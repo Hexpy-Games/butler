@@ -4,6 +4,7 @@ export const DURABLE_WORK_TOOL_NAMES = [
   "replace_work_plan",
   "record_work_checkpoint",
   "record_work_review",
+  "record_work_disposition",
 ] as const;
 
 export type DurableWorkToolName = typeof DURABLE_WORK_TOOL_NAMES[number];

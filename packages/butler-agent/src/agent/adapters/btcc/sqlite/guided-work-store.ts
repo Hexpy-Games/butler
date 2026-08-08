@@ -8,6 +8,8 @@ import type {
   LegacyOpenWorkImportResult,
   LegacyProjectWorkSource,
   RecordWorkCheckpointCommand,
+  RecordCloseoutMissingInput,
+  RecordWorkDispositionCommand,
   RecordWorkReviewCommand,
   ReplaceWorkPlanCommand,
   StartWorkCommand,
@@ -21,24 +23,26 @@ import {
 } from "./guided-work-mutation-journal.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
 import { GuidedWorkProgressWriter } from "./guided-work-progress-writer.ts";
+import { GuidedWorkDispositionWriter } from "./guided-work-disposition-writer.ts";
+import { GuidedWorkRelationBackfill } from "./guided-work-relation-backfill.ts";
 import { preserveBlockedStatus } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkLegacyImporter } from "./guided-work-legacy-importer.ts";
 import { GuidedWorkLegacyProjectImporter } from
   "./guided-work-legacy-project-importer.ts";
 import { GuidedWorkReviewWriter } from "./guided-work-review-writer.ts";
 import { GuidedWorkSessionWriter } from "./guided-work-session-writer.ts";
-import { GuidedWorkStatusWriter } from "./guided-work-status-writer.ts";
 import { GuidedWorkToolResultWriter } from "./guided-work-tool-result-writer.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
 
 export class SqliteGuidedWorkStore implements DurableWorkStore {
   private readonly reader: GuidedWorkViewReader;
   private readonly sessions: GuidedWorkSessionWriter;
-  private readonly statuses: GuidedWorkStatusWriter;
   private readonly mutations: GuidedWorkMutationJournal;
   private readonly progress: GuidedWorkProgressWriter;
   private readonly reviews: GuidedWorkReviewWriter;
   private readonly toolResults: GuidedWorkToolResultWriter;
+  private readonly dispositions: GuidedWorkDispositionWriter;
+  private readonly relationBackfill: GuidedWorkRelationBackfill;
   private readonly legacyImporter: GuidedWorkLegacyImporter;
   private readonly legacyProjectImporter: GuidedWorkLegacyProjectImporter;
 
@@ -48,18 +52,28 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   ) {
     this.reader = new GuidedWorkViewReader(db);
     this.sessions = new GuidedWorkSessionWriter(db, this.reader);
-    this.statuses = new GuidedWorkStatusWriter(db, this.reader);
     this.mutations = new GuidedWorkMutationJournal(db);
     this.progress = new GuidedWorkProgressWriter(db);
     this.reviews = new GuidedWorkReviewWriter(
       db,
       this.reader,
       this.sessions,
-      this.statuses,
       this.mutations,
       this.progress,
     );
     this.toolResults = new GuidedWorkToolResultWriter(db);
+    this.dispositions = new GuidedWorkDispositionWriter(
+      db,
+      this.reader,
+      this.sessions,
+      this.progress,
+      this.toolResults,
+    );
+    this.relationBackfill = new GuidedWorkRelationBackfill(
+      db,
+      this.reader,
+      this.toolResults,
+    );
     this.legacyImporter = new GuidedWorkLegacyImporter(db, this.reader);
     this.legacyProjectImporter = new GuidedWorkLegacyProjectImporter(
       db,
@@ -99,7 +113,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   async startWork(input: StartWorkCommand): Promise<DurableWorkView> {
     return this.writeTransaction(() => {
       const work = this.sessions.start(input);
-      this.backfillTurnToolResults(work.work_id, input);
+      this.relationBackfill.attach(work.work_id, input);
       return this.reader.view(work.work_id);
     });
   }
@@ -107,7 +121,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   async continueWork(input: ContinueWorkCommand): Promise<DurableWorkView> {
     return this.writeTransaction(() => {
       const work = this.sessions.continue(input);
-      this.backfillTurnToolResults(work.work_id, input);
+      this.relationBackfill.attach(work.work_id, input);
       return this.reader.view(work.work_id);
     });
   }
@@ -117,11 +131,11 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     return this.writeTransaction(() => {
       const replay = this.replay(input.mutationCallId, "replace_plan", requestSha256);
       if (replay) {
-        this.backfillTurnToolResults(replay.workId, input);
+        this.relationBackfill.attach(replay.workId, input);
         return this.reader.view(replay.workId);
       }
       const work = this.sessions.selectForPlan(input);
-      this.backfillTurnToolResults(work.work_id, input);
+      this.relationBackfill.attach(work.work_id, input);
       if (input.expectedWorkId && work.work_id !== input.expectedWorkId) {
         throw new Error("Durable Work changed before its Plan update");
       }
@@ -244,6 +258,16 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     return this.reviews.record(input);
   }
 
+  async recordDisposition(
+    input: RecordWorkDispositionCommand,
+  ): Promise<DurableWorkView> {
+    return this.dispositions.record(input);
+  }
+
+  async recordCloseoutMissing(input: RecordCloseoutMissingInput): Promise<void> {
+    this.dispositions.recordCloseoutMissing(input);
+  }
+
   async attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView> {
     const requestSha256 = guidedWorkMutationFingerprint("attach_tool_result", input);
     return this.writeTransaction(() => {
@@ -257,7 +281,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
       const resultRef = this.toolResults.attach(work.work_id, input);
       const now = new Date().toISOString();
       if (work.status === "completed") {
-        this.statuses.reopen(work.work_id, now);
+        this.reopen(work.work_id, now);
       } else {
         this.touch(work.work_id, now);
       }
@@ -299,36 +323,19 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     `).get(workId)?.sequence ?? 0;
   }
 
-  /**
-   * Attach only the completed, Turn-local results selected by the runtime.
-   * This runs inside the same immediate transaction as relation selection, so
-   * a rejected or failed attachment rolls back the Work, binding, and receipt
-   * together.  The result writer keeps its own cross-Turn/duplicate checks.
-   */
-  private backfillTurnToolResults(
-    workId: string,
-    input: Pick<
-      StartWorkCommand | ContinueWorkCommand | ReplaceWorkPlanCommand,
-      "turnId" | "sessionId" | "projectRef" | "mutationCallId" | "backfillToolCallIds"
-    >,
-  ): void {
-    const toolCallIds = input.backfillToolCallIds ?? [];
-    if (toolCallIds.length === 0) return;
-    this.reader.relationTurn(input);
-    for (const toolCallId of toolCallIds) {
-      this.toolResults.attach(workId, {
-        turnId: input.turnId,
-        sessionId: input.sessionId,
-        ...(input.projectRef ? { projectRef: input.projectRef } : {}),
-        mutationCallId: `${input.mutationCallId}:backfill:${toolCallId}`,
-        toolCallId,
-      });
-    }
-  }
-
   private touch(workId: string, now: string): void {
     this.db.query("UPDATE btcc_guided_works SET updated_at = ? WHERE work_id = ?")
       .run(now, workId);
+  }
+
+  private reopen(workId: string, now: string): void {
+    const updated = this.db.query(`
+      UPDATE btcc_guided_works SET status = 'open', updated_at = ?
+      WHERE work_id = ? AND status = 'completed'
+    `).run(now, workId);
+    if (updated.changes !== 1) {
+      throw new Error(`Durable Work could not reopen: ${workId}`);
+    }
   }
 
   private writeTransaction<T>(operation: () => T): T {

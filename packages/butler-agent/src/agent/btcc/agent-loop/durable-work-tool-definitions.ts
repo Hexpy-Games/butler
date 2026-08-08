@@ -197,12 +197,12 @@ const RECORD_WORK_REVIEW: FunctionToolDefinition = {
   type: "function",
   name: "record_work_review",
   description: [
-    "Record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress.",
-    "Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review.",
+    "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress.",
+    "Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful.",
     "Include action_updates known at that point and next_stage only when taking one legal next step after the entered stage.",
     "When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates.",
     "The runtime validates only fixed stage transitions, known action keys, and durable bindings; it does not judge the Review or Validation meaning.",
-    "Accepting a result never completes Work. A completion acceptance can complete Work only after the current Plan and result Reviews are accepted, every action is done or skipped, and no effect blocker remains.",
+    "Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority.",
     "Disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished.",
     "A review records judgment but never replaces real tool evidence.",
   ].join(" "),
@@ -248,6 +248,71 @@ const RECORD_WORK_REVIEW: FunctionToolDefinition = {
   },
 };
 
+const RECORD_WORK_DISPOSITION: FunctionToolDefinition = {
+  type: "function",
+  name: "record_work_disposition",
+  description: [
+    "Atomically declare the explicitly bound Work completed, open, or blocked.",
+    "Use this closeout operation when the current Turn has finished its Work update; it does not require Plan, Review, or stage sequence records.",
+    "Completed requires every current Plan action done or skipped, no remaining actions, eligible evidence, and no unresolved or in-flight effect.",
+    "Open or blocked requires a truthful remaining action or next condition; blocked also requires a concrete next condition.",
+    "The Work id must be the exact id from the current bound Work context.",
+  ].join(" "),
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      work_id: {
+        type: "string",
+        minLength: 1,
+        description: "The exact Work id explicitly bound to this Turn.",
+      },
+      disposition: {
+        type: "string",
+        enum: ["completed", "open", "blocked"],
+      },
+      summary: { type: "string", minLength: 1 },
+      action_updates: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            action_key: { type: "string", minLength: 1 },
+            status: {
+              type: "string",
+              enum: ["done", "skipped", "blocked"],
+            },
+            note: { type: "string", minLength: 1 },
+          },
+          required: ["action_key", "status"],
+        },
+        default: [],
+      },
+      remaining_actions: {
+        type: "array",
+        items: { type: "string", minLength: 1 },
+        default: [],
+      },
+      next_condition: {
+        type: "string",
+        minLength: 1,
+      },
+      evidence_refs: {
+        type: "array",
+        items: { type: "string", minLength: 1 },
+        default: [],
+      },
+      followups: {
+        type: "array",
+        items: { type: "string", minLength: 1 },
+        default: [],
+      },
+    },
+    required: ["work_id", "disposition", "summary"],
+  },
+};
+
 export const DURABLE_WORK_TOOL_DEFINITIONS: readonly FunctionToolDefinition[] =
   Object.freeze([
     START_WORK,
@@ -255,4 +320,5 @@ export const DURABLE_WORK_TOOL_DEFINITIONS: readonly FunctionToolDefinition[] =
     REPLACE_WORK_PLAN,
     RECORD_WORK_CHECKPOINT,
     RECORD_WORK_REVIEW,
+    RECORD_WORK_DISPOSITION,
   ]);

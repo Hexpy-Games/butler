@@ -97,6 +97,11 @@ export class GuidedWorkSessionWriter {
         "Durable Work relation is already selected for this Turn; startNew cannot switch Work; continue the current Work or start new Work in a fresh Turn",
       );
     }
+    if (bound && !isOpenWork(bound)) {
+      throw new Error(
+        "Durable Work relation is already selected for a terminal Work; start new Work in a fresh Turn",
+      );
+    }
     if (bound && head && bound.work_id !== head.work_id) {
       throw new Error("Durable Work Turn binding is no longer the Session head");
     }
@@ -165,6 +170,20 @@ export class GuidedWorkSessionWriter {
   }
 
   requireBoundForResult(scope: WorkTurnScope): GuidedWorkRow {
+    return this.requireBound(scope, true);
+  }
+
+  requireBoundForDisposition(scope: WorkTurnScope): GuidedWorkRow {
+    return this.requireBound(scope, false);
+  }
+
+  /**
+   * Closeout diagnostics are bookkeeping only.  They still require the
+   * admitted/current relation and Stop fence, but must remain appendable when
+   * a legacy review/import left a bound Work terminal before disposition was
+   * introduced.
+   */
+  requireBoundForCloseoutDiagnostic(scope: WorkTurnScope): GuidedWorkRow {
     return this.requireBound(scope, true);
   }
 
