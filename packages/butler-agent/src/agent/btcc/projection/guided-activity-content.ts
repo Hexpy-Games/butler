@@ -49,7 +49,7 @@ export function activityContent(
   calls: GuidedActivityToolCall[],
   assistantText: string,
 ): {
-  displayStage: WorkStage;
+  displayStage?: WorkStage;
   title: string;
   summary: string;
   rationale?: string;
@@ -95,7 +95,6 @@ export function activityContent(
   const summary = authoredSummary || commandLabel || toolSummary ||
     "도구 작업을 진행하고 있습니다";
   return {
-    displayStage: "execution",
     title,
     summary: commandLabel && !authoredSummary
       ? summary

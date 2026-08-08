@@ -9,6 +9,8 @@ type GuidedRouteEventInput = {
   semanticState: string;
   progress?: BtccTurnProgressObserver;
   setActiveModelRef(modelRef: string): void;
+  /** Canonical monotonic revision shared with activity projection. */
+  nextSourceRevision?: () => number;
   recordModelRouteEvent?: (
     event: ModelRouteEvent,
   ) => ModelRouteEventResult | void | Promise<ModelRouteEventResult | void>;
@@ -17,6 +19,8 @@ type GuidedRouteEventInput = {
 /** Model-route persistence plus bounded public fallback activity projection. */
 export function createGuidedRouteEventHandler(input: GuidedRouteEventInput) {
   let pendingFallbackProjection: { roundId: string; modelRef: string } | undefined;
+  let localSourceRevision = 0;
+  const nextSourceRevision = input.nextSourceRevision ?? (() => ++localSourceRevision);
   return async (event: ModelRouteEvent) => {
     const persisted = await input.recordModelRouteEvent?.(event);
     if (
@@ -46,9 +50,11 @@ export function createGuidedRouteEventHandler(input: GuidedRouteEventInput) {
         await input.progress?.phaseActivityChanged?.({
           turnId: input.turnId,
           semanticState: input.semanticState,
+          originTurnId: input.turnId,
+          sourceRevision: nextSourceRevision(),
           activityId: `${input.turnId}:model-fallback:${event.roundId}:${event.candidateIndex}`,
           title: "대체 모델 경로 선택",
-          summary: `${event.modelRef} 모델로 계속 진행합니다.`,
+          summary: "대체 모델 경로로 계속 진행합니다.",
           modelRef: event.modelRef,
         });
       } catch {

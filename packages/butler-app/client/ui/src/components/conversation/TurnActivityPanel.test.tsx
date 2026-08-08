@@ -95,6 +95,7 @@ test("turn activity panel shows only the latest model-authored phase intent", ()
       work_decision_rationale: "사용자의 원래 목표를 보존하기 위해 필요합니다.",
       work_decision_next_step: "목표 계약을 작성합니다.",
       work_decision_source: "model-authored",
+      activity_stage: "conception",
     },
     {
       id: "planning-activity",
@@ -107,6 +108,7 @@ test("turn activity panel shows only the latest model-authored phase intent", ()
       work_decision_rationale: "완결된 작업 단위로 나누기 위해 필요합니다.",
       work_decision_next_step: "계획 후보를 검토합니다.",
       work_decision_source: "model-authored",
+      activity_stage: "planning",
     },
   ]);
 
@@ -129,7 +131,7 @@ test("turn activity panel keeps the handoff under the canonical successor phase"
     },
   ]);
 
-  expect(html).toContain("현재 · 구상 검토 · 1개 기록");
+  expect(html).toContain("현재 · 구상 · 1개 기록");
   expect(html).not.toContain("구상 결과를 독립적으로 검토하고 있습니다");
 });
 
@@ -350,5 +352,6 @@ function phaseActivityRow(): ProgressRow {
     work_decision_rationale: "사용자의 원래 목표를 보존하기 위해 필요합니다.",
     work_decision_next_step: "목표 계약을 작성합니다.",
     work_decision_source: "model-authored",
+    activity_stage: "conception",
   };
 }

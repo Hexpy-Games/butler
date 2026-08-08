@@ -99,6 +99,12 @@ export function projectTurnProgressToEvents(
             : {}),
           decisionSource: "model-authored",
           semanticBlockId: update.activityId,
+          ...(update.originTurnId
+            ? { originTurnId: update.originTurnId }
+            : {}),
+          ...(update.sourceRevision !== undefined
+            ? { sourceRevision: update.sourceRevision }
+            : {}),
           ...(update.displayStage !== undefined
             ? { activityStage: update.displayStage }
             : {}),

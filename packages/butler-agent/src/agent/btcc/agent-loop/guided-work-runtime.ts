@@ -119,6 +119,14 @@ export async function publishWorkProgress(
   const work = await safeBoundWork(service, turnId);
   const plan = work?.currentPlan;
   if (!work || !plan) return;
+  const currentMaterial = [
+    work.latestDisposition,
+    work.latestCompletionValidation,
+    work.latestResultReview,
+    work.latestPlanReview,
+    work.latestCheckpoint,
+    work.currentPlan,
+  ].find((entry) => entry?.originTurnId === turnId);
   const progressByKey = new Map(
     work.actionProgress.map((action) => [action.actionKey, action]),
   );
@@ -147,6 +155,12 @@ export async function publishWorkProgress(
     await progress.workProgressChanged({
       turnId,
       turnRevision,
+      ...(currentMaterial?.originTurnId
+        ? { originTurnId: currentMaterial.originTurnId }
+        : {}),
+      ...(currentMaterial?.revision !== undefined
+        ? { sourceRevision: currentMaterial.revision }
+        : {}),
       programId: work.workId,
       ...(modelRef ? { modelRef } : {}),
       tasks,

@@ -1088,7 +1088,7 @@ test("R3 projects the existing Plan, tool, Review, and final events without anot
       "conception",
       "planning",
       "review",
-      "execution",
+      undefined,
       "review",
     ]);
     expect(activities[3]).toMatchObject({
