@@ -17,6 +17,7 @@ type GuidedToolCallRow = {
   tool_name: string;
   raw_arguments: string;
   arguments_json: string;
+  turn_sequence: number | null;
   status: GuidedToolJournalRecord["status"];
   result_json: string | null;
   result_sha256: string | null;
@@ -34,18 +35,22 @@ export class SqliteGuidedToolJournal {
     arguments: Record<string, unknown>;
   }): void {
     const argumentsJson = stableJson(input.arguments);
+    const startedAt = new Date().toISOString();
     this.db.query(`
       INSERT OR IGNORE INTO btcc_guided_tool_calls (
         call_id, turn_id, tool_name, raw_arguments, arguments_json,
-        status, started_at
-      ) VALUES (?, ?, ?, ?, ?, 'started', ?)
+        turn_sequence, status, started_at
+      )
+      SELECT ?, ?, ?, ?, ?, COALESCE(MAX(turn_sequence), 0) + 1, 'started', ?
+      FROM btcc_guided_tool_calls WHERE turn_id = ?
     `).run(
       input.callId,
       input.turnId,
       input.toolName,
       input.rawArguments,
       argumentsJson,
-      new Date().toISOString(),
+      startedAt,
+      input.turnId,
     );
     const current = this.db.query<{
       turn_id: string;
@@ -102,7 +107,7 @@ export class SqliteGuidedToolJournal {
 
   find(callId: string): GuidedToolJournalRecord | null {
     const row = this.db.query<GuidedToolCallRow, [string]>(`
-      SELECT call_id, tool_name, raw_arguments, arguments_json, status,
+      SELECT call_id, tool_name, raw_arguments, arguments_json, turn_sequence, status,
         result_json, result_sha256, error_code
       FROM btcc_guided_tool_calls WHERE call_id = ?
     `).get(callId);
@@ -111,9 +116,10 @@ export class SqliteGuidedToolJournal {
 
   list(turnId: string): GuidedToolJournalRecord[] {
     return this.db.query<GuidedToolCallRow, [string]>(`
-      SELECT call_id, tool_name, raw_arguments, arguments_json, status,
+      SELECT call_id, tool_name, raw_arguments, arguments_json, turn_sequence, status,
         result_json, result_sha256, error_code
-      FROM btcc_guided_tool_calls WHERE turn_id = ? ORDER BY started_at, call_id
+      FROM btcc_guided_tool_calls
+      WHERE turn_id = ? ORDER BY turn_sequence, rowid
     `).all(turnId).map(hydrate);
   }
 }

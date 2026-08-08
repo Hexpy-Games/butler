@@ -13,50 +13,92 @@ import {
   renderDurableWorkContext,
 } from "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tools.ts";
 
-test("R3 Work exposes only three compact optional control tools", () => {
+test("R3 Work exposes explicit relation tools and compact optional control tools", () => {
   expect(DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name)).toEqual([
+    "start_work",
+    "continue_work",
     "replace_work_plan",
     "record_work_checkpoint",
     "record_work_review",
   ]);
-  expect(DURABLE_WORK_TOOL_DEFINITIONS[0]?.description)
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
     .toContain("multi-source or multi-step research");
-  expect(DURABLE_WORK_TOOL_DEFINITIONS[0]?.description)
-    .toContain("once this Turn continues it, keep the same Work");
-  expect(DURABLE_WORK_TOOL_DEFINITIONS[0]?.description)
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
+    .toContain("Use start_new only as a compatibility translation");
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
     .toContain("overall multi-Turn user outcome");
-  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[1]))
+  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[3]))
     .toContain("next_stage");
-  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[1]))
+  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[3]))
     .toContain("action_updates");
-  expect(DURABLE_WORK_TOOL_DEFINITIONS[1]?.description)
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[3]?.description)
     .toContain("when no Review is being recorded");
-  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[2]))
+  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[4]))
     .toContain("next_stage");
-  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[2]))
+  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[4]))
     .toContain("action_updates");
-  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[2]))
+  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[4]))
     .toContain('"enum":["planning","execution","review","validation","reporting"]');
-  expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[4]?.description)
     .toContain("Plan and result subjects enter review");
-  expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[4]?.description)
     .toContain("does not judge the Review or Validation meaning");
-  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[2]?.parameters))
+  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[4]?.parameters))
     .toContain("The legal stage to enter after Review or Validation");
   for (const tool of DURABLE_WORK_TOOL_DEFINITIONS) {
     expect(tool.concurrencySafe).not.toBe(true);
   }
-  expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[4]?.description)
     .toContain("completion enters validation against the original request");
-  expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[4]?.description)
     .toContain("Disclosed non-critical limits may still be accepted");
-  expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[4]?.description)
     .toContain("a material requested outcome remains unfinished");
   const encoded = JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS);
   expect(encoded).not.toContain("revision_id");
   expect(encoded).not.toContain("result_id");
   expect(encoded).not.toContain("checkpoint_id");
   expect(encoded).not.toContain("hash");
+});
+
+test("R3 relation tools map explicit model arguments without selecting a candidate", async () => {
+  let startedInput: Parameters<DurableWorkService["startWork"]>[0] | null = null;
+  let continuedInput: Parameters<DurableWorkService["continueWork"]>[0] | null = null;
+  const service = fakeService({
+    startWork(input) {
+      startedInput = input;
+      return Promise.resolve(workView());
+    },
+    continueWork(input) {
+      continuedInput = input;
+      return Promise.resolve(workView());
+    },
+  });
+  const scope = { turnId: "turn-1", sessionId: "session-1" };
+  expect(await executeDurableWorkTool({
+    service,
+    scope,
+    mutationCallId: "start-call",
+    name: "start_work",
+    args: { objective: "Create a fresh report" },
+  })).toMatchObject({ ok: true });
+  expect(startedInput).toMatchObject({
+    ...scope,
+    mutationCallId: "start-call",
+    objective: "Create a fresh report",
+  });
+  expect(await executeDurableWorkTool({
+    service,
+    scope,
+    mutationCallId: "continue-call",
+    name: "continue_work",
+    args: { work_id: "work-1" },
+  })).toMatchObject({ ok: true });
+  expect(continuedInput).toMatchObject({
+    ...scope,
+    mutationCallId: "continue-call",
+    workId: "work-1",
+  });
 });
 
 test("R3 Work tool maps semantic model input and returns validation as ordinary feedback", async () => {
@@ -427,9 +469,11 @@ test("R3 continuation context stays concise and semantic", () => {
   expect(rendered).toContain("- [pending] research: Collect evidence");
   expect(rendered).toContain("Current plan details:");
   expect(rendered).toContain("Result (write_file, completed)");
+  expect(rendered).toContain(
+    "Explicit relation Work id (model-only; never report to user): work-1",
+  );
   expect(rendered).toContain("Plan corrections: Add a second independent source.");
   expect(rendered).toContain("Result corrections: Read report.md back before reporting.");
-  expect(rendered).not.toContain("work-1");
   expect(rendered).not.toContain("plan-revision-1");
   expect(rendered.length).toBeLessThanOrEqual(8_000);
 });
@@ -528,7 +572,8 @@ function fakeService(
   return {
     loadContext: async () => null,
     importOpenLegacyWork: async () => null,
-    bindOpenWork: async () => null,
+    startWork: async () => workView(),
+    continueWork: async () => workView(),
     replacePlan: async () => workView(),
     recordCheckpoint: async () => workView(),
     recordReview: async () => workView(),

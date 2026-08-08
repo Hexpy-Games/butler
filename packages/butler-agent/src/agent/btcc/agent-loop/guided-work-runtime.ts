@@ -66,32 +66,6 @@ export async function safeBoundWork(
   }
 }
 
-export async function safeBindOpenWork(
-  service: DurableWorkService,
-  scope: WorkTurnScope,
-  expectedWorkId?: string,
-): Promise<DurableWorkView | null> {
-  try {
-    return await service.bindOpenWork(scope, expectedWorkId);
-  } catch {
-    return null;
-  }
-}
-
-export async function bindPresentedWorkForToolDispatch(
-  input: GuidedWorkRuntimeInput,
-  scope: WorkTurnScope,
-  presentedWorkId: string,
-): Promise<boolean> {
-  const current = await safeBoundWork(input.durableWork, scope.turnId);
-  if (current && current.workId !== presentedWorkId) return false;
-  const bound = current ??
-    await safeBindOpenWork(input.durableWork, scope, presentedWorkId);
-  if (bound?.workId !== presentedWorkId) return false;
-  await backfillTurnToolResults(input, scope);
-  return true;
-}
-
 export async function safeAttachToolResult(
   input: GuidedWorkRuntimeInput,
   scope: WorkTurnScope,

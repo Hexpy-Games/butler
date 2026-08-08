@@ -122,9 +122,10 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain("real HOME and network");
   expect(instructions).toContain("after the current concise Plan has an accepted Plan Review");
   expect(instructions).toContain("Multi-source or multi-step research");
-  expect(instructions).toContain("call replace_work_plan before the dependent work");
+  expect(instructions).toContain("explicitly call continue_work with the exact current Work id");
+  expect(instructions).toContain("Ordinary tools never select Work");
   expect(instructions).toContain(
-    "decide whether the current open Work continues or is superseded",
+    "explicitly call continue_work with the exact current Work id",
   );
   expect(instructions).toContain(
     "Keep the Work objective as the overall user outcome across Turns",

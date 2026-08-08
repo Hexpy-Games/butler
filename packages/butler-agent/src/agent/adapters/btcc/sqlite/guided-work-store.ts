@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type {
   AttachToolResultInput,
+  ContinueWorkCommand,
   DurableWorkContext,
   DurableWorkStore,
   DurableWorkView,
@@ -9,6 +10,7 @@ import type {
   RecordWorkCheckpointCommand,
   RecordWorkReviewCommand,
   ReplaceWorkPlanCommand,
+  StartWorkCommand,
   WorkTurnScope,
 } from "../../../btcc/work/index.ts";
 import { stableJson } from "./identity.ts";
@@ -94,13 +96,19 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     return this.reader.boundView(turnId);
   }
 
-  async bindOpenWork(
-    scope: WorkTurnScope,
-    expectedWorkId?: string,
-  ): Promise<DurableWorkView | null> {
+  async startWork(input: StartWorkCommand): Promise<DurableWorkView> {
     return this.writeTransaction(() => {
-      const work = this.sessions.bindOpenHead(scope, expectedWorkId);
-      return work ? this.reader.view(work.work_id) : null;
+      const work = this.sessions.start(input);
+      this.backfillTurnToolResults(work.work_id, input);
+      return this.reader.view(work.work_id);
+    });
+  }
+
+  async continueWork(input: ContinueWorkCommand): Promise<DurableWorkView> {
+    return this.writeTransaction(() => {
+      const work = this.sessions.continue(input);
+      this.backfillTurnToolResults(work.work_id, input);
+      return this.reader.view(work.work_id);
     });
   }
 
@@ -108,8 +116,12 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     const requestSha256 = input.requestSha256;
     return this.writeTransaction(() => {
       const replay = this.replay(input.mutationCallId, "replace_plan", requestSha256);
-      if (replay) return replay;
+      if (replay) {
+        this.backfillTurnToolResults(replay.workId, input);
+        return this.reader.view(replay.workId);
+      }
       const work = this.sessions.selectForPlan(input);
+      this.backfillTurnToolResults(work.work_id, input);
       if (input.expectedWorkId && work.work_id !== input.expectedWorkId) {
         throw new Error("Durable Work changed before its Plan update");
       }
@@ -136,7 +148,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
         now,
       );
       const resultSequence = this.latestResultSequence(work.work_id);
-      if (!input.expectedWorkId) {
+      if (input.openingPlan) {
         this.progress.insert({
           workId: work.work_id,
           planRevisionId,
@@ -285,6 +297,33 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
       SELECT COALESCE(MAX(sequence), 0) AS sequence
       FROM btcc_guided_work_results WHERE work_id = ?
     `).get(workId)?.sequence ?? 0;
+  }
+
+  /**
+   * Attach only the completed, Turn-local results selected by the runtime.
+   * This runs inside the same immediate transaction as relation selection, so
+   * a rejected or failed attachment rolls back the Work, binding, and receipt
+   * together.  The result writer keeps its own cross-Turn/duplicate checks.
+   */
+  private backfillTurnToolResults(
+    workId: string,
+    input: Pick<
+      StartWorkCommand | ContinueWorkCommand | ReplaceWorkPlanCommand,
+      "turnId" | "sessionId" | "projectRef" | "mutationCallId" | "backfillToolCallIds"
+    >,
+  ): void {
+    const toolCallIds = input.backfillToolCallIds ?? [];
+    if (toolCallIds.length === 0) return;
+    this.reader.relationTurn(input);
+    for (const toolCallId of toolCallIds) {
+      this.toolResults.attach(workId, {
+        turnId: input.turnId,
+        sessionId: input.sessionId,
+        ...(input.projectRef ? { projectRef: input.projectRef } : {}),
+        mutationCallId: `${input.mutationCallId}:backfill:${toolCallId}`,
+        toolCallId,
+      });
+    }
   }
 
   private touch(workId: string, now: string): void {

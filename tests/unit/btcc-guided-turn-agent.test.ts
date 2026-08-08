@@ -1667,7 +1667,7 @@ test("Guided agent renders CSV text once and passes image attachments to the pro
   }
 });
 
-test("Guided agent offers only the three optional R3 Work tools and keeps direct turns free of Work", async () => {
+test("Guided agent offers explicit relation and optional R3 Work tools while keeping direct turns free of Work", async () => {
   const fixture = createFixture("guided-work-surface");
   try {
     let visibleNames: string[] = [];
@@ -1690,6 +1690,8 @@ test("Guided agent offers only the three optional R3 Work tools and keeps direct
     expect(visibleNames).toContain("replace_work_plan");
     expect(visibleNames).toContain("record_work_checkpoint");
     expect(visibleNames).toContain("record_work_review");
+    expect(visibleNames).toContain("start_work");
+    expect(visibleNames).toContain("continue_work");
     expect(visibleNames).not.toContain("update_todo_list");
     expect(visibleNames).not.toContain("list_todo_list");
     expect(visibleNames).not.toContain("list_work_streams");
@@ -1924,6 +1926,130 @@ test("Guided tool restart reuses a prestarted occurrence after call order change
     expect(fixture.stores.guidedToolJournal.find(reorderedCallId)).toBeNull();
     expect(fixture.stores.guidedToolJournal.find(newOccurrenceCallId)?.status)
       .toBe("completed");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("completed relation replay repairs a missing prior result without duplicate authority", async () => {
+  const fixture = createFixture("guided-relation-replay-repair");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "turn-relation-replay-repair",
+    });
+    const db = new Database(fixture.dbPath);
+    try {
+      db.query(`
+        INSERT INTO btcc_turns (
+          turn_id, session_id, inbox_id, trigger_key, original_message_id,
+          original_message, admission_snapshot_ref, model_selection_json,
+          context_json, semantic_state, revision, execution_fence
+        ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', '{}', '{}', 'admitted', 1, 0)
+      `).run(
+        turn.turnId,
+        turn.sessionId,
+        `inbox:${turn.turnId}`,
+        `trigger:${turn.turnId}`,
+        turn.originalMessageId,
+        turn.originalMessage,
+      );
+    } finally {
+      db.close();
+    }
+
+    const firstRead = "relation-replay-read-first";
+    const secondRead = "relation-replay-read-second";
+    for (const [callId, content] of [
+      [firstRead, "first"],
+      [secondRead, "second"],
+    ] as const) {
+      fixture.stores.guidedToolJournal.start({
+        turnId: turn.turnId,
+        callId,
+        toolName: "read_file",
+        rawArguments: "{}",
+        arguments: {},
+      });
+      fixture.stores.guidedToolJournal.finish({
+        callId,
+        status: "completed",
+        result: { content },
+      });
+    }
+
+    const relationArgs = { objective: "재생 시 누락 결과를 복구한다" };
+    const createExecutor = () => createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["start_work"]),
+      visibleNames: new Set(["start_work"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool: async () => {
+        throw new Error("relation replay should stay in the durable Work handler");
+      },
+    });
+    const executeRelation = (executor: ReturnType<typeof createExecutor>) =>
+      executor.executeTool({
+        name: "start_work",
+        args: relationArgs,
+        rawArguments: JSON.stringify(relationArgs),
+      });
+
+    const firstResult = await executeRelation(createExecutor());
+    expect(firstResult).toMatchObject({ ok: true, work: { status: "open" } });
+    const firstWork = await fixture.stores.durableWork.boundWorkForTurn(turn.turnId);
+    expect(firstWork?.resultRefs.map((result) => result.toolCallId)).toEqual([
+      firstRead,
+      secondRead,
+    ]);
+
+    const missingDb = new Database(fixture.dbPath);
+    try {
+      missingDb.query(`
+        DELETE FROM btcc_guided_work_results WHERE tool_call_id = ?
+      `).run(secondRead);
+    } finally {
+      missingDb.close();
+    }
+    expect((await fixture.stores.durableWork.boundWorkForTurn(turn.turnId))
+      ?.resultRefs.map((result) => result.toolCallId)).toEqual([firstRead]);
+
+    const replayed = await executeRelation(createExecutor());
+    expect(replayed).toMatchObject({ ok: true, work: { status: "open" } });
+    const repaired = await fixture.stores.durableWork.boundWorkForTurn(turn.turnId);
+    expect(repaired?.resultRefs.map((result) => result.toolCallId)).toEqual([
+      firstRead,
+      secondRead,
+    ]);
+    expect(fixture.stores.guidedToolJournal.list(turn.turnId)).toHaveLength(3);
+    expect((await fixture.stores.durableWork.loadContext({
+      turnId: turn.turnId,
+      sessionId: turn.sessionId,
+    }))?.resultFacts.map((fact) => fact.resultJson)).toEqual([
+      { content: "first" },
+      { content: "second" },
+    ]);
+    const countsDb = new Database(fixture.dbPath);
+    try {
+      expect(countsDb.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_works
+      `).get()?.count).toBe(1);
+      expect(countsDb.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_turn_work_bindings
+        WHERE turn_id = ? AND is_current = 1
+      `).get(turn.turnId)?.count).toBe(1);
+      expect(countsDb.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_work_relation_commands
+      `).get()?.count).toBe(1);
+      expect(countsDb.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_work_results
+      `).get()?.count).toBe(2);
+    } finally {
+      countsDb.close();
+    }
   } finally {
     fixture.close();
   }

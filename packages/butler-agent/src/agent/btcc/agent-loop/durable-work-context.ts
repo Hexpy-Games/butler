@@ -11,6 +11,7 @@ export function renderDurableWorkContext(
     `Original request (highest priority): ${singleLine(context.originalRequest.content, 900)}`,
     `Status: ${work.status}`,
     `Stable Work objective: ${singleLine(work.objective, 500)}`,
+    `Explicit relation Work id (model-only; never report to user): ${work.workId}`,
   ];
   if (work.currentStage) {
     rows.push(

@@ -1,6 +1,8 @@
 import type { Database } from "bun:sqlite";
 import type {
+  ContinueWorkCommand,
   ReplaceWorkPlanCommand,
+  StartWorkCommand,
   WorkTurnScope,
 } from "../../../btcc/work/index.ts";
 import type { GuidedWorkRow, GuidedWorkTurn } from "./guided-work-records.ts";
@@ -14,10 +16,87 @@ export class GuidedWorkSessionWriter {
     private readonly reader: GuidedWorkViewReader,
   ) {}
 
+  start(input: StartWorkCommand): GuidedWorkRow {
+    const replay = this.replayRelation(
+      input.mutationCallId,
+      "start_work",
+      input.requestSha256,
+    );
+    if (replay) return replay;
+    const turn = this.reader.relationTurn(input);
+    const bound = this.reader.boundWork(input.turnId);
+    if (bound) {
+      throw new Error("Durable Work relation is already selected for this Turn");
+    }
+    const head = this.reader.sessionHead(input.sessionId);
+    if (head?.status === "open" || head?.status === "blocked") {
+      this.abandon(head.work_id);
+    }
+    const work = this.createAndBind(input, turn);
+    this.recordRelation(
+      input.mutationCallId,
+      "start_work",
+      input.requestSha256,
+      work.work_id,
+    );
+    return work;
+  }
+
+  continue(input: ContinueWorkCommand): GuidedWorkRow {
+    const replay = this.replayRelation(
+      input.mutationCallId,
+      "continue_work",
+      input.requestSha256,
+    );
+    if (replay) return replay;
+    const turn = this.reader.relationTurn(input);
+    const bound = this.reader.boundWork(input.turnId);
+    if (bound) {
+      const head = this.reader.sessionHead(input.sessionId);
+      if (bound.work_id !== input.workId) {
+        throw new Error("Durable Work relation is already selected for another Work");
+      }
+      if (!head || head.work_id !== bound.work_id || !isOpenWork(bound) ||
+        !guidedWorkMatchesScope(bound, input)) {
+        throw new Error("Durable Work continuation target is not the current open Work");
+      }
+      this.recordRelation(
+        input.mutationCallId,
+        "continue_work",
+        input.requestSha256,
+        bound.work_id,
+      );
+      return bound;
+    }
+    const head = this.reader.sessionHead(input.sessionId);
+    if (!head || head.work_id !== input.workId || !isOpenWork(head) ||
+      !guidedWorkMatchesScope(head, input)) {
+      throw new Error("Durable Work continuation target is not the current open Work");
+    }
+    this.bind(turn, head.work_id);
+    this.recordRelation(
+      input.mutationCallId,
+      "continue_work",
+      input.requestSha256,
+      head.work_id,
+    );
+    return head;
+  }
+
   selectForPlan(input: ReplaceWorkPlanCommand): GuidedWorkRow {
-    const turn = this.reader.turn(input);
+    const turn = this.reader.relationTurn(input);
     const bound = this.reader.boundWork(input.turnId);
     const head = this.reader.sessionHead(input.sessionId);
+    if (input.startNew && bound) {
+      if (this.turnCommittedToWork(input.turnId, bound.work_id)) {
+        throw new Error(
+          "Durable Work continuation is already committed for this Turn; continue the current Work or start new Work in a fresh Turn",
+        );
+      }
+      throw new Error(
+        "Durable Work relation is already selected for this Turn; startNew cannot switch Work; continue the current Work or start new Work in a fresh Turn",
+      );
+    }
     if (bound && head && bound.work_id !== head.work_id) {
       throw new Error("Durable Work Turn binding is no longer the Session head");
     }
@@ -26,24 +105,39 @@ export class GuidedWorkSessionWriter {
       throw new Error("Durable Work scope changed; startNew is required");
     }
     if (input.startNew) {
-      if (
-        bound &&
-        this.turnCommittedToWork(input.turnId, bound.work_id)
-      ) {
-        throw new Error(
-          "Durable Work continuation is already committed for this Turn; continue the current Work or start new Work in a fresh Turn",
-        );
-      }
       if (current?.status === "open" || current?.status === "blocked") {
         this.abandon(current.work_id);
       }
-      return this.createAndBind(input, turn);
+      const work = this.createAndBind(input, turn);
+      this.recordRelation(
+        input.mutationCallId,
+        "start_work",
+        input.requestSha256,
+        work.work_id,
+      );
+      return work;
     }
     if (current?.status === "open" || current?.status === "blocked") {
+      const wasBound = Boolean(bound);
       this.bind(turn, current.work_id);
+      if (!wasBound) {
+        this.recordRelation(
+          input.mutationCallId,
+          "continue_work",
+          input.requestSha256,
+          current.work_id,
+        );
+      }
       return current;
     }
-    return this.createAndBind(input, turn);
+    const work = this.createAndBind(input, turn);
+    this.recordRelation(
+      input.mutationCallId,
+      "start_work",
+      input.requestSha256,
+      work.work_id,
+    );
+    return work;
   }
 
   private turnCommittedToWork(turnId: string, workId: string): boolean {
@@ -66,34 +160,6 @@ export class GuidedWorkSessionWriter {
     `).get(workId, turnId));
   }
 
-  bindOpenHead(
-    scope: WorkTurnScope,
-    expectedWorkId?: string,
-  ): GuidedWorkRow | null {
-    const turn = this.reader.turn(scope);
-    const bound = this.reader.boundWork(scope.turnId);
-    const head = this.reader.sessionHead(scope.sessionId);
-    if (expectedWorkId && bound?.work_id !== expectedWorkId &&
-      head?.work_id !== expectedWorkId) {
-      return null;
-    }
-    if (bound) {
-      if (expectedWorkId && bound.work_id !== expectedWorkId) return null;
-      if (!head || bound.work_id !== head.work_id) {
-        throw new Error("Durable Work Turn binding is no longer the Session head");
-      }
-      if (!guidedWorkMatchesScope(bound, scope)) {
-        throw new Error("Durable Work Turn scope does not match its bound Work");
-      }
-      return bound.status === "open" || bound.status === "blocked" ? bound : null;
-    }
-    if (!head || (head.status !== "open" && head.status !== "blocked")) return null;
-    if (expectedWorkId && head.work_id !== expectedWorkId) return null;
-    if (!guidedWorkMatchesScope(head, scope)) return null;
-    this.bind(turn, head.work_id);
-    return head;
-  }
-
   requireBoundHead(scope: WorkTurnScope): GuidedWorkRow {
     return this.requireBound(scope, false);
   }
@@ -106,7 +172,11 @@ export class GuidedWorkSessionWriter {
     scope: WorkTurnScope,
     allowCompleted: boolean,
   ): GuidedWorkRow {
-    this.reader.turn(scope);
+    // A bound relation is still subject to the current Turn admission and
+    // execution fence.  Reads may inspect a stopped Turn, but no checkpoint,
+    // review, result attachment, or status mutation may be accepted after the
+    // Stop CAS moves its fence.
+    this.reader.relationTurn(scope);
     const bound = this.reader.boundWork(scope.turnId);
     if (!bound) {
       throw new Error(`Durable Work is not bound to Turn: ${scope.turnId}`);
@@ -129,7 +199,8 @@ export class GuidedWorkSessionWriter {
   }
 
   private createAndBind(
-    input: ReplaceWorkPlanCommand,
+    input: Pick<ReplaceWorkPlanCommand, "turnId" | "sessionId" | "projectRef" |
+      "mutationCallId" | "objective">,
     turn: GuidedWorkTurn,
   ): GuidedWorkRow {
     const workId = guidedWorkRecordId("work", input.mutationCallId);
@@ -161,6 +232,47 @@ export class GuidedWorkSessionWriter {
     `).run(input.sessionId, workId, now);
     this.bind(turn, workId);
     return this.reader.sessionHead(input.sessionId)!;
+  }
+
+  private replayRelation(
+    mutationCallId: string,
+    operation: "start_work" | "continue_work",
+    requestSha256: string,
+  ): GuidedWorkRow | null {
+    const row = this.db.query<{
+      operation: string;
+      request_sha256: string;
+      work_id: string;
+    }, [string]>(`
+      SELECT operation, request_sha256, work_id
+      FROM btcc_guided_work_relation_commands WHERE mutation_call_id = ?
+    `).get(mutationCallId);
+    if (!row) return null;
+    if (row.operation !== operation || row.request_sha256 !== requestSha256) {
+      throw new Error(`Durable Work relation identity conflict: ${mutationCallId}`);
+    }
+    return this.db.query<GuidedWorkRow, [string]>(
+      "SELECT * FROM btcc_guided_works WHERE work_id = ?",
+    ).get(row.work_id) ?? null;
+  }
+
+  private recordRelation(
+    mutationCallId: string,
+    operation: "start_work" | "continue_work",
+    requestSha256: string,
+    workId: string,
+  ): void {
+    this.db.query(`
+      INSERT INTO btcc_guided_work_relation_commands (
+        mutation_call_id, operation, request_sha256, work_id, created_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run(
+      mutationCallId,
+      operation,
+      requestSha256,
+      workId,
+      new Date().toISOString(),
+    );
   }
 
   private abandon(workId: string): void {
@@ -201,4 +313,8 @@ export class GuidedWorkSessionWriter {
       new Date().toISOString(),
     );
   }
+}
+
+function isOpenWork(work: GuidedWorkRow): boolean {
+  return work.status === "open" || work.status === "blocked";
 }

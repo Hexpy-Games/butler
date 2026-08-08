@@ -142,10 +142,26 @@ export type DurableWorkContext = {
 export type ReplaceWorkPlanInput = WorkTurnScope & {
   mutationCallId: string;
   startNew?: boolean;
+  /** Runtime-only IDs of completed Turn-local results to attach atomically. */
+  backfillToolCallIds?: string[];
   objective: string;
   governingRefs?: string[];
   actions: DurableWorkPlanAction[];
   checks: string[];
+};
+
+export type StartWorkInput = WorkTurnScope & {
+  mutationCallId: string;
+  objective: string;
+  /** Runtime-only IDs of completed Turn-local results to attach atomically. */
+  backfillToolCallIds?: string[];
+};
+
+export type ContinueWorkInput = WorkTurnScope & {
+  mutationCallId: string;
+  workId: string;
+  /** Runtime-only IDs of completed Turn-local results to attach atomically. */
+  backfillToolCallIds?: string[];
 };
 
 export type RecordWorkCheckpointInput = WorkTurnScope & {
@@ -187,6 +203,15 @@ export type ReplaceWorkPlanCommand = Omit<
   expectedWorkId?: string;
   expectedProgressRevision?: number;
   actionProgress: DurableWorkActionProgress[];
+  openingPlan: boolean;
+};
+
+export type StartWorkCommand = StartWorkInput & {
+  requestSha256: string;
+};
+
+export type ContinueWorkCommand = ContinueWorkInput & {
+  requestSha256: string;
 };
 
 export type RecordWorkCheckpointCommand = Omit<
@@ -220,10 +245,8 @@ export interface DurableWorkService {
   importOpenLegacyWork(
     scope: WorkTurnScope,
   ): Promise<LegacyOpenWorkImportResult | null>;
-  bindOpenWork(
-    scope: WorkTurnScope,
-    expectedWorkId?: string,
-  ): Promise<DurableWorkView | null>;
+  startWork(input: StartWorkInput): Promise<DurableWorkView>;
+  continueWork(input: ContinueWorkInput): Promise<DurableWorkView>;
   replacePlan(input: ReplaceWorkPlanInput): Promise<DurableWorkView>;
   recordCheckpoint(input: RecordWorkCheckpointInput): Promise<DurableWorkView>;
   recordReview(input: RecordWorkReviewInput): Promise<DurableWorkView>;
@@ -236,10 +259,8 @@ export interface DurableWorkStore {
   importOpenLegacyWork(
     scope: WorkTurnScope,
   ): Promise<LegacyOpenWorkImportResult | null>;
-  bindOpenWork(
-    scope: WorkTurnScope,
-    expectedWorkId?: string,
-  ): Promise<DurableWorkView | null>;
+  startWork(input: StartWorkCommand): Promise<DurableWorkView>;
+  continueWork(input: ContinueWorkCommand): Promise<DurableWorkView>;
   replacePlan(input: ReplaceWorkPlanCommand): Promise<DurableWorkView>;
   recordCheckpoint(input: RecordWorkCheckpointCommand): Promise<DurableWorkView>;
   recordReview(input: RecordWorkReviewCommand): Promise<DurableWorkView>;

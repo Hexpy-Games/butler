@@ -26,6 +26,19 @@ export type GuidedWorkTurn = {
   original_message: string;
 };
 
+/**
+ * The turn fields required when a Work relation is about to be mutated.
+ *
+ * Keep these control fields on a relation-specific type so legacy readers
+ * which only hydrate the original-message projection do not have to invent
+ * execution state.  GuidedWorkViewReader.turn is the authoritative source
+ * for this richer row.
+ */
+export type GuidedWorkRelationTurn = GuidedWorkTurn & {
+  semantic_state: string;
+  execution_fence: number;
+};
+
 export type GuidedWorkPlanRow = {
   plan_revision_id: string;
   revision: number;
@@ -75,5 +88,7 @@ export type GuidedWorkResultRow = {
   result_sha256: string | null;
   error_code: string | null;
   origin_turn_id: string;
+  source_turn_rowid: number | null;
+  source_turn_sequence: number | null;
   attached_at: string;
 };

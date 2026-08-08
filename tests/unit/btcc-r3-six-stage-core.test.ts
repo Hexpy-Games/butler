@@ -34,6 +34,8 @@ test("Managed Work exposes the fixed six-stage transition guide", () => {
 
 test("the existing Review tool exposes completion Validation without adding a tool", async () => {
   expect(DURABLE_WORK_TOOL_DEFINITIONS.map(({ name }) => name)).toEqual([
+    "start_work",
+    "continue_work",
     "replace_work_plan",
     "record_work_checkpoint",
     "record_work_review",
@@ -211,7 +213,8 @@ function fakeStore(input: {
   return {
     loadContext: () => Promise.resolve(input.context),
     importOpenLegacyWork: () => Promise.resolve(null),
-    bindOpenWork: () => Promise.resolve(input.context.work),
+    startWork: () => Promise.resolve(input.context.work),
+    continueWork: () => Promise.resolve(input.context.work),
     replacePlan: () => Promise.resolve(input.context.work),
     recordCheckpoint: () => Promise.resolve(input.context.work),
     recordReview: input.recordReview,

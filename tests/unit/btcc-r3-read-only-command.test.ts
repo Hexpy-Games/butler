@@ -388,7 +388,6 @@ describe("R3 read-only command boundary", () => {
         createGuidedToolExecutionBoundary({
           durableWork: {
             boundWorkForTurn: async () => reviewedWork(),
-            bindOpenWork: async () => reviewedWork(),
           } as unknown as DurableWorkService,
           workScope: { turnId: "turn", sessionId: "session" },
           effectService: service,
@@ -452,7 +451,6 @@ describe("R3 read-only command boundary", () => {
     const boundary = createGuidedToolExecutionBoundary({
       durableWork: {
         boundWorkForTurn: async () => work,
-        bindOpenWork: async () => work,
       } as unknown as DurableWorkService,
       workScope: { turnId: "turn", sessionId: "session" },
       effectService: createGuidedEffectService(

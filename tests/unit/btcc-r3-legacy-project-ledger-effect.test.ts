@@ -577,7 +577,11 @@ async function createHarness(input: HarnessInput) {
   const scope = { turnId: command.turnId, sessionId: SESSION_ID };
   const imported = await stores.durableWork.importOpenLegacyWork(scope);
   if (imported?.work.currentStage === "execution") {
-    await stores.durableWork.bindOpenWork(scope, imported.work.workId);
+    await stores.durableWork.continueWork({
+      ...scope,
+      mutationCallId: `continue-imported-plan-${input.recordId}-${input.currentKind}`,
+      workId: imported.work.workId,
+    });
     await stores.durableWork.recordCheckpoint({
       ...scope,
       mutationCallId: `review-imported-plan-${input.recordId}-${input.currentKind}`,
