@@ -16,12 +16,11 @@ import {
   admitVisualImageRequest,
   assertVisualCarrierMatchesCatalog,
   ImageAdmissionError,
-  resolveZaiMcpVisionCatalogEntry,
-  type VisualAdmittedManifest,
 } from "../../agent/image-attachment/index.ts";
 import { findModelMetadata, listModelMetadata } from "./model-catalog.ts";
 import { getButlerData } from "./shared/runtime-support.ts";
 import { registeredHostedModelMetadata } from "./shared/registered-models.ts";
+import { resolveProviderVisualCapability } from "./registry.ts";
 
 export async function runPromptTextWithUsage(
   options: PromptCacheAwarePromptOptions,
@@ -58,7 +57,7 @@ export async function runModelRound(
     const metadata = registeredHostedModelMetadata(butlerData).find((candidate) =>
       candidate.model_ref === model || candidate.model_id === model,
     ) ?? findModelMetadata(model, listModelMetadata());
-    const resolvedMetadata = await resolveZaiMcpVisionCatalogEntry({
+    const resolvedMetadata = await resolveProviderVisualCapability({
       entry: metadata,
       modelRef: model,
       butlerData,

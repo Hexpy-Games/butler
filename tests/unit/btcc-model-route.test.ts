@@ -7,12 +7,19 @@ import type { ModelRoundPort } from "../../packages/butler-agent/src/agent/btcc/
 import {
   buildModelRoute,
   classifyModelRouteFailure,
-  createModelRoutePort,
+  createModelRoutePort as createProductionModelRoutePort,
   MODEL_ROUTE_MAX_DISPATCHES,
 } from "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { createTurnRuntime } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import { openBtccSqliteStores } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+import type { ImageCarrierTuple } from "../../packages/butler-agent/src/agent/image-attachment/index.ts";
+
+function createModelRoutePort(
+  input: Parameters<typeof createProductionModelRoutePort>[0],
+) {
+  return createProductionModelRoutePort({ ...input, retryDelayMs: () => 0 });
+}
 
 test("model route advances once after bounded provider exhaustion and preserves order", async () => {
   const route = buildModelRoute({
@@ -122,6 +129,53 @@ test("model route surfaces auth and admission failures without fallback", async 
     .rejects.toMatchObject({ code: "provider_auth_error" });
   expect(calls).toBe(1);
   expect(classifyModelRouteFailure(new Error("local invariant"))).toBe("surface");
+});
+
+test("visual provider failures never advance to a different model", async () => {
+  const route = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.6-sol",
+    backupModelRefs: ["zai/glm-5.2"],
+    reasoningEffort: "medium",
+    retryCeiling: 1,
+  });
+  const imageCarrier: ImageCarrierTuple = {
+    providerId: "openai",
+    modelId: "gpt-5.6-sol",
+    carrierProtocol: "openai_responses",
+    endpointProfileId: "openai-responses-v1",
+    catalogCapabilityRevision: "openai-image-input-v1",
+    catalogCapabilityDigest: "openai-image-fixture",
+  };
+  const requests: string[] = [];
+  const events: string[] = [];
+  const routed = createModelRoutePort({
+    base: {
+      async runRound(request) {
+        requests.push(String(request.model));
+        throw new ModelProviderRequestError({
+          code: "provider_rate_limited",
+          message: "rate limited",
+          provider: "openai",
+          statusCode: 429,
+          retryable: true,
+        });
+      },
+    },
+    turnId: "turn-route-visual-no-fallback",
+    route,
+    onRouteEvent: (event) => {
+      events.push(event.type);
+    },
+  });
+
+  await expect(routed.runRound({
+    model: "openai/gpt-5.6-sol",
+    messages: [],
+    tools: [],
+    imageCarrier,
+  })).rejects.toMatchObject({ code: "provider_rate_limited" });
+  expect(requests).toEqual(["openai/gpt-5.6-sol"]);
+  expect(events).not.toContain("model.fallback.selected");
 });
 
 test("persisted surface failure is recovered without redispatch or fallback", async () => {

@@ -37,6 +37,7 @@ export function normalizeModelRouteFailure(
 export function createModelRouteRecovery(input: {
   maxAttempts: number;
   signal?: AbortSignal;
+  retryDelayMs?: (retryIndex: number) => number;
   onChanged?: (update: ModelRouteRecoveryUpdate) => void | Promise<void>;
 }) {
   let active = false;
@@ -56,7 +57,10 @@ export function createModelRouteRecovery(input: {
     async wait(attempt: number, modelRef: string, errorCode: string) {
       active = true;
       await notify("recovering", attempt, modelRef, errorCode);
-      await sleep(modelApiRetryDelayMs(attempt - 1), input.signal);
+      await sleep(
+        input.retryDelayMs?.(attempt - 1) ?? modelApiRetryDelayMs(attempt - 1),
+        input.signal,
+      );
     },
     async clear(attempt: number, modelRef: string, errorCode?: string) {
       if (!active) return;

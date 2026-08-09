@@ -3,11 +3,11 @@ import { AUTO_CODEX_LATEST } from "./models.ts";
 
 export const OPENAI_SOURCE = "https://developers.openai.com/api/docs/models/compare";
 const OPENAI_IMAGE_INPUT = {
-  // Documentation describes the model-family capability, but a carrier is
-  // not production-advertised until the exact registered credential/base URL
-  // has passed the bounded synthetic-image probe.  The registered-model
-  // overlay sets this to true only for that exact persisted route evidence.
-  image_input_verified: false,
+  // Official provider metadata is model-capability authority. Route probes
+  // refine exact-route health and never rewrite documented modality support.
+  image_input_support: "supported" as const,
+  image_capability_source: "provider_catalog" as const,
+  image_route_health: "unchecked" as const,
   image_input_modalities: ["text", "image"] as const,
   image_accepted_mime_types: ["image/png", "image/jpeg", "image/webp"] as const,
   image_max_inline_bytes: 10 * 1024 * 1024,

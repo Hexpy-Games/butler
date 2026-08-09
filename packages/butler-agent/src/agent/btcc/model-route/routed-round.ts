@@ -35,6 +35,7 @@ export function createModelRoutePort(input: {
   base: ModelRoundPort;
   turnId: string;
   route: ModelRouteState;
+  retryDelayMs?: (retryIndex: number) => number;
   onRouteEvent?: ModelRouteEventHandler;
   loadAcceptedResponse?: (input: {
     roundId: string;
@@ -71,6 +72,7 @@ export function createModelRoutePort(input: {
       const recovery = createModelRouteRecovery({
         maxAttempts: route.retryCeiling,
         signal: request.signal,
+        retryDelayMs: input.retryDelayMs,
         onChanged: input.onRecoveryChanged,
       });
       const frozenVisualModelRef = request.imageCarrier

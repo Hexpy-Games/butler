@@ -2,10 +2,12 @@ import type { ProviderModelMetadata, ReasoningEffort } from "../model-catalog.ts
 
 export const ZAI_SOURCE = "https://docs.z.ai/guides/overview/quick-start";
 const ZAI_VISION_MCP_IMAGE = {
-  // Capability is advertised only after the enabled `zai-vision` MCP server
-  // proves this exact tool schema at admission.  The base catalog is
-  // documentation-only and therefore remains fail-closed.
-  image_input_verified: false,
+  // The tool-assisted model capability is documented independently from the
+  // dynamically discovered MCP carrier. The provider adapter resolves the
+  // exact tool schema before admission.
+  image_input_support: "supported" as const,
+  image_capability_source: "provider_catalog" as const,
+  image_route_health: "unchecked" as const,
   image_input_modalities: ["text", "image"] as const,
   image_accepted_mime_types: ["image/png", "image/jpeg", "image/webp"] as const,
   image_max_inline_bytes: 10 * 1024 * 1024,

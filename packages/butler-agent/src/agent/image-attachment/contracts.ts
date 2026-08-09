@@ -10,6 +10,19 @@ export type ImageCarrierProtocol =
   | "zai_mcp_vision"
   | "fake_vision";
 
+export type ImageInputSupport = "supported" | "unsupported" | "unknown";
+export type ImageRouteHealth =
+  | "unchecked"
+  | "healthy"
+  | "incompatible"
+  | "transient_failure";
+export type ImageCapabilitySource =
+  | "provider_catalog"
+  | "provider_discovery"
+  | "explicit_config"
+  | "route_probe"
+  | "unknown";
+
 export interface ImageCarrierTuple {
   readonly providerId: string;
   readonly modelId: string;
@@ -29,6 +42,9 @@ export interface ImageCapabilityEvidence {
   readonly endpointProfileId: string;
   readonly catalogCapabilityRevision: string;
   readonly catalogCapabilityDigest: string;
+  readonly modelSupport: ImageInputSupport;
+  readonly capabilitySource: ImageCapabilitySource;
+  readonly routeHealth: ImageRouteHealth;
   readonly inputModalities: readonly string[];
   readonly acceptedMimeTypes: readonly string[];
   readonly maxInlineImageBytes: number;
@@ -122,7 +138,9 @@ export interface ImageCapabilityCatalogEntry {
   readonly credential_id?: string;
   readonly hosted_api_shape?: string;
   readonly runtime_supported?: boolean;
-  readonly image_input_verified?: boolean;
+  readonly image_input_support?: ImageInputSupport;
+  readonly image_capability_source?: ImageCapabilitySource;
+  readonly image_route_health?: ImageRouteHealth;
   readonly image_input_modalities?: readonly string[];
   readonly image_accepted_mime_types?: readonly string[];
   readonly image_max_inline_bytes?: number;
@@ -138,6 +156,19 @@ export interface ImageCapabilityCatalogEntry {
   readonly image_tool_server_id?: string;
   readonly image_tool_name?: string;
   readonly image_tool_capability_digest?: string;
+}
+
+export interface VisualCapabilityResolverInput {
+  readonly entry: ImageCapabilityCatalogEntry | undefined;
+  readonly modelRef: string;
+  readonly butlerData: string;
+  readonly signal?: AbortSignal;
+}
+
+export interface VisualCapabilityResolver {
+  resolve(
+    input: VisualCapabilityResolverInput,
+  ): Promise<ImageCapabilityCatalogEntry | undefined>;
 }
 
 export interface ResolvedImageRoute {
@@ -168,6 +199,9 @@ export interface VisualAdmissionMemo {
 export class ImageAdmissionError extends Error {
   readonly code:
     | "image_model_unsupported"
+    | "image_capability_unknown"
+    | "image_carrier_unavailable"
+    | "image_route_incompatible"
     | "image_carrier_unverified"
     | "image_manifest_invalid"
     | "image_payload_invalid";

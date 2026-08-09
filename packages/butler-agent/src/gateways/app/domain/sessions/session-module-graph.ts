@@ -11,6 +11,7 @@ import {
   createAppSessionInteractionModuleGraph,
   type AppSessionInteractionModuleGraph,
 } from "./session-interaction-module-graph.ts";
+import { resolveProviderVisualCapability } from "../../../../integrations/providers/registry.ts";
 
 export interface AppSessionModuleGraph {
   messageFiles: AppMessageFileStore;
@@ -39,8 +40,11 @@ export function createAppSessionModuleGraph(input: {
   host: any;
 }): AppSessionModuleGraph {
   const { db, butlerData, defaultChatId, defaultChatTitle, host } = input;
-  const messageFiles = new AppMessageFileStore(db, butlerData, (sessionId) =>
-    host.ensureChat(sessionId),
+  const messageFiles = new AppMessageFileStore(
+    db,
+    butlerData,
+    (sessionId) => host.ensureChat(sessionId),
+    { resolve: resolveProviderVisualCapability },
   );
   const sessionRecords = new AppSessionRecordStore(
     db,

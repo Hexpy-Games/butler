@@ -32,6 +32,7 @@ import {
   safeEndpointLabel,
 } from "../provider-errors.ts";
 import { recordPromptCacheMetric } from "../openai/runtime.ts";
+import { serializeOpenAIChatVisualContent } from "../../../agent/image-attachment/index.ts";
 
 export async function runHostedOpenAICompatiblePromptText(
   config: HostedRuntimeConfig,
@@ -89,7 +90,7 @@ export async function runHostedOpenAICompatibleModelRound(
   const response = await createHostedChatCompletion(
     config,
     {
-      messages: hostedModelRoundMessages(request),
+      messages: await hostedModelRoundMessages(request),
       ...(request.tools.length > 0
         ? { tools: hostedChatTools(request.tools.map(modelRoundTool)) }
         : {}),
@@ -172,15 +173,16 @@ function modelRoundTool(
   };
 }
 
-function hostedModelRoundMessages(
+async function hostedModelRoundMessages(
   request: ModelRoundRequest,
-): HostedChatMessage[] {
+): Promise<HostedChatMessage[]> {
   const firstUser = request.messages.findIndex(
     (message) => message.role === "user",
   );
-  const messages = request.messages.map((message, index): HostedChatMessage => {
+  const messages: HostedChatMessage[] = [];
+  for (const [index, message] of request.messages.entries()) {
     if (message.role === "assistant") {
-      return {
+      messages.push({
         role: "assistant",
         content: message.content || null,
         ...(message.toolCalls && message.toolCalls.length > 0
@@ -195,30 +197,44 @@ function hostedModelRoundMessages(
               })),
             }
           : {}),
-      };
+      });
+      continue;
     }
     if (message.role === "tool") {
-      return {
+      messages.push({
         role: "tool",
         content: message.content,
         tool_call_id: message.toolCallId,
         ...(message.name ? { name: message.name } : {}),
-      };
+      });
+      continue;
     }
     if (message.role === "system") {
-      return { role: "system", content: message.content };
+      messages.push({ role: "system", content: message.content });
+      continue;
     }
     const content =
       index === firstUser
         ? request.imageCarrier?.carrierProtocol === "zai_mcp_vision"
           ? promptWithZaiVisionToolAttachments(message.content, request.imageManifests)
+          : request.imageCarrier?.carrierProtocol === "openai_chat_completions" &&
+              (request.imageManifests?.length ?? 0) > 0
+            ? await serializeOpenAIChatVisualContent({
+                text: message.content,
+                manifests: request.imageManifests ?? [],
+                payloadPort: request.verifiedImagePayloadPort ?? {
+                  read: async () => {
+                    throw new Error("verified_image_payload_port_missing");
+                  },
+                },
+              })
           : promptTextForHosted({
               prompt: message.content,
               attachments: [...(request.attachments ?? [])],
             })
         : message.content;
-    return { role: "user", content };
-  });
+    messages.push({ role: "user", content });
+  }
   if (request.instructions?.trim()) {
     return [
       { role: "system", content: request.instructions.trim() },

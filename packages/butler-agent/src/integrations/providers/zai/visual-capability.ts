@@ -2,19 +2,14 @@ import { createHash } from "node:crypto";
 import {
   getMcpServer,
   type McpServerConfig,
-} from "../../interfaces/mcp-client/registry.ts";
-import { probeMcpServer } from "../../interfaces/mcp-client/client.ts";
-import type { ImageCapabilityCatalogEntry } from "./contracts.ts";
+} from "../../../interfaces/mcp-client/registry.ts";
+import { probeMcpServer } from "../../../interfaces/mcp-client/client.ts";
+import type { ImageCapabilityCatalogEntry } from "../../../agent/image-attachment/contracts.ts";
 
 export const ZAI_VISION_MCP_SERVER_ID = "zai-vision" as const;
 export const ZAI_VISION_MCP_TOOL_NAME = "analyze_image" as const;
 
-/**
- * Resolve the tool-assisted carrier only for the exact Coding Plan model and
- * the enabled, schema-proven `zai-vision/analyze_image` server.  Discovery
- * failures return a fresh unverified entry; a prior dynamic digest is never
- * allowed to survive a failed revalidation.
- */
+/** Resolve the exact tool-assisted carrier through provider-owned discovery. */
 export async function resolveZaiMcpVisionCatalogEntry(input: {
   entry: ImageCapabilityCatalogEntry | undefined;
   modelRef: string;
@@ -29,7 +24,7 @@ export async function resolveZaiMcpVisionCatalogEntry(input: {
     return entry;
   }
   const server = getMcpServer(input.butlerData, ZAI_VISION_MCP_SERVER_ID);
-  if (!server?.enabled) return unverifiedEntry(entry);
+  if (!server?.enabled) return unavailableEntry(entry);
   let toolDigest: string | undefined;
   try {
     const capabilities = await probeMcpServer({
@@ -38,20 +33,18 @@ export async function resolveZaiMcpVisionCatalogEntry(input: {
       timeoutMs: input.timeoutMs ?? 10_000,
       signal: input.signal,
     });
-    if (!capabilities.ok) return unverifiedEntry(entry);
+    if (!capabilities.ok) return unavailableEntry(entry);
     const tool = capabilities.tools.find((candidate) =>
       candidate.name === ZAI_VISION_MCP_TOOL_NAME,
     );
     if (!tool || !schemaAcceptsImageSourceAndPrompt(tool.input_schema)) {
-      return unverifiedEntry(entry);
+      return unavailableEntry(entry);
     }
     toolDigest = sha256Canonical({
       route: {
         provider_id: entry.provider_id,
         model_id: entry.model_id,
-        credential_id: typeof (entry as { credential_id?: unknown }).credential_id === "string"
-          ? (entry as { credential_id: string }).credential_id
-          : null,
+        credential_id: typeof entry.credential_id === "string" ? entry.credential_id : null,
       },
       server: {
         id: server.id,
@@ -67,11 +60,13 @@ export async function resolveZaiMcpVisionCatalogEntry(input: {
       tool: { name: ZAI_VISION_MCP_TOOL_NAME, input_schema: tool.input_schema },
     });
   } catch {
-    return unverifiedEntry(entry);
+    return unavailableEntry(entry);
   }
   return {
     ...entry,
-    image_input_verified: true,
+    image_input_support: "supported",
+    image_capability_source: "provider_discovery",
+    image_route_health: "healthy",
     image_capability_digest: toolDigest,
     image_tool_capability_digest: toolDigest,
     image_tool_server_id: ZAI_VISION_MCP_SERVER_ID,
@@ -79,10 +74,11 @@ export async function resolveZaiMcpVisionCatalogEntry(input: {
   };
 }
 
-function unverifiedEntry(entry: ImageCapabilityCatalogEntry): ImageCapabilityCatalogEntry {
+function unavailableEntry(entry: ImageCapabilityCatalogEntry): ImageCapabilityCatalogEntry {
   return {
     ...entry,
-    image_input_verified: false,
+    image_route_health: "transient_failure",
+    image_carrier_protocol: undefined,
     image_capability_digest: undefined,
     image_tool_capability_digest: undefined,
     image_tool_server_id: undefined,

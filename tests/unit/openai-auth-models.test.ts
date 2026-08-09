@@ -1329,7 +1329,7 @@ test("registered local model strips textual analysis protocol before final", asy
   }
 });
 
-test("registered local OpenAI-compatible model receives image attachments as OpenAI-compatible image parts", async () => {
+test("registered local OpenAI-compatible model cannot bypass admitted image derivatives", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   const localServer = Bun.serve({
     port: 0,
@@ -1363,21 +1363,8 @@ test("registered local OpenAI-compatible model receives image attachments as Ope
         sizeBytes: 8,
         url: `/message-files/${fileId}`,
       }],
-    })).resolves.toBe("image seen");
-    expect(seenBodies).toHaveLength(1);
-    expect(seenBodies[0]?.messages[0]?.content).toEqual([
-      expect.objectContaining({
-        type: "text",
-        text: expect.stringContaining("describe this"),
-      }),
-      expect.objectContaining({
-        type: "image_url",
-        image_url: {
-          url: expect.stringMatching(/^data:image\/png;base64,/),
-        },
-      }),
-    ]);
-    expect(JSON.stringify(seenBodies[0])).not.toContain(tempDir);
+    })).rejects.toThrow("verified_image_payload_port_required");
+    expect(seenBodies).toHaveLength(0);
   } finally {
     localServer.stop(true);
   }
