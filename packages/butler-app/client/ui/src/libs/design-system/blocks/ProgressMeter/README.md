@@ -13,7 +13,10 @@ Use it in inspectors, settings, and activity summaries.
 It provides accessible progress semantics without domain math.
 
 ## How to use this component
-Pass a 0-100 value and optional label, meta, and tone.
+Pass a 0-100 value and optional label, meta, accessible name, and tone.
+
+Use `ariaLabel` when the visible label and percentage need a complete
+accessible description, such as `"5시간 한도: 90% 남음"`.
 
 ## Who can use this component
 Any UI that has already computed a bounded percentage.

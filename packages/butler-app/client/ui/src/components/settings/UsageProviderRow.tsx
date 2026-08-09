@@ -5,12 +5,11 @@ import type {
 import { Stack, Typo } from "@/butler-ds";
 import {
   formatQuotaTimestamp,
-  formatRemaining,
   planLabel,
   quotaReasonLabel,
   sourceLabel,
-  windowLabel,
 } from "./providerQuotaPresentation";
+import { ProviderQuotaGauge } from "./ProviderQuotaGauge";
 import { formatCompact, formatCount } from "./usageSettingsFormat";
 
 type UsageProvider = UsageMonitorView["providerUsage"]["providers"][number];
@@ -45,14 +44,12 @@ export function UsageProviderRow({
           {formatCompact(provider.promptTokens)} · 출력{" "}
           {formatCompact(provider.outputTokens)}
         </Typo.Caption>
-        <Typo.Caption>
-          잔여량: {" "}
-          {quota.available
-            ? quota.stale
-              ? "이전 확인값(새로고침 실패)"
-              : "확인됨"
-            : quotaReasonLabel(quota.reason?.code)}
-        </Typo.Caption>
+        {quota.available && quota.stale ? (
+          <Typo.Caption>잔여량: 이전 확인값(새로고침 실패)</Typo.Caption>
+        ) : null}
+        {!quota.available ? (
+          <Typo.Caption>잔여량: {quotaReasonLabel(quota.reason?.code)}</Typo.Caption>
+        ) : null}
         {renderQuotaDetails(quota)}
         <Typo.Caption>
           과금: {provider.billing.available ? "확인됨" : provider.billing.reason}
@@ -80,11 +77,7 @@ function renderQuotaDetails(quota: ProviderQuotaResultView) {
         {quota.stale ? ` · ${quotaReasonLabel(quota.reason?.code)}` : ""}
       </Typo.Caption>
       {quota.windows.map((window) => (
-        <Typo.Caption key={window.id}>
-          {windowLabel(window)}: 남은 {formatRemaining(window.remainingPercent)}
-          {window.resetsAt ? ` · 재설정 ${formatQuotaTimestamp(window.resetsAt)}` : ""}
-          {window.expiresAt ? ` · 만료 ${formatQuotaTimestamp(window.expiresAt)}` : ""}
-        </Typo.Caption>
+        <ProviderQuotaGauge key={window.id} window={window} />
       ))}
     </Stack>
   );
