@@ -21,6 +21,7 @@ export async function validateProjectDeliverable(input: {
   browserExecutablePath: string;
   runRoot: string;
   workspaceRoot: string;
+  env?: NodeJS.ProcessEnv;
 }): Promise<ProjectDeliverableValidation> {
   const browserExecutablePath = resolveBenchmarkBrowserExecutable(
     input.browserExecutablePath,
@@ -28,7 +29,7 @@ export async function validateProjectDeliverable(input: {
   const outputRoot = join(input.runRoot, "deliverable-validation");
   const entryPath = join(input.workspaceRoot, "index.html");
   mkdirSync(outputRoot, { recursive: true });
-  const build = await runProjectBuild(input.workspaceRoot);
+  const build = await runProjectBuild(input.workspaceRoot, input.env);
   const failedViewport = (name: keyof typeof VIEWPORTS, error: string) =>
     emptyViewport(VIEWPORTS[name].width, VIEWPORTS[name].height, error);
   if (build.exitCode === null && !build.timedOut) {
@@ -227,12 +228,13 @@ async function revealLazyPageContent(
 
 async function runProjectBuild(
   workspaceRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<ProjectDeliverableValidation["build"]> {
   const command = "npm run build";
   const output: string[] = [];
   const child = spawn("npm", ["run", "build"], {
     cwd: workspaceRoot,
-    env: process.env,
+    env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   child.stdout?.on("data", (chunk) => output.push(String(chunk)));

@@ -235,6 +235,7 @@ function prepareConfig(
   run: Pick<PreparedRun, "dataRoot" | "model" | "reasoningEffort" | "repoRoot" | "runId" | "workspaceRoot">,
   modelFallback?: ElectronScenario["modelFallback"],
   providerFixture?: ElectronScenario["providerFixture"],
+  promptCacheKeyPrefix?: string,
 ): void {
   const config = structuredClone(sourceConfig);
   if (providerFixture) {
@@ -249,7 +250,9 @@ function prepareConfig(
     defaultModel: run.model,
     devRoot: run.workspaceRoot,
     openaiModel: run.model.split("/").slice(1).join("/"),
-    openaiPromptCacheKeyPrefix: `btcc-r3-e2e-${run.runId}`,
+    openaiPromptCacheKeyPrefix: promptCacheKeyPrefix === undefined
+      ? `btcc-r3-e2e-${run.runId}`
+      : validatedPromptCacheKeyPrefix(promptCacheKeyPrefix),
     openaiReasoningEffort: run.reasoningEffort,
   };
   if (modelFallback) {
@@ -280,6 +283,15 @@ function prepareConfig(
     topics: {},
   };
   writeJson(join(run.dataRoot, "butler.config.json"), config);
+}
+
+function validatedPromptCacheKeyPrefix(value: string): string {
+  const candidate = value.trim();
+  assert(
+    /^[a-z0-9][a-z0-9._-]{0,95}$/u.test(candidate),
+    "Prompt cache key prefix must be a bounded lowercase identifier.",
+  );
+  return candidate;
 }
 
 function writeFixtures(
@@ -358,6 +370,9 @@ export async function prepareElectronRun(
   options: ElectronHarnessOptions,
 ): Promise<PreparedRun> {
   const repoRoot = resolve(options.repoRoot ?? process.cwd());
+  const promptCacheKeyPrefix = options.promptCacheKeyPrefix === undefined
+    ? undefined
+    : validatedPromptCacheKeyPrefix(options.promptCacheKeyPrefix);
   const sourceData = resolve(
     options.sourceData ?? process.env.BUTLER_E2E_SOURCE_DATA ?? join(homedir(), ".butler"),
   );
@@ -448,7 +463,7 @@ export async function prepareElectronRun(
   mkdirSync(dataRoot, { recursive: true, mode: 0o700 });
   mkdirSync(electronProfile, { recursive: true, mode: 0o700 });
   if (sessionKind === "chat") mkdirSync(workspaceRoot, { recursive: true });
-  prepareConfig(sourceConfig, run, scenario.modelFallback, scenario.providerFixture);
+  prepareConfig(sourceConfig, run, scenario.modelFallback, scenario.providerFixture, promptCacheKeyPrefix);
   if (scenario.providerFixture) {
     writeFixtureProviderCredential(dataRoot);
   } else {
