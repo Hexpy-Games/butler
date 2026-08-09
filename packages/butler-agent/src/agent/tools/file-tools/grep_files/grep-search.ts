@@ -15,7 +15,7 @@ export type SearchMatch = {
 
 export type CandidateReadResult = {
   skipped: boolean;
-  reason?: "max_bytes_per_file" | "binary" | "invalid_utf8" | "io_error" | "symlink";
+  reason?: "max_bytes_per_file" | "binary" | "invalid_utf8" | "io_error" | "symlink" | "elapsed_ms";
   matches: SearchMatch[];
   bytesRead: number;
   attemptedRead: boolean;
@@ -113,7 +113,11 @@ export async function readCandidate(
   maxMatches: number,
   maxOutputBytes: number,
   after?: { path: string; line: number } | null,
+  options: { deadlineAt?: number } = {},
 ): Promise<CandidateReadResult> {
+  if (options.deadlineAt !== undefined && Date.now() >= options.deadlineAt) {
+    return { skipped: true, reason: "elapsed_ms", matches: [], bytesRead: 0, attemptedRead: false };
+  }
   if (candidate.bytes > maxBytesPerFile) return { skipped: true, reason: "max_bytes_per_file", matches: [], bytesRead: 0, attemptedRead: false };
   try {
     const currentStat = await lstat(candidate.absolutePath);
@@ -122,6 +126,9 @@ export async function readCandidate(
     // immediately before read so a file that grew after traversal cannot
     // bypass the declared per-file byte budget.
     if (currentStat.size > maxBytesPerFile) return { skipped: true, reason: "max_bytes_per_file", matches: [], bytesRead: 0, attemptedRead: false };
+    if (options.deadlineAt !== undefined && Date.now() >= options.deadlineAt) {
+      return { skipped: true, reason: "elapsed_ms", matches: [], bytesRead: 0, attemptedRead: false };
+    }
   } catch {
     return { skipped: true, reason: "io_error", matches: [], bytesRead: 0, attemptedRead: true };
   }
@@ -130,6 +137,9 @@ export async function readCandidate(
     data = await readFile(candidate.absolutePath);
   } catch {
     return { skipped: true, reason: "io_error", matches: [], bytesRead: 0, attemptedRead: true };
+  }
+  if (options.deadlineAt !== undefined && Date.now() >= options.deadlineAt) {
+    return { skipped: true, reason: "elapsed_ms", matches: [], bytesRead: data.byteLength, attemptedRead: true };
   }
   if (isBinary(data)) return { skipped: true, reason: "binary", matches: [], bytesRead: data.byteLength, attemptedRead: true };
   const decoded = decodeUtf8(data);

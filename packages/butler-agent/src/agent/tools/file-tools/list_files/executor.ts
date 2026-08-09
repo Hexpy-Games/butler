@@ -1,5 +1,9 @@
 import { relative } from "node:path";
-import { resolveWorkspacePathGuard } from "../shared/workspace-path-guard.ts";
+import {
+  resolveWorkspacePathGuard,
+  safeWorkspaceGuardResult,
+  safeWorkspaceResultPath,
+} from "../shared/workspace-path-guard.ts";
 import { fileToolCapabilityReceipt, fileToolEvidenceReceipt } from "../shared/evidence.ts";
 import { getWorkspaceRoot, tryParseToolArgs } from "../shared/args.ts";
 import {
@@ -100,15 +104,30 @@ export async function executeListFilesTool(
     rejectProtectedProjectLedgerPaths: true,
     protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
   });
-  if (!guard.ok) return {
-    ok: false,
-    error: guard.reason === "directory_not_allowed" || guard.reason === "not_a_directory" ? "not_a_directory" : guard.reason,
-    path: root,
-    guard,
-    message: "The discovery root is not an admitted workspace directory.",
-    recovery_hint: "Choose a contained, non-sensitive workspace directory.",
-    evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "list_files", ok: false, path: root, error: guard.reason === "directory_not_allowed" || guard.reason === "not_a_directory" ? "not_a_directory" : guard.reason }),
-  };
+  if (!guard.ok) {
+    const error = guard.reason === "directory_not_allowed" || guard.reason === "not_a_directory"
+      ? "not_a_directory"
+      : guard.reason;
+    const safePath = safeWorkspaceResultPath({
+      workspaceRoot: guard.workspaceRoot,
+      requestedPath: root,
+      absolutePath: guard.absolutePath,
+    });
+    return {
+      ok: false,
+      error,
+      ...(safePath === undefined ? {} : { path: safePath }),
+      guard: safeWorkspaceGuardResult(guard),
+      message: "The discovery root is not an admitted workspace directory.",
+      recovery_hint: "Choose a contained, non-sensitive workspace directory.",
+      evidence_capability_receipts: fileToolCapabilityReceipt({
+        toolName: "list_files",
+        ok: false,
+        path: safePath,
+        error,
+      }),
+    };
+  }
   const traversal = await traverseWorkspaceFiles({
     workspaceRoot: guard.workspaceRoot,
     rootPath: guard.realPath ?? guard.absolutePath!,

@@ -1,4 +1,8 @@
-import { resolveWorkspacePathGuard } from "../shared/workspace-path-guard.ts";
+import {
+  resolveWorkspacePathGuard,
+  safeWorkspaceGuardResult,
+  safeWorkspaceResultPath,
+} from "../shared/workspace-path-guard.ts";
 import { fileToolCapabilityReceipt, fileToolEvidenceReceipt, safeWorkspacePath } from "../shared/evidence.ts";
 import { getWorkspaceRoot, tryParseToolArgs } from "../shared/args.ts";
 import {
@@ -84,14 +88,19 @@ export async function executeReadFileTool(
         protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
       });
       if (!suppliedGuard.ok && suppliedGuard.reason === "protected_path") {
+        const safePath = safeWorkspaceResultPath({
+          workspaceRoot: suppliedGuard.workspaceRoot,
+          requestedPath: request.path,
+          absolutePath: suppliedGuard.absolutePath,
+        });
         return {
           ok: false,
           error: suppliedGuard.reason,
-          path: request.path,
-          guard: suppliedGuard,
+          ...(safePath === undefined ? {} : { path: safePath }),
+          guard: safeWorkspaceGuardResult(suppliedGuard),
           message: "Project Ledger files must be inspected through their dedicated tool policy.",
           recovery_hint: "Use the admitted workspace root or the Project Ledger inspection tools.",
-          evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, path: request.path, error: suppliedGuard.reason }),
+          evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, path: safePath, error: suppliedGuard.reason }),
         };
       }
     }
