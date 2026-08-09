@@ -109,6 +109,7 @@ export class AppTransportQueueStore {
           chatId: input.chatId,
           messageId: input.message.id,
           turnId: input.turnId,
+          turnAttempt: this.getTurn(input.turnId).attempt,
           text: input.text,
           timestamp: input.message.created_at,
           sessionId,

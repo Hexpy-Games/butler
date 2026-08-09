@@ -57,14 +57,17 @@ import {
 } from "../model-route/index.ts";
 import { renderExecutionWindowObservation } from "./execution-window-observation.ts";
 import { createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
-import { createGuidedRouteEventHandler } from "./guided-turn-route-events.ts";
+import {
+  createGuidedRouteEventHandler,
+  createGuidedRouteRecoveryHandler,
+} from "./guided-turn-route-events.ts";
 import { createGuidedOperationalProgressCapture } from
   "./guided-operational-progress.ts";
+import { throwIfExecutionWindowAborted } from "./execution-window.ts";
 import {
   guidedOperationalFallbackAfterInternalId,
   loadGuidedOperationalFacts,
 } from "./guided-operational-facts.ts";
-
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
   butlerData: string;
@@ -80,7 +83,7 @@ export function createProductionGuidedTurnAgent(input: {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   return {
     async run({
-      turn,
+      turn, recoveryAttempt,
       signal,
       progress,
       recordModelRouteEvent,
@@ -219,6 +222,11 @@ export function createProductionGuidedTurnAgent(input: {
             loadAttemptHistory: loadModelRouteAttemptHistory,
             loadAcceptedResponse: loadModelRoundAcceptance,
             recordAcceptedResponse: recordModelRoundAcceptance,
+            onRecoveryChanged: createGuidedRouteRecoveryHandler({
+              turnId: turn.turnId,
+              semanticState: turn.semanticState,
+              progress: observedProgress,
+            }),
           })
         : baseModelRound;
       const responseLanguage = renderGuidedResponseLanguage(
@@ -242,6 +250,7 @@ export function createProductionGuidedTurnAgent(input: {
             : "",
         }),
         turnId: turn.turnId,
+        recoveryAttempt,
         instructions: guidedInstructions(
           policy,
           renderGuidedPersonaInstructions(turn, input.contextDocuments),
@@ -270,7 +279,7 @@ export function createProductionGuidedTurnAgent(input: {
         maxIterations: Math.max(1, input.executionWindowSize ?? 60),
         modelRound,
         onExecutionWindowBoundary: async ({ windowIndex }) => {
-          if (signal.aborted) throwGuidedAbort(signal);
+          throwIfExecutionWindowAborted(signal);
           const refreshedContext = policy.trackingMode === "none"
             ? null
             : await safeLoadWorkContext(input.durableWork, workScope);
@@ -338,10 +347,4 @@ export function createProductionGuidedTurnAgent(input: {
       };
     },
   };
-}
-
-function throwGuidedAbort(signal: AbortSignal): never {
-  throw signal.reason instanceof Error
-    ? signal.reason
-    : new Error("Guided Turn was aborted");
 }

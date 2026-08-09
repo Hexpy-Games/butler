@@ -13,6 +13,7 @@ export interface AppInboundInput {
   chatId: string;
   messageId: string;
   turnId: string;
+  turnAttempt?: number;
   text: string;
   timestamp: string;
   sessionId: string;
@@ -59,6 +60,7 @@ export function createAppInboundEnvelope(input: AppInboundInput): InboundEnvelop
       sessionId: input.sessionId,
       projectId: input.projectId,
       turnId: input.turnId,
+      ...(input.turnAttempt ? { turnAttempt: input.turnAttempt } : {}),
     },
     executionControls,
     raw: input.raw ?? {

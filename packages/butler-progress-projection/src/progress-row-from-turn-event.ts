@@ -31,11 +31,16 @@ export function progressRowFromSharedTurnEvent(
   if (event.kind === "assistant.public_note") {
     const note = safeText(payload.note, "Working");
     const workBlockId = optionalText(payload.workBlockId);
+    const recoveryStatus = optionalText(payload.recoveryStatus);
     return {
       ...base,
       kind: "message",
       safe_label: note,
-      state: "running",
+      state: recoveryStatus === "cleared"
+        ? "delivered"
+        : recoveryStatus === "interrupted"
+          ? "failed"
+          : "running",
       work_block_id: workBlockId,
       work_block_label:
         optionalText(payload.decisionTitle ?? payload.workBlockLabel) ??

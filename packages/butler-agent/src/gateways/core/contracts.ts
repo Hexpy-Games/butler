@@ -73,6 +73,7 @@ export interface InboundEnvelope {
     projectId?: string;
     stewardId?: string;
     turnId?: string;
+    turnAttempt?: number;
   };
   executionControls?: TurnExecutionControlsV1;
   raw?: unknown;

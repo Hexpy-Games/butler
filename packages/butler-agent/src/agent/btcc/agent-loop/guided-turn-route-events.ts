@@ -2,7 +2,9 @@ import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type {
   ModelRouteEvent,
   ModelRouteEventResult,
+  ModelRouteRecoveryUpdate,
 } from "../model-route/index.ts";
+import { publishOperationalNotice } from "../projection/index.ts";
 
 type GuidedRouteEventInput = {
   turnId: string;
@@ -63,4 +65,24 @@ export function createGuidedRouteEventHandler(input: GuidedRouteEventInput) {
     }
     return persisted;
   };
+}
+
+/** Projects the router's real same-model recovery state without owning it. */
+export function createGuidedRouteRecoveryHandler(input: {
+  turnId: string;
+  semanticState: string;
+  progress?: BtccTurnProgressObserver;
+}) {
+  return (update: ModelRouteRecoveryUpdate) => publishOperationalNotice(
+    input.progress,
+    {
+      turnId: input.turnId,
+      semanticState: input.semanticState,
+      status: update.status,
+      activationKind: "automatic_provider_recovery",
+      code: update.errorCode,
+      attempt: update.attempt,
+      maxAttempts: update.maxAttempts,
+    },
+  );
 }
