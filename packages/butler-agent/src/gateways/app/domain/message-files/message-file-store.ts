@@ -34,11 +34,11 @@ import {
   sha256,
   verifyVisualManifestSource,
   visualDerivativeStorageName,
-  resolveZaiMcpVisionCatalogEntry,
   type VisualImageAdmissionResult,
   ImageAdmissionError,
   type ImageCapabilityCatalogEntry,
   type VerifiedImagePayloadPort,
+  type VisualCapabilityResolver,
   type VisualAdmittedManifest,
 } from "../../../../agent/image-attachment/index.ts";
 
@@ -49,6 +49,9 @@ export class AppMessageFileStore {
     private readonly db: Database,
     private readonly butlerData: string,
     private readonly ensureOwnerSession: (sessionId: string) => void,
+    private readonly visualCapabilityResolver: VisualCapabilityResolver = {
+      resolve: async ({ entry }) => entry,
+    },
   ) {}
 
   create(input: {
@@ -166,7 +169,7 @@ export class AppMessageFileStore {
     const entry = catalog.find((candidate) =>
       candidate.model_ref === model || candidate.model_id === model,
     );
-    return resolveZaiMcpVisionCatalogEntry({
+    return this.visualCapabilityResolver.resolve({
       entry,
       modelRef: model,
       butlerData: this.butlerData,
@@ -180,13 +183,13 @@ export class AppMessageFileStore {
           prepared.map((item) => item.manifest),
         );
       } catch (error) {
-        throw imageAdmissionErrorToAppError(error, catalog);
+        throw imageAdmissionErrorToAppError(error);
       }
       prepared.forEach((item) => this.persistVisualDerivative(item.manifest, item.bytes));
       return result;
     })).catch((error) => {
       if (error instanceof AppStoreOperationError) throw error;
-      throw imageAdmissionErrorToAppError(error, catalog);
+      throw imageAdmissionErrorToAppError(error);
     });
   }
 
@@ -198,7 +201,7 @@ export class AppMessageFileStore {
     const entry = catalog.find((candidate) =>
       candidate.model_ref === model || candidate.model_id === model,
     );
-    return resolveZaiMcpVisionCatalogEntry({
+    return this.visualCapabilityResolver.resolve({
       entry,
       modelRef: model,
       butlerData: this.butlerData,
@@ -251,7 +254,7 @@ export class AppMessageFileStore {
       }
       return checked;
       } catch (error) {
-        throw imageAdmissionErrorToAppError(error, catalog);
+        throw imageAdmissionErrorToAppError(error);
       }
     });
   }
@@ -475,21 +478,22 @@ export class AppMessageFileStore {
 
 function imageAdmissionErrorToAppError(
   error: unknown,
-  catalog: readonly ImageCapabilityCatalogEntry[] = [],
 ): AppStoreOperationError {
   if (error instanceof AppStoreOperationError) return error;
   if (error instanceof ImageAdmissionError) {
-    const status = error.code === "image_payload_invalid" ? 413 : 409;
-    const hasEligibleCandidate = catalog.some((entry) =>
-      entry.runtime_supported === true && entry.image_input_verified === true &&
-      Boolean(entry.image_endpoint_profile_id && entry.image_capability_revision &&
-        entry.image_capability_digest &&
-        (entry.image_carrier_protocol || entry.hosted_api_shape)),
-    );
+    const status = error.code === "image_payload_invalid"
+      ? 413
+      : error.code === "image_manifest_invalid"
+        ? 422
+        : 409;
     const message = error.code === "image_model_unsupported"
-      ? hasEligibleCandidate
-        ? "현재 모델은 이미지를 읽을 수 없습니다. 이미지 지원 모델을 선택하거나 이미지를 제거하세요."
-        : "현재 사용 가능한 이미지 지원 모델이 없습니다"
+      ? "현재 모델은 이미지를 읽을 수 없습니다. 이미지 지원 모델을 선택하거나 이미지를 제거하세요."
+      : error.code === "image_capability_unknown"
+        ? "현재 모델의 이미지 지원 여부를 확인할 수 없습니다. 모델 설정을 확인하거나 이미지를 제거하세요."
+      : error.code === "image_carrier_unavailable"
+        ? "현재 모델로 이미지를 전송할 수 있는 어댑터가 없습니다. 모델 연결 설정을 확인하세요."
+      : error.code === "image_route_incompatible"
+        ? "현재 모델 연결 경로는 이미지 입력과 호환되지 않습니다. 연결 설정을 확인하세요."
       : error.code === "image_carrier_unverified"
         ? "이미지 전송 경로를 확인할 수 없습니다."
         : "이미지 첨부를 확인할 수 없습니다.";

@@ -11561,9 +11561,10 @@ test("message replay includes automatic compaction markers at the snapshot point
 });
 
 test("message files are uploaded, served safely, and attached by file id only", async () => {
-  const pngBytes = new Uint8Array([
-    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13,
-  ]);
+  const pngBytes = Uint8Array.from(Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64",
+  ));
   const responderInputs: Array<{ attachments?: unknown[] }> = [];
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -11584,6 +11585,13 @@ test("message files are uploaded, served safely, and attached by file id only", 
     },
   });
   try {
+    server.store.registerHostedModel({
+      provider_id: "openai",
+      model_id: "gpt-5.6-sol",
+      auth_type: "api_key",
+      api_key: "message-file-fixture-key",
+      api_base_url: "http://message-file-fixture.test/v1",
+    });
     const uploadForm = new FormData();
     uploadForm.set("session_id", "general");
     uploadForm.set(
@@ -11625,6 +11633,7 @@ test("message files are uploaded, served safely, and attached by file id only", 
 
     const sent = await postJson(`${server.url}messages`, {
       chat_id: "general",
+      model: "openai/gpt-5.6-sol",
       text: "please inspect attachment",
       attachments: [{ file_id: uploaded.data.file.file_id }],
     });
@@ -14197,7 +14206,9 @@ async function postJson(url: string, body: unknown) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  expect(response.ok).toBe(true);
+  if (!response.ok) {
+    throw new Error(`POST ${url} failed (${response.status}): ${await response.text()}`);
+  }
   return await response.json();
 }
 

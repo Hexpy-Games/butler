@@ -5,6 +5,11 @@ import { localModelConfigToMetadata } from "./local/catalog.ts";
 import { workerModelPresets } from "./shared/worker-presets.ts";
 import { readLocalModelConfigs, type LocalModelApiType, type LocalModelPlatform, type LocalModelSource } from "./local/models.ts";
 import { parseModelRef, type ParsedModelRef } from "./model-ref.ts";
+import type {
+  ImageCapabilitySource,
+  ImageInputSupport,
+  ImageRouteHealth,
+} from "../../agent/image-attachment/contracts.ts";
 
 export type ModelProviderId =
   | "openai"
@@ -92,12 +97,10 @@ export interface ProviderModelMetadata {
   credential_id?: string;
   credential_label?: string;
   credential_masked_value?: string;
-  /**
-   * Image input is opt-in and exact-tuple verified. Missing or dynamic values
-   * deliberately mean unsupported at message admission; provider id alone is
-   * never treated as an image capability.
-   */
-  image_input_verified?: boolean;
+  /** Provider/model modality, adapter carrier, and route health are independent facts. */
+  image_input_support?: ImageInputSupport;
+  image_capability_source?: ImageCapabilitySource;
+  image_route_health?: ImageRouteHealth;
   image_input_modalities?: readonly ("text" | "image")[];
   image_accepted_mime_types?: readonly string[];
   image_max_inline_bytes?: number;

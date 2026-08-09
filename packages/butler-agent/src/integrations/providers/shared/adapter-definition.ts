@@ -6,6 +6,10 @@ import type {
   PromptTextResult,
 } from "../runtime-contracts.ts";
 import type {
+  ImageCapabilityCatalogEntry,
+  VisualCapabilityResolverInput,
+} from "../../../agent/image-attachment/contracts.ts";
+import type {
   ModelProviderId,
   ProviderModelMetadata,
   StructuredDecisionTransport,
@@ -16,6 +20,9 @@ export interface ProviderAdapterDefinition {
   readonly catalog: readonly ProviderModelMetadata[];
   readonly structuredDecisionTransport: StructuredDecisionTransport | null;
   capabilitiesFor(modelRef: string): ProviderCapabilities;
+  resolveVisualCapability?(
+    input: VisualCapabilityResolverInput,
+  ): Promise<ImageCapabilityCatalogEntry | undefined>;
   runPrompt(options: PromptOptions): Promise<PromptTextResult>;
   runRound(request: ModelRoundRequest): Promise<ModelRoundResult>;
 }
@@ -24,6 +31,9 @@ export function defineProviderAdapter(input: {
   providerId: ModelProviderId;
   catalog: readonly ProviderModelMetadata[];
   structuredDecisionTransport: StructuredDecisionTransport | null;
+  resolveVisualCapability?(
+    input: VisualCapabilityResolverInput,
+  ): Promise<ImageCapabilityCatalogEntry | undefined>;
   runPrompt(options: PromptOptions): Promise<PromptTextResult>;
   runRound(request: ModelRoundRequest): Promise<ModelRoundResult>;
 }): ProviderAdapterDefinition {
@@ -41,7 +51,7 @@ export function defineProviderAdapter(input: {
         throw new Error(`provider_model_unavailable:${parsed.canonicalRef}`);
       }
       const supportsStructuredOutputs = input.structuredDecisionTransport !== null;
-      const supportsImages = metadata.image_input_verified === true &&
+      const supportsImages = metadata.image_input_support === "supported" &&
         metadata.image_carrier_protocol !== undefined &&
         metadata.image_endpoint_profile_id?.trim().length !== 0 &&
         metadata.image_capability_revision?.trim().length !== 0 &&

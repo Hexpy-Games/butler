@@ -13,12 +13,18 @@ import {
   admitVisualImageRequest,
   createFileStoreVerifiedImagePayloadPort,
   createVisualManifest,
+  imageAdmissionForCatalogEntry,
+  serializeOpenAIChatVisualContent,
   serializeOpenAIVisualInput,
+  type ImageCapabilityCatalogEntry,
   type ImageCapabilityEvidence,
   type ImageCarrierTuple,
   type VerifiedImagePayloadPort,
 } from "../../packages/butler-agent/src/agent/image-attachment/index.ts";
-import { recordImageProbeEvidenceForRegisteredModel } from "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
+import { registeredHostedModelMetadata } from "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
+import { QWEN_MODELS } from "../../packages/butler-agent/src/integrations/providers/qwen/catalog.ts";
+import { runHostedOpenAICompatibleModelRound } from "../../packages/butler-agent/src/integrations/providers/shared/hosted-chat-tool-runtime.ts";
+import type { HostedRuntimeConfig } from "../../packages/butler-agent/src/integrations/providers/shared/model-routing.ts";
 
 const PNG_1X1 = Uint8Array.from(
   Buffer.from(
@@ -47,6 +53,9 @@ function capability(overrides: Partial<ImageCapabilityEvidence> = {}): ImageCapa
     endpointProfileId: "openai-responses-v1",
     catalogCapabilityRevision: "2026-08-09",
     catalogCapabilityDigest: "catalog-image-fixture",
+    modelSupport: "supported",
+    capabilitySource: "provider_catalog",
+    routeHealth: "unchecked",
     inputModalities: ["text", "image"],
     acceptedMimeTypes: ["image/png"],
     maxInlineImageBytes: 10 * 1024 * 1024,
@@ -60,6 +69,95 @@ function capability(overrides: Partial<ImageCapabilityEvidence> = {}): ImageCapa
     ...overrides,
   };
 }
+
+function catalogEntry(
+  overrides: Partial<ImageCapabilityCatalogEntry> = {},
+): ImageCapabilityCatalogEntry {
+  return {
+    provider_id: "fixture",
+    model_id: "vision-model",
+    model_ref: "fixture/vision-model",
+    runtime_supported: true,
+    image_input_support: "supported",
+    image_capability_source: "provider_catalog",
+    image_route_health: "unchecked",
+    image_input_modalities: ["text", "image"],
+    image_accepted_mime_types: ["image/png"],
+    image_max_inline_bytes: 10 * 1024 * 1024,
+    image_max_width: 4096,
+    image_max_height: 4096,
+    image_max_pixels: 16_000_000,
+    image_capability_source_url: "https://provider.example/models",
+    image_capability_verified_at: "2026-08-09T00:00:00.000Z",
+    image_capability_revision: "fixture-vision-v1",
+    image_capability_digest: "fixture-vision-digest",
+    image_endpoint_profile_id: "fixture-vision-endpoint",
+    image_carrier_protocol: "fake_vision",
+    ...overrides,
+  };
+}
+
+function manifest() {
+  return createVisualManifest({
+    fileId: "file-44444444-4444-4444-8444-444444444444",
+    safeName: "sample.png",
+    mimeType: "image/png",
+    sourceBytes: PNG_1X1,
+    derivativeBytes: PNG_1X1,
+    position: 0,
+  });
+}
+
+test("admits documented image support without requiring a positive route probe", () => {
+  for (const routeHealth of ["unchecked", "healthy", "transient_failure"] as const) {
+    const admitted = imageAdmissionForCatalogEntry(
+      catalogEntry({ image_route_health: routeHealth }),
+      [manifest()],
+    );
+    expect(admitted.capability.modelSupport).toBe("supported");
+    expect(admitted.capability.routeHealth).toBe(routeHealth);
+  }
+});
+
+test("distinguishes unsupported, unknown, unavailable carrier, and incompatible route", () => {
+  expect(() => imageAdmissionForCatalogEntry(
+    catalogEntry({ image_input_support: "unsupported" }),
+    [manifest()],
+  )).toThrow("image_model_unsupported");
+  expect(() => imageAdmissionForCatalogEntry(
+    catalogEntry({ image_input_support: "unknown" }),
+    [manifest()],
+  )).toThrow("image_capability_unknown");
+  expect(() => imageAdmissionForCatalogEntry(
+    catalogEntry({ image_carrier_protocol: undefined }),
+    [manifest()],
+  )).toThrow("image_carrier_unavailable");
+  expect(() => imageAdmissionForCatalogEntry(
+    catalogEntry({ image_route_health: "incompatible" }),
+    [manifest()],
+  )).toThrow("image_route_incompatible");
+});
+
+test("uses capability facts instead of provider or model name exceptions", () => {
+  for (const carrier of [
+    "openai_responses",
+    "openai_chat_completions",
+    "zai_mcp_vision",
+    "fake_vision",
+  ] as const) {
+    const admitted = imageAdmissionForCatalogEntry(catalogEntry({
+      provider_id: `provider-${carrier}`,
+      model_id: `model-${carrier}`,
+      model_ref: `provider-${carrier}/model-${carrier}`,
+      image_carrier_protocol: carrier,
+    }), [manifest()]);
+    expect(admitted.tuple.carrierProtocol).toBe(carrier);
+  }
+  expect(OPENAI_MODELS.every((model) =>
+    model.image_input_support === "supported" &&
+    model.image_carrier_protocol === "openai_responses",
+  )).toBe(true);
+});
 
 test("rejects the exact Z.AI Coding tuple before provider admission", () => {
   const unsupportedTuple = tuple({
@@ -129,6 +227,85 @@ test("serializes a supported fake/OpenAI visual carrier with path-free manifest 
   }]);
   expect(JSON.stringify(serialized)).not.toContain("localPath");
   expect(JSON.stringify(serialized)).not.toContain("file-11111111-1111-4111-8111-111111111111");
+});
+
+test("serializes admitted pixels for OpenAI-compatible Chat Completions adapters", async () => {
+  const visualManifest = manifest();
+  const content = await serializeOpenAIChatVisualContent({
+    text: "what is visible?",
+    manifests: [visualManifest],
+    payloadPort: {
+      read: async () => ({ bytes: PNG_1X1, mimeType: "image/png" }),
+    },
+  });
+  expect(content).toEqual([
+    { type: "text", text: "what is visible?" },
+    {
+      type: "image_url",
+      image_url: { url: expect.stringMatching(/^data:image\/png;base64,/) },
+    },
+  ]);
+  expect(QWEN_MODELS.find((model) => model.model_id === "qwen3.7-plus"))
+    .toMatchObject({
+      image_input_support: "supported",
+      image_carrier_protocol: "openai_chat_completions",
+    });
+  expect(QWEN_MODELS.find((model) => model.model_id === "qwen3.7-max")?.image_input_support)
+    .toBe("unsupported");
+});
+
+test("sends admitted pixels through the hosted Chat Completions adapter", async () => {
+  const bodies: Array<Record<string, any>> = [];
+  const server = Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      bodies.push(await request.json());
+      return Response.json({
+        model: "qwen3.7-plus",
+        choices: [{ message: { role: "assistant", content: "image seen" } }],
+      });
+    },
+  });
+  const config: HostedRuntimeConfig = {
+    providerId: "qwen",
+    modelId: "qwen3.7-plus",
+    modelRef: "qwen/qwen3.7-plus",
+    authType: "api_key",
+    apiKey: "test-key",
+    apiBaseUrl: server.url.toString(),
+  };
+  const visualManifest = manifest();
+
+  try {
+    const result = await runHostedOpenAICompatibleModelRound(config, {
+      model: config.modelRef,
+      messages: [{ role: "user", content: "what is visible?" }],
+      tools: [],
+      imageCarrier: tuple({
+        providerId: "qwen",
+        modelId: "qwen3.7-plus",
+        carrierProtocol: "openai_chat_completions",
+        endpointProfileId: "qwen-chat-completions-v1",
+      }),
+      imageManifests: [visualManifest],
+      verifiedImagePayloadPort: {
+        read: async () => ({ bytes: PNG_1X1, mimeType: "image/png" }),
+      },
+    });
+
+    expect(result.text).toBe("image seen");
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]?.messages[0]?.content).toEqual([
+      { type: "text", text: "what is visible?" },
+      {
+        type: "image_url",
+        image_url: { url: expect.stringMatching(/^data:image\/png;base64,/) },
+      },
+    ]);
+    expect(JSON.stringify(bodies[0])).not.toContain(visualManifest.fileId);
+  } finally {
+    server.stop(true);
+  }
 });
 
 test("rejects the exact Z.AI Coding image send before either durable queue stage", async () => {
@@ -299,26 +476,8 @@ test("does not resolve image pixels from an original attachment path", () => {
 test("carries a supported visual tuple from upload through both queues to the native serializer", async () => {
   const model = OPENAI_MODELS.find((candidate) => candidate.model_ref === "openai/gpt-5.6-sol");
   if (!model) throw new Error("vision fixture model missing");
-  const modelRecord = model as unknown as Record<string, unknown>;
-  const imageFields = {
-    image_input_verified: true,
-    image_input_modalities: ["text", "image"],
-    image_accepted_mime_types: ["image/png"],
-    image_max_inline_bytes: 10 * 1024 * 1024,
-    image_max_width: 4096,
-    image_max_height: 4096,
-    image_max_pixels: 16_000_000,
-    image_capability_source_url: "https://developers.openai.com/api/docs/models",
-    image_capability_verified_at: "2026-08-09T00:00:00.000Z",
-    image_capability_revision: "openai-image-fixture-v1",
-    image_capability_digest: "openai-image-fixture-digest",
-    image_endpoint_profile_id: "openai-responses-v1",
-    image_carrier_protocol: "openai_responses",
-  } as const;
-  const previousImageFields = Object.fromEntries(
-    Object.keys(imageFields).map((key) => [key, modelRecord[key]]),
-  );
-  Object.assign(modelRecord, imageFields);
+  expect(model.image_input_support).toBe("supported");
+  expect(model.image_route_health).toBe("unchecked");
 
   const root = mkdtempSync(join(tmpdir(), "butler-iac-supported-"));
   mkdirSync(join(root, "state"), { recursive: true });
@@ -360,10 +519,10 @@ test("carries a supported visual tuple from upload through both queues to the na
       api_key: "vision-fixture-key",
       api_base_url: "http://vision-fixture.test/v1",
     });
-    // The fixture stands in for the bounded live probe; persist evidence for
-    // this exact temporary credential/base route so generic catalog metadata
-    // remains unverified by default.
-    recordImageProbeEvidenceForRegisteredModel("openai/gpt-5.6-sol", root);
+    const registered = registeredHostedModelMetadata(root)
+      .find((candidate) => candidate.model_ref === "openai/gpt-5.6-sol");
+    expect(registered?.image_input_support).toBe("supported");
+    expect(registered?.image_route_health).toBe("unchecked");
     const upload = new FormData();
     upload.set("session_id", "general");
     upload.set("file", new Blob([PNG_1X1], { type: "image/png" }), "pixel.png");
@@ -446,11 +605,6 @@ test("carries a supported visual tuple from upload through both queues to the na
     expect(serialized[0]?.content[1]).toMatchObject({ type: "input_image" });
   } finally {
     server.stop();
-    Object.keys(imageFields).forEach((key) => {
-      const previous = previousImageFields[key];
-      if (previous === undefined) delete modelRecord[key];
-      else modelRecord[key] = previous;
-    });
     rmSync(root, { recursive: true, force: true });
   }
 });

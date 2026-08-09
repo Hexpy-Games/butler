@@ -26,6 +26,7 @@ const expectedNamesByBoundary = {
     "tool_describe",
     "list_mcp_capabilities",
     "read_mcp_resource",
+    "analyze_attached_image",
     "list_automations",
     "list_todo_list",
     "list_work_streams",

@@ -23,7 +23,7 @@ function carrierFromCatalog(entry: ImageCapabilityCatalogEntry): ImageCarrierTup
   };
   if (!values.providerId || !values.modelId || !values.carrierProtocol || !values.endpointProfileId ||
       !values.catalogCapabilityRevision || !values.catalogCapabilityDigest) {
-    throw new ImageAdmissionError("image_carrier_unverified", "catalog_tuple_incomplete");
+    throw new ImageAdmissionError("image_carrier_unavailable", "catalog_tuple_incomplete");
   }
   return values as ImageCarrierTuple;
 }
@@ -40,6 +40,9 @@ function evidenceFromCatalog(
   return {
     ...tuple,
     ...(entry.credential_id ? { credentialId: entry.credential_id } : {}),
+    modelSupport: entry.image_input_support ?? "unknown",
+    capabilitySource: entry.image_capability_source ?? "unknown",
+    routeHealth: entry.image_route_health ?? "unchecked",
     inputModalities: [...(entry.image_input_modalities ?? [])],
     acceptedMimeTypes: [...(entry.image_accepted_mime_types ?? [])],
     maxInlineImageBytes: entry.image_max_inline_bytes ?? 0,
@@ -85,6 +88,9 @@ function assertEvidenceEqual(actual: ImageCapabilityEvidence, expected: ImageCap
       actual.endpointProfileId !== expected.endpointProfileId ||
       actual.catalogCapabilityRevision !== expected.catalogCapabilityRevision ||
       actual.catalogCapabilityDigest !== expected.catalogCapabilityDigest ||
+      actual.modelSupport !== expected.modelSupport ||
+      actual.capabilitySource !== expected.capabilitySource ||
+      actual.routeHealth !== expected.routeHealth ||
       actual.evidenceRevision !== expected.evidenceRevision ||
       actual.evidenceDigest !== expected.evidenceDigest ||
       actual.sourceUrl !== expected.sourceUrl || actual.verifiedAt !== expected.verifiedAt ||
@@ -100,6 +106,24 @@ function assertEvidenceEqual(actual: ImageCapabilityEvidence, expected: ImageCap
   }
 }
 
+function assertCatalogImageAdmission(entry: ImageCapabilityCatalogEntry | undefined): asserts entry is ImageCapabilityCatalogEntry {
+  if (!entry?.runtime_supported) {
+    throw new ImageAdmissionError("image_model_unsupported", "runtime_model_unavailable");
+  }
+  if (entry.image_input_support === "unsupported") {
+    throw new ImageAdmissionError("image_model_unsupported", "catalog_image_support_unsupported");
+  }
+  if (entry.image_input_support !== "supported") {
+    throw new ImageAdmissionError("image_capability_unknown", "catalog_image_support_unknown");
+  }
+  if (entry.image_route_health === "incompatible") {
+    throw new ImageAdmissionError("image_route_incompatible", "exact_route_incompatible");
+  }
+  if (!entry.image_carrier_protocol && !hostedShapeToCarrier(entry.hosted_api_shape)) {
+    throw new ImageAdmissionError("image_carrier_unavailable", "adapter_carrier_missing");
+  }
+}
+
 export function assertVisualCarrierMatchesCatalog(input: {
   catalogEntry: ImageCapabilityCatalogEntry | undefined;
   tuple: ImageCarrierTuple;
@@ -107,9 +131,7 @@ export function assertVisualCarrierMatchesCatalog(input: {
   resolvedRoute: ResolvedImageRoute;
 }): { tuple: ImageCarrierTuple; capability: ImageCapabilityEvidence } {
   const entry = input.catalogEntry;
-  if (!entry?.runtime_supported || entry.image_input_verified !== true) {
-    throw new ImageAdmissionError("image_model_unsupported", "verified_image_capability_missing");
-  }
+  assertCatalogImageAdmission(entry);
   const tuple = carrierFromCatalog(entry);
   const capability = evidenceFromCatalog(entry, tuple);
   assertTupleEqual(input.tuple, tuple);
@@ -125,9 +147,7 @@ export function imageAdmissionForCatalogEntry(
   entry: ImageCapabilityCatalogEntry | undefined,
   manifests: readonly VisualAdmittedManifest[],
 ): VisualImageAdmissionResult {
-  if (!entry?.runtime_supported || entry.image_input_verified !== true) {
-    throw new ImageAdmissionError("image_model_unsupported", "verified_image_capability_missing");
-  }
+  assertCatalogImageAdmission(entry);
   const tuple = carrierFromCatalog(entry);
   return admitVisualImageRequest({
     tuple,
@@ -143,8 +163,20 @@ export function admitVisualImageRequest(
   if (!tuple.providerId || !tuple.modelId || !tuple.carrierProtocol || !tuple.endpointProfileId ||
       !tuple.catalogCapabilityRevision || !tuple.catalogCapabilityDigest ||
       !capability.providerId || !capability.modelId || !capability.endpointProfileId ||
-      !capability.evidenceDigest || !capability.evidenceRevision || !capability.verifiedAt) {
+      !capability.evidenceDigest || !capability.evidenceRevision || !capability.verifiedAt ||
+      !capability.modelSupport || !capability.capabilitySource || !capability.routeHealth) {
     throw new ImageAdmissionError("image_carrier_unverified", "tuple_or_evidence_missing");
+  }
+  if (capability.modelSupport !== "supported") {
+    throw new ImageAdmissionError(
+      capability.modelSupport === "unsupported"
+        ? "image_model_unsupported"
+        : "image_capability_unknown",
+      "frozen_model_support_invalid",
+    );
+  }
+  if (capability.routeHealth === "incompatible") {
+    throw new ImageAdmissionError("image_route_incompatible", "frozen_route_incompatible");
   }
   if (capability.providerId !== tuple.providerId || capability.modelId !== tuple.modelId ||
       capability.carrierProtocol !== tuple.carrierProtocol ||

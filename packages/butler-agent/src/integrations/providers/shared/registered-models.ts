@@ -692,11 +692,14 @@ export function registeredHostedModelMetadata(
       credential_masked_value: credential ? maskedCredentialValue(credential.secret) : undefined,
       api_base_url: model.api_base_url ?? defaultHostedProviderApiBaseUrl(model.provider_id),
       runtime_supported: true,
-      // Documentation-only catalog capability is never sufficient for a
-      // registered route.  Only exact persisted probe evidence advertises
-      // image input to admission/runtime.
-      image_input_verified: probeEvidence !== null,
-      ...(probeEvidence ? { image_capability_verified_at: probeEvidence.verified_at } : {}),
+      // Preserve provider-documented modality support. Probe evidence only
+      // refines this exact registered route's operational health.
+      image_route_health: probeEvidence ? "healthy" : (base.image_route_health ?? "unchecked"),
+      ...(probeEvidence
+        ? {
+            image_capability_verified_at: probeEvidence.verified_at,
+          }
+        : {}),
       reasoning_efforts: [...base.reasoning_efforts],
     }];
   });

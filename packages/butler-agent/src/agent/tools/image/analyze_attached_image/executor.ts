@@ -8,7 +8,7 @@ import {
   ZAI_VISION_MCP_SERVER_ID,
   ZAI_VISION_MCP_TOOL_NAME,
   resolveZaiMcpVisionCatalogEntry,
-} from "../../../image-attachment/index.ts";
+} from "../../../../integrations/providers/zai/visual-capability.ts";
 import type {
   ImageCapabilityCatalogEntry,
   ImageCapabilityEvidence,
@@ -95,7 +95,9 @@ async function assertCurrentMcpCarrier(input: {
     model_ref: modelRef,
     ...(capability.credentialId ? { credential_id: capability.credentialId } : {}),
     runtime_supported: true,
-    image_input_verified: true,
+    image_input_support: capability.modelSupport,
+    image_capability_source: capability.capabilitySource,
+    image_route_health: capability.routeHealth,
     image_capability_revision: tuple.catalogCapabilityRevision,
     image_capability_digest: tuple.catalogCapabilityDigest,
     image_endpoint_profile_id: tuple.endpointProfileId,
@@ -111,7 +113,7 @@ async function assertCurrentMcpCarrier(input: {
     timeoutMs: 10_000,
     signal: input.signal,
   });
-  if (!current || current.image_input_verified !== true ||
+  if (!current || current.image_route_health !== "healthy" ||
       current.image_carrier_protocol !== tuple.carrierProtocol ||
       current.image_endpoint_profile_id !== tuple.endpointProfileId ||
       current.image_capability_revision !== tuple.catalogCapabilityRevision ||

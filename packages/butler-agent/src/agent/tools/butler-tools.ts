@@ -22,7 +22,7 @@ import {
 import { createAutomationToolHandlers } from "./automation/index.ts";
 import { createDataTableToolHandlers } from "./data-table/index.ts";
 import { createMcpToolHandlers } from "./mcp/index.ts";
-import { createAnalyzeAttachedImageToolHandler } from "./image/index.ts";
+import { createImageToolHandlers } from "./image/index.ts";
 import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
 import { createToolBridgeToolHandlers } from "./tool-bridge/index.ts";
@@ -58,11 +58,8 @@ export type {
   ToolCapabilityCategory,
   ToolCapabilityMetadata,
 } from "./types.ts";
-
 export type ButlerToolExecutor = (call: ButlerToolCall) => Promise<unknown>;
-export type ButlerToolRuntimeContext = {
-  effectOccurrenceId?: string;
-};
+export type ButlerToolRuntimeContext = { effectOccurrenceId?: string };
 export type ContextualButlerToolExecutor = (
   call: ButlerToolCall,
   context?: ButlerToolRuntimeContext,
@@ -240,17 +237,7 @@ export function createButlerToolExecutor(input: {
     ...createMcpToolHandlers({
       butlerData: input.butlerData,
     }),
-    "analyze_attached_image": createAnalyzeAttachedImageToolHandler({
-      butlerData: input.butlerData,
-      imageManifests: input.imageManifests,
-      imageCarrier: input.imageCarrier,
-      imageCapability: input.imageCapability,
-      verifiedImagePayloadPort: input.verifiedImagePayloadPort ?? {
-        read: async () => {
-          throw new Error("verified_image_payload_port_missing");
-        },
-      },
-    }),
+    ...createImageToolHandlers(input),
     ...createAutomationToolHandlers({
       sessionId: input.sessionId,
       automationStore,
