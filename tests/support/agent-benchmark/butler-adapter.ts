@@ -1,0 +1,261 @@
+import { existsSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { join, relative } from "node:path";
+import {
+  runBtccR3ElectronHarness,
+  type ElectronScenario,
+} from "../../e2e/btcc-r3-electron-harness.ts";
+import type {
+  AdapterRunInput,
+  AdapterRunResult,
+  AgentAdapter,
+  PreflightResult,
+} from "./contracts.ts";
+import type { BenchmarkTarget } from "../btcc-revision-benchmark/contracts.ts";
+import { firstMeaningfulEventTime, readProductUsage, readTurnEvents, summarizeTools } from "../btcc-revision-benchmark/product-telemetry.ts";
+import { readRepositoryEvidenceFiles, verifyEvidenceWorkspace } from "./repository-evidence.ts";
+import { benchmarkPlatformGate } from "./isolation.ts";
+import {
+  boundedUsefulTime,
+  copyGeneratedArtifacts,
+  gatedAdapterResult,
+  readButlerVersion,
+  rootsOverlap,
+  sumNullable,
+} from "./butler-output.ts";
+import { sanitizeIdentifier } from "./identifiers.ts";
+
+export type ButlerBenchmarkRunner = (
+  input: AdapterRunInput,
+) => Promise<Record<string, unknown>>;
+
+export function createButlerAdapter(
+  runner: ButlerBenchmarkRunner,
+  sourceRoot: string,
+): AgentAdapter {
+  let adapterVersion: string | null = null;
+  return {
+    agent: "butler",
+    async preflight(): Promise<PreflightResult> {
+      const platformDiagnostic = benchmarkPlatformGate();
+      if (platformDiagnostic) {
+        return { available: false, executable: null, version: null, authenticated: null, configVerified: false, gateCode: "configuration_unverifiable", diagnostic: platformDiagnostic };
+      }
+      const packagePath = join(sourceRoot, "package.json");
+      if (!existsSync(packagePath)) {
+        return {
+          available: false,
+          executable: null,
+          version: null,
+          authenticated: null,
+          configVerified: false,
+          gateCode: "configuration_unverifiable",
+          diagnostic: "Butler package metadata was not found in the pinned source root.",
+        };
+      }
+      adapterVersion = sanitizeIdentifier(readButlerVersion(packagePath));
+      return {
+        available: true,
+        executable: "butler-electron-harness",
+        version: adapterVersion,
+        authenticated: null,
+        configVerified: true,
+        gateCode: "none",
+        diagnostic: null,
+      };
+    },
+    async run(input: AdapterRunInput): Promise<AdapterRunResult> {
+      const startedAtMs = Date.now();
+      const evidence = await runner(input);
+      if (input.fixture.id === "butler_landing_page") {
+        const run = asRecord(evidence.run);
+        const workspaceRoot = typeof run?.workspaceRoot === "string" ? run.workspaceRoot : null;
+        if (!workspaceRoot || !input.sourceEvidenceRoot) {
+          return gatedAdapterResult("configuration_unverifiable", "Butler landing workspace did not expose the pinned evidence root.", adapterVersion);
+        }
+        if (rootsOverlap(workspaceRoot, input.arm.outputRoot)) {
+          return gatedAdapterResult("configuration_unverifiable", "Butler evidence workspace overlaps the generated output workspace.", adapterVersion);
+        }
+        const evidenceCheck = verifyEvidenceWorkspace(
+          { root: input.sourceEvidenceRoot, files: readRepositoryEvidenceFiles(input.sourceEvidenceRoot).map((file) => file.path.replace(/^\.benchmark-input\/repository\//u, "")), sha256: "" },
+          workspaceRoot,
+        );
+        if (!evidenceCheck.ok) {
+          return gatedAdapterResult("configuration_unverifiable", evidenceCheck.diagnostic ?? "Butler workspace repository evidence verification failed.", adapterVersion);
+        }
+      }
+      copyGeneratedArtifacts(evidence, input);
+      return { ...parseButlerEvidence(evidence, startedAtMs, Date.now(), input), adapterVersion };
+    },
+  };
+}
+
+export function createElectronButlerRunner(): ButlerBenchmarkRunner {
+  return async (input): Promise<Record<string, unknown>> => {
+    const scenario: ElectronScenario = {
+      schema: "butler.btcc-r3-electron-scenario.v1",
+      id: `agent-benchmark-${input.arm.cachePairId}`,
+      model: input.arm.effectiveConfig.model ?? undefined,
+      reasoningEffort: toReasoning(input.arm.effectiveConfig.reasoning),
+      accessMode: "full_access",
+      session: {
+        id: randomUUID(),
+        kind: input.fixture.id === "butler_landing_page" ? "project" : "chat",
+        projectDisplayName: input.fixture.id === "butler_landing_page" ? "Butler benchmark landing page" : undefined,
+        title: `Agent benchmark ${input.fixture.id}`,
+      },
+      fixtures: input.fixture.id === "butler_landing_page"
+        ? readRepositoryEvidenceFiles(input.sourceEvidenceRoot)
+        : [],
+      steps: input.fixture.prompts.map((prompt, index) => ({
+        id: `turn-${index + 1}`,
+        prompt: `${prompt}\n\n${input.runtimeInstructions}`,
+        timeoutMs: input.arm.timeoutMs,
+        reloadAfter: index === input.fixture.prompts.length - 1,
+        expect: { terminalState: "delivered" },
+      })),
+    };
+    return runBtccR3ElectronHarness(scenario, {
+      repoRoot: input.arm.sourceRoot,
+      runRoot: input.arm.evidenceRoot,
+      model: input.arm.effectiveConfig.model ?? undefined,
+      reasoningEffort: toReasoning(input.arm.effectiveConfig.reasoning),
+      accessMode: "full_access",
+      keepLogs: true,
+      promptCacheKeyPrefix: promptCacheKeyPrefixForPair(input.arm.cachePairId),
+    });
+  };
+}
+
+/** Stable provider-cache namespace shared by the cold/warm arms in one pair. */
+export function promptCacheKeyPrefixForPair(cachePairId: string): string {
+  const digest = createHash("sha256").update(cachePairId).digest("hex").slice(0, 24);
+  return `agent-benchmark-${digest}`;
+}
+
+function parseButlerEvidence(
+  evidence: Record<string, unknown>,
+  startedAtMs: number,
+  endedAtMs: number,
+  input: AdapterRunInput,
+): AdapterRunResult {
+  const observations = Array.isArray(evidence.observations) ? evidence.observations : [];
+  const finalObservation = asRecord(observations.at(-1));
+  const firstObservation = asRecord(observations[0]);
+  const finalText = typeof finalObservation?.finalText === "string" ? finalObservation.finalText : null;
+  const changedPaths = observations.flatMap((value) => {
+    const artifacts = asRecord(asRecord(value)?.artifacts);
+    return Object.values(artifacts ?? {}).flatMap((entry) => {
+      const path = asRecord(entry)?.path;
+      return typeof path === "string" ? [relative(input.arm.sourceRoot, path)] : [];
+    });
+  });
+  const run = asRecord(evidence.run);
+  const session = asRecord(evidence.session);
+  const dataRoot = typeof run?.dataRoot === "string" ? run.dataRoot : null;
+  const model = typeof finalObservation?.providerReportedModel === "string"
+    ? finalObservation.providerReportedModel
+    : null;
+  const terminalTiming = asRecord(finalObservation?.timing);
+  const firstTiming = asRecord(firstObservation?.timing);
+  const terminalAtMs = numberOrNull(terminalTiming?.terminalAtMs) ?? endedAtMs;
+  const submittedAtMs = numberOrNull(firstTiming?.submittedAtMs) ?? startedAtMs;
+  const usage = dataRoot
+    ? readProductUsage(dataRoot, syntheticTarget(input.arm.effectiveConfig.model ?? model ?? ""), terminalAtMs)
+    : { model: null, modelRequests: null, promptTokens: null, cachedPromptTokens: null, outputTokens: null, totalTokens: null };
+  const turnIds = observations.flatMap((value) => {
+    const turnId = asRecord(value)?.turnId;
+    return typeof turnId === "string" && turnId ? [turnId] : [];
+  });
+  const turnEvents = dataRoot
+    ? turnIds.map((turnId) => readTurnEvents(dataRoot, turnId))
+    : [];
+  const terminalState = finalObservation?.terminalState === "delivered";
+  const toolSummaries = turnEvents.map((events) => summarizeTools(events, terminalState, terminalAtMs));
+  const toolRecords = toolSummaries.flatMap((summary) => summary.observations);
+  const calls = toolSummaries.reduce((sum, summary) => sum + summary.calls, 0);
+  const failedCalls = toolSummaries.reduce((sum, summary) => sum + summary.failedCalls, 0);
+  const firstTurnEvents = turnEvents[0] ?? [];
+  const firstUsefulOutputAtMs = boundedUsefulTime(
+    firstMeaningfulEventTime(firstTurnEvents) ?? numberOrNull(firstTiming?.firstProviderTokenAtMs) ?? null,
+    submittedAtMs,
+    terminalAtMs,
+  );
+  const providerRequests = Array.isArray(evidence.providerRequests)
+    ? evidence.providerRequests.filter((request): request is Record<string, unknown> => Boolean(asRecord(request)) && asRecord(request)?.requestKind === "agent")
+    : [];
+  const effectiveModel = normalizeObservedModel(model ?? usage.model, input.arm.effectiveConfig.model);
+  return {
+    exitCode: evidence.error ? 1 : 0,
+    gateCode: "none",
+    timedOut: false,
+    cancelled: false,
+    stdout: "",
+    stderr: typeof evidence.error === "string" ? evidence.error : "",
+    adapterVersion: "butler-local",
+    provider: effectiveModel?.split("/", 1)[0] ?? null,
+    finalText,
+    ...(effectiveModel ? { effectiveConfig: { model: effectiveModel } } : {}),
+    usage: {
+      inputTokens: usage.promptTokens,
+      cacheReadTokens: usage.cachedPromptTokens,
+      cacheWriteTokens: null,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+      modelRequests: providerRequests.length > 0 ? providerRequests.length : usage.modelRequests,
+    },
+    tools: { calls, failedCalls, records: toolRecords.map((tool) => ({ callId: tool.callId, name: tool.toolName, status: tool.status === "started" ? "unknown" : tool.status, startedAtMs: tool.startedAtMs, endedAtMs: tool.endedAtMs })) },
+    timing: {
+      submittedAtMs,
+      firstUsefulOutputAtMs,
+      terminalAtMs,
+      totalElapsedMs: Math.max(0, terminalAtMs - submittedAtMs),
+    },
+    operations: { userInterventions: sumNullable(observations.map((value) => numberOrNull(asRecord(asRecord(value)?.ux)?.userInterventions))) ?? 0, retries: null, changedFiles: changedPaths.length, tests: { ran: null, passed: null, command: null }, build: { ran: null, passed: null, command: null } },
+    sessionId: typeof session?.id === "string" ? session.id : null,
+    changedPaths,
+    evidenceRefs: Array.isArray(finalObservation?.screenshots)
+      ? finalObservation.screenshots.filter((value): value is string => typeof value === "string").map((value) => relative(input.arm.evidenceRoot, value)).filter((value) => !value.startsWith(".."))
+      : [],
+  };
+}
+
+function syntheticTarget(model: string): BenchmarkTarget {
+  return {
+    revision: "r3",
+    worktreePath: "<benchmark-source>",
+    commit: "549463fbe074fc25042f9302cd330699948dab50",
+    buildId: "agent-benchmark",
+    appBaseUrl: "http://127.0.0.1",
+    electronDebugPort: 0,
+    dataRoot: "<benchmark-data>",
+    electronUserData: "<benchmark-profile>",
+    workspaceRoot: "<benchmark-workspace>",
+    model,
+    reasoningEffort: "medium",
+    permissionMode: "full_access",
+    fixtureHash: "agent-benchmark",
+  };
+}
+
+function normalizeObservedModel(observed: string | null, requested: string | null): string | null {
+  if (!observed) return null;
+  if (requested && (observed === requested || requested.endsWith(`/${observed}`))) return requested;
+  return observed;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function toReasoning(value: string | null): "high" | "low" | "max" | "medium" | "none" | "xhigh" | undefined {
+  return value === "high" || value === "low" || value === "max" || value === "medium" || value === "none" || value === "xhigh"
+    ? value
+    : undefined;
+}
