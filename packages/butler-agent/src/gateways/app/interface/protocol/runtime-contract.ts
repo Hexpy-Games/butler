@@ -1,5 +1,6 @@
 import { APP_PROTOCOL_VERSION } from "./base-contract.ts";
 import type { PaginationView } from "./navigation-contract.ts";
+import type { ProviderQuotaResult } from "../../../../operations/metrics/provider-quota.ts";
 
 export interface AppRuntimeReadinessView {
   authenticated_gateway_ready: true;
@@ -151,10 +152,7 @@ export interface UsageMonitorView {
     providers: Array<UsageTokenBucketView & {
       providerId: string;
       source: "local_telemetry" | "provider_adapter";
-      remaining: {
-        available: boolean;
-        reason: string;
-      };
+      remaining: ProviderQuotaResult;
       billing: {
         available: boolean;
         reason: string;
