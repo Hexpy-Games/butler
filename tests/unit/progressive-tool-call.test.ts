@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { createButlerToolExecutor } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { bridgeToolAuditEvent } from "../../packages/butler-agent/src/agent/tools/tool-bridge/audit.ts";
@@ -7,6 +7,7 @@ import { validateJsonObjectSchema } from "../../packages/butler-agent/src/agent/
 import { DisabledWebSearchProvider } from "../../packages/butler-agent/src/integrations/search/provider.ts";
 import type { PageReadResult } from "../../packages/butler-agent/src/integrations/search/page-reader.ts";
 import { upsertMcpServer } from "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";
+import { createHash } from "node:crypto";
 
 const root = process.cwd();
 let tempDir = "";
@@ -58,6 +59,10 @@ function fixtureServerEval(): string {
     }));
     await server.connect(new StdioServerTransport());
   `;
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 test("tool_call invokes native tools through the guarded Butler dispatcher", async () => {
@@ -121,6 +126,61 @@ test("progressive tool_describe and tool_call dispatch native list_files", async
   expect(called.ok).toBe(true);
   expect(called.files).toEqual([{ path: "candidate.txt", bytes: 10 }]);
   expect(called.bridge_invocation).toEqual({ id: "native:list_files", provider: "native", affordance: "native_tool" });
+});
+
+test("progressive tool_call dispatches canonical edit_file batches through the registered executor", async () => {
+  writeFileSync(`${tempDir}/first.txt`, "first\n", "utf8");
+  writeFileSync(`${tempDir}/second.txt`, "second\n", "utf8");
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+    currentToolNames: ["tool_call", "tool_describe", "edit_file"],
+  });
+  const described = await execute({
+    name: "tool_describe",
+    args: { ids: ["native:edit_file"] },
+    rawArguments: "{}",
+  }) as any;
+  expect(described.ok).toBe(true);
+  expect(described.descriptions[0]).toMatchObject({
+    id: "native:edit_file",
+    name: "edit_file",
+    enabled: true,
+  });
+  const called = await execute({
+    name: "tool_call",
+    args: {
+      id: "native:edit_file",
+      arguments: {
+        edits: [
+          { path: "first.txt", old_text: "first", new_text: "FIRST", expected_sha256: sha256("first\n").toUpperCase() },
+          { path: "second.txt", old_text: "second", new_text: "SECOND", expected_sha256: sha256("second\n").toUpperCase() },
+        ],
+      },
+    },
+    rawArguments: "{}",
+  }) as any;
+  expect(called.ok).toBe(true);
+  expect(called.applied.map((entry: { path: string }) => entry.path)).toEqual(["first.txt", "second.txt"]);
+  expect(readFileSync(`${tempDir}/first.txt`, "utf8")).toBe("FIRST\n");
+  expect(readFileSync(`${tempDir}/second.txt`, "utf8")).toBe("SECOND\n");
+
+  const rejected = await execute({
+    name: "tool_call",
+    args: {
+      id: "native:edit_file",
+      arguments: {
+        edits: [
+          { path: "first.txt", old_text: "FIRST", new_text: "first", expected_sha256: "not-a-sha" },
+          { path: "second.txt", old_text: "SECOND", new_text: "second", expected_sha256: sha256("SECOND\n") },
+        ],
+      },
+    },
+    rawArguments: "{}",
+  }) as any;
+  expect(rejected.ok).toBe(false);
+  expect(rejected.error.code).toBe("invalid_tool_arguments");
 });
 
 test("tool_call returns underlying native dispatch failures as operational failures", async () => {

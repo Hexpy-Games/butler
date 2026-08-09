@@ -47,6 +47,7 @@ export function fileToolCapabilityReceipt(input: {
   toolName: "read_file" | "write_file" | "edit_file" | "grep_files" | "list_files";
   ok: boolean;
   path?: unknown;
+  paths?: unknown;
   error?: unknown;
   truncated?: unknown;
   created?: unknown;
@@ -60,12 +61,20 @@ export function fileToolCapabilityReceipt(input: {
   dirsVisited?: unknown;
   filesConsidered?: unknown;
   sha256?: unknown;
+  applied?: unknown;
+  conflicting?: unknown;
+  not_attempted?: unknown;
 }) {
   if (
     (input.toolName === "write_file" || input.toolName === "edit_file") &&
     input.ok
   ) {
     const path = safeWorkspacePath(input.path);
+    const paths = safeWorkspacePaths(input.paths);
+    const applied = safeMutationRecordPaths(input.applied);
+    const mutationReferences = paths.length > 0
+      ? paths.map((value) => ({ path: value }))
+      : path ? [{ path }] : [];
     const receipts = [createEvidenceCapabilityReceipt({
       producer: { kind: "tool", name: input.toolName },
       capability: "workspace_mutated",
@@ -80,11 +89,14 @@ export function fileToolCapabilityReceipt(input: {
           : input.edited ? "edited" : input.overwritten ? "overwritten" : "written",
         created: Boolean(input.created),
         overwritten: Boolean(input.overwritten),
+        paths,
+        applied,
+        files_written: paths.length > 0 ? paths.length : undefined,
         bytes: typeof input.bytes === "number" ? input.bytes : undefined,
       },
-      references: path ? [{ path }] : [],
+      references: mutationReferences,
     })];
-    if (path) {
+    if (path || paths.length > 0) {
       receipts.push(createEvidenceCapabilityReceipt({
         producer: { kind: "tool", name: input.toolName },
         capability: "durable_artifact",
@@ -97,9 +109,11 @@ export function fileToolCapabilityReceipt(input: {
           operation: input.created
             ? "created"
             : input.edited ? "edited" : input.overwritten ? "overwritten" : "written",
+          paths,
+          applied,
           bytes: typeof input.bytes === "number" ? input.bytes : undefined,
         },
-        references: [{ path }],
+        references: mutationReferences,
         satisfies: ["durable_artifact"],
       }));
     }
@@ -213,6 +227,35 @@ export function fileToolCapabilityReceipt(input: {
     })];
   }
 
+  if (
+    (input.toolName === "write_file" || input.toolName === "edit_file") &&
+    !input.ok
+  ) {
+    const paths = safeWorkspacePaths(input.paths);
+    const applied = safeMutationRecordPaths(input.applied);
+    const conflicting = safeMutationRecordPaths(input.conflicting);
+    const notAttempted = safeMutationRecordPaths(input.not_attempted);
+    return [createEvidenceCapabilityReceipt({
+      producer: { kind: "tool", name: input.toolName },
+      capability: "limitation_recorded",
+      evidence_kind: "mutation_result",
+      maturity: "rejected",
+      verified: false,
+      confidence: 0.9,
+      summary: "File mutation was rejected or stopped with bounded conflict state.",
+      scope: {
+        tool: input.toolName,
+        error: typeof input.error === "string" ? input.error : "unknown_error",
+        paths,
+        applied,
+        conflicting,
+        not_attempted: notAttempted,
+      },
+      references: [...new Set([...applied, ...conflicting, ...notAttempted, ...paths])].map((path) => ({ path })),
+      limitations: ["No file content or private absolute path was exposed in the receipt."],
+    })];
+  }
+
   return [createEvidenceCapabilityReceipt({
     producer: { kind: "tool", name: input.toolName },
     capability: "limitation_recorded",
@@ -227,6 +270,29 @@ export function fileToolCapabilityReceipt(input: {
     },
     limitations: ["No file content or private path was exposed in the receipt."],
   })];
+}
+
+function safeWorkspacePaths(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const path = safeWorkspacePath(item);
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    paths.push(path);
+    if (paths.length >= 20) break;
+  }
+  return paths;
+}
+
+function safeMutationRecordPaths(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return safeWorkspacePaths(value.map((item) => (
+    item && typeof item === "object" && !Array.isArray(item)
+      ? (item as Record<string, unknown>).path
+      : undefined
+  )));
 }
 
 function sourceCandidateReferences(matches: unknown): Array<{ path: string; label?: string }> {

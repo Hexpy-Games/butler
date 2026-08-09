@@ -240,7 +240,7 @@ describe("write_file", () => {
   test("creates, overwrites with expected_sha256, rejects stale guard", async () => {
     const created = await executeWriteFileTool(call({ workspace_root: root, path: "dir/a.txt", content: "one", create_parents: true })) as any;
     expect(created.ok).toBe(true); expect(created.created).toBe(true); expect(await readFile(join(root, "dir/a.txt"), "utf8")).toBe("one");
-    const stale = await executeWriteFileTool(call({ workspace_root: root, path: "dir/a.txt", content: "two", overwrite: true, expected_sha256: "bad" })) as any;
+    const stale = await executeWriteFileTool(call({ workspace_root: root, path: "dir/a.txt", content: "two", overwrite: true, expected_sha256: "f".repeat(64) })) as any;
     expect(stale.error).toBe("expected_sha256_mismatch");
     const good = await executeWriteFileTool(call({ workspace_root: root, path: "dir/a.txt", content: "two", overwrite: true, expected_sha256: sha256Hex("one") })) as any;
     expect(good.ok).toBe(true); expect(good.atomic_write).toBe(true); expect(good.after_sha256).toBe(sha256Hex("two"));

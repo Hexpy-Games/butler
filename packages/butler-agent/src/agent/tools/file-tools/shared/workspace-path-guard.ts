@@ -26,6 +26,44 @@ export interface WorkspacePathGuardResult {
   next?: Array<{ command: string }>;
 }
 
+/** Return only a workspace-relative path suitable for a public tool result. */
+export function safeWorkspaceResultPath(input: {
+  workspaceRoot: string;
+  requestedPath?: unknown;
+  absolutePath?: unknown;
+}): string | undefined {
+  const root = resolve(input.workspaceRoot || ".");
+  const absolute = typeof input.absolutePath === "string" && input.absolutePath.trim()
+    ? resolve(input.absolutePath)
+    : undefined;
+  const candidate = absolute
+    ? relative(root, absolute)
+    : typeof input.requestedPath === "string"
+      ? input.requestedPath.trim()
+      : "";
+  if (!candidate || candidate === "." || isAbsolute(candidate) || candidate.split(/[\\/]+/u).includes("..")) return undefined;
+  return candidate.replaceAll("\\", "/");
+}
+
+/** Strip private absolute and real paths from a rejected guard result. */
+export function safeWorkspaceGuardResult(
+  guard: WorkspacePathGuardResult,
+): Record<string, unknown> {
+  const path = safeWorkspaceResultPath({
+    workspaceRoot: guard.workspaceRoot,
+    requestedPath: guard.requestedPath,
+    absolutePath: guard.absolutePath,
+  });
+  return {
+    ok: false,
+    ...(path === undefined ? {} : { path }),
+    ...(guard.reason === undefined ? {} : { reason: guard.reason }),
+    ...(guard.code === undefined ? {} : { code: guard.code }),
+    ...(guard.message === undefined ? {} : { message: guard.message }),
+    ...(guard.next === undefined ? {} : { next: guard.next }),
+  };
+}
+
 const SENSITIVE_SEGMENTS = new Set([".git", ".ssh", ".gnupg"]);
 const SENSITIVE_FILENAMES = new Set(["chatgpt-oauth.json", "credentials.json", "secrets.json", "id_rsa", "id_ed25519"]);
 

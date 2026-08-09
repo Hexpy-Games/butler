@@ -19,7 +19,7 @@ Each native file tool returns `evidence_receipts` using `butler.evidence-receipt
 - `list_files`: reports bounded root/glob scope, regular-file count, traversal caps, and continuation state without file content or absolute paths.
 - `read_file`: preserves the single `path` result (byte count, line range, truncation, SHA-256) and accepts canonical `requests` batches of 1–20 files with per-file and aggregate byte bounds. Batch entries remain in request order and isolate typed per-file failures.
 - `write_file`: reports path, created/overwritten state, before/after SHA-256, byte count, and atomic-write status.
-- `edit_file`: replaces one exact range beginning at a one-based line, preserves the file mode, and reports the before/after SHA-256. Use it for a small change to an existing UTF-8 file.
+- `edit_file`: replaces one exact range beginning at a one-based line, preserves the file mode, and reports the before/after SHA-256. Single edits retain the established exact-text contract; canonical `edits` batches contain 2–20 distinct paths, require each current expected SHA-256, preflight every entry before mutation, and report bounded applied/conflicting/not-attempted state without rollback on external change.
 - `grep_files`: reports literal/regex mode, case sensitivity, searched/skipped file counts, match truncation, and bounded match data under `max_output_bytes`. Candidate reads are bounded; matches use established source-priority then path/line ordering with a same-window cursor; invalid UTF-8 and binary files are counted and skipped.
 
 `run_command` remains available for build, test, transform, and multi-step shell execution. It should not be the default path for simple workspace file read/write/edit/search once these native tools are available.

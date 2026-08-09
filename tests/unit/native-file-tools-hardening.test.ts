@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { executeReadFileTool } from "../../packages/butler-agent/src/agent/tools/file-tools/read_file/executor.ts";
 import { executeWriteFileTool } from "../../packages/butler-agent/src/agent/tools/file-tools/write_file/executor.ts";
+import { writeFileToolDefinition } from "../../packages/butler-agent/src/agent/tools/file-tools/write_file/definition.ts";
 import { executeGrepFilesTool } from "../../packages/butler-agent/src/agent/tools/file-tools/grep_files/executor.ts";
 
 async function tmpWorkspace() {
@@ -11,6 +12,11 @@ async function tmpWorkspace() {
 }
 
 describe("native file tools hardening", () => {
+  test("write_file advertises the canonical SHA-256 guard pattern", () => {
+    const parameters = writeFileToolDefinition.parameters as { properties: Record<string, { pattern?: string }> };
+    expect(parameters.properties.expected_sha256.pattern).toBe("^[a-fA-F0-9]{64}$");
+  });
+
   test("returns structured errors for malformed JSON tool arguments", async () => {
     const workspace = await tmpWorkspace();
     for (const execute of [executeReadFileTool, executeWriteFileTool, executeGrepFilesTool]) {
@@ -32,11 +38,126 @@ describe("native file tools hardening", () => {
     expect(await readFile(join(workspace, "nested/file.txt"), "utf8")).toBe("hello");
   });
 
+  test("write_file requires a current expected hash for replacement and keeps creation explicit", async () => {
+    const workspace = await tmpWorkspace();
+    await writeFile(join(workspace, "existing.txt"), "old", "utf8");
+    const missingGuard = await executeWriteFileTool({ arguments: {
+      path: "existing.txt",
+      content: "new",
+      overwrite: true,
+    } }, { workspacePath: workspace }) as { ok: false; error: string };
+    expect(missingGuard.error).toBe("expected_sha256_required");
+    const accidentalCreate = await executeWriteFileTool({ arguments: {
+      path: "new.txt",
+      content: "new",
+      overwrite: true,
+    } }, { workspacePath: workspace }) as { ok: false; error: string };
+    expect(accidentalCreate.error).toBe("invalid_arguments");
+    expect(await readFile(join(workspace, "existing.txt"), "utf8")).toBe("old");
+    await expect(access(join(workspace, "new.txt"))).rejects.toBeDefined();
+  });
+
   test("write_file does not treat expected sha on missing file as a successful create", async () => {
     const workspace = await tmpWorkspace();
-    const result = await executeWriteFileTool({ arguments: { path: "missing.txt", content: "new", expected_sha256: "abc" } }, { workspacePath: workspace }) as { ok: false; error: string };
+    const result = await executeWriteFileTool({ arguments: { path: "missing.txt", content: "new", expected_sha256: "a".repeat(64) } }, { workspacePath: workspace }) as { ok: false; error: string };
     expect(result.ok).toBe(false);
     expect(result.error).toBe("expected_sha256_on_missing_file");
+  });
+
+  test("rejected write preflight never creates requested parents", async () => {
+    const workspace = await tmpWorkspace();
+    const rejectedOverwrite = await executeWriteFileTool({ arguments: {
+      path: "rejected/overwrite.txt",
+      content: "new",
+      overwrite: true,
+      create_parents: true,
+    } }, { workspacePath: workspace }) as { ok: false; error: string };
+    expect(rejectedOverwrite.error).toBe("invalid_arguments");
+    await expect(access(join(workspace, "rejected"))).rejects.toBeDefined();
+
+    const rejectedExpectedSha = await executeWriteFileTool({ arguments: {
+      path: "rejected-sha/file.txt",
+      content: "new",
+      overwrite: false,
+      expected_sha256: "f".repeat(64),
+      create_parents: true,
+    } }, { workspacePath: workspace }) as { ok: false; error: string };
+    expect(rejectedExpectedSha.error).toBe("expected_sha256_on_missing_file");
+    await expect(access(join(workspace, "rejected-sha"))).rejects.toBeDefined();
+
+    const invalid = await executeWriteFileTool({ arguments: {
+      path: "",
+      content: "new",
+      overwrite: false,
+      create_parents: true,
+    } }, { workspacePath: workspace }) as { ok: false; error: string };
+    expect(invalid.error).toBe("invalid_arguments");
+    expect(JSON.stringify(invalid)).not.toContain(workspace);
+  });
+
+  test("write_file invalid path/content/overwrite inputs are typed invalid_arguments", async () => {
+    const workspace = await tmpWorkspace();
+    const omittedOverwrite = await executeWriteFileTool({ arguments: {
+      path: "omitted-overwrite.txt",
+      content: "new",
+    } }, { workspacePath: workspace }) as { ok: true; created: boolean };
+    expect(omittedOverwrite.created).toBe(true);
+    const invalidOverwrite = await executeWriteFileTool({ arguments: {
+      path: "invalid-overwrite.txt",
+      content: "new",
+      overwrite: "false",
+    } }, { workspacePath: workspace }) as { ok: false; error: string };
+    expect(invalidOverwrite.error).toBe("invalid_arguments");
+    const invalidContent = await executeWriteFileTool({ arguments: {
+      path: "invalid-content.txt",
+      content: 42,
+      overwrite: false,
+    } }, { workspacePath: workspace }) as { ok: false; error: string };
+    expect(invalidContent.error).toBe("invalid_arguments");
+    const invalidSha = await executeWriteFileTool({ arguments: {
+      path: "invalid-sha.txt",
+      content: "new",
+      overwrite: false,
+      expected_sha256: "not-a-sha",
+    } }, { workspacePath: workspace }) as { ok: false; error: string };
+    expect(invalidSha.error).toBe("invalid_arguments");
+  });
+
+  test("write_file normalizes uppercase SHA-256 replacement guards", async () => {
+    const workspace = await tmpWorkspace();
+    await writeFile(join(workspace, "uppercase.txt"), "old", "utf8");
+    const result = await executeWriteFileTool({ arguments: {
+      path: "uppercase.txt",
+      content: "new",
+      overwrite: true,
+      expected_sha256: "c".repeat(64).toUpperCase(),
+    } }, { workspacePath: workspace }) as { ok: false; error: string };
+    expect(result.error).toBe("expected_sha256_mismatch");
+    const actual = await import("../../packages/butler-agent/src/agent/tools/file-tools/shared/evidence.ts").then(({ sha256Hex }) => sha256Hex("old"));
+    const success = await executeWriteFileTool({ arguments: {
+      path: "uppercase.txt",
+      content: "new",
+      overwrite: true,
+      expected_sha256: actual.toUpperCase(),
+    } }, { workspacePath: workspace }) as { ok: true; overwritten: boolean };
+    expect(success.overwritten).toBe(true);
+    expect(await readFile(join(workspace, "uppercase.txt"), "utf8")).toBe("new");
+  });
+
+  test("rejected absolute write paths are not exposed in result or evidence", async () => {
+    const workspace = await tmpWorkspace();
+    const outside = await tmpWorkspace();
+    const absolutePath = join(outside, "secret.txt");
+    const result = await executeWriteFileTool({ arguments: {
+      path: absolutePath,
+      content: "secret",
+      overwrite: false,
+      create_parents: true,
+    } }, { workspacePath: workspace }) as { ok: false; error: string };
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(absolutePath);
+    expect(JSON.stringify(result)).not.toContain(outside);
+    await expect(access(absolutePath)).rejects.toBeDefined();
   });
 
   test("read_file byte truncation preserves UTF-8 boundaries", async () => {
