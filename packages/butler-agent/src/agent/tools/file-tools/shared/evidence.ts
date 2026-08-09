@@ -148,7 +148,7 @@ export function fileToolCapabilityReceipt(input: {
     const files = Array.isArray(input.files) ? input.files : [];
     return [createEvidenceCapabilityReceipt({
       producer: { kind: "tool", name: input.toolName },
-      capability: "source_candidate",
+      capability: "workspace_file_list",
       evidence_kind: "workspace_inspection",
       maturity: "candidate",
       verified: false,
