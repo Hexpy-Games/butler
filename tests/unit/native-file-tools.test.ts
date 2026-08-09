@@ -68,6 +68,32 @@ describe("read_file", () => {
     expect(res.error).toBe("protected_path");
   });
 
+  test("sanitizes supplied workspace-root protected-path rejection", async () => {
+    const outsideRoot = await mkdtemp(join(tmpdir(), "butler-read-outside-"));
+    try {
+      await mkdir(join(outsideRoot, ".project-ledger", "specs"), { recursive: true });
+      await writeFile(join(outsideRoot, ".project-ledger", "specs", "private.md"), "private read fixture content", "utf8");
+      const res = await executeReadFileTool(
+        call({
+          workspace_root: outsideRoot,
+          path: ".project-ledger/specs/private.md",
+        }),
+        { workspacePath: root },
+      ) as any;
+      expect(res.ok).toBe(false);
+      expect(res.error).toBe("protected_path");
+      expect(res.guard).not.toHaveProperty("workspaceRoot");
+      expect(res.guard).not.toHaveProperty("absolutePath");
+      expect(res.guard).not.toHaveProperty("realPath");
+      const serialized = JSON.stringify(res);
+      expect(serialized).not.toContain(root);
+      expect(serialized).not.toContain(outsideRoot);
+      expect(serialized).not.toContain("private read fixture content");
+    } finally {
+      await rm(outsideRoot, { recursive: true, force: true });
+    }
+  });
+
   test("reads canonical requests in order with aggregate continuation and stale cursor guard", async () => {
     await writeFile(join(root, "one.txt"), "one\ntwo\nthree\n", "utf8");
     await writeFile(join(root, "two.txt"), "four\nfive\n", "utf8");
@@ -221,6 +247,36 @@ describe("list_files", () => {
     const grep = await executeGrepFilesTool(call({ workspace_root: root, root: "one.txt", pattern: "needle" })) as any;
     expect(grep.ok).toBe(false);
     expect(grep.error).toBe("not_a_directory");
+  });
+
+  test("redacts rejected discovery roots while retaining typed errors", async () => {
+    const outsideRoot = join(tmpdir(), "butler-list-outside");
+    const absolute = await executeListFilesTool(call({ workspace_root: root, root: outsideRoot })) as any;
+    expect(absolute.ok).toBe(false);
+    expect(absolute.error).toBe("path_escape");
+    expect(JSON.stringify(absolute)).not.toContain(root);
+    expect(JSON.stringify(absolute)).not.toContain(outsideRoot);
+
+    const parent = await executeListFilesTool(call({ workspace_root: root, root: "../outside" })) as any;
+    expect(parent.ok).toBe(false);
+    expect(parent.error).toBe("parent_traversal_not_allowed");
+    expect(JSON.stringify(parent)).not.toContain(root);
+    expect(JSON.stringify(parent)).not.toContain("../outside");
+
+    await mkdir(join(root, ".project-ledger", "specs"), { recursive: true });
+    await writeFile(join(root, ".project-ledger", "specs", "private.md"), "private list fixture content", "utf8");
+    const protectedResult = await executeListFilesTool(call({ workspace_root: root, root: ".project-ledger" })) as any;
+    expect(protectedResult.ok).toBe(false);
+    expect(protectedResult.error).toBe("protected_path");
+    expect(JSON.stringify(protectedResult)).not.toContain(root);
+    expect(JSON.stringify(protectedResult)).not.toContain("private list fixture content");
+
+    await symlink(tmpdir(), join(root, "escape"));
+    const symlinkResult = await executeListFilesTool(call({ workspace_root: root, root: "escape" })) as any;
+    expect(symlinkResult.ok).toBe(false);
+    expect(symlinkResult.error).toBe("symlink_escape");
+    expect(JSON.stringify(symlinkResult)).not.toContain(root);
+    expect(JSON.stringify(symlinkResult)).not.toContain(tmpdir());
   });
 
   test("does not emit a repeating cursor when a directory cap stops before a file boundary", async () => {
@@ -404,6 +460,43 @@ describe("grep_files", () => {
     expect(res.error).toBe("missing_pattern");
   });
 
+  test("redacts rejected absolute, protected, and symlink search roots", async () => {
+    const outsideRoot = join(tmpdir(), "butler-grep-outside");
+    const absolute = await executeGrepFilesTool(call({
+      workspace_root: root,
+      root: outsideRoot,
+      pattern: "needle",
+    })) as any;
+    expect(absolute.ok).toBe(false);
+    expect(absolute.error).toBe("path_escape");
+    expect(absolute.searched_root).toBe(".");
+    expect(JSON.stringify(absolute)).not.toContain(root);
+    expect(JSON.stringify(absolute)).not.toContain(outsideRoot);
+
+    await mkdir(join(root, ".project-ledger", "specs"), { recursive: true });
+    await writeFile(join(root, ".project-ledger", "specs", "private.md"), "needle", "utf8");
+    const protectedResult = await executeGrepFilesTool(call({
+      workspace_root: root,
+      root: ".project-ledger",
+      pattern: "needle",
+    })) as any;
+    expect(protectedResult.ok).toBe(false);
+    expect(protectedResult.error).toBe("protected_path");
+    expect(JSON.stringify(protectedResult)).not.toContain(root);
+    expect(JSON.stringify(protectedResult)).not.toContain("private.md");
+
+    await symlink(tmpdir(), join(root, "escape"));
+    const symlinkResult = await executeGrepFilesTool(call({
+      workspace_root: root,
+      root: "escape",
+      pattern: "needle",
+    })) as any;
+    expect(symlinkResult.ok).toBe(false);
+    expect(symlinkResult.error).toBe("symlink_escape");
+    expect(JSON.stringify(symlinkResult)).not.toContain(root);
+    expect(JSON.stringify(symlinkResult)).not.toContain(tmpdir());
+  });
+
   test("supports include, exclude, context, truncation, and receipts", async () => {
     await mkdir(join(root, "src")); await writeFile(join(root, "src/a.ts"), "before\nneedle\nafter\n"); await writeFile(join(root, "src/a.md"), "needle\n");
     const res = await executeGrepFilesTool(call({ workspace_root: root, pattern: "NEEDLE", case_sensitive: false, include_globs:["src/*.ts"], exclude_globs:["**/*.md"], context_lines:1, max_matches:1 })) as any;
@@ -493,6 +586,40 @@ describe("grep_files", () => {
     expect(result.matches).toHaveLength(1);
     expect(result.metrics.candidate_reads).toBeLessThanOrEqual(4);
     expect(result.metrics.candidate_reads).toBeLessThan(result.files_considered);
+  });
+
+  test("applies timeout across candidate batches without issuing an unsafe cursor", async () => {
+    for (let index = 0; index < 8; index += 1) {
+      await writeFile(join(root, `timeout-${String(index).padStart(2, "0")}.txt`), "no hit\n", "utf8");
+    }
+    const originalNow = Date.now;
+    let clockCalls = 0;
+    let result: any;
+    Date.now = () => {
+      const value = clockCalls < 20 ? 0 : 100;
+      clockCalls += 1;
+      return value;
+    };
+    try {
+      result = await executeGrepFilesTool(call({
+        workspace_root: root,
+        pattern: "needle",
+        timeout_ms: 100,
+      })) as any;
+    } finally {
+      Date.now = originalNow;
+    }
+    expect(result.ok).toBe(true);
+    expect(result.truncated).toBe(true);
+    expect(result.stopped_by).toBe("elapsed_ms");
+    expect(result.next_cursor).toBeUndefined();
+    expect(result.recovery_hint).toContain("timeout_ms");
+    expect(result.metrics.candidate_reads).toBeLessThanOrEqual(4);
+    expect(result.metrics.candidate_reads).toBeLessThan(result.files_considered);
+    expect(result.metrics.elapsed_ms).toBeGreaterThanOrEqual(100);
+    expect(result.evidence_capability_receipts[0].verified).toBe(false);
+    expect(JSON.stringify(result.evidence_capability_receipts)).not.toContain(root);
+    expect(JSON.stringify(result.evidence_capability_receipts)).not.toContain("no hit");
   });
 
   test("bounds long match and context payloads with UTF-8-safe output truncation", async () => {

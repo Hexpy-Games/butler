@@ -1,5 +1,5 @@
 import { relative } from "node:path";
-import { resolveWorkspacePathGuard } from "../shared/workspace-path-guard.ts";
+import { resolveWorkspacePathGuard, safeWorkspaceGuardResult } from "../shared/workspace-path-guard.ts";
 import { fileToolCapabilityReceipt, fileToolEvidenceReceipt } from "../shared/evidence.ts";
 import { getWorkspaceRoot, tryParseToolArgs } from "../shared/args.ts";
 import {
@@ -128,6 +128,7 @@ export async function executeGrepFilesTool(
   const maxBytesPerFile = boundedInteger(args.max_bytes_per_file, 262_144, 1, 1_048_576);
   const maxOutputBytes = boundedInteger(args.max_output_bytes, DEFAULT_MAX_OUTPUT_BYTES, 1, MAX_OUTPUT_BYTES);
   const limits = normalizeTraversalLimits(args, { maxResults: boundedInteger(args.max_files, 5000, 1, 50_000) });
+  const deadlineAt = startedAt + limits.elapsedMs;
   if (!pattern) return { ok: false, error: "missing_pattern", message: "pattern is required.", recovery_hint: "Provide a non-empty literal pattern or explicit regex pattern.", evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: "missing_pattern" }) };
   const query = cursorQueryHash({ root, pattern, regex, case_sensitive: caseSensitive, include_globs: includeGlobs, exclude_globs: excludeGlobs, context_lines: contextLines, max_matches: maxMatches, max_bytes_per_file: maxBytesPerFile, max_output_bytes: maxOutputBytes, limits });
   const cursor = args.cursor === undefined ? null : decodeFileToolCursor(args.cursor);
@@ -137,7 +138,8 @@ export async function executeGrepFilesTool(
   const guard = await resolveWorkspacePathGuard({ workspaceRoot, relativePath: root, allowDirectories: true, requireDirectory: true, rejectProtectedProjectLedgerPaths: true, protectedProjectLedgerRoots: context.protectedProjectLedgerRoots });
   if (!guard.ok) {
     const error = guard.reason === "directory_not_allowed" || guard.reason === "not_a_directory" ? "not_a_directory" : guard.reason;
-    return { ok: false, error, searched_root: root.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(root) ? "." : root, guard, message: "The search root is not an admitted workspace directory.", recovery_hint: "Choose a contained, non-sensitive workspace directory.", evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, path: root, error }) };
+    const searchedRoot = root.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(root) || root.split(/[\\/]+/u).includes("..") ? "." : root;
+    return { ok: false, error, searched_root: searchedRoot, guard: safeWorkspaceGuardResult(guard), message: "The search root is not an admitted workspace directory.", recovery_hint: "Choose a contained, non-sensitive workspace directory.", evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, path: root, error }) };
   }
   let matcherSource: string;
   try { matcherSource = regex ? pattern : escapeRegExp(pattern); new RegExp(matcherSource, caseSensitive ? "" : "i"); } catch (error) {
@@ -165,10 +167,15 @@ export async function executeGrepFilesTool(
   let maxMatchesReached = false;
   let maxOutputReached = false;
   let stoppedWithinCandidate = false;
+  let elapsedBudgetReached = traversal.stoppedBy === "elapsed_ms" || Date.now() >= deadlineAt;
 
   outer: for (let offset = 0; offset < searchCandidates.length; offset += MAX_READ_CONCURRENCY) {
+    if (elapsedBudgetReached || Date.now() >= deadlineAt) {
+      elapsedBudgetReached = true;
+      break;
+    }
     const batch = searchCandidates.slice(offset, offset + MAX_READ_CONCURRENCY);
-    const batchResults = await mapBounded(batch, MAX_READ_CONCURRENCY, (candidate) => readCandidate(candidate, matcherSource, matcherFlags, contextLines, maxBytesPerFile, maxMatches, maxOutputBytes, after));
+    const batchResults = await mapBounded(batch, MAX_READ_CONCURRENCY, (candidate) => readCandidate(candidate, matcherSource, matcherFlags, contextLines, maxBytesPerFile, maxMatches, maxOutputBytes, after, { deadlineAt }));
     // All reads in a small deterministic batch are accounted for, even when
     // the first result satisfies the output budget and stops later processing.
     candidateResults.push(...batchResults);
@@ -206,20 +213,25 @@ export async function executeGrepFilesTool(
         break outer;
       }
     }
+    if (batchResults.some((result) => result.reason === "elapsed_ms") || Date.now() >= deadlineAt) {
+      elapsedBudgetReached = true;
+      break;
+    }
   }
 
-  const truncated = traversal.truncated || maxMatchesReached || maxOutputReached || stoppedWithinCandidate;
+  const truncated = traversal.truncated || maxMatchesReached || maxOutputReached || stoppedWithinCandidate || elapsedBudgetReached;
   const partialCandidateResults = candidateResults.filter((result) => result.reason === "max_bytes_per_file" || result.reason === "io_error");
   const partialReasons = [...new Set(partialCandidateResults.map((result) => result.reason!))];
   const candidateIncomplete = partialCandidateResults.length > 0;
   let stoppedBy = traversal.stoppedBy as string | undefined;
-  if (maxOutputReached) stoppedBy = "max_output_bytes";
+  if (elapsedBudgetReached) stoppedBy = "elapsed_ms";
+  else if (maxOutputReached) stoppedBy = "max_output_bytes";
   else if (maxMatchesReached) stoppedBy = "max_results";
   else if (candidateIncomplete && !stoppedBy) stoppedBy = partialReasons.includes("io_error") ? "io_error" : "max_bytes_per_file";
   const lastMatch = matches[matches.length - 1];
   const processedCandidate = searchCandidates[Math.min(candidateResults.length, searchCandidates.length) - 1];
   const scanPath = traversal.lastFilePath ?? processedCandidate?.path ?? traversal.lastPath;
-  const cursorTraversalSafe = traversalSupportsCursor(traversal.stoppedBy);
+  const cursorTraversalSafe = !elapsedBudgetReached && traversalSupportsCursor(traversal.stoppedBy);
   const cursorPayload = cursorTraversalSafe && stoppedWithinCandidate && (lastMatch ?? after)
     ? { tool: "grep_files" as const, query, marker: (lastMatch ?? after)!.path, line: (lastMatch ?? after)!.line, scan_path: windowStartPath, scan_inclusive: true, window_start_path: windowStartPath, window_end_path: windowEndPath }
     : cursorTraversalSafe && traversal.truncated && !maxOutputReached && (!maxMatchesReached || !stoppedWithinCandidate) && scanPath
@@ -269,7 +281,9 @@ export async function executeGrepFilesTool(
     ...(candidateIncomplete ? { partial: true, partial_reasons: partialReasons } : {}),
     ...(stoppedBy ? { stopped_by: stoppedBy } : {}),
     ...(
-      candidateIncomplete
+      elapsedBudgetReached
+        ? { recovery_hint: "Search reached timeout_ms before all candidate files were read; narrow the root or globs, raise timeout_ms, and retry without cursor." }
+        : candidateIncomplete
         ? { recovery_hint: partialReasons.includes("io_error") ? "Search encountered a candidate I/O error; retry with a narrower admitted root or after checking workspace permissions." : "Some candidates exceeded max_bytes_per_file; raise that bound or narrow the include globs and retry without cursor." }
         : traversal.stoppedBy && !traversalSupportsCursor(traversal.stoppedBy)
           ? { recovery_hint: traversal.stoppedBy === "io_error" ? "Search hit a workspace I/O error; retry grep_files with a narrower admitted root or glob." : "Search stopped before a safe file boundary; narrow the root/globs or raise the directory/depth/time cap and retry without cursor." }
