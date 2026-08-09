@@ -13,5 +13,6 @@ export {
 } from "./provider-request-errors.ts";
 export {
   diagnosticDetails,
+  normalizeLegacyProviderRequestError,
   safeRuntimeFailure,
 } from "./runtime-failure-diagnostics.ts";

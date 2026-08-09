@@ -1,5 +1,4 @@
-import { createToolResultModelPreviewContext } from
-  "../../tools/tool-result-serialization.ts";
+import { createToolResultModelPreviewContext } from "../../tools/tool-result-serialization.ts";
 import type { ToolResultModelPreviewContext } from
   "../../tools/tool-result-model-preview.ts";
 import { emptyResponseRecoveryObservation } from
@@ -23,6 +22,7 @@ import { renderPartialLimitResponse } from "./partial-limit-response.ts";
 import { toolResultToMessage } from "./tool-result-message.ts";
 import {
   emitExecutionWindowBoundary,
+  modelRoundRequestId,
   resolveExecutionWindowSize,
   throwIfExecutionWindowAborted,
 } from "./execution-window.ts";
@@ -57,7 +57,7 @@ export async function runBtccAgentLoop(
   }): Promise<ModelRoundResult> => {
     const roundIndex = (input.usageAttribution?.roundIndex ?? 0) + modelRoundIndex;
     modelRoundIndex += 1;
-    const requestId = `btcc-model-round-${roundIndex}`;
+    const requestId = modelRoundRequestId(roundIndex, input.recoveryAttempt);
     const resolveModelRef = () => input.resolveModelRef?.() ?? input.model ?? "";
     const publishWaiting = async (
       status: "started" | "completed" | "failed" | "cancelled",

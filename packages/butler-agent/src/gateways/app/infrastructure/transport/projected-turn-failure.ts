@@ -5,6 +5,7 @@ import {
 import { timestampBefore } from "./app-transport-metadata.ts";
 import type { AppTransportProjectionStoreOptions } from "./transport-projection-contract.ts";
 import { btccRetainsTurnAuthority } from "./btcc-turn-projection-authority.ts";
+import { runtimeFaultFailureMessage } from "./runtime-fault-failure.ts";
 
 export function projectAppTurnFailure(input: {
   options: AppTransportProjectionStoreOptions;
@@ -17,7 +18,8 @@ export function projectAppTurnFailure(input: {
   const { options, chatId, turnId, message, metadata, eventTimestamp } = input;
   const turn = options.getTurnRow(turnId);
   if (!turn) return false;
-  if (btccRetainsTurnAuthority(options.db, turnId)) return false;
+  const runtimeFault = options.runtimeFaultRecordForTurn(turnId);
+  if (!runtimeFault && btccRetainsTurnAuthority(options.db, turnId)) return false;
   if (turn.state === "delivered" || turn.state === "cancelled") return false;
   if (
     turn.state === "retrying" &&
@@ -37,10 +39,10 @@ export function projectAppTurnFailure(input: {
     return false;
   }
 
-  const runtimeFault = options.runtimeFaultRecordForTurn(turnId);
   const isRuntimeFault = Boolean(runtimeFault);
   const isRetryableRuntimeFault = runtimeFault?.retryable === true;
-  options.upsertAssistantTurnFailure(chatId, turnId, safeError, {
+  const projectedError = runtimeFaultFailureMessage(runtimeFault, safeError);
+  options.upsertAssistantTurnFailure(chatId, turnId, projectedError, {
     retryable: isRetryableRuntimeFault,
   });
   if (
@@ -51,7 +53,7 @@ export function projectAppTurnFailure(input: {
   ) {
     options.appendTurnEvent(chatId, turnId, {
       kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
-      payload: runtimeFault ?? safeTurnFailureEventPayload(safeError),
+      payload: runtimeFault ?? safeTurnFailureEventPayload(projectedError),
     });
   }
   const failedTurn = options.updateTurnState(
@@ -61,7 +63,7 @@ export function projectAppTurnFailure(input: {
       safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
       retryable: isRetryableRuntimeFault,
       cancellable: false,
-      safeErrorCode: safeError.code,
+      safeErrorCode: projectedError.code,
     },
   );
   options.appendTerminalTurnStateChanged(failedTurn);

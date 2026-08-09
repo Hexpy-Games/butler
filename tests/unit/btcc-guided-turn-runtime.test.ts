@@ -280,17 +280,22 @@ test("Guided Turn does not retry a non-contention final commit failure", async (
   }
 });
 
-test("Guided Turn delivers an explicit operational failure when the model produces no final answer", async () => {
+test("Guided Turn surfaces exhausted provider recovery as a retryable runtime fault", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-provider-failure-"));
   const stores = openBtccSqliteStores({
     dbPath: join(root, "btcc.sqlite"),
     ownerId: "guided-provider-failure",
     storageProfile: "ephemeral",
   });
+  const faults: Array<{ kind: string; retryable: boolean; safeErrorCode: string }> = [];
   const runtime = createGuidedTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
     messages: stores.messages,
+    progress: {
+      stateChanged() {},
+      runtimeFaulted(update) { faults.push(update); },
+    },
     agent: {
       async run() {
         throw new ModelProviderRequestError({
@@ -303,11 +308,14 @@ test("Guided Turn delivers an explicit operational failure when the model produc
     },
   });
   try {
-    expect(await runtime.runTurn(runCommand("guided-provider-failure-turn")))
-      .toMatchObject({
-        kind: "delivered",
-        content: "모델 연결이 일시적으로 중단되어 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.",
-      });
+    await expect(runtime.runTurn(runCommand("guided-provider-failure-turn")))
+      .rejects.toMatchObject({ code: "provider_network_error" });
+    expect(faults).toHaveLength(1);
+    expect(faults[0]).toMatchObject({
+      kind: "provider_transport_exhausted",
+      retryable: true,
+      safeErrorCode: "provider_network_error",
+    });
   } finally {
     stores.close();
     rmSync(root, { recursive: true, force: true });

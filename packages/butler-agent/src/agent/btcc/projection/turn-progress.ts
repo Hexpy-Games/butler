@@ -180,13 +180,23 @@ export function projectTurnProgressToEvents(
       await publish({
         kind: "assistant.public_note",
         payload: {
-          note: operationalProgressLabel(update.activationKind, update.code),
+          note: operationalProgressLabel(
+            update.activationKind,
+            update.attempt,
+            update.maxAttempts,
+          ),
           btccState: update.semanticState,
           operational: true,
           semanticBlockId: update.semanticState,
           bridgePhase: "operational_recovery",
           recoveryStatus: update.status,
         },
+      });
+    },
+    async runtimeFaulted(update) {
+      await publish({
+        kind: "runtime.fault",
+        payload: update,
       });
     },
   };
@@ -211,11 +221,23 @@ function operationEventKind(
 }
 
 function operationalProgressLabel(
-  activation: "automatic_storage_recovery" | "cancelled" | undefined,
-  _code?: string,
+  activation:
+    | "automatic_storage_recovery"
+    | "automatic_provider_recovery"
+    | "cancelled"
+    | undefined,
+  attempt?: number,
+  maxAttempts?: number,
 ): string {
   if (activation === "automatic_storage_recovery") {
     return "저장소 쓰기 순서를 조정하고 있습니다";
+  }
+  if (
+    activation === "automatic_provider_recovery" &&
+    Number.isInteger(attempt) &&
+    Number.isInteger(maxAttempts)
+  ) {
+    return `재연결 중 (${attempt}/${maxAttempts})`;
   }
   return "요청을 중지하고 있습니다";
 }

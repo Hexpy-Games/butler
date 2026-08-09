@@ -10831,6 +10831,65 @@ test("navigation sync tolerates replayed model stream sequence strings", async (
   }
 });
 
+test("delivered BTCC runtime fault progress makes an active App Turn retryable", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    port: 0,
+    responder: () => new Promise(() => undefined),
+  });
+  const accepted = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "provider reconnect exhaustion",
+  });
+  const turnId = accepted.data.turn.id as string;
+  const userMessageId = accepted.data.accepted.id as string;
+  server.stop();
+
+  appendAppTurnEventOutboundForTest({
+    sessionId: "butler/app-general",
+    actionId: `app-turn-event:${turnId}:runtime-fault`,
+    turnId,
+    replyToMessageId: userMessageId,
+    event: {
+      kind: "runtime.fault",
+      payload: createRuntimeFaultPayload({
+        faultId: `${turnId}:provider-transport-exhausted`,
+        sessionId: "general",
+        turnId,
+        kind: "provider_transport_exhausted",
+        retryable: true,
+        publicSummary: "모델 연결 복구 한도를 초과했습니다.",
+        operatorSummary: "Provider retry ceiling exhausted.",
+        safeErrorCode: "provider_rate_limited",
+        createdAt: "2026-08-09T00:00:00.000Z",
+      }),
+    },
+  });
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    await server.store.waitForAppTransportProjection();
+    const messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
+    expect(server.store.getTurn(turnId)).toMatchObject({
+      id: turnId,
+      state: "runtime_fault",
+      retryable: true,
+      safe_error_code: "runtime_fault",
+    });
+    expect(messages.data.messages).toContainEqual(expect.objectContaining({
+      turn_id: turnId,
+      status: "failed",
+      retryable: true,
+      safe_error_code: "runtime_fault",
+      text: "모델 연결 복구 한도를 초과했습니다.",
+    }));
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport sync skips unchanged transcript snapshots", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });

@@ -36,6 +36,7 @@ export type BtccAgentLoopResult = {
 export interface BtccAgentLoop {
   run(input: {
     turn: TurnRecord;
+    recoveryAttempt?: number;
     signal: AbortSignal;
     progress?: BtccTurnProgressObserver;
     onProviderResponseIdentity?: (identity: {
@@ -112,6 +113,7 @@ export interface BtccFinalSynthesisOptions {
 export interface BtccAgentLoopInput {
   prompt: string;
   turnId?: string;
+  recoveryAttempt?: number;
   model?: string;
   resolveModelRef?: () => string;
   instructions?: string;

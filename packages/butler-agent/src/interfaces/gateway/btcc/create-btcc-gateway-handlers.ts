@@ -52,6 +52,7 @@ function toBtccRequest(
   }
   return {
     turnId,
+    recoveryAttempt: envelope.routingHints?.turnAttempt,
     sessionId: route.sessionId,
     eventId: envelope.eventId,
     transport: envelope.transport,

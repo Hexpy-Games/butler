@@ -61,7 +61,7 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
       return this.prepareConversationProjection(
         request,
         replayBinding(existingTurn, request),
-        { kind: "resume", turnId: request.turnId },
+        { kind: "resume", turnId: request.turnId, recoveryAttempt: request.recoveryAttempt },
         false,
       );
     }

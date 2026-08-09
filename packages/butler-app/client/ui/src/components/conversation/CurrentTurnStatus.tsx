@@ -20,6 +20,8 @@ export function CurrentTurnStatus({
   const operationLabel = operation
     ? operation.safe_label || publicOperationTitle(operation.safe_tool_name)
     : undefined;
+  const providerRecovery = publicActivity?.bridge_phase ===
+    "operational_recovery" ? publicActivity : undefined;
   const fullLabel = operationLabel ?? publicActivity?.safe_label ??
     "응답 생성 중";
   return (
@@ -36,6 +38,8 @@ export function CurrentTurnStatus({
         <div data-test-class="turn-current-status-content">
           {operation ? (
             <CurrentPhaseActivity row={{ ...operation, safe_label: operationLabel! }} />
+          ) : providerRecovery ? (
+            <CurrentPhaseActivity row={providerRecovery} />
           ) : modelRoundWait ? (
             <CurrentModelRoundWaiting row={modelRoundWait} />
           ) : publicActivity ? (
