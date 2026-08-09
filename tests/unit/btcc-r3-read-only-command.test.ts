@@ -20,6 +20,8 @@ import { executeGuidedCommandCall } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-command-execution.ts";
 import { prepareGuidedCommandEffect } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-command-effect.ts";
+import { collectGuidedFinalArtifacts } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
 import { createGuidedToolExecutionBoundary } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-execution-boundary.ts";
 import { createGuidedEffectService } from
@@ -32,6 +34,8 @@ import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { runCommandToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/run-command/run_command/definition.ts";
+import { artifactFilesFromOutbound } from
+  "../../packages/butler-agent/src/gateways/app/infrastructure/transport/outbound-artifact-files.ts";
 import { reviewedWork } from "./support/guided-effect-test-fixture.ts";
 
 const roots: string[] = [];
@@ -530,7 +534,7 @@ describe("R3 read-only command boundary", () => {
     const prepared = await prepareGuidedCommandEffect({
       args: {
         command: "printf artifact > \"$BUTLER_ARTIFACTS_DIR/result.txt\"",
-        output_paths: ["$BUTLER_ARTIFACTS_DIR/result.txt"],
+        output_paths: ["artifacts/generated/result.txt"],
         state_effect: "mutation",
       },
       butlerData,
@@ -562,6 +566,144 @@ describe("R3 read-only command boundary", () => {
       });
       if (!outcome.ok) throw new Error("generated artifact command did not apply");
       expect(JSON.stringify(outcome.result.artifacts)).not.toContain(root);
+    } finally {
+      db.close(false);
+    }
+  });
+
+  test("mutation auto-discovers generated files when output paths are empty", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-auto-artifacts-"));
+    roots.push(root);
+    const workspace = join(root, "workspace");
+    const sourceRoot = join(workspace, "source");
+    const butlerData = join(root, "data");
+    const artifactRoot = join(butlerData, "artifacts", "generated");
+    mkdirSync(sourceRoot, { recursive: true });
+    mkdirSync(artifactRoot, { recursive: true });
+    const names = [
+      "page.png",
+      "crop.png",
+      "report.json",
+      "model-response.txt",
+      "poc-vision-crop.mjs",
+    ];
+    for (const name of names) writeFileSync(join(sourceRoot, name), `source:${name}`);
+    writeFileSync(join(artifactRoot, "stale.txt"), "pre-existing");
+    writeFileSync(join(workspace, "outside.txt"), "private");
+    const command = [
+      "const fs=require('node:fs')",
+      "const path=require('node:path')",
+      `const names=${JSON.stringify(names)}`,
+      "const src=path.join(process.cwd(),'source')",
+      "const dst=process.env.BUTLER_ARTIFACTS_DIR",
+      "fs.mkdirSync(dst,{recursive:true})",
+      "for(const name of names){const from=path.join(src,name);const to=path.join(dst,name);fs.copyFileSync(from,to);const stat=fs.statSync(from);fs.utimesSync(to,stat.atime,stat.mtime)}",
+      "fs.symlinkSync(path.join(process.cwd(),'outside.txt'),path.join(dst,'escape.txt'))",
+    ].join(";");
+    const prepared = await prepareGuidedCommandEffect({
+      args: {
+        command: `node -e ${JSON.stringify(command)}`,
+        output_paths: [],
+        state_effect: "mutation",
+      },
+      butlerData,
+      workspacePath: workspace,
+      originalRequest: "attach the five generated Vision Crop files",
+    });
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    try {
+      const outcome = await createGuidedEffectService(
+        new SqliteGuidedEffectJournal(db),
+      ).execute({
+        work: reviewedWork(),
+        accessMode: "full_access",
+        occurrenceId: "auto-generated-artifact-command",
+        signal: new AbortController().signal,
+        ...prepared,
+      });
+      expect(outcome).toMatchObject({ ok: true, status: "applied" });
+      if (!outcome.ok) throw new Error("generated artifact command did not apply");
+      const artifacts = outcome.result.artifacts as Array<{ path: string }>;
+      expect(artifacts.map((artifact) => artifact.path).sort()).toEqual(
+        names.map((name) => `artifacts/generated/${name}`).sort(),
+      );
+      expect(JSON.stringify(artifacts)).not.toContain("stale.txt");
+      expect(JSON.stringify(artifacts)).not.toContain("escape.txt");
+      expect(JSON.stringify(artifacts)).not.toContain(root);
+      const finalArtifacts = collectGuidedFinalArtifacts([{
+        callId: "auto-generated-artifact-command",
+        toolName: "run_command",
+        rawArguments: "{}",
+        arguments: {},
+        status: "completed",
+        result: outcome.result,
+      }]);
+      expect(finalArtifacts.map((artifact) => artifact.safePathLabel).sort())
+        .toEqual(names.map((name) => `artifacts/generated/${name}`).sort());
+      const outboundFiles = artifactFilesFromOutbound({
+        butlerData,
+        butlerHome: workspace,
+        messageFiles: { refsForMessage: () => [] } as never,
+        getChatRow: () => null,
+        getProjectRow: () => null,
+        chatId: "sandy-shaped-artifact-chat",
+        artifacts: finalArtifacts,
+      });
+      expect(outboundFiles.map((file) => file.name).sort()).toEqual(names.sort());
+    } finally {
+      db.close(false);
+    }
+  });
+
+  test("failed mutation does not publish auto-discovered generated files", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-failed-artifacts-"));
+    roots.push(root);
+    const workspace = join(root, "workspace");
+    const butlerData = join(root, "data");
+    mkdirSync(workspace, { recursive: true });
+    const command = [
+      "const fs=require('node:fs')",
+      "const path=require('node:path')",
+      "fs.mkdirSync(process.env.BUTLER_ARTIFACTS_DIR,{recursive:true})",
+      "fs.writeFileSync(path.join(process.env.BUTLER_ARTIFACTS_DIR,'failed.txt'),'not deliverable')",
+      "process.exit(1)",
+    ].join(";");
+    const prepared = await prepareGuidedCommandEffect({
+      args: {
+        command: `node -e ${JSON.stringify(command)}`,
+        output_paths: [],
+        state_effect: "mutation",
+      },
+      butlerData,
+      workspacePath: workspace,
+      originalRequest: "create the result",
+    });
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    try {
+      const outcome = await createGuidedEffectService(
+        new SqliteGuidedEffectJournal(db),
+      ).execute({
+        work: reviewedWork(),
+        accessMode: "full_access",
+        occurrenceId: "failed-auto-generated-artifact-command",
+        signal: new AbortController().signal,
+        ...prepared,
+      });
+      expect(outcome).toMatchObject({
+        ok: true,
+        status: "applied",
+        result: { ok: false },
+      });
+      if (!outcome.ok) throw new Error("failed command outcome was not recorded");
+      expect(outcome.result).not.toHaveProperty("artifacts");
+      expect(existsSync(join(
+        butlerData,
+        "artifacts",
+        "generated",
+        "failed.txt",
+      ))).toBe(true);
     } finally {
       db.close(false);
     }
