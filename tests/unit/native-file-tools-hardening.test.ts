@@ -74,7 +74,7 @@ describe("native file tools hardening", () => {
     expect(result.stopped_by).toBe("max_dirs");
   });
 
-  test("grep_files excludes temporary roots and orders source before tests", async () => {
+  test("grep_files excludes temporary roots and preserves source-priority results", async () => {
     const workspace = await tmpWorkspace();
     await mkdir(join(workspace, ".tmp", "generated"), { recursive: true });
     await mkdir(join(workspace, "packages", "feature", "src"), { recursive: true });
@@ -101,7 +101,7 @@ describe("native file tools hardening", () => {
   test("evidence receipts distinguish read, write, and search operations", async () => {
     const workspace = await tmpWorkspace();
     await writeFile(join(workspace, "file.txt"), "needle", "utf8");
-    const readResult = await executeReadFileTool({ arguments: { path: "file.txt" } }, { workspacePath: workspace }) as { evidence_receipts: Array<{ covers: string[] }> };
+    const readResult = await executeReadFileTool({ arguments: { path: "file.txt" } }, { workspacePath: workspace }) as unknown as { evidence_receipts: Array<{ covers: string[] }> };
     const writeResult = await executeWriteFileTool({ arguments: { path: "out.txt", content: "ok" } }, { workspacePath: workspace }) as { evidence_receipts: Array<{ covers: string[] }> };
     const grepResult = await executeGrepFilesTool({ arguments: { pattern: "needle" } }, { workspacePath: workspace }) as { evidence_receipts: Array<{ covers: string[] }> };
     expect(readResult.evidence_receipts[0].covers).toContain("workspace_file_read");

@@ -7,6 +7,8 @@ export interface WorkspacePathGuardInput {
   relativePath: string;
   allowMissingLeaf?: boolean;
   allowDirectories?: boolean;
+  /** Require the admitted path itself to be a directory. */
+  requireDirectory?: boolean;
   rejectProtectedProjectLedgerPaths?: boolean;
   rejectProtectedProjectLedgerWrites?: boolean;
   protectedProjectLedgerRoots?: string[];
@@ -87,6 +89,7 @@ export async function resolveWorkspacePathGuard(input: WorkspacePathGuardInput):
     const real = await realpath(absolutePath);
     if (!isInside(rootReal, real)) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: real, reason: "symlink_escape" };
     const st = await lstat(absolutePath);
+    if (input.requireDirectory && !st.isDirectory()) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: real, reason: "not_a_directory" };
     if (st.isDirectory() && !input.allowDirectories) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: real, reason: "directory_not_allowed" };
     if (!st.isFile() && !st.isDirectory() && !st.isSymbolicLink()) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: real, reason: "special_file_not_allowed" };
     return { ok: true, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: real };

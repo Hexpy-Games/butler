@@ -36,6 +36,7 @@ const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "web_read",
   "read_file",
   "grep_files",
+  "list_files",
   "read_tool_evidence_artifact",
   "read_tool_output_artifact",
   "project_ledger_status",
@@ -141,6 +142,7 @@ export function authorizedToolDefinitions(
     "web_read",
     "read_file",
     "grep_files",
+    "list_files",
   ]) names.add(name);
   for (const name of GUIDED_UNAVAILABLE_NATIVE_TOOL_NAMES) names.delete(name);
   if (policy.accessMode === "full_access") {
@@ -209,6 +211,7 @@ export function visibleToolDefinitions(
     "web_read",
     "read_file",
     "grep_files",
+    "list_files",
     "recall_memory",
     "list_conversation_sessions",
     "read_conversation_session",

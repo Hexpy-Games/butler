@@ -11,6 +11,7 @@ function operationCover(toolName: string): string {
     return "workspace_file_written";
   }
   if (toolName === "grep_files") return "workspace_search_result";
+  if (toolName === "list_files") return "workspace_file_list";
   return "workspace_file_operation";
 }
 
@@ -33,17 +34,17 @@ export function fileToolEvidenceReceipt(input: {
   }];
 }
 
-function safeWorkspacePath(path: unknown): string | null {
+export function safeWorkspacePath(path: unknown): string | null {
   if (typeof path !== "string" || !path.trim()) return null;
   const trimmed = path.trim();
-  if (trimmed.startsWith("/") || trimmed.startsWith("~")) return null;
-  if (/^[A-Za-z]:[\\/]/u.test(trimmed)) return null;
+  if (trimmed.startsWith("/") || trimmed.startsWith("\\") || trimmed.startsWith("~")) return null;
+  if (/^[A-Za-z]:/u.test(trimmed)) return null;
   if (trimmed.split(/[\\/]+/u).includes("..")) return null;
   return trimmed;
 }
 
 export function fileToolCapabilityReceipt(input: {
-  toolName: "read_file" | "write_file" | "edit_file" | "grep_files";
+  toolName: "read_file" | "write_file" | "edit_file" | "grep_files" | "list_files";
   ok: boolean;
   path?: unknown;
   error?: unknown;
@@ -55,6 +56,10 @@ export function fileToolCapabilityReceipt(input: {
   filesSearched?: unknown;
   filesSkipped?: unknown;
   matches?: unknown;
+  files?: unknown;
+  dirsVisited?: unknown;
+  filesConsidered?: unknown;
+  sha256?: unknown;
 }) {
   if (
     (input.toolName === "write_file" || input.toolName === "edit_file") &&
@@ -125,9 +130,62 @@ export function fileToolCapabilityReceipt(input: {
     })];
   }
 
+  if (input.toolName === "list_files" && input.ok) {
+    const files = Array.isArray(input.files) ? input.files : [];
+    return [createEvidenceCapabilityReceipt({
+      producer: { kind: "tool", name: input.toolName },
+      capability: "source_candidate",
+      evidence_kind: "workspace_inspection",
+      maturity: "candidate",
+      verified: false,
+      confidence: input.truncated ? 0.75 : 0.95,
+      summary: "Workspace file discovery completed with bounded path metadata.",
+      scope: {
+        tool: input.toolName,
+        truncated: Boolean(input.truncated),
+        files_considered: typeof input.filesConsidered === "number" ? input.filesConsidered : undefined,
+        dirs_visited: typeof input.dirsVisited === "number" ? input.dirsVisited : undefined,
+        file_count: files.length,
+      },
+      references: sourceCandidateReferences(files),
+      limitations: input.truncated ? ["Discovery was bounded and may be partial."] : [],
+    })];
+  }
+
   if (input.toolName === "read_file" && input.ok) {
-    const path = safeWorkspacePath(input.path);
     const truncated = Boolean(input.truncated);
+    const files = Array.isArray(input.files) ? input.files : null;
+    const references = files
+      ? readFileReferences(files)
+      : (() => {
+        const path = safeWorkspacePath(input.path);
+        if (!path) return [];
+        return [{
+          path,
+          ...(typeof input.sha256 === "string" && /^[a-f0-9]{64}$/u.test(input.sha256) ? { sha256: input.sha256 } : {}),
+          ...(typeof input.bytes === "number" && Number.isFinite(input.bytes) && input.bytes >= 0 ? { bytes: Math.floor(input.bytes) } : {}),
+        }];
+      })();
+    // A batch is source-verifying only when it can name at least one admitted
+    // workspace-relative success. Failed-only or unreferenceable batches must
+    // remain limitation evidence rather than claiming verification.
+    if (references.length === 0) {
+      return [createEvidenceCapabilityReceipt({
+        producer: { kind: "tool", name: input.toolName },
+        capability: "limitation_recorded",
+        evidence_kind: "limitation",
+        maturity: "rejected",
+        verified: false,
+        confidence: 0.7,
+        summary: "File inspection produced no safe admitted file reference for verification.",
+        scope: {
+          tool: input.toolName,
+          batch: Boolean(files),
+          truncated,
+        },
+        limitations: ["No file content or private path was exposed in the receipt."],
+      })];
+    }
     return [createEvidenceCapabilityReceipt({
       producer: { kind: "tool", name: input.toolName },
       capability: "source_verified",
@@ -140,13 +198,16 @@ export function fileToolCapabilityReceipt(input: {
         : "File inspection completed with redacted metadata.",
       scope: {
         tool: input.toolName,
+        batch: Boolean(files),
+        files_requested: files ? files.length : undefined,
+        files_verified: references.length,
         truncated,
         bytes: typeof input.bytes === "number" ? input.bytes : undefined,
         files_searched: typeof input.filesSearched === "number" ? input.filesSearched : undefined,
         files_skipped: typeof input.filesSkipped === "number" ? input.filesSkipped : undefined,
         match_count: Array.isArray(input.matches) ? input.matches.length : undefined,
       },
-      references: path ? [{ path }] : [],
+      references,
       satisfies: ["source_verified"],
       limitations: truncated ? ["Result was bounded and may be partial."] : [],
     })];
@@ -186,4 +247,25 @@ function sourceCandidateReferences(matches: unknown): Array<{ path: string; labe
     if (references.size >= 12) break;
   }
   return [...references.values()];
+}
+
+function readFileReferences(files: unknown): Array<{ path: string; bytes?: number; sha256?: string }> {
+  if (!Array.isArray(files)) return [];
+  const references: Array<{ path: string; bytes?: number; sha256?: string }> = [];
+  const seen = new Set<string>();
+  for (const value of files) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const record = value as Record<string, unknown>;
+    if (record.ok !== true || record.skipped === true) continue;
+    const path = safeWorkspacePath(record.path);
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    references.push({
+      path,
+      ...(typeof record.bytes === "number" && Number.isFinite(record.bytes) && record.bytes >= 0 ? { bytes: Math.floor(record.bytes) } : {}),
+      ...(typeof record.sha256 === "string" && /^[a-f0-9]{64}$/u.test(record.sha256) ? { sha256: record.sha256 } : {}),
+    });
+    if (references.length >= 12) break;
+  }
+  return references;
 }
