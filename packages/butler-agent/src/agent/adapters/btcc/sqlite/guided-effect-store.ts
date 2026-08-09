@@ -8,6 +8,7 @@ import type {
   GuidedEffectReceipt,
   PrepareGuidedEffectResult,
 } from "../../../btcc/effects/index.ts";
+import { normalizeGuidedEffectRecoveryEntries } from "../../../btcc/effects/index.ts";
 import { SqliteGuidedEffectBlockerStore } from
   "./guided-effect-blocker-store.ts";
 import {
@@ -86,10 +87,13 @@ export class SqliteGuidedEffectJournal implements GuidedEffectJournal {
         recovery.start_line AS recovery_start_line,
         recovery.before_sha256 AS recovery_before_sha256,
         recovery.after_sha256 AS recovery_after_sha256,
+        recovery_payload.payload_json AS recovery_payload_json,
         btcc_guided_effects.created_at, btcc_guided_effects.updated_at
       FROM btcc_guided_effects
       LEFT JOIN btcc_guided_effect_recovery_hints recovery
         ON recovery.effect_id = btcc_guided_effects.effect_id
+      LEFT JOIN btcc_guided_effect_recovery_payloads recovery_payload
+        ON recovery_payload.effect_id = btcc_guided_effects.effect_id
       WHERE btcc_guided_effects.effect_id = ?
     `).get(effectId);
     return row ? hydrateGuidedEffect(row) : null;
@@ -111,10 +115,13 @@ export class SqliteGuidedEffectJournal implements GuidedEffectJournal {
         recovery.start_line AS recovery_start_line,
         recovery.before_sha256 AS recovery_before_sha256,
         recovery.after_sha256 AS recovery_after_sha256,
+        recovery_payload.payload_json AS recovery_payload_json,
         btcc_guided_effects.created_at, btcc_guided_effects.updated_at
       FROM btcc_guided_effects
       LEFT JOIN btcc_guided_effect_recovery_hints recovery
         ON recovery.effect_id = btcc_guided_effects.effect_id
+      LEFT JOIN btcc_guided_effect_recovery_payloads recovery_payload
+        ON recovery_payload.effect_id = btcc_guided_effects.effect_id
       WHERE btcc_guided_effects.work_id = ?
       ORDER BY btcc_guided_effects.updated_at DESC, btcc_guided_effects.effect_id DESC
       LIMIT ?
@@ -125,6 +132,19 @@ export class SqliteGuidedEffectJournal implements GuidedEffectJournal {
     effectId: string,
     hint: GuidedEffectRecoveryHint,
   ): void {
+    if ("entries" in hint) {
+      const entries = normalizeGuidedEffectRecoveryEntries(hint.entries);
+      this.db.query(`
+        INSERT OR IGNORE INTO btcc_guided_effect_recovery_payloads (
+          effect_id, capability, payload_json
+        ) VALUES (?, ?, ?)
+      `).run(
+        effectId,
+        hint.capability,
+        json(entries, "guided edit batch recovery entries"),
+      );
+      return;
+    }
     this.db.query(`
       INSERT OR IGNORE INTO btcc_guided_effect_recovery_hints (
         effect_id, capability, start_line, before_sha256, after_sha256

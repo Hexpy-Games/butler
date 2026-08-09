@@ -145,6 +145,7 @@ async function reconcileEffect<TNormalizedInput, TResult>(
       idempotencyKey: context.identity.idempotencyKey,
       signal: context.input.signal,
       dispatchAttempts: current.dispatchAttempts,
+      priorError: current.error,
     });
   } catch (error) {
     const diagnostic = effectError(

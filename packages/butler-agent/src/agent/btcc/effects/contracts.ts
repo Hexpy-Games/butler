@@ -1,4 +1,5 @@
 import type { DurableWorkView } from "../work/index.ts";
+import type { GuidedEffectRecoveryEntry } from "./guided-effect-recovery.ts";
 
 export type GuidedEffectAccessMode =
   | "full_access"
@@ -20,6 +21,8 @@ export type GuidedEffectError = {
     | "effect_journal_conflict";
   message: string;
   recoverable: boolean;
+  /** Adapter-specific durable diagnostic used to preserve terminal uncertainty. */
+  sourceCode?: string;
 };
 
 export type GuidedEffectReceipt<TResult = unknown> = {
@@ -104,6 +107,7 @@ export type EffectAdapter<TNormalizedInput = unknown, TResult = unknown> = {
     idempotencyKey: string;
     signal: AbortSignal;
     dispatchAttempts: number;
+    priorError?: GuidedEffectError;
   }): Promise<EffectReconciliation<TResult>>;
 };
 
@@ -136,12 +140,17 @@ export type GuidedEffectIdentity = {
   sanitizedTarget: string;
 };
 
-export type GuidedEffectRecoveryHint = {
-  capability: "edit_file";
-  startLine: number;
-  beforeSha256: string;
-  afterSha256: string;
-};
+export type GuidedEffectRecoveryHint =
+  | {
+      capability: "edit_file";
+      startLine: number;
+      beforeSha256: string;
+      afterSha256: string;
+    }
+  | {
+      capability: "edit_file";
+      entries: readonly GuidedEffectRecoveryEntry[];
+    };
 
 export type GuidedEffectJournalStatus =
   | "prepared"
