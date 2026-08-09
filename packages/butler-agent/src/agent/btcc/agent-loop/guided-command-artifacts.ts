@@ -7,6 +7,10 @@ import {
 import { extname, isAbsolute, join, relative, resolve } from "node:path";
 import type { CommandArtifactEvidence } from
   "../../tools/run-command/run_command/evidence.ts";
+import {
+  publishGuidedDeclaredArtifacts,
+  type GuidedDeclaredArtifactPublication,
+} from "./guided-declared-artifact-publication.ts";
 
 const MAX_GUIDED_COMMAND_ARTIFACTS = 12;
 const MAX_GUIDED_ARTIFACT_SCAN_FILES = 20_000;
@@ -34,48 +38,25 @@ export function snapshotGuidedCommandArtifacts(input: {
 export function guidedCommandArtifacts(input: {
   outputPaths: unknown;
   butlerData: string;
-  startedAtMs: number;
-  before: GuidedCommandArtifactSnapshot;
-}): CommandArtifactEvidence[] {
+  workspacePath: string;
+  cwd: string;
+  startedAtMs?: number;
+  before?: GuidedCommandArtifactSnapshot;
+}): GuidedDeclaredArtifactPublication {
   const outputPaths = Array.isArray(input.outputPaths)
     ? input.outputPaths.filter((value): value is string =>
         typeof value === "string" && Boolean(value.trim()))
     : [];
-  if (outputPaths.length === 0) return discoveredGeneratedArtifacts(input);
-
-  const artifactRoot = resolve(input.butlerData, "artifacts", "generated");
-  const canonicalRoot = canonicalPath(artifactRoot);
-  const seen = new Set<string>();
-  const artifacts: CommandArtifactEvidence[] = [];
-  for (const value of outputPaths.slice(0, MAX_GUIDED_COMMAND_ARTIFACTS * 2)) {
-    const candidate = expandArtifactPath(value.trim(), artifactRoot, input.butlerData);
-    if (!candidate || seen.has(candidate) || !existsSync(candidate)) continue;
-    let stat;
-    try {
-      const linkStat = lstatSync(candidate);
-      if (!linkStat.isFile() || linkStat.isSymbolicLink()) continue;
-      const real = realpathSync.native(candidate);
-      if (!isInside(canonicalRoot, real)) continue;
-      stat = lstatSync(real);
-    } catch {
-      continue;
-    }
-    if (!stat.isFile() || stat.size <= 0) continue;
-    if (stat.mtimeMs + 1_000 < input.startedAtMs) continue;
-    seen.add(candidate);
-    artifacts.push({
-      path: join(
-        "artifacts",
-        "generated",
-        relative(canonicalRoot, realpathSync.native(candidate)),
-      ).split("\\").join("/"),
-      artifact_kind: artifactKind(candidate),
-      size_bytes: stat.size,
-      modified_at: new Date(stat.mtimeMs).toISOString(),
-    });
-    if (artifacts.length >= MAX_GUIDED_COMMAND_ARTIFACTS) break;
+  if (outputPaths.length > 0) {
+    return publishGuidedDeclaredArtifacts({ ...input, outputPaths });
   }
-  return artifacts;
+  if (input.startedAtMs === undefined || input.before === undefined) {
+    return { requested: 0, artifacts: [] };
+  }
+  return { requested: 0, artifacts: discoveredGeneratedArtifacts({
+    butlerData: input.butlerData,
+    before: input.before,
+  }) };
 }
 
 function discoveredGeneratedArtifacts(input: {
@@ -149,35 +130,6 @@ function scanGeneratedArtifacts(butlerData: string): GeneratedArtifactFile[] {
   };
   visit(artifactRoot, 0);
   return files;
-}
-
-function expandArtifactPath(
-  value: string,
-  artifactRoot: string,
-  butlerData: string,
-): string | null {
-  const generatedLabel = "artifacts/generated/";
-  if (value.startsWith(generatedLabel)) {
-    return resolve(artifactRoot, value.slice(generatedLabel.length));
-  }
-  const replacements: Array<[string, string]> = [
-    ["${BUTLER_ARTIFACTS_DIR}", artifactRoot],
-    ["$BUTLER_ARTIFACTS_DIR", artifactRoot],
-    ["${BUTLER_ARTIFACT_DIR}", artifactRoot],
-    ["$BUTLER_ARTIFACT_DIR", artifactRoot],
-    ["${BUTLER_DATA}", butlerData],
-    ["$BUTLER_DATA", butlerData],
-  ];
-  let expanded = value;
-  for (const [token, replacement] of replacements) {
-    if (expanded === token) expanded = replacement;
-    else if (expanded.startsWith(`${token}/`)) {
-      expanded = join(replacement, expanded.slice(token.length + 1));
-    }
-  }
-  if (!isAbsolute(expanded)) return null;
-  const resolved = resolve(expanded);
-  return isInside(artifactRoot, resolved) ? resolved : null;
 }
 
 function artifactKind(path: string): CommandArtifactEvidence["artifact_kind"] {
