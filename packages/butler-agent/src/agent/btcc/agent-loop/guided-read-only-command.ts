@@ -5,7 +5,10 @@ import {
   commandEvidenceCapabilityReceipts,
   commandEvidenceReceipts,
 } from "../../tools/run-command/run_command/evidence.ts";
-import { guidedCommandArtifacts } from "./guided-command-artifacts.ts";
+import {
+  guidedCommandArtifacts,
+  type GuidedCommandArtifactSnapshot,
+} from "./guided-command-artifacts.ts";
 
 export type GuidedSpooledCommandResult = {
   summary: {
@@ -62,13 +65,22 @@ export async function executeGuidedReadOnlyCommand(input: {
   }
 }
 
-export function guidedCommandPublicResult(input: {
+type GuidedCommandPublicResultInput = {
   spooled: GuidedSpooledCommandResult;
   butlerData: string;
   args: Record<string, unknown>;
-  sandbox: "read_only_no_network" | "full_access_contained";
-  startedAtMs?: number;
-}): Record<string, unknown> {
+} & (
+  | { sandbox: "read_only_no_network" }
+  | {
+      sandbox: "full_access_contained";
+      startedAtMs: number;
+      artifactSnapshot: GuidedCommandArtifactSnapshot;
+    }
+);
+
+export function guidedCommandPublicResult(
+  input: GuidedCommandPublicResultInput,
+): Record<string, unknown> {
   const streams = readSpooledStreams(input.spooled.payloadSource.path);
   const budgeted = budgetToolOutput({
     result: {
@@ -88,6 +100,7 @@ export function guidedCommandPublicResult(input: {
         outputPaths: input.args.output_paths,
         butlerData: input.butlerData,
         startedAtMs: input.startedAtMs,
+        before: input.artifactSnapshot,
       })
     : [];
   return {
