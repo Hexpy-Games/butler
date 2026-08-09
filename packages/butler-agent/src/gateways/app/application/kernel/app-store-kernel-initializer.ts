@@ -46,6 +46,8 @@ import {
 } from "../../../../operations/metrics/provider-quota.ts";
 import { createOpenAIQuotaAdapter } from
   "../../../../integrations/providers/openai/provider-quota.ts";
+import { createZaiQuotaAdapter } from
+  "../../../../integrations/providers/zai/provider-quota.ts";
 
 export function initializeAppStoreKernel(
   kernel: AppStoreKernel,
@@ -88,7 +90,10 @@ export function initializeAppStoreKernel(
   kernel.systemMonitor = new AppSystemMonitorStore(
     kernel.butlerData,
     options.providerQuotaMonitor ?? createProviderQuotaMonitor({
-      adapters: [createOpenAIQuotaAdapter()],
+      adapters: [
+        createOpenAIQuotaAdapter(),
+        createZaiQuotaAdapter({ butlerData: kernel.butlerData }),
+      ],
     }),
   );
   kernel.developerLogs = new DeveloperLogStore({ butlerData: kernel.butlerData });

@@ -43,6 +43,10 @@ import {
 } from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
 import { ProviderQuotaMonitor } from "../../packages/butler-agent/src/operations/metrics/provider-quota.ts";
+import { createZaiQuotaAdapter } from
+  "../../packages/butler-agent/src/integrations/providers/zai/provider-quota.ts";
+import { registerHostedModelConfig } from
+  "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
 import {
   TURN_DECISION_EVENT_KIND,
   TURN_ACKNOWLEDGED_EVENT_KIND,
@@ -2983,6 +2987,91 @@ test("app server exposes safe usage monitor summary", async () => {
       }),
     ]));
     expect(JSON.stringify(usage.data)).not.toContain("SECRET_USAGE");
+  } finally {
+    server.stop();
+  }
+});
+
+test("app server merges the real Z.AI quota adapter and preserves partial providers", async () => {
+  appendPromptCacheMetric({
+    ts: Date.now(),
+    model: "zai/glm-5.2",
+    scope: "session-turn",
+    promptTokens: 40,
+    cachedTokens: 10,
+    totalTokens: 55,
+  }, { butlerData: tempDir });
+  appendPromptCacheMetric({
+    ts: Date.now(),
+    model: "zai-api/glm-5.2",
+    scope: "worker",
+    promptTokens: 20,
+    cachedTokens: 0,
+    totalTokens: 25,
+  }, { butlerData: tempDir });
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-route-secret",
+  }, tempDir);
+  const calls: Array<{ url: string; authorization: string }> = [];
+  const server = createAppServer({
+    dbPath: join(tempDir, "zai-usage.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    providerQuotaMonitor: new ProviderQuotaMonitor({
+      adapters: [createZaiQuotaAdapter({
+        butlerData: tempDir,
+        fetchImpl: async (input, init) => {
+          calls.push({
+            url: String(input),
+            authorization: String(new Headers(init?.headers).get("authorization")),
+          });
+          return new Response(JSON.stringify({
+            data: {
+              level: "pro",
+              limits: [
+                { type: "TOKENS_LIMIT", unit: 3, number: 5, percentage: 25 },
+                { type: "TIME_LIMIT", unit: 5, number: 1, percentage: 10 },
+              ],
+            },
+          }), { status: 200 });
+        },
+      })],
+    }),
+  });
+  try {
+    const usage = await getJson(`${server.url}usage-monitor`);
+    expect(calls).toEqual([{
+      url: "https://api.z.ai/api/monitor/usage/quota/limit",
+      authorization: "zai-route-secret",
+    }]);
+    expect(usage.data.providerUsage.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        providerId: "zai",
+        remaining: expect.objectContaining({
+          available: true,
+          sourceKind: "zai_usage_query",
+          windows: expect.arrayContaining([
+            expect.objectContaining({
+              id: "tokens-5-hour",
+              usedPercent: 25,
+              remainingPercent: 75,
+            }),
+            expect.objectContaining({ id: "mcp-month", remainingPercent: 90 }),
+          ]),
+        }),
+      }),
+      expect.objectContaining({
+        providerId: "zai-api",
+        remaining: expect.objectContaining({
+          available: false,
+          reason: expect.objectContaining({ code: "provider_quota_surface_unavailable" }),
+        }),
+      }),
+    ]));
+    expect(JSON.stringify(usage.data)).not.toContain("zai-route-secret");
   } finally {
     server.stop();
   }

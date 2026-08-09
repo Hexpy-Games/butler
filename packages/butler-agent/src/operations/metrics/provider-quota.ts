@@ -7,7 +7,10 @@
  */
 
 export type ProviderQuotaPlanKind = "subscription" | "api" | "unknown";
-export type ProviderQuotaSourceKind = "codex_app_server" | "provider_quota";
+export type ProviderQuotaSourceKind =
+  | "codex_app_server"
+  | "zai_usage_query"
+  | "provider_quota";
 
 export type ProviderQuotaReasonCode =
   | "provider_quota_surface_unavailable"
