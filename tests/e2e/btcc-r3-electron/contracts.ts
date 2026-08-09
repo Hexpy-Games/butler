@@ -121,6 +121,8 @@ export interface ElectronHarnessOptions {
   smoke?: boolean;
   dryRun?: boolean;
   keepLogs?: boolean;
+  /** Optional stable provider prompt-cache namespace for paired benchmark arms. */
+  promptCacheKeyPrefix?: string;
 }
 
 export interface PreparedRun {
