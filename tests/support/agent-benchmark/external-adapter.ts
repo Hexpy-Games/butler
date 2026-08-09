@@ -1,44 +1,25 @@
-import { join } from "node:path";
 import type {
   AdapterRunInput,
   AdapterRunResult,
   AgentAdapter,
+  EffectiveAgentConfig,
   PreflightResult,
 } from "./contracts.ts";
 import { createProcessExecutor, resolveExecutable, safeEnvironment, type CommandExecutor } from "./command.ts";
-import { commandFor, parseCliOutput } from "./cli-output.ts";
+import { readHermesSessionTelemetry } from "./hermes-cli.ts";
 import { benchmarkPlatformGate } from "./isolation.ts";
+import { sanitizeIdentifier } from "./identifiers.ts";
+import { resolveOpenCodeAuthDataRoot } from "./opencode-config.ts";
+import { runExternalTurn } from "./external-runner.ts";
 import {
   authListingIsPositive,
-  boundedUsefulTime,
   combineExternalRuns,
   emptyAdapterResult,
   firstLine,
   hermesAuthFilesExist,
+  resolveHermesConfig,
   safeVersion,
 } from "./external-normalization.ts";
-
-const CONTROLLED_OPENCODE_CONFIG = {
-  "$schema": "https://opencode.ai/config.json",
-  permission: {
-    "*": "deny",
-    read: "allow",
-    edit: { "*": "allow", ".benchmark-input/repository/**": "deny" },
-    glob: "allow",
-    grep: "allow",
-    list: "allow",
-    webfetch: "allow",
-    websearch: "allow",
-    bash: "deny",
-    task: "deny",
-    skill: "deny",
-    question: "deny",
-    external_directory: "deny",
-    lsp: "deny",
-  },
-  plugin: [],
-  instructions: [],
-} as const;
 
 export class ExternalCliAdapter implements AgentAdapter {
   readonly agent: "hermes" | "opencode";
@@ -46,10 +27,15 @@ export class ExternalCliAdapter implements AgentAdapter {
   private executablePath: string | null = null;
   private preflightVersion: string | null = null;
   private preflightModel: string | null = null;
+  private preflightConfig: Partial<EffectiveAgentConfig> | null = null;
+  private readonly baseEnvironment: NodeJS.ProcessEnv;
+  private openCodeAuthDataRoot: string | null = null;
+  private openCodeAuthRootChecked = false;
 
   constructor(agent: "hermes" | "opencode", executor: CommandExecutor) {
     this.agent = agent;
     this.executor = executor;
+    this.baseEnvironment = { ...process.env };
   }
 
   async preflight(): Promise<PreflightResult> {
@@ -77,11 +63,22 @@ export class ExternalCliAdapter implements AgentAdapter {
         diagnostic: `${this.agent} executable is not installed on PATH.`,
       };
     }
+    if (this.agent === "opencode" && !this.ensureOpenCodeAuthDataRoot()) {
+      return {
+        available: false,
+        executable: this.executablePath,
+        version: null,
+        authenticated: null,
+        configVerified: false,
+        gateCode: "configuration_unverifiable",
+        diagnostic: "OpenCode authentication data root could not be verified.",
+      };
+    }
     const versionResult = await this.executor.execute({
       executable: this.executablePath,
       args: ["--version"],
       cwd: process.cwd(),
-      env: safeEnvironment(),
+      env: safeEnvironment({}, this.baseEnvironment),
       timeoutMs: 5_000,
       signal: new AbortController().signal,
     });
@@ -100,7 +97,7 @@ export class ExternalCliAdapter implements AgentAdapter {
       executable: this.executablePath,
       args: ["auth", "list"],
       cwd: process.cwd(),
-      env: safeEnvironment(),
+      env: safeEnvironment({}, this.baseEnvironment),
       timeoutMs: 5_000,
       signal: new AbortController().signal,
     });
@@ -108,8 +105,11 @@ export class ExternalCliAdapter implements AgentAdapter {
     this.preflightVersion = version;
     const authenticated = authResult.exitCode === 0 && authListingIsPositive(authResult.stdout, this.agent) &&
       (this.agent !== "hermes" || hermesAuthFilesExist());
-    const effectiveModel = this.agent === "hermes" ? await this.resolveHermesModel() : process.env.OPENCODE_MODEL ?? null;
-    this.preflightModel = effectiveModel;
+    const effectiveConfig = this.agent === "hermes"
+      ? await resolveHermesConfig(this.executablePath, this.executor)
+      : process.env.OPENCODE_MODEL ? { model: sanitizeIdentifier(process.env.OPENCODE_MODEL) } : null;
+    this.preflightConfig = effectiveConfig;
+    this.preflightModel = effectiveConfig?.model ?? null;
     return {
       available: authenticated,
       executable: this.executablePath,
@@ -118,27 +118,17 @@ export class ExternalCliAdapter implements AgentAdapter {
       configVerified: authenticated,
       gateCode: authenticated ? "none" : "authentication_unavailable",
       diagnostic: authenticated ? null : `${this.agent} authentication/configuration is unavailable.`,
-      ...(effectiveModel ? { effectiveConfig: { model: effectiveModel } } : {}),
+      ...(effectiveConfig ? { effectiveConfig } : {}),
     };
-  }
-
-  private async resolveHermesModel(): Promise<string | null> {
-    if (!this.executablePath) return null;
-    const result = await this.executor.execute({
-      executable: this.executablePath,
-      args: ["config", "get", "model"],
-      cwd: process.cwd(),
-      env: safeEnvironment(),
-      timeoutMs: 5_000,
-      signal: new AbortController().signal,
-    });
-    return result.exitCode === 0 ? firstLine(result.stdout) || null : null;
   }
 
   async run(input: AdapterRunInput): Promise<AdapterRunResult> {
     if (benchmarkPlatformGate()) return emptyAdapterResult("configuration_unverifiable", benchmarkPlatformGate()!);
     const executable = this.executablePath ?? resolveExecutable(this.agent);
     if (!executable) return emptyAdapterResult();
+    if (this.agent === "opencode" && !this.ensureOpenCodeAuthDataRoot()) {
+      return emptyAdapterResult("configuration_unverifiable", "OpenCode authentication data root could not be verified.");
+    }
     const prompts = input.fixture.id === "direct_conversation" ? input.fixture.prompts : [input.prompt];
     const runs: AdapterRunResult[] = [];
     let sessionId: string | null = null;
@@ -148,8 +138,22 @@ export class ExternalCliAdapter implements AgentAdapter {
         prompt: `${prompt}\n\n${input.runtimeInstructions}`,
         sessionId,
       };
-      runs.push(await this.runOne(executable, turnInput));
-      const observedSessionId = runs.at(-1)?.sessionId ?? null;
+      runs.push(await runExternalTurn({
+        agent: this.agent,
+        executable,
+        executor: this.executor,
+        preflightVersion: this.preflightVersion,
+        preflightModel: this.preflightModel,
+        preflightConfig: this.preflightConfig,
+        baseEnvironment: this.baseEnvironment,
+        openCodeAuthDataRoot: this.openCodeAuthDataRoot,
+      }, turnInput));
+      const lastRun = runs.at(-1)!;
+      // Preserve real product failures before applying measurement gates for
+      // missing session telemetry. A failed turn cannot be repaired by a
+      // later session-id probe.
+      if (lastRun.exitCode !== 0 || lastRun.timedOut || lastRun.cancelled || input.signal.aborted) break;
+      const observedSessionId = lastRun.sessionId ?? null;
       if (input.fixture.id === "direct_conversation" && index > 0 && observedSessionId !== sessionId) {
         runs.push({ ...emptyAdapterResult(), gateCode: "measurement_unavailable", stderr: "The product changed the real direct-conversation session while resuming a turn." });
         break;
@@ -159,54 +163,52 @@ export class ExternalCliAdapter implements AgentAdapter {
         runs.push({ ...emptyAdapterResult(), gateCode: "measurement_unavailable", stderr: "A real product session id was not observable after the direct-conversation turn." });
         break;
       }
-      if (runs.at(-1)?.exitCode !== 0 || input.signal.aborted) break;
     }
-    return combineExternalRuns(runs);
+    const combined = combineExternalRuns(runs);
+    if (this.agent !== "hermes" || input.fixture.id !== "direct_conversation") return combined;
+    const telemetry = readHermesSessionTelemetry(sessionId);
+    if (!telemetry) {
+      return {
+        ...combined,
+        gateCode: combined.exitCode === 0 && !combined.timedOut && !combined.cancelled && combined.gateCode === "none"
+          ? "measurement_unavailable"
+          : combined.gateCode,
+        stderr: `${combined.stderr}\nHermes aggregate session telemetry was unavailable.`.trim(),
+        usage: {
+          inputTokens: null,
+          cacheReadTokens: null,
+          cacheWriteTokens: null,
+          outputTokens: null,
+          totalTokens: null,
+          modelRequests: null,
+        },
+        tools: { calls: null, failedCalls: null, records: [] },
+      };
+    }
+    const effectiveModel = telemetry.model
+      ? normalizeObservedModel(telemetry.model, input.arm.effectiveConfig.model)
+      : null;
+    return {
+      ...combined,
+      sessionId: telemetry.sessionId,
+      provider: telemetry.provider,
+      effectiveConfig: {
+        model: effectiveModel,
+        provider: telemetry.provider,
+        reasoning: input.arm.track === "controlled" ? input.arm.effectiveConfig.reasoning : this.preflightConfig?.reasoning ?? null,
+        variant: null,
+      },
+      usage: telemetry.usage,
+      tools: telemetry.tools,
+    };
   }
 
-  private async runOne(executable: string, input: AdapterRunInput): Promise<AdapterRunResult> {
-    const command = commandFor(this.agent, input);
-    const result = await this.executor.execute({
-      executable,
-      args: command.args,
-      cwd: input.arm.outputRoot,
-      env: safeEnvironment({
-        ...(this.agent === "opencode" && input.arm.effectiveConfig.model ? { OPENCODE_MODEL: input.arm.effectiveConfig.model } : {}),
-        XDG_CACHE_HOME: join(input.arm.cacheRoot, "xdg-cache"),
-        ...(this.agent === "hermes"
-          ? { HERMES_WRITE_SAFE_ROOT: input.arm.outputRoot }
-          : input.arm.track === "controlled" ? {
-              XDG_CONFIG_HOME: join(input.arm.cacheRoot, "xdg-config"),
-              OPENCODE_CONFIG_DIR: join(input.arm.cacheRoot, "opencode-config"),
-              OPENCODE_CONFIG_CONTENT: JSON.stringify(CONTROLLED_OPENCODE_CONFIG),
-              OPENCODE_DISABLE_CLAUDE_CODE: "1",
-            } : {}),
-      }),
-      timeoutMs: input.arm.timeoutMs,
-      signal: input.signal,
-    });
-    const parsed = parseCliOutput(this.agent, result.stdout, boundedUsefulTime(result.firstOutputAtMs, result.startedAtMs, result.endedAtMs));
-    return {
-      exitCode: result.exitCode,
-      gateCode: parsed.gateCode,
-      timedOut: result.timedOut,
-      cancelled: result.cancelled,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      adapterVersion: this.preflightVersion,
-      provider: null,
-      finalText: parsed.finalText,
-      sessionId: parsed.sessionId,
-      ...((parsed.effectiveModel ?? (input.arm.track === "controlled" ? input.arm.effectiveConfig.model : this.preflightModel))
-        ? { effectiveConfig: { model: normalizeObservedModel(parsed.effectiveModel ?? (input.arm.track === "controlled" ? input.arm.effectiveConfig.model : this.preflightModel)!, input.arm.effectiveConfig.model) } }
-        : {}),
-      usage: parsed.usage,
-      tools: parsed.tools,
-      timing: { submittedAtMs: result.startedAtMs, firstUsefulOutputAtMs: parsed.firstUsefulOutputAtMs, terminalAtMs: result.endedAtMs, totalElapsedMs: result.endedAtMs - result.startedAtMs },
-      operations: { userInterventions: 0, retries: null, changedFiles: parsed.changedPaths.length, tests: { ran: null, passed: null, command: null }, build: { ran: null, passed: null, command: null } },
-      changedPaths: parsed.changedPaths,
-      evidenceRefs: [],
-    };
+  private ensureOpenCodeAuthDataRoot(): string | null {
+    if (!this.openCodeAuthRootChecked) {
+      this.openCodeAuthDataRoot = resolveOpenCodeAuthDataRoot(this.baseEnvironment);
+      this.openCodeAuthRootChecked = true;
+    }
+    return this.openCodeAuthDataRoot;
   }
 }
 

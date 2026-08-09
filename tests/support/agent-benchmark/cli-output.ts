@@ -5,6 +5,11 @@ import type {
   ToolCallObservation,
   ToolMetrics,
 } from "./contracts.ts";
+import { sanitizeIdentifier } from "./identifiers.ts";
+import { hermesCommandFor } from "./hermes-cli.ts";
+
+export { hermesUsageDiagnosticFor, MAX_HERMES_USAGE_BYTES, hermesUsagePath, parseHermesUsageFile } from "./hermes-cli.ts";
+export type { HermesUsageObservation } from "./hermes-cli.ts";
 
 export interface ParsedCliOutput {
   finalText: string | null;
@@ -21,6 +26,7 @@ export function parseCliOutput(
   agent: "hermes" | "opencode",
   stdout: string,
   firstUsefulOutputAtMs: number | null = null,
+  stderr = "",
 ): ParsedCliOutput {
   const lines = stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
   const events = lines.flatMap((line) => {
@@ -57,9 +63,10 @@ export function parseCliOutput(
   });
   const sessionId = events.map((event) => normalizeSessionId(event.sessionID ?? event.sessionId ?? event.session_id ?? asRecord(event.properties)?.sessionID ?? asRecord(event.properties)?.sessionId))
     .find((value): value is string => value !== null) ??
-    normalizeSessionId(stdout.match(/(?:^|\n)\s*(?:session|session[_ -]*id)\s*:\s*([A-Za-z0-9_-]{1,160})\s*$/imu)?.[1]) ?? null;
+    normalizeSessionId(`${stdout}\n${stderr}`.match(/(?:^|\n)\s*(?:session|session[_ -]*id)\s*:\s*([A-Za-z0-9_-]{1,160})\s*$/imu)?.[1]) ?? null;
   const effectiveModel = events.map((event) => event.model ?? event.modelID ?? event.model_id)
-    .find((value): value is string => typeof value === "string") ?? null;
+    .map((value) => sanitizeIdentifier(value))
+    .find((value): value is string => value !== null) ?? null;
   return {
     finalText,
     firstUsefulOutputAtMs: finalText ? (agent === "opencode" ? structuredUsefulTime : firstUsefulOutputAtMs) : null,
@@ -266,13 +273,7 @@ export function commandFor(
 ): { args: string[] } {
   const config = input.arm.effectiveConfig;
   if (agent === "hermes") {
-    const controlledFlags = input.arm.track === "controlled"
-      ? ["--safe-mode", "--toolsets", "web,file", "--yolo"]
-      : [];
-    const args = ["chat", ...controlledFlags, "--quiet", "-q", input.prompt];
-    if (config.model) args.splice(controlledFlags.length + 1, 0, "--model", config.model);
-    if (input.sessionId) args.unshift("--resume", input.sessionId);
-    return { args };
+    return hermesCommandFor(input);
   }
   const args = ["run", "--format", "json", "--dir", input.arm.outputRoot, ...(input.arm.track === "controlled" ? ["--auto"] : [])];
   if (config.model) args.push("--model", config.model);

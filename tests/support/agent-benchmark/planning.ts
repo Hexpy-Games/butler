@@ -9,7 +9,6 @@ import {
   type BenchmarkPlan,
   type BenchmarkScenario,
   type BenchmarkTrack,
-  type EffectiveAgentConfig,
 } from "./contracts.ts";
 import {
   AGENT_BENCHMARK_FIXTURES,
@@ -17,13 +16,22 @@ import {
   summarizeBenchmarkFixture,
 } from "./fixtures.ts";
 import { sanitizeIdentifier } from "./identifiers.ts";
+import { effectiveAgentConfig } from "./track-config.ts";
 
 export const BENCHMARK_AGENTS: readonly BenchmarkAgent[] = [
   "butler",
   "hermes",
   "opencode",
 ];
+/**
+ * Tracks that are materialized by the compact pilot.  The recommended-default
+ * configuration remains a supported definition, but it is intentionally not
+ * an execution arm or separately verified configuration in this pilot.
+ */
 export const BENCHMARK_TRACKS: readonly BenchmarkTrack[] = [
+  "controlled",
+];
+export const BENCHMARK_SUPPORTED_TRACKS: readonly BenchmarkTrack[] = [
   "controlled",
   "recommended-default",
 ];
@@ -56,64 +64,65 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
     );
   }
   const repetitionsPerCache = input.repetitionsPerCache ?? 1;
-  if (!Number.isSafeInteger(repetitionsPerCache) || repetitionsPerCache < 1) {
-    throw new Error("repetitionsPerCache must be a positive integer");
+  if (repetitionsPerCache !== 1) {
+    throw new Error("The canonical pilot uses exactly one repetition per scenario");
   }
   const runRoot = resolve(input.runRoot);
   const sourceRoot = resolve(input.sourceRoot);
   const fixtures = AGENT_BENCHMARK_FIXTURES.map(summarizeBenchmarkFixture);
   const arms: BenchmarkArmPlan[] = [];
   let order = 0;
+  const track: BenchmarkTrack = "controlled";
+  const repetition = 1;
   for (const fixture of AGENT_BENCHMARK_FIXTURES) {
-    for (const track of BENCHMARK_TRACKS) {
-      for (let repetition = 1; repetition <= repetitionsPerCache; repetition += 1) {
-        const randomizedAgents = seededShuffle(
-          BENCHMARK_AGENTS,
-          deriveArmSeed(input.seed, fixture.id, track, "cold", repetition),
+    const randomizedAgents = seededShuffle(
+      BENCHMARK_AGENTS,
+      deriveArmSeed(input.seed, fixture.id, track, "cold", repetition),
+    );
+    const cacheStates: readonly BenchmarkCacheState[] = fixture.id === "direct_conversation"
+      ? ["cold", "warm"]
+      : ["cold"];
+    for (const agent of randomizedAgents) {
+      for (const cache of cacheStates) {
+        const fixtureHash = hashBenchmarkFixture(fixture);
+        const key = `${fixture.id}:${track}:${agent}:${cache}:${repetition}`;
+        const cachePairId = `${fixture.id}:${track}:${agent}:${repetition}`;
+        const cacheRoot = join(
+          runRoot,
+          "cache",
+          safeSegment(fixture.id),
+          safeSegment(track),
+          safeSegment(agent),
+          `rep-${repetition}`,
         );
-        for (const agent of randomizedAgents) {
-          for (const cache of BENCHMARK_CACHE_STATES) {
-            const fixtureHash = hashBenchmarkFixture(fixture);
-            const key = `${fixture.id}:${track}:${agent}:${cache}:${repetition}`;
-            const cachePairId = `${fixture.id}:${track}:${agent}:${repetition}`;
-            const cacheRoot = join(
-              runRoot,
-              "cache",
-              safeSegment(fixture.id),
-              safeSegment(track),
-              safeSegment(agent),
-              `rep-${repetition}`,
-            );
-            const armRoot = join(
-              runRoot,
-              "arms",
-              safeSegment(fixture.id),
-              safeSegment(track),
-              `rep-${repetition}`,
-              safeSegment(agent),
-              safeSegment(cache),
-            );
-            arms.push({
-              key,
-              scenario: fixture.id,
-              repetition,
-              order,
-              agent,
-              track,
-              cache,
-              fixtureHash,
-              effectiveConfig: effectiveConfig(agent, track, input),
-              sourceRoot,
-              outputRoot: join(armRoot, "output"),
-              dataRoot: join(armRoot, "data"),
-              evidenceRoot: join(armRoot, "evidence"),
-              cacheRoot,
-              cachePairId,
-              timeoutMs: DEFAULT_BENCHMARK_TIMEOUT_MS,
-            });
-            order += 1;
-          }
-        }
+        const armRoot = join(
+          runRoot,
+          "arms",
+          safeSegment(fixture.id),
+          safeSegment(track),
+          `rep-${repetition}`,
+          safeSegment(agent),
+          safeSegment(cache),
+        );
+        arms.push({
+          key,
+          scenario: fixture.id,
+          repetition,
+          order,
+          agent,
+          track,
+          cache,
+          fixtureHash,
+          effectiveConfig: effectiveAgentConfig(agent, track, input),
+          sourceRoot,
+          outputRoot: join(armRoot, "output"),
+          dataRoot: join(armRoot, "data"),
+          evidenceRoot: join(armRoot, "evidence"),
+          cacheRoot,
+          cachePairId,
+          timeoutMs: DEFAULT_BENCHMARK_TIMEOUT_MS,
+        });
+        order += 1;
       }
     }
   }
@@ -210,64 +219,6 @@ export function summarizePlan(plan: BenchmarkPlan): {
     byAgent[arm.agent] += 1;
   }
   return { armCount: plan.arms.length, byScenario, byAgent };
-}
-
-function effectiveConfig(
-  agent: BenchmarkAgent,
-  track: BenchmarkTrack,
-  input: CreateBenchmarkPlanInput,
-): EffectiveAgentConfig {
-  if (track === "controlled") {
-    const model = sanitizeIdentifier(input.controlledModel);
-    if (!model) throw new Error("controlledModel must be a safe non-empty model identifier");
-    const reasoning = sanitizeIdentifier(input.controlledReasoning ?? "medium");
-    if (!reasoning) throw new Error("controlledReasoning must be a safe identifier");
-    if (agent === "butler") {
-      // The Electron harness accepts a full-access product configuration and
-      // applies the requested model/reasoning. It does not expose a supported
-      // tool/memory introspection surface, so keep those dimensions honest.
-      return {
-        model,
-        reasoning,
-        permissions: "benchmark-workspace-full-source-read-only",
-        tools: ["product-default"],
-        memoryEnabled: null,
-        skillsEnabled: null,
-        pluginsEnabled: null,
-        mcpEnabled: null,
-        provider: null,
-        variant: null,
-      };
-    }
-    // Hermes exposes no official per-run reasoning-effort option. The adapter
-    // records that dimension as unavailable instead of claiming the operator's
-    // requested value was applied.
-    const effectiveReasoning = agent === "hermes" ? null : reasoning;
-    return {
-      model,
-      reasoning: effectiveReasoning,
-      permissions: "benchmark-workspace-full-source-read-only",
-      tools: ["filesystem", "web"],
-      memoryEnabled: false,
-      skillsEnabled: false,
-      pluginsEnabled: false,
-      mcpEnabled: false,
-      provider: null,
-      variant: agent === "hermes" ? null : effectiveReasoning,
-    };
-  }
-  return {
-    model: null,
-    reasoning: null,
-    permissions: "product-recommended-default",
-    tools: agent === "butler" ? ["product-default"] : ["filesystem", "web", "terminal"],
-    memoryEnabled: null,
-    skillsEnabled: null,
-    pluginsEnabled: null,
-    mcpEnabled: null,
-    provider: null,
-    variant: null,
-  };
 }
 
 function assertSeed(seed: number): void {
