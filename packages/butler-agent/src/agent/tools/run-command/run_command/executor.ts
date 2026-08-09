@@ -17,6 +17,7 @@ import {
   createProjectLedgerMutationSnapshot,
   restoreProjectLedgerMutationIfChanged,
 } from "./project-ledger-mutation-snapshot.ts";
+import type { WorkspaceReference } from "../../../session-workspaces/index.ts";
 
 type ToolCall = { args: Record<string, unknown>; signal?: AbortSignal };
 
@@ -24,6 +25,7 @@ export function createRunCommandToolHandlers(input: {
   butlerHome: string;
   butlerData: string;
   workspacePath: string;
+  workspaceReference?: WorkspaceReference;
   commandExecutor?: CommandExecutor;
 }) {
   const commandExecutor = input.commandExecutor ?? createPlatformCommandExecutor();
@@ -32,6 +34,7 @@ export function createRunCommandToolHandlers(input: {
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
       workspacePath: input.workspacePath,
+      workspaceReference: input.workspaceReference,
       args: call.args,
       signal: call.signal,
       commandExecutor,
@@ -70,6 +73,7 @@ function boundedInteger(value: unknown, input: {
 
 function commandWorkingDirectory(input: {
   workspacePath: string;
+  workspaceReference?: WorkspaceReference;
   cwd?: unknown;
 }): string {
   const workspace = resolve(input.workspacePath);
@@ -600,6 +604,7 @@ export async function runCommandTool(input: {
   butlerHome?: string;
   butlerData: string;
   workspacePath: string;
+  workspaceReference?: WorkspaceReference;
   args: Record<string, unknown>;
   signal?: AbortSignal;
   commandExecutor?: CommandExecutor;
@@ -607,8 +612,9 @@ export async function runCommandTool(input: {
   throwIfCommandAborted(input.signal);
   const command = typeof input.args.command === "string" ? input.args.command.trim() : "";
   if (!command) throw new Error("run_command requires command");
+  const workspacePath = input.workspaceReference?.get() ?? input.workspacePath;
   const cwd = commandWorkingDirectory({
-    workspacePath: input.workspacePath,
+    workspacePath,
     cwd: input.args.cwd,
   });
   const timeoutMs = boundedInteger(input.args.timeout_ms, {
@@ -626,7 +632,7 @@ export async function runCommandTool(input: {
     ? input.args.output_mode
     : "auto";
 
-  const workspace = resolve(input.workspacePath);
+  const workspace = resolve(workspacePath);
   const projectLedgerGuard = projectLedgerCommandMutationGuard({
     command,
     cwd,

@@ -1,0 +1,43 @@
+import type { SessionWorkspaceBindingStore, WorkspaceReference } from "../session-workspaces/index.ts";
+import type { ButlerToolExecutorRegistry } from "./butler-tools.ts";
+import { createFileToolHandlers } from "./file-tools/index.ts";
+import { createRunCommandToolHandlers } from "./run-command/index.ts";
+import {
+  createWorkspacePagePreviewToolHandlers,
+} from "./workspace-page-preview/index.ts";
+import { createSessionWorkspaceToolHandlers } from "./session-workspace/index.ts";
+
+export function createWorkspaceToolHandlers(input: {
+  butlerHome: string;
+  butlerData: string;
+  workspacePath?: string;
+  workspaceReference: WorkspaceReference;
+  sessionId?: string;
+  sessionBindingStore?: SessionWorkspaceBindingStore;
+}): ButlerToolExecutorRegistry {
+  const workspacePath = input.workspacePath ?? input.butlerHome;
+  return {
+    ...createRunCommandToolHandlers({
+      butlerHome: input.butlerHome,
+      butlerData: input.butlerData,
+      workspacePath,
+      workspaceReference: input.workspaceReference,
+    }),
+    ...createWorkspacePagePreviewToolHandlers({
+      butlerData: input.butlerData,
+      workspacePath,
+      workspaceReference: input.workspaceReference,
+    }),
+    ...createFileToolHandlers({
+      butlerData: input.butlerData,
+      workspacePath,
+      workspaceReference: input.workspaceReference,
+    }),
+    ...createSessionWorkspaceToolHandlers({
+      butlerData: input.butlerData,
+      sessionId: input.sessionId,
+      bindingStore: input.sessionBindingStore,
+      workspaceReference: input.workspaceReference,
+    }),
+  };
+}

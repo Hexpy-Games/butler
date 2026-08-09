@@ -86,7 +86,7 @@ export async function executeEditFileTool(
   }
 
   const args = parsed.args;
-  const workspaceRoot = getWorkspaceRoot(args, context.workspacePath);
+  const workspaceRoot = getWorkspaceRoot(args, context.workspaceReference?.get() ?? context.workspacePath);
   const path = typeof args.path === "string" ? args.path : "";
   const startLine = args.start_line === undefined ? undefined : Number(args.start_line);
   const oldText = args.old_text;

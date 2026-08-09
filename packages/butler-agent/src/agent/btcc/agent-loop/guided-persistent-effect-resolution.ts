@@ -10,6 +10,7 @@ import {
   GitEvidenceCollectionError,
 } from "../../tools/project-ledger/git-commit-evidence.ts";
 import type { ButlerToolCall } from "../../tools/butler-tools.ts";
+import type { WorkspaceReference, SessionWorkspaceBindingStore } from "../../session-workspaces/index.ts";
 import type {
   GuidedPersistentEffectContext,
   GuidedPersistentEffectResolution,
@@ -25,6 +26,10 @@ import {
 } from "./guided-workspace-file-effect.ts";
 import { prepareGuidedWorkspaceFileEdit } from
   "./guided-workspace-file-edit-effect.ts";
+import {
+  createGuidedSessionWorkspaceEffectAdapter,
+  normalizeSessionWorkspaceEffectInput,
+} from "./guided-session-workspace-effect.ts";
 
 type ExecuteRegisteredTool = (prepared?: {
   args: ButlerToolCall["args"];
@@ -36,6 +41,9 @@ export function createGuidedPersistentEffectResolver(input: {
   butlerData: string;
   appMessageDbPath: string;
   workspacePath: string;
+  workspaceReference?: WorkspaceReference;
+  sessionId?: string;
+  sessionBindingStore?: SessionWorkspaceBindingStore;
   projectId?: string;
   trackingMode: ButlerExecutionPolicy["trackingMode"];
   projectLedgerResolver: ActiveProjectLedgerResolver;
@@ -47,11 +55,35 @@ export function createGuidedPersistentEffectResolver(input: {
   effectContext: GuidedPersistentEffectContext,
 ) => Promise<GuidedPersistentEffectResolution | null> {
   return async (call, executeRegistered, effectContext) => {
+    if (call.name === "bind_session_git_worktree") {
+      if (!input.sessionId || !input.sessionBindingStore || !input.workspaceReference) {
+        return {
+          error: {
+            code: "session_workspace_unavailable",
+            message: "The guided runtime has no durable session workspace binding.",
+            recoverable: true,
+          },
+        };
+      }
+      const normalizedInput = normalizeSessionWorkspaceEffectInput(call.args);
+      const target = `session-worktree/${normalizedInput.action}/${normalizedInput.branch}`;
+      return {
+        target,
+        input: normalizedInput,
+        adapter: createGuidedSessionWorkspaceEffectAdapter({
+          butlerData: input.butlerData,
+          sessionId: input.sessionId,
+          sessionBindingStore: input.sessionBindingStore,
+          workspaceReference: input.workspaceReference,
+          target,
+        }),
+      };
+    }
     if (call.name === "run_command") {
       return await prepareGuidedCommandEffect({
         args: call.args,
         butlerData: input.butlerData,
-        workspacePath: input.workspacePath,
+        workspacePath: input.workspaceReference?.get() ?? input.workspacePath,
         originalRequest: input.originalRequest,
       });
     }
@@ -67,7 +99,7 @@ export function createGuidedPersistentEffectResolver(input: {
         : null;
       const prepared = await prepareGuidedWorkspaceFileEdit({
         args: call.args,
-        workspacePath: input.workspacePath,
+        workspacePath: input.workspaceReference?.get() ?? input.workspacePath,
         butlerData: input.butlerData,
         ...(prior ? { priorInputSha256: prior.inputSha256 } : {}),
         ...(prior?.recoveryHint
@@ -82,7 +114,7 @@ export function createGuidedPersistentEffectResolver(input: {
     }
     if (call.name === "write_file") {
       const adapter = createGuidedWorkspaceFileEffectAdapter({
-        workspacePath: input.workspacePath,
+        workspacePath: input.workspaceReference?.get() ?? input.workspacePath,
         butlerData: input.butlerData,
         executeWriteFile: async (preparedInput) => executeRegistered({
           args: preparedInput,
@@ -106,7 +138,7 @@ export function createGuidedPersistentEffectResolver(input: {
     const ledgerLookup = {
       appMessageDbPath: input.appMessageDbPath,
       appProjectId: input.projectId,
-      workspacePath: input.workspacePath,
+      workspacePath: input.workspaceReference?.get() ?? input.workspacePath,
     };
     const resolveActiveProjectReference = () => {
       input.projectLedgerResolver.clear();
@@ -125,7 +157,7 @@ export function createGuidedPersistentEffectResolver(input: {
         butlerData: input.butlerData,
         projectRoot,
         projectRef: input.projectId,
-        workspacePath: input.workspacePath,
+        workspacePath: input.workspaceReference?.get() ?? input.workspacePath,
         resolveActiveProjectReference,
         ...(call.name === "project_ledger_create"
           ? {
