@@ -6,6 +6,13 @@ import type {
 export function windowLabel(
   window: ProviderQuotaResultView["windows"][number],
 ): string {
+  if (window.id === "mcp-month") return "MCP 월간 한도";
+  if (window.id === "tokens-5-hour" || window.id.startsWith("tokens-5-hour-")) {
+    return "5시간 한도";
+  }
+  if (window.id === "tokens-weekly" || window.id.startsWith("tokens-weekly-")) {
+    return "주간 한도";
+  }
   if (window.windowDurationMins !== null) {
     return `${window.windowDurationMins}분 한도`;
   }
@@ -25,9 +32,9 @@ export function planLabel(
 export function sourceLabel(
   kind: ProviderQuotaResultView["sourceKind"],
 ): string {
-  return kind === "codex_app_server"
-    ? "OpenAI Codex 공식 사용량"
-    : "공식 프로바이더 사용량";
+  if (kind === "codex_app_server") return "OpenAI Codex 공식 사용량";
+  if (kind === "zai_usage_query") return "Z.AI Coding Plan 공식 사용량";
+  return "공식 프로바이더 사용량";
 }
 
 export function quotaReasonLabel(

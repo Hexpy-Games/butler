@@ -35,7 +35,7 @@ test("usage provider panel renders fresh, stale, unavailable, and partial states
           planKind: "subscription",
           planName: "Pro",
           windows: [{
-            id: "primary",
+            id: "tokens-5-hour",
             usedPercent: 10,
             remainingPercent: 90,
             windowDurationMins: 300,
@@ -94,5 +94,5 @@ test("usage provider panel renders fresh, stale, unavailable, and partial states
   expect(markup).not.toContain("openai-codex-rate-limits");
   expect(markup).not.toContain("anthropic-unsupported");
   expect(markup).not.toContain("300분 창");
-  expect(markup).toContain("300분 한도: 남은 90%");
+  expect(markup).toContain("5시간 한도: 남은 90%");
 });
