@@ -23,6 +23,8 @@ provider when that processing must stay on your machine.
 **Reviewed outcomes.** Tool output and worker results are evidence, not final
 answers.
 
+Successful native `list_files` results emit the candidate `workspace_file_list` capability and do not satisfy source verification.
+
 **Real work.** Butler can plan, execute, repair, and report through durable
 workstreams.
 
