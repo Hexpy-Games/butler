@@ -137,6 +137,7 @@ function createGuidedCommandEffectAdapter(input: {
       const outcome = guidedCommandPublicResult({
         spooled,
         butlerData: input.butlerData,
+        workspacePath: input.canonicalWorkspacePath,
         args: effect.normalizedInput,
         sandbox: "full_access_contained",
         startedAtMs,

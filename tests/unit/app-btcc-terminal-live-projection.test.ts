@@ -16,6 +16,10 @@ import {
 } from "./support/transcript-projection-harness.ts";
 import { AppMessageFileStore } from
   "../../packages/butler-agent/src/gateways/app/domain/message-files/message-file-store.ts";
+import { executeGuidedReadOnlyCommand } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-read-only-command.ts";
+import { collectGuidedFinalArtifacts } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
 
 afterEach(() => cleanupTranscriptProjectionHarnesses());
 
@@ -73,18 +77,53 @@ test("delivered turn event directly projects the canonical BTCC answer", () => {
   harness.close();
 });
 
-test("BTCC final result creates one real App attachment for a generated artifact", () => {
+test("guided read-only workspace outputs create real App attachments", async () => {
   const harness = createHarness();
   seedBtccTerminalSchema(harness.db);
   seedAppTurn(harness.db, harness.chatId, "live-artifact-turn");
-  const artifactDir = join(harness.root, "artifacts", "generated", "capture");
-  mkdirSync(artifactDir, { recursive: true });
-  writeFileSync(join(artifactDir, "report.txt"), "verified report\n");
+  const workspace = join(harness.root, "workspace");
+  const sourceDir = join(workspace, ".sandy-data", "poc", "vision-crop");
+  mkdirSync(sourceDir, { recursive: true });
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+3f4AAAAASUVORK5CYII=",
     "base64",
   );
-  writeFileSync(join(artifactDir, "page.png"), png);
+  writeFileSync(join(sourceDir, "page.png"), png);
+  writeFileSync(join(sourceDir, "crop.png"), png);
+  const guidedResult = await executeGuidedReadOnlyCommand({
+    args: {
+      command: "test -f .sandy-data/poc/vision-crop/page.png && test -f .sandy-data/poc/vision-crop/crop.png",
+      cwd: workspace,
+      state_effect: "read_only",
+      output_paths: [
+        ".sandy-data/poc/vision-crop/page.png",
+        ".sandy-data/poc/vision-crop/crop.png",
+      ],
+    },
+    butlerData: harness.root,
+    workspacePath: workspace,
+    originalRequest: "이미지가 안보였어 한번만 다시 첨부해줄래?",
+  });
+  if (process.platform !== "darwin") {
+    harness.close();
+    return;
+  }
+  expect(guidedResult).toMatchObject({
+    ok: true,
+    artifact_publication: { requested: 2, published: 2 },
+  });
+  const finalArtifacts = collectGuidedFinalArtifacts([{
+    callId: "sandy-read-only-attachment",
+    toolName: "run_command",
+    rawArguments: "{}",
+    arguments: {},
+    status: "completed",
+    result: guidedResult,
+  }]);
+  expect(finalArtifacts.map((artifact) => artifact.title)).toEqual([
+    "page.png",
+    "crop.png",
+  ]);
   const messageFiles = new AppMessageFileStore(
     harness.db,
     harness.root,
@@ -125,21 +164,7 @@ test("BTCC final result creates one real App attachment for a generated artifact
     turnId: "live-artifact-turn",
     text: "생성한 보고서입니다.",
     generatedSessionTitle: "Artifact result",
-    artifacts: [{
-      id: "artifact-report",
-      kind: "file",
-      title: "report.txt",
-      safePathLabel: "artifacts/generated/capture/report.txt",
-      mimeType: "text/plain",
-      sizeBytes: 16,
-    }, {
-      id: "artifact-page",
-      kind: "chart_file",
-      title: "page.png",
-      safePathLabel: "artifacts/generated/capture/page.png",
-      mimeType: "image/png",
-      sizeBytes: png.byteLength,
-    }],
+    artifacts: finalArtifacts,
   });
   writeTranscript(harness, [event]);
 

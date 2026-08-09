@@ -51,6 +51,7 @@ export async function executeGuidedReadOnlyCommand(input: {
     return guidedCommandPublicResult({
       spooled,
       butlerData: input.butlerData,
+      workspacePath: input.workspacePath,
       args: input.args,
       sandbox: "read_only_no_network",
     });
@@ -68,6 +69,7 @@ export async function executeGuidedReadOnlyCommand(input: {
 type GuidedCommandPublicResultInput = {
   spooled: GuidedSpooledCommandResult;
   butlerData: string;
+  workspacePath: string;
   args: Record<string, unknown>;
 } & (
   | { sandbox: "read_only_no_network" }
@@ -95,16 +97,25 @@ export function guidedCommandPublicResult(
     maxModelTokens: boundedInteger(input.args.max_output_tokens, 1_200, 200, 8_000),
   });
   const success = budgeted.exit_code === 0 && !budgeted.timed_out;
-  const artifacts = input.sandbox === "full_access_contained" && success
+  const publication = success
     ? guidedCommandArtifacts({
         outputPaths: input.args.output_paths,
         butlerData: input.butlerData,
-        startedAtMs: input.startedAtMs,
-        before: input.artifactSnapshot,
+        workspacePath: input.workspacePath,
+        cwd: input.spooled.summary.cwd,
+        ...(input.sandbox === "full_access_contained"
+          ? {
+              startedAtMs: input.startedAtMs,
+              before: input.artifactSnapshot,
+            }
+          : {}),
       })
-    : [];
+    : { requested: declaredOutputCount(input.args.output_paths), artifacts: [] };
+  const publicationFailed = success && publication.requested > 0 &&
+    publication.artifacts.length === 0;
+  const ok = success && !publicationFailed;
   return {
-    ok: success,
+    ok,
     command: input.spooled.summary.command,
     cwd: input.spooled.summary.cwd,
     exit_code: budgeted.exit_code,
@@ -112,24 +123,55 @@ export function guidedCommandPublicResult(
     stdout: budgeted.stdout,
     stderr: budgeted.stderr,
     sandbox: input.sandbox,
+    ...(publication.requested > 0
+      ? {
+          artifact_publication: {
+            requested: publication.requested,
+            published: publication.artifacts.length,
+            unpublished: Math.max(
+              0,
+              publication.requested - publication.artifacts.length,
+            ),
+          },
+        }
+      : {}),
+    ...(publicationFailed
+      ? {
+          error: {
+            code: "declared_output_files_unavailable",
+            message: "None of the declared output files could be published as attachments.",
+            recoverable: true,
+            next_action: "Declare existing regular files inside the active workspace or Butler artifact directory.",
+          },
+        }
+      : {}),
     ...(budgeted.butler_tool_artifact
       ? { butler_tool_artifact: budgeted.butler_tool_artifact }
       : {}),
-    ...(artifacts.length > 0
+    ...(publication.artifacts.length > 0
       ? {
-          artifacts,
-          verified_output_files: artifacts,
-          evidence_receipts: commandEvidenceReceipts({ success, artifacts }),
+          artifacts: publication.artifacts,
+          verified_output_files: publication.artifacts,
+          evidence_receipts: commandEvidenceReceipts({
+            success: ok,
+            artifacts: publication.artifacts,
+          }),
           evidence_capability_receipts: commandEvidenceCapabilityReceipts({
             exitCode: budgeted.exit_code,
             timedOut: budgeted.timed_out,
             outputSuppressed: false,
             outputBudgeted: Boolean(budgeted.butler_tool_artifact),
-            artifacts,
+            artifacts: publication.artifacts,
           }),
         }
       : {}),
   };
+}
+
+function declaredOutputCount(value: unknown): number {
+  return Array.isArray(value)
+    ? value.filter((item) => typeof item === "string" && Boolean(item.trim())).length
+    : 0;
 }
 
 function readSpooledStreams(path: string): { stdout: string; stderr: string } {

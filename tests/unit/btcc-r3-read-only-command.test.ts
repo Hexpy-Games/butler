@@ -22,6 +22,8 @@ import { prepareGuidedCommandEffect } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-command-effect.ts";
 import { collectGuidedFinalArtifacts } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
+import { publishGuidedDeclaredArtifacts } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-declared-artifact-publication.ts";
 import { createGuidedToolExecutionBoundary } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-execution-boundary.ts";
 import { createGuidedEffectService } from
@@ -83,6 +85,164 @@ describe("R3 read-only command boundary", () => {
     if (process.platform !== "darwin") return;
     expect(result).toMatchObject({ ok: true, cwd: root });
     expect(String(result.stdout)).toContain(root);
+  });
+
+  test("publishes explicitly declared existing workspace images from a read-only command", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-existing-images-"));
+    roots.push(root);
+    const data = join(root, "data");
+    const workspace = join(root, "workspace");
+    const sourceDir = join(workspace, ".sandy-data", "poc", "vision-crop");
+    mkdirSync(sourceDir, { recursive: true });
+    const page = Buffer.from("existing-page-image");
+    const crop = Buffer.from("existing-crop-image");
+    writeFileSync(join(sourceDir, "page.png"), page);
+    writeFileSync(join(sourceDir, "crop.png"), crop);
+
+    const result = await executeGuidedReadOnlyCommand({
+      args: {
+        command: "test -f .sandy-data/poc/vision-crop/page.png && test -f .sandy-data/poc/vision-crop/crop.png",
+        cwd: workspace,
+        state_effect: "read_only",
+        output_paths: [
+          ".sandy-data/poc/vision-crop/page.png",
+          ".sandy-data/poc/vision-crop/crop.png",
+        ],
+      },
+      butlerData: data,
+      workspacePath: workspace,
+      originalRequest: "이미지가 안보였어 한번만 다시 첨부해줄래?",
+    });
+
+    if (process.platform !== "darwin") return;
+    expect(result).toMatchObject({
+      ok: true,
+      sandbox: "read_only_no_network",
+      artifact_publication: { requested: 2, published: 2 },
+    });
+    const artifacts = result.artifacts as Array<{ path: string }>;
+    expect(artifacts.map((artifact) => artifact.path)).toEqual([
+      expect.stringMatching(/^artifacts\/generated\/published\/[a-f0-9]{64}\/page\.png$/u),
+      expect.stringMatching(/^artifacts\/generated\/published\/[a-f0-9]{64}\/crop\.png$/u),
+    ]);
+    expect(readFileSync(join(data, artifacts[0]!.path))).toEqual(page);
+    expect(readFileSync(join(data, artifacts[1]!.path))).toEqual(crop);
+    expect(publishGuidedDeclaredArtifacts({
+      outputPaths: [
+        ".sandy-data/poc/vision-crop/page.png",
+        ".sandy-data/poc/vision-crop/crop.png",
+      ],
+      butlerData: data,
+      workspacePath: workspace,
+      cwd: workspace,
+    }).artifacts.map((artifact) => artifact.path)).toEqual(
+      artifacts.map((artifact) => artifact.path),
+    );
+
+    const finalArtifacts = collectGuidedFinalArtifacts([{
+      callId: "sandy-existing-image-attachment",
+      toolName: "run_command",
+      rawArguments: "{}",
+      arguments: {},
+      status: "completed",
+      result,
+    }]);
+    expect(finalArtifacts.map((artifact) => artifact.title)).toEqual([
+      "page.png",
+      "crop.png",
+    ]);
+    expect(artifactFilesFromOutbound({
+      butlerData: data,
+      butlerHome: workspace,
+      messageFiles: { refsForMessage: () => [] } as never,
+      getChatRow: () => null,
+      getProjectRow: () => null,
+      chatId: "sandy-chat",
+      artifacts: finalArtifacts,
+    }).map((file) => file.name)).toEqual(["page.png", "crop.png"]);
+  });
+
+  test("fails a declared attachment request when no workspace file can be published", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-missing-attachment-"));
+    roots.push(root);
+    const data = join(root, "data");
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace, { recursive: true });
+    const result = await executeGuidedReadOnlyCommand({
+      args: {
+        command: "true",
+        cwd: workspace,
+        state_effect: "read_only",
+        output_paths: ["missing.png"],
+      },
+      butlerData: data,
+      workspacePath: workspace,
+      originalRequest: "attach missing.png",
+    });
+
+    if (process.platform !== "darwin") return;
+    expect(result).toMatchObject({
+      ok: false,
+      sandbox: "read_only_no_network",
+      artifact_publication: { requested: 1, published: 0 },
+      error: { code: "declared_output_files_unavailable" },
+    });
+    expect(result).not.toHaveProperty("artifacts");
+  });
+
+  test("explicit publication rejects unsafe, empty, and oversized workspace files", () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-unsafe-attachments-"));
+    roots.push(root);
+    const data = join(root, "data");
+    const workspace = join(root, "workspace");
+    const outside = join(root, "outside.png");
+    mkdirSync(workspace, { recursive: true });
+    writeFileSync(outside, "outside");
+    writeFileSync(join(workspace, "empty.png"), "");
+    writeFileSync(join(workspace, "oversized.png"), Buffer.alloc(10 * 1024 * 1024 + 1));
+    symlinkSync(outside, join(workspace, "final-link.png"));
+    symlinkSync(root, join(workspace, "parent-link"), "dir");
+
+    const publication = publishGuidedDeclaredArtifacts({
+      outputPaths: [
+        "../outside.png",
+        "empty.png",
+        "oversized.png",
+        "final-link.png",
+        "parent-link/outside.png",
+      ],
+      butlerData: data,
+      workspacePath: workspace,
+      cwd: workspace,
+    });
+
+    expect(publication).toEqual({ requested: 5, artifacts: [] });
+  });
+
+  test("explicit publication rejects generated-label traversal and a symlinked artifact root", () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-artifact-root-link-"));
+    roots.push(root);
+    const data = join(root, "data");
+    const workspace = join(data, "workspace");
+    const outsideArtifactRoot = join(root, "outside-artifacts");
+    mkdirSync(workspace, { recursive: true });
+    mkdirSync(join(data, "artifacts"), { recursive: true });
+    mkdirSync(outsideArtifactRoot, { recursive: true });
+    writeFileSync(join(workspace, "secret.png"), "private");
+    symlinkSync(outsideArtifactRoot, join(data, "artifacts", "generated"), "dir");
+
+    const publication = publishGuidedDeclaredArtifacts({
+      outputPaths: [
+        "artifacts/generated/../../workspace/secret.png",
+        "secret.png",
+      ],
+      butlerData: data,
+      workspacePath: workspace,
+      cwd: workspace,
+    });
+
+    expect(publication).toEqual({ requested: 2, artifacts: [] });
+    expect(readdirSync(outsideArtifactRoot)).toEqual([]);
   });
 
   test("does not trust a read_only label when the command attempts a write", async () => {
