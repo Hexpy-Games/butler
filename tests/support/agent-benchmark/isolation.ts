@@ -40,11 +40,14 @@ export function assertNoSymlinkComponents(path: string): void {
 
 const ALLOWED_SYSTEM_SYMLINKS = new Set(["/var", "/tmp"]);
 
-export function prepareArmRoots(arm: { dataRoot: string; evidenceRoot: string; outputRoot: string; cacheRoot: string; cache: "cold" | "warm"; key: string }): void {
+export function prepareArmRoots(arm: { agent?: "butler" | "hermes" | "opencode"; dataRoot: string; evidenceRoot: string; outputRoot: string; cacheRoot: string; cache: "cold" | "warm"; key: string }): void {
   if (arm.cache === "cold") rmSync(arm.cacheRoot, { recursive: true, force: true });
   mkdirSync(arm.cacheRoot, { recursive: true });
   mkdirSync(arm.dataRoot, { recursive: true });
-  mkdirSync(arm.evidenceRoot, { recursive: true });
+  // The BTCC Electron harness owns its runRoot lifecycle and requires the
+  // path not to exist when it is invoked. External adapters create usage
+  // evidence just-in-time, so they retain the eager evidence directory.
+  if (arm.agent !== "butler") mkdirSync(arm.evidenceRoot, { recursive: true });
   mkdirSync(arm.outputRoot, { recursive: true });
   if (readdirSync(arm.outputRoot).length > 0) throw new Error(`Output workspace is not empty: ${arm.key}`);
 }

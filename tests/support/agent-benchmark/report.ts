@@ -178,7 +178,7 @@ export function generateBenchmarkReport(result: BenchmarkResultFile): string {
     `- Seed: \`${summary.seed}\``,
     `- Observations: ${summary.observationCount}`,
     `- Accepted: ${summary.acceptedCount}`,
-    `- Ranking: ${summary.canRank ? "eligible" : "withheld (missing or gated observations)"}`,
+    `- Ranking: ${summary.canRank ? "eligible" : rankingStatus(summary)}`,
     "",
     "## Track configurations",
     "",
@@ -209,12 +209,32 @@ export function generateBenchmarkReport(result: BenchmarkResultFile): string {
     "",
     summary.canRank
       ? "All required agents have eligible observations. Comparisons remain stratified by track, scenario, and cache arm."
-      : "Hermes/OpenCode installation or another required observation is unavailable. No agent ranking or fabricated comparison number is reported.",
+      : rankingInterpretation(summary),
     "",
     "See `PILOT_PROTOCOL.md` for the operator protocol and official installation links.",
     "",
   );
   return lines.join("\n");
+}
+
+function rankingStatus(summary: BenchmarkReportSummary): string {
+  const missing = summary.arms.some((arm) => arm.terminalState === "pending");
+  const gated = summary.gatedAgents.length > 0 || summary.arms.some((arm) => arm.gateCode !== "none");
+  if (missing && gated) return "withheld (missing or gated observations)";
+  if (missing) return "withheld (missing observations)";
+  if (gated) return "withheld (gated observations)";
+  if (summary.acceptedCount === 0) return "withheld (no observation met acceptance criteria)";
+  return "withheld (required metrics or visual review incomplete)";
+}
+
+function rankingInterpretation(summary: BenchmarkReportSummary): string {
+  const missing = summary.arms.some((arm) => arm.terminalState === "pending");
+  const gated = summary.gatedAgents.length > 0 || summary.arms.some((arm) => arm.gateCode !== "none");
+  if (missing && gated) return "Required observations are missing or gated. No agent ranking or fabricated comparison number is reported.";
+  if (missing) return "Required observations are missing. No agent ranking or fabricated comparison number is reported.";
+  if (gated) return "One or more required observations are gated. No agent ranking or fabricated comparison number is reported.";
+  if (summary.acceptedCount === 0) return "No observation met the acceptance criteria. No agent ranking or accepted-result-per-token comparison is reported.";
+  return "Observations completed, but required token metrics, visual review, or other eligibility evidence is incomplete. No agent ranking or fabricated comparison number is reported.";
 }
 
 export function writeBenchmarkReport(
@@ -253,14 +273,11 @@ function describeTrack(result: BenchmarkResultFile, track: "controlled" | "recom
     const observation = result.observations.find((candidate) => candidate.arm.key === arm.key);
     const config = observation?.effectiveConfig ?? arm.effectiveConfig;
     const model = sanitizeIdentifier(config.model) ?? "product-resolved";
-    const hermesControlled = track === "controlled" && agent === "hermes";
-    const reasoning = hermesControlled ? "unavailable" : sanitizeIdentifier(config.reasoning) ?? "product-resolved";
+    const reasoning = sanitizeIdentifier(config.reasoning) ?? "product-resolved";
     const permissions = sanitizeIdentifier(config.permissions) ?? "unavailable";
     const tools = config.tools.map((tool) => sanitizeIdentifier(tool)).filter((tool): tool is string => tool !== null).join(",") || "unavailable";
-    const hermesNote = hermesControlled
-      ? "; reasoning unavailable (Hermes CLI has no official per-run reasoning flag)"
-      : "";
-    return `${agent}: model=${model}, reasoning=${reasoning}, permissions=${permissions}, tools=${tools}${hermesNote}`;
+    const provider = sanitizeIdentifier(config.provider) ?? "product-resolved";
+    return `${agent}: model=${model}, reasoning=${reasoning}, provider=${provider}, permissions=${permissions}, tools=${tools}`;
   });
   return descriptions.join("; ");
 }
