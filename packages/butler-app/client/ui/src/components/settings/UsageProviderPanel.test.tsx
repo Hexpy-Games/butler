@@ -41,6 +41,13 @@ test("usage provider panel renders fresh, stale, unavailable, and partial states
             windowDurationMins: 300,
             resetsAt: "2026-08-09T01:00:00.000Z",
             expiresAt: null,
+          }, {
+            id: "unknown-window",
+            usedPercent: null,
+            remainingPercent: null,
+            windowDurationMins: null,
+            resetsAt: null,
+            expiresAt: null,
           }],
           fetchedAt: "2026-08-09T00:00:00.000Z",
           reason: null,
@@ -53,7 +60,14 @@ test("usage provider panel renders fresh, stale, unavailable, and partial states
             sourceId: "openai-codex-rate-limits",
             planKind: "subscription",
             planName: "Pro",
-            windows: [],
+            windows: [{
+              id: "tokens-weekly",
+              usedPercent: 55,
+              remainingPercent: 45,
+              windowDurationMins: 10080,
+              resetsAt: "2026-08-10T01:00:00.000Z",
+              expiresAt: null,
+            }],
             fetchedAt: "2026-08-08T00:00:00.000Z",
             reason: {
               code: "provider_timeout",
@@ -83,7 +97,16 @@ test("usage provider panel renders fresh, stale, unavailable, and partial states
     />,
   );
 
-  expect(markup).toContain("남은 90%");
+  expect(markup).toContain("90% 남음");
+  expect(markup).toContain("45% 남음");
+  expect(markup).toContain("미확인");
+  expect(markup).toContain("5시간 한도");
+  expect(markup).toContain("주간 한도");
+  expect(markup.match(/role="progressbar"/g)).toHaveLength(2);
+  expect(markup).toContain('aria-valuenow="90"');
+  expect(markup).toContain('aria-valuenow="45"');
+  expect(markup).toContain('aria-label="5시간 한도: 90% 남음"');
+  expect(markup).toContain('aria-label="주간 한도: 45% 남음"');
   expect(markup).toContain("재설정");
   expect(markup).toContain("OpenAI Codex 공식 사용량");
   expect(markup).toContain("공식 잔여량 조회를 지원하지 않습니다.");
@@ -93,6 +116,7 @@ test("usage provider panel renders fresh, stale, unavailable, and partial states
   expect(markup).not.toContain("provider_timeout");
   expect(markup).not.toContain("openai-codex-rate-limits");
   expect(markup).not.toContain("anthropic-unsupported");
+  expect(markup).not.toContain("잔여량: 확인됨");
+  expect(markup).not.toContain('aria-valuenow="0"');
   expect(markup).not.toContain("300분 창");
-  expect(markup).toContain("5시간 한도: 남은 90%");
 });
