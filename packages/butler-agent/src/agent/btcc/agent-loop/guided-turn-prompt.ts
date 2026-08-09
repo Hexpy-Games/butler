@@ -127,15 +127,24 @@ export function renderGuidedResponseLanguage(
 }
 
 export function providerImageAttachments(turn: TurnRecord) {
+  const admittedByFileId = new Map(
+    (turn.context.imageAdmission?.manifests ?? []).map((manifest) => [
+      manifest.fileId,
+      manifest,
+    ]),
+  );
   return (turn.context.attachments ?? [])
     .filter((attachment) => attachment.kind === "image")
-    .map((attachment) => ({
-      ...attachment,
-      // The admitted manifest is the sole image identity.  Do not create a
-      // guided-only id: the late payload port resolves the derivative by its
-      // path-free fileId and digest.
-      id: attachment.visualManifest?.fileId ?? attachment.id,
-    }));
+    .map((attachment) => {
+      const visualManifest = attachment.visualManifest ?? admittedByFileId.get(attachment.id);
+      return {
+        ...attachment,
+        ...(visualManifest ? { visualManifest } : {}),
+        // The admitted manifest is the sole image identity. Do not create a
+        // guided-only id: the late payload port resolves by fileId and digest.
+        id: visualManifest?.fileId ?? attachment.id,
+      };
+    });
 }
 
 function renderContextDocuments(
