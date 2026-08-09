@@ -1,15 +1,11 @@
-import type { DurableWorkService } from "../work/index.ts";
-import type { BtccAgentLoopInput } from "./contracts.ts";
+import { isDurableWorkTool, type DurableWorkService } from "../work/index.ts";
+import type { BtccAgentLoop, BtccAgentLoopInput, BtccAgentLoopResult } from "./contracts.ts";
 import type { ModelRoundPort } from "../ports/model-round.ts";
 import { createGuidedEffectService } from "../effects/index.ts";
-import type { BtccAgentLoop, BtccAgentLoopResult } from "./contracts.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
-import type { SqliteGuidedEffectJournal, SqliteGuidedToolJournal } from
-  "../../adapters/index.ts";
-import { ActiveProjectLedgerResolver } from
-  "../../../integrations/project-ledger/active-project-ledger-reference.ts";
-import { createProviderModelRoundPort } from
-  "../../../integrations/providers/runtime.ts";
+import type { SqliteGuidedEffectJournal, SqliteGuidedToolJournal } from "../../adapters/index.ts";
+import { ActiveProjectLedgerResolver } from "../../../integrations/project-ledger/active-project-ledger-reference.ts";
+import { createProviderModelRoundPort } from "../../../integrations/providers/runtime.ts";
 import { createFileStoreVerifiedImagePayloadPort } from
   "../../image-attachment/index.ts";
 import {
@@ -35,7 +31,6 @@ import { createGuidedToolExecutionBoundary } from
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
 import { renderGuidedEffectContext } from "./guided-effect-context.ts";
 import { renderDurableWorkContext } from "./durable-work-tools.ts";
-import { isDurableWorkTool } from "../work/index.ts";
 import {
   backfillTurnToolResults,
   safeImportOpenLegacyWork,
@@ -68,6 +63,7 @@ import {
   guidedOperationalFallbackAfterInternalId,
   loadGuidedOperationalFacts,
 } from "./guided-operational-facts.ts";
+import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
   butlerData: string;
@@ -337,8 +333,12 @@ export function createProductionGuidedTurnAgent(input: {
             readProgress: () => progressCapture.facts(),
           })
         : text;
+      const artifacts = collectGuidedFinalArtifacts(
+        input.toolJournal.list(turn.turnId),
+      );
       return {
         content,
+        ...(artifacts.length > 0 ? { artifacts } : {}),
         route: routeForUsedTools(
           toolCalls.usedTools,
           Boolean(finalWork) ||

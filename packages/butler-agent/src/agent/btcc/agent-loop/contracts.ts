@@ -23,6 +23,7 @@ import type {
   ReasoningEffort,
 } from "../../../integrations/providers/runtime-contracts.ts";
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
+import type { BtccFinalArtifact } from "../contracts.ts";
 
 export type BtccAgentLoopMessage = ModelRoundMessage;
 export type BtccAgentLoopToolDefinition = ModelRoundTool;
@@ -31,6 +32,7 @@ export type BtccAgentLoopToolCall = ModelRoundToolCall;
 export type BtccAgentLoopResult = {
   content: string;
   route: "direct" | "assisted" | "managed";
+  artifacts?: BtccFinalArtifact[];
 };
 
 export interface BtccAgentLoop {

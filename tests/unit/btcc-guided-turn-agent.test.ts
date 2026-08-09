@@ -2173,8 +2173,10 @@ test("Guided agent renders CSV text once and passes image attachments to the pro
     expect(prompt.match(/name,pork_percent/g)?.length).toBe(1);
     expect(attachments).toHaveLength(1);
     expect(attachments[0]).toMatchObject({
-      id: "guided-image:image-1",
+      id: "image-1",
       kind: "image",
+      mimeType: "image/png",
+      fileName: "photo.png",
       localPath: imagePath,
     });
   } finally {

@@ -3,6 +3,7 @@ import type { StopPersistenceOutcome } from
   "../../../btcc/turn/index.ts";
 import { assertGuidedTurnSemanticState } from "./guided-turn-state.ts";
 import { digest } from "./identity.ts";
+import { hydrateFinalPayload } from "./sqlite-guided-turn-hydration.ts";
 
 type TurnControlRow = {
   semantic_state: string;
@@ -47,7 +48,10 @@ export class SqliteGuidedStopController {
 
     if (turn.semantic_state === "delivered") {
       this.closeRequest(stopRequestId, "already_delivered", turn.revision);
-      const content = finalPayloadContent(turn.final_payload_json);
+      const finalPayload = hydrateFinalPayload(turn.final_payload_json);
+      if (!finalPayload) {
+        throw new Error("Delivered BTCC R3 Turn has no final payload");
+      }
       if (!turn.canonical_assistant_message_id) {
         throw new Error("Delivered BTCC R3 Turn has no canonical message");
       }
@@ -55,7 +59,10 @@ export class SqliteGuidedStopController {
         kind: "already_delivered",
         turnId,
         messageId: turn.canonical_assistant_message_id,
-        content,
+        content: finalPayload.content,
+        ...(finalPayload.artifacts?.length
+          ? { artifacts: finalPayload.artifacts }
+          : {}),
       };
     }
     if (turn.semantic_state === "cancelled") {
@@ -112,13 +119,4 @@ export class SqliteGuidedStopController {
         updated_at = datetime('now') WHERE stop_request_id = ?
     `).run(status, turnRevision, stopRequestId);
   }
-}
-
-function finalPayloadContent(value: string | null): string {
-  if (!value) throw new Error("Delivered BTCC R3 Turn has no final payload");
-  const payload = JSON.parse(value) as { content?: unknown };
-  if (typeof payload.content !== "string") {
-    throw new Error("Delivered BTCC R3 Turn has an invalid final payload");
-  }
-  return payload.content;
 }

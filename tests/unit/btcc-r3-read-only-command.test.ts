@@ -519,6 +519,54 @@ describe("R3 read-only command boundary", () => {
     }
   });
 
+  test("mutation returns verified generated files as safe artifact evidence", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-generated-artifact-"));
+    roots.push(root);
+    const workspace = join(root, "workspace");
+    const butlerData = join(root, "data");
+    const artifactRoot = join(butlerData, "artifacts", "generated");
+    mkdirSync(workspace, { recursive: true });
+    mkdirSync(artifactRoot, { recursive: true });
+    const prepared = await prepareGuidedCommandEffect({
+      args: {
+        command: "printf artifact > \"$BUTLER_ARTIFACTS_DIR/result.txt\"",
+        output_paths: ["$BUTLER_ARTIFACTS_DIR/result.txt"],
+        state_effect: "mutation",
+      },
+      butlerData,
+      workspacePath: workspace,
+      originalRequest: "create and attach the result",
+    });
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    try {
+      const outcome = await createGuidedEffectService(
+        new SqliteGuidedEffectJournal(db),
+      ).execute({
+        work: reviewedWork(),
+        accessMode: "full_access",
+        occurrenceId: "generated-artifact-command",
+        signal: new AbortController().signal,
+        ...prepared,
+      });
+      expect(outcome).toMatchObject({
+        ok: true,
+        status: "applied",
+        result: {
+          artifacts: [{
+            path: "artifacts/generated/result.txt",
+            artifact_kind: "file",
+            size_bytes: 8,
+          }],
+        },
+      });
+      if (!outcome.ok) throw new Error("generated artifact command did not apply");
+      expect(JSON.stringify(outcome.result.artifacts)).not.toContain(root);
+    } finally {
+      db.close(false);
+    }
+  });
+
   test("mutation canonicalizes a symlinked workspace before deriving its target", async () => {
     if (process.platform === "win32") return;
     const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-symlink-root-"));

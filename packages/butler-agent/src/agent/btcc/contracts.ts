@@ -50,6 +50,25 @@ export type ButlerAttachmentRef = {
   visualManifest?: VisualAttachmentManifest;
 };
 
+export type BtccFinalArtifact = {
+  id: string;
+  kind:
+    | "csv_file"
+    | "table_file"
+    | "chart_file"
+    | "image"
+    | "document"
+    | "code"
+    | "report"
+    | "file"
+    | "unknown";
+  title: string;
+  safePathLabel: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  createdAt?: string;
+};
+
 export type BtccTurnExecutionControls = {
   schema_version: string;
   turn_id: string;
@@ -102,7 +121,13 @@ export type BtccRunCommand = Exclude<BtccTurnCommand, { kind: "stop" }>;
 export type BtccStopCommand = Extract<BtccTurnCommand, { kind: "stop" }>;
 
 export type BtccTurnOutcome = (
-  | { kind: "delivered"; turnId: string; messageId: string; content: string }
+  | {
+      kind: "delivered";
+      turnId: string;
+      messageId: string;
+      content: string;
+      artifacts?: BtccFinalArtifact[];
+    }
   | { kind: "cancelled"; turnId: string }
   | { kind: "already_cancelled"; turnId: string }
   | { kind: "already_finalizing"; turnId: string }

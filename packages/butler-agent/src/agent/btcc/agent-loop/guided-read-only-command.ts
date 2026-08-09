@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { budgetToolOutput } from "../../context/tool-output-budgeter.ts";
 import { executeGuidedCommand } from "./guided-command/execute-command.ts";
+import {
+  commandEvidenceCapabilityReceipts,
+  commandEvidenceReceipts,
+} from "../../tools/run-command/run_command/evidence.ts";
+import { guidedCommandArtifacts } from "./guided-command-artifacts.ts";
 
 export type GuidedSpooledCommandResult = {
   summary: {
@@ -62,6 +67,7 @@ export function guidedCommandPublicResult(input: {
   butlerData: string;
   args: Record<string, unknown>;
   sandbox: "read_only_no_network" | "full_access_contained";
+  startedAtMs?: number;
 }): Record<string, unknown> {
   const streams = readSpooledStreams(input.spooled.payloadSource.path);
   const budgeted = budgetToolOutput({
@@ -76,8 +82,16 @@ export function guidedCommandPublicResult(input: {
     cwd: input.spooled.summary.cwd,
     maxModelTokens: boundedInteger(input.args.max_output_tokens, 1_200, 200, 8_000),
   });
+  const success = budgeted.exit_code === 0 && !budgeted.timed_out;
+  const artifacts = input.sandbox === "full_access_contained" && success
+    ? guidedCommandArtifacts({
+        outputPaths: input.args.output_paths,
+        butlerData: input.butlerData,
+        startedAtMs: input.startedAtMs,
+      })
+    : [];
   return {
-    ok: budgeted.exit_code === 0 && !budgeted.timed_out,
+    ok: success,
     command: input.spooled.summary.command,
     cwd: input.spooled.summary.cwd,
     exit_code: budgeted.exit_code,
@@ -87,6 +101,20 @@ export function guidedCommandPublicResult(input: {
     sandbox: input.sandbox,
     ...(budgeted.butler_tool_artifact
       ? { butler_tool_artifact: budgeted.butler_tool_artifact }
+      : {}),
+    ...(artifacts.length > 0
+      ? {
+          artifacts,
+          verified_output_files: artifacts,
+          evidence_receipts: commandEvidenceReceipts({ success, artifacts }),
+          evidence_capability_receipts: commandEvidenceCapabilityReceipts({
+            exitCode: budgeted.exit_code,
+            timedOut: budgeted.timed_out,
+            outputSuppressed: false,
+            outputBudgeted: Boolean(budgeted.butler_tool_artifact),
+            artifacts,
+          }),
+        }
       : {}),
   };
 }

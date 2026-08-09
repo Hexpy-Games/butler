@@ -28,7 +28,6 @@ import {
 } from "../model-route/index.ts";
 import { ModelProviderRequestError, safeRuntimeFailure } from "../../../integrations/providers/provider-errors.ts";
 import { createModelRouteRuntimeHooks } from "./model-route-runtime-hooks.ts";
-
 export type TurnRuntimeDependencies = {
   admission: TurnAdmissionRepository;
   turns: TurnStateRepository;
@@ -271,6 +270,7 @@ function guidedFinalTransition(turn: TurnRecord, result: BtccAgentLoopResult) {
     route: result.route,
     disposition: "completed" as const,
     content,
+    ...(result.artifacts?.length ? { artifacts: result.artifacts } : {}),
   };
   const finalPayload = {
     ref: contentRef("payload", finalPayloadBody),
