@@ -86,6 +86,7 @@ const projectLifecycleWorkspaceToolNames: string[] = [
   "write_file",
   "edit_file",
   "grep_files",
+  "list_files",
   "project_ledger_status",
   "project_ledger_list",
   "project_ledger_show",
@@ -740,6 +741,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "write_file",
     "edit_file",
     "grep_files",
+    "list_files",
     "inspect_workspace_page",
     ...projectLedgerToolNames,
     "get_work_dashboard",
@@ -1119,7 +1121,7 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
   // The workspace surface carries the same default memory-reference contract.
-  expect(toolContractJsonChars(tools)).toBeLessThan(31_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(33_000);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -1178,6 +1180,22 @@ test("explicit required native tool profiles expose workspace file tools without
   expect(names).toContain("read_tool_output_artifact");
   expect(names).not.toContain("web_search");
   expect(names).not.toContain("web_read");
+});
+
+test("read-only discovery is selected for both workspace profile and Worker defaults", () => {
+  const workspaceTools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "Inspect the admitted workspace.",
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+  }).map((tool) => tool.name);
+  const workerTools = selectButlerToolsForTurn({ role: "worker", text: "Inspect the admitted workspace." }).map((tool) => tool.name);
+
+  expect(workspaceTools).toContain("list_files");
+  expect(workspaceTools).toContain("read_file");
+  expect(workspaceTools).toContain("grep_files");
+  expect(workerTools).toContain("list_files");
+  expect(workerTools).toContain("read_file");
+  expect(workerTools).toContain("grep_files");
 });
 
 for (const fixture of promptOnlySurfaceFixtures) {
@@ -3097,13 +3115,15 @@ test("Project Ledger tool schemas expose bounded project management wrappers", (
 });
 
 test("workspace file tool schemas keep the runtime-owned root out of model arguments", () => {
-  for (const name of ["grep_files", "read_file", "write_file", "edit_file"]) {
+  for (const name of ["grep_files", "list_files", "read_file", "write_file", "edit_file"]) {
     const tool = BUTLER_TOOLS.find((candidate) => candidate.name === name);
     expect(tool).toBeDefined();
     expect(tool?.parameters.properties).not.toHaveProperty("workspace_root");
   }
   expect((BUTLER_TOOLS.find((tool) => tool.name === "read_file")?.parameters.properties as any)
     .path.description).toContain("inside the active workspace");
+  expect((BUTLER_TOOLS.find((tool) => tool.name === "list_files")?.parameters.properties as any)
+    .include_globs).toBeDefined();
   expect(BUTLER_TOOLS.find((tool) => tool.name === "write_file")?.description)
     .toContain("content is never a patch, fragment, or append");
 });

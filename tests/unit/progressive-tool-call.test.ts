@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { createButlerToolExecutor } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { bridgeToolAuditEvent } from "../../packages/butler-agent/src/agent/tools/tool-bridge/audit.ts";
@@ -91,6 +91,36 @@ test("tool_call invokes native tools through the guarded Butler dispatcher", asy
     affordance: "native_tool",
   });
   expect(pageReads).toBe(1);
+});
+
+test("progressive tool_describe and tool_call dispatch native list_files", async () => {
+  writeFileSync(`${tempDir}/candidate.txt`, "candidate\n", "utf8");
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+    currentToolNames: ["tool_call", "tool_describe", "list_files"],
+  });
+  const described = await execute({
+    name: "tool_describe",
+    args: { ids: ["native:list_files"] },
+    rawArguments: "{}",
+  }) as any;
+  expect(described.ok).toBe(true);
+  expect(described.descriptions[0]).toMatchObject({
+    id: "native:list_files",
+    name: "list_files",
+    enabled: true,
+    call_affordance: { type: "native_tool", tool_name: "list_files" },
+  });
+  const called = await execute({
+    name: "tool_call",
+    args: { id: "native:list_files", arguments: { max_results: 1 } },
+    rawArguments: "{}",
+  }) as any;
+  expect(called.ok).toBe(true);
+  expect(called.files).toEqual([{ path: "candidate.txt", bytes: 10 }]);
+  expect(called.bridge_invocation).toEqual({ id: "native:list_files", provider: "native", affordance: "native_tool" });
 });
 
 test("tool_call returns underlying native dispatch failures as operational failures", async () => {
@@ -335,13 +365,13 @@ test("tool_call validates array item schemas before dispatch", async () => {
 
   const result = await execute({
     name: "tool_call",
-    args: { id: "native:grep_files", arguments: { pattern: "needle", include: [123] } },
+    args: { id: "native:grep_files", arguments: { pattern: "needle", include_globs: [123] } },
     rawArguments: "{}",
   }) as { ok: boolean; error: { code: string; path: string } };
 
   expect(result.ok).toBe(false);
   expect(result.error.code).toBe("invalid_tool_arguments");
-  expect(result.error.path).toBe("$.include[0]");
+  expect(result.error.path).toBe("$.include_globs[0]");
 });
 
 test("tool_call schema validation rejects unknown properties when no properties map is present", () => {

@@ -290,6 +290,17 @@ test("R3 Conception guidance actively selects associative recall and exposes cro
   expect(visible).toContain("read_conversation_session");
 });
 
+test("guided read-only policy authorizes and visibly exposes list_files", () => {
+  const turn = turnRecord({ accessMode: "read_only" });
+  const policy = guidedPolicy(turn);
+  const authorized = authorizedToolDefinitions(turn, {});
+  const visible = visibleToolDefinitions(authorized, policy);
+
+  expect(authorized.find((tool) => tool.name === "list_files")).toBeDefined();
+  expect(visible.find((tool) => tool.name === "list_files")).toBeDefined();
+  expect(visible.find((tool) => tool.name === "list_files")?.parameters.properties).toHaveProperty("include_globs");
+});
+
 test("R3 guided prompt reports disabled Work without inventing a Work context", () => {
   const turn = turnRecord({
     executionPolicy: executionPolicy("none"),

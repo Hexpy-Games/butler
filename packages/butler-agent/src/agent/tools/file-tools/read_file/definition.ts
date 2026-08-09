@@ -3,7 +3,7 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const readFileToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "read_file",
-  description: "Read a bounded UTF-8 text file inside the active workspace with path guard, binary/sensitive-path checks, line range controls, truncation metadata, and evidence receipts.",
+  description: "Read one bounded UTF-8 workspace file or 1-20 files in request order with path guard, binary/UTF-8 checks, aggregate limits, stale-safe continuation, and evidence receipts.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -15,8 +15,26 @@ export const readFileToolDefinition: ButlerToolDefinition = {
       start_line: { type: "integer", minimum: 1 },
       limit_lines: { type: "integer", minimum: 1, maximum: 10000 },
       max_bytes: { type: "integer", minimum: 1, maximum: 1048576 },
+      requests: {
+        type: "array",
+        minItems: 1,
+        maxItems: 20,
+        description: "Canonical bounded batch requests. Use requests instead of path, never both.",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            path: { type: "string" },
+            start_line: { type: "integer", minimum: 1 },
+            limit_lines: { type: "integer", minimum: 1, maximum: 10000 },
+            max_bytes: { type: "integer", minimum: 1, maximum: 1048576 },
+          },
+          required: ["path"],
+        },
+      },
+      max_total_bytes: { type: "integer", minimum: 1, maximum: 4194304 },
+      cursor: { type: "string" },
     },
-    required: ["path"],
   },
   effectBoundary: "none",
   concurrencySafe: true,
