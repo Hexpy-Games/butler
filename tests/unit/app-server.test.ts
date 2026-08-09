@@ -42,6 +42,7 @@ import {
   upsertLocalModelConfig,
 } from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
+import { ProviderQuotaMonitor } from "../../packages/butler-agent/src/operations/metrics/provider-quota.ts";
 import {
   TURN_DECISION_EVENT_KIND,
   TURN_ACKNOWLEDGED_EVENT_KIND,
@@ -2867,6 +2868,14 @@ test("app server exposes safe usage monitor summary", async () => {
     cachedTokens: 30,
     totalTokens: 145,
   }, { butlerData: tempDir });
+  appendPromptCacheMetric({
+    ts: Date.now(),
+    model: "zai-api/glm-5.2",
+    scope: "worker",
+    promptTokens: 20,
+    cachedTokens: 0,
+    totalTokens: 25,
+  }, { butlerData: tempDir });
   mkdirSync(join(tempDir, "transcripts"), { recursive: true });
   writeFileSync(
     join(tempDir, "transcripts", "butler_main.jsonl"),
@@ -2895,6 +2904,31 @@ test("app server exposes safe usage monitor summary", async () => {
     dbPath: join(tempDir, "app.sqlite"),
     butlerData: tempDir,
     port: 0,
+    providerQuotaMonitor: new ProviderQuotaMonitor({
+      adapters: [{
+        providerId: "openai",
+        async read() {
+          return {
+            available: true,
+            stale: false,
+            sourceKind: "codex_app_server",
+            sourceId: "openai-codex-rate-limits",
+            planKind: "subscription",
+            planName: "Pro",
+            windows: [{
+              id: "primary",
+              usedPercent: 10,
+              remainingPercent: 90,
+              windowDurationMins: 300,
+              resetsAt: "2026-08-09T01:00:00.000Z",
+              expiresAt: null,
+            }],
+            fetchedAt: "2026-08-09T00:00:00.000Z",
+            reason: null,
+          };
+        },
+      }],
+    }),
   });
   try {
     const usage = await getJson(
@@ -2903,12 +2937,12 @@ test("app server exposes safe usage monitor summary", async () => {
 
     expect(usage.data.raw_text_included).toBe(false);
     expect(usage.data.model).toMatchObject({
-      requestCount: 1,
-      promptTokens: 100,
+      requestCount: 2,
+      promptTokens: 120,
       cachedTokens: 30,
-      uncachedTokens: 70,
-      outputTokens: 45,
-      totalTokens: 145,
+      uncachedTokens: 90,
+      outputTokens: 50,
+      totalTokens: 170,
       byScopeUsage: {
         "session-turn": {
           requestCount: 1,
@@ -2927,6 +2961,27 @@ test("app server exposes safe usage monitor summary", async () => {
       failures: 0,
     });
     expect(usage.data.cost.available).toBe(false);
+    expect(usage.data.providerUsage.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        providerId: "openai",
+        remaining: expect.objectContaining({
+          available: true,
+          stale: false,
+          planName: "Pro",
+          windows: [expect.objectContaining({ remainingPercent: 90 })],
+        }),
+      }),
+      expect.objectContaining({
+        providerId: "zai-api",
+        remaining: expect.objectContaining({
+          available: false,
+          stale: false,
+          reason: expect.objectContaining({
+            code: "provider_quota_surface_unavailable",
+          }),
+        }),
+      }),
+    ]));
     expect(JSON.stringify(usage.data)).not.toContain("SECRET_USAGE");
   } finally {
     server.stop();

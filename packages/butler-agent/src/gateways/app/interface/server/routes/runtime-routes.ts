@@ -95,7 +95,7 @@ export async function handleRuntimeRoutes(
   if (input.request.method === "GET" && url.pathname === "/usage-monitor") {
     return json(
       apiEnvelope<UsageMonitorView>(
-        input.store.getUsageMonitor(usageMonitorFromSearchParams(url.searchParams)),
+        await input.store.getUsageMonitor(usageMonitorFromSearchParams(url.searchParams)),
       ),
     );
   }

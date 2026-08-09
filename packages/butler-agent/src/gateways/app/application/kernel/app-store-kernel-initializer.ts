@@ -41,6 +41,11 @@ import type { AppStoreKernel } from "./app-store-kernel.ts";
 import { SqliteOperationOutputReader } from "../../infrastructure/operation-output/sqlite-operation-output-reader.ts";
 import { initializeTerminalTurnRetention } from
   "./app-terminal-retention-initializer.ts";
+import {
+  createProviderQuotaMonitor,
+} from "../../../../operations/metrics/provider-quota.ts";
+import { createOpenAIQuotaAdapter } from
+  "../../../../integrations/providers/openai/provider-quota.ts";
 
 export function initializeAppStoreKernel(
   kernel: AppStoreKernel,
@@ -80,7 +85,12 @@ export function initializeAppStoreKernel(
     kernel.appUpdateManifest,
     () => kernel.preferences?.getSettings().diagnostics_enabled === true,
   );
-  kernel.systemMonitor = new AppSystemMonitorStore(kernel.butlerData);
+  kernel.systemMonitor = new AppSystemMonitorStore(
+    kernel.butlerData,
+    options.providerQuotaMonitor ?? createProviderQuotaMonitor({
+      adapters: [createOpenAIQuotaAdapter()],
+    }),
+  );
   kernel.developerLogs = new DeveloperLogStore({ butlerData: kernel.butlerData });
   kernel.dbConnection = openOwnedSqliteConnection(
     options.dbPath ?? ":memory:",
