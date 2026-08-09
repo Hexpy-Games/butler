@@ -20,7 +20,9 @@ export const analyzeAttachedImageToolDefinition: ButlerToolDefinition = {
     },
     required: ["file_id", "prompt"],
   },
-  effectBoundary: "dynamic",
+  // Vision analysis is observational: it reads the current Turn's admitted
+  // derivative and returns text without mutating local or remote state.
+  effectBoundary: "none",
   concurrencySafe: false,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",
@@ -33,4 +35,3 @@ export const analyzeAttachedImageToolMetadata: ToolCapabilityMetadata = {
     "Only the current Turn's admitted image file_id is accepted; the sanitized derivative is materialized in a private temporary path and removed after the MCP call.",
   ],
 };
-
