@@ -71,8 +71,13 @@ function toBtccRequest(
             ...(Number.isFinite(attachment.sizeBytes)
               ? { sizeBytes: attachment.sizeBytes } : {}),
             ...(attachment.url ? { url: attachment.url } : {}),
-            ...(attachment.localPath ? { localPath: attachment.localPath } : {}),
+            ...(attachment.kind !== "image" && attachment.localPath
+              ? { localPath: attachment.localPath }
+              : {}),
           })) }
+        : {}),
+      ...(envelope.message.imageAdmission
+        ? { imageAdmission: envelope.message.imageAdmission }
         : {}),
     },
     trigger: { kind: "user_message" },

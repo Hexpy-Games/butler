@@ -21,6 +21,10 @@ import { toolCallToolDefinition, toolCallToolMetadata } from "./tool-bridge/tool
 import { listMcpCapabilitiesToolDefinition, listMcpCapabilitiesToolMetadata } from "./mcp/list_mcp_capabilities/index.ts";
 import { callMcpToolToolDefinition, callMcpToolToolMetadata } from "./mcp/call_mcp_tool/index.ts";
 import { readMcpResourceToolDefinition, readMcpResourceToolMetadata } from "./mcp/read_mcp_resource/index.ts";
+import {
+  analyzeAttachedImageToolDefinition,
+  analyzeAttachedImageToolMetadata,
+} from "./image/index.ts";
 import { createAutomationToolDefinition, createAutomationToolMetadata } from "./automation/create_automation/index.ts";
 import { listAutomationsToolDefinition, listAutomationsToolMetadata } from "./automation/list_automations/index.ts";
 import { deleteAutomationToolDefinition, deleteAutomationToolMetadata } from "./automation/delete_automation/index.ts";
@@ -73,6 +77,7 @@ export const CORE_BUTLER_TOOLS = [
   listMcpCapabilitiesToolDefinition,
   callMcpToolToolDefinition,
   readMcpResourceToolDefinition,
+  analyzeAttachedImageToolDefinition,
   createAutomationToolDefinition,
   listAutomationsToolDefinition,
   deleteAutomationToolDefinition,
@@ -124,6 +129,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [listMcpCapabilitiesToolDefinition.name]: listMcpCapabilitiesToolMetadata,
   [callMcpToolToolDefinition.name]: callMcpToolToolMetadata,
   [readMcpResourceToolDefinition.name]: readMcpResourceToolMetadata,
+  [analyzeAttachedImageToolDefinition.name]: analyzeAttachedImageToolMetadata,
   [createAutomationToolDefinition.name]: createAutomationToolMetadata,
   [listAutomationsToolDefinition.name]: listAutomationsToolMetadata,
   [deleteAutomationToolDefinition.name]: deleteAutomationToolMetadata,

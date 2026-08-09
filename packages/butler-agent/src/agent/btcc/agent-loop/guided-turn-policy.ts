@@ -58,6 +58,7 @@ const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "read_mcp_resource",
   "list_skills",
   "transform_public_data_table",
+  "analyze_attached_image",
 ]);
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
@@ -143,6 +144,8 @@ export function authorizedToolDefinitions(
     "grep_files",
   ]) names.add(name);
   for (const name of GUIDED_UNAVAILABLE_NATIVE_TOOL_NAMES) names.delete(name);
+  if (isZaiMcpVisionTurn(turn)) names.add("analyze_attached_image");
+  else names.delete("analyze_attached_image");
   if (policy.accessMode === "full_access") {
     for (const tool of BUTLER_TOOLS) {
       if (
@@ -192,13 +195,7 @@ export function hiddenNativeToolNamesForGuidedTurn(
   ];
 }
 
-export function visibleToolDefinitions(
-  authorized: readonly FunctionToolDefinition[],
-  policy: Pick<
-    ButlerExecutionPolicy,
-    "accessMode" | "trackingMode" | "projectId"
-  >,
-): FunctionToolDefinition[] {
+export function visibleToolDefinitions(authorized: readonly FunctionToolDefinition[], policy: Pick<ButlerExecutionPolicy, "accessMode" | "trackingMode" | "projectId">, includeAttachedImageTool = false): FunctionToolDefinition[] {
   const projectLedgerWork =
     policy.trackingMode === "ledger" && Boolean(policy.projectId);
   const visible = new Set([
@@ -214,6 +211,7 @@ export function visibleToolDefinitions(
     "read_conversation_session",
     ...DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name),
     "project_ledger_status",
+    ...(includeAttachedImageTool ? ["analyze_attached_image"] : []),
     ...(projectLedgerWork
       ? ["project_ledger_list"]
       : []),
@@ -228,6 +226,14 @@ export function visibleToolDefinitions(
       : []),
   ]);
   return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
+}
+
+export function isZaiMcpVisionTurn(turn: TurnRecord): boolean {
+  const a = turn.context.imageAdmission;
+  return a?.tuple.providerId === "zai" && a.tuple.modelId === "glm-5.2" &&
+    a.tuple.carrierProtocol === "zai_mcp_vision" && a.capability.toolServerId === "zai-vision" &&
+    a.capability.toolName === "analyze_image" &&
+    a.capability.toolCapabilityDigest === a.tuple.catalogCapabilityDigest;
 }
 
 export function guidedNativeToolDefinitions(): ButlerToolDefinition[] {

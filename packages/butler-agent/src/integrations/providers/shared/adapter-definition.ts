@@ -41,10 +41,15 @@ export function defineProviderAdapter(input: {
         throw new Error(`provider_model_unavailable:${parsed.canonicalRef}`);
       }
       const supportsStructuredOutputs = input.structuredDecisionTransport !== null;
+      const supportsImages = metadata.image_input_verified === true &&
+        metadata.image_carrier_protocol !== undefined &&
+        metadata.image_endpoint_profile_id?.trim().length !== 0 &&
+        metadata.image_capability_revision?.trim().length !== 0 &&
+        metadata.image_capability_digest?.trim().length !== 0;
       return {
         supportsStreaming: false,
         supportsToolCalls: supportsStructuredOutputs,
-        supportsImages: false,
+        supportsImages,
         supportsAudio: false,
         supportsServerThreads: false,
         supportsReasoningConfig: true,

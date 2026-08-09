@@ -27,7 +27,7 @@ export async function handleSessionQueueRoutes(
         "Queued message text is required.",
       );
     }
-    return json(apiEnvelope(input.store.createQueuedMessage(body)), 202);
+    return json(apiEnvelope(await input.store.createQueuedMessage(strictQueueMessageRequest(body))), 202);
   }
 
   const queuedMessageId = queuedMessageIdFromPath(input);
@@ -37,7 +37,7 @@ export async function handleSessionQueueRoutes(
     const body = await parseJson(input.request);
     return json(
       apiEnvelope(
-        input.store.updateQueuedMessage(
+        await input.store.updateQueuedMessage(
           queuedMessageId,
           body as UpdateQueuedMessageRequest,
         ),
@@ -49,6 +49,20 @@ export async function handleSessionQueueRoutes(
     return json(apiEnvelope(input.store.deleteQueuedMessage(queuedMessageId)));
   }
   return null;
+}
+
+function strictQueueMessageRequest(
+  body: import("../../protocol/app-protocol.ts").QueueMessageRequest,
+): import("../../protocol/app-protocol.ts").QueueMessageRequest {
+  return {
+    ...(typeof body.chat_id === "string" ? { chat_id: body.chat_id } : {}),
+    ...(typeof body.text === "string" ? { text: body.text } : {}),
+    ...(Array.isArray(body.attachments) ? { attachments: body.attachments.map((item) => ({ file_id: item.file_id })) } : {}),
+    ...(typeof body.model === "string" ? { model: body.model } : {}),
+    ...(body.reasoning_effort !== undefined ? { reasoning_effort: body.reasoning_effort } : {}),
+    ...(body.access_mode !== undefined ? { access_mode: body.access_mode } : {}),
+    ...(typeof body.plan_mode === "boolean" ? { plan_mode: body.plan_mode } : {}),
+  };
 }
 
 function sessionIdOrGeneral(input: AppRouteContext): string {

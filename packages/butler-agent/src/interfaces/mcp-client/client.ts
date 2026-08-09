@@ -164,8 +164,11 @@ async function probeMcpServerConfig(
       async (client) => {
       const [tools, resources, templates] = await Promise.all([
         listAllMcpPages((cursor) => client.listTools(cursor ? { cursor } : undefined), "tools"),
-        listAllMcpPages((cursor) => client.listResources(cursor ? { cursor } : undefined), "resources"),
-        listAllMcpPages(
+        optionalMcpPage(
+          (cursor) => client.listResources(cursor ? { cursor } : undefined),
+          "resources",
+        ),
+        optionalMcpPage(
           (cursor) => client.listResourceTemplates(cursor ? { cursor } : undefined),
           "resourceTemplates",
         ),
@@ -203,6 +206,32 @@ async function probeMcpServerConfig(
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+/**
+ * MCP tools-only servers are valid capability providers.  Some servers
+ * advertise no resources or resource templates and answer those optional
+ * methods with JSON-RPC -32601; discovery must preserve their tools instead
+ * of turning the whole server probe into an error.
+ */
+async function optionalMcpPage<T>(
+  load: (cursor?: string) => Promise<Record<string, unknown>>,
+  key: string,
+): Promise<T[]> {
+  try {
+    return await listAllMcpPages<T>(load, key);
+  } catch (error) {
+    if (isMcpMethodNotFound(error)) return [];
+    throw error;
+  }
+}
+
+function isMcpMethodNotFound(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  if (code === -32601 || code === "-32601") return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /(?:^|\D)-32601(?:\D|$)|method\s+not\s+found/iu.test(message);
 }
 
 function requireMcpServer(butlerData: string, serverId: string): McpServerConfig {

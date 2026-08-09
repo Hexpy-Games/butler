@@ -3,6 +3,7 @@ import {
   verifyTurnExecutionControls,
   type TurnExecutionControlsV1,
 } from "./turn-execution-controls.ts";
+import type { VisualImageAdmissionResult } from "../../agent/image-attachment/contracts.ts";
 
 export const APP_TRANSPORT = "app";
 export const APP_ACCOUNT = "local";
@@ -24,6 +25,7 @@ export interface AppInboundInput {
   projectId?: string;
   executionControls?: TurnExecutionControlsV1;
   attachments?: InboundEnvelope["message"]["attachments"];
+  imageAdmission?: VisualImageAdmissionResult;
   raw?: InboundEnvelope["raw"];
   rawSource?: string;
 }
@@ -50,6 +52,7 @@ export function createAppInboundEnvelope(input: AppInboundInput): InboundEnvelop
       id: input.messageId,
       text: input.text,
       attachments: input.attachments,
+      imageAdmission: input.imageAdmission,
       timestamp: input.timestamp,
     },
     routingHints: {

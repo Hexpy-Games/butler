@@ -22,6 +22,7 @@ import {
 import { createAutomationToolHandlers } from "./automation/index.ts";
 import { createDataTableToolHandlers } from "./data-table/index.ts";
 import { createMcpToolHandlers } from "./mcp/index.ts";
+import { createAnalyzeAttachedImageToolHandler } from "./image/index.ts";
 import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
 import { createToolBridgeToolHandlers } from "./tool-bridge/index.ts";
@@ -43,6 +44,12 @@ import type {
   ButlerToolDefinition,
   NativeToolAvailabilityOverrides,
 } from "./types.ts";
+import type {
+  ImageCapabilityEvidence,
+  ImageCarrierTuple,
+  VerifiedImagePayloadPort,
+  VisualAdmittedManifest,
+} from "../image-attachment/contracts.ts";
 export { BUTLER_TOOLS, CORE_BUTLER_TOOLS } from "./registry.ts";
 export type {
   ButlerToolCall,
@@ -142,6 +149,10 @@ export function createButlerToolExecutor(input: {
   workspacePath?: string;
   sessionId?: string; originChatId?: string;
   projectId?: string; turnId?: string;
+  imageManifests?: readonly VisualAdmittedManifest[];
+  imageCarrier?: ImageCarrierTuple;
+  imageCapability?: ImageCapabilityEvidence;
+  verifiedImagePayloadPort?: VerifiedImagePayloadPort;
   turnContext?: string;
   searchPlannerOriginalRequest?: string;
   workerModel?: string;
@@ -228,6 +239,17 @@ export function createButlerToolExecutor(input: {
     }),
     ...createMcpToolHandlers({
       butlerData: input.butlerData,
+    }),
+    "analyze_attached_image": createAnalyzeAttachedImageToolHandler({
+      butlerData: input.butlerData,
+      imageManifests: input.imageManifests,
+      imageCarrier: input.imageCarrier,
+      imageCapability: input.imageCapability,
+      verifiedImagePayloadPort: input.verifiedImagePayloadPort ?? {
+        read: async () => {
+          throw new Error("verified_image_payload_port_missing");
+        },
+      },
     }),
     ...createAutomationToolHandlers({
       sessionId: input.sessionId,

@@ -2,7 +2,8 @@ import type { StopPersistenceOutcome } from "./turn/index.ts";
 import type { RuntimeTurnEventInput } from "../events/turn-events.ts";
 import type { ToolProgressSummary } from "../tools/tool-support.ts";
 import type { ModelRouteState } from "./model-route/index.ts";
-
+import type { VisualAttachmentManifest } from "../../gateways/core/contracts.ts";
+import type { VisualImageAdmissionResult } from "../image-attachment/contracts.ts";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export type AdmittedModelSelection = {
@@ -14,7 +15,6 @@ export type AdmittedModelSelection = {
   contextWindowTokens?: number;
   modelRoute?: ModelRouteState;
 };
-
 export type ButlerContextInput = {
   userRef: string;
   projectRef?: string;
@@ -25,6 +25,7 @@ export type ButlerContextInput = {
   baselineObservationScopeRefs: string[];
   executionPolicy?: ButlerExecutionPolicy;
   attachments?: ButlerAttachmentRef[];
+  imageAdmission?: VisualImageAdmissionResult;
 };
 
 export type ButlerExecutionPolicy = {
@@ -45,6 +46,7 @@ export type ButlerAttachmentRef = {
   sizeBytes?: number;
   url?: string;
   localPath?: string;
+  visualManifest?: VisualAttachmentManifest;
 };
 
 export type BtccTurnExecutionControls = {
@@ -174,6 +176,7 @@ export type BtccTurnRequest = {
     content: string;
     timestamp: string;
     attachments?: ButlerAttachmentRef[];
+    imageAdmission?: VisualImageAdmissionResult;
   };
   trigger:
     | {

@@ -1,6 +1,7 @@
 import {
   ModelProviderRequestError,
 } from "../../../integrations/providers/provider-errors.ts";
+import { ImageAdmissionError } from "../../image-attachment/index.ts";
 import type {
   ModelRoundPort,
   ModelRoundRequest,
@@ -61,9 +62,15 @@ export function createModelRoutePort(input: {
       let attemptHistory: ModelRouteAttemptHistory = emptyAttemptHistory();
       let lastProviderError: unknown;
       const dispatchBudget = modelRouteDispatchBudget(route);
+      const frozenVisualModelRef = request.imageCarrier
+        ? `${request.imageCarrier.providerId}/${request.imageCarrier.modelId}`
+        : undefined;
       while (true) {
         const candidate = currentModelRouteCandidate(route);
         if (!candidate) throw new Error("model_route_exhausted");
+        if (frozenVisualModelRef && candidate.modelRef !== frozenVisualModelRef) {
+          throw new ImageAdmissionError("image_model_unsupported", "visual_fallback_disabled");
+        }
         const attemptKey = routeAttemptKey(input.turnId, roundId, route);
         const accepted = await input.loadAcceptedResponse?.({
           roundId,
@@ -113,6 +120,7 @@ export function createModelRoutePort(input: {
               roundId,
               next,
               recoveredFailure(latestFailure),
+              request.imageCarrier,
             );
             continuation = undefined;
             loadedAttemptKey = undefined;
@@ -126,6 +134,7 @@ export function createModelRoutePort(input: {
               roundId,
               undefined,
               lastProviderError,
+              request.imageCarrier,
             );
             continuation = undefined;
             loadedAttemptKey = undefined;
@@ -165,6 +174,7 @@ export function createModelRoutePort(input: {
             roundId,
             undefined,
             lastProviderError,
+            request.imageCarrier,
           );
           continuation = undefined;
           loadedAttemptKey = undefined;
@@ -228,7 +238,7 @@ export function createModelRoutePort(input: {
           }
           const next = advanceModelRoute(route, attemptKey);
           if (!next) throw error;
-          route = await selectFallback(input, route, attemptKey, roundId, next);
+          route = await selectFallback(input, route, attemptKey, roundId, next, undefined, request.imageCarrier);
           continuation = undefined;
           loadedAttemptKey = undefined;
           continue;
@@ -269,11 +279,18 @@ async function selectFallback(
   roundId: string,
   next = advanceModelRoute(route, attemptKey),
   exhaustionError?: unknown,
+  imageCarrier?: ModelRoundRequest["imageCarrier"],
 ): Promise<ModelRouteState> {
   if (!next) {
     throw exhaustionError instanceof Error
       ? exhaustionError
       : new Error("model_route_exhausted_after_restart");
+  }
+  if (imageCarrier) {
+    const candidate = currentModelRouteCandidate(next);
+    if (!candidate || candidate.modelRef !== `${imageCarrier.providerId}/${imageCarrier.modelId}`) {
+      throw new ImageAdmissionError("image_model_unsupported", "visual_fallback_disabled");
+    }
   }
   await input.onRouteEvent?.({
     type: "model.fallback.selected",

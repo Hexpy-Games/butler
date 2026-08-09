@@ -14,6 +14,7 @@ import type {
   UserMessageTurnStoreInput,
   UserResponderTurnInput,
 } from "./user-message-turn-contract.ts";
+import type { VisualImageAdmissionResult } from "../../../../agent/image-attachment/contracts.ts";
 
 type CapturedUserFeedback = {
   entry: {
@@ -36,20 +37,10 @@ export class AppUserMessageTurnStore {
     input: MessageSendRequest,
     responder?: AppMessageResponder,
     options: SendMessageOptions = {},
+    admittedVisual?: VisualImageAdmissionResult,
   ): Promise<MessageSendResult> {
     const chatId = input.chat_id?.trim() || this.input.defaultChatId;
     this.input.ensureChat(chatId);
-    if (
-      input.queue_policy === "enqueue_if_busy" &&
-      this.input.sessionHasActiveTurn(chatId)
-    ) {
-      const queue = this.input.createQueuedMessage(input);
-      return {
-        queued: queue.queued_messages.at(-1),
-        replies: [],
-        next_cursor: maxMessageCursor(this.input.listMessages(chatId)),
-      };
-    }
     const text = (input.text ?? "").trim();
     const attachableFiles = this.input.validateAttachable(
       chatId,
@@ -59,6 +50,21 @@ export class AppUserMessageTurnStore {
       chatId,
       input,
     );
+    const visualAdmission = admittedVisual ?? await this.input.admitVisualAttachments(
+      attachableFiles,
+      controlResolution.controls.model,
+    );
+    if (
+      input.queue_policy === "enqueue_if_busy" &&
+      this.input.sessionHasActiveTurn(chatId)
+    ) {
+      const queue = await this.input.createQueuedMessage(input, visualAdmission);
+      return {
+        queued: queue.queued_messages.at(-1),
+        replies: [],
+        next_cursor: maxMessageCursor(this.input.listMessages(chatId)),
+      };
+    }
     const turn = this.input.insertTurn(
       chatId,
       "accepted",
@@ -91,6 +97,7 @@ export class AppUserMessageTurnStore {
         message: accepted,
         text,
         executionControls,
+        ...(visualAdmission ? { visualAdmission } : {}),
       });
       return {
         accepted,

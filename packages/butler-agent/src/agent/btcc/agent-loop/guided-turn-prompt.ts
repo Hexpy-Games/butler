@@ -131,7 +131,10 @@ export function providerImageAttachments(turn: TurnRecord) {
     .filter((attachment) => attachment.kind === "image")
     .map((attachment) => ({
       ...attachment,
-      id: `guided-image:${attachment.id}`,
+      // The admitted manifest is the sole image identity.  Do not create a
+      // guided-only id: the late payload port resolves the derivative by its
+      // path-free fileId and digest.
+      id: attachment.visualManifest?.fileId ?? attachment.id,
     }));
 }
 

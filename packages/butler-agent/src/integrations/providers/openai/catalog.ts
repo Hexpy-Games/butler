@@ -2,6 +2,25 @@ import type { ProviderModelMetadata, ReasoningEffort } from "../model-catalog.ts
 import { AUTO_CODEX_LATEST } from "./models.ts";
 
 export const OPENAI_SOURCE = "https://developers.openai.com/api/docs/models/compare";
+const OPENAI_IMAGE_INPUT = {
+  // Documentation describes the model-family capability, but a carrier is
+  // not production-advertised until the exact registered credential/base URL
+  // has passed the bounded synthetic-image probe.  The registered-model
+  // overlay sets this to true only for that exact persisted route evidence.
+  image_input_verified: false,
+  image_input_modalities: ["text", "image"] as const,
+  image_accepted_mime_types: ["image/png", "image/jpeg", "image/webp"] as const,
+  image_max_inline_bytes: 10 * 1024 * 1024,
+  image_max_width: 4096,
+  image_max_height: 4096,
+  image_max_pixels: 16_000_000,
+  image_capability_source_url: "https://developers.openai.com/api/docs/models",
+  image_capability_verified_at: "2026-08-09T00:00:00.000Z",
+  image_capability_revision: "openai-image-input-v1",
+  image_capability_digest: "75bd5b41fd9ad7888fde02bc82c785c57e7245c55f892378b133e5bea51f4de7",
+  image_endpoint_profile_id: "openai-responses-v1",
+  image_carrier_protocol: "openai_responses" as const,
+};
 
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = "xhigh";
 const GPT_56_REASONING_EFFORTS: ReasoningEffort[] = ["none", "low", "medium", "high", "xhigh", "max"];
@@ -26,6 +45,7 @@ export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
     token_estimator: "openai_tiktoken_o200k",
     source_url: OPENAI_SOURCE,
     runtime_supported: true,
+    ...OPENAI_IMAGE_INPUT,
   },
   {
     provider_id: "openai",
@@ -41,6 +61,7 @@ export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
     token_estimator: "openai_tiktoken_o200k",
     source_url: OPENAI_SOURCE,
     runtime_supported: true,
+    ...OPENAI_IMAGE_INPUT,
   },
   {
     provider_id: "openai",
@@ -56,6 +77,7 @@ export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
     token_estimator: "openai_tiktoken_o200k",
     source_url: OPENAI_SOURCE,
     runtime_supported: true,
+    ...OPENAI_IMAGE_INPUT,
   },
   {
     provider_id: "openai",
@@ -75,6 +97,7 @@ export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
     token_estimator: "openai_tiktoken_o200k",
     source_url: OPENAI_SOURCE,
     runtime_supported: true,
+    ...OPENAI_IMAGE_INPUT,
   },
   {
     provider_id: "openai",
@@ -90,6 +113,7 @@ export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
     token_estimator: "openai_tiktoken_o200k",
     source_url: OPENAI_SOURCE,
     runtime_supported: true,
+    ...OPENAI_IMAGE_INPUT,
   },
   {
     provider_id: "openai",
@@ -105,6 +129,7 @@ export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
     token_estimator: "openai_tiktoken_o200k",
     source_url: OPENAI_SOURCE,
     runtime_supported: true,
+    ...OPENAI_IMAGE_INPUT,
   },
   {
     provider_id: "openai",
@@ -120,5 +145,6 @@ export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
     token_estimator: "openai_tiktoken_o200k",
     source_url: OPENAI_SOURCE,
     runtime_supported: true,
+    ...OPENAI_IMAGE_INPUT,
   },
 ];

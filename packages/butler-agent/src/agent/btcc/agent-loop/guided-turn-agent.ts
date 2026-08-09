@@ -10,6 +10,8 @@ import { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { createProviderModelRoundPort } from
   "../../../integrations/providers/runtime.ts";
+import { createFileStoreVerifiedImagePayloadPort } from
+  "../../image-attachment/index.ts";
 import {
   guidedInstructions,
   providerImageAttachments,
@@ -23,6 +25,7 @@ import {
   guidedNativeToolDefinitions,
   guidedPolicy,
   hiddenNativeToolNamesForGuidedTurn,
+  isZaiMcpVisionTurn,
   routeForUsedTools,
   selectedModelRef,
   visibleToolDefinitions,
@@ -108,7 +111,7 @@ export function createProductionGuidedTurnAgent(input: {
       }
       const authorizedTools = authorizedToolDefinitions(turn);
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
-      const visibleTools = visibleToolDefinitions(authorizedTools, policy);
+      const visibleTools = visibleToolDefinitions(authorizedTools, policy, isZaiMcpVisionTurn(turn));
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
       const describedToolIds = new Set<string>();
       const effectService = createGuidedEffectService(input.effectJournal);
@@ -121,6 +124,9 @@ export function createProductionGuidedTurnAgent(input: {
         originChatId: turn.sessionId,
         projectId: policy.projectId ?? turn.context.projectRef,
         turnId: turn.turnId,
+        imageManifests: providerImageAttachments(turn).flatMap((a) => a.visualManifest ? [a.visualManifest] : []),
+        ...(turn.context.imageAdmission ? { imageCarrier: turn.context.imageAdmission.tuple, imageCapability: turn.context.imageAdmission.capability } : {}),
+        verifiedImagePayloadPort: createFileStoreVerifiedImagePayloadPort(input.butlerData),
         turnContext: turn.originalMessage,
         searchPlanner: async () => ({
           plan: null,
@@ -254,6 +260,9 @@ export function createProductionGuidedTurnAgent(input: {
         signal,
         butlerData: input.butlerData,
         attachments: providerImageAttachments(turn),
+        ...(turn.context.imageAdmission ? { imageCarrier: turn.context.imageAdmission.tuple, imageCapability: turn.context.imageAdmission.capability } : {}),
+        imageManifests: providerImageAttachments(turn).flatMap((a) => a.visualManifest ? [a.visualManifest] : []),
+        verifiedImagePayloadPort: createFileStoreVerifiedImagePayloadPort(input.butlerData),
         onProviderResponseIdentity,
         tools: visibleTools,
         // This is an internal execution-window size. The same Turn remains

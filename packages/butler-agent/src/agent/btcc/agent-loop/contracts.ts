@@ -9,6 +9,12 @@ import type {
   ModelRoundTool,
   ModelRoundToolCall,
 } from "../ports/model-round.ts";
+import type {
+  ImageCapabilityEvidence,
+  ImageCarrierTuple,
+  VerifiedImagePayloadPort,
+  VisualAdmittedManifest,
+} from "../../image-attachment/index.ts";
 import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
 import type {
@@ -113,6 +119,10 @@ export interface BtccAgentLoopInput {
   cacheScope?: string;
   signal?: AbortSignal;
   attachments?: readonly AttachmentRef[];
+  imageCarrier?: ImageCarrierTuple;
+  imageCapability?: ImageCapabilityEvidence;
+  imageManifests?: readonly VisualAdmittedManifest[];
+  verifiedImagePayloadPort?: VerifiedImagePayloadPort;
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
   onProviderStreamEvent?: ProviderStreamProjectionHandler;

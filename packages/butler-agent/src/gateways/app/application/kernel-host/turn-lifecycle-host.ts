@@ -25,6 +25,7 @@ import type {
   TurnControlResolution,
   TurnExecutionControlsV1,
 } from "../../../core/turn-execution-controls.ts";
+import type { VisualImageAdmissionResult } from "../../../../agent/image-attachment/contracts.ts";
 
 export interface AppStoreKernelTurnLifecycleHost {
   reconcileTurnLocalWorkOutcomeForTurn(turn: TurnRecord): void;
@@ -58,6 +59,7 @@ export interface AppStoreKernelTurnLifecycleHost {
     message: MessageRecord;
     text: string;
     executionControls: TurnExecutionControlsV1;
+    visualAdmission?: VisualImageAdmissionResult;
   }): TurnRecord;
   runSystemResponderTurn(
     chatId: string,
