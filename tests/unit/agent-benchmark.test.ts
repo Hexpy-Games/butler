@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, sy
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import {
   AGENT_BENCHMARK_BASELINE_SHA,
@@ -22,8 +23,8 @@ import { createGatedBenchmarkObservation, redactBenchmarkResult, resumeOrInitial
 import { ExternalCliAdapter } from "../support/agent-benchmark/external-adapter.ts";
 import { createButlerAdapter, promptCacheKeyPrefixForPair } from "../support/agent-benchmark/butler-adapter.ts";
 import { copyGeneratedArtifacts } from "../support/agent-benchmark/butler-output.ts";
-import { executeCommand, safeEnvironment } from "../support/agent-benchmark/command.ts";
-import { commandFor, parseCliOutput } from "../support/agent-benchmark/cli-output.ts";
+import { canSettleAfterExit, executeCommand, outputStreamIsComplete, safeEnvironment, type CommandExecutor } from "../support/agent-benchmark/command.ts";
+import { commandFor, hermesUsageDiagnosticFor, parseCliOutput, parseHermesUsageFile } from "../support/agent-benchmark/cli-output.ts";
 import { materializeEvidenceWorkspace, materializeRepositoryEvidence, readRepositoryEvidenceFiles, verifyEvidenceWorkspace, verifyRepositoryEvidence } from "../support/agent-benchmark/repository-evidence.ts";
 import { runtimeInstructions } from "../support/agent-benchmark/workflow.ts";
 import { runBenchmarkArm } from "../support/agent-benchmark/workflow-arm.ts";
@@ -33,10 +34,38 @@ import type {
   AdapterRunInput,
   AdapterRunResult,
   AgentAdapter,
+  BenchmarkArmPlan,
   BenchmarkObservation,
   PreflightResult,
 } from "../support/agent-benchmark/contracts.ts";
 import { prepareElectronRun } from "../e2e/btcc-r3-electron/isolation-config.ts";
+import { prepareArmRoots } from "../support/agent-benchmark/isolation.ts";
+import { BENCHMARK_SUPPORTED_TRACKS } from "../support/agent-benchmark/planning.ts";
+
+function recommendedArmFrom(arm: BenchmarkArmPlan): BenchmarkArmPlan {
+  return {
+    ...arm,
+    key: `${arm.key}:recommended-fixture`,
+    track: "recommended-default",
+    cachePairId: `${arm.cachePairId}:recommended-fixture`,
+    outputRoot: `${arm.outputRoot}-recommended-fixture`,
+    dataRoot: `${arm.dataRoot}-recommended-fixture`,
+    evidenceRoot: `${arm.evidenceRoot}-recommended-fixture`,
+    cacheRoot: `${arm.cacheRoot}-recommended-fixture`,
+    effectiveConfig: {
+      model: null,
+      reasoning: null,
+      permissions: "product-recommended-default",
+      tools: ["filesystem", "web", "terminal"],
+      memoryEnabled: null,
+      skillsEnabled: null,
+      pluginsEnabled: null,
+      mcpEnabled: null,
+      provider: null,
+      variant: null,
+    },
+  };
+}
 
 test("agent benchmark plan pins baseline, hashes fixtures, and randomizes deterministically", () => {
   const first = createBenchmarkPlan({
@@ -53,13 +82,29 @@ test("agent benchmark plan pins baseline, hashes fixtures, and randomizes determ
     sourceRoot: "/tmp/agent-benchmark-source-b",
     controlledModel: "openai/gpt-5.5",
   });
+  const differentSeed = createBenchmarkPlan({
+    runId: "run-c",
+    seed: 43,
+    runRoot: "/tmp/agent-benchmark-run-c",
+    sourceRoot: "/tmp/agent-benchmark-source-c",
+    controlledModel: "openai/gpt-5.5",
+  });
   expect(first.baselineSha).toBe(AGENT_BENCHMARK_BASELINE_SHA);
   expect(first.arms.map((arm) => arm.agent)).toEqual(second.arms.map((arm) => arm.agent));
-  expect(first.arms.some((arm) => arm.track === "controlled")).toBe(true);
-  expect(first.arms.some((arm) => arm.track === "recommended-default")).toBe(true);
-  expect(first.arms.some((arm) => arm.cache === "cold")).toBe(true);
-  expect(first.arms.some((arm) => arm.cache === "warm")).toBe(true);
-  for (const pair of new Set(first.arms.map((arm) => arm.cachePairId))) {
+  expect(first.arms.filter((arm) => arm.scenario === "direct_conversation").map((arm) => arm.agent)).not.toEqual(
+    differentSeed.arms.filter((arm) => arm.scenario === "direct_conversation").map((arm) => arm.agent),
+  );
+  expect(first.tracks).toEqual(["controlled"]);
+  expect(BENCHMARK_SUPPORTED_TRACKS).toEqual(["controlled", "recommended-default"]);
+  expect(first.arms).toHaveLength(12);
+  expect(first.arms.filter((arm) => arm.scenario === "direct_conversation")).toHaveLength(6);
+  expect(first.arms.filter((arm) => arm.scenario === "current_web_research")).toHaveLength(3);
+  expect(first.arms.filter((arm) => arm.scenario === "butler_landing_page")).toHaveLength(3);
+  expect(first.arms.filter((arm) => arm.track === "recommended-default")).toHaveLength(0);
+  for (const agent of ["butler", "hermes", "opencode"] as const) {
+    expect(first.arms.filter((arm) => arm.agent === agent)).toHaveLength(4);
+  }
+  for (const pair of new Set(first.arms.filter((arm) => arm.scenario === "direct_conversation").map((arm) => arm.cachePairId))) {
     const arms = first.arms.filter((arm) => arm.cachePairId === pair);
     expect(arms.map((arm) => arm.cache)).toEqual(["cold", "warm"]);
     expect(arms[0]!.cacheRoot).toBe(arms[1]!.cacheRoot);
@@ -68,12 +113,19 @@ test("agent benchmark plan pins baseline, hashes fixtures, and randomizes determ
   expect(first.fixtures.every((fixture) => fixture.sha256.length === 64)).toBe(true);
   expect(hashBenchmarkFixture(AGENT_BENCHMARK_FIXTURES[0]!)).toBe(first.fixtures[0]!.sha256);
   const hermesControlled = first.arms.find((arm) => arm.agent === "hermes" && arm.track === "controlled")!;
-  expect(hermesControlled.effectiveConfig.provider).toBeNull();
-  expect(hermesControlled.effectiveConfig.reasoning).toBeNull();
+  expect(hermesControlled.effectiveConfig.model).toBe("openai/gpt-5.5");
+  expect(hermesControlled.effectiveConfig.provider).toBe("openai-codex");
+  expect(hermesControlled.effectiveConfig.reasoning).toBe("medium");
   expect(hermesControlled.effectiveConfig.variant).toBeNull();
   const trimmed = createBenchmarkPlan({ runId: "trimmed-model", seed: 42, runRoot: "/tmp/trimmed-run", sourceRoot: "/tmp/trimmed-source", controlledModel: "  openai/gpt-5.5  " });
   expect(trimmed.arms.find((arm) => arm.track === "controlled" && arm.agent === "butler")!.effectiveConfig.model).toBe("openai/gpt-5.5");
   expect(() => createBenchmarkPlan({ runId: "unsafe-plan", seed: 42, runRoot: "/tmp/unsafe-run", sourceRoot: "/tmp/unsafe-source", controlledModel: "openai/gpt|secret" })).toThrow();
+  const solPlan = createBenchmarkPlan({ runId: "sol-plan", seed: 42, runRoot: "/tmp/sol-run", sourceRoot: "/tmp/sol-source", controlledModel: "openai/gpt-5.6-sol", controlledReasoning: "medium" });
+  const solHermes = solPlan.arms.find((arm) => arm.agent === "hermes" && arm.track === "controlled")!;
+  expect(solHermes.effectiveConfig).toMatchObject({ model: "openai/gpt-5.6-sol", provider: "openai-codex", reasoning: "medium" });
+  const nonSolPlan = createBenchmarkPlan({ runId: "non-sol-plan", seed: 42, runRoot: "/tmp/non-sol-run", sourceRoot: "/tmp/non-sol-source", controlledModel: "anthropic/claude-sonnet-4", controlledReasoning: "low" });
+  const nonSolHermes = nonSolPlan.arms.find((arm) => arm.agent === "hermes" && arm.track === "controlled" && arm.scenario === "current_web_research")!;
+  expect(nonSolHermes.effectiveConfig).toMatchObject({ model: "anthropic/claude-sonnet-4", provider: null, reasoning: "low" });
 });
 
 test("Butler paired cache arms resolve one provider cache namespace per pair", async () => {
@@ -172,6 +224,7 @@ test("public benchmark CLI rejects unknown commands", () => {
   expect(() => parseOptions(["unknown", "--seed", "1", "--controlled-model", "openai/gpt-5.5"])).toThrow();
   expect(() => parseOptions(["pilot", "--seed", "1", "--controlled-model", "openai/gpt-5.5", "--typo"])).toThrow();
   expect(() => parseOptions(["pilot", "--seed", "1", "--controlled-model"])).toThrow();
+  expect(() => parseOptions(["pilot", "--seed", "1", "--controlled-model", "openai/gpt-5.5"])).toThrow("canonical pilot");
 });
 
 test("public benchmark CLI rejects unsafe run ids and report paths outside the run root", () => {
@@ -244,7 +297,9 @@ test("public pilot command stays preflight-only without execute flag", async () 
     "--seed",
     "19",
     "--controlled-model",
-    "openai/gpt-5.5",
+    "openai/gpt-5.6-sol",
+    "--controlled-reasoning",
+    "medium",
     "--run-root",
     join(root, "run"),
     "--source-root",
@@ -252,7 +307,7 @@ test("public pilot command stays preflight-only without execute flag", async () 
     "--output",
     join(root, "run", "report"),
   ]);
-  expect(JSON.parse(output).gates).toBe(36);
+  expect(JSON.parse(output).gates).toBe(12);
 });
 
 test("workflow preflight-only mode never launches arms on a clean pinned baseline", async () => {
@@ -261,6 +316,7 @@ test("workflow preflight-only mode never launches arms on a clean pinned baselin
   // Keep a real clean pinned checkout while reusing local Git objects; the
   // workflow itself still performs the authoritative SHA/clean-status gate.
   execFileSync("git", ["clone", "--quiet", "--local", process.cwd(), sourceRoot], { stdio: "ignore" });
+  execFileSync("git", ["-C", sourceRoot, "checkout", "--quiet", "--detach", AGENT_BENCHMARK_BASELINE_SHA], { stdio: "ignore" });
   const calls: string[] = [];
   const adapters = {
     butler: fakeAdapter(calls, "butler"),
@@ -283,6 +339,7 @@ test("landing evidence failure gates only landing arms, not direct or web arms",
   // keeps the local object store hard-linked so the source-integrity check
   // does not spend its entire timeout copying the repository's history.
   execFileSync("git", ["clone", "--quiet", "--local", process.cwd(), sourceRoot], { stdio: "ignore" });
+  execFileSync("git", ["-C", sourceRoot, "checkout", "--quiet", "--detach", AGENT_BENCHMARK_BASELINE_SHA], { stdio: "ignore" });
   const plan = createBenchmarkPlan({ runId: "landing-evidence-scope", seed: 38, runRoot: join(root, "run"), sourceRoot, controlledModel: "openai/gpt-5.5" });
   const adapter = fakeAdapter([], "butler");
   const preflight: PreflightResult = { available: true, executable: "fixture", version: "fixture", authenticated: true, configVerified: true, gateCode: "none", diagnostic: null };
@@ -295,10 +352,10 @@ test("landing evidence failure gates only landing arms, not direct or web arms",
   rmSync(root, { recursive: true, force: true });
 }, 30_000);
 
-test("preflight-resolved recommended model survives a gated observation", () => {
+test("preflight-resolved model survives a gated controlled observation", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-benchmark-preflight-config-"));
   const plan = createBenchmarkPlan({ runId: "preflight-config", seed: 35, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
-  const arm = plan.arms.find((candidate) => candidate.agent === "hermes" && candidate.track === "recommended-default")!;
+  const arm = plan.arms.find((candidate) => candidate.agent === "hermes" && candidate.track === "controlled")!;
   const observation = createGatedBenchmarkObservation(arm, { available: false, executable: "hermes", version: "hermes-1", authenticated: false, configVerified: false, gateCode: "authentication_unavailable", diagnostic: "auth unavailable", effectiveConfig: { model: "resolved/hermes-model" } });
   expect(observation.effectiveConfig.model).toBe("resolved/hermes-model");
 });
@@ -358,8 +415,10 @@ test("Butler landing evidence uses a read-only input namespace and detects works
 
 test("Butler adapter uses the last turn and BTCC telemetry when present", async () => {
   const root = mkdtempSync(join(tmpdir(), "agent-benchmark-butler-evidence-"));
-  const dataRoot = join(root, "data");
   writeFileSync(join(root, "package.json"), '{"version":"fixture-butler-1"}', "utf8");
+  const plan = createBenchmarkPlan({ runId: "butler-evidence", seed: 15, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
+  const arm = plan.arms.find((candidate) => candidate.agent === "butler" && candidate.scenario === "direct_conversation" && candidate.cache === "cold" && candidate.track === "controlled")!;
+  const dataRoot = join(arm.evidenceRoot, "data");
   mkdirSync(join(dataRoot, "metrics"), { recursive: true });
   mkdirSync(join(dataRoot, "transcripts"), { recursive: true });
   writeFileSync(join(dataRoot, "metrics", "prompt-cache-usage.jsonl"), JSON.stringify({ model: "gpt-5.5", promptTokens: 4, cachedTokens: 1, totalTokens: 7, ts: Date.now() }) + "\n", "utf8");
@@ -369,8 +428,6 @@ test("Butler adapter uses the last turn and BTCC telemetry when present", async 
     { payload: { metadata: { turnId: "last", event: { kind: "tool.started", createdAt: new Date(25).toISOString(), payload: { toolCallId: "call-last", toolName: "write" } } } } },
     { payload: { metadata: { turnId: "last", event: { kind: "tool.failed", createdAt: new Date(27).toISOString(), payload: { toolCallId: "call-last", toolName: "write" } } } } },
   ].map((entry) => JSON.stringify(entry)).join("\n") + "\n", "utf8");
-  const plan = createBenchmarkPlan({ runId: "butler-evidence", seed: 15, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
-  const arm = plan.arms.find((candidate) => candidate.agent === "butler" && candidate.scenario === "direct_conversation" && candidate.cache === "cold" && candidate.track === "controlled")!;
   mkdirSync(arm.outputRoot, { recursive: true });
   const adapter = createButlerAdapter(async () => ({
     run: { dataRoot, workspaceRoot: arm.outputRoot },
@@ -392,6 +449,103 @@ test("Butler adapter uses the last turn and BTCC telemetry when present", async 
   expect(result.adapterVersion).toBe("fixture-butler-1");
   expect(result.operations.userInterventions).toBe(0);
   expect(result.effectiveConfig?.model).toBe("openai/gpt-5.5");
+});
+
+test("Butler harness receives a nonexistent evidence root while external roots remain usable", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-benchmark-evidence-lifecycle-"));
+  try {
+    const plan = createBenchmarkPlan({ runId: "evidence-lifecycle", seed: 15, runRoot: join(root, "run"), sourceRoot: process.cwd(), controlledModel: "openai/gpt-5.5" });
+    const butlerArm = plan.arms.find((candidate) => candidate.agent === "butler" && candidate.scenario === "direct_conversation" && candidate.track === "controlled" && candidate.cache === "cold")!;
+    prepareArmRoots(butlerArm);
+    let evidenceRootExistedAtInvocation: boolean | null = null;
+    const adapter = createButlerAdapter(async (input) => {
+      evidenceRootExistedAtInvocation = existsSync(input.arm.evidenceRoot);
+      return {
+        run: { workspaceRoot: input.arm.outputRoot },
+        session: { id: "fixture-session" },
+        observations: [{ finalText: "fixture answer", providerReportedModel: input.arm.effectiveConfig.model, timing: { submittedAtMs: 1, terminalAtMs: 2 }, turnId: "turn-1" }],
+        providerRequests: [],
+      };
+    }, process.cwd());
+    const result = await adapter.run({ arm: butlerArm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+    expect(evidenceRootExistedAtInvocation === false).toBe(true);
+    expect(result.gateCode).toBe("none");
+
+    const hermesArm = plan.arms.find((candidate) => candidate.agent === "hermes" && candidate.scenario === "current_web_research" && candidate.track === "controlled" && candidate.cache === "cold")!;
+    prepareArmRoots(hermesArm);
+    expect(existsSync(hermesArm.evidenceRoot)).toBe(true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Butler adapter cleans ephemeral runtime data after successful and failed harness evidence", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-benchmark-runtime-cleanup-"));
+  try {
+    const plan = createBenchmarkPlan({ runId: "runtime-cleanup", seed: 55, runRoot: join(root, "run"), sourceRoot: process.cwd(), controlledModel: "openai/gpt-5.5" });
+    const arm = plan.arms.find((candidate) => candidate.agent === "butler" && candidate.scenario === "direct_conversation" && candidate.track === "controlled" && candidate.cache === "cold")!;
+    mkdirSync(arm.outputRoot, { recursive: true });
+    for (const failed of [false, true]) {
+      const adapter = createButlerAdapter(async (input) => {
+        mkdirSync(input.arm.evidenceRoot, { recursive: true });
+        const dataRoot = join(input.arm.evidenceRoot, "data");
+        mkdirSync(dataRoot, { recursive: true });
+        writeFileSync(join(dataRoot, "runtime.db"), "ephemeral", "utf8");
+        const evidence = {
+          ok: !failed,
+          ...(failed ? { error: "harness failed" } : {}),
+          run: { dataRoot, workspaceRoot: input.arm.outputRoot },
+          session: { id: "fixture-session" },
+          observations: failed ? [] : [{ finalText: "fixture answer", providerReportedModel: input.arm.effectiveConfig.model, timing: { submittedAtMs: 1, terminalAtMs: 2 }, turnId: "turn-1" }],
+          providerRequests: [],
+        };
+        writeFileSync(join(input.arm.evidenceRoot, "evidence.json"), JSON.stringify(evidence), "utf8");
+        if (failed) throw new Error("harness failed");
+        return evidence;
+      }, process.cwd());
+      const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+      expect(existsSync(join(arm.evidenceRoot, "data"))).toBe(false);
+      expect(existsSync(join(arm.evidenceRoot, "evidence.json"))).toBe(true);
+      expect(result.exitCode).toBe(failed ? 1 : 0);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Butler runtime cleanup fails closed for out-of-root and symlink data paths", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-benchmark-runtime-cleanup-boundary-"));
+  try {
+    const plan = createBenchmarkPlan({ runId: "runtime-cleanup-boundary", seed: 56, runRoot: join(root, "run"), sourceRoot: process.cwd(), controlledModel: "openai/gpt-5.5" });
+    const arm = plan.arms.find((candidate) => candidate.agent === "butler" && candidate.scenario === "direct_conversation" && candidate.track === "controlled" && candidate.cache === "cold")!;
+    mkdirSync(arm.outputRoot, { recursive: true });
+    const outside = join(root, "outside-data");
+    const symlinkTarget = join(arm.evidenceRoot, "data-link");
+    for (const dataRoot of [outside, symlinkTarget]) {
+      const adapter = createButlerAdapter(async (input) => {
+        mkdirSync(input.arm.evidenceRoot, { recursive: true });
+        mkdirSync(outside, { recursive: true });
+        writeFileSync(join(outside, "keep.txt"), "keep", "utf8");
+        if (dataRoot === symlinkTarget) symlinkSync(outside, symlinkTarget, "dir");
+        const evidence = {
+          ok: true,
+          run: { dataRoot, workspaceRoot: input.arm.outputRoot },
+          session: { id: "fixture-session" },
+          observations: [{ finalText: "fixture answer", providerReportedModel: input.arm.effectiveConfig.model, timing: { submittedAtMs: 1, terminalAtMs: 2 }, turnId: "turn-1" }],
+          providerRequests: [],
+        };
+        return evidence;
+      }, process.cwd());
+      const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+      expect(result.gateCode).toBe("configuration_unverifiable");
+      expect(evaluateAdapterResult(arm, AGENT_BENCHMARK_FIXTURES[0]!, result).terminalState).toBe("gated");
+      expect(existsSync(join(outside, "keep.txt"))).toBe(true);
+      if (dataRoot === symlinkTarget) expect(existsSync(symlinkTarget)).toBe(true);
+      if (dataRoot === symlinkTarget) rmSync(symlinkTarget, { force: true });
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("Butler landing artifact copy includes extra generated assets but excludes input namespace", async () => {
@@ -477,6 +631,25 @@ test("report summary with a gate never becomes rank eligible", () => {
   expect(summary.gatedAgents.length).toBeGreaterThan(0);
 });
 
+test("report truthfully distinguishes complete all-rejected results from missing or gated runs", () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-benchmark-report-rejected-"));
+  const plan = createBenchmarkPlan({ runId: "report-rejected", seed: 45, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.6-sol" });
+  const observations = plan.arms.map((arm) => ({
+    ...emptyObservation(arm),
+    terminalState: "rejected" as const,
+    gateCode: "none" as const,
+    evaluation: { ...emptyObservation(arm).evaluation, accepted: false },
+    acceptedResultPerToken: null,
+  }));
+  const result = { schema: "butler.agent-benchmark.v1" as const, kind: "agent_benchmark_result" as const, run: { runId: plan.runId, seed: plan.seed, baselineSha: plan.baselineSha, runRoot: plan.runRoot, state: "reported" as const }, plan, observations };
+  const summary = summarizeBenchmarkResult(result);
+  expect(summary.canRank).toBe(false);
+  const markdown = generateBenchmarkReport(result);
+  expect(markdown).toContain("Ranking: withheld (no observation met acceptance criteria)");
+  expect(markdown).toContain("No observation met the acceptance criteria.");
+  expect(markdown).not.toContain("installation or another required observation is unavailable");
+});
+
 test("report ranking requires every planned arm and known token efficiency", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-benchmark-rank-"));
   const plan = createBenchmarkPlan({ runId: "rank-all", seed: 16, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
@@ -494,7 +667,8 @@ test("report ranking requires every planned arm and known token efficiency", () 
   const markdown = generateBenchmarkReport({ schema: "butler.agent-benchmark.v1", kind: "agent_benchmark_result", run: { runId: plan.runId, seed: plan.seed, baselineSha: plan.baselineSha, runRoot: plan.runRoot, state: "reported" }, plan, observations });
   expect(markdown).toContain("butler: model=");
   expect(markdown).toContain("hermes: model=");
-  expect(markdown).toContain("reasoning unavailable (Hermes CLI has no official per-run reasoning flag)");
+  expect(markdown).toContain("hermes: model=openai/gpt-5.5, reasoning=medium, provider=openai-codex");
+  expect(markdown).toContain("Recommended-default: butler: not present; hermes: not present; opencode: not present");
 });
 
 test("report ranking waits for typed visual review on every landing arm", () => {
@@ -527,14 +701,25 @@ test("report ranking waits for typed visual review on every landing arm", () => 
 
 test("group medians stay unknown when any planned repetition is missing a metric", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-benchmark-median-unknown-"));
-  const plan = createBenchmarkPlan({ runId: "median-unknown", seed: 33, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5", repetitionsPerCache: 2 });
-  const [first, second] = plan.arms.filter((arm) => arm.agent === "butler" && arm.scenario === "direct_conversation" && arm.track === "controlled" && arm.cache === "cold");
-  const observations = [first, second].filter(Boolean).map((arm, index) => ({
-    ...emptyObservation(arm!),
-    usage: { ...emptyObservation(arm!).usage, totalTokens: index === 0 ? 100 : null },
-    timing: { ...emptyObservation(arm!).timing, totalElapsedMs: index === 0 ? 10 : null },
+  const plan = createBenchmarkPlan({ runId: "median-unknown", seed: 33, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
+  const first = plan.arms.find((arm) => arm.agent === "butler" && arm.scenario === "direct_conversation" && arm.track === "controlled" && arm.cache === "cold")!;
+  const second = {
+    ...first,
+    key: `${first.key}:synthetic-repetition`,
+    repetition: 2,
+    order: first.order + plan.arms.length,
+    cachePairId: `${first.cachePairId}:synthetic-repetition`,
+    outputRoot: `${first.outputRoot}-synthetic-repetition`,
+    dataRoot: `${first.dataRoot}-synthetic-repetition`,
+    evidenceRoot: `${first.evidenceRoot}-synthetic-repetition`,
+  };
+  const medianPlan = { ...plan, arms: [first, second] };
+  const observations = [first, second].map((arm, index) => ({
+    ...emptyObservation(arm),
+    usage: { ...emptyObservation(arm).usage, totalTokens: index === 0 ? 100 : null },
+    timing: { ...emptyObservation(arm).timing, totalElapsedMs: index === 0 ? 10 : null },
   }));
-  const summary = summarizeBenchmarkResult({ schema: "butler.agent-benchmark.v1", kind: "agent_benchmark_result", run: { runId: plan.runId, seed: plan.seed, baselineSha: plan.baselineSha, runRoot: plan.runRoot, state: "reported" }, plan, observations });
+  const summary = summarizeBenchmarkResult({ schema: "butler.agent-benchmark.v1", kind: "agent_benchmark_result", run: { runId: plan.runId, seed: plan.seed, baselineSha: plan.baselineSha, runRoot: plan.runRoot, state: "reported" }, plan: medianPlan, observations });
   const median = summary.medians.find((value) => value.agent === "butler" && value.scenario === "direct_conversation" && value.track === "controlled" && value.cache === "cold");
   expect(median?.totalTokens).toBeNull();
   expect(median?.elapsedMs).toBeNull();
@@ -546,7 +731,7 @@ test("external direct conversation uses one real session and sequential argv tur
   mkdirSync(bin, { recursive: true });
   const logPath = join(root, "argv.log");
   const script = join(bin, "hermes");
-  writeFileSync(script, `#!/bin/sh\nprintf '%s\\n' "$*" >> ${logPath}\ncase "$1" in\n  --version) echo 'hermes 1.0';;\n  auth) echo 'nous configured';;\n  config) echo 'openai/gpt-5.5';;\n  *) echo '{"sessionID":"real-session","text":"turn"}';;\nesac\n`, "utf8");
+  writeFileSync(script, `#!/bin/sh\nprintf '%s\\n' "$*" >> ${logPath}\ncase "$1" in\n  --version) echo 'hermes 1.0';;\n  auth) echo 'nous configured';;\n  config) if [ "$3" = "agent.reasoning_effort" ]; then echo '"medium"'; else echo '{"default":"gpt-5.6-sol","provider":"openai-codex","base_url":""}'; fi;;\n  *) echo 'session_id: real-session' >&2; echo 'turn';;\nesac\n`, "utf8");
   chmodSync(script, 0o755);
   const previousPath = process.env.PATH;
   const previousHome = process.env.HOME;
@@ -554,20 +739,31 @@ test("external direct conversation uses one real session and sequential argv tur
   process.env.HOME = root;
   mkdirSync(join(root, ".hermes"), { recursive: true });
   writeFileSync(join(root, ".hermes", "auth.json"), "{}", "utf8");
+  const db = new Database(join(root, ".hermes", "state.db"));
+  db.run("CREATE TABLE sessions (id TEXT PRIMARY KEY, model TEXT, billing_provider TEXT, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, api_call_count INTEGER, tool_call_count INTEGER)");
+  db.run("INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", ["real-session", "gpt-5.6-sol", "openai-codex", 40, 32, 8, 4, 4, 2]);
+  db.close();
   try {
     const plan = createBenchmarkPlan({ runId: "adapter", seed: 4, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
-    const arm = plan.arms.find((candidate) => candidate.agent === "hermes" && candidate.scenario === "direct_conversation" && candidate.cache === "cold" && candidate.track === "recommended-default")!;
+    const arm = plan.arms.find((candidate) => candidate.agent === "hermes" && candidate.scenario === "direct_conversation" && candidate.cache === "cold" && candidate.track === "controlled")!;
     mkdirSync(arm.outputRoot, { recursive: true });
     const adapter = new ExternalCliAdapter("hermes", { execute: executeCommand });
     const preflight = await adapter.preflight();
     expect(preflight.gateCode).toBe("none");
+    expect(preflight.effectiveConfig).toMatchObject({ model: "gpt-5.6-sol", provider: "openai-codex", reasoning: "medium" });
     const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: AGENT_BENCHMARK_FIXTURES[0]!.prompts.join("\n"), sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
     expect(result.gateCode).toBe("none");
     expect(result.sessionId).toBe("real-session");
     expect(result.adapterVersion).toBe("hermes 1.0");
-    expect(result.effectiveConfig?.model).toBe("openai/gpt-5.5");
+    expect(result.effectiveConfig?.model).toBe("gpt-5.6-sol");
+    expect(result.effectiveConfig?.provider).toBe("openai-codex");
+    expect(result.effectiveConfig?.reasoning).toBe("medium");
+    expect(result.usage).toMatchObject({ inputTokens: 40, cacheReadTokens: 8, cacheWriteTokens: 4, outputTokens: 32, totalTokens: 72, modelRequests: 4 });
     const calls = await (await import("node:fs/promises")).readFile(logPath, "utf8");
-    expect(calls.split("\n").filter(Boolean).filter((line) => line.includes("chat")).length).toBe(4);
+    const callLines = calls.split("\n").filter(Boolean);
+    const turnLines = callLines.filter((line) => line.startsWith("chat "));
+    expect(turnLines.length).toBe(4);
+    expect(turnLines.filter((line) => line.includes(" -q ")).length).toBe(4);
     expect(calls).toContain("--resume real-session");
   } finally {
     process.env.PATH = previousPath;
@@ -578,7 +774,7 @@ test("external direct conversation uses one real session and sequential argv tur
 test("external direct conversation gates when a resumed turn changes the real session", async () => {
   const root = mkdtempSync(join(tmpdir(), "agent-benchmark-session-mismatch-"));
   const plan = createBenchmarkPlan({ runId: "session-mismatch", seed: 32, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
-  const arm = plan.arms.find((candidate) => candidate.agent === "opencode" && candidate.scenario === "direct_conversation" && candidate.cache === "cold" && candidate.track === "recommended-default")!;
+  const arm = plan.arms.find((candidate) => candidate.agent === "opencode" && candidate.scenario === "direct_conversation" && candidate.cache === "cold" && candidate.track === "controlled")!;
   mkdirSync(arm.outputRoot, { recursive: true });
   let calls = 0;
   const adapter = new ExternalCliAdapter("opencode", { execute: async (_request) => {
@@ -609,7 +805,7 @@ test("OpenCode JSON events capture nested tool parts and a real session id", asy
   process.env.PATH = bin;
   try {
     const plan = createBenchmarkPlan({ runId: "opencode-adapter", seed: 5, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
-    const arm = plan.arms.find((candidate) => candidate.agent === "opencode" && candidate.scenario === "direct_conversation" && candidate.cache === "cold" && candidate.track === "recommended-default")!;
+    const arm = plan.arms.find((candidate) => candidate.agent === "opencode" && candidate.scenario === "direct_conversation" && candidate.cache === "cold" && candidate.track === "controlled")!;
     mkdirSync(arm.outputRoot, { recursive: true });
     const adapter = new ExternalCliAdapter("opencode", { execute: executeCommand });
     expect((await adapter.preflight()).gateCode).toBe("none");
@@ -666,6 +862,7 @@ test("Hermes plain output captures session_id metadata without treating it as th
   expect(parseCliOutput("hermes", "Session ID: 2026-session_1", 123).finalText).toBeNull();
   expect(parseCliOutput("opencode", JSON.stringify({ sessionID: "/Users/private/session", text: "answer" })).sessionId).toBeNull();
   expect(parseCliOutput("hermes", `session_id: ${"a".repeat(161)}\nA useful answer`, 123).sessionId).toBeNull();
+  expect(parseCliOutput("hermes", "A useful answer", 123, "session_id: stderr-session").sessionId).toBe("stderr-session");
 });
 
 test("OpenCode step-finish usage without unique part ids is unknown", () => {
@@ -707,6 +904,43 @@ test("accepted-result-per-token uses a complete input/output-derived total", () 
   expect(observation.terminalState).toBe("accepted");
   expect(observation.usage.totalTokens).toBe(20);
   expect(observation.acceptedResultPerToken).toBe(50_000);
+});
+
+test("direct synthesis evaluator accepts equivalent English and Korean claims but fails closed per omission", () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-benchmark-direct-eval-"));
+  const plan = createBenchmarkPlan({ runId: "direct-eval", seed: 25, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
+  const arm = plan.arms.find((candidate) => candidate.agent === "butler" && candidate.scenario === "direct_conversation" && candidate.track === "controlled" && candidate.cache === "cold")!;
+  const fixture = AGENT_BENCHMARK_FIXTURES.find((candidate) => candidate.id === "direct_conversation")!;
+  const english = "A reproducible benchmark pins inputs and records the environment. Confounding variables are controlled by holding the model and cache constant. Unavailable tools and measurements are gated and remain unknown, never counted as zero.";
+  const korean = "재현 가능한 벤치마크는 입력과 실행 환경을 고정하고 기록합니다. 비교의 교란 변수는 모델과 캐시를 동일하게 유지해 통제합니다. 사용할 수 없는 도구와 측정값은 게이트 처리하며 미확인으로 남기고 0으로 세지 않습니다.";
+  const equivalentKorean = "조건을 고정하고 입력과 실행 환경 및 평가 절차를 동일하게 유지합니다. 비교의 교란 변수는 모델과 캐시를 동일하게 유지해 통제합니다. 사용할 수 없는 도구와 측정값은 게이트 처리하며 미확인으로 남기고 0으로 세지 않습니다.";
+  for (const finalText of [english, korean, equivalentKorean]) {
+    const observation = evaluateAdapterResult(arm, fixture, baseAdapterResult({ finalText }));
+    expect(observation.evaluation.factualAccuracy).toBe(1);
+    expect(observation.evaluation.accepted).toBe(true);
+  }
+  const nearMiss = "입력과 실행 환경 및 평가 절차를 기록하고 설명합니다. 비교의 교란 변수는 모델과 캐시를 동일하게 유지해 통제합니다. 사용할 수 없는 도구와 측정값은 게이트 처리하며 미확인으로 남기고 0으로 세지 않습니다.";
+  const nearMissObservation = evaluateAdapterResult(arm, fixture, baseAdapterResult({ finalText: nearMiss }));
+  expect(nearMissObservation.evaluation.factualAccuracy).toBeLessThan(1);
+  expect(nearMissObservation.evaluation.accepted).toBe(false);
+  const omissions = [
+    english.replace("pins inputs and records the environment", "uses a benchmark"),
+    english.replace("Confounding variables are controlled by holding the model and cache constant.", "The model and cache are documented."),
+    english.replace("Unavailable tools and measurements are gated and remain unknown, never counted as zero.", "Unavailable tools are mentioned."),
+  ];
+  for (const finalText of omissions) {
+    const observation = evaluateAdapterResult(arm, fixture, baseAdapterResult({ finalText }));
+    expect(observation.evaluation.factualAccuracy).toBeLessThan(1);
+    expect(observation.evaluation.accepted).toBe(false);
+  }
+  for (const falseStatement of [
+    english.replace("Unavailable tools and measurements are gated and remain unknown, never counted as zero.", "Unavailable tools and measurements count as zero."),
+    korean.replace("사용할 수 없는 도구와 측정값은 게이트 처리하며 미확인으로 남기고 0으로 세지 않습니다.", "사용할 수 없는 도구와 측정값을 0으로 계산합니다."),
+  ]) {
+    const observation = evaluateAdapterResult(arm, fixture, baseAdapterResult({ finalText: falseStatement }));
+    expect(observation.evaluation.factualAccuracy).toBeLessThan(1);
+    expect(observation.evaluation.accepted).toBe(false);
+  }
 });
 
 test("external preflight does not infer authentication from a successful empty listing", async () => {
@@ -768,34 +1002,97 @@ test("OpenCode auth list with not-configured text is a gate", async () => {
   }
 });
 
-test("external controlled and warm arms preserve normal auth HOME and reuse the cache pair", async () => {
+test("OpenCode controlled preflight gates when the normal auth data root is unverifiable", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-benchmark-opencode-auth-root-"));
+  const bin = join(root, "bin");
+  mkdirSync(bin, { recursive: true });
+  const script = join(bin, "opencode");
+  writeFileSync(script, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo opencode; else echo 'provider configured'; fi\n", "utf8");
+  chmodSync(script, 0o755);
+  const previousPath = process.env.PATH;
+  const previousHome = process.env.HOME;
+  const previousXdgData = process.env.XDG_DATA_HOME;
+  process.env.PATH = bin;
+  process.env.HOME = join(root, "missing-home");
+  delete process.env.XDG_DATA_HOME;
+  try {
+    const result = await new ExternalCliAdapter("opencode", { execute: executeCommand }).preflight();
+    expect(result.available).toBe(false);
+    expect(result.authenticated).toBeNull();
+    expect(result.gateCode).toBe("configuration_unverifiable");
+    const symlinkHome = join(root, "symlink-home");
+    const symlinkData = join(symlinkHome, ".local", "share", "opencode");
+    const symlinkTarget = join(root, "auth-target.json");
+    mkdirSync(symlinkData, { recursive: true });
+    writeFileSync(symlinkTarget, "{}", "utf8");
+    symlinkSync(symlinkTarget, join(symlinkData, "auth.json"));
+    process.env.HOME = symlinkHome;
+    const symlinkResult = await new ExternalCliAdapter("opencode", { execute: executeCommand }).preflight();
+    expect(symlinkResult.gateCode).toBe("configuration_unverifiable");
+  } finally {
+    process.env.PATH = previousPath;
+    process.env.HOME = previousHome;
+    if (previousXdgData === undefined) delete process.env.XDG_DATA_HOME;
+    else process.env.XDG_DATA_HOME = previousXdgData;
+  }
+});
+
+test("external OpenCode controlled arms isolate legacy config while retaining normal auth data and paired cache", async () => {
   const root = mkdtempSync(join(tmpdir(), "agent-benchmark-external-cache-"));
   const bin = join(root, "bin");
   mkdirSync(bin, { recursive: true });
-  writeFileSync(join(bin, "opencode"), "#!/bin/sh\nprintf '%s|%s|%s\\n' \"$HOME\" \"${OPENCODE_CONFIG_CONTENT-}\" \"${XDG_CONFIG_HOME-}\" >> \"$BUTLER_DATA\"\nif [ \"$1\" = \"--version\" ]; then echo opencode; else echo '{\"sessionID\":\"session\",\"model\":\"openai/gpt-5.5\",\"text\":\"turn\"}'; fi\n", "utf8");
+  const normalHome = join(root, "normal-home");
+  const normalDataRoot = join(normalHome, ".local", "share");
+  mkdirSync(join(normalHome, ".opencode"), { recursive: true });
+  mkdirSync(join(normalDataRoot, "opencode"), { recursive: true });
+  writeFileSync(join(normalHome, ".opencode", "legacy-marker"), "normal-config", "utf8");
+  writeFileSync(join(normalDataRoot, "opencode", "auth.json"), "{}", "utf8");
+  writeFileSync(join(bin, "opencode"), "#!/bin/sh\nif [ -f \"$HOME/.opencode/legacy-marker\" ]; then legacy=legacy-visible; else legacy=legacy-hidden; fi\nprintf '%s|%s|%s|%s|%s|%s|%s\\n' \"$HOME\" \"${OPENCODE_CONFIG_CONTENT-}\" \"${XDG_CONFIG_HOME-}\" \"${OPENCODE_CONFIG_DIR-}\" \"${XDG_DATA_HOME-}\" \"${XDG_CACHE_HOME-}\" \"$legacy\" >> \"$BUTLER_DATA\"\nif [ \"$1\" = \"--version\" ]; then echo opencode; else echo '{\"sessionID\":\"session\",\"model\":\"openai/gpt-5.5\",\"text\":\"turn\"}'; fi\n", "utf8");
   chmodSync(join(bin, "opencode"), 0o755);
   const previousPath = process.env.PATH;
   const previousLog = process.env.BUTLER_DATA;
+  const previousHome = process.env.HOME;
+  const previousXdgData = process.env.XDG_DATA_HOME;
   process.env.PATH = bin;
   process.env.BUTLER_DATA = join(root, "home.log");
+  process.env.HOME = normalHome;
+  process.env.XDG_DATA_HOME = normalDataRoot;
   const plan = createBenchmarkPlan({ runId: "external-cache", seed: 14, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
   const adapter = new ExternalCliAdapter("opencode", { execute: executeCommand });
   const controlled = plan.arms.find((arm) => arm.agent === "opencode" && arm.cache === "cold" && arm.track === "controlled")!;
-  const warm = plan.arms.find((arm) => arm.agent === "opencode" && arm.cache === "warm" && arm.track === "recommended-default")!;
+  const warm = plan.arms.find((arm) => arm.agent === "opencode" && arm.cache === "warm" && arm.track === "controlled")!;
+  const recommended = recommendedArmFrom(controlled);
   mkdirSync(controlled.outputRoot, { recursive: true });
   mkdirSync(warm.outputRoot, { recursive: true });
-  const controlledResult = await adapter.run({ arm: controlled, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
-  const warmResult = await adapter.run({ arm: warm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
+  mkdirSync(recommended.outputRoot, { recursive: true });
+  const fixture = AGENT_BENCHMARK_FIXTURES[1]!;
+  const controlledResult = await adapter.run({ arm: controlled, fixture, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
+  const warmResult = await adapter.run({ arm: warm, fixture, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
+  const recommendedResult = await adapter.run({ arm: recommended, fixture, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
   expect(controlledResult.gateCode).toBe("none");
   expect(warmResult.gateCode).toBe("none");
+  expect(recommendedResult.gateCode).toBe("none");
   const homes = (await (await import("node:fs/promises")).readFile(process.env.BUTLER_DATA!, "utf8")).trim().split("\n");
-  expect(homes.every((home) => home.split("|")[0] !== controlled.cacheRoot && home.split("|")[0] !== warm.cacheRoot)).toBe(true);
+  expect(homes[0]!.split("|")[0]).toBe(join(controlled.dataRoot, "home"));
+  expect(homes[1]!.split("|")[0]).toBe(join(warm.dataRoot, "home"));
+  expect(homes[2]!.split("|")[0]).toBe(normalHome);
   expect(homes[0]).toContain('"bash":"deny"');
-  expect(homes[0]).toContain(controlled.cacheRoot);
-  expect(homes.at(-1)).not.toContain('"bash":"deny"');
-  expect(homes.at(-1)).not.toContain(controlled.cacheRoot);
+  expect(homes[0]).toContain(join(controlled.dataRoot, "xdg-config"));
+  expect(homes[0]).toContain(normalDataRoot);
+  expect(homes[0]).toContain(join(controlled.cacheRoot, "xdg-cache"));
+  expect(homes[0]).toContain(join(controlled.dataRoot, "opencode-config"));
+  expect(homes[0]).toContain("legacy-hidden");
+  expect(homes[1]).toContain(join(warm.dataRoot, "home"));
+  expect(homes[1]).toContain(join(controlled.cacheRoot, "xdg-cache"));
+  expect(homes[2]).toContain(normalHome);
+  expect(homes[2]).toContain(normalDataRoot);
+  expect(homes[2]).toContain("legacy-visible");
+  expect(homes[2]).not.toContain('"bash":"deny"');
   process.env.PATH = previousPath;
   process.env.BUTLER_DATA = previousLog;
+  process.env.HOME = previousHome;
+  if (previousXdgData === undefined) delete process.env.XDG_DATA_HOME;
+  else process.env.XDG_DATA_HOME = previousXdgData;
 });
 
 test("controlled command argv uses documented isolation/model flags", () => {
@@ -808,12 +1105,239 @@ test("controlled command argv uses documented isolation/model flags", () => {
   expect(hermes.args).toContain("web,file");
   expect(hermes.args).not.toContain("terminal");
   expect(hermes.args).toContain("--yolo");
-  expect(hermes.args).toContain("--quiet");
+  expect(hermes.args).toEqual(expect.arrayContaining(["chat", "-Q", "-q"]));
+  expect(hermes.args).not.toContain("-z");
+  expect(hermes.args).not.toContain("--usage-file");
+  expect(hermes.args).toContain("--provider");
+  expect(hermes.args).toContain("openai-codex");
   expect(hermes.args).toContain("--model");
-  expect(hermes.args).toContain("openai/gpt-5.5");
-  const opencode = commandFor("opencode", { arm: { ...arm, agent: "opencode" }, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  expect(hermes.args).toContain("gpt-5.5");
+  expect(hermes.args).toContain("--reasoning");
+  expect(hermes.args).toContain("medium");
+  const queryIndex = hermes.args.indexOf("-q");
+  expect(hermes.args[queryIndex + 1]).toBe("turn");
+  expect(queryIndex).toBe(hermes.args.length - 2);
+  const resumedHermes = commandFor("hermes", { arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: "session-1", sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  expect(resumedHermes.args).toContain("--resume");
+  expect(resumedHermes.args).toContain("session-1");
+  const resumedQueryIndex = resumedHermes.args.indexOf("-q");
+  expect(resumedHermes.args[resumedQueryIndex + 1]).toBe("turn");
+  expect(resumedHermes.args.indexOf("--resume")).toBeLessThan(resumedQueryIndex);
+  expect(resumedQueryIndex).toBe(resumedHermes.args.length - 2);
+  const landingArm = plan.arms.find((candidate) => candidate.agent === "hermes" && candidate.scenario === "butler_landing_page" && candidate.track === "controlled" && candidate.cache === "cold")!;
+  const hermesOneShot = commandFor("hermes", { arm: landingArm, fixture: AGENT_BENCHMARK_FIXTURES[2]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  expect(hermesOneShot.args).toContain("-z");
+  expect(hermesOneShot.args[hermesOneShot.args.indexOf("-z") + 1]).toBe("turn");
+  expect(hermesOneShot.args).toContain("--usage-file");
+  expect(hermesOneShot.args.find((arg) => arg.endsWith("/evidence/hermes-usage.json"))).toBeTruthy();
+  const recommendedArm = recommendedArmFrom(arm);
+  const recommended = commandFor("hermes", { arm: recommendedArm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  expect(recommended.args).toEqual(expect.arrayContaining(["chat", "-Q", "-q"]));
+  expect(recommended.args[recommended.args.indexOf("-q") + 1]).toBe("turn");
+  expect(recommended.args.indexOf("-q")).toBe(recommended.args.length - 2);
+  expect(recommended.args).not.toContain("-z");
+  expect(recommended.args).not.toContain("--usage-file");
+  expect(recommended.args).not.toContain("--provider");
+  expect(recommended.args).not.toContain("--model");
+  expect(recommended.args).not.toContain("--reasoning");
+  expect(recommended.args).not.toContain("--safe-mode");
+  expect(recommended.args).not.toContain("--toolsets");
+  expect(recommended.args).not.toContain("--yolo");
+  const recommendedLanding = recommendedArmFrom(landingArm);
+  const recommendedOneShot = commandFor("hermes", { arm: recommendedLanding, fixture: AGENT_BENCHMARK_FIXTURES[2]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  expect(recommendedOneShot.args).toContain("-z");
+  expect(recommendedOneShot.args).toContain("--usage-file");
+  const nonSolArm = createBenchmarkPlan({ runId: "non-sol-command", seed: 18, runRoot: join(root, "non-sol-run"), sourceRoot: join(root, "non-sol-source"), controlledModel: "anthropic/claude-sonnet-4", controlledReasoning: "low" }).arms.find((candidate) => candidate.agent === "hermes" && candidate.track === "controlled" && candidate.scenario === "current_web_research")!;
+  const nonSolCommand = commandFor("hermes", { arm: nonSolArm, fixture: AGENT_BENCHMARK_FIXTURES[1]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  expect(nonSolCommand.args).not.toContain("--provider");
+  expect(nonSolCommand.args).toContain("--model");
+  expect(nonSolCommand.args).toContain("claude-sonnet-4");
+  const opencodeArm = plan.arms.find((candidate) => candidate.agent === "opencode" && candidate.track === "controlled" && candidate.cache === "cold")!;
+  const opencode = commandFor("opencode", { arm: opencodeArm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
   expect(opencode.args).toContain("--auto");
   expect(opencode.args).toContain("openai/gpt-5.5");
+});
+
+test("Hermes usage file parser keeps bounded scalar telemetry and fails closed", () => {
+  const parsed = parseHermesUsageFile(JSON.stringify({
+    session_id: "hermes-session",
+    model: "gpt-5.6-sol",
+    provider: "openai-codex",
+    input_tokens: 10,
+    cache_read_tokens: 2,
+    cache_write_tokens: 1,
+    output_tokens: 8,
+    total_tokens: 21,
+    api_calls: 1,
+    completed: true,
+    failed: false,
+    failure: null,
+    prompt: "do not persist",
+    tool_payload: { secret: "never" },
+  }));
+  expect(parsed).toMatchObject({ sessionId: "hermes-session", model: "gpt-5.6-sol", provider: "openai-codex", inputTokens: 10, cacheReadTokens: 2, cacheWriteTokens: 1, outputTokens: 8, totalTokens: 21, apiCalls: 1, completed: true, failed: false });
+  const invalid = parseHermesUsageFile(JSON.stringify({ session_id: "/Users/private/session", model: "gpt-5.6-sol|secret", input_tokens: -1, output_tokens: 1e20, api_calls: "1", failure: "token=secret /Users/private" }));
+  expect(invalid.sessionId).toBeNull();
+  expect(invalid.model).toBeNull();
+  expect(invalid.inputTokens).toBeNull();
+  expect(invalid.outputTokens).toBeNull();
+  expect(invalid.apiCalls).toBeNull();
+  expect(invalid.failure).toBeNull();
+  expect(parseHermesUsageFile("not-json").totalTokens).toBeNull();
+  expect(parseHermesUsageFile("x".repeat(64 * 1024 + 1)).totalTokens).toBeNull();
+  expect(parseHermesUsageFile("é".repeat(33_000)).totalTokens).toBeNull();
+  expect(hermesUsageDiagnosticFor(parseHermesUsageFile(JSON.stringify({ completed: false, failed: false })))).toBe("Hermes usage telemetry reported an incomplete or failed one-shot.");
+  expect(hermesUsageDiagnosticFor(parseHermesUsageFile(JSON.stringify({ completed: true, failed: true })))).toBe("Hermes usage telemetry reported an incomplete or failed one-shot.");
+  expect(hermesUsageDiagnosticFor(parseHermesUsageFile(JSON.stringify({ completed: true, failed: false, failure: "safe failure" })))).toBe("Hermes usage telemetry reported an incomplete or failed one-shot.");
+});
+
+test("Hermes direct continuation uses stderr session identity and aggregate telemetry", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-benchmark-hermes-session-gate-"));
+  const bin = join(root, "bin");
+  mkdirSync(bin, { recursive: true });
+  const script = join(bin, "hermes");
+  writeFileSync(script, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo hermes; elif [ \"$1\" = \"auth\" ]; then echo 'nous configured'; elif [ \"$1\" = \"config\" ]; then echo '{\"model\":{\"default\":\"gpt-5.6-sol\",\"provider\":\"openai-codex\"}}'; else echo 'session_id: stdout-only-session'; echo answer; fi\n", "utf8");
+  chmodSync(script, 0o755);
+  const previousPath = process.env.PATH;
+  const previousHome = process.env.HOME;
+  process.env.PATH = bin;
+  process.env.HOME = root;
+  mkdirSync(join(root, ".hermes"), { recursive: true });
+  writeFileSync(join(root, ".hermes", "auth.json"), "{}", "utf8");
+  try {
+    const plan = createBenchmarkPlan({ runId: "hermes-session-gate", seed: 41, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
+    const arm = plan.arms.find((candidate) => candidate.agent === "hermes" && candidate.scenario === "direct_conversation" && candidate.track === "controlled" && candidate.cache === "cold")!;
+    mkdirSync(arm.outputRoot, { recursive: true });
+    const adapter = new ExternalCliAdapter("hermes", { execute: executeCommand });
+    expect((await adapter.preflight()).gateCode).toBe("none");
+    const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+    expect(result.gateCode).toBe("measurement_unavailable");
+  } finally {
+    process.env.PATH = previousPath;
+    process.env.HOME = previousHome;
+  }
+});
+
+test("Hermes one-shot failures remain failed while successful missing usage is gated", async () => {
+  const modes = ["exit-failure", "usage-failure", "missing-usage"] as const;
+  for (const mode of modes) {
+    const root = mkdtempSync(join(tmpdir(), `agent-benchmark-hermes-${mode}-`));
+    const executable = join(root, "hermes");
+    writeFileSync(executable, "", "utf8");
+    chmodSync(executable, 0o755);
+    mkdirSync(join(root, ".hermes"), { recursive: true });
+    writeFileSync(join(root, ".hermes", "auth.json"), "{}", "utf8");
+    const previousPath = process.env.PATH;
+    const previousHome = process.env.HOME;
+    process.env.PATH = root;
+    process.env.HOME = root;
+    const resultFor = (exitCode: number | null, stdout = "", stderr = "") => ({
+      exitCode,
+      stdout,
+      stderr,
+      startedAtMs: 10,
+      endedAtMs: 20,
+      firstOutputAtMs: stdout ? 12 : null,
+      timedOut: false,
+      cancelled: false,
+    });
+    const executor: CommandExecutor = {
+      execute: async ({ args }) => {
+        if (args[0] === "--version") return resultFor(0, "hermes 0.20.0\n");
+        if (args[0] === "auth") return resultFor(0, "nous configured\n");
+        if (args[0] === "config") {
+          return args[2] === "agent.reasoning_effort"
+            ? resultFor(0, '"medium"\n')
+            : resultFor(0, '{"default":"gpt-5.5","provider":"openai-codex"}\n');
+        }
+        const usageIndex = args.indexOf("--usage-file");
+        const usagePath = usageIndex >= 0 ? args[usageIndex + 1] : null;
+        if (usagePath && mode !== "missing-usage") {
+          writeFileSync(usagePath, JSON.stringify({
+            model: "gpt-5.5",
+            provider: "openai-codex",
+            input_tokens: 1,
+            output_tokens: 1,
+            total_tokens: 2,
+            api_calls: 1,
+            completed: mode !== "usage-failure",
+            failed: mode === "usage-failure",
+            failure: mode === "usage-failure" ? "safe failure" : null,
+          }), "utf8");
+        }
+        return resultFor(mode === "exit-failure" ? 7 : 0, "answer\n", mode === "exit-failure" ? "product failed\n" : "");
+      },
+    };
+    try {
+      const plan = createBenchmarkPlan({ runId: `hermes-${mode}`, seed: 41, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
+      const arm = plan.arms.find((candidate) => candidate.agent === "hermes" && candidate.scenario === "current_web_research" && candidate.track === "controlled" && candidate.cache === "cold")!;
+      mkdirSync(arm.outputRoot, { recursive: true });
+      const adapter = new ExternalCliAdapter("hermes", executor);
+      expect((await adapter.preflight()).gateCode).toBe("none");
+      const adapterResult = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[1]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+      const observation = evaluateAdapterResult(arm, AGENT_BENCHMARK_FIXTURES[1]!, adapterResult);
+      if (mode === "missing-usage") {
+        expect(adapterResult.gateCode).toBe("measurement_unavailable");
+        expect(adapterResult.exitCode).toBe(0);
+        expect(observation.terminalState).toBe("gated");
+      } else {
+        expect(adapterResult.gateCode).toBe("none");
+        expect(adapterResult.exitCode).not.toBe(0);
+        expect(observation.terminalState).toBe("failed");
+      }
+    } finally {
+      process.env.PATH = previousPath;
+      process.env.HOME = previousHome;
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("external adapter gates successful runs when command output completeness is unknown", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-benchmark-incomplete-output-"));
+  const executable = join(root, "hermes");
+  writeFileSync(executable, "", "utf8");
+  chmodSync(executable, 0o755);
+  mkdirSync(join(root, ".hermes"), { recursive: true });
+  writeFileSync(join(root, ".hermes", "auth.json"), "{}", "utf8");
+  const previousPath = process.env.PATH;
+  const previousHome = process.env.HOME;
+  process.env.PATH = root;
+  process.env.HOME = root;
+  const resultFor = (outputComplete?: boolean) => ({
+    exitCode: 0,
+    stdout: "answer\n",
+    stderr: "",
+    startedAtMs: 10,
+    endedAtMs: 20,
+    firstOutputAtMs: 12,
+    ...(outputComplete === undefined ? {} : { outputComplete }),
+    timedOut: false,
+    cancelled: false,
+  });
+  const executor: CommandExecutor = {
+    execute: async ({ args }) => {
+      if (args[0] === "--version") return resultFor(true);
+      if (args[0] === "auth") return { ...resultFor(true), stdout: "nous configured\n" };
+      if (args[0] === "config") return { ...resultFor(true), stdout: args[2] === "agent.reasoning_effort" ? '"medium"\n' : '{"default":"gpt-5.5","provider":"openai-codex"}\n' };
+      return resultFor(false);
+    },
+  };
+  try {
+    const plan = createBenchmarkPlan({ runId: "incomplete-output", seed: 44, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
+    const arm = plan.arms.find((candidate) => candidate.agent === "hermes" && candidate.scenario === "current_web_research" && candidate.cache === "cold")!;
+    mkdirSync(arm.outputRoot, { recursive: true });
+    const adapter = new ExternalCliAdapter("hermes", executor);
+    expect((await adapter.preflight()).gateCode).toBe("none");
+    const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[1]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+    expect(result.exitCode).toBe(0);
+    expect(result.gateCode).toBe("measurement_unavailable");
+    expect(result.stderr).toContain("output stream completeness");
+  } finally {
+    process.env.PATH = previousPath;
+    process.env.HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("timeout escalates an uncooperative process after bounded grace", async () => {
@@ -843,6 +1367,55 @@ test("command executor records first stdout emission before terminal", async () 
   expect(result.firstOutputAtMs).not.toBeNull();
   expect(result.firstOutputAtMs!).toBeGreaterThanOrEqual(result.startedAtMs);
   expect(result.firstOutputAtMs!).toBeLessThanOrEqual(result.endedAtMs);
+  expect(result.outputComplete).toBe(true);
+});
+
+test("command executor closes non-interactive stdin so EOF-driven products can finish", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-benchmark-stdin-eof-"));
+  const result = await executeCommand({
+    executable: process.execPath,
+    args: ["-e", "process.stdin.resume();process.stdin.once('end',()=>{process.stdout.write('eof');process.exit(0)});"],
+    cwd: root,
+    env: safeEnvironment(),
+    timeoutMs: 500,
+    signal: new AbortController().signal,
+  });
+  expect(result.exitCode).toBe(0);
+  expect(result.timedOut).toBe(false);
+  expect(result.stdout).toBe("eof");
+  expect(result.firstOutputAtMs).not.toBeNull();
+  expect(result.firstOutputAtMs!).toBeLessThanOrEqual(result.endedAtMs);
+  expect(result.outputComplete).toBe(true);
+});
+
+test("command executor settles rapid EOF exits without losing close events", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-benchmark-stdin-race-"));
+  const results = await Promise.all(Array.from({ length: 32 }, () => executeCommand({
+    executable: process.execPath,
+    args: ["-e", "process.stdin.resume();process.stdin.once('end',()=>process.stdout.write('eof'));"],
+    cwd: root,
+    env: safeEnvironment(),
+    timeoutMs: 2_000,
+    signal: new AbortController().signal,
+  })));
+  expect(results.every((result) => result.exitCode === 0 && !result.timedOut && result.stdout === "eof")).toBe(true);
+  expect(results.every((result) => result.firstOutputAtMs !== null && result.firstOutputAtMs! <= result.endedAtMs)).toBe(true);
+  expect(results.every((result) => result.outputComplete === true)).toBe(true);
+});
+
+test("command executor exit fallback requires both output streams to close", () => {
+  expect(canSettleAfterExit(false, true, true)).toBe(false);
+  expect(canSettleAfterExit(true, false, true)).toBe(false);
+  expect(canSettleAfterExit(true, true, false)).toBe(false);
+  expect(canSettleAfterExit(true, true, true)).toBe(true);
+});
+
+test("command executor treats destroyed zero-length streams as drained after exit", () => {
+  expect(outputStreamIsComplete({ destroyed: true, readableLength: 0 })).toBe(true);
+  expect(outputStreamIsComplete({ closed: true, readableLength: 0 })).toBe(true);
+  expect(outputStreamIsComplete({ readableEnded: true, readableLength: 0 })).toBe(true);
+  expect(outputStreamIsComplete({ destroyed: true, readableLength: 1 })).toBe(false);
+  expect(outputStreamIsComplete({ readableLength: 0 })).toBe(false);
 });
 
 test("landing evaluation rejects source mutation, missing validation, and weak generated claims", () => {

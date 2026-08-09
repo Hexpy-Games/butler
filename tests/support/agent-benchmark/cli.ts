@@ -30,6 +30,9 @@ export interface AgentBenchmarkCliOptions {
   visualReviewPath: string | null;
 }
 
+const CANONICAL_PILOT_MODEL = "openai/gpt-5.6-sol";
+const CANONICAL_PILOT_REASONING = "medium";
+
 export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<string> {
   const options = parseOptions(argv);
   const plan = createBenchmarkPlan({
@@ -90,6 +93,10 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
   assertNoSymlinkComponents(outputDirectory);
   const controlledModel = option(argv, "--controlled-model");
   if (!controlledModel) throw new Error("Missing required option: --controlled-model");
+  const controlledReasoning = option(argv, "--controlled-reasoning") ?? CANONICAL_PILOT_REASONING;
+  if (command === "pilot" && (controlledModel.trim() !== CANONICAL_PILOT_MODEL || controlledReasoning.trim() !== CANONICAL_PILOT_REASONING)) {
+    throw new Error(`The canonical pilot requires ${CANONICAL_PILOT_MODEL} with ${CANONICAL_PILOT_REASONING} reasoning`);
+  }
   return {
     command,
     runRoot,
@@ -99,7 +106,7 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
     runId,
     executeAvailable: argv.includes("--execute-available"),
     controlledModel,
-    controlledReasoning: option(argv, "--controlled-reasoning") ?? "medium",
+    controlledReasoning,
     visualReviewPath: option(argv, "--visual-review") ?? null,
   };
 }

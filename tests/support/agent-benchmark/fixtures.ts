@@ -5,7 +5,7 @@ import type {
   BenchmarkScenario,
 } from "./contracts.ts";
 
-const FIXTURE_VERSION = "2026-08-09.1";
+const FIXTURE_VERSION = "2026-08-09.2";
 
 /** The checked-in corpus is intentionally small and reviewable. */
 export const AGENT_BENCHMARK_FIXTURES: readonly BenchmarkFixture[] = [
@@ -19,9 +19,9 @@ export const AGENT_BENCHMARK_FIXTURES: readonly BenchmarkFixture[] = [
       "Turn 4/4: Synthesize the protocol in four bullets, preserving the correction and keeping the wording user-facing.",
     ],
     expectedClaims: [
-      "reproducibility requires pinned inputs and recorded environment",
-      "unavailable measurements remain unknown rather than fabricated",
-      "the correction is reflected in the final synthesis",
+      "reproducibility pins and records inputs and environment",
+      "confounding variables are controlled in the comparison",
+      "unavailable tools are gates or unknown rather than zeros",
     ],
   },
   {

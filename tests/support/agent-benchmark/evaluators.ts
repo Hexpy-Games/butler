@@ -21,6 +21,7 @@ import { boundedText } from "./command.ts";
 import { evaluateWebResearch } from "./web-evaluator.ts";
 import { landingClaimMatches } from "./landing-evaluator.ts";
 import { sanitizeEffectiveConfig } from "./identifiers.ts";
+import { directConversationClaimMatches } from "./direct-evaluator.ts";
 
 export { evaluateWebResearch } from "./web-evaluator.ts";
 
@@ -143,11 +144,7 @@ function evaluateFixture(
   const notes: string[] = [];
   const text = result.finalText?.toLowerCase() ?? "";
   const claimMatches = fixture.id === "direct_conversation"
-    ? [
-        /reproducib(?:le|ility)[^.]{0,120}(?:pinned|recorded)/u,
-        /unavailable[^.]{0,120}(?:unknown|null|fabricat)/u,
-        /correction[^.]{0,120}(?:synth|rule|reflected)/u,
-      ].filter((predicate) => predicate.test(text)).length
+    ? directConversationClaimMatches(text).filter(Boolean).length
     : landingClaimMatches(arm, fixture, repositoryEvidenceRoot);
   const factualAccuracy = fixture.expectedClaims?.length
     ? claimMatches / fixture.expectedClaims.length
@@ -180,6 +177,7 @@ function evaluateFixture(
     evidenceRefs: safeEvidenceRefs(result.evidenceRefs),
   };
 }
+
 
 function evaluatePrivacy(
   result: AdapterRunResult,
