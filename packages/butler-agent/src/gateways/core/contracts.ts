@@ -1,5 +1,14 @@
 import type { TurnExecutionControlsV1 } from "./turn-execution-controls.ts";
+import type { VisualAttachmentManifest } from "../../agent/image-attachment/contracts.ts";
+import type { VisualImageAdmissionResult } from "../../agent/image-attachment/contracts.ts";
 
+export type { VisualAttachmentManifest } from "../../agent/image-attachment/contracts.ts";
+
+/**
+ * Path-free evidence admitted by the BTCC image carrier.  The app/message
+ * boundary may persist the original bytes, but this DTO is the only image
+ * identity that may cross into BTCC/model rounds.
+ */
 export type SessionRole = "butler" | "steward" | "worker";
 export type ModelRef = `${string}/${string}`;
 export type PromptCacheRetention = "in_memory" | "24h";
@@ -13,6 +22,7 @@ export interface AttachmentRef {
   url?: string;
   localPath?: string;
   metadata?: Record<string, unknown>;
+  visualManifest?: VisualAttachmentManifest;
 }
 
 export interface ArtifactRef {
@@ -55,6 +65,7 @@ export interface InboundEnvelope {
     id: string;
     text?: string;
     attachments?: AttachmentRef[];
+    imageAdmission?: VisualImageAdmissionResult;
     timestamp: string;
   };
   routingHints?: {

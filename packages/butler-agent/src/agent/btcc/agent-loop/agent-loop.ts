@@ -26,7 +26,6 @@ import {
   resolveExecutionWindowSize,
   throwIfExecutionWindowAborted,
 } from "./execution-window.ts";
-
 function emit(
   events: BtccAgentLoopEvent[],
   onEvent: BtccAgentLoopInput["onEvent"],
@@ -84,6 +83,10 @@ export async function runBtccAgentLoop(
         reasoningEffort: input.reasoningEffort,
         signal: input.signal,
         attachments: input.attachments,
+        imageCarrier: input.imageCarrier,
+        imageCapability: input.imageCapability,
+        imageManifests: input.imageManifests,
+        verifiedImagePayloadPort: input.verifiedImagePayloadPort,
         butlerData: input.butlerData,
         usageAttribution: input.usageAttribution
           ? { ...input.usageAttribution, roundIndex }

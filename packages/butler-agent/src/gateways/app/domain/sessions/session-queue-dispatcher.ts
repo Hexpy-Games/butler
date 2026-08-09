@@ -11,6 +11,7 @@ import type {
   AppMessageResponder,
   SendMessageOptions,
 } from "./message-responder-contract.ts";
+import type { VisualImageAdmissionResult } from "../../../../agent/image-attachment/contracts.ts";
 
 export class AppSessionQueueDispatcher {
   constructor(
@@ -23,7 +24,12 @@ export class AppSessionQueueDispatcher {
         input: MessageSendRequest,
         responder?: AppMessageResponder,
         options?: SendMessageOptions,
+        visualAdmission?: VisualImageAdmissionResult,
       ) => Promise<MessageSendResult>;
+      validateVisualAdmission: (
+        admission: VisualImageAdmissionResult,
+        model: string,
+      ) => Promise<VisualImageAdmissionResult>;
       appendEvent: (type: string, payload: Record<string, unknown>) => void;
     },
   ) {}
@@ -50,6 +56,10 @@ export class AppSessionQueueDispatcher {
       this.markDispatching(chatId, row.id);
       try {
         const controls = this.input.queuedControlsFromRow(row);
+        const visualAdmission = parseQueuedVisualAdmission(row.attachments_json);
+        const validatedVisual = visualAdmission
+          ? await this.input.validateVisualAdmission(visualAdmission, controls.model)
+          : undefined;
         const result = await this.input.sendMessage(
           queuedMessageSendRequest(
             chatId,
@@ -59,6 +69,7 @@ export class AppSessionQueueDispatcher {
           ),
           responder,
           options,
+          validatedVisual,
         );
         this.markDispatched(chatId, row.id, result);
       } catch (error) {
@@ -156,6 +167,39 @@ function queuedMessageSendRequest(
       file_id: file.id,
     })),
   };
+}
+
+function parseQueuedVisualAdmission(value: string): VisualImageAdmissionResult | undefined {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const imageEntries = parsed.filter((item) => item && typeof item === "object" &&
+      "file_id" in item) as Array<{ file_id?: unknown; image_admission?: unknown }>;
+    if (imageEntries.length === 0) return undefined;
+    const admissions = imageEntries.map((entry) => {
+      const admission = entry.image_admission;
+      if (!admission || typeof admission !== "object" ||
+          !("tuple" in admission) || !("capability" in admission) || !("manifests" in admission)) {
+        throw new AppStoreOperationError(409, "image_carrier_unverified", "Queued image admission is incomplete.");
+      }
+      return admission as VisualImageAdmissionResult;
+    });
+    const first = admissions[0]!;
+    for (const admission of admissions.slice(1)) {
+      if (JSON.stringify(admission.tuple) !== JSON.stringify(first.tuple) ||
+          JSON.stringify(admission.capability) !== JSON.stringify(first.capability)) {
+        throw new AppStoreOperationError(409, "image_carrier_unverified", "Queued image admissions disagree.");
+      }
+    }
+    return {
+      tuple: first.tuple,
+      capability: first.capability,
+      manifests: admissions.flatMap((admission) => admission.manifests),
+    };
+  } catch (error) {
+    if (error instanceof AppStoreOperationError) throw error;
+    throw new AppStoreOperationError(409, "image_carrier_unverified", "Queued image admission is invalid.");
+  }
 }
 
 function safeQueueDispatchErrorCode(error: unknown): string {

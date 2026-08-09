@@ -2,6 +2,7 @@ import type {
   ModelRoundRequest,
   ModelRoundResult,
 } from "../../../agent/btcc/ports/model-round.ts";
+import { serializeOpenAIVisualInput } from "../../../agent/image-attachment/index.ts";
 import type {
   OpenAIResponse,
   PromptOptions,
@@ -188,7 +189,7 @@ export async function runHostedResponsesModelRound(
 ): Promise<ModelRoundResult> {
   const roundIndex = request.usageAttribution?.roundIndex ?? 0;
   beforeAttributedModelRequest({ attribution: request.usageAttribution, roundIndex });
-  const input = hostedResponsesModelRoundInput(request);
+  const input = await hostedResponsesModelRoundInput(request);
   const response = await createHostedResponse(
     config,
     {
@@ -245,23 +246,44 @@ export async function runHostedResponsesModelRound(
  * Responses APIs require a function_call item before its function_call_output
  * item; dropping that protocol item makes a tool continuation invalid.
  */
-function hostedResponsesModelRoundInput(
+async function hostedResponsesModelRoundInput(
   request: ModelRoundRequest,
-): Array<Record<string, unknown>> {
-  return request.messages.flatMap((message): Array<Record<string, unknown>> => {
-    if (message.role === "system") return [];
+): Promise<Array<Record<string, unknown>>> {
+  const imageManifests = request.imageManifests ?? request.attachments
+    ?.flatMap((attachment) => attachment.visualManifest ? [attachment.visualManifest] : []) ?? [];
+  let imageInputConsumed = false;
+  const items: Array<Record<string, unknown>> = [];
+  for (const message of request.messages) {
+    if (message.role === "system") continue;
     if (message.role === "tool") {
-      return [{
+      items.push({
         type: "function_call_output",
         call_id: message.toolCallId,
         output: message.content,
-      }];
+      });
+      continue;
     }
     if (message.role === "assistant") {
-      return responsesAssistantItems(message);
+      items.push(...responsesAssistantItems(message));
+      continue;
     }
-    return [{ role: "user", content: message.content }];
-  });
+    if (!imageInputConsumed && imageManifests.length > 0) {
+      const serialized = await serializeOpenAIVisualInput({
+        text: message.content,
+        manifests: imageManifests,
+        payloadPort: request.verifiedImagePayloadPort ?? {
+          read: async () => {
+            throw new Error("verified_image_payload_port_missing");
+          },
+        },
+      });
+      items.push(...serialized);
+      imageInputConsumed = true;
+    } else {
+      items.push({ role: "user", content: message.content });
+    }
+  }
+  return items;
 }
 
 function responsesAssistantItems(

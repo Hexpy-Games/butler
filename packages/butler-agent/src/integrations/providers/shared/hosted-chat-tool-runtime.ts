@@ -210,10 +210,12 @@ function hostedModelRoundMessages(
     }
     const content =
       index === firstUser
-        ? promptTextForHosted({
-            prompt: message.content,
-            attachments: [...(request.attachments ?? [])],
-          })
+        ? request.imageCarrier?.carrierProtocol === "zai_mcp_vision"
+          ? promptWithZaiVisionToolAttachments(message.content, request.imageManifests)
+          : promptTextForHosted({
+              prompt: message.content,
+              attachments: [...(request.attachments ?? [])],
+            })
         : message.content;
     return { role: "user", content };
   });
@@ -224,6 +226,23 @@ function hostedModelRoundMessages(
     ];
   }
   return messages;
+}
+
+function promptWithZaiVisionToolAttachments(
+  prompt: string,
+  manifests: ModelRoundRequest["imageManifests"],
+): string {
+  const files = (manifests ?? []).map((manifest) =>
+    `- file_id=${manifest.fileId} (${manifest.derivativeMimeType}, ${manifest.width}x${manifest.height})`,
+  );
+  if (files.length === 0) return prompt;
+  return [
+    prompt,
+    "",
+    "Attached images are available only through the admitted Z.AI Vision MCP tool.",
+    "Call analyze_attached_image with one exact file_id below and a focused prompt before answering visual questions. Do not invent paths or send native image parts.",
+    ...files,
+  ].join("\n");
 }
 
 export function recordHostedOpenAICompatibleUsage(input: {

@@ -8,6 +8,12 @@ import type {
   ProviderStreamProjectionHandler,
   ReasoningEffort,
 } from "../../../integrations/providers/runtime-contracts.ts";
+import type {
+  ImageCapabilityEvidence,
+  ImageCarrierTuple,
+  VerifiedImagePayloadPort,
+  VisualAdmittedManifest,
+} from "../../image-attachment/index.ts";
 
 export type ModelRoundRole = "system" | "user" | "assistant" | "tool";
 
@@ -54,6 +60,11 @@ export interface ModelRoundRequest {
   reasoningEffort?: ReasoningEffort;
   signal?: AbortSignal;
   attachments?: readonly AttachmentRef[];
+  /** Exact tuple/capability frozen at admission for visual image turns. */
+  imageCarrier?: ImageCarrierTuple;
+  imageCapability?: ImageCapabilityEvidence;
+  imageManifests?: readonly VisualAdmittedManifest[];
+  verifiedImagePayloadPort?: VerifiedImagePayloadPort;
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
   cacheScope?: string;

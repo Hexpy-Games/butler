@@ -75,13 +75,16 @@ export function hostedProviderId(value: string): HostedModelProviderId | null {
 }
 
 
-export function resolveRegisteredHostedModelConfig(model?: string): RegisteredHostedModelConfig | null {
+export function resolveRegisteredHostedModelConfig(
+  model?: string,
+  butlerData = getButlerData(),
+): RegisteredHostedModelConfig | null {
   const requested = model?.trim() || configuredDefaultModelRef() || "";
   if (!requested) return null;
   const parsed = parseModelRef(requested);
   const providerId = hostedProviderId(parsed.providerId);
   if (!providerId) return null;
-  const configs = readRegisteredHostedModelConfigs(getButlerData());
+  const configs = readRegisteredHostedModelConfigs(butlerData);
   const match = configs.find((config) =>
     config.provider_id === providerId &&
     (config.model_ref === parsed.canonicalRef || config.model_id === parsed.modelId),
@@ -92,8 +95,11 @@ export function resolveRegisteredHostedModelConfig(model?: string): RegisteredHo
 }
 
 
-export function resolveHostedRuntimeConfig(model?: string): HostedRuntimeConfig | null {
-  const registered = resolveRegisteredHostedModelConfig(model);
+export function resolveHostedRuntimeConfig(
+  model?: string,
+  butlerData = getButlerData(),
+): HostedRuntimeConfig | null {
+  const registered = resolveRegisteredHostedModelConfig(model, butlerData);
   if (!registered) return null;
   const metadata = resolveModelMetadata(registered.model_ref);
   if (registered.auth_type === "codex_oauth") {
@@ -109,7 +115,7 @@ export function resolveHostedRuntimeConfig(model?: string): HostedRuntimeConfig 
   const apiKey = resolveProviderCredentialSecret(
     registered.credential_id,
     registered.provider_id,
-    getButlerData(),
+    butlerData,
   );
   if (!apiKey) {
     throw new Error(`Provider API key credential is not registered for ${registered.model_ref}`);

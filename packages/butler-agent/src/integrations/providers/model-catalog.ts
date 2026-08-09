@@ -92,6 +92,27 @@ export interface ProviderModelMetadata {
   credential_id?: string;
   credential_label?: string;
   credential_masked_value?: string;
+  /**
+   * Image input is opt-in and exact-tuple verified. Missing or dynamic values
+   * deliberately mean unsupported at message admission; provider id alone is
+   * never treated as an image capability.
+   */
+  image_input_verified?: boolean;
+  image_input_modalities?: readonly ("text" | "image")[];
+  image_accepted_mime_types?: readonly string[];
+  image_max_inline_bytes?: number;
+  image_max_width?: number;
+  image_max_height?: number;
+  image_max_pixels?: number;
+  image_capability_source_url?: string;
+  image_capability_verified_at?: string;
+  image_capability_revision?: string;
+  image_capability_digest?: string;
+  image_endpoint_profile_id?: string;
+  image_carrier_protocol?: "openai_responses" | "openai_chat_completions" | "zai_mcp_vision" | "fake_vision";
+  image_tool_server_id?: string;
+  image_tool_name?: string;
+  image_tool_capability_digest?: string;
 }
 
 export interface ModelCatalogView {

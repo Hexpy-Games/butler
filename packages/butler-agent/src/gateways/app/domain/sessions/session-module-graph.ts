@@ -109,10 +109,17 @@ export function createAppSessionModuleGraph(input: {
     defaultChatId,
     ensureChat: (chatId) => host.ensureChat(chatId),
     sessionHasActiveTurn: (chatId) => host.sessionHasActiveTurn(chatId),
-    createQueuedMessage: (queueInput) => host.createQueuedMessage(queueInput),
+    createQueuedMessage: (queueInput, visualAdmission) =>
+      host.sessionQueue.createQueuedMessage(queueInput, visualAdmission),
     listMessages: (chatId) => host.listMessages(chatId),
     validateAttachable: (chatId, attachments) =>
       messageFiles.validateAttachable(chatId, attachments ?? []),
+    admitVisualAttachments: async (files, model) =>
+      await messageFiles.admitVisualAttachments(
+        files,
+        model,
+        host.registeredModelMetadata(),
+      ),
     resolveControlsForMessageSend: (chatId, request) =>
       host.resolveControlsForMessageSend(chatId, request),
     insertTurn: (chatId, state, safeStatusLabel, controlResolution) =>
