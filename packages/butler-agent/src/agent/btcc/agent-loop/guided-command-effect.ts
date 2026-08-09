@@ -118,6 +118,7 @@ function createGuidedCommandEffectAdapter(input: {
           "The approved command workspace or directory changed before dispatch.",
         );
       }
+      const startedAtMs = Date.now();
       const spooled = await executeGuidedCommand({
         ...effect.normalizedInput,
         cwd: input.canonicalCwd,
@@ -134,6 +135,7 @@ function createGuidedCommandEffectAdapter(input: {
         butlerData: input.butlerData,
         args: effect.normalizedInput,
         sandbox: "full_access_contained",
+        startedAtMs,
       });
       return {
         status: "applied",

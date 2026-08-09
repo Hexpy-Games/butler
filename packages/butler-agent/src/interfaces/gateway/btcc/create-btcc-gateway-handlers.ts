@@ -25,7 +25,7 @@ export function createBtccGatewayHandlers(
       handledBy: "btcc/turn",
       metadata: {
         text: result.text,
-        artifacts: [],
+        artifacts: result.artifacts,
         generatedSessionTitle,
         loadedSkillNames: [],
         durableFinalRecorded: true,

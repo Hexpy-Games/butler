@@ -1,8 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import type { RuntimeTurnEventInput } from
   "../../packages/butler-agent/src/agent/events/turn-events.ts";
-import type { MessageRow, TurnRow } from
+import type { ChatRow, MessageRow, TurnRow } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/core/records.ts";
 import type { TranscriptEvent } from
   "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
@@ -12,6 +14,8 @@ import {
   createTranscriptProjectionHarness as createHarness,
   writeTranscript,
 } from "./support/transcript-projection-harness.ts";
+import { AppMessageFileStore } from
+  "../../packages/butler-agent/src/gateways/app/domain/message-files/message-file-store.ts";
 
 afterEach(() => cleanupTranscriptProjectionHarnesses());
 
@@ -66,6 +70,99 @@ test("delivered turn event directly projects the canonical BTCC answer", () => {
   expect(state.generatedTitles).toEqual(["Useful title"]);
   expect(state.assistant?.text).toBe("Canonical answer");
   expect(state.assistantWrites).toBe(1);
+  harness.close();
+});
+
+test("BTCC final result creates one real App attachment for a generated artifact", () => {
+  const harness = createHarness();
+  seedBtccTerminalSchema(harness.db);
+  seedAppTurn(harness.db, harness.chatId, "live-artifact-turn");
+  const artifactDir = join(harness.root, "artifacts", "generated", "capture");
+  mkdirSync(artifactDir, { recursive: true });
+  writeFileSync(join(artifactDir, "report.txt"), "verified report\n");
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+3f4AAAAASUVORK5CYII=",
+    "base64",
+  );
+  writeFileSync(join(artifactDir, "page.png"), png);
+  const messageFiles = new AppMessageFileStore(
+    harness.db,
+    harness.root,
+    () => undefined,
+  );
+  let assistant: MessageRow | null = null;
+  let writes = 0;
+  const state = projectionState(harness.db);
+  const projection = harness.createProjectionStore({
+    ...state.options,
+    messageFiles,
+    getChatRow: (chatId) => harness.db.query<ChatRow, [string]>(
+      "SELECT rowid, * FROM chats WHERE id = ?",
+    ).get(chatId),
+    getProjectRow: () => null,
+    getLatestAssistantMessageForTurn: () => assistant,
+    insertOrReplaceAssistantReplies: (chatId, turnId, texts, files) => {
+      writes += 1;
+      const now = new Date().toISOString();
+      const id = assistant?.id ?? "assistant-artifact-message";
+      if (!assistant) {
+        harness.db.query(`
+          INSERT INTO messages (
+            id, chat_id, turn_id, role, text, status, created_at, updated_at,
+            safe_error_code, retryable
+          ) VALUES (?, ?, ?, 'assistant', ?, 'delivered', ?, ?, NULL, 0)
+        `).run(id, chatId, turnId, texts.at(-1) ?? "", now, now);
+      }
+      messageFiles.attachToMessage(chatId, id, files ?? []);
+      assistant = harness.db.query<MessageRow, [string]>(
+        "SELECT rowid, * FROM messages WHERE id = ?",
+      ).get(id);
+      return [];
+    },
+  });
+  const event = finalResultEvent({
+    actionId: "artifact-final",
+    turnId: "live-artifact-turn",
+    text: "생성한 보고서입니다.",
+    generatedSessionTitle: "Artifact result",
+    artifacts: [{
+      id: "artifact-report",
+      kind: "file",
+      title: "report.txt",
+      safePathLabel: "artifacts/generated/capture/report.txt",
+      mimeType: "text/plain",
+      sizeBytes: 16,
+    }, {
+      id: "artifact-page",
+      kind: "chart_file",
+      title: "page.png",
+      safePathLabel: "artifacts/generated/capture/page.png",
+      mimeType: "image/png",
+      sizeBytes: png.byteLength,
+    }],
+  });
+  writeTranscript(harness, [event]);
+
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(harness.db.query<{ count: number }, []>(
+    "SELECT COUNT(*) AS count FROM message_files",
+  ).get()?.count).toBe(2);
+  expect(harness.db.query<{ count: number }, []>(
+    "SELECT COUNT(*) AS count FROM message_attachments",
+  ).get()?.count).toBe(2);
+  expect(messageFiles.refsForMessage("assistant-artifact-message")).toHaveLength(2);
+  expect(writes).toBe(1);
+
+  appendTranscript(harness, {
+    ...event,
+    eventId: "event-artifact-final-replay",
+    payload: { ...event.payload, actionId: "artifact-final-replay" },
+  });
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(harness.db.query<{ count: number }, []>(
+    "SELECT COUNT(*) AS count FROM message_attachments",
+  ).get()?.count).toBe(2);
+  expect(writes).toBe(1);
   harness.close();
 });
 
@@ -421,6 +518,7 @@ function finalResultEvent(input: {
   turnId: string;
   text: string;
   generatedSessionTitle: string;
+  artifacts?: Array<Record<string, unknown>>;
 }): TranscriptEvent {
   return {
     eventId: `event-${input.actionId}`,
@@ -430,7 +528,10 @@ function finalResultEvent(input: {
     transport: "app",
     payload: {
       actionId: input.actionId,
-      message: { text: input.text },
+      message: {
+        text: input.text,
+        ...(input.artifacts ? { artifacts: input.artifacts } : {}),
+      },
       metadata: {
         kind: "final_result",
         turnId: input.turnId,

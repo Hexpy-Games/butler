@@ -2,6 +2,7 @@ import type {
   AdmittedModelSelection,
   ButlerContextInput,
   BtccProgressDestination,
+  BtccFinalArtifact,
   FreshBtccTurnCommand,
 } from "../contracts.ts";
 import type {
@@ -56,6 +57,7 @@ export type TurnRecord = {
     ref: ContentRef;
     content: string;
     contentSha256: string;
+    artifacts?: BtccFinalArtifact[];
   };
   deliveryOutbox?: DeliveryOutbox;
   canonicalAssistantMessageId?: string;
@@ -194,4 +196,10 @@ export type StopPersistenceOutcome =
   | { kind: "cancelled"; turnId: string }
   | { kind: "already_cancelled"; turnId: string }
   | { kind: "already_finalizing"; turnId: string }
-  | { kind: "already_delivered"; turnId: string; messageId: string; content: string };
+  | {
+      kind: "already_delivered";
+      turnId: string;
+      messageId: string;
+      content: string;
+      artifacts?: BtccFinalArtifact[];
+    };
