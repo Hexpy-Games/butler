@@ -1,6 +1,6 @@
 # Butler, Hermes Agent, and OpenCode benchmark
 
-Status: governing specification, revision 1
+Status: governing specification, revision 3
 Baseline: `origin/main` at `549463fbe074fc25042f9302cd330699948dab50`
 
 ## Intent lock
@@ -8,6 +8,14 @@ Baseline: `origin/main` at `549463fbe074fc25042f9302cd330699948dab50`
 - Accepted intent: provide a reproducible, reviewable comparison of Butler,
   Hermes Agent, and OpenCode for a short conversation, current-information
   research, and a repository-to-landing-page task.
+- Pilot correction accepted on 2026-08-09: execute the authenticated installed
+  products instead of treating non-interactive PATH discovery as an external
+  gate. The controlled pilot model is `openai/gpt-5.6-sol` with `medium`
+  reasoning in every product's supported per-run control.
+- Pilot-size correction accepted on 2026-08-09: the canonical pilot is a
+  compact 12-arm controlled comparison, not a full track/cache factorial. It
+  runs four cases per agent: direct conversation cold and paired warm,
+  current-information web research cold, and Butler landing-page cold.
 - Observable success: one benchmark CLI materializes a randomized plan, checks
   the three real adapters, runs available arms in isolated workspaces, evaluates
   captured evidence, and writes a machine-readable result plus a Markdown report.
@@ -32,43 +40,64 @@ only translation between that workflow and one real product surface:
 
 - Butler uses the repository's real Electron/App benchmark ingress and captures
   its provider, tool, timing, result, and artifact evidence.
-- Hermes uses the official `hermes` CLI one-shot/session-resume surface.
+- Hermes uses the official `hermes` CLI: `chat -Q -q` with exact session resume
+  for the multi-turn fixture, and one-shot plus its usage-file contract for the
+  single-turn fixtures. Direct-session aggregate telemetry reads only the
+  documented local session store's safe counter/config columns by session ID;
+  it never reads message, prompt, tool payload, or reasoning columns.
 - OpenCode uses the official `opencode run` JSON-event/session surface.
 
 The CLI composition root binds all three adapters. Adapters and evaluators are
 not independently public product APIs. A missing executable, authentication,
 or required measurement produces a typed gate or `null`, never a fallback arm.
 
-Official external contracts reviewed for revision 1:
+Official external contracts reviewed for revision 3:
 
 - Hermes install: <https://hermes-agent.nousresearch.com/docs/>
 - Hermes CLI: <https://hermes-agent.nousresearch.com/docs/user-guide/cli>
 - OpenCode install: <https://github.com/anomalyco/opencode#installation>
 - OpenCode CLI: <https://opencode.ai/docs/ko/cli/>
 
-The pilot inspection on 2026-08-09 found no `hermes`, `hermes-agent`, or
-`opencode` executable on PATH. This is baseline-report evidence only; it must be
-rechecked for every run.
+The corrected pilot inspection on 2026-08-09 resolved Hermes Agent 0.20.0 at
+its official per-user install location and OpenCode 1.18.15 at its per-user
+install location. Both authentication probes succeeded, Hermes reported
+`gpt-5.6-sol` as its configured default, and OpenCode enumerated
+`openai/gpt-5.6-sol`. Every run must still recheck executable, authentication,
+and effective-model evidence through the canonical workflow.
 
 ## Tracks
 
-Every plan includes both tracks and records the effective executable version,
-model, reasoning/variant, permissions, tool set, and relevant safe configuration.
+The benchmark defines both a controlled track and a recommended-default track.
+Every executed arm records the effective executable version, model,
+reasoning/variant, permissions, tool set, and relevant safe configuration. The
+canonical compact pilot executes controlled arms only; the workflow preflights
+the three agents for that controlled plan. The recommended-default definition
+remains available for a later comparison run, but is not applied or verified in
+this pilot.
 
 ### Controlled track
 
 - The operator supplies one model identity supported by all three products.
-- The requested reasoning effort is applied where the official product surface
-  exposes a per-run control. An unsupported reasoning knob is recorded as
-  `null` and called out as a comparability limitation; it is never claimed as
-  applied. Full benchmark-workspace permissions and web access are required.
+- The controlled logical identity `openai/gpt-5.6-sol` maps to Hermes'
+  authenticated `openai-codex` provider with provider-native model argument
+  `gpt-5.6-sol`; observations normalize it back to the shared logical identity
+  while retaining the provider field.
+- The requested reasoning effort is applied through Butler's harness, Hermes'
+  `--reasoning`, and OpenCode's `--variant` per-run controls. An unavailable or
+  unverifiable applied value gates the controlled arm; it is never silently
+  omitted. Full benchmark-workspace permissions and web access are required.
 - Personal memory, skills, project rules, plugins, MCP servers, and unrelated
   user configuration are disabled where the product offers an official switch.
 - Hermes enables only its official web and file toolsets under safe mode; its
   terminal tool is excluded because it would bypass the write-safe-root guard.
   OpenCode uses an explicit-deny inline permission policy: workspace file and
   web operations are allowed, while shell, subagent, skill, question, LSP, and
-  external-directory operations are denied even under `--auto`.
+  external-directory operations are denied even under `--auto`. Controlled
+  OpenCode additionally uses an arm-owned HOME, XDG config directory,
+  OPENCODE_CONFIG_DIR, and cache, while XDG_DATA_HOME points at the existing
+  normal auth data parent without copying credentials; an unverifiable parent
+  gates the arm. Recommended-default retains the normal HOME/config/data
+  surface.
 - No adapter may silently substitute a different model or provider. An arm with
   an unverifiable effective model is gated.
 
@@ -118,8 +147,13 @@ this PR or by a benchmark arm.
 ## Planning, randomization, and cache states
 
 - A run seed is mandatory and stored. Fisher-Yates shuffling derived from that
-  seed randomizes agent order independently for each scenario and repetition.
-- A plan contains at least one cold and one warm repetition per agent/scenario.
+  seed randomizes agent order independently for each scenario. The canonical
+  plan has exactly 12 arms: six direct-conversation arms (cold then warm for
+  each agent), three current-web-research cold arms, and three landing-page
+  cold arms. Each agent therefore has exactly four arms.
+- Direct cold and warm arms for an agent are adjacent and share one
+  `cachePairId`/cache root while keeping fresh sessions, evidence, data, and
+  output roots. Web and landing arms are cold-only in the compact pilot.
 - Cold means the first invocation in a pair with fresh benchmark-owned mutable
   data/config/output state. Warm immediately repeats the same fixture and config
   with a fresh session/output while its pair cache and any provider-side cache
@@ -220,6 +254,9 @@ interruption can resume idempotently.
   serialized nor printed. Authentication checks expose status only.
 - Evidence and reports exclude raw prompts, transcripts, hidden reasoning, tool
   arguments/results, credentials, and private absolute paths.
+- Hermes direct-conversation telemetry selects only model/provider and aggregate
+  token, request, and tool counters from the exact sanitized session ID. The
+  benchmark never exports or selects session message content.
 - Generated landing build/test subprocesses receive only a minimal environment;
   HOME and cache directories are redirected under benchmark-owned roots. The
   runner does not claim an OS sandbox, so pilots must treat generated scripts as
@@ -232,7 +269,7 @@ interruption can resume idempotently.
 
 ## Platform contract
 
-Revision 1 supports macOS and Linux under Bun. Executable discovery uses PATH,
+Revision 3 supports macOS and Linux under Bun. Executable discovery uses PATH,
 process-group termination uses the platform's POSIX semantics, and browser
 rendering requires an explicitly discovered Chromium-family binary. Windows is
 reported as `configuration_unverifiable` until its process-tree termination and
@@ -243,14 +280,19 @@ authentication outside the benchmark process.
 
 ## Acceptance criteria and validation map
 
-1. The baseline SHA, both tracks, seed, cache state, fixtures, and runtime versions
-   are present in a materialized plan. Covered by plan/schema tests.
+1. The baseline SHA, executed track(s), seed, cache state, fixtures, and runtime
+   versions are present in a materialized plan. The supported track definitions
+   live in this specification and the planning configuration. The compact
+   pilot's plan has 12 controlled arms; recommended-default is defined and
+   supported but is not executed or separately verified. Covered by plan/schema
+   tests.
 2. The single CLI preflights and invokes concrete Butler, Hermes, and OpenCode
    adapters. Covered by adapter contract tests and a real missing-CLI smoke.
 3. All required metrics are parsed or explicitly `null`; derived token efficiency
    is never fabricated. Covered by schema and evaluator tests.
-4. Randomization is deterministic for one seed, varies across seeds, and balances
-   order across repetitions. Covered by plan tests.
+4. Randomization is deterministic for one seed and independently orders agents
+   per scenario while preserving direct cold-to-warm adjacency. Covered by plan
+   tests.
 5. Workspace isolation, canonical/symlink containment, baseline integrity,
    redaction, timeout, resume, and external gates fail closed. Covered by
    workflow integration tests.
@@ -258,12 +300,18 @@ authentication outside the benchmark process.
    failure, missing files, source mutation, overflow, and privacy leakage. Covered
    by evaluator fixtures and integration tests.
 7. A pilot command uses the single workflow path and produces a baseline Markdown
-   report without fabricated agent results when Hermes/OpenCode are unavailable.
+   report from the installed authenticated Butler, Hermes, and OpenCode products
+   using the 12 controlled `openai/gpt-5.6-sol`/`medium` arms. The
+   recommended-default configuration is defined and supported for a later
+   comparison, but is not executed or separately verified in this canonical
+   pilot. Any genuinely unavailable product remains a typed gate rather than a
+   fabricated result.
    Typed post-run visual review is accepted only for screenshot-backed landing
    observations. Covered by CLI and visual-review smoke tests.
 8. Targeted tests, lint, typecheck, `git diff --check`, `bun run check`, the
    module-shape audit, and Project Ledger status/check/render pass before PR.
 
-The pilot protocol in the report documentation is the operator runbook. Actual
-cross-agent numbers require installed, authenticated CLIs and must be generated
-outside Git; only a truthful baseline gate report belongs in this PR.
+The pilot protocol in the report documentation is the operator runbook. The
+reviewed, redacted pilot Markdown report belongs in this PR. Raw checkpoints,
+transcripts, prompts, credentials, absolute paths, and unsanitized tool payloads
+remain outside Git.

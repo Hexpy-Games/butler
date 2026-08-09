@@ -2,10 +2,13 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type {
   AdapterRunResult,
+  EffectiveAgentConfig,
   TokenUsage,
   ToolCallObservation,
   ToolMetrics,
 } from "./contracts.ts";
+import { safeEnvironment, type CommandExecutor } from "./command.ts";
+import { sanitizeEffectiveConfig, sanitizeIdentifier } from "./identifiers.ts";
 
 /** Normalizes multi-turn CLI observations without inventing missing metrics. */
 export function combineExternalRuns(runs: readonly AdapterRunResult[]): AdapterRunResult {
@@ -79,6 +82,43 @@ export function emptyAdapterResult(
   };
 }
 
+/** Hermes exposes the model object and reasoning scalar through separate
+ * `config get ... --json` probes. Keep this preflight authority in the
+ * external normalization boundary so the adapter's run path stays one-way. */
+export async function resolveHermesConfig(
+  executable: string,
+  executor: CommandExecutor,
+): Promise<Partial<EffectiveAgentConfig> | null> {
+  const modelResult = await executor.execute({
+    executable,
+    args: ["config", "get", "model", "--json"],
+    cwd: process.cwd(),
+    env: safeEnvironment(),
+    timeoutMs: 5_000,
+    signal: new AbortController().signal,
+  });
+  if (modelResult.exitCode !== 0) return null;
+  const modelValue = parseJsonValue(modelResult.stdout);
+  const modelRecord = asRecord(modelValue);
+  const modelConfig = asRecord(modelRecord?.model) ?? modelRecord;
+  const reasoningResult = await executor.execute({
+    executable,
+    args: ["config", "get", "agent.reasoning_effort", "--json"],
+    cwd: process.cwd(),
+    env: safeEnvironment(),
+    timeoutMs: 5_000,
+    signal: new AbortController().signal,
+  });
+  const reasoningValue = reasoningResult.exitCode === 0 ? parseJsonValue(reasoningResult.stdout) : null;
+  const reasoningRecord = asRecord(reasoningValue);
+  const config = sanitizeEffectiveConfig({
+    model: modelConfig ? sanitizeIdentifier(modelConfig.default) : null,
+    provider: modelConfig ? sanitizeIdentifier(modelConfig.provider) : null,
+    reasoning: sanitizeIdentifier(typeof reasoningValue === "string" ? reasoningValue : reasoningRecord?.value),
+  });
+  return config.model || config.provider || config.reasoning ? config : null;
+}
+
 export function authListingIsPositive(output: string, agent: "hermes" | "opencode"): boolean {
   const normalized = output.trim().toLowerCase();
   if (!normalized || /(?:no credentials?|not configured|not authenticated|no providers?|none configured|logged out|unauthenticated)/u.test(normalized)) return false;
@@ -126,4 +166,18 @@ function dedupeToolRecords(records: readonly ToolCallObservation[]): ToolCallObs
 function sumKnown(values: readonly (number | undefined | null)[]): number | null {
   if (values.length === 0 || values.some((value) => value === null || value === undefined)) return null;
   return values.reduce<number>((sum, value) => sum + (value as number), 0);
+}
+
+function parseJsonValue(stdout: string): unknown {
+  const candidates = stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).reverse();
+  for (const candidate of candidates) {
+    try { return JSON.parse(candidate) as unknown; } catch { /* bounded informational line */ }
+  }
+  return null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
