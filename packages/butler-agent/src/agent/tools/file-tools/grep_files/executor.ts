@@ -6,6 +6,7 @@ import {
   cursorQueryHash,
   decodeFileToolCursor,
   encodeFileToolCursor,
+  normalizeOptionalFileToolCursor,
 } from "../shared/cursor.ts";
 import {
   normalizeGlobArguments,
@@ -101,7 +102,10 @@ export async function executeGrepFilesTool(
     evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: parsed.error }),
   };
   const args = parsed.args;
-  const workspaceRoot = getWorkspaceRoot(args, context.workspacePath);
+  const workspaceRoot = getWorkspaceRoot(
+    args,
+    context.workspaceReference?.get() ?? context.workspacePath,
+  );
   const root = normalizeRoot(args.root);
   const patternArgs = normalizePatternArgs(args);
   if (!patternArgs.ok) return { ok: false, error: patternArgs.error, message: patternArgs.message, recovery_hint: patternArgs.recovery_hint, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: patternArgs.error }) };
@@ -130,9 +134,10 @@ export async function executeGrepFilesTool(
   const limits = normalizeTraversalLimits(args, { maxResults: boundedInteger(args.max_files, 5000, 1, 50_000) });
   const deadlineAt = startedAt + limits.elapsedMs;
   if (!pattern) return { ok: false, error: "missing_pattern", message: "pattern is required.", recovery_hint: "Provide a non-empty literal pattern or explicit regex pattern.", evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: "missing_pattern" }) };
-  const query = cursorQueryHash({ root, pattern, regex, case_sensitive: caseSensitive, include_globs: includeGlobs, exclude_globs: excludeGlobs, context_lines: contextLines, max_matches: maxMatches, max_bytes_per_file: maxBytesPerFile, max_output_bytes: maxOutputBytes, limits });
-  const cursor = args.cursor === undefined ? null : decodeFileToolCursor(args.cursor);
-  if (args.cursor !== undefined && (!cursor || cursor.tool !== "grep_files" || cursor.query !== query)) {
+  const query = cursorQueryHash({ workspace_root: workspaceRoot, root, pattern, regex, case_sensitive: caseSensitive, include_globs: includeGlobs, exclude_globs: excludeGlobs, context_lines: contextLines, max_matches: maxMatches, max_bytes_per_file: maxBytesPerFile, max_output_bytes: maxOutputBytes, limits });
+  const cursorInput = normalizeOptionalFileToolCursor(args.cursor);
+  const cursor = cursorInput === undefined ? null : decodeFileToolCursor(cursorInput);
+  if (cursorInput !== undefined && (!cursor || cursor.tool !== "grep_files" || cursor.query !== query)) {
     return { ok: false, error: "invalid_cursor", message: "The grep_files cursor is malformed or does not match the current search options.", recovery_hint: "Restart grep_files with the same pattern/root/globs and omit cursor.", metrics: { elapsed_ms: Math.max(0, Date.now() - startedAt) }, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: "invalid_cursor" }) };
   }
   const guard = await resolveWorkspacePathGuard({ workspaceRoot, relativePath: root, allowDirectories: true, requireDirectory: true, rejectProtectedProjectLedgerPaths: true, protectedProjectLedgerRoots: context.protectedProjectLedgerRoots });

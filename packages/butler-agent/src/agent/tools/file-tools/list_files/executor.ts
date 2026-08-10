@@ -10,6 +10,7 @@ import {
   cursorQueryHash,
   decodeFileToolCursor,
   encodeFileToolCursor,
+  normalizeOptionalFileToolCursor,
 } from "../shared/cursor.ts";
 import {
   normalizeGlobArguments,
@@ -20,12 +21,14 @@ import {
 import type { FileToolExecutionContext } from "../read_file/executor.ts";
 
 function expectedQuery(input: {
+  workspaceRoot: string;
   root: string;
   includeGlobs: string[];
   excludeGlobs: string[];
   limits: ReturnType<typeof normalizeTraversalLimits>;
 }): string {
   return cursorQueryHash({
+    workspace_root: input.workspaceRoot,
     root: input.root,
     include_globs: input.includeGlobs,
     exclude_globs: input.excludeGlobs,
@@ -57,7 +60,10 @@ export async function executeListFilesTool(
     evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "list_files", ok: false, error: parsed.error }),
   };
   const args = parsed.args;
-  const workspaceRoot = getWorkspaceRoot(args, context.workspacePath);
+  const workspaceRoot = getWorkspaceRoot(
+    args,
+    context.workspaceReference?.get() ?? context.workspacePath,
+  );
   const root = normalizeRoot(args.root);
   const includeResult = normalizeGlobArguments(args, "include_globs", "include");
   const excludeResult = normalizeGlobArguments(args, "exclude_globs", "exclude");
@@ -84,9 +90,10 @@ export async function executeListFilesTool(
   const includeGlobs = includeResult.value;
   const excludeGlobs = excludeResult.value;
   const limits = normalizeTraversalLimits(args, { maxResults: boundedInteger(args.max_results, 100, 1, 1000) });
-  const query = expectedQuery({ root, includeGlobs, excludeGlobs, limits });
-  const cursor = args.cursor === undefined ? null : decodeFileToolCursor(args.cursor);
-  if (args.cursor !== undefined && (!cursor || cursor.tool !== "list_files" || cursor.query !== query)) {
+  const query = expectedQuery({ workspaceRoot, root, includeGlobs, excludeGlobs, limits });
+  const cursorInput = normalizeOptionalFileToolCursor(args.cursor);
+  const cursor = cursorInput === undefined ? null : decodeFileToolCursor(cursorInput);
+  if (cursorInput !== undefined && (!cursor || cursor.tool !== "list_files" || cursor.query !== query)) {
     return {
       ok: false,
       error: "invalid_cursor",

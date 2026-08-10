@@ -3,6 +3,7 @@ import type { ButlerServiceClient } from "../../../core/client.ts";
 import type { ConversationProjectionReader } from "../../../../agent/conversation/types.ts";
 import type { SessionBindingStore } from
   "../../../../test-support/harness/session-store.ts";
+import type { ProviderQuotaMonitor } from "../../../../operations/metrics/provider-quota.ts";
 
 export const DEFAULT_CHAT_ID = "general";
 export const DEFAULT_CHAT_TITLE = "Onboarding";
@@ -22,4 +23,5 @@ export interface AppServerStoreOptions {
   serviceClient?: ButlerServiceClient;
   conversationProjectionReader?: ConversationProjectionReader;
   sessionBindingStore?: SessionBindingStore;
+  providerQuotaMonitor?: ProviderQuotaMonitor;
 }

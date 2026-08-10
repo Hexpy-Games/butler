@@ -71,7 +71,10 @@ export async function executeWriteFileTool(
   if (!parsed.ok) return parseFailure(parsed.error, parsed.detail);
 
   const args = parsed.args;
-  const workspaceRoot = getWorkspaceRoot(args, context.workspacePath);
+  const workspaceRoot = getWorkspaceRoot(
+    args,
+    context.workspaceReference?.get() ?? context.workspacePath,
+  );
   const requestedPath = typeof args.path === "string" ? args.path.trim() : "";
   const content = typeof args.content === "string" ? args.content : undefined;
   // Preserve the established runtime default for direct callers while the

@@ -36,6 +36,7 @@ import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integra
 import { retainToolEvidence } from "../../packages/butler-agent/src/agent/context/tool-evidence-retention.ts";
 import { budgetToolOutput } from "../../packages/butler-agent/src/agent/context/tool-output-budgeter.ts";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { createWorkspaceReference } from "../../packages/butler-agent/src/agent/session-workspaces/index.ts";
 
 let tempDir = "";
 const root = process.cwd();
@@ -255,6 +256,53 @@ test("Project Ledger tool wrappers inherit the active workspace when project_pat
     join(butlerData, "project-ledger", "projects", "sandy-bot"),
     "--json",
   ]);
+});
+
+test("registered native file tools use the session WorkspaceReference instead of project cwd", async () => {
+  const projectWorkspace = join(tempDir, "project-workspace");
+  const sessionWorkspace = join(tempDir, "session-workspace");
+  mkdirSync(projectWorkspace, { recursive: true });
+  mkdirSync(sessionWorkspace, { recursive: true });
+  writeFileSync(join(projectWorkspace, "project-only.txt"), "project path\n", "utf8");
+  writeFileSync(join(sessionWorkspace, "session-only.txt"), "session path\n", "utf8");
+
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: join(tempDir, "butler-data"),
+    workspacePath: projectWorkspace,
+    workspaceReference: createWorkspaceReference(sessionWorkspace),
+  });
+  const result = await execute({
+    name: "list_files",
+    args: { workspace_root: projectWorkspace },
+    rawArguments: JSON.stringify({ workspace_root: projectWorkspace }),
+  }) as Record<string, any>;
+
+  expect(result.ok).toBe(true);
+  expect(result.files.map((file: { path: string }) => file.path)).toEqual(["session-only.txt"]);
+});
+
+test("session-bound executor fails closed when its WorkspaceReference is omitted", async () => {
+  const projectWorkspace = join(tempDir, "project-workspace");
+  mkdirSync(projectWorkspace, { recursive: true });
+  writeFileSync(join(projectWorkspace, "project-only.txt"), "project path\n", "utf8");
+  const sessionBindingStore = {
+    getBySessionId: () => null,
+    rebindWorkspace: () => ({ status: "missing" as const }),
+  };
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: join(tempDir, "butler-data"),
+    workspacePath: projectWorkspace,
+    sessionId: "session-without-reference",
+    sessionBindingStore,
+  });
+
+  await expect(execute({
+    name: "list_files",
+    args: {},
+    rawArguments: "{}",
+  })).rejects.toThrow("session_workspace_unavailable");
 });
 
 test("Project Ledger tool wrappers resolve active app project id through the app registry", async () => {
@@ -742,6 +790,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "edit_file",
     "grep_files",
     "list_files",
+    "bind_session_git_worktree",
     "inspect_workspace_page",
     ...projectLedgerToolNames,
     "get_work_dashboard",
@@ -925,6 +974,7 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
     "monitoring",
     "project-ledger",
     "run-command",
+    "session-workspace",
     "skills",
     "tool-bridge",
     "web-read",

@@ -10,6 +10,7 @@ import { browserObservationCapabilityReceipt } from
   "../../../output/evidence/ledger.ts";
 import { resolveWorkspacePathGuard } from
   "../../file-tools/shared/workspace-path-guard.ts";
+import type { WorkspaceReference } from "../../../session-workspaces/index.ts";
 
 const MAX_SCREENSHOT_BYTES = 2 * 1024 * 1024;
 const PREVIEW_TIMEOUT_MS = 90_000;
@@ -22,6 +23,7 @@ type PreviewToolCall = {
 export function createInspectWorkspacePageHandler(input: {
   butlerData: string;
   workspacePath: string;
+  workspaceReference?: WorkspaceReference;
   endpoint?: string | null;
   authToken?: string | null;
   fetcher?: typeof fetch;
@@ -45,7 +47,7 @@ export function createInspectWorkspacePageHandler(input: {
       );
     }
     const guarded = await resolveWorkspacePathGuard({
-      workspaceRoot: input.workspacePath,
+      workspaceRoot: input.workspaceReference?.get() ?? input.workspacePath,
       relativePath: entryPath,
     });
     if (!guarded.ok || !guarded.realPath || !guarded.absolutePath) {

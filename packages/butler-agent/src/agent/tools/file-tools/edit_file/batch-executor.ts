@@ -190,7 +190,10 @@ function partialResult(input: {
 }
 
 export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<string, unknown>, context: FileToolExecutionContext) {
-  const workspaceRoot = getWorkspaceRoot(args, context.workspacePath);
+  const workspaceRoot = getWorkspaceRoot(
+    args,
+    context.workspaceReference?.get() ?? context.workspacePath,
+  );
   const guardedEdits: NormalizedEdit[] = [];
   const failures: Record<string, unknown>[] = [];
   const seenTargets = new Set<string>();
