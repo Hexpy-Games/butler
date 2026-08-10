@@ -368,6 +368,9 @@ export function selectButlerToolsForTurn(input: {
     for (const profile of selectButlerToolProfiles(input)) {
       for (const name of PROFILE_TOOL_NAMES[profile]) allowedNames.add(name);
     }
+    if (hasProjectContext(input) && trackingPolicyString(input, "accessMode", "access_mode") === "full_access") {
+      allowedNames.add("bind_session_git_worktree");
+    }
   }
   for (const name of requiredToolNamesForTurn(input)) {
     if (input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(name)) continue;

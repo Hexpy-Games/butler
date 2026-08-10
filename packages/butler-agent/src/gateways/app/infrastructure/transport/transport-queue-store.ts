@@ -35,6 +35,7 @@ import {
   verifyTurnExecutionControls,
   type TurnExecutionControlsV1,
 } from "../../../core/turn-execution-controls.ts";
+import { resolveSessionWorkspaceAuthority } from "../../../../agent/session-workspaces/index.ts";
 
 export class AppTransportQueueStore {
   constructor(
@@ -216,13 +217,18 @@ export class AppTransportQueueStore {
       projectId: input.project?.id ?? existing?.projectId,
       sessionKind: input.sessionKind,
     });
+    const workspaceAuthority = resolveSessionWorkspaceAuthority({
+      binding: existing,
+      projectWorkspacePath: input.project?.workspace_path,
+    });
     this.sessionBindingStore.upsert({
       sessionId: input.sessionId,
       role: existing?.role ?? "butler",
       projectId: input.project?.id ?? existing?.projectId,
       workspacePath:
-        input.project?.workspace_path ??
+        workspaceAuthority.workspacePath ??
         existing?.workspacePath ??
+        input.project?.workspace_path ??
         this.butlerHome,
       runtimeAdapterId: "btcc-turn-runtime",
       modelProviderId:

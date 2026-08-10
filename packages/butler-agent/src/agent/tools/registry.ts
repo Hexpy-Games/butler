@@ -45,6 +45,10 @@ import {
   inspectWorkspacePageToolDefinition,
   inspectWorkspacePageToolMetadata,
 } from "./workspace-page-preview/index.ts";
+import {
+  bindSessionGitWorktreeToolDefinition,
+  bindSessionGitWorktreeToolMetadata,
+} from "./session-workspace/index.ts";
 
 export const CORE_BUTLER_TOOLS = [
   webSearchToolDefinition,
@@ -55,6 +59,7 @@ export const CORE_BUTLER_TOOLS = [
   writeFileToolDefinition,
   editFileToolDefinition,
   grepFilesToolDefinition,
+  bindSessionGitWorktreeToolDefinition,
   inspectWorkspacePageToolDefinition,
   ...projectLedgerNativeToolDefinitions,
   getWorkDashboardToolDefinition,
@@ -106,6 +111,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [writeFileToolDefinition.name]: writeFileToolMetadata,
   [editFileToolDefinition.name]: editFileToolMetadata,
   [grepFilesToolDefinition.name]: grepFilesToolMetadata,
+  [bindSessionGitWorktreeToolDefinition.name]: bindSessionGitWorktreeToolMetadata,
   [inspectWorkspacePageToolDefinition.name]: inspectWorkspacePageToolMetadata,
   ...projectLedgerNativeToolMetadata,
   [getWorkDashboardToolDefinition.name]: getWorkDashboardToolMetadata,

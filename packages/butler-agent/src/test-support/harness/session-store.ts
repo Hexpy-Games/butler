@@ -213,6 +213,45 @@ export class SessionBindingStore {
     return this.getBySessionId(binding.sessionId)!;
   }
 
+  rebindWorkspace(input: {
+    sessionId: string;
+    expectedUpdatedAt: string;
+    workspacePath: string;
+    metadata: Record<string, unknown>;
+    updatedAt?: string;
+  }):
+    | { status: "applied"; binding: StoredSessionBinding }
+    | { status: "changed"; binding: StoredSessionBinding | null }
+    | { status: "missing" } {
+    const current = this.getBySessionId(input.sessionId);
+    if (!current) return { status: "missing" };
+    const updatedAt = input.updatedAt && input.updatedAt > input.expectedUpdatedAt
+      ? input.updatedAt
+      : this.nextRevisionTimestamp(input.expectedUpdatedAt);
+    const updated = this.db.query(`
+      UPDATE session_bindings
+      SET workspace_path = ?, metadata_json = ?, updated_at = ?
+      WHERE session_id = ? AND updated_at = ?
+    `).run(
+      input.workspacePath,
+      JSON.stringify(input.metadata),
+      updatedAt,
+      input.sessionId,
+      input.expectedUpdatedAt,
+    ) as { changes: number };
+    const binding = this.getBySessionId(input.sessionId);
+    if (updated.changes !== 1) return { status: "changed", binding };
+    if (!binding) return { status: "changed", binding: null };
+    return { status: "applied", binding };
+  }
+
+  private nextRevisionTimestamp(previous: string): string {
+    const previousMs = Date.parse(previous);
+    const nowMs = Date.now();
+    const nextMs = Number.isFinite(previousMs) ? Math.max(nowMs, previousMs + 1) : nowMs;
+    return new Date(nextMs).toISOString();
+  }
+
   getBySessionId(sessionId: string): StoredSessionBinding | null {
     const row = this.db.query(`
       SELECT

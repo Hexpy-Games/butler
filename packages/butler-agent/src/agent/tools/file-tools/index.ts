@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { WorkspaceReference } from "../../session-workspaces/index.ts";
 import type { ButlerToolExecutorRegistry } from "../butler-tools.ts";
 import { executeReadFileTool } from "./read_file/index.ts";
 import { executeWriteFileTool } from "./write_file/index.ts";
@@ -11,7 +12,7 @@ export { editFileToolDefinition, editFileToolMetadata } from "./edit_file/index.
 export { grepFilesToolDefinition, grepFilesToolMetadata } from "./grep_files/index.ts";
 export { resolveWorkspacePathGuard, looksSensitiveWorkspacePath } from "./shared/workspace-path-guard.ts";
 
-export function createFileToolHandlers(input: { butlerData?: string; workspacePath?: string } = {}): ButlerToolExecutorRegistry {
+export function createFileToolHandlers(input: { butlerData?: string; workspacePath?: string; workspaceReference?: WorkspaceReference } = {}): ButlerToolExecutorRegistry {
   const context = {
     ...input,
     protectedProjectLedgerRoots: input.butlerData

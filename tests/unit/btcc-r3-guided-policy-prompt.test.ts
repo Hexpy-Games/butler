@@ -290,6 +290,39 @@ test("R3 Conception guidance actively selects associative recall and exposes cro
   expect(visible).toContain("read_conversation_session");
 });
 
+test("session worktree binding is visible only on full-access project surfaces", () => {
+  const projectFullAccess = turnRecord({
+    projectRef: "butler",
+    accessMode: "full_access",
+    executionPolicy: {
+      ...executionPolicy("ledger"),
+      accessMode: "full_access",
+    },
+  });
+  const projectAuthorized = authorizedToolDefinitions(projectFullAccess, {});
+  expect(projectAuthorized.map((tool) => tool.name)).toContain("bind_session_git_worktree");
+  expect(visibleToolDefinitions(projectAuthorized, guidedPolicy(projectFullAccess))
+    .map((tool) => tool.name)).toContain("bind_session_git_worktree");
+
+  const readOnlyProject = turnRecord({
+    projectRef: "butler",
+    accessMode: "read_only",
+    executionPolicy: executionPolicy("ledger"),
+  });
+  expect(authorizedToolDefinitions(readOnlyProject, {}).map((tool) => tool.name))
+    .not.toContain("bind_session_git_worktree");
+
+  const generalFullAccess = turnRecord({
+    accessMode: "full_access",
+    executionPolicy: {
+      ...executionPolicy("local"),
+      accessMode: "full_access",
+    },
+  });
+  expect(authorizedToolDefinitions(generalFullAccess, {}).map((tool) => tool.name))
+    .not.toContain("bind_session_git_worktree");
+});
+
 test("R3 guided prompt reports disabled Work without inventing a Work context", () => {
   const turn = turnRecord({
     executionPolicy: executionPolicy("none"),

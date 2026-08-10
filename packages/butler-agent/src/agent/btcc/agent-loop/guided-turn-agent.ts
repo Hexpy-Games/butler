@@ -54,6 +54,7 @@ import {
   type ModelRouteEvent,
 } from "../model-route/index.ts";
 import { renderExecutionWindowObservation } from "./execution-window-observation.ts";
+import { createGuidedSessionWorkspaceRuntime, type GuidedSessionWorkspaceBindingStore } from "./guided-session-workspace-recovery.ts";
 
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
@@ -64,10 +65,12 @@ export function createProductionGuidedTurnAgent(input: {
   effectJournal: SqliteGuidedEffectJournal;
   durableWork: DurableWorkService;
   modelRound?: ModelRoundPort;
+  sessionBindingStore?: GuidedSessionWorkspaceBindingStore;
   /** Test seam for exercising more than one internal execution window. */
   executionWindowSize?: number;
 }): BtccAgentLoop {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
+  const sessionWorkspace = createGuidedSessionWorkspaceRuntime({ butlerData: input.butlerData, bindingStore: input.sessionBindingStore });
   return {
     async run({
       turn,
@@ -80,6 +83,7 @@ export function createProductionGuidedTurnAgent(input: {
       onProviderResponseIdentity,
     }): Promise<BtccAgentLoopResult> {
       const policy = guidedPolicy(turn);
+      const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
       const workScope = workScopeForTurn(turn, policy.trackingMode);
       let initialWork = policy.trackingMode === "none"
         ? null
@@ -112,6 +116,8 @@ export function createProductionGuidedTurnAgent(input: {
         sessionId: turn.sessionId,
         originChatId: turn.sessionId,
         projectId: policy.projectId ?? turn.context.projectRef,
+        workspaceReference,
+        sessionBindingStore: sessionWorkspace.bindingStore,
         turnId: turn.turnId,
         turnContext: turn.originalMessage,
         searchPlanner: async () => ({
@@ -140,7 +146,7 @@ export function createProductionGuidedTurnAgent(input: {
             call,
             accessMode: policy.accessMode,
             butlerData: input.butlerData,
-            workspacePath: policy.workspacePath,
+            workspacePath: workspaceReference.get(),
             originalRequest: turn.originalMessage,
             signal,
           }),
@@ -149,6 +155,9 @@ export function createProductionGuidedTurnAgent(input: {
             butlerData: input.butlerData,
             appMessageDbPath: input.appMessageDbPath,
             workspacePath: policy.workspacePath,
+            workspaceReference,
+            sessionId: turn.sessionId,
+            sessionBindingStore: sessionWorkspace.bindingStore,
             projectId: policy.projectId,
             trackingMode: policy.trackingMode,
             projectLedgerResolver,

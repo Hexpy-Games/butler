@@ -15,6 +15,7 @@ import { runProjectLedgerPlannedLifecycleMutation } from "./lifecycle-planner.ts
 import { projectLedgerNativeNextHints } from "./recovery-hints.ts";
 import { createEvidenceCapabilityReceipt } from "../../output/evidence/ledger.ts";
 import type { EvidenceCapabilityReceipt } from "../../output/evidence/types.ts";
+import type { WorkspaceReference } from "../../session-workspaces/index.ts";
 import { normalizeProjectLedgerAcceptanceInput } from "./acceptance-input.ts";
 import {
   GIT_INSTALL_URL,
@@ -30,6 +31,7 @@ type ProjectLedgerExecutorInput = {
   workspacePath?: string;
   sessionId?: string;
   projectId?: string;
+  workspaceReference?: WorkspaceReference;
 };
 
 type ToolSpec = {
@@ -264,7 +266,10 @@ function runProjectLedgerNativeTool(
   }
   let projectPath: string;
   try {
-    projectPath = projectLedgerProjectPath(input, normalizedArgs);
+    projectPath = projectLedgerProjectPath({
+      ...input,
+      workspacePath: input.workspaceReference?.get() || input.workspacePath,
+    }, normalizedArgs);
   } catch (error) {
     if (error instanceof ProjectLedgerProjectScopeError) {
       return {
@@ -358,7 +363,7 @@ function normalizeProjectLedgerCommitEvidence(
   return normalizeProjectLedgerCommitEvidenceInput({
     toolName,
     args,
-    workspacePath: input.workspacePath || stringArg(args, "project_path") ||
+    workspacePath: input.workspaceReference?.get() || input.workspacePath || stringArg(args, "project_path") ||
       input.butlerHome,
   });
 }

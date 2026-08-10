@@ -1789,6 +1789,9 @@ test("session summaries do not require host git for project workspace metadata",
       available: false,
       workspace_mode: "folder",
       safe_status: "Project workspace",
+      workspace_binding: "project",
+      workspace_label: "No Git project",
+      workspace_status: "available",
     });
 
     const summary = await getJson(
@@ -1798,6 +1801,9 @@ test("session summaries do not require host git for project workspace metadata",
       available: false,
       workspace_mode: "folder",
       safe_status: "Project workspace",
+      workspace_binding: "project",
+      workspace_label: "No Git project",
+      workspace_status: "available",
     });
   } finally {
     server.stop();
@@ -1839,6 +1845,9 @@ test("missing Git is a non-blocking session capability with a safe transport sta
       workspace_mode: "unknown",
       safe_status: "Git is not installed",
       safe_error_code: "git_not_installed",
+      workspace_binding: "project",
+      workspace_label: "Optional Git project",
+      workspace_status: "unavailable",
     });
 
     const delivered = await postJson(`${server.url}messages`, {
