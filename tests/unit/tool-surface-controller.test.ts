@@ -125,6 +125,7 @@ test("initial surface selection uses structured controller state without prompt 
     "write_file",
     "edit_file",
     "grep_files",
+    "list_files",
     "project_ledger_status",
     "project_ledger_list",
     "project_ledger_show",

@@ -607,6 +607,7 @@ test("guided edit resolves a unique exact text after a stale line shift and acce
     });
     expect(noHint.ok).toBe(true);
     if (!noHint.ok) throw new Error(noHint.error.message);
+    if ("edits" in noHint.effect.input) throw new Error("expected single edit");
     expect(noHint.effect.input.start_line).toBe(3);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -1153,6 +1154,7 @@ test("guided edit restart resolves repeated new_text by durable input identity",
     });
     expect(resumedPrepared.ok).toBe(true);
     if (!resumedPrepared.ok) throw new Error(resumedPrepared.error.message);
+    if ("edits" in resumedPrepared.effect.input) throw new Error("expected single edit");
     expect(resumedPrepared.effect.input.start_line).toBe(2);
     const resumed = await createGuidedEffectService(
       new SqliteGuidedEffectJournal(resumedDb),
@@ -1256,6 +1258,7 @@ test("guided deletion restart resolves an omitted start_line by durable input id
     });
     expect(resumedPrepared.ok).toBe(true);
     if (!resumedPrepared.ok) throw new Error(resumedPrepared.error.message);
+    if ("edits" in resumedPrepared.effect.input) throw new Error("expected single edit");
     expect(resumedPrepared.effect.input.start_line).toBe(2);
     const resumed = await createGuidedEffectService(
       new SqliteGuidedEffectJournal(resumedDb),

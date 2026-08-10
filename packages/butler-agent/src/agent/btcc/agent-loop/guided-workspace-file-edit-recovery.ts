@@ -10,6 +10,7 @@ import {
   normalizedGuidedWorkspaceEditCandidate,
   type GuidedWorkspaceFileEditInput,
 } from "./guided-workspace-file-edit-adapter.ts";
+import { isGuidedWorkspaceFileEditBatchInput } from "./guided-workspace-file-edit-batch.ts";
 import { guidedWorkspaceBytesSha256 } from "./guided-workspace-file-edit-observation.ts";
 
 const LEGACY_RECOVERY_MAX_CANDIDATES = 16;
@@ -48,26 +49,31 @@ export function recoverLegacyInput(input: {
   for (const location of beforeLocations) {
     if (input.decoded.oldText === input.decoded.newText) continue;
     if (!takeLegacyRecoveryCandidate(budget)) return null;
-    if (!spendLegacyRecoveryWork(budget, input.observedText.length)) return null;
-    const candidate = normalizedGuidedWorkspaceEditCandidate({
-      adapter: input.adapter,
-      decoded: input.decoded,
-      location,
-    }, {
-      beforeSha256: input.observedSha256,
-      afterSha256: textSha256WithReplacement(
-        input.observedText,
-        location.offset,
-        input.decoded.oldText.length,
-        input.decoded.newText,
-      ),
-    });
+    if (!spendLegacyRecoveryWork(budget, input.observedText.length))
+      return null;
+    const candidate = normalizedGuidedWorkspaceEditCandidate(
+      {
+        adapter: input.adapter,
+        decoded: input.decoded,
+        location,
+      },
+      {
+        beforeSha256: input.observedSha256,
+        afterSha256: textSha256WithReplacement(
+          input.observedText,
+          location.offset,
+          input.decoded.oldText.length,
+          input.decoded.newText,
+        ),
+      },
+    );
     if (guidedWorkspaceEditInputSha256(candidate) === input.priorInputSha256) {
       matches.push(candidate);
     }
   }
   if (input.decoded.newText) {
-    if (!spendLegacyRecoveryWork(budget, input.observedText.length)) return null;
+    if (!spendLegacyRecoveryWork(budget, input.observedText.length))
+      return null;
     const afterStateHash = textSha256(input.observedText);
     if (afterStateHash === input.observedSha256) {
       const afterLocations = boundedExactTextLocations(
@@ -77,10 +83,13 @@ export function recoverLegacyInput(input: {
       );
       if (!afterLocations) return null;
       for (const afterLocation of afterLocations) {
-        const beforeTextLength = input.observedText.length -
-          input.decoded.newText.length + input.decoded.oldText.length;
+        const beforeTextLength =
+          input.observedText.length -
+          input.decoded.newText.length +
+          input.decoded.oldText.length;
         if (!spendLegacyRecoveryWork(budget, beforeTextLength)) return null;
-        const beforeText = input.observedText.slice(0, afterLocation.offset) +
+        const beforeText =
+          input.observedText.slice(0, afterLocation.offset) +
           input.decoded.oldText +
           input.observedText.slice(
             afterLocation.offset + input.decoded.newText.length,
@@ -96,15 +105,20 @@ export function recoverLegacyInput(input: {
         const beforeSha256 = textSha256(beforeText);
         for (const beforeLocation of beforeLocations) {
           if (!takeLegacyRecoveryCandidate(budget)) return null;
-          const candidate = normalizedGuidedWorkspaceEditCandidate({
-            adapter: input.adapter,
-            decoded: input.decoded,
-            location: beforeLocation,
-          }, {
-            beforeSha256,
-            afterSha256: afterStateHash,
-          });
-          if (guidedWorkspaceEditInputSha256(candidate) === input.priorInputSha256) {
+          const candidate = normalizedGuidedWorkspaceEditCandidate(
+            {
+              adapter: input.adapter,
+              decoded: input.decoded,
+              location: beforeLocation,
+            },
+            {
+              beforeSha256,
+              afterSha256: afterStateHash,
+            },
+          );
+          if (
+            guidedWorkspaceEditInputSha256(candidate) === input.priorInputSha256
+          ) {
             matches.push(candidate);
           }
         }
@@ -123,10 +137,14 @@ export function recoverDurableInput(input: {
   priorInputSha256: string;
   priorRecoveryHint: GuidedEffectRecoveryHint;
 }): GuidedWorkspaceFileEditInput | null {
-  if (input.priorRecoveryHint.capability !== "edit_file") return null;
+  if (
+    input.priorRecoveryHint.capability !== "edit_file" ||
+    "entries" in input.priorRecoveryHint
+  )
+    return null;
   let candidate: GuidedWorkspaceFileEditInput;
   try {
-    candidate = input.adapter.normalizeInput({
+    const normalized = input.adapter.normalizeInput({
       path: input.decoded.path,
       start_line: input.priorRecoveryHint.startLine,
       old_text: input.decoded.oldText,
@@ -134,6 +152,8 @@ export function recoverDurableInput(input: {
       before_sha256: input.priorRecoveryHint.beforeSha256,
       after_sha256: input.priorRecoveryHint.afterSha256,
     });
+    if (isGuidedWorkspaceFileEditBatchInput(normalized)) return null;
+    candidate = normalized;
   } catch {
     return null;
   }
@@ -196,9 +216,7 @@ function spendLegacyRecoveryWork(
   return true;
 }
 
-function takeLegacyRecoveryCandidate(
-  budget: LegacyRecoveryBudget,
-): boolean {
+function takeLegacyRecoveryCandidate(budget: LegacyRecoveryBudget): boolean {
   if (budget.candidateCount >= LEGACY_RECOVERY_MAX_CANDIDATES) return false;
   budget.candidateCount += 1;
   return true;

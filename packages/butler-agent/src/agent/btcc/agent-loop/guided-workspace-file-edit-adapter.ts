@@ -1,5 +1,4 @@
 import {
-  stableEffectJson,
   type EffectAdapter,
   type EffectAdapterError,
   type EffectDispatchOutcome,
@@ -7,72 +6,77 @@ import {
   type GuidedEffectRecoveryHint,
 } from "../effects/index.ts";
 import {
-  normalizeExpectedSha256,
-  normalizeWorkspaceContainedPath,
   normalizeWorkspaceFileTarget,
   workspaceFileEffectTarget,
 } from "./guided-workspace-file-target.ts";
 import {
-  guidedWorkspaceBytesSha256,
-  observeGuidedWorkspaceEditTarget,
-  type GuidedWorkspaceEditGuardOptions,
-} from "./guided-workspace-file-edit-observation.ts";
-import type { ExactTextLocation } from "../../tools/file-tools/edit_file/index.ts";
+  dispatchGuidedWorkspaceEditBatch,
+  reconcileGuidedWorkspaceEditBatch,
+} from "./guided-workspace-file-edit-batch-adapter.ts";
+import { classifyGuidedWorkspaceEditBlocker } from "./guided-workspace-file-edit-blocker.ts";
+import { observeGuidedWorkspaceEditTarget } from "./guided-workspace-file-edit-observation.ts";
+import {
+  isGuidedWorkspaceFileEditBatchInput,
+  normalizeWorkspaceFileEditBatchTarget,
+  type GuidedWorkspaceFileEditNormalizedInput,
+} from "./guided-workspace-file-edit-batch.ts";
+import { normalizeGuidedWorkspaceFileEditEffectInput } from "./guided-workspace-file-edit-normalization.ts";
+import {
+  GUIDED_WORKSPACE_FILE_EDIT_CAPABILITY,
+  type GuidedWorkspaceFileEditAdapterOptions,
+  type GuidedWorkspaceFileEditBatchResult,
+  type GuidedWorkspaceFileEditInput,
+  type GuidedWorkspaceFileEditResult,
+} from "./guided-workspace-file-edit-contracts.ts";
 
-export const GUIDED_WORKSPACE_FILE_EDIT_CAPABILITY = "edit_file";
-
-export type GuidedWorkspaceFileEditInput = {
-  path: string;
-  start_line: number;
-  old_text: string;
-  new_text: string;
-  before_sha256: string;
-  after_sha256: string;
-};
-
-export type GuidedWorkspaceFileEditResult = {
-  ok: true;
-  effect: "workspace_file_edit";
-  path: string;
-  start_line: number;
-  bytes: number;
-  before_sha256: string;
-  after_sha256: string;
-  target_observed: true;
-};
-
-export type RegisteredEditFileInput = {
-  path: string;
-  start_line: number;
-  old_text: string;
-  new_text: string;
-  expected_sha256: string;
-};
-
-export type GuidedWorkspaceFileEditAdapterOptions =
-  GuidedWorkspaceEditGuardOptions & {
-    executeEditFile(input: RegisteredEditFileInput): Promise<unknown>;
-  };
-
-const INPUT_FIELDS = new Set([
-  "path",
-  "start_line",
-  "old_text",
-  "new_text",
-  "before_sha256",
-  "after_sha256",
-]);
+export {
+  GUIDED_WORKSPACE_FILE_EDIT_CAPABILITY,
+} from "./guided-workspace-file-edit-contracts.ts";
+export type {
+  GuidedWorkspaceFileEditAdapterOptions,
+  GuidedWorkspaceFileEditBatch,
+  GuidedWorkspaceFileEditBatchResult,
+  GuidedWorkspaceFileEditInput,
+  GuidedWorkspaceFileEditResult,
+  RegisteredEditFileBatchInput,
+  RegisteredEditFileInput,
+  RegisteredEditFileInvocation,
+} from "./guided-workspace-file-edit-contracts.ts";
+export {
+  guidedWorkspaceEditInputSha256,
+  normalizedGuidedWorkspaceEditBatchCandidate,
+  normalizedGuidedWorkspaceEditCandidate,
+} from "./guided-workspace-file-edit-normalization.ts";
 
 export function createGuidedWorkspaceFileEditEffectAdapter(
   options: GuidedWorkspaceFileEditAdapterOptions,
-): EffectAdapter<GuidedWorkspaceFileEditInput, GuidedWorkspaceFileEditResult> {
+): EffectAdapter<
+  GuidedWorkspaceFileEditNormalizedInput,
+  GuidedWorkspaceFileEditResult | GuidedWorkspaceFileEditBatchResult
+> {
   return {
     capability: GUIDED_WORKSPACE_FILE_EDIT_CAPABILITY,
     reviewedPlanBinding: "accepted_plan",
-    normalizeTarget: normalizeWorkspaceFileTarget,
+    normalizeTarget(target) {
+      return target.startsWith("workspace:batch:")
+        ? normalizeWorkspaceFileEditBatchTarget(target)
+        : normalizeWorkspaceFileTarget(target);
+    },
     sanitizeTarget: (target) => target,
-    normalizeInput: (input) => normalizeEditEffectInput(input, options.workspacePath),
+    normalizeInput: (input) =>
+      normalizeGuidedWorkspaceFileEditEffectInput(input, options.workspacePath),
     recoveryHint(input): GuidedEffectRecoveryHint {
+      if (isGuidedWorkspaceFileEditBatchInput(input)) {
+        return {
+          capability: GUIDED_WORKSPACE_FILE_EDIT_CAPABILITY,
+          entries: input.edits.map((entry) => ({
+            path: entry.path,
+            startLine: entry.start_line,
+            beforeSha256: entry.before_sha256,
+            afterSha256: entry.after_sha256,
+          })),
+        };
+      }
       return {
         capability: GUIDED_WORKSPACE_FILE_EDIT_CAPABILITY,
         startLine: input.start_line,
@@ -81,6 +85,13 @@ export function createGuidedWorkspaceFileEditEffectAdapter(
       };
     },
     async dispatch(input) {
+      if (isGuidedWorkspaceFileEditBatchInput(input.normalizedInput)) {
+        return dispatchGuidedWorkspaceEditBatch(options, {
+          normalizedTarget: input.normalizedTarget,
+          normalizedInput: input.normalizedInput,
+          signal: input.signal,
+        });
+      }
       const mismatch = targetInputMismatch(
         input.normalizedTarget,
         input.normalizedInput,
@@ -100,7 +111,8 @@ export function createGuidedWorkspaceFileEditEffectAdapter(
       if (before.value.sha256 !== input.normalizedInput.before_sha256) {
         return notApplied({
           code: "expected_sha256_mismatch",
-          message: "The workspace file changed before the reviewed edit was applied.",
+          message:
+            "The workspace file changed before the reviewed edit was applied.",
         });
       }
       const registeredResult = await options.executeEditFile({
@@ -125,6 +137,14 @@ export function createGuidedWorkspaceFileEditEffectAdapter(
       return uncertain(after.ok ? stateMismatch() : after.error);
     },
     async reconcile(input) {
+      if (isGuidedWorkspaceFileEditBatchInput(input.normalizedInput)) {
+        return reconcileGuidedWorkspaceEditBatch(options, {
+          normalizedTarget: input.normalizedTarget,
+          normalizedInput: input.normalizedInput,
+          dispatchAttempts: input.dispatchAttempts,
+          priorError: input.priorError,
+        });
+      }
       const mismatch = targetInputMismatch(
         input.normalizedTarget,
         input.normalizedInput,
@@ -134,9 +154,8 @@ export function createGuidedWorkspaceFileEditEffectAdapter(
         options,
         input.normalizedInput.path,
       );
-      if (!observation.ok) {
+      if (!observation.ok)
         return { status: "uncertain", error: observation.error };
-      }
       if (observation.value.sha256 === input.normalizedInput.before_sha256) {
         return { status: "not_applied" };
       }
@@ -154,63 +173,13 @@ export function createGuidedWorkspaceFileEditEffectAdapter(
       }
       return { status: "uncertain", error: stateMismatch() };
     },
-  };
-}
-
-export function guidedWorkspaceEditInputSha256(
-  value: GuidedWorkspaceFileEditInput,
-): string {
-  return guidedWorkspaceBytesSha256(
-    Buffer.from(stableEffectJson(value), "utf8"),
-  );
-}
-
-export function normalizedGuidedWorkspaceEditCandidate(input: {
-  adapter: ReturnType<typeof createGuidedWorkspaceFileEditEffectAdapter>;
-  decoded: { path: string; oldText: string; newText: string };
-  location: ExactTextLocation;
-}, hashes: { beforeSha256: string; afterSha256: string }): GuidedWorkspaceFileEditInput {
-  return input.adapter.normalizeInput({
-    path: input.decoded.path,
-    start_line: input.location.startLine,
-    old_text: input.decoded.oldText,
-    new_text: input.decoded.newText,
-    before_sha256: hashes.beforeSha256,
-    after_sha256: hashes.afterSha256,
-  });
-}
-
-function normalizeEditEffectInput(
-  input: unknown,
-  workspacePath: string,
-): GuidedWorkspaceFileEditInput {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new Error("edit_file effect input must be an object");
-  }
-  const record = input as Record<string, unknown>;
-  const unknown = Object.keys(record).filter((key) => !INPUT_FIELDS.has(key));
-  if (unknown.length > 0) {
-    throw new Error(`edit_file effect rejects unknown input: ${unknown.join(", ")}`);
-  }
-  if (!Number.isSafeInteger(record.start_line) || Number(record.start_line) < 1) {
-    throw new Error("edit_file effect start_line must be a positive integer");
-  }
-  if (typeof record.old_text !== "string" || record.old_text.length === 0) {
-    throw new Error("edit_file effect old_text must be non-empty");
-  }
-  if (typeof record.new_text !== "string") {
-    throw new Error("edit_file effect new_text must be a string");
-  }
-  return {
-    path: normalizeWorkspaceContainedPath(
-      workspacePath,
-      requiredText(record.path, "path"),
-    ),
-    start_line: Number(record.start_line),
-    old_text: record.old_text,
-    new_text: record.new_text,
-    before_sha256: requiredSha(record.before_sha256, "before_sha256"),
-    after_sha256: requiredSha(record.after_sha256, "after_sha256"),
+    async classifyEffectBlocker(input) {
+      return classifyGuidedWorkspaceEditBlocker({
+        ...input,
+        normalizeInput: (value) =>
+          normalizeGuidedWorkspaceFileEditEffectInput(value, options.workspacePath),
+      });
+    },
   };
 }
 
@@ -234,18 +203,6 @@ function applied(
   };
 }
 
-function notApplied(
-  error: EffectAdapterError,
-): EffectDispatchOutcome<GuidedWorkspaceFileEditResult> {
-  return { status: "not_applied", error };
-}
-
-function uncertain(
-  error: EffectAdapterError,
-): EffectDispatchOutcome<GuidedWorkspaceFileEditResult> {
-  return { status: "uncertain", error };
-}
-
 function targetInputMismatch(
   target: string,
   input: GuidedWorkspaceFileEditInput,
@@ -254,17 +211,31 @@ function targetInputMismatch(
     ? null
     : {
         code: "workspace_target_input_mismatch",
-        message: "The reviewed edit target does not match the normalized input path.",
+        message:
+          "The reviewed edit target does not match the normalized input path.",
       };
+}
+
+function notApplied<
+  TResult = GuidedWorkspaceFileEditResult | GuidedWorkspaceFileEditBatchResult,
+>(error: EffectAdapterError): EffectDispatchOutcome<TResult> {
+  return { status: "not_applied", error };
+}
+
+function uncertain<
+  TResult = GuidedWorkspaceFileEditResult | GuidedWorkspaceFileEditBatchResult,
+>(error: EffectAdapterError): EffectDispatchOutcome<TResult> {
+  return { status: "uncertain", error };
 }
 
 function registeredToolRejection(value: unknown): EffectAdapterError | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   if (record.ok !== false) return null;
-  const code = typeof record.error === "string"
-    ? record.error
-    : "registered_edit_file_rejected";
+  const code =
+    typeof record.error === "string"
+      ? record.error
+      : "registered_edit_file_rejected";
   return {
     code,
     message: `The registered edit_file tool rejected the reviewed edit (${code}).`,
@@ -274,19 +245,7 @@ function registeredToolRejection(value: unknown): EffectAdapterError | null {
 function stateMismatch(): EffectAdapterError {
   return {
     code: "workspace_file_state_mismatch",
-    message: "The workspace file matches neither the durable before nor after state.",
+    message:
+      "The workspace file matches neither the durable before nor after state.",
   };
-}
-
-function requiredSha(value: unknown, field: string): string {
-  const normalized = normalizeExpectedSha256(value);
-  if (!normalized) throw new Error(`edit_file effect requires ${field}`);
-  return normalized;
-}
-
-function requiredText(value: unknown, field: string): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`edit_file requires ${field}`);
-  }
-  return value.trim();
 }

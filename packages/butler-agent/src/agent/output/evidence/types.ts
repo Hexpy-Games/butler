@@ -4,6 +4,7 @@ export const EVIDENCE_CAPABILITY_SCHEMA_VERSION = "evidence-capability.v1" as co
 
 export const EVIDENCE_CAPABILITY_TAXONOMY = {
   candidateDiscovery: "source_candidate",
+  workspaceFileList: "workspace_file_list",
   sourceVerification: "source_verified",
   execution: "command_executed",
   mutation: "workspace_mutated",

@@ -114,6 +114,7 @@ export function authorizedToolDefinitions(
     "web_read",
     "read_file",
     "grep_files",
+    "list_files",
   ]) names.add(name);
   for (const name of GUIDED_UNAVAILABLE_NATIVE_TOOL_NAMES) names.delete(name);
   applyGuidedWorkspaceAuthorization({
@@ -170,6 +171,7 @@ export function visibleToolDefinitions(
     "web_read",
     "read_file",
     "grep_files",
+    "list_files",
     "recall_memory",
     "list_conversation_sessions",
     "read_conversation_session",
@@ -251,7 +253,7 @@ export function isReplaySafeTool(name: string): boolean {
   if (isDurableWorkTool(name)) return true;
   const nativeTool = BUTLER_TOOLS.find((tool) => tool.name === name);
   if (nativeTool?.effectBoundary === "none") return true;
-  if (name === "write_file" || name === "edit_file" || name === "run_command" ||
+  if (name === "bind_session_git_worktree" || name === "write_file" || name === "edit_file" || name === "run_command" ||
       GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES.includes(
         name as typeof GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES[number],
       )) return true;

@@ -7,6 +7,8 @@ export interface WorkspacePathGuardInput {
   relativePath: string;
   allowMissingLeaf?: boolean;
   allowDirectories?: boolean;
+  /** Require the admitted path itself to be a directory. */
+  requireDirectory?: boolean;
   rejectProtectedProjectLedgerPaths?: boolean;
   rejectProtectedProjectLedgerWrites?: boolean;
   protectedProjectLedgerRoots?: string[];
@@ -22,6 +24,44 @@ export interface WorkspacePathGuardResult {
   code?: string;
   message?: string;
   next?: Array<{ command: string }>;
+}
+
+/** Return only a workspace-relative path suitable for a public tool result. */
+export function safeWorkspaceResultPath(input: {
+  workspaceRoot: string;
+  requestedPath?: unknown;
+  absolutePath?: unknown;
+}): string | undefined {
+  const root = resolve(input.workspaceRoot || ".");
+  const absolute = typeof input.absolutePath === "string" && input.absolutePath.trim()
+    ? resolve(input.absolutePath)
+    : undefined;
+  const candidate = absolute
+    ? relative(root, absolute)
+    : typeof input.requestedPath === "string"
+      ? input.requestedPath.trim()
+      : "";
+  if (!candidate || candidate === "." || isAbsolute(candidate) || candidate.split(/[\\/]+/u).includes("..")) return undefined;
+  return candidate.replaceAll("\\", "/");
+}
+
+/** Strip private absolute and real paths from a rejected guard result. */
+export function safeWorkspaceGuardResult(
+  guard: WorkspacePathGuardResult,
+): Record<string, unknown> {
+  const path = safeWorkspaceResultPath({
+    workspaceRoot: guard.workspaceRoot,
+    requestedPath: guard.requestedPath,
+    absolutePath: guard.absolutePath,
+  });
+  return {
+    ok: false,
+    ...(path === undefined ? {} : { path }),
+    ...(guard.reason === undefined ? {} : { reason: guard.reason }),
+    ...(guard.code === undefined ? {} : { code: guard.code }),
+    ...(guard.message === undefined ? {} : { message: guard.message }),
+    ...(guard.next === undefined ? {} : { next: guard.next }),
+  };
 }
 
 const SENSITIVE_SEGMENTS = new Set([".git", ".ssh", ".gnupg"]);
@@ -87,6 +127,7 @@ export async function resolveWorkspacePathGuard(input: WorkspacePathGuardInput):
     const real = await realpath(absolutePath);
     if (!isInside(rootReal, real)) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: real, reason: "symlink_escape" };
     const st = await lstat(absolutePath);
+    if (input.requireDirectory && !st.isDirectory()) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: real, reason: "not_a_directory" };
     if (st.isDirectory() && !input.allowDirectories) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: real, reason: "directory_not_allowed" };
     if (!st.isFile() && !st.isDirectory() && !st.isSymbolicLink()) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: real, reason: "special_file_not_allowed" };
     return { ok: true, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: real };
