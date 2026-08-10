@@ -2,9 +2,11 @@ import { readFile, stat } from "node:fs/promises";
 import { resolveWorkspacePathGuard } from "../shared/workspace-path-guard.ts";
 import { fileToolCapabilityReceipt, fileToolEvidenceReceipt, sha256Hex } from "../shared/evidence.ts";
 import { getWorkspaceRoot, tryParseToolArgs } from "../shared/args.ts";
+import type { WorkspaceReference } from "../../../session-workspaces/index.ts";
 
 export interface FileToolExecutionContext {
   workspacePath?: string;
+  workspaceReference?: WorkspaceReference;
   protectedProjectLedgerRoots?: string[];
 }
 
@@ -31,10 +33,10 @@ export async function executeReadFileTool(call: { arguments?: unknown; input?: u
   const parsed = tryParseToolArgs(call);
   if (!parsed.ok) return { ok: false, error: parsed.error, detail: parsed.detail, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, error: parsed.error }) };
   const a = parsed.args;
-  const workspaceRoot = getWorkspaceRoot(a, context.workspacePath);
+  const workspaceRoot = getWorkspaceRoot(a, context.workspaceReference?.get() ?? context.workspacePath);
   const path = String(a.path ?? "");
   const suppliedWorkspaceRoot = typeof a.workspace_root === "string" ? a.workspace_root.trim() : "";
-  if (context.workspacePath && suppliedWorkspaceRoot) {
+  if ((context.workspaceReference?.get() ?? context.workspacePath) && suppliedWorkspaceRoot) {
     const suppliedGuard = await resolveWorkspacePathGuard({
       workspaceRoot: suppliedWorkspaceRoot,
       relativePath: path,

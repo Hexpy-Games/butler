@@ -39,7 +39,7 @@ export async function executeWriteFileTool(call: { arguments?: unknown; input?: 
   const parsed = tryParseToolArgs(call);
   if (!parsed.ok) return { ok: false, error: parsed.error, detail: parsed.detail, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, error: parsed.error }) };
   const a = parsed.args;
-  const workspaceRoot = getWorkspaceRoot(a, context.workspacePath);
+  const workspaceRoot = getWorkspaceRoot(a, context.workspaceReference?.get() ?? context.workspacePath);
   const path = String(a.path ?? "");
   const content = String(a.content ?? "");
   const overwrite = Boolean(a.overwrite);

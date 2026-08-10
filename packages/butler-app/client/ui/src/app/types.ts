@@ -1257,6 +1257,10 @@ export interface SessionSummaryView {
     branch_name?: string;
     safe_status?: string;
     safe_error_code?: string;
+    workspace_binding?: "project" | "session_worktree";
+    workspace_label?: string;
+    workspace_status?: "available" | "unavailable";
+    dirty?: boolean;
   };
   context_details?: ContextDetailsView;
   artifacts?: SessionArtifactSummary[];

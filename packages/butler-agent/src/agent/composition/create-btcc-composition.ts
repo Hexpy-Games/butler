@@ -67,6 +67,7 @@ export function createProductionBtccComposition(input: {
       effectJournal: stores.guidedEffectJournal,
       durableWork: stores.durableWork,
       modelRound: input.modelRound,
+      sessionBindingStore: bindings,
     }),
   });
   const preparationDependencies: BtccTurnPreparationDependencies = {
