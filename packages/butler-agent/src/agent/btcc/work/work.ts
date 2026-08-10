@@ -16,6 +16,12 @@ import {
 } from "./work-progress-policy.ts";
 import { digest, stableJson } from "../identity/index.ts";
 
+export function durableWorkReviewRevisionId(mutationCallId: string): string {
+  return `guided-review-${digest(
+    `btcc-guided-work.v1\0review\0${mutationCallId}`,
+  )}`;
+}
+
 export function createDurableWorkService(
   store: DurableWorkStore,
 ): DurableWorkService {

@@ -53,7 +53,7 @@ export function renderDurableWorkContext(
         "Reconcile this exact target before another effect.",
     );
   }
-  if (work.latestPlanReview) {
+  if (!compactReplay && work.latestPlanReview) {
     const current = work.currentPlan?.planRevisionId ===
       work.latestPlanReview.boundPlanRevisionId;
     rows.push(
@@ -63,7 +63,7 @@ export function renderDurableWorkContext(
     );
     pushCorrections(rows, "Plan corrections", work.latestPlanReview.corrections);
   }
-  if (work.latestResultReview) {
+  if (!compactReplay && work.latestResultReview) {
     const current = isDurableWorkResultReviewCurrent(work);
     rows.push(
       `Latest result review${current ? "" : " (outdated)"}: ` +
@@ -72,7 +72,7 @@ export function renderDurableWorkContext(
     );
     pushCorrections(rows, "Result corrections", work.latestResultReview.corrections);
   }
-  if (work.latestCompletionValidation) {
+  if (!compactReplay && work.latestCompletionValidation) {
     const current = isDurableWorkCompletionValidationCurrent(work);
     rows.push(
       `Latest completion validation${current ? "" : " (outdated)"}: ` +
@@ -113,11 +113,13 @@ export function renderDurableWorkContext(
       rows.push(
         `- [${status}] ${singleLine(action.actionKey, 80)}: ` +
           `${singleLine(action.description, 280)}${dependencies}${effect}` +
-          (progress?.note ? ` — ${singleLine(progress.note, 180)}` : ""),
+          (!compactReplay && progress?.note
+            ? ` — ${singleLine(progress.note, 180)}`
+            : ""),
       );
     }
   }
-  if (work.latestCheckpoint) {
+  if (!compactReplay && work.latestCheckpoint) {
     if (work.latestCheckpoint.publicSummary) {
       rows.push(
         `Latest progress (${work.latestCheckpoint.stage}): ` +

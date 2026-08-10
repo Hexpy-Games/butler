@@ -1,4 +1,7 @@
-export { createDurableWorkService } from "./work.ts";
+export {
+  createDurableWorkService,
+  durableWorkReviewRevisionId,
+} from "./work.ts";
 export {
   DURABLE_WORK_TOOL_NAMES,
   isDurableWorkTool,
