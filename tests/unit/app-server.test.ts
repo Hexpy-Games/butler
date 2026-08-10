@@ -42,6 +42,11 @@ import {
   upsertLocalModelConfig,
 } from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
+import { ProviderQuotaMonitor } from "../../packages/butler-agent/src/operations/metrics/provider-quota.ts";
+import { createZaiQuotaAdapter } from
+  "../../packages/butler-agent/src/integrations/providers/zai/provider-quota.ts";
+import { registerHostedModelConfig } from
+  "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
 import {
   TURN_DECISION_EVENT_KIND,
   TURN_ACKNOWLEDGED_EVENT_KIND,
@@ -1784,6 +1789,9 @@ test("session summaries do not require host git for project workspace metadata",
       available: false,
       workspace_mode: "folder",
       safe_status: "Project workspace",
+      workspace_binding: "project",
+      workspace_label: "No Git project",
+      workspace_status: "available",
     });
 
     const summary = await getJson(
@@ -1793,6 +1801,9 @@ test("session summaries do not require host git for project workspace metadata",
       available: false,
       workspace_mode: "folder",
       safe_status: "Project workspace",
+      workspace_binding: "project",
+      workspace_label: "No Git project",
+      workspace_status: "available",
     });
   } finally {
     server.stop();
@@ -1834,6 +1845,9 @@ test("missing Git is a non-blocking session capability with a safe transport sta
       workspace_mode: "unknown",
       safe_status: "Git is not installed",
       safe_error_code: "git_not_installed",
+      workspace_binding: "project",
+      workspace_label: "Optional Git project",
+      workspace_status: "unavailable",
     });
 
     const delivered = await postJson(`${server.url}messages`, {
@@ -2867,6 +2881,14 @@ test("app server exposes safe usage monitor summary", async () => {
     cachedTokens: 30,
     totalTokens: 145,
   }, { butlerData: tempDir });
+  appendPromptCacheMetric({
+    ts: Date.now(),
+    model: "zai-api/glm-5.2",
+    scope: "worker",
+    promptTokens: 20,
+    cachedTokens: 0,
+    totalTokens: 25,
+  }, { butlerData: tempDir });
   mkdirSync(join(tempDir, "transcripts"), { recursive: true });
   writeFileSync(
     join(tempDir, "transcripts", "butler_main.jsonl"),
@@ -2895,6 +2917,31 @@ test("app server exposes safe usage monitor summary", async () => {
     dbPath: join(tempDir, "app.sqlite"),
     butlerData: tempDir,
     port: 0,
+    providerQuotaMonitor: new ProviderQuotaMonitor({
+      adapters: [{
+        providerId: "openai",
+        async read() {
+          return {
+            available: true,
+            stale: false,
+            sourceKind: "codex_app_server",
+            sourceId: "openai-codex-rate-limits",
+            planKind: "subscription",
+            planName: "Pro",
+            windows: [{
+              id: "primary",
+              usedPercent: 10,
+              remainingPercent: 90,
+              windowDurationMins: 300,
+              resetsAt: "2026-08-09T01:00:00.000Z",
+              expiresAt: null,
+            }],
+            fetchedAt: "2026-08-09T00:00:00.000Z",
+            reason: null,
+          };
+        },
+      }],
+    }),
   });
   try {
     const usage = await getJson(
@@ -2903,12 +2950,12 @@ test("app server exposes safe usage monitor summary", async () => {
 
     expect(usage.data.raw_text_included).toBe(false);
     expect(usage.data.model).toMatchObject({
-      requestCount: 1,
-      promptTokens: 100,
+      requestCount: 2,
+      promptTokens: 120,
       cachedTokens: 30,
-      uncachedTokens: 70,
-      outputTokens: 45,
-      totalTokens: 145,
+      uncachedTokens: 90,
+      outputTokens: 50,
+      totalTokens: 170,
       byScopeUsage: {
         "session-turn": {
           requestCount: 1,
@@ -2927,7 +2974,113 @@ test("app server exposes safe usage monitor summary", async () => {
       failures: 0,
     });
     expect(usage.data.cost.available).toBe(false);
+    expect(usage.data.providerUsage.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        providerId: "openai",
+        remaining: expect.objectContaining({
+          available: true,
+          stale: false,
+          planName: "Pro",
+          windows: [expect.objectContaining({ remainingPercent: 90 })],
+        }),
+      }),
+      expect.objectContaining({
+        providerId: "zai-api",
+        remaining: expect.objectContaining({
+          available: false,
+          stale: false,
+          reason: expect.objectContaining({
+            code: "provider_quota_surface_unavailable",
+          }),
+        }),
+      }),
+    ]));
     expect(JSON.stringify(usage.data)).not.toContain("SECRET_USAGE");
+  } finally {
+    server.stop();
+  }
+});
+
+test("app server merges the real Z.AI quota adapter and preserves partial providers", async () => {
+  appendPromptCacheMetric({
+    ts: Date.now(),
+    model: "zai/glm-5.2",
+    scope: "session-turn",
+    promptTokens: 40,
+    cachedTokens: 10,
+    totalTokens: 55,
+  }, { butlerData: tempDir });
+  appendPromptCacheMetric({
+    ts: Date.now(),
+    model: "zai-api/glm-5.2",
+    scope: "worker",
+    promptTokens: 20,
+    cachedTokens: 0,
+    totalTokens: 25,
+  }, { butlerData: tempDir });
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-route-secret",
+  }, tempDir);
+  const calls: Array<{ url: string; authorization: string }> = [];
+  const server = createAppServer({
+    dbPath: join(tempDir, "zai-usage.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    providerQuotaMonitor: new ProviderQuotaMonitor({
+      adapters: [createZaiQuotaAdapter({
+        butlerData: tempDir,
+        fetchImpl: async (input, init) => {
+          calls.push({
+            url: String(input),
+            authorization: String(new Headers(init?.headers).get("authorization")),
+          });
+          return new Response(JSON.stringify({
+            data: {
+              level: "pro",
+              limits: [
+                { type: "TOKENS_LIMIT", unit: 3, number: 5, percentage: 25 },
+                { type: "TIME_LIMIT", unit: 5, number: 1, percentage: 10 },
+              ],
+            },
+          }), { status: 200 });
+        },
+      })],
+    }),
+  });
+  try {
+    const usage = await getJson(`${server.url}usage-monitor`);
+    expect(calls).toEqual([{
+      url: "https://api.z.ai/api/monitor/usage/quota/limit",
+      authorization: "zai-route-secret",
+    }]);
+    expect(usage.data.providerUsage.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        providerId: "zai",
+        remaining: expect.objectContaining({
+          available: true,
+          sourceKind: "zai_usage_query",
+          windows: expect.arrayContaining([
+            expect.objectContaining({
+              id: "tokens-5-hour",
+              usedPercent: 25,
+              remainingPercent: 75,
+            }),
+            expect.objectContaining({ id: "mcp-month", remainingPercent: 90 }),
+          ]),
+        }),
+      }),
+      expect.objectContaining({
+        providerId: "zai-api",
+        remaining: expect.objectContaining({
+          available: false,
+          reason: expect.objectContaining({ code: "provider_quota_surface_unavailable" }),
+        }),
+      }),
+    ]));
+    expect(JSON.stringify(usage.data)).not.toContain("zai-route-secret");
   } finally {
     server.stop();
   }

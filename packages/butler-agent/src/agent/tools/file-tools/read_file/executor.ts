@@ -9,6 +9,7 @@ import {
   cursorQueryHash,
   decodeFileToolCursor,
   encodeFileToolCursor,
+  normalizeOptionalFileToolCursor,
 } from "../shared/cursor.ts";
 import {
   DEFAULT_MAX_BYTES,
@@ -22,9 +23,11 @@ import {
   type ReadFileResult,
   type ReadRequest,
 } from "./read-content.ts";
+import type { WorkspaceReference } from "../../../session-workspaces/index.ts";
 
 export interface FileToolExecutionContext {
   workspacePath?: string;
+  workspaceReference?: WorkspaceReference;
   protectedProjectLedgerRoots?: string[];
 }
 
@@ -64,9 +67,15 @@ export async function executeReadFileTool(
   }
   const normalizedRequests = requests as ReadRequest[];
   const maxTotalBytes = integer(args.max_total_bytes, hasPath ? normalizedRequests[0]!.max_bytes : DEFAULT_MAX_TOTAL_BYTES, 1, MAX_TOTAL_BYTES);
-  const query = cursorQueryHash(normalizedQueryRequests(normalizedRequests, maxTotalBytes));
-  const cursor = args.cursor === undefined ? null : decodeFileToolCursor(args.cursor);
-  if (args.cursor !== undefined && (!cursor || cursor.tool !== "read_file" || cursor.query !== query)) {
+  const boundWorkspaceRoot = context.workspaceReference?.get() ?? context.workspacePath;
+  const workspaceRoot = getWorkspaceRoot(args, boundWorkspaceRoot);
+  const query = cursorQueryHash({
+    workspace_root: workspaceRoot,
+    ...normalizedQueryRequests(normalizedRequests, maxTotalBytes) as Record<string, unknown>,
+  });
+  const cursorInput = normalizeOptionalFileToolCursor(args.cursor);
+  const cursor = cursorInput === undefined ? null : decodeFileToolCursor(cursorInput);
+  if (cursorInput !== undefined && (!cursor || cursor.tool !== "read_file" || cursor.query !== query)) {
     return invalidCursorResult("invalid_cursor", "The read_file cursor is malformed or does not match the current request options.", "Restart read_file with the same path or requests and omit cursor.");
   }
   const cursorIndex = cursor?.request_index ?? 0;
@@ -77,9 +86,8 @@ export async function executeReadFileTool(
     return invalidCursorResult("invalid_cursor", "The read_file cursor is missing its partial-file revision marker.", "Restart the affected file read without cursor.");
   }
 
-  const workspaceRoot = getWorkspaceRoot(args, context.workspacePath);
   const suppliedWorkspaceRoot = typeof args.workspace_root === "string" ? args.workspace_root.trim() : "";
-  if (context.workspacePath && suppliedWorkspaceRoot) {
+  if (boundWorkspaceRoot && suppliedWorkspaceRoot) {
     for (const request of normalizedRequests) {
       const suppliedGuard = await resolveWorkspacePathGuard({
         workspaceRoot: suppliedWorkspaceRoot,

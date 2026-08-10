@@ -8,6 +8,10 @@ import {
   readPromptCacheMetrics,
   type PromptCacheMetricEvent,
 } from "../../integrations/providers/prompt-cache-metrics.ts";
+import {
+  unavailableProviderQuota,
+  type ProviderQuotaResult,
+} from "./provider-quota.ts";
 
 export interface ToolUsageBucket {
   calls: number;
@@ -88,10 +92,7 @@ export interface UsageMonitorSummary {
 export interface UsageProviderView extends UsageTokenBucket {
   providerId: string;
   source: "local_telemetry" | "provider_adapter";
-  remaining: {
-    available: boolean;
-    reason: string;
-  };
+  remaining: ProviderQuotaResult;
   billing: {
     available: boolean;
     reason: string;
@@ -343,10 +344,13 @@ function telemetryProviderAdapter(providerId: string): UsageProviderAdapter {
         ...bucket,
         providerId,
         source: "local_telemetry",
-        remaining: {
-          available: false,
-          reason: "Provider quota adapter is not configured.",
-        },
+        remaining: unavailableProviderQuota({
+          code: "provider_quota_surface_unavailable",
+          message: "Provider quota adapter is not configured.",
+        }, {
+          kind: "provider_quota",
+          id: `${providerId}-unconfigured`,
+        }),
         billing: {
           available: false,
           reason: "Provider billing adapter is not configured.",

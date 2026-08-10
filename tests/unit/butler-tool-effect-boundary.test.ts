@@ -51,6 +51,7 @@ const expectedNamesByBoundary = {
     "transform_public_data_table",
     "write_file",
     "edit_file",
+    "bind_session_git_worktree",
     "project_ledger_index",
     "project_ledger_create",
     "project_ledger_update",

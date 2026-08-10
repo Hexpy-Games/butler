@@ -987,9 +987,11 @@ test("App session summaries delegate bounded Git inspection outside React", () =
     "packages/butler-app/client/ui/src/components/conversation/GitDependencyNotice.tsx",
   );
 
+  expect(sessionContextHost).toContain("resolveSessionWorkspaceAuthority({");
   expect(sessionContextHost).toContain(
-    "resolveGitWorkspaceSummary(project.workspace_path)",
+    "expectedRepositoryAnchorPath: authority.marker.repositoryAnchorPath",
   );
+  expect(sessionContextHost).toContain("resolveGitWorkspaceSummary(");
   expect(resolver).toContain("spawnSync");
   expect(resolver).toContain("GIT_INSPECTION_TIMEOUT_MS");
   expect(resolver).toContain("windowsHide: true");

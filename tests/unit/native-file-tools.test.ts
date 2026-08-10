@@ -18,6 +18,7 @@ import {
   listFilesToolDefinition,
 } from "../../packages/butler-agent/src/agent/tools/file-tools/list_files/index.ts";
 import { createFileToolHandlers } from "../../packages/butler-agent/src/agent/tools/file-tools/index.ts";
+import { createWorkspaceReference } from "../../packages/butler-agent/src/agent/session-workspaces/index.ts";
 
 let root = "";
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "butler-file-tools-")); });
@@ -163,6 +164,23 @@ describe("read_file", () => {
     const beyondEof = await executeReadFileTool(call({ workspace_root: root, path: "cursor-unicode.txt", max_bytes: 4, cursor: forge(100) })) as any;
     expect(beyondEof.error).toBe("invalid_cursor");
   });
+
+  test("normalizes blank model cursors to an initial read and rejects non-empty malformed cursors", async () => {
+    await writeFile(join(root, "blank-cursor.txt"), "blank cursor content\n", "utf8");
+    const blank = await executeReadFileTool(call({
+      workspace_root: root,
+      path: "blank-cursor.txt",
+      cursor: "  ",
+    })) as any;
+    expect(blank.ok).toBe(true);
+    expect(blank.content).toBe("blank cursor content\n");
+    const malformed = await executeReadFileTool(call({
+      workspace_root: root,
+      path: "blank-cursor.txt",
+      cursor: "not-a-cursor",
+    })) as any;
+    expect(malformed.error).toBe("invalid_cursor");
+  });
 });
 
 describe("list_files", () => {
@@ -289,6 +307,116 @@ describe("list_files", () => {
     expect(result.evidence_receipts[0].summary).toContain("bounded partial result");
     expect(result.evidence_receipts[0].summary).not.toContain("continuation");
     expect(result.recovery_hint).toContain("safe file boundary");
+  });
+});
+
+describe("session-bound workspace authority", () => {
+  test("rejects list, read, and grep cursors issued before a workspace rebind", async () => {
+    const reboundRoot = await mkdtemp(join(tmpdir(), "butler-session-rebound-cursor-"));
+    try {
+      await writeFile(join(root, "list-a.txt"), "a", "utf8");
+      await writeFile(join(root, "list-b.txt"), "b", "utf8");
+      await writeFile(join(root, "read-a.txt"), "aaaa", "utf8");
+      await writeFile(join(root, "read-b.txt"), "bbbb", "utf8");
+      await writeFile(join(root, "grep-a.txt"), "needle\n", "utf8");
+      await writeFile(join(root, "grep-b.txt"), "needle\n", "utf8");
+      await writeFile(join(reboundRoot, "list-a.txt"), "rebound\n", "utf8");
+      await writeFile(join(reboundRoot, "list-b.txt"), "rebound\n", "utf8");
+      await writeFile(join(reboundRoot, "read-a.txt"), "rebound\n", "utf8");
+      await writeFile(join(reboundRoot, "read-b.txt"), "rebound\n", "utf8");
+      await writeFile(join(reboundRoot, "grep-a.txt"), "needle\n", "utf8");
+      await writeFile(join(reboundRoot, "grep-b.txt"), "needle\n", "utf8");
+
+      const listReference = createWorkspaceReference(root);
+      const listContext = { workspacePath: root, workspaceReference: listReference };
+      const listFirst = await executeListFilesTool(call({ root: ".", max_results: 1 }), listContext) as any;
+      expect(typeof listFirst.next_cursor).toBe("string");
+      expect(listFirst.next_cursor).not.toContain(root);
+      expect((await executeListFilesTool(call({ root: ".", max_results: 1, cursor: listFirst.next_cursor }), listContext) as any).ok).toBe(true);
+      listReference.set(reboundRoot);
+      expect((await executeListFilesTool(call({ root: ".", max_results: 1, cursor: listFirst.next_cursor }), listContext) as any).error).toBe("invalid_cursor");
+
+      const readReference = createWorkspaceReference(root);
+      const readContext = { workspacePath: root, workspaceReference: readReference };
+      const readArgs = { requests: [{ path: "read-a.txt" }, { path: "read-b.txt" }], max_total_bytes: 3 };
+      const readFirst = await executeReadFileTool(call(readArgs), readContext) as any;
+      expect(typeof readFirst.next_cursor).toBe("string");
+      expect(readFirst.next_cursor).not.toContain(root);
+      expect((await executeReadFileTool(call({ ...readArgs, cursor: readFirst.next_cursor }), readContext) as any).ok).toBe(true);
+      readReference.set(reboundRoot);
+      expect((await executeReadFileTool(call({ ...readArgs, cursor: readFirst.next_cursor }), readContext) as any).error).toBe("invalid_cursor");
+
+      const grepReference = createWorkspaceReference(root);
+      const grepContext = { workspacePath: root, workspaceReference: grepReference };
+      const grepArgs = { pattern: "needle", max_matches: 1 };
+      const grepFirst = await executeGrepFilesTool(call(grepArgs), grepContext) as any;
+      expect(typeof grepFirst.next_cursor).toBe("string");
+      expect(grepFirst.next_cursor).not.toContain(root);
+      expect((await executeGrepFilesTool(call({ ...grepArgs, cursor: grepFirst.next_cursor }), grepContext) as any).ok).toBe(true);
+      grepReference.set(reboundRoot);
+      expect((await executeGrepFilesTool(call({ ...grepArgs, cursor: grepFirst.next_cursor }), grepContext) as any).error).toBe("invalid_cursor");
+    } finally {
+      await rm(reboundRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("routes all native file tools through the bound WorkspaceReference", async () => {
+    const boundRoot = await mkdtemp(join(tmpdir(), "butler-session-bound-file-tools-"));
+    try {
+      await writeFile(join(root, "project-only.txt"), "project path must not win\n", "utf8");
+      await writeFile(join(boundRoot, "bound.txt"), "needle from bound workspace\n", "utf8");
+      await writeFile(join(boundRoot, "edit-a.txt"), "alpha\n", "utf8");
+      await writeFile(join(boundRoot, "edit-b.txt"), "beta\n", "utf8");
+
+      const handlers = createFileToolHandlers({
+        workspacePath: root,
+        workspaceReference: createWorkspaceReference(boundRoot),
+      });
+      const invoke = async (name: string, args: Record<string, unknown>) => await handlers[name]!({
+        name,
+        args,
+        rawArguments: JSON.stringify(args),
+      } as any) as any;
+
+      const listed = await invoke("list_files", { workspace_root: root });
+      expect(listed.ok).toBe(true);
+      expect(listed.files.map((file: { path: string }) => file.path)).toContain("bound.txt");
+      expect(listed.files.map((file: { path: string }) => file.path)).not.toContain("project-only.txt");
+
+      const read = await invoke("read_file", { workspace_root: root, path: "bound.txt" });
+      expect(read.ok).toBe(true);
+      expect(read.content).toBe("needle from bound workspace\n");
+
+      const grep = await invoke("grep_files", { workspace_root: root, pattern: "needle" });
+      expect(grep.ok).toBe(true);
+      expect(grep.matches.map((match: { path: string }) => match.path)).toEqual(["bound.txt"]);
+
+      const written = await invoke("write_file", {
+        workspace_root: root,
+        path: "created.txt",
+        content: "created in bound workspace\n",
+        overwrite: false,
+      });
+      expect(written.ok).toBe(true);
+      expect(await readFile(join(boundRoot, "created.txt"), "utf8")).toBe("created in bound workspace\n");
+      expect(await readFile(join(root, "project-only.txt"), "utf8")).toBe("project path must not win\n");
+
+      const editA = "alpha\n";
+      const editB = "beta\n";
+      const edited = await invoke("edit_file", {
+        workspace_root: root,
+        edits: [
+          { path: "edit-a.txt", old_text: editA, new_text: "alpha bound\n", expected_sha256: sha256Hex(editA) },
+          { path: "edit-b.txt", old_text: editB, new_text: "beta bound\n", expected_sha256: sha256Hex(editB) },
+        ],
+      });
+      expect(edited.ok).toBe(true);
+      expect(await readFile(join(boundRoot, "edit-a.txt"), "utf8")).toBe("alpha bound\n");
+      expect(await readFile(join(boundRoot, "edit-b.txt"), "utf8")).toBe("beta bound\n");
+      expect(await Bun.file(join(root, "edit-a.txt")).exists()).toBe(false);
+    } finally {
+      await rm(boundRoot, { recursive: true, force: true });
+    }
   });
 });
 
@@ -711,6 +839,36 @@ describe("grep_files", () => {
     const malformedList = encodeFileToolCursor({ tool: "list_files", query: listCursor.query, marker: listCursor.marker, scan_path: listCursor.marker, scan_inclusive: false });
     const listResult = await executeListFilesTool(call({ workspace_root: root, max_results: 1, cursor: malformedList })) as any;
     expect(listResult.error).toBe("invalid_cursor");
+  });
+
+  test("normalizes blank model cursors for list and grep without weakening non-empty rejection", async () => {
+    await writeFile(join(root, "blank-cursor.txt"), "needle\n", "utf8");
+    const list = await executeListFilesTool(call({
+      workspace_root: root,
+      max_results: 10,
+      cursor: "\t",
+    })) as any;
+    expect(list.ok).toBe(true);
+    expect(list.files).toEqual([{ path: "blank-cursor.txt", bytes: 7 }]);
+    const grep = await executeGrepFilesTool(call({
+      workspace_root: root,
+      pattern: "needle",
+      cursor: "\n",
+    })) as any;
+    expect(grep.ok).toBe(true);
+    expect(grep.matches.map((match: any) => match.path)).toEqual(["blank-cursor.txt"]);
+    const malformedList = await executeListFilesTool(call({
+      workspace_root: root,
+      max_results: 10,
+      cursor: "not-a-cursor",
+    })) as any;
+    expect(malformedList.error).toBe("invalid_cursor");
+    const malformedGrep = await executeGrepFilesTool(call({
+      workspace_root: root,
+      pattern: "needle",
+      cursor: "not-a-cursor",
+    })) as any;
+    expect(malformedGrep.error).toBe("invalid_cursor");
   });
 
   test("batch read evidence names only successful admitted workspace-relative files", async () => {

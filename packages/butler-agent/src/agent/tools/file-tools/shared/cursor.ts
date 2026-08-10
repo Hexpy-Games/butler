@@ -94,6 +94,15 @@ export function encodeFileToolCursor(cursor: Omit<FileToolCursor, "v">): string 
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
+/**
+ * Models sometimes serialize an omitted optional continuation as an empty
+ * string. Treat only blank strings as absent; malformed non-empty values still
+ * flow through decodeFileToolCursor and remain rejected.
+ */
+export function normalizeOptionalFileToolCursor(value: unknown): unknown {
+  return typeof value === "string" && value.trim().length === 0 ? undefined : value;
+}
+
 export function decodeFileToolCursor(value: unknown): FileToolCursor | null {
   if (typeof value !== "string" || value.length === 0 || value.length > 4096) return null;
   try {

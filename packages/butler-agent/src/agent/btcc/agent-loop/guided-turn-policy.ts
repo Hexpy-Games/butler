@@ -3,7 +3,6 @@ import type { BtccAgentLoopResult } from "./contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
 import { parseToolCatalogId } from "../../tools/progressive-catalog.ts";
 import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
-import { TOOL_CAPABILITY_METADATA } from "../../tools/registry.ts";
 import { PROJECT_LEDGER_MUTATION_TOOL_NAME_SET } from
   "../../tools/project-ledger/mutation-tools.ts";
 import { selectInitialToolsFromSurfaceController } from
@@ -26,40 +25,10 @@ import { workspacePagePreviewAvailabilityOverride } from
   "../../tools/workspace-page-preview/index.ts";
 import { safeCommandActionLabel } from "../../output/progress/arguments.ts";
 import { currentModelRouteCandidate } from "../model-route/index.ts";
-
-const NON_FULL_ACCESS_TOOL_NAMES = new Set([
-  "list_tool_capabilities",
-  "tool_search",
-  "tool_describe",
-  "tool_call",
-  "web_search",
-  "web_read",
-  "read_file",
-  "grep_files",
-  "list_files",
-  "read_tool_evidence_artifact",
-  "read_tool_output_artifact",
-  "project_ledger_status",
-  "project_ledger_list",
-  "project_ledger_show",
-  "project_ledger_check",
-  "inspect_project_status",
-  "query_project_work",
-  "render_project_dashboard",
-  "get_work_dashboard",
-  "get_context_monitor",
-  "get_usage_monitor",
-  "get_memory_health",
-  "read_conversation_context",
-  "list_conversation_sessions",
-  "read_conversation_session",
-  "recall_memory",
-  "query_memory",
-  "list_automations",
-  "read_mcp_resource",
-  "list_skills",
-  "transform_public_data_table",
-]);
+import {
+  applyGuidedWorkspaceAuthorization,
+  guidedWorkspaceVisibleToolNames,
+} from "./guided-session-workspace-policy.ts";
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
   disabledReason:
@@ -88,6 +57,9 @@ export function guidedPolicy(turn: TurnRecord): ButlerExecutionPolicy {
   if (turn.context.executionPolicy) {
     return {
       ...turn.context.executionPolicy,
+      ...(turn.context.projectRef && !turn.context.executionPolicy.projectId
+        ? { projectId: turn.context.projectRef }
+        : {}),
       accessMode: narrowerAccessMode(
         turn.context.executionPolicy.accessMode,
         admittedAccessMode(turn),
@@ -145,23 +117,11 @@ export function authorizedToolDefinitions(
     "list_files",
   ]) names.add(name);
   for (const name of GUIDED_UNAVAILABLE_NATIVE_TOOL_NAMES) names.delete(name);
-  if (policy.accessMode === "full_access") {
-    for (const tool of BUTLER_TOOLS) {
-      if (
-        tool.effectBoundary === "none" &&
-        TOOL_CAPABILITY_METADATA[tool.name]?.category !== "project"
-      ) {
-        names.add(tool.name);
-      }
-    }
-    names.add("run_command");
-    names.add("write_file");
-    names.add("edit_file");
-  } else {
-    for (const name of names) {
-      if (!NON_FULL_ACCESS_TOOL_NAMES.has(name)) names.delete(name);
-    }
-  }
+  applyGuidedWorkspaceAuthorization({
+    names,
+    policy,
+    projectRef: turn.context.projectRef,
+  });
   if (workspacePagePreviewAvailabilityOverride(env)) {
     names.delete("inspect_workspace_page");
   }
@@ -226,9 +186,7 @@ export function visibleToolDefinitions(
           "project_ledger_work_complete",
         ]
       : []),
-    ...(policy.accessMode === "full_access"
-      ? ["run_command", "write_file", "edit_file", "inspect_workspace_page"]
-      : []),
+    ...guidedWorkspaceVisibleToolNames(policy),
   ]);
   return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
 }
@@ -295,7 +253,7 @@ export function isReplaySafeTool(name: string): boolean {
   if (isDurableWorkTool(name)) return true;
   const nativeTool = BUTLER_TOOLS.find((tool) => tool.name === name);
   if (nativeTool?.effectBoundary === "none") return true;
-  if (name === "write_file" || name === "edit_file" || name === "run_command" ||
+  if (name === "bind_session_git_worktree" || name === "write_file" || name === "edit_file" || name === "run_command" ||
       GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES.includes(
         name as typeof GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES[number],
       )) return true;

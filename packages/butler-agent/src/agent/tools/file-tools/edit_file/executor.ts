@@ -145,7 +145,10 @@ async function executeSingleEdit(
   context: FileToolExecutionContext,
   args: Record<string, unknown>,
 ) {
-  const workspaceRoot = getWorkspaceRoot(args, context.workspacePath);
+  const workspaceRoot = getWorkspaceRoot(
+    args,
+    context.workspaceReference?.get() ?? context.workspacePath,
+  );
   const guard = await resolveWorkspacePathGuard({
     workspaceRoot,
     relativePath: edit.path,
