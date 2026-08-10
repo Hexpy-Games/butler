@@ -19,6 +19,8 @@ import { executeCompactReplayControlTool } from
   "./guided-compact-replay-control.ts";
 import type { GuidedToolCallExecutionInput } from
   "./guided-tool-call-contracts.ts";
+import { rejectUnrecoveredCompactReplayWorkReview } from
+  "./compact-replay-correction-recovery.ts";
 
 type GuidedToolCall = Parameters<ButlerToolExecutor>[0];
 
@@ -59,14 +61,26 @@ export async function executeGuidedFreshTool(input: {
     runtime: input.compactReplayRuntime,
   });
   if (compactControl.handled) return compactControl.result;
+  let boundWork = null;
   if (isDurableWorkTool(input.call.name) && input.call.name !== "replace_work_plan") {
     await safeBindOpenWork(input.durableWork, input.workScope);
     await backfillTurnToolResults(
       { durableWork: input.durableWork, toolJournal: input.toolJournal },
       input.workScope,
     );
+    boundWork = await safeBindOpenWork(input.durableWork, input.workScope);
   }
   if (isDurableWorkTool(input.call.name)) {
+    if (input.compactReplayRuntime.enabled &&
+      input.call.name === "record_work_review" && boundWork) {
+      const rejection = rejectUnrecoveredCompactReplayWorkReview({
+        work: boundWork,
+        toolJournal: input.toolJournal,
+        turnId: input.workScope.turnId,
+        args: input.call.args,
+      });
+      if (rejection) return rejection;
+    }
     return executeDurableWorkTool({
       service: input.durableWork,
       scope: input.workScope,

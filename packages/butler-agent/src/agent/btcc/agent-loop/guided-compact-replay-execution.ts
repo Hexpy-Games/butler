@@ -6,7 +6,10 @@ import {
 import { parseCompactReplayPhaseContinuity } from
   "../compact-replay/index.ts";
 import { isDurableWorkTool } from "../work/index.ts";
-import type { DurableWorkService, WorkTurnScope } from "../work/index.ts";
+import type {
+  DurableWorkService,
+  WorkTurnScope,
+} from "../work/index.ts";
 import type {
   BtccCompactReplayIdentity,
   BtccCompactReplayMetadata,
@@ -19,6 +22,15 @@ import { safeBoundWork } from "./guided-work-runtime.ts";
 import { createBtccToolExecutionEnvelope } from "./tool-execution.ts";
 import { guidedOperationStructuralFacts } from
   "./guided-tool-context-projection.ts";
+import {
+  compactReplayExactReadIdentity,
+  projectCompactReplayWorkState,
+} from
+  "./compact-replay-work-state.ts";
+import {
+  isSuccessfulGuidedReferenceRead,
+  readCompactReplayCorrectionRejection,
+} from "./compact-replay-correction-recovery.ts";
 
 type CompactReplayExecutionInput = {
   durableWork: DurableWorkService;
@@ -33,7 +45,7 @@ export async function rehydrateGuidedCompactReplayResult(
   record: NonNullable<ReturnType<SqliteGuidedToolJournal["find"]>>,
 ): Promise<unknown> {
   if (toolName !== READ_OPERATION_RESULTS_TOOL_NAME) return record.result;
-  if (!isSuccessfulReferenceRead(record.result)) {
+  if (!isSuccessfulGuidedReferenceRead(record.result)) {
     return operationRejectedResult(errorCode(record.result));
   }
   const replay = await executeCompactReplayControlTool({
@@ -142,7 +154,43 @@ async function compactReplayMetadata(
       : [];
     return { kind: "selected_views", views, replayed };
   }
-  if (isDurableWorkTool(toolName)) return null;
+  if (isDurableWorkTool(toolName)) {
+    const correctionRejection = readCompactReplayCorrectionRejection(value);
+    if (correctionRejection) {
+      return {
+        kind: "operation_rejected",
+        code: correctionRejection.code,
+        toolName,
+        ...(correctionRejection.recovery
+          ? { recovery: correctionRejection.recovery }
+          : {}),
+      };
+    }
+    const work = await safeBoundWork(input.durableWork, input.workScope.turnId);
+    const record = input.toolJournal.find(callId);
+    const resultIdentity = record
+      ? compactReplayExactReadIdentity(record)
+      : null;
+    const accepted = value?.ok === true;
+    return {
+      kind: "work_state",
+      receipt: {
+        operation: toolName,
+        accepted,
+        result_identity: resultIdentity,
+      },
+      state: work
+        ? projectCompactReplayWorkState(work, {
+            ...(resultIdentity
+              ? { actionStates: resultIdentity }
+              : {}),
+            ...(accepted && toolName === "record_work_review" && resultIdentity
+              ? { reviewCorrection: resultIdentity }
+              : {}),
+          })
+        : null,
+    };
+  }
   const record = input.toolJournal.find(callId);
   if (!record?.resultRef || record.status === "started") return null;
   const work = await safeBoundWork(input.durableWork, input.workScope.turnId);
@@ -201,15 +249,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
-}
-
-function isSuccessfulReferenceRead(value: unknown): boolean {
-  const record = asRecord(value);
-  return record?.ok === true && record.reference_only === true &&
-    Number.isSafeInteger(record.read_count) && Number(record.read_count) > 0 &&
-    Array.isArray(record.result_refs) &&
-    record.result_refs.length === Number(record.read_count) &&
-    record.result_refs.every((ref) => typeof ref === "string" && ref.length > 0);
 }
 
 function errorCode(value: unknown): string {

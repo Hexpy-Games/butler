@@ -3,10 +3,10 @@ import type {
   DurableWorkView,
   RecordWorkReviewCommand,
 } from "../../../btcc/work/index.ts";
+import { durableWorkReviewRevisionId } from "../../../btcc/work/index.ts";
 import { preserveBlockedStatus } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkMutationJournal } from "./guided-work-mutation-journal.ts";
 import { GuidedWorkProgressWriter } from "./guided-work-progress-writer.ts";
-import { guidedWorkRecordId } from "./guided-work-record-id.ts";
 import { GuidedWorkSessionWriter } from "./guided-work-session-writer.ts";
 import { GuidedWorkStatusWriter } from "./guided-work-status-writer.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
@@ -67,7 +67,7 @@ export class GuidedWorkReviewWriter {
         });
       }
 
-      const reviewId = guidedWorkRecordId("review", input.mutationCallId);
+      const reviewId = durableWorkReviewRevisionId(input.mutationCallId);
       const resultSequence = input.subject !== "plan"
         ? input.expectedResultSequence
         : null;

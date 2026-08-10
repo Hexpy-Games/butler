@@ -10,6 +10,13 @@ import type {
 } from "../compact-replay/index.ts";
 import { M1_COMPACT_REPLAY_OPERATION_CARRIER_INSTRUCTION } from
   "../../tools/m1-compact-replay.ts";
+import {
+  mergeCompactReplayWorkStates,
+  type BtccCompactReplayWorkControlReceipt,
+  type BtccCompactReplayWorkState,
+} from "./compact-replay-work-state.ts";
+import type { BtccCompactReplayCorrectionRecovery } from
+  "./compact-replay-correction-recovery.ts";
 
 export type BtccCompactReplayIdentity = {
   kind: "work" | "direct";
@@ -37,6 +44,12 @@ export type BtccCompactReplayMetadata =
   }
   | { kind: "phase_continuity"; value: unknown; batchIndex?: number }
   | {
+    kind: "work_state";
+    receipt: BtccCompactReplayWorkControlReceipt;
+    state: BtccCompactReplayWorkState | null;
+    batchIndex?: number;
+  }
+  | {
     kind: "selected_views";
     views: Array<{ identity: BtccCompactReplayIdentity; selector: unknown; view: unknown }>;
     replayed: boolean;
@@ -50,6 +63,7 @@ export type BtccCompactReplayMetadata =
     schemaPath?: string;
     reason?: CompactReplayCarrierRejectionReason;
     properties?: CompactReplayCarrierPropertyShape[];
+    recovery?: BtccCompactReplayCorrectionRecovery;
     batchIndex?: number;
   };
 
@@ -60,6 +74,8 @@ export type BtccCompactReplaySelectedView = {
 };
 
 export type BtccCompactReplayInitialProjection = {
+  workState?: BtccCompactReplayWorkState | null;
+  workControlReceipt?: BtccCompactReplayWorkControlReceipt | null;
   openAnchors: Array<Record<string, unknown>>;
   newestBatch: Array<{
     identity: BtccCompactReplayIdentity;
@@ -130,6 +146,21 @@ export function assembleBtccCompactReplayMessages(input: {
     input.toolResults,
     initial?.selectedViews ?? [],
   );
+  const workResults = input.toolResults.filter((result) =>
+    result.compactReplay?.kind === "work_state");
+  const latestWorkResult = workResults.at(-1);
+  const latestWorkMetadata = latestWorkResult?.compactReplay?.kind === "work_state"
+    ? latestWorkResult.compactReplay
+    : null;
+  const workState = mergeCompactReplayWorkStates([
+    initial?.workState,
+    ...workResults.map((result) =>
+      result.compactReplay?.kind === "work_state"
+        ? result.compactReplay.state
+        : null),
+  ]);
+  const workControlReceipt = latestWorkMetadata?.receipt ??
+    initial?.workControlReceipt ?? null;
   const rejectedResults = input.toolResults.filter((result) =>
     result.compactReplay?.kind === "operation_rejected");
   const newestRejectionBatchIndex = rejectedResults.reduce(
@@ -160,6 +191,9 @@ export function assembleBtccCompactReplayMessages(input: {
           ...(result.compactReplay.properties
             ? { properties: result.compactReplay.properties }
             : {}),
+          ...(result.compactReplay.recovery
+            ? { recovery: result.compactReplay.recovery }
+            : {}),
         }]
       : []);
   const retainedMessages = input.messages.flatMap((message, index) => {
@@ -172,6 +206,8 @@ export function assembleBtccCompactReplayMessages(input: {
   while (true) {
     const projection = renderProjection({
       phaseContinuity,
+      workState,
+      workControlReceipt,
       openAnchors,
       newestBatch,
       selectedViews,
@@ -227,6 +263,8 @@ function dedupeSelectedViews(
 
 function renderProjection(input: {
   phaseContinuity: unknown;
+  workState: BtccCompactReplayWorkState | null;
+  workControlReceipt: BtccCompactReplayWorkControlReceipt | null;
   openAnchors: Array<Record<string, unknown>>;
   newestBatch: Array<{ identity: BtccCompactReplayIdentity; payload: unknown }>;
   selectedViews: BtccCompactReplaySelectedView[];
@@ -239,12 +277,18 @@ function renderProjection(input: {
     schema_path?: string;
     reason?: CompactReplayCarrierRejectionReason;
     properties?: CompactReplayCarrierPropertyShape[];
+    recovery?: BtccCompactReplayCorrectionRecovery;
   }>;
 }): string {
   return [
     "## Canonical compact replay for this phase",
     "Model-authored PhaseContinuity:",
     JSON.stringify(input.phaseContinuity),
+    "This mechanical Work state supersedes older Work status, stage, revision, action-state, and result-ref fields in the initial prompt.",
+    "Authoritative mechanical Work state:",
+    JSON.stringify(input.workState),
+    "Latest durable Work control receipt:",
+    JSON.stringify(input.workControlReceipt),
     "Required open operation anchors:",
     JSON.stringify(input.openAnchors),
     "Newest completed source batch:",

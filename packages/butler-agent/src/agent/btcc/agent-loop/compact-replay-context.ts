@@ -2,7 +2,10 @@ import type {
   GuidedToolJournalRecord,
   SqliteGuidedToolJournal,
 } from "../../adapters/index.ts";
-import type { DurableWorkContext } from "../work/index.ts";
+import {
+  isDurableWorkTool,
+  type DurableWorkContext,
+} from "../work/index.ts";
 import { digest, stableJson } from "../identity/index.ts";
 import {
   projectGuidedToolContextForReplay,
@@ -16,10 +19,12 @@ import {
 import type { GuidedCompactReplayBudget } from "./guided-compact-replay-budget.ts";
 import { readGuidedOperationResultViews } from
   "./guided-operation-result-read.ts";
-import type {
-  BtccCompactReplayIdentity,
-  BtccCompactReplayInitialProjection,
-} from "./compact-replay-messages.ts";
+import type { BtccCompactReplayInitialProjection } from
+  "./compact-replay-messages.ts";
+import { createCompactReplayInitialProjection } from
+  "./compact-replay-initial-projection.ts";
+import { isSuccessfulGuidedReferenceRead } from
+  "./compact-replay-correction-recovery.ts";
 export type GuidedCompactReplayContext = {
   toolResults: GuidedToolContextReplayProjection;
   workResults: GuidedToolContextReplayProjection | null;
@@ -50,6 +55,7 @@ export async function createGuidedCompactReplayContext(input: {
   );
   const turnNewestBatchId = turnRecords.findLast((record) =>
     !isM1CompactReplayControlTool(record.toolName) &&
+    !isDurableWorkTool(record.toolName) &&
     record.status !== "started" && Boolean(record.operationBatchId))
     ?.operationBatchId;
   const workRead = await readWorkResults({
@@ -62,6 +68,7 @@ export async function createGuidedCompactReplayContext(input: {
     sessionId: input.sessionId,
     records: turnRecords.filter((record) =>
       !isM1CompactReplayControlTool(record.toolName) &&
+      !isDurableWorkTool(record.toolName) &&
       !workCallIds.has(record.callId)),
     newestBatchId,
   });
@@ -87,10 +94,13 @@ export async function createGuidedCompactReplayContext(input: {
     workId: input.work?.work.workId ?? null,
     maxOutputTokens: input.budget.selectedViewTokens,
   });
-  const initialProjection = createInitialProjection({
+  const initialProjection = createCompactReplayInitialProjection({
     toolResults,
     workResults,
     selectedViews: restoredViews.views,
+    work: input.work,
+    records: turnRecords,
+    turnId: input.turnId,
   });
   const phaseContinuity = input.toolJournal.readLatestPhaseContinuity({
     turnId: input.turnId,
@@ -99,6 +109,8 @@ export async function createGuidedCompactReplayContext(input: {
   const projectionRevision = digest(stableJson({
     tool: toolResults.projectionRevision,
     work: workResults?.projectionRevision ?? null,
+    workState: initialProjection.workState,
+    workControlReceipt: initialProjection.workControlReceipt,
     phaseContinuity,
     selectedViews: restoredViews.views.map((view) => ({
       resultRef: view.identity.result_ref,
@@ -144,7 +156,8 @@ function restoreSelectedViews(input: {
 }) {
   const reads = input.records.filter((record) =>
     record.toolName === READ_OPERATION_RESULTS_TOOL_NAME &&
-    record.status === "completed" && successfulReferenceRead(record.result));
+    record.status === "completed" &&
+    isSuccessfulGuidedReferenceRead(record.result));
   return {
     attempts: reads.length,
     views: reads.flatMap((record) => readGuidedOperationResultViews({
@@ -158,73 +171,6 @@ function restoreSelectedViews(input: {
       },
       maxOutputTokens: input.maxOutputTokens,
     }).views),
-  };
-}
-
-function successfulReferenceRead(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return record.ok === true && record.reference_only === true &&
-    Number.isSafeInteger(record.read_count) && Number(record.read_count) > 0 &&
-    Array.isArray(record.result_refs) &&
-    record.result_refs.length === Number(record.read_count) &&
-    record.result_refs.every((ref) => typeof ref === "string" && ref.length > 0);
-}
-
-function createInitialProjection(input: {
-  toolResults: GuidedToolContextReplayProjection;
-  workResults: GuidedToolContextReplayProjection | null;
-  selectedViews: BtccCompactReplayInitialProjection["selectedViews"];
-}): BtccCompactReplayInitialProjection {
-  const projections = [input.toolResults, input.workResults]
-    .filter((value): value is GuidedToolContextReplayProjection => Boolean(value));
-  const newest = projections.flatMap((projection) => projection.newest);
-  return {
-    openAnchors: newest.filter((record) => record.status === "started"),
-    newestBatch: newest.flatMap((payload) => {
-      const identity = projectedIdentity(payload);
-      return identity ? [{ identity, payload }] : [];
-    }),
-    selectedViews: input.selectedViews,
-    older: projections.flatMap((projection) =>
-      projection.older.flatMap((identity) => {
-        const projected = projectedIdentity(identity);
-        return projected ? [projected] : [];
-      })),
-  };
-}
-
-function projectedIdentity(
-  value: Record<string, unknown>,
-): BtccCompactReplayIdentity | null {
-  if ((value.kind !== "work" && value.kind !== "direct") ||
-    typeof value.result_ref !== "string" ||
-    typeof value.tool_name !== "string" ||
-    !["completed", "failed", "cancelled"].includes(String(value.status)) ||
-    !["succeeded", "failed", "cancelled"].includes(String(value.outcome)) ||
-    !["complete", "incomplete"].includes(String(value.completeness)) ||
-    (value.revision !== null && !Number.isInteger(value.revision)) ||
-    (value.result_sha256 !== null &&
-      typeof value.result_sha256 !== "string")) {
-    return null;
-  }
-  if (value.kind === "work" && typeof value.work_id !== "string") return null;
-  return {
-    kind: value.kind,
-    result_ref: value.result_ref,
-    ...(value.kind === "work" ? { work_id: value.work_id as string } : {}),
-    revision: value.revision as number | null,
-    tool_name: value.tool_name,
-    status: value.status as BtccCompactReplayIdentity["status"],
-    result_sha256: value.result_sha256 as string | null,
-    outcome: value.outcome as BtccCompactReplayIdentity["outcome"],
-    completeness: value.completeness as BtccCompactReplayIdentity["completeness"],
-    ...(value.command_execution_summary
-      ? {
-          command_execution_summary: value.command_execution_summary as
-            NonNullable<BtccCompactReplayIdentity["command_execution_summary"]>,
-        }
-      : {}),
   };
 }
 

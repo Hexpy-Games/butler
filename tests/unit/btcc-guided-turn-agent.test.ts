@@ -315,6 +315,602 @@ test("T3 production Guided Turn reuses a completed operation without duplicate d
   }
 });
 
+test("T3 compact Work receipt recovers a rejected review correction exactly", async () => {
+  const previousFlag = process.env.BUTLER_M1_COMPACT_REPLAY;
+  const fixture = createFixture("guided-t3-work-receipt");
+  const actionKey = "PRIVATE_ACTION_KEY_work-receipt_must_not_replay";
+  const actionDescription = "PRIVATE_ACTION_DESCRIPTION_must_not_replay";
+  const planReviewSummary = "PRIVATE_PLAN_REVIEW_SUMMARY_must_not_replay";
+  const resultReviewSummary = "PRIVATE_RESULT_REVIEW_SUMMARY_must_not_replay";
+  const correction = "PRIVATE_REVIEW_CORRECTION_must_not_replay";
+  try {
+    process.env.BUTLER_M1_COMPACT_REPLAY = "on";
+    const turnId = "guided-t3-work-receipt-turn";
+    let round = 0;
+    const agent = fixture.agent({
+      async runRound(request) {
+        round += 1;
+        const prompt = request.messages.map((message) => message.content).join("\n");
+        if (round === 1) {
+          return toolResponse([compactCarrierCall(
+            "work-receipt-plan-carrier",
+            "Create the durable Plan.",
+            [toolCall("work-receipt-plan", "replace_work_plan", {
+              start_new: true,
+              objective: "Complete the bounded Work receipt regression.",
+              actions: [{
+                action_key: actionKey,
+                description: actionDescription,
+              }],
+              checks: ["The Work reaches reporting after completion validation."],
+            })],
+          )]);
+        }
+        expect(messagesWithToolResults(request)).toHaveLength(0);
+        expect(prompt.match(/Authoritative mechanical Work state:/gu))
+          .toHaveLength(1);
+        if (round === 2) {
+          expect(prompt).toContain('"stage":"planning"');
+          expect(prompt).toContain('"plan":1');
+          return toolResponse([compactCarrierCall(
+            "work-receipt-plan-review-carrier",
+            "Accept the Plan and enter execution.",
+            [toolCall("work-receipt-plan-review", "record_work_review", {
+              subject: "plan",
+              verdict: "accept",
+              next_stage: "execution",
+              action_updates: [{ action_key: actionKey, status: "active" }],
+              summary: planReviewSummary,
+              corrections: [],
+            })],
+          )]);
+        }
+        if (round === 3) {
+          expect(prompt).toContain('"stage":"execution"');
+          expect(prompt).toContain('"plan_review":1');
+          expect(prompt).not.toContain(planReviewSummary);
+          expect(prompt).not.toContain(actionKey);
+          expect(prompt).not.toContain(actionDescription);
+          expect(prompt).toContain('"plan_ordinal":1');
+          expect(prompt).toContain('"pointer":"/result/work/actions"');
+          return toolResponse([compactCarrierCall(
+            "work-receipt-result-review-carrier",
+            "Reject the result with one exact correction.",
+            [toolCall("work-receipt-result-review", "record_work_review", {
+              subject: "result",
+              verdict: "revise",
+              next_stage: "execution",
+              action_updates: [{
+                action_key: actionKey,
+                status: "active",
+                note: correction,
+              }],
+              summary: resultReviewSummary,
+              corrections: [correction],
+            })],
+          )]);
+        }
+        if (round === 4) {
+          expect(prompt).toContain('"stage":"execution"');
+          expect(prompt).toContain('"result_review":2');
+          expect(prompt).toContain('"active":1');
+          expect(prompt).toContain(
+            '"operation":"record_work_review","accepted":true',
+          );
+          expect(prompt).not.toContain(resultReviewSummary);
+          expect(prompt).not.toContain(correction);
+          expect(prompt).not.toContain(actionKey);
+          expect(prompt).not.toContain(actionDescription);
+          expect(prompt).toContain('"count":1,"review_revision":2');
+          expect(prompt).toContain('"pointer":"/request/corrections"');
+          return toolResponse([compactCarrierCall(
+            "work-receipt-premature-accept-carrier",
+            "Attempt result acceptance before exact correction recovery.",
+            [toolCall(
+              "work-receipt-premature-accept",
+              "record_work_review",
+              {
+                subject: "result",
+                verdict: "accept",
+                next_stage: "validation",
+                action_updates: [{ action_key: actionKey, status: "done" }],
+                summary: "Premature acceptance must be rejected mechanically.",
+                corrections: [],
+              },
+            )],
+          )]);
+        }
+        if (round === 5) {
+          expect(prompt).toContain(
+            '"code":"guided_work_review_correction_recovery_required"',
+          );
+          expect(prompt).toContain('"review_revision":2');
+          expect(prompt).toContain('"pointer":"/request/corrections"');
+          expect(prompt).not.toContain(correction);
+          expect(await fixture.stores.durableWork.boundWorkForTurn(turnId))
+            .toMatchObject({
+              currentStage: "execution",
+              latestResultReview: { revision: 2, verdict: "revise" },
+            });
+          const planReviewRecord = fixture.stores.guidedToolJournal.list(turnId)
+            .find((record) =>
+              record.toolName === "record_work_review" &&
+              record.arguments.subject === "plan",
+            );
+          expect(planReviewRecord?.resultRef).toBeTruthy();
+          return toolResponse([compactCarrierCall(
+            "work-receipt-wrong-recovery-read-carrier",
+            "Read a different review result, which must not unlock acceptance.",
+            [toolCall("work-receipt-wrong-recovery-read", "read_operation_results", {
+              reads: [{
+                kind: "direct",
+                result_ref: planReviewRecord!.resultRef,
+                revision: null,
+                result_sha256: planReviewRecord!.resultSha256 ?? null,
+                selector: {
+                  kind: "json_pointer",
+                  pointer: "/request/corrections",
+                },
+              }],
+            })],
+          )]);
+        }
+        if (round === 6) {
+          expect(prompt).not.toContain(correction);
+          const records = fixture.stores.guidedToolJournal.list(turnId);
+          const requiredReview = records.find((record) =>
+            record.toolName === "record_work_review" &&
+            record.arguments.subject === "result" &&
+            record.arguments.verdict === "revise",
+          );
+          const otherReview = records.find((record) =>
+            record.toolName === "record_work_review" &&
+            record.arguments.subject === "plan",
+          );
+          expect(requiredReview?.resultRef).toBeTruthy();
+          expect(otherReview?.resultRef).toBeTruthy();
+          const mismatchedReadArgs = {
+            reads: [{
+              kind: "direct",
+              result_ref: requiredReview!.resultRef,
+              revision: null,
+              result_sha256: requiredReview!.resultSha256 ?? null,
+              selector: {
+                kind: "json_pointer",
+                pointer: "/request/corrections",
+              },
+            }],
+          };
+          fixture.stores.guidedToolJournal.start({
+            turnId,
+            callId: "work-receipt-mismatched-reference-read",
+            toolName: "read_operation_results",
+            rawArguments: JSON.stringify(mismatchedReadArgs),
+            arguments: mismatchedReadArgs,
+          });
+          fixture.stores.guidedToolJournal.finish({
+            callId: "work-receipt-mismatched-reference-read",
+            status: "completed",
+            result: {
+              ok: true,
+              reference_only: true,
+              read_count: 1,
+              result_refs: [otherReview!.resultRef],
+            },
+          });
+          return toolResponse([compactCarrierCall(
+            "work-receipt-other-ref-accept-carrier",
+            "Verify that another exact result does not unlock acceptance.",
+            [toolCall(
+              "work-receipt-other-ref-accept",
+              "record_work_review",
+              {
+                subject: "result",
+                verdict: "accept",
+                next_stage: "validation",
+                action_updates: [{ action_key: actionKey, status: "done" }],
+                summary: "Another result reference cannot recover this correction.",
+                corrections: [],
+              },
+            )],
+          )]);
+        }
+        if (round === 7) {
+          expect(prompt).toContain(
+            '"code":"guided_work_review_correction_recovery_required"',
+          );
+          expect(prompt).not.toContain(correction);
+          expect(await fixture.stores.durableWork.boundWorkForTurn(turnId))
+            .toMatchObject({
+              currentStage: "execution",
+              latestResultReview: { revision: 2, verdict: "revise" },
+            });
+          const reviewRecord = fixture.stores.guidedToolJournal.list(turnId)
+            .find((record) =>
+              record.toolName === "record_work_review" &&
+              record.arguments.subject === "result" &&
+              record.arguments.verdict === "revise",
+            );
+          expect(reviewRecord?.resultRef).toBeTruthy();
+          return toolResponse([compactCarrierCall(
+            "work-receipt-recovery-read-carrier",
+            "Recover the exact durable action identity and review correction.",
+            [toolCall("work-receipt-correction-read", "read_operation_results", {
+              reads: [
+                {
+                  kind: "direct",
+                  result_ref: reviewRecord!.resultRef,
+                  revision: null,
+                  result_sha256: reviewRecord!.resultSha256 ?? null,
+                  selector: {
+                    kind: "json_pointer",
+                    pointer: "/result/work/actions/0/action_key",
+                  },
+                },
+                {
+                  kind: "direct",
+                  result_ref: reviewRecord!.resultRef,
+                  revision: null,
+                  result_sha256: reviewRecord!.resultSha256 ?? null,
+                  selector: {
+                    kind: "json_pointer",
+                    pointer: "/request/corrections",
+                  },
+                },
+              ],
+            })],
+          )]);
+        }
+        if (round === 8) {
+          expect(prompt).toContain(correction);
+          expect(prompt).toContain(actionKey);
+          expect(prompt).not.toContain(actionDescription);
+          return toolResponse([compactCarrierCall(
+            "work-receipt-corrected-result-review-carrier",
+            "Apply the recovered correction and accept the revised result.",
+            [toolCall(
+              "work-receipt-corrected-result-review",
+              "record_work_review",
+              {
+                subject: "result",
+                verdict: "accept",
+                next_stage: "validation",
+                action_updates: [{ action_key: actionKey, status: "done" }],
+                summary: "The exact correction has been applied.",
+                corrections: [],
+              },
+            )],
+          )]);
+        }
+        if (round === 9) {
+          expect(prompt).toContain('"stage":"validation"');
+          expect(prompt).toContain('"result_review":3');
+          expect(prompt).toContain('"done":1');
+          expect(prompt).toContain('"review_correction":null');
+          expect(prompt).not.toContain(actionDescription);
+          return toolResponse([compactCarrierCall(
+            "work-receipt-completion-carrier",
+            "Validate completion and enter reporting.",
+            [toolCall("work-receipt-completion", "record_work_review", {
+              subject: "completion",
+              verdict: "accept",
+              next_stage: "reporting",
+              summary: "The mechanical completion gate is satisfied.",
+              corrections: [],
+            })],
+          )]);
+        }
+        expect(prompt).toContain('"status":"completed"');
+        expect(prompt).toContain('"stage":"reporting"');
+        expect(prompt).toContain('"completion_validation":4');
+        expect(prompt).not.toContain(actionDescription);
+        return { text: "기계적 Work 전이가 완료됐습니다.", toolCalls: [] };
+      },
+    });
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+
+    expect(await runtime.runTurn(localRunCommand(fixture.root, turnId)))
+      .toMatchObject({
+        kind: "delivered",
+        content: "기계적 Work 전이가 완료됐습니다.",
+      });
+    const work = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+    expect(work).toMatchObject({
+      status: "completed",
+      currentStage: "reporting",
+      latestResultReview: { revision: 3 },
+      latestCompletionValidation: { revision: 4 },
+    });
+    const reviewRecords = fixture.stores.guidedToolJournal.list(turnId)
+      .filter((record) => record.toolName === "record_work_review");
+    expect(reviewRecords.map((record) => record.arguments.subject)).toEqual([
+      "plan",
+      "result",
+      "result",
+      "result",
+      "result",
+      "completion",
+    ]);
+    expect(reviewRecords.filter((record) =>
+      (record.result as { ok?: boolean } | undefined)?.ok === false,
+    )).toHaveLength(2);
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_COMPACT_REPLAY;
+    else process.env.BUTLER_M1_COMPACT_REPLAY = previousFlag;
+    fixture.close();
+  }
+});
+
+test("T3 restart reconstructs the authoritative mechanical Work receipt", async () => {
+  const previousFlag = process.env.BUTLER_M1_COMPACT_REPLAY;
+  const root = mkdtempSync(join(tmpdir(), "guided-t3-work-receipt-restart-"));
+  const dbPath = join(root, "butler.sqlite");
+  const turnId = "guided-t3-work-receipt-restart-turn";
+  const actionKey = "PRIVATE_RESTART_ACTION_KEY_must_not_replay";
+  const resultSummary = "PRIVATE_RESTART_RESULT_SUMMARY_must_not_replay";
+  const correction = "PRIVATE_RESTART_CORRECTION_must_be_exactly_recoverable";
+  let stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-t3-work-receipt-restart-setup",
+    storageProfile: "ephemeral",
+  });
+  try {
+    process.env.BUTLER_M1_COMPACT_REPLAY = "on";
+    let setupRound = 0;
+    const setupAgent = createProductionGuidedTurnAgent({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: dbPath,
+      contextDocuments: stores.contextDocuments,
+      toolJournal: stores.guidedToolJournal,
+      effectJournal: stores.guidedEffectJournal,
+      durableWork: stores.durableWork,
+      modelRound: {
+        async runRound(request) {
+          setupRound += 1;
+          if (setupRound === 1) {
+            return toolResponse([compactCarrierCall(
+              "restart-work-state-carrier",
+              "Record a review correction before restart.",
+              [
+                toolCall("restart-work-plan", "replace_work_plan", {
+                  start_new: true,
+                  objective: "Restart from the mechanical Work state.",
+                  actions: [{ action_key: actionKey }],
+                  checks: ["Completion continues after restart."],
+                }),
+                toolCall("restart-work-plan-review", "record_work_review", {
+                  subject: "plan",
+                  verdict: "accept",
+                  next_stage: "execution",
+                  action_updates: [{ action_key: actionKey, status: "active" }],
+                  summary: "The restart Plan is accepted.",
+                  corrections: [],
+                }),
+                toolCall("restart-work-result-review", "record_work_review", {
+                  subject: "result",
+                  verdict: "revise",
+                  next_stage: "execution",
+                  action_updates: [{
+                    action_key: actionKey,
+                    status: "active",
+                    note: correction,
+                  }],
+                  summary: resultSummary,
+                  corrections: [correction],
+                }),
+              ],
+            )]);
+          }
+          const prompt = request.messages.map((message) => message.content).join("\n");
+          expect(prompt).toContain('"stage":"execution"');
+          expect(prompt).toContain('"result_review":2');
+          expect(prompt).not.toContain(resultSummary);
+          expect(prompt).not.toContain(correction);
+          expect(prompt).not.toContain(actionKey);
+          expect(prompt).toContain('"pointer":"/request/corrections"');
+          throw new ModelRouteDurabilityError("response_acceptance_write");
+        },
+      },
+    });
+    const setupRuntime = createGuidedTurnRuntime({
+      admission: stores.admission,
+      turns: stores.turns,
+      messages: stores.messages,
+      committedSuccessorReadiness: stores.committedSuccessorReadiness,
+      agent: setupAgent,
+    });
+    await expect(setupRuntime.runTurn(localRunCommand(root, turnId)))
+      .rejects.toBeInstanceOf(ModelRouteDurabilityError);
+    expect(await stores.durableWork.boundWorkForTurn(turnId)).toMatchObject({
+      status: "open",
+      currentStage: "execution",
+      latestResultReview: { revision: 2 },
+    });
+
+    stores.close();
+    stores = openBtccSqliteStores({
+      dbPath,
+      ownerId: "guided-t3-work-receipt-restart-resume",
+      storageProfile: "ephemeral",
+    });
+    let resumeRound = 0;
+    let resumePrompt = "";
+    const resumeAgent = createProductionGuidedTurnAgent({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: dbPath,
+      contextDocuments: stores.contextDocuments,
+      toolJournal: stores.guidedToolJournal,
+      effectJournal: stores.guidedEffectJournal,
+      durableWork: stores.durableWork,
+      modelRound: {
+        async runRound(request) {
+          resumeRound += 1;
+          const prompt = request.messages.map((message) => message.content).join("\n");
+          if (resumeRound === 1) {
+            resumePrompt = prompt;
+            const canonical = prompt.slice(
+              prompt.indexOf("## Canonical compact replay for this phase"),
+            );
+            expect(canonical).toContain('"stage":"execution"');
+            expect(canonical).toContain('"result_review":2');
+            expect(canonical).toContain('"count":1,"review_revision":2');
+            expect(canonical).toContain('"pointer":"/request/corrections"');
+            expect(canonical).not.toContain(resultSummary);
+            expect(canonical).not.toContain(correction);
+            expect(canonical).not.toContain(actionKey);
+            return toolResponse([compactCarrierCall(
+              "restart-work-premature-accept-carrier",
+              "Attempt acceptance before recovering the durable correction.",
+              [toolCall(
+                "restart-work-premature-accept",
+                "record_work_review",
+                {
+                  subject: "result",
+                  verdict: "accept",
+                  next_stage: "validation",
+                  action_updates: [{ action_key: actionKey, status: "done" }],
+                  summary: "Restart acceptance must wait for exact recovery.",
+                  corrections: [],
+                },
+              )],
+            )]);
+          }
+          if (resumeRound === 2) {
+            expect(prompt).toContain(
+              '"code":"guided_work_review_correction_recovery_required"',
+            );
+            expect(prompt).toContain('"review_revision":2');
+            expect(prompt).toContain('"pointer":"/request/corrections"');
+            expect(prompt).not.toContain(correction);
+            expect(await stores.durableWork.boundWorkForTurn(turnId))
+              .toMatchObject({
+                currentStage: "execution",
+                latestResultReview: { revision: 2, verdict: "revise" },
+              });
+            const reviewRecord = stores.guidedToolJournal.list(turnId)
+              .find((record) =>
+                record.toolName === "record_work_review" &&
+                record.arguments.subject === "result" &&
+                record.arguments.verdict === "revise",
+              );
+            return toolResponse([compactCarrierCall(
+              "restart-work-correction-read-carrier",
+              "Recover the review correction after restart.",
+              [toolCall(
+                "restart-work-correction-read",
+                "read_operation_results",
+                {
+                  reads: [{
+                    kind: "direct",
+                    result_ref: reviewRecord!.resultRef,
+                    revision: null,
+                    result_sha256: reviewRecord!.resultSha256 ?? null,
+                    selector: {
+                      kind: "json_pointer",
+                      pointer: "/request/corrections",
+                    },
+                  }],
+                },
+              )],
+            )]);
+          }
+          if (resumeRound === 3) {
+            expect(prompt).toContain(correction);
+            return toolResponse([compactCarrierCall(
+              "restart-work-corrected-review-carrier",
+              "Accept the corrected result after exact recovery.",
+              [toolCall("restart-work-corrected-review", "record_work_review", {
+                subject: "result",
+                verdict: "accept",
+                next_stage: "validation",
+                action_updates: [{ action_key: actionKey, status: "done" }],
+                summary: "The durable correction is applied.",
+                corrections: [],
+              })],
+            )]);
+          }
+          if (resumeRound === 4) {
+            expect(prompt).toContain('"stage":"validation"');
+            expect(prompt).toContain('"result_review":3');
+            return toolResponse([compactCarrierCall(
+              "restart-work-completion-carrier",
+              "Complete the resumed durable Work.",
+              [toolCall("restart-work-completion", "record_work_review", {
+                subject: "completion",
+                verdict: "accept",
+                next_stage: "reporting",
+                summary: "The resumed Work satisfies its mechanical gates.",
+                corrections: [],
+              })],
+            )]);
+          }
+          expect(prompt).toContain('"status":"completed"');
+          expect(prompt).toContain('"completion_validation":4');
+          return { text: "재시작 후 Work를 완료했습니다.", toolCalls: [] };
+        },
+      },
+    });
+    const resumed = await createGuidedTurnRuntime({
+      admission: stores.admission,
+      turns: stores.turns,
+      messages: stores.messages,
+      committedSuccessorReadiness: stores.committedSuccessorReadiness,
+      agent: resumeAgent,
+    }).runTurn({ kind: "resume", turnId });
+
+    expect(resumed).toMatchObject({
+      kind: "delivered",
+      content: "재시작 후 Work를 완료했습니다.",
+    });
+    expect(resumePrompt).toContain('"stage":"execution"');
+    expect(resumePrompt).toContain('"result_review":2');
+    expect(resumePrompt).toContain('"active":1');
+    expect(resumePrompt.match(/Authoritative mechanical Work state:/gu))
+      .toHaveLength(1);
+    const canonicalPrompt = resumePrompt.slice(
+      resumePrompt.indexOf("## Canonical compact replay for this phase"),
+    );
+    expect(canonicalPrompt).not.toContain(resultSummary);
+    expect(canonicalPrompt).not.toContain(correction);
+    expect(canonicalPrompt).not.toContain(actionKey);
+    expect(canonicalPrompt).toContain('"plan_ordinal":1');
+    expect(await stores.durableWork.boundWorkForTurn(turnId)).toMatchObject({
+      status: "completed",
+      currentStage: "reporting",
+      latestCompletionValidation: { revision: 4 },
+    });
+    const reviewRecords = stores.guidedToolJournal.list(turnId)
+      .filter((record) => record.toolName === "record_work_review");
+    expect(reviewRecords.map((record) => record.arguments.subject)).toEqual([
+      "plan",
+      "result",
+      "result",
+      "result",
+      "completion",
+    ]);
+    expect(reviewRecords.filter((record) =>
+      (record.result as { ok?: boolean } | undefined)?.ok === false,
+    )).toHaveLength(1);
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_COMPACT_REPLAY;
+    else process.env.BUTLER_M1_COMPACT_REPLAY = previousFlag;
+    try {
+      stores.close();
+    } catch {
+      // A failed reopen may already have closed the active stores.
+    }
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("T3 restart resumes the same in-flight Turn with PhaseContinuity and exact Work views", async () => {
   const previousFlag = process.env.BUTLER_M1_COMPACT_REPLAY;
   const root = mkdtempSync(join(tmpdir(), "guided-t3-restart-"));
