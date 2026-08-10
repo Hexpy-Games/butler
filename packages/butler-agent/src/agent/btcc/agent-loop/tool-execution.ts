@@ -5,6 +5,23 @@ import type {
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
 import { validateToolCallArguments } from "../../tools/schema-validation.ts";
+import type { BtccCompactReplayMetadata } from
+  "./compact-replay-messages.ts";
+
+const BTCC_TOOL_EXECUTION_ENVELOPE = Symbol("btcc-tool-execution-envelope");
+
+export type BtccToolExecutionEnvelope = {
+  [BTCC_TOOL_EXECUTION_ENVELOPE]: true;
+  output: unknown;
+  compactReplay: BtccCompactReplayMetadata;
+};
+
+export function createBtccToolExecutionEnvelope(
+  output: unknown,
+  compactReplay: BtccCompactReplayMetadata,
+): BtccToolExecutionEnvelope {
+  return { [BTCC_TOOL_EXECUTION_ENVELOPE]: true, output, compactReplay };
+}
 
 export interface PreparedBtccToolCall {
   call: BtccAgentLoopToolCall;
@@ -40,6 +57,7 @@ export function prepareBtccToolCall(
 export async function executePreparedBtccToolCall(
   input: Pick<BtccAgentLoopInput, "executeTool">,
   prepared: PreparedBtccToolCall,
+  operationBatch: { id: string; ordinal: number },
   signal?: AbortSignal,
 ): Promise<BtccAgentLoopToolResult> {
   if (prepared.validationError) {
@@ -59,6 +77,12 @@ export async function executePreparedBtccToolCall(
         summary: observation.summary,
         model_visible_content: observation.modelVisibleContent,
       },
+      compactReplay: {
+        kind: "operation_rejected",
+        code: observation.kind,
+        toolName: prepared.call.name,
+        summary: observation.summary.slice(0, 1_000),
+      },
     };
   }
 
@@ -67,21 +91,51 @@ export async function executePreparedBtccToolCall(
     name: prepared.call.name,
     arguments: prepared.call.arguments,
     rawArguments: prepared.call.rawArguments,
+    operationBatchId: operationBatch.id,
+    operationBatchOrdinal: operationBatch.ordinal,
     signal,
   }).then(
-    (output): BtccAgentLoopToolResult => ({
-      toolCallId: prepared.call.id,
-      name: prepared.call.name,
-      ok: true,
-      output,
-    }),
-    (error): BtccAgentLoopToolResult => ({
-      toolCallId: prepared.call.id,
-      name: prepared.call.name,
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    }),
+    (output): BtccAgentLoopToolResult => {
+      if (isBtccToolExecutionEnvelope(output)) {
+        return {
+          toolCallId: prepared.call.id,
+          name: prepared.call.name,
+          ok: true,
+          output: output.output,
+          compactReplay: output.compactReplay,
+        };
+      }
+      return {
+        toolCallId: prepared.call.id,
+        name: prepared.call.name,
+        ok: true,
+        output,
+      };
+    },
+    (error): BtccAgentLoopToolResult => {
+      const summary = (error instanceof Error ? error.message : String(error))
+        .slice(0, 1_000);
+      return {
+        toolCallId: prepared.call.id,
+        name: prepared.call.name,
+        ok: false,
+        error: summary,
+        compactReplay: {
+          kind: "operation_rejected",
+          code: "tool_execution_rejected",
+          toolName: prepared.call.name,
+          summary,
+        },
+      };
+    },
   );
+}
+
+function isBtccToolExecutionEnvelope(
+  value: unknown,
+): value is BtccToolExecutionEnvelope {
+  return Boolean(value && typeof value === "object" &&
+    (value as Partial<BtccToolExecutionEnvelope>)[BTCC_TOOL_EXECUTION_ENVELOPE]);
 }
 
 function invalidArgumentsObservation(input: {

@@ -10,6 +10,7 @@ import { createGuidedEffectService } from "../../packages/butler-agent/src/agent
 import { createGuidedPersistentEffectResolver } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-persistent-effect-resolution.ts";
 import { createGuidedToolExecutionBoundary } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-execution-boundary.ts";
 import { createGuidedToolCallExecutor } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-call-execution.ts";
+import { createDisabledGuidedCompactReplayRuntime } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-compact-replay-runtime.ts";
 import { ActiveProjectLedgerResolver } from "../../packages/butler-agent/src/integrations/project-ledger/active-project-ledger-reference.ts";
 import { createPlatformCommandExecutor } from "../../packages/butler-agent/src/runtime/command/platform-command-executor.ts";
 import { admitTurn } from "../../packages/butler-agent/src/agent/btcc/turn/admission/admit-turn.ts";
@@ -717,6 +718,7 @@ describe("session-owned Git worktree lifecycle", () => {
           describedToolIds: new Set(),
           durableWork: stores.durableWork,
           toolJournal: stores.guidedToolJournal,
+          compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
           executeButlerTool,
         });
       };

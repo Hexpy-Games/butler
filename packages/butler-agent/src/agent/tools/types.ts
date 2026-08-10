@@ -6,6 +6,8 @@ export interface ButlerToolCall {
   args: Record<string, unknown>;
   rawArguments: string;
   providerCallId?: string;
+  operationBatchId?: string;
+  operationBatchOrdinal?: number;
   signal?: AbortSignal;
 }
 

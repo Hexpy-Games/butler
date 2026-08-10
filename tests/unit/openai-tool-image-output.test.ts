@@ -16,6 +16,8 @@ import type { ModelRoundPort } from
   "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 import { runOpenAIModelRound } from
   "../../packages/butler-agent/src/integrations/providers/openai/model-round.ts";
+import { createBtccToolExecutionEnvelope } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-execution.ts";
 
 const originalFetch = globalThis.fetch;
 const originalOpenAIBaseUrl = process.env.OPENAI_BASE_URL;
@@ -76,6 +78,189 @@ function previewOutput(relativePath: string): Record<string, unknown> {
     }],
   };
 }
+
+test("OpenAI stateless transport carries the canonical compact replay request", async () => {
+  const continuityTool = { ...previewTool, name: "replace_phase_continuity" };
+  const sourceTool = { ...previewTool, name: "read_file" };
+  const { modelRound, requests } = openAIModelRound([
+    {
+      id: "compact-response-1",
+      model: "gpt-5.5",
+      output: [
+        {
+          type: "function_call",
+          call_id: "compact-continuity",
+          name: "replace_phase_continuity",
+          arguments: "{}",
+        },
+        {
+          type: "function_call",
+          call_id: "compact-source",
+          name: "read_file",
+          arguments: "{}",
+        },
+      ],
+    },
+    {
+      id: "compact-response-2",
+      model: "gpt-5.5",
+      output: [{
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Compact replay received." }],
+      }],
+    },
+  ]);
+
+  const result = await runBtccAgentLoop({
+    prompt: "Inspect the durable result.",
+    model: "openai/gpt-5.5",
+    tools: [continuityTool, sourceTool],
+    compactReplay: { enabled: true, initialPhaseContinuity: null },
+    modelRound,
+    executeTool: async (call) => call.name === "replace_phase_continuity"
+      ? createBtccToolExecutionEnvelope(
+          { ok: true },
+          { kind: "phase_continuity", value: { objective: "inspect" } },
+        )
+      : createBtccToolExecutionEnvelope(
+          { ok: true, content: "CANONICAL_COMPACT_RESULT" },
+          {
+            kind: "source",
+            identity: {
+              kind: "direct",
+              result_ref: `guided-result-${"1".repeat(64)}`,
+              revision: null,
+              tool_name: "read_file",
+              status: "completed",
+              result_sha256: null,
+              outcome: "succeeded",
+              completeness: "complete",
+            },
+          },
+        ),
+  });
+
+  expect(result.finalText).toBe("Compact replay received.");
+  expect(requests).toHaveLength(2);
+  const secondInput = JSON.stringify(requests[1]?.input);
+  expect(secondInput).toContain("Inspect the durable result.");
+  expect(secondInput).toContain("## Canonical compact replay for this phase");
+  expect(secondInput).toContain("CANONICAL_COMPACT_RESULT");
+  expect(requests[1]?.previous_response_id).toBeUndefined();
+});
+
+test("OpenAI stateless rebuild preserves assistant correction context", async () => {
+  const { modelRound, requests } = openAIModelRound([{
+    id: "compact-correction-response",
+    model: "gpt-5.5",
+    output: [{
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "Correction retained." }],
+    }],
+  }]);
+
+  await modelRound.runRound({
+    model: "openai/gpt-5.5",
+    messages: [
+      { role: "user", content: "Original request" },
+      { role: "assistant", content: "Do not lose this correction." },
+      { role: "user", content: "Canonical compact projection" },
+    ],
+    tools: [],
+  });
+
+  const input = requests[0]?.input as Array<Record<string, unknown>>;
+  expect(input.map((item) => item.role)).toEqual([
+    "user",
+    "assistant",
+    "user",
+  ]);
+  expect(JSON.stringify(input)).toContain("Do not lose this correction.");
+  expect(JSON.stringify(input)).toContain("Canonical compact projection");
+});
+
+test("OpenAI loop reset carries canonical replay and assistant correction in one fetch body", async () => {
+  const continuityTool = { ...previewTool, name: "replace_phase_continuity" };
+  const sourceTool = { ...previewTool, name: "read_file" };
+  const { modelRound, requests } = openAIModelRound([
+    {
+      id: "combined-replay-response-1",
+      model: "gpt-5.5",
+      output: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [{
+            type: "output_text",
+            text: "Correction: inspect the retained durable result.",
+          }],
+        },
+        {
+          type: "function_call",
+          call_id: "combined-continuity",
+          name: "replace_phase_continuity",
+          arguments: "{}",
+        },
+        {
+          type: "function_call",
+          call_id: "combined-source",
+          name: "read_file",
+          arguments: "{}",
+        },
+      ],
+    },
+    {
+      id: "combined-replay-response-2",
+      model: "gpt-5.5",
+      output: [{
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Combined context received." }],
+      }],
+    },
+  ]);
+
+  const result = await runBtccAgentLoop({
+    prompt: "Preserve the correction and replay exactly.",
+    model: "openai/gpt-5.5",
+    tools: [continuityTool, sourceTool],
+    compactReplay: { enabled: true, initialPhaseContinuity: null },
+    modelRound,
+    executeTool: async (call) => call.name === "replace_phase_continuity"
+      ? createBtccToolExecutionEnvelope(
+          { ok: true },
+          { kind: "phase_continuity", value: { objective: "corrected" } },
+        )
+      : createBtccToolExecutionEnvelope(
+          { ok: true, content: "COMBINED_CANONICAL_RESULT" },
+          {
+            kind: "source",
+            identity: {
+              kind: "direct",
+              result_ref: `guided-result-${"c".repeat(64)}`,
+              revision: null,
+              tool_name: "read_file",
+              status: "completed",
+              result_sha256: null,
+              outcome: "succeeded",
+              completeness: "complete",
+            },
+          },
+        ),
+  });
+
+  expect(result.finalText).toBe("Combined context received.");
+  expect(requests).toHaveLength(2);
+  expect(requests[1]?.previous_response_id).toBeUndefined();
+  const secondInput = JSON.stringify(requests[1]?.input);
+  expect(secondInput).toContain(
+    "Correction: inspect the retained durable result.",
+  );
+  expect(secondInput).toContain("## Canonical compact replay for this phase");
+  expect(secondInput).toContain("COMBINED_CANONICAL_RESULT");
+});
 
 test("BTCC-created preview messages reach the actual OpenAI model-round boundary as image input", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-tool-image-"));

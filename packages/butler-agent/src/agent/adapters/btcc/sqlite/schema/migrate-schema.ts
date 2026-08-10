@@ -4,6 +4,11 @@ import {
   BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA,
 } from "./guided-work-schema.ts";
 import { BTCC_GUIDED_EFFECT_RECOVERY_PAYLOAD_TABLE_SCHEMA } from "./guided-effect-schema.ts";
+import { guidedWorkRecordId } from "../guided-work-record-id.ts";
+import {
+  encodeGuidedOperationResultStructuralFacts,
+  legacyGuidedOperationResultStructuralFacts,
+} from "../../../../btcc/operation-results/index.ts";
 
 type ColumnRow = { name: string };
 
@@ -12,6 +17,7 @@ export function migrateBtccSchema(db: Database): void {
     ensureLegacyWorkImportProvenance(db);
     ensureGuidedEffectRecoveryPayloadTable(db);
     ensureGuidedWorkProgressColumns(db);
+    ensureGuidedToolResultRecord(db);
     ensureTurnProgressDestination(db);
     ensureTurnRouteState(db);
     ensureModelRoundAcceptanceCheckpoint(db);
@@ -19,6 +25,49 @@ export function migrateBtccSchema(db: Database): void {
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
+}
+
+function ensureGuidedToolResultRecord(db: Database): void {
+  const table = "btcc_guided_tool_calls";
+  if (!tableExists(db, table)) return;
+  ensureColumn(db, table, "result_ref", "TEXT");
+  ensureColumn(db, table, "operation_batch_id", "TEXT");
+  ensureColumn(db, table, "operation_batch_ordinal", "INTEGER");
+  ensureColumn(db, table, "structural_facts_json", "TEXT");
+  const rows = db.query<{ call_id: string }, []>(`
+    SELECT call_id FROM ${table} WHERE result_ref IS NULL
+  `).all();
+  const update = db.query(`
+    UPDATE ${table} SET result_ref = ? WHERE call_id = ? AND result_ref IS NULL
+  `);
+  for (const row of rows) {
+    update.run(guidedWorkRecordId("result", row.call_id), row.call_id);
+  }
+  const legacyResults = db.query<{
+    call_id: string;
+    status: "completed" | "failed" | "cancelled";
+    result_sha256: string | null;
+  }, []>(`
+    SELECT call_id, status, result_sha256 FROM ${table}
+    WHERE structural_facts_json IS NULL
+      AND status IN ('completed', 'failed', 'cancelled')
+  `).all();
+  const updateFacts = db.query(`
+    UPDATE ${table} SET structural_facts_json = ?
+    WHERE call_id = ? AND structural_facts_json IS NULL
+  `);
+  for (const row of legacyResults) {
+    updateFacts.run(encodeGuidedOperationResultStructuralFacts(
+      legacyGuidedOperationResultStructuralFacts({
+        status: row.status,
+        resultSha256: row.result_sha256,
+      }),
+    ), row.call_id);
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_btcc_guided_tool_calls_result_ref
+    ON ${table}(result_ref)
+  `);
 }
 
 function ensureGuidedEffectRecoveryPayloadTable(db: Database): void {

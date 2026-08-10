@@ -18,10 +18,19 @@ import {
   createM1ToolSurfaceAdmissionRecorder,
 } from
   "../../packages/butler-agent/src/operations/metrics/m1-tool-surface-admission.ts";
+import {
+  M1_COMPACT_REPLAY_EVENT_NAME,
+  createM1CompactReplayRecorder,
+} from
+  "../../packages/butler-agent/src/operations/metrics/m1-compact-replay.ts";
 import { readOperationalMetricEvents } from
   "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
 import { modelFacingFunctionTools } from
   "../../packages/butler-agent/src/integrations/providers/shared/tools.ts";
+import { createGuidedCompactReplayRuntime } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-compact-replay-runtime.ts";
+import type { SqliteGuidedToolJournal } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 
 function tempRoot(suffix: string): string {
   return join(tmpdir(), `butler-m1-t2-${suffix}-${Date.now()}-${Math.random()}`);
@@ -253,6 +262,185 @@ test("M1 T2 admission telemetry is typed, nullable, private-path safe, and idemp
       },
     });
     expect(JSON.stringify(event)).not.toContain("/private/");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("M1 T3 compact replay telemetry keeps only typed refs and nullable counters", () => {
+  const butlerData = tempRoot("compact-telemetry");
+  try {
+    const resultRef = `guided-result-${"d".repeat(64)}`;
+    const recorder = createM1CompactReplayRecorder({
+      butlerData,
+      env: { BUTLER_METRICS_ENABLED: "on" },
+      metadata: {
+        phaseId: "guided",
+        projectionRevision: "a".repeat(64),
+        resultRef: "/private/result",
+        exactRead: null,
+        duplicateEffect: null,
+        flagRevision: "m1-t3-v1",
+      },
+    });
+    recorder.observe({
+      projectionRevision: "b".repeat(64),
+      resultRef,
+      exactRead: true,
+      duplicateEffect: false,
+      projectionCount: null,
+      anchorCount: 3,
+      replayCount: 0,
+    });
+    recorder.finalize("ok");
+    recorder.finalize("error");
+
+    const [event] = readOperationalMetricEvents({ butlerData });
+    expect(readOperationalMetricEvents({ butlerData })).toHaveLength(1);
+    expect(event).toMatchObject({
+      category: "tool",
+      name: M1_COMPACT_REPLAY_EVENT_NAME,
+      status: "ok",
+      unit: "operation_result",
+      rawTextStored: false,
+      dimensions: {
+        phaseId: "guided",
+        projectionRevision: "b".repeat(64),
+        resultRef,
+        exactRead: true,
+        duplicateEffect: false,
+        flagRevision: "m1-t3-v1",
+        projectionCount: null,
+        anchorCount: 3,
+        replayCount: 0,
+      },
+    });
+    expect(JSON.stringify(event)).not.toContain("/private/");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("M1 T3 adds one fixed control surface only at the enabled phase boundary", () => {
+  const workspaceReference = createWorkspaceReference("/tmp/m1-t3-workspace");
+  const first = selectGuidedToolSurface(
+    turnRecord({ accessMode: "full_access", originalMessage: "first request" }),
+    { BUTLER_M1_MINIMAL_TOOL_SURFACE: "on" },
+    workspaceReference,
+    true,
+  );
+  const second = selectGuidedToolSurface(
+    turnRecord({ accessMode: "full_access", originalMessage: "different request" }),
+    { BUTLER_M1_MINIMAL_TOOL_SURFACE: "on" },
+    workspaceReference,
+    true,
+  );
+  const off = selectGuidedToolSurface(
+    turnRecord({ accessMode: "full_access" }),
+    { BUTLER_M1_MINIMAL_TOOL_SURFACE: "on" },
+    workspaceReference,
+    false,
+  );
+
+  expect(schemaBytes(first.providerTools)).toBe(schemaBytes(second.providerTools));
+  expect(first.providerTools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
+    "replace_phase_continuity",
+    "read_operation_results",
+  ]));
+  expect(off.providerTools.map((tool) => tool.name)).not.toContain(
+    "replace_phase_continuity",
+  );
+  const readTool = first.providerTools.find((tool) =>
+    tool.name === "read_operation_results")!;
+  const schema = JSON.stringify(readTool.parameters);
+  expect(schema).toContain(
+    '"required":["kind","result_ref","work_id","revision","result_sha256","selector"]',
+  );
+  expect(schema).toContain(
+    '"required":["kind","result_ref","revision","result_sha256","selector"]',
+  );
+  expect(schema).toContain('"const":"json_pointer"');
+  expect(schema).toContain('"const":"line_range"');
+  expect(schema).toContain('"const":"byte_range"');
+  expect(schema).toContain('"const":"search"');
+});
+
+test("M1 T3 failed exact read clears duplicate-effect certainty", () => {
+  const butlerData = tempRoot("compact-telemetry-failure");
+  try {
+    const recorder = createM1CompactReplayRecorder({
+      butlerData,
+      env: { BUTLER_METRICS_ENABLED: "on" },
+      metadata: {
+        phaseId: "guided",
+        projectionRevision: "a".repeat(64),
+        resultRef: null,
+        exactRead: null,
+        duplicateEffect: null,
+        flagRevision: "m1-t3-v1",
+      },
+    });
+    recorder.observe({
+      resultRef: `guided-result-${"b".repeat(64)}`,
+      exactRead: true,
+      duplicateEffect: false,
+    });
+    recorder.observe({
+      resultRef: null,
+      exactRead: false,
+      duplicateEffect: null,
+    });
+    recorder.finalize("error");
+
+    expect(readOperationalMetricEvents({ butlerData })[0]).toMatchObject({
+      status: "error",
+      dimensions: {
+        resultRef: null,
+        exactRead: false,
+        duplicateEffect: null,
+      },
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("M1 T3 runtime keeps exact-read failure sticky after a later success", async () => {
+  const butlerData = tempRoot("compact-telemetry-monotonic");
+  try {
+    const toolJournal = {
+      list: () => [],
+      listForCompactReplay: () => [],
+      readLatestPhaseContinuity: () => null,
+    } as unknown as SqliteGuidedToolJournal;
+    const runtime = await createGuidedCompactReplayRuntime({
+      enabled: true,
+      butlerData,
+      toolJournal,
+      turnId: "turn-monotonic",
+      sessionId: "session-monotonic",
+      work: null,
+      modelRef: "openai/gpt-5.6-sol",
+    });
+    runtime.observeExactRead({ success: false });
+    runtime.observeExactRead({
+      success: true,
+      resultRef: `guided-result-${"c".repeat(64)}`,
+      replayed: true,
+    });
+    runtime.finalize(false);
+
+    expect(readOperationalMetricEvents({ butlerData })[0]).toMatchObject({
+      status: "error",
+      dimensions: {
+        exactRead: false,
+        duplicateEffect: null,
+        exactReadAttempts: 2,
+        exactReadSuccesses: 1,
+        exactReadFailures: 1,
+        replayCount: 1,
+      },
+    });
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

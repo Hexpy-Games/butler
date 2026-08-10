@@ -2,7 +2,7 @@ import type { ButlerToolExecutor } from "../../tools/butler-tools.ts";
 import { unauthorizedToolResult, publishOperation, safeJson } from
   "./guided-tool-progress.ts";
 import type { GuidedActivityBinding } from "../projection/index.ts";
-import type { GuidedToolCallExecutionInput } from "./guided-tool-call-execution.ts";
+import type { GuidedToolCallExecutionInput } from "./guided-tool-call-contracts.ts";
 
 export async function denyUnauthorizedTool(
   input: GuidedToolCallExecutionInput,

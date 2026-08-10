@@ -332,6 +332,7 @@ function hydrateActionProgress(
 function hydrateResultRef(row: GuidedWorkResultRow): DurableWorkToolResultRef {
   return {
     resultRef: row.result_ref,
+    sequence: row.sequence,
     toolCallId: row.tool_call_id,
     toolName: row.tool_name,
     status: row.status,

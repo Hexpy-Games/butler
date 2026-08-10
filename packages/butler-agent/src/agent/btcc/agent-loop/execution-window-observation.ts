@@ -29,6 +29,42 @@ export function renderExecutionWindowObservation(input: {
   return lines.join("\n");
 }
 
+/** Mechanical recovery facts used only by the compact replay arm. */
+export function renderCompactExecutionWindowObservation(input: {
+  windowIndex: number;
+  context: DurableWorkContext | null;
+  boundWork: DurableWorkView | null;
+}): string {
+  const work = input.context?.work ?? input.boundWork;
+  const lines = [
+    `Execution checkpoint ${input.windowIndex + 1}: preserve the existing request and durable result references.`,
+  ];
+  if (!work) {
+    lines.push("Durable Work status: unavailable.");
+    return lines.join("\n");
+  }
+  lines.push(`Durable Work status: ${work.status}.`);
+  if (work.currentStage) lines.push(`Current stage: ${work.currentStage}.`);
+  lines.push(
+    `Plan revision: ${work.currentPlan?.revision ?? null}.`,
+    `Checkpoint revision: ${work.latestCheckpoint?.revision ?? null}.`,
+    `Result revision: ${work.resultRefs.length}.`,
+    `Required result refs: ${work.resultRefs.map((result) => result.resultRef).join(", ") || "none"}.`,
+  );
+  return lines.join("\n");
+}
+
+export function renderGuidedExecutionWindowObservation(input: {
+  compactReplayEnabled: boolean;
+  windowIndex: number;
+  context: DurableWorkContext | null;
+  boundWork: DurableWorkView | null;
+}): string {
+  return input.compactReplayEnabled
+    ? renderCompactExecutionWindowObservation(input)
+    : renderExecutionWindowObservation(input);
+}
+
 function singleLine(value: string, limit: number): string {
   return value.replace(/\s+/gu, " ").trim().slice(0, limit);
 }

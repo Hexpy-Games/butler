@@ -7,8 +7,7 @@ import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
 import type { SqliteGuidedEffectJournal, SqliteGuidedToolJournal } from "../../adapters/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
-import { createProviderModelRoundPort } from
-  "../../../integrations/providers/runtime.ts";
+import { createProviderModelRoundPort } from "../../../integrations/providers/runtime.ts";
 import {
   guidedInstructions,
   providerImageAttachments,
@@ -25,8 +24,7 @@ import {
   selectGuidedToolSurface,
   selectedModelRef,
 } from "./guided-turn-policy.ts";
-import { createGuidedToolSurfaceObservation, type GuidedToolSurfaceObservation } from
-  "./guided-tool-surface-observation.ts";
+import { createGuidedToolSurfaceObservation, type GuidedToolSurfaceObservation } from "./guided-tool-surface-observation.ts";
 import { createGuidedToolExecutionBoundary } from
   "./guided-tool-execution-boundary.ts";
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
@@ -34,16 +32,11 @@ import { renderGuidedEffectContext } from "./guided-effect-context.ts";
 import { renderDurableWorkContext } from "./durable-work-tools.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import {
-  backfillTurnToolResults,
-  safeImportOpenLegacyWork,
   safeBoundWork,
   safeLoadWorkContext,
-  workScopeForTurn,
 } from "./guided-work-runtime.ts";
-import { createGuidedToolCallExecutor } from
-  "./guided-tool-call-execution.ts";
-import { runGuidedAgentLoopWithOperationalReport } from
-  "./guided-operational-report.ts";
+import { createGuidedToolCallExecutor } from "./guided-tool-call-execution.ts";
+import { runGuidedAgentLoopWithOperationalReport } from "./guided-operational-report.ts";
 import { createGuidedActivityProjection } from
   "../projection/index.ts";
 import { createGuidedPersistentEffectResolver } from
@@ -52,12 +45,16 @@ import {
   createModelRoutePort,
   currentModelRouteCandidate,
 } from "../model-route/index.ts";
-import { renderExecutionWindowObservation } from "./execution-window-observation.ts";
+import { renderGuidedExecutionWindowObservation } from "./execution-window-observation.ts";
 import { createGuidedSessionWorkspaceRuntime, type GuidedSessionWorkspaceBindingStore } from "./guided-session-workspace-recovery.ts";
-import { createGuidedTurnBaselineObservation } from
-  "./guided-turn-baseline-observation.ts";
+import { createGuidedTurnBaselineObservation } from "./guided-turn-baseline-observation.ts";
 import { createGuidedRouteEventHandler } from "./guided-turn-route-events.ts";
-
+import { isM1CompactReplayEnabled } from "../../tools/m1-compact-replay.ts";
+import type { GuidedCompactReplayRuntime } from "./guided-compact-replay-runtime.ts";
+import { assembleGuidedTurnContext } from "./guided-turn-context-assembly.ts";
+import { observeCompactReplayToolBatch } from "./guided-compact-replay-control.ts";
+import { throwIfExecutionWindowAborted } from "./execution-window.ts";
+import { createBtccCompactReplayModelRoundPort } from "./model-round-request-assembly.ts";
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
   butlerData: string;
@@ -99,6 +96,7 @@ export function createProductionGuidedTurnAgent(input: {
         resolveModelRef: () => activeModelRef,
       });
       let m1ToolSurfaceAdmission: GuidedToolSurfaceObservation | undefined;
+      let compactReplayRuntime: GuidedCompactReplayRuntime | undefined;
       try {
       const policy = guidedPolicy(turn);
       const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
@@ -109,28 +107,27 @@ export function createProductionGuidedTurnAgent(input: {
         turn,
         workspaceReference,
       });
-      const workScope = workScopeForTurn(turn, policy.trackingMode);
-      let initialWork = policy.trackingMode === "none"
-        ? null
-        : await safeLoadWorkContext(input.durableWork, workScope);
-      if (!initialWork && policy.trackingMode !== "none") {
-        await safeImportOpenLegacyWork(input.durableWork, workScope);
-        initialWork = await safeLoadWorkContext(input.durableWork, workScope);
-      }
-      let initialWorkBound = false;
-      if (initialWork) {
-        const boundWork = await safeBoundWork(input.durableWork, turn.turnId);
-        initialWorkBound = boundWork?.workId === initialWork.work.workId;
-        if (initialWorkBound) {
-          await backfillTurnToolResults(input, workScope);
-          initialWork = await safeLoadWorkContext(input.durableWork, workScope);
-        }
-      }
+      const compactReplayEnabled = isM1CompactReplayEnabled(process.env);
+      const contextAssembly = await assembleGuidedTurnContext({
+        compactReplayEnabled,
+        butlerData: input.butlerData,
+        durableWork: input.durableWork,
+        toolJournal: input.toolJournal,
+        trackingMode: policy.trackingMode,
+        turn, modelRef: activeModelRef, resolveModelRef: () => activeModelRef,
+        ...(policy.projectId || turn.context.projectRef
+          ? { projectRef: policy.projectId ?? turn.context.projectRef }
+          : {}),
+      });
+      const { workScope, initialWork, initialWorkBound } = contextAssembly;
+      compactReplayRuntime = contextAssembly.compactReplayRuntime;
+      const compactReplay = compactReplayRuntime.context;
       const presentedWorkId = initialWork?.work.workId;
       const toolSurface = selectGuidedToolSurface(
         turn,
         process.env,
         workspaceReference,
+        compactReplayEnabled,
       );
       const authorizedTools = toolSurface.authorizedTools;
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
@@ -216,8 +213,9 @@ export function createProductionGuidedTurnAgent(input: {
         durableWork: input.durableWork,
         toolJournal: input.toolJournal,
         executeButlerTool: execute,
+        compactReplayRuntime,
       });
-      const baseModelRound = input.modelRound ?? createProviderModelRoundPort();
+      const baseModelRound = createBtccCompactReplayModelRoundPort(input.modelRound ?? createProviderModelRoundPort());
       const onRouteEvent = createGuidedRouteEventHandler({
         turn,
         progress,
@@ -245,12 +243,16 @@ export function createProductionGuidedTurnAgent(input: {
       const loopOptions: BtccAgentLoopInput = {
         prompt: renderGuidedPrompt(turn, {
           ...input,
-          workContext: renderDurableWorkContext(initialWork),
+          workContext: renderDurableWorkContext(
+            initialWork, compactReplay, compactReplayEnabled
+              ? compactReplayRuntime.budget.workContextCharacters : undefined,
+          ),
           effectContext: initialWork
             ? renderGuidedEffectContext(
                 input.effectJournal.listForWork(initialWork.work.workId),
             )
             : "",
+          compactReplay,
         }),
         turnId: turn.turnId,
         instructions: guidedInstructions(
@@ -274,37 +276,39 @@ export function createProductionGuidedTurnAgent(input: {
         attachments: providerImageAttachments(turn),
         onProviderResponseIdentity,
         tools: visibleTools,
-        // This is an internal execution-window size. The same Turn remains
-        // active across windows until the model reaches a final answer.
+        compactReplay: {
+          enabled: compactReplayEnabled, initialPhaseContinuity: compactReplay?.phaseContinuity ?? null,
+          ...(compactReplay && { initialProjection: compactReplay.initialProjection }),
+        },
         maxIterations: Math.max(1, input.executionWindowSize ?? 60),
         modelRound,
         onExecutionWindowBoundary: async ({ windowIndex }) => {
-          if (signal.aborted) throwGuidedAbort(signal);
+          throwIfExecutionWindowAborted(signal);
           const refreshedContext = policy.trackingMode === "none"
             ? null
             : await safeLoadWorkContext(input.durableWork, workScope);
           const refreshedBoundWork = policy.trackingMode === "none"
             ? null
             : await safeBoundWork(input.durableWork, turn.turnId);
-          return renderExecutionWindowObservation({
-            windowIndex,
-            context: refreshedContext,
-            boundWork: refreshedBoundWork,
+          return renderGuidedExecutionWindowObservation({
+            compactReplayEnabled, windowIndex,
+            context: refreshedContext, boundWork: refreshedBoundWork,
           });
         },
-        onAssistantTextBeforeTools: ({ text, toolCalls: calls }) => activity.observeToolBatch({
-          text,
-          toolCalls: calls.map((call) => ({
-            name: call.name,
-            args: call.arguments,
-          })),
-        }),
+        onAssistantTextBeforeTools: ({ text, toolCalls: calls }) =>
+          observeCompactReplayToolBatch({
+            enabled: compactReplayEnabled,
+            activity,
+            text,
+            calls,
+          }),
         onEvent: m1Observation.onEvent,
         executeTool: async (call) => await toolCalls.executeTool({
           name: call.name,
           args: call.arguments,
           rawArguments: call.rawArguments,
           providerCallId: call.id,
+          operationBatchId: call.operationBatchId, operationBatchOrdinal: call.operationBatchOrdinal,
           signal: call.signal,
         }),
       };
@@ -337,14 +341,10 @@ export function createProductionGuidedTurnAgent(input: {
         ),
       };
       } finally {
+        compactReplayRuntime?.finalize(signal.aborted);
         m1ToolSurfaceAdmission?.finalize(signal.aborted ? "skipped" : "error");
         m1Observation.finalize(signal.aborted ? "skipped" : "error");
       }
     },
   };
-}
-
-function throwGuidedAbort(signal: AbortSignal): never {
-  if (signal.reason instanceof Error) throw signal.reason;
-  throw new Error("Guided Turn was aborted");
 }

@@ -54,6 +54,7 @@ export type DurableWorkPlan = {
 
 export type DurableWorkToolResultRef = {
   resultRef: string;
+  sequence?: number;
   toolCallId: string;
   toolName: string;
   status: "completed" | "failed" | "cancelled";

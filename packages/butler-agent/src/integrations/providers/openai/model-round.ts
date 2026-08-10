@@ -58,11 +58,12 @@ export async function runOpenAIModelRound(
   const previous = isOpenAIContinuation(request.continuation)
     ? request.continuation
     : null;
-  const firstUser = request.messages.find((message) => message.role === "user");
-  const initialInput = openAIInputWithAttachments(
-    firstUser?.content ?? "",
+  const initialInput = initialOpenAIInput(
+    request.messages,
     request.attachments ? [...request.attachments] : undefined,
   );
+  const initialUserMessages = request.messages.filter((message) =>
+    message.role === "user").length;
   const initialStatelessInput = toCodexStatelessInput(initialInput);
   const continuationMessages = previous
     ? newOpenAIContinuationMessages(
@@ -162,7 +163,10 @@ export async function runOpenAIModelRound(
   const nextContinuation: OpenAIContinuation = {
     provider: "openai",
     responseId: response.id,
-    sent: continuationMessages?.sent ?? { toolMessages: 0, userMessages: 1 },
+    sent: continuationMessages?.sent ?? {
+      toolMessages: 0,
+      userMessages: initialUserMessages,
+    },
     statelessInput,
   };
   if (continuationMessages) {
@@ -184,6 +188,38 @@ export async function runOpenAIModelRound(
     ...(providerIdentity ? { providerIdentity } : {}),
     raw: response,
   };
+}
+
+function initialOpenAIInput(
+  messages: readonly ModelRoundMessage[],
+  attachments: ModelRoundRequest["attachments"],
+): unknown {
+  const users = messages.filter((message) => message.role === "user");
+  const first = openAIInputWithAttachments(
+    users[0]?.content ?? "",
+    attachments ? [...attachments] : undefined,
+  );
+  if (messages.length === 1 && users.length === 1) return first;
+  let firstUserSeen = false;
+  return messages.flatMap((message): Array<Record<string, unknown>> => {
+    if (message.role === "user") {
+      if (!firstUserSeen) {
+        firstUserSeen = true;
+        return toCodexStatelessInput(first);
+      }
+      return [{
+        role: "user",
+        content: [{ type: "input_text", text: message.content }],
+      }];
+    }
+    if (message.role === "assistant" && message.content) {
+      return [{
+        role: "assistant",
+        content: [{ type: "output_text", text: message.content }],
+      }];
+    }
+    return [];
+  });
 }
 
 function isOpenAIContinuation(value: unknown): value is OpenAIContinuation {

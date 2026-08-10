@@ -14,6 +14,8 @@ import type { SqliteGuidedToolJournal } from "../../adapters/index.ts";
 import { sanitizePublicText } from "../../events/turn-events.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import { publicWorkActionDisplay } from "../projection/index.ts";
+import { isM1CompactReplayControlTool } from
+  "../../tools/m1-compact-replay.ts";
 
 type GuidedWorkRuntimeInput = {
   durableWork: DurableWorkService;
@@ -114,7 +116,8 @@ export async function backfillTurnToolResults(
   scope: WorkTurnScope,
 ): Promise<void> {
   for (const record of input.toolJournal.list(scope.turnId)) {
-    if (record.status !== "completed" || isDurableWorkTool(record.toolName)) continue;
+    if (record.status !== "completed" || isDurableWorkTool(record.toolName) ||
+      isM1CompactReplayControlTool(record.toolName)) continue;
     await safeAttachToolResult(input, scope, record.callId);
   }
 }

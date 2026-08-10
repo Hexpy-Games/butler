@@ -12,6 +12,8 @@ const WORK_CONTROL_TOOL_NAMES = new Set([
   "replace_work_plan",
   "record_work_checkpoint",
   "record_work_review",
+  "read_operation_results",
+  "replace_phase_continuity",
 ]);
 
 export class GuidedWorkToolResultWriter {
@@ -37,8 +39,7 @@ export class GuidedWorkToolResultWriter {
     if (existing && existing.work_id !== workId) {
       throw new Error("Durable Work tool result is already bound to another Work");
     }
-    const resultRef = existing?.result_ref
-      ?? guidedWorkRecordId("result", input.toolCallId);
+    const resultRef = existing?.result_ref ?? guidedWorkResultRef(input.toolCallId);
     if (!existing) {
       this.db.query(`
         INSERT INTO btcc_guided_work_results (
@@ -62,4 +63,8 @@ export class GuidedWorkToolResultWriter {
       FROM btcc_guided_work_results WHERE work_id = ?
     `).get(workId)?.sequence ?? 0;
   }
+}
+
+export function guidedWorkResultRef(toolCallId: string): string {
+  return guidedWorkRecordId("result", toolCallId);
 }

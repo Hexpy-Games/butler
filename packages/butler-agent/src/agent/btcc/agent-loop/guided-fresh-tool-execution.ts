@@ -13,8 +13,32 @@ import {
   backfillTurnToolResults,
   safeBindOpenWork,
 } from "./guided-work-runtime.ts";
+import type { GuidedCompactReplayRuntime } from
+  "./guided-compact-replay-runtime.ts";
+import { executeCompactReplayControlTool } from
+  "./guided-compact-replay-control.ts";
+import type { GuidedToolCallExecutionInput } from
+  "./guided-tool-call-contracts.ts";
 
 type GuidedToolCall = Parameters<ButlerToolExecutor>[0];
+
+export function executeGuidedFreshToolForCall(
+  input: GuidedToolCallExecutionInput,
+  call: GuidedToolCall,
+  callId: string,
+  toolSignal: AbortSignal,
+): Promise<unknown> {
+  return executeGuidedFreshTool({
+    durableWork: input.durableWork,
+    toolJournal: input.toolJournal,
+    workScope: input.workScope,
+    call,
+    callId,
+    toolSignal,
+    executeButlerTool: input.executeButlerTool,
+    compactReplayRuntime: input.compactReplayRuntime,
+  });
+}
 
 export async function executeGuidedFreshTool(input: {
   durableWork: DurableWorkService;
@@ -24,7 +48,17 @@ export async function executeGuidedFreshTool(input: {
   callId: string;
   toolSignal: AbortSignal;
   executeButlerTool: ContextualButlerToolExecutor;
+  compactReplayRuntime: GuidedCompactReplayRuntime;
 }): Promise<unknown> {
+  const compactControl = await executeCompactReplayControlTool({
+    name: input.call.name,
+    args: input.call.args,
+    durableWork: input.durableWork,
+    toolJournal: input.toolJournal,
+    workScope: input.workScope,
+    runtime: input.compactReplayRuntime,
+  });
+  if (compactControl.handled) return compactControl.result;
   if (isDurableWorkTool(input.call.name) && input.call.name !== "replace_work_plan") {
     await safeBindOpenWork(input.durableWork, input.workScope);
     await backfillTurnToolResults(

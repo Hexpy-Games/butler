@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   runBtccAgentLoop,
   type BtccAgentLoopToolDefinition,
@@ -10,6 +13,20 @@ import type {
   ModelRoundResult,
   ModelRoundToolCall,
 } from "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
+import { createBtccToolExecutionEnvelope } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-execution.ts";
+import { createBtccCompactReplayModelRoundPort } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/model-round-request-assembly.ts";
+import {
+  buildModelRoute,
+  createModelRoutePort,
+} from "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
+import { ModelProviderRequestError } from
+  "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { estimateContextTokensForModel } from
+  "../../packages/butler-agent/src/agent/context/budget.ts";
+import { resolveGuidedCompactReplayBudget } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-compact-replay-budget.ts";
 
 const echoTool: BtccAgentLoopToolDefinition = {
   name: "echo",
@@ -75,6 +92,276 @@ function scriptedModelRound(steps: readonly ModelRoundStep[]): {
 function toolMessages(request: ModelRoundRequest | undefined): ModelRoundMessage[] {
   return request?.messages.filter((message) => message.role === "tool") ?? [];
 }
+
+test("T3 canonical loop sends only continuity, newest source batch, and older identities", async () => {
+  const sourceOne = "SOURCE_ONE_PRIVATE_BODY";
+  const sourceTwo = "SOURCE_TWO_PRIVATE_BODY";
+  const continuityTool = { ...echoTool, name: "replace_phase_continuity" };
+  const sourceTool = { ...echoTool, name: "read_file" };
+  const { port, requests } = scriptedModelRound([
+    response({ continuation: { provider: "private-one" }, toolCalls: [
+      call("continuity-1", "replace_phase_continuity", { message: "one" }),
+      call("source-1", "read_file", { message: "one" }),
+    ] }),
+    response({ continuation: { provider: "private-two" }, toolCalls: [
+      call("continuity-2", "replace_phase_continuity", { message: "two" }),
+      call("source-2", "read_file", { message: "two" }),
+    ] }),
+    response({ text: "done" }),
+  ]);
+
+  const result = await runBtccAgentLoop({
+    prompt: "do the work",
+    model: "openai/gpt-5.6-sol",
+    tools: [continuityTool, sourceTool],
+    compactReplay: { enabled: true, initialPhaseContinuity: null },
+    modelRound: port,
+    executeTool: async (toolCall) => {
+      if (toolCall.name === "replace_phase_continuity") {
+        return createBtccToolExecutionEnvelope(
+          { ok: true },
+          { kind: "phase_continuity", value: { batch: toolCall.id } },
+        );
+      }
+      const first = toolCall.id === "source-1";
+      return createBtccToolExecutionEnvelope(
+        { ok: true, body: first ? sourceOne : sourceTwo },
+        {
+          kind: "source",
+          identity: {
+            kind: "direct",
+            result_ref: `guided-result-${first ? "1".repeat(64) : "2".repeat(64)}`,
+            revision: null,
+            tool_name: "read_file",
+            status: "completed",
+            result_sha256: null,
+            outcome: "succeeded",
+            completeness: "complete",
+          },
+        },
+      );
+    },
+  });
+
+  expect(result.finalText).toBe("done");
+  const second = JSON.stringify(requests[1]!.messages);
+  const third = JSON.stringify(requests[2]!.messages);
+  expect(toolMessages(requests[1])).toEqual([]);
+  expect(requests[1]!.continuation).toBeUndefined();
+  expect(requests[2]!.continuation).toBeUndefined();
+  expect(second).toContain(sourceOne);
+  expect(third).toContain(sourceTwo);
+  expect(third).not.toContain(sourceOne);
+  expect(third).toContain("Older operation identity index");
+  expect(third).toContain("continuity-2");
+});
+
+test("T3 canonical replay replaces the restart snapshot payload after a newer source batch", async () => {
+  const oldRef = `guided-result-${"a".repeat(64)}`;
+  const { port, requests } = scriptedModelRound([
+    response({
+      toolCalls: [call("new-source", "read_file", { message: "new" })],
+    }),
+    response({ text: "done" }),
+  ]);
+
+  await runBtccAgentLoop({
+    prompt: "resume the same turn",
+    model: "openai/gpt-5.6-sol",
+    tools: [{ ...echoTool, name: "read_file" }],
+    compactReplay: {
+      enabled: true,
+      initialPhaseContinuity: { objective: "resume" },
+      initialProjection: {
+        openAnchors: [],
+        newestBatch: [{
+          identity: {
+            kind: "direct",
+            result_ref: oldRef,
+            revision: null,
+            tool_name: "read_file",
+            status: "completed",
+            result_sha256: null,
+            outcome: "succeeded",
+            completeness: "complete",
+          },
+          payload: { content: "OLD_RESTART_PAYLOAD" },
+        }],
+        selectedViews: [],
+        older: [],
+      },
+    },
+    modelRound: port,
+    executeTool: async () => createBtccToolExecutionEnvelope(
+      { content: "NEW_CANONICAL_PAYLOAD" },
+      {
+        kind: "source",
+        identity: {
+          kind: "direct",
+          result_ref: `guided-result-${"b".repeat(64)}`,
+          revision: null,
+          tool_name: "read_file",
+          status: "completed",
+          result_sha256: null,
+          outcome: "succeeded",
+          completeness: "complete",
+        },
+      },
+    ),
+  });
+
+  const first = JSON.stringify(requests[0]!.messages);
+  const second = JSON.stringify(requests[1]!.messages);
+  expect(first.match(/## Canonical compact replay for this phase/gu)).toHaveLength(1);
+  expect(first).toContain("OLD_RESTART_PAYLOAD");
+  expect(second.match(/## Canonical compact replay for this phase/gu)).toHaveLength(1);
+  expect(second).toContain("NEW_CANONICAL_PAYLOAD");
+  expect(second).not.toContain("OLD_RESTART_PAYLOAD");
+  expect(second).toContain(oldRef);
+});
+
+test("T3 routed compact replay refits against the selected fallback model", async () => {
+  const primary = "openai/gpt-5.5";
+  const fallback = "zai/glm-5.1";
+  const previousButlerData = process.env.BUTLER_DATA;
+  const configRoot = mkdtempSync(join(tmpdir(), "t3-route-capacity-"));
+  writeFileSync(join(configRoot, "butler.config.json"), JSON.stringify({
+    system: {
+      contextWindowTokensByModel: {
+        [primary]: 10_000,
+        [fallback]: 2_500,
+      },
+    },
+  }));
+  process.env.BUTLER_DATA = configRoot;
+  const routedRequests: ModelRoundRequest[] = [];
+  const base: ModelRoundPort = {
+    async runRound(request) {
+      routedRequests.push(request);
+      if (request.model === primary) {
+        throw new ModelProviderRequestError({
+          code: "provider_quota_exhausted",
+          message: "primary exhausted",
+          provider: "openai",
+          retryable: false,
+        });
+      }
+      return response({ text: "fallback done" });
+    },
+  };
+  const route = buildModelRoute({
+    primaryModelRef: primary,
+    backupModelRefs: [fallback],
+    reasoningEffort: "medium",
+    retryCeiling: 1,
+  });
+  const selectedViews = Array.from({ length: 4 }, (_, index) => ({
+    identity: {
+      kind: "direct" as const,
+      result_ref: `guided-result-${String(index + 1).repeat(64)}`,
+      revision: null,
+      tool_name: "read_file",
+      status: "completed" as const,
+      result_sha256: null,
+      outcome: "succeeded" as const,
+      completeness: "complete" as const,
+    },
+    selector: { kind: "json_pointer", pointer: "/result" },
+    view: `SELECTED_${index}_${"x".repeat(1_500)}`,
+  }));
+
+  try {
+    const result = await runBtccAgentLoop({
+      prompt: "fit this restart projection",
+      model: primary,
+      tools: [echoTool],
+      compactReplay: {
+        enabled: true,
+        initialPhaseContinuity: null,
+        initialProjection: {
+          openAnchors: [],
+          newestBatch: [],
+          selectedViews,
+          older: [],
+        },
+      },
+      modelRound: createModelRoutePort({
+        base: createBtccCompactReplayModelRoundPort(base),
+        turnId: "t3-fallback-capacity",
+        route,
+      }),
+      executeTool: async () => ({ ok: true }),
+    });
+
+    expect(result.finalText).toBe("fallback done");
+    expect(routedRequests.map((request) => request.model)).toEqual([
+      primary,
+      fallback,
+    ]);
+    const primaryBody = JSON.stringify(routedRequests[0]!.messages);
+    const fallbackBody = JSON.stringify(routedRequests[1]!.messages);
+    expect(primaryBody).toContain("SELECTED_0_");
+    expect(fallbackBody).not.toContain("SELECTED_0_");
+    expect(fallbackBody).toContain("SELECTED_3_");
+    expect(estimateContextTokensForModel(JSON.stringify({
+      messages: routedRequests[1]!.messages,
+      instructions: null,
+      tools: routedRequests[1]!.tools,
+    }), fallback).tokens).toBeLessThanOrEqual(
+      resolveGuidedCompactReplayBudget(fallback).inputCapacityTokens,
+    );
+    expect(routedRequests[1]!.continuation).toBeUndefined();
+    expect(routedRequests[1]!.tools).toEqual(routedRequests[0]!.tools);
+    expect(routedRequests[1]).not.toHaveProperty(
+      "__butler_btcc_compact_replay",
+    );
+  } finally {
+    if (previousButlerData === undefined) delete process.env.BUTLER_DATA;
+    else process.env.BUTLER_DATA = previousButlerData;
+    rmSync(configRoot, { recursive: true, force: true });
+  }
+});
+
+test("T3 compact replay preserves schema and unknown-tool rejections without dispatch", async () => {
+  const { port, requests } = scriptedModelRound([
+    response({ toolCalls: [
+      call("old-unknown-tool", "old_not_available", {}),
+    ] }),
+    response({ toolCalls: [
+      call("invalid-echo", "echo", { private: "NEW_PRIVATE_ARGUMENT" }),
+      call("unknown-tool", "not_available", {}),
+    ] }),
+    response({ text: "rejections received" }),
+  ]);
+  let dispatches = 0;
+
+  const result = await runBtccAgentLoop({
+    prompt: "Validate the proposed operations.",
+    model: "openai/gpt-5.6-sol",
+    tools: [echoTool],
+    compactReplay: { enabled: true, initialPhaseContinuity: null },
+    modelRound: port,
+    executeTool: async () => {
+      dispatches += 1;
+      return { ok: true };
+    },
+  });
+
+  expect(result.finalText).toBe("rejections received");
+  expect(dispatches).toBe(0);
+  expect(toolMessages(requests[1])).toEqual([]);
+  expect(toolMessages(requests[2])).toEqual([]);
+  expect(JSON.stringify(requests[1]?.messages)).toContain("old_not_available");
+  const canonical = JSON.stringify(requests[2]?.messages);
+  expect(canonical).toContain("operation_rejected");
+  expect(canonical).toContain("tool_invalid_arguments");
+  expect(canonical).toContain("tool_unavailable");
+  expect(canonical).toContain("tool_name");
+  expect(canonical).toContain("echo");
+  expect(canonical).toContain("not_available");
+  expect(canonical).not.toContain("old_not_available");
+  expect(canonical).not.toContain("PRIVATE_ARGUMENT");
+});
 
 test("BTCC returns a text-only model response", async () => {
   const { port } = scriptedModelRound([response({ text: "hi" })]);
