@@ -56,6 +56,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
     command: BtccRunCommand,
     progress?: BtccTurnProgressObserver,
     onAdmitted?: (isFresh: boolean) => void | Promise<void>,
+    observationStartedAtMs?: number,
   ): Promise<BtccTurnOutcome> {
     const active = this.activeTurns.get(command.turnId);
     if (active) return active;
@@ -63,6 +64,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
       command,
       progress ?? this.dependencies.progress,
       onAdmitted,
+      observationStartedAtMs,
     )
       .finally(() => this.activeTurns.delete(command.turnId));
     this.activeTurns.set(command.turnId, running);
@@ -77,6 +79,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
     command: BtccRunCommand,
     progress: BtccTurnProgressObserver | undefined,
     onAdmitted: ((isFresh: boolean) => void | Promise<void>) | undefined,
+    observationStartedAtMs: number | undefined,
   ): Promise<BtccTurnOutcome> {
     let turn = await loadOrAdmitTurn(
       command,
@@ -91,7 +94,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
       await publishState(progress, turn);
     }
     if (turn.semanticState !== "delivery_committed") {
-      turn = await this.runAgentAndCommit(turn, progress);
+      turn = await this.runAgentAndCommit(turn, progress, observationStartedAtMs);
     }
     if (turn.semanticState === "cancelled") {
       await this.publishTerminal(progress, turn);
@@ -104,6 +107,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
   private async runAgentAndCommit(
     turn: TurnRecord,
     progress: BtccTurnProgressObserver | undefined,
+    observationStartedAtMs: number | undefined,
   ): Promise<TurnRecord> {
     const permit = this.supervisor.enter({
       turnId: turn.turnId,
@@ -127,6 +131,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
             claim,
             turns: this.dependencies.turns,
           }),
+          observationStartedAtMs,
         });
       } catch (error) {
         if (isModelRouteDurabilityError(error)) throw error;

@@ -37,6 +37,21 @@ export function normalizeAcceptedModelRound(result: ModelRoundResult): ModelRoun
       cachedTokens: result.usage.cachedTokens,
       totalTokens: result.usage.totalTokens,
       outputTokens: result.usage.outputTokens,
+      ...(result.usage.providerPromptTokens !== undefined
+        ? { providerPromptTokens: result.usage.providerPromptTokens }
+        : {}),
+      ...(result.usage.providerCacheReadTokens !== undefined
+        ? { providerCacheReadTokens: result.usage.providerCacheReadTokens }
+        : {}),
+      ...(result.usage.providerCacheWriteTokens !== undefined
+        ? { providerCacheWriteTokens: result.usage.providerCacheWriteTokens }
+        : {}),
+      ...(result.usage.providerOutputTokens !== undefined
+        ? { providerOutputTokens: result.usage.providerOutputTokens }
+        : {}),
+      ...(result.usage.providerTotalTokens !== undefined
+        ? { providerTotalTokens: result.usage.providerTotalTokens }
+        : {}),
     };
   }
   if (result.providerIdentity) {

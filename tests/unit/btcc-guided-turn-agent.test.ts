@@ -59,6 +59,8 @@ import { ModelProviderRequestError } from
   "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { buildModelRoute } from
   "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
+import { readOperationalMetricEvents } from
+  "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
 
 type ScriptedModelRoundStep =
   | ModelRoundResult
@@ -373,6 +375,146 @@ test("Guided model rounds attribute provider usage before completion progress", 
 
     expect(events).toEqual(["started", `metric:${turnId}`, "completed"]);
   } finally {
+    fixture.close();
+  }
+});
+
+test("real Guided Turn records one M1 observation through the BTCC loop and provider boundary", async () => {
+  const fixture = createFixture("guided-m1-baseline-observation");
+  const envKeys = [
+    "BUTLER_METRICS_ENABLED",
+    "BUTLER_M1_BASELINE_TELEMETRY",
+    "BUTLER_M1_BASELINE_ARM_ID",
+    "BUTLER_M1_BASELINE_SCENARIO",
+    "BUTLER_M1_BASELINE_CACHE_STATE",
+    "BUTLER_M1_BASELINE_SOURCE_REVISION",
+    "BUTLER_M1_BASELINE_FLAG_REVISION",
+    "BUTLER_M1_BASELINE_ARM_STATE",
+  ] as const;
+  const previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  try {
+    process.env.BUTLER_METRICS_ENABLED = "true";
+    process.env.BUTLER_M1_BASELINE_TELEMETRY = "on";
+    process.env.BUTLER_M1_BASELINE_ARM_ID = "direct-cold";
+    process.env.BUTLER_M1_BASELINE_SCENARIO = "direct";
+    process.env.BUTLER_M1_BASELINE_CACHE_STATE = "cold";
+    process.env.BUTLER_M1_BASELINE_SOURCE_REVISION = "65494154f6e9ddbfb20458bc67250c7d15b5d13d";
+    process.env.BUTLER_M1_BASELINE_FLAG_REVISION = "m1-t1-v1";
+    process.env.BUTLER_M1_BASELINE_ARM_STATE = "accepted";
+
+    const agent = fixture.agent({
+      async runRound(request) {
+        // This is only the fake provider boundary; the Session -> BTCC -> loop
+        // path above it remains the production composition under test.
+        request.usageAttribution?.beforeModelRequest?.({
+          roundIndex: request.usageAttribution.roundIndex ?? 0,
+          phase: "guided",
+        });
+        request.usageAttribution?.beforeAdmittedModelRequest?.({
+          roundIndex: request.usageAttribution.roundIndex ?? 0,
+          phase: "guided",
+          admittedPromptTokens: 48,
+          requestedOutputTokens: 256,
+          requestHash: "safe-test-request-hash",
+        });
+        request.usageAttribution?.afterModelResponseUsage?.({
+          model: String(request.model),
+          promptTokens: 48,
+          cachedTokens: 8,
+          totalTokens: 60,
+          outputTokens: 12,
+          providerPromptTokens: 48,
+          providerCacheReadTokens: 8,
+          providerCacheWriteTokens: null,
+          providerOutputTokens: 12,
+          providerTotalTokens: 60,
+          roundIndex: request.usageAttribution.roundIndex ?? 0,
+        });
+        return { text: "M1 baseline answer", toolCalls: [] };
+      },
+    });
+
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    const result = await runtime.runTurn(
+      localRunCommand(fixture.root, "guided-m1-baseline-observation"),
+    );
+
+    const events = readOperationalMetricEvents({ butlerData: fixture.root })
+      .filter((event) => event.name === "m1_baseline_arm_observed");
+    expect(result).toMatchObject({
+      kind: "delivered",
+      content: "M1 baseline answer",
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      status: "ok",
+      unit: "arm",
+      dimensions: {
+        armId: "direct-cold",
+        scenario: "direct",
+        cacheState: "cold",
+        sourceRevision: "65494154f6e9ddbfb20458bc67250c7d15b5d13d",
+        modelRef: "openai/gpt-5.6-sol",
+        reasoning: "low",
+        flagRevision: "m1-t1-v1",
+        armState: "accepted",
+        serializedInputEstimateTokens: 48,
+        providerPromptTokens: 48,
+        providerCacheReadTokens: 8,
+        providerCacheWriteTokens: null,
+        providerOutputTokens: 12,
+        providerTotalTokens: 60,
+        modelRequests: 1,
+        toolCalls: 0,
+        toolFailures: 0,
+      },
+    });
+    expect(JSON.stringify(events[0])).not.toContain("요청을 처리해 주세요");
+  } finally {
+    for (const key of envKeys) {
+      const value = previousEnv[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fixture.close();
+  }
+});
+
+test("M1 telemetry flag-off leaves the real Guided Turn outcome unchanged", async () => {
+  const fixture = createFixture("guided-m1-baseline-disabled");
+  const previousFlag = process.env.BUTLER_M1_BASELINE_TELEMETRY;
+  const previousMetrics = process.env.BUTLER_METRICS_ENABLED;
+  try {
+    process.env.BUTLER_METRICS_ENABLED = "true";
+    process.env.BUTLER_M1_BASELINE_TELEMETRY = "off";
+    const agent = fixture.agent({
+      async runRound() {
+        return { text: "unchanged guided answer", toolCalls: [] };
+      },
+    });
+
+    const result = await agent.run({
+      turn: turnRecord(fixture.root, { turnId: "guided-m1-baseline-disabled" }),
+      signal: new AbortController().signal,
+    });
+
+    expect(result).toMatchObject({
+      content: "unchanged guided answer",
+      route: "direct",
+    });
+    expect(readOperationalMetricEvents({ butlerData: fixture.root })
+      .filter((event) => event.name === "m1_baseline_arm_observed")).toEqual([]);
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_BASELINE_TELEMETRY;
+    else process.env.BUTLER_M1_BASELINE_TELEMETRY = previousFlag;
+    if (previousMetrics === undefined) delete process.env.BUTLER_METRICS_ENABLED;
+    else process.env.BUTLER_METRICS_ENABLED = previousMetrics;
     fixture.close();
   }
 });

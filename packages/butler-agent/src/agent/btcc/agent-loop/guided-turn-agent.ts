@@ -51,10 +51,13 @@ import { createGuidedPersistentEffectResolver } from
 import {
   createModelRoutePort,
   currentModelRouteCandidate,
-  type ModelRouteEvent,
 } from "../model-route/index.ts";
 import { renderExecutionWindowObservation } from "./execution-window-observation.ts";
 import { createGuidedSessionWorkspaceRuntime, type GuidedSessionWorkspaceBindingStore } from "./guided-session-workspace-recovery.ts";
+import {
+  createGuidedTurnBaselineObservation,
+} from "./guided-turn-baseline-observation.ts";
+import { createGuidedRouteEventHandler } from "./guided-turn-route-events.ts";
 
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
@@ -81,7 +84,22 @@ export function createProductionGuidedTurnAgent(input: {
       loadModelRoundAcceptance,
       recordModelRoundAcceptance,
       onProviderResponseIdentity,
+      observationStartedAtMs,
     }): Promise<BtccAgentLoopResult> {
+      const routedCandidate = turn.modelRoute
+        ? currentModelRouteCandidate(turn.modelRoute)
+        : undefined;
+      const selectedReasoningEffort = routedCandidate?.reasoningEffort ??
+        turn.modelSelection.reasoningEffort;
+      let activeModelRef = routedCandidate?.modelRef ?? selectedModelRef(turn);
+      const m1Observation = createGuidedTurnBaselineObservation({
+        butlerData: input.butlerData,
+        modelRef: activeModelRef,
+        reasoning: selectedReasoningEffort,
+        startedAtMs: observationStartedAtMs,
+        resolveModelRef: () => activeModelRef,
+      });
+      try {
       const policy = guidedPolicy(turn);
       const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
       const workScope = workScopeForTurn(turn, policy.trackingMode);
@@ -171,7 +189,6 @@ export function createProductionGuidedTurnAgent(input: {
         progress,
         managedInitially: initialWorkBound,
       });
-      let activeModelRef = selectedModelRef(turn);
       const toolCalls = createGuidedToolCallExecutor({
         turn,
         signal,
@@ -188,52 +205,15 @@ export function createProductionGuidedTurnAgent(input: {
         executeButlerTool: execute,
       });
       const baseModelRound = input.modelRound ?? createProviderModelRoundPort();
-      const routedCandidate = turn.modelRoute
-        ? currentModelRouteCandidate(turn.modelRoute)
-        : undefined;
-      const selectedReasoningEffort = routedCandidate?.reasoningEffort ??
-        turn.modelSelection.reasoningEffort;
-      let pendingFallbackProjection: { roundId: string; modelRef: string } | undefined;
-      const onRouteEvent = async (event: ModelRouteEvent) => {
-        const persisted = await recordModelRouteEvent?.(event);
-        if (
-          event.type === "model.attempt.started" &&
-          pendingFallbackProjection?.roundId === event.roundId &&
-          pendingFallbackProjection.modelRef === event.modelRef
-        ) {
-          pendingFallbackProjection = undefined;
-          try {
-            await progress?.modelRoundWaitingChanged?.({
-              turnId: turn.turnId,
-              requestId: event.roundId,
-              status: "started",
-              modelRef: event.modelRef,
-            });
-          } catch {
-            // Public model identity cannot veto the provider dispatch.
-          }
-        }
-        if (event.type === "model.fallback.selected") {
+      const onRouteEvent = createGuidedRouteEventHandler({
+        turn,
+        progress,
+        recordModelRouteEvent,
+        onFallbackSelected: (event) => {
+          m1Observation.markMeasurementIneligible();
           activeModelRef = event.modelRef;
-          pendingFallbackProjection = {
-            roundId: event.roundId,
-            modelRef: event.modelRef,
-          };
-          try {
-            await progress?.phaseActivityChanged?.({
-              turnId: turn.turnId,
-              semanticState: turn.semanticState,
-              activityId: `${turn.turnId}:model-fallback:${event.roundId}:${event.candidateIndex}`,
-              title: "대체 모델 경로 선택",
-              summary: `${event.modelRef} 모델로 계속 진행합니다.`,
-              modelRef: event.modelRef,
-            });
-          } catch {
-            // Public fallback notice cannot veto the next provider dispatch.
-          }
-        }
-        return persisted;
-      };
+        },
+      });
       const modelRound = turn.modelRoute
         ? createModelRoutePort({
             base: baseModelRound,
@@ -273,6 +253,7 @@ export function createProductionGuidedTurnAgent(input: {
           turnId: turn.turnId,
           phase: "guided",
           reasoningEffort: selectedReasoningEffort,
+          ...m1Observation.usageAttribution,
         },
         cacheScope: `btcc-guided:${turn.sessionId}`,
         signal,
@@ -305,6 +286,7 @@ export function createProductionGuidedTurnAgent(input: {
             args: call.arguments,
           })),
         }),
+        onEvent: m1Observation.onEvent,
         executeTool: async (call) => await toolCalls.executeTool({
           name: call.name,
           args: call.arguments,
@@ -332,6 +314,7 @@ export function createProductionGuidedTurnAgent(input: {
         },
       });
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
+      m1Observation.markSuccess();
       return {
         content: text,
         route: routeForUsedTools(
@@ -340,6 +323,9 @@ export function createProductionGuidedTurnAgent(input: {
             toolCalls.usedTools.some(isDurableWorkTool),
         ),
       };
+      } finally {
+        m1Observation.finalize(signal.aborted ? "skipped" : "error");
+      }
     },
   };
 }

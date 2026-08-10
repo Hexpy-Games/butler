@@ -143,12 +143,30 @@ export function geminiUsageSample(
   response: Record<string, any>,
 ): ProviderUsageSample | null {
   const promptTokens = numberOrNull(response.usageMetadata?.promptTokenCount);
-  const outputTokens = numberOrNull(response.usageMetadata?.candidatesTokenCount) ?? 0;
+  const providerOutputTokens = numberOrNull(response.usageMetadata?.candidatesTokenCount);
+  const outputTokens = providerOutputTokens ?? 0;
   const totalTokens = numberOrNull(response.usageMetadata?.totalTokenCount) ??
     (promptTokens === null ? null : promptTokens + outputTokens);
-  const cachedTokens = numberOrNull(response.usageMetadata?.cachedContentTokenCount) ?? 0;
-  if (promptTokens === null && totalTokens === null) return null;
-  return { promptTokens, cachedTokens, outputTokens, totalTokens };
+  const providerCacheReadTokens = numberOrNull(response.usageMetadata?.cachedContentTokenCount);
+  const cachedTokens = providerCacheReadTokens ?? 0;
+  const providerTotalTokens = numberOrNull(response.usageMetadata?.totalTokenCount);
+  if (
+    promptTokens === null &&
+    totalTokens === null &&
+    providerCacheReadTokens === null &&
+    providerOutputTokens === null
+  ) return null;
+  return {
+    promptTokens,
+    cachedTokens,
+    outputTokens,
+    totalTokens,
+    providerPromptTokens: promptTokens,
+    providerCacheReadTokens,
+    providerCacheWriteTokens: null,
+    providerOutputTokens,
+    providerTotalTokens,
+  };
 }
 
 export function geminiTools(tools: FunctionToolDefinition[]): Array<Record<string, unknown>> {
