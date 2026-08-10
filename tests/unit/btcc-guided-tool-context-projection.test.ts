@@ -7,6 +7,8 @@ import { digest } from
   "../../packages/butler-agent/src/agent/btcc/identity/index.ts";
 import { projectGuidedToolContext } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-context-projection.ts";
+import { projectGuidedToolContextForReplay } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-replay-projection.ts";
 import { renderGuidedPrompt } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-prompt.ts";
 import type { SqliteGuidedToolJournal } from
@@ -239,6 +241,222 @@ test("guided prompt renders only the bounded model projection of prior tools", (
   expect(prompt).not.toContain("overwrite");
   expect(prompt).not.toContain("runtime-call-id");
   expect(prompt.match(/"arguments"/gu)).toHaveLength(1);
+});
+
+test("T3 compact replay bounds newest previews and retains older durable identities", () => {
+  const records: GuidedToolJournalRecord[] = Array.from({ length: 6 }, (_, index) => ({
+    callId: `compact-call-${index}`,
+    resultRef: `guided-result-${digest(`compact-result-${index}`)}`,
+    toolName: "read_file",
+    rawArguments: `RAW_COMPACT_${index}`,
+    arguments: {
+      path: `src/file-${index}.ts`,
+      content: `private argument ${index}`,
+    },
+    status: "completed",
+    result: {
+      ok: true,
+      content: `private result ${index} `.repeat(20),
+    },
+    resultSha256: digest(`compact-hash-${index}`),
+    operationBatchId: index >= 4 ? "newest-provider-batch" : "older-provider-batch",
+    operationBatchOrdinal: index >= 4 ? index - 4 : index,
+  }));
+  const sequenceByResultRef = new Map(
+    records.map((record, index) => [record.resultRef!, index + 1]),
+  );
+
+  const projection = projectGuidedToolContextForReplay(records, {
+    maxRecordBytes: 3_000,
+    maxTotalBytes: 6_000,
+    newestBatchId: "newest-provider-batch",
+    sequenceByResultRef,
+    workId: "work-compact",
+  });
+
+  expect(projection.newest).toHaveLength(2);
+  expect(projection.newest.map((record) => record.result_ref)).toEqual([
+    records[5]!.resultRef,
+    records[4]!.resultRef,
+  ]);
+  expect(projection.older.map((record) => record.result_ref)).toEqual(
+    records.slice(0, 4).map((record) => record.resultRef!),
+  );
+  expect(projection.older[0]).toMatchObject({
+    kind: "work",
+    work_id: "work-compact",
+    revision: 1,
+    tool_name: "read_file",
+    result_sha256: records[0]!.resultSha256,
+  });
+  expect(JSON.stringify(projection.older)).not.toContain("private result");
+  expect(JSON.stringify(projection.older)).not.toContain("private argument");
+  expect(Buffer.byteLength(JSON.stringify(projection.newest), "utf8"))
+    .toBeLessThanOrEqual(6_000);
+});
+
+test("T3 compact replay prioritizes every open call anchor before completed previews", () => {
+  const records: GuidedToolJournalRecord[] = [
+    {
+      callId: "open-call",
+      resultRef: `guided-result-${digest("open-result")}`,
+      toolName: "edit_file",
+      rawArguments: "private raw arguments",
+      arguments: { path: "src/open.ts", content: "x".repeat(10_000) },
+      status: "started",
+    },
+    {
+      callId: "completed-call",
+      resultRef: `guided-result-${digest("completed-result")}`,
+      toolName: "read_file",
+      rawArguments: "{}",
+      arguments: { path: "src/done.ts" },
+      status: "completed",
+      result: { ok: true, content: "done" },
+      resultSha256: digest("done"),
+    },
+  ];
+
+  const projection = projectGuidedToolContextForReplay(records, {
+    maxRecordBytes: 1_000,
+    maxTotalBytes: 1_100,
+  });
+
+  expect(projection.newest[0]).toMatchObject({
+    result_ref: records[0]!.resultRef,
+    status: "started",
+  });
+  expect(JSON.stringify(projection.newest)).not.toContain("private raw arguments");
+});
+
+test("T3 compact replay keeps every open identity atomically when previews exceed budget", () => {
+  const records: GuidedToolJournalRecord[] = Array.from(
+    { length: 8 },
+    (_, index) => ({
+      callId: `open-overflow-${index}`,
+      resultRef: `guided-result-${digest(`open-overflow-result-${index}`)}`,
+      toolName: "read_file",
+      rawArguments: `private-${index}`,
+      arguments: { path: `src/open-${index}.ts`, content: "x".repeat(4_000) },
+      status: "started" as const,
+    }),
+  );
+
+  const projection = projectGuidedToolContextForReplay(records, {
+    maxRecordBytes: 120,
+    maxTotalBytes: 180,
+  });
+
+  expect(projection.newest).toHaveLength(records.length);
+  for (const record of records) {
+    expect(projection.newest.some((value) =>
+      value.result_ref === record.resultRef && value.status === "started"))
+      .toBe(true);
+  }
+  expect(JSON.stringify(projection.newest)).not.toContain("private-");
+});
+
+test("T3 compact replay demotes an unfitted completed preview to the older identity index", () => {
+  const resultRef = `guided-result-${digest("completed-overflow")}`;
+  const projection = projectGuidedToolContextForReplay([{
+    callId: "completed-overflow",
+    resultRef,
+    toolName: "read_file",
+    rawArguments: "{}",
+    arguments: { path: "src/large.ts" },
+    status: "completed",
+    result: { ok: true, content: "x".repeat(20_000) },
+    resultSha256: digest("completed-overflow-body"),
+  }], {
+    maxRecordBytes: 10,
+    maxTotalBytes: 10,
+  });
+
+  expect(projection.newest).toEqual([]);
+  expect(projection.older).toEqual([expect.objectContaining({
+    kind: "direct",
+    result_ref: resultRef,
+    revision: null,
+  })]);
+});
+
+test("T3 older identity retains failed command outcome without command payload", () => {
+  const records: GuidedToolJournalRecord[] = [
+    {
+      callId: "failed-command",
+      resultRef: `guided-result-${digest("failed-command")}`,
+      operationBatchId: "older-command-batch",
+      operationBatchOrdinal: 0,
+      toolName: "run_command",
+      rawArguments: "PRIVATE COMMAND",
+      arguments: { command: "private command" },
+      status: "completed",
+      result: {
+        ok: false,
+        exit_code: 9,
+        timed_out: false,
+        signal: "SIGTERM",
+        stdout: "PRIVATE STDOUT",
+        stderr: "PRIVATE STDERR",
+      },
+      resultSha256: digest("failed-command-result"),
+    },
+    {
+      callId: "newest-read",
+      resultRef: `guided-result-${digest("newest-read")}`,
+      operationBatchId: "newest-read-batch",
+      operationBatchOrdinal: 0,
+      toolName: "read_file",
+      rawArguments: "{}",
+      arguments: { path: "src/current.ts" },
+      status: "completed",
+      result: { ok: true, content: "current" },
+      resultSha256: digest("newest-read-result"),
+    },
+  ];
+
+  const projection = projectGuidedToolContextForReplay(records, {
+    newestBatchId: "newest-read-batch",
+    maxRecordBytes: 3_000,
+    maxTotalBytes: 6_000,
+  });
+
+  expect(projection.older).toEqual([expect.objectContaining({
+    result_ref: records[0]!.resultRef,
+    outcome: "failed",
+    completeness: "complete",
+    command_execution_summary: {
+      exit_status: 9,
+      timed_out: false,
+      signal: "SIGTERM",
+    },
+  })]);
+  expect(JSON.stringify(projection.older)).not.toContain("PRIVATE");
+});
+
+test("T3 legacy rows without durable batch identity remain identity-only", () => {
+  const records: GuidedToolJournalRecord[] = Array.from(
+    { length: 6 },
+    (_, index) => ({
+      callId: `legacy-no-batch-${index}`,
+      resultRef: `guided-result-${digest(`legacy-no-batch-${index}`)}`,
+      toolName: "read_file",
+      rawArguments: `PRIVATE_LEGACY_ARGUMENT_${index}`,
+      arguments: { path: `legacy-${index}.txt` },
+      status: "completed" as const,
+      result: { ok: true, content: `PRIVATE_LEGACY_RESULT_${index}` },
+      resultSha256: digest(`legacy-no-batch-result-${index}`),
+    }),
+  );
+
+  const projection = projectGuidedToolContextForReplay(records, {
+    maxRecordBytes: 3_000,
+    maxTotalBytes: 20_000,
+  });
+
+  expect(projection.newest).toEqual([]);
+  expect(projection.older).toHaveLength(records.length);
+  expect(JSON.stringify(projection.older)).not.toContain("PRIVATE_LEGACY");
 });
 
 function toolJournal(

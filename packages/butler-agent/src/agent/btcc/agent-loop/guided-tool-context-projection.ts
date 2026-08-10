@@ -2,6 +2,11 @@ import type { GuidedToolJournalRecord } from "../../adapters/index.ts";
 import { digest } from "../identity/index.ts";
 import { structuredToolResultModelPreview } from
   "../../tools/tool-result-model-preview.ts";
+import {
+  captureGuidedOperationResultStructuralFacts,
+  legacyGuidedOperationResultStructuralFacts,
+  type GuidedOperationResultStructuralFacts,
+} from "../operation-results/index.ts";
 
 const DEFAULT_MAX_RECORDS = 12;
 const DEFAULT_MAX_RECORD_BYTES = 6_000;
@@ -16,6 +21,8 @@ type ProjectionOptions = {
   maxRecordBytes?: number;
   maxTotalBytes?: number;
 };
+
+export type GuidedOperationStructuralFacts = GuidedOperationResultStructuralFacts;
 
 export function projectGuidedToolContext(
   records: readonly GuidedToolJournalRecord[],
@@ -41,7 +48,10 @@ export function projectGuidedToolContext(
       maxTotalBytes - totalBytes - separatorBytes,
     );
     if (available <= 0) break;
-    const bounded = fitRecord(projectRecord(record), available);
+    const bounded = fitGuidedToolContextRecord(
+      projectGuidedToolContextRecord(record),
+      available,
+    );
     if (!bounded) continue;
     result.push(bounded.value);
     totalBytes += separatorBytes + bounded.bytes;
@@ -49,7 +59,9 @@ export function projectGuidedToolContext(
   return result;
 }
 
-function projectRecord(record: GuidedToolJournalRecord): Record<string, unknown> {
+export function projectGuidedToolContextRecord(
+  record: GuidedToolJournalRecord,
+): Record<string, unknown> {
   const layers = resultLayers(record.result);
   const facts = latestResultFacts(record, layers);
   const preview = structuredToolResultModelPreview({
@@ -62,10 +74,35 @@ function projectRecord(record: GuidedToolJournalRecord): Record<string, unknown>
     status: record.status,
     arguments: projectValue(modelVisibleArguments(record), 0),
     result_sha256: record.resultSha256,
+    ...guidedOperationStructuralFacts(record, layers),
     result_preview: resultPreview && Object.keys(resultPreview).length > 0
       ? resultPreview
       : undefined,
     ...facts,
+  });
+}
+
+export function guidedOperationStructuralFacts(
+  record: Pick<
+    GuidedToolJournalRecord,
+    "toolName" | "status" | "result" | "resultSha256" | "structuralFacts"
+  >,
+  _knownLayers?: readonly Record<string, unknown>[],
+): GuidedOperationStructuralFacts {
+  if (record.structuralFacts) return record.structuralFacts;
+  if (record.status === "started") {
+    return { outcome: "unknown", completeness: "incomplete" };
+  }
+  if (record.result === undefined) {
+    return legacyGuidedOperationResultStructuralFacts({
+      status: record.status,
+      resultSha256: record.resultSha256 ?? null,
+    });
+  }
+  return captureGuidedOperationResultStructuralFacts({
+    toolName: record.toolName,
+    status: record.status,
+    result: record.result,
   });
 }
 
@@ -171,7 +208,7 @@ function projectValue(value: unknown, depth: number, key = ""): unknown {
   return result;
 }
 
-function fitRecord(
+export function fitGuidedToolContextRecord(
   value: Record<string, unknown>,
   maxBytes: number,
 ): { value: Record<string, unknown>; bytes: number } | null {

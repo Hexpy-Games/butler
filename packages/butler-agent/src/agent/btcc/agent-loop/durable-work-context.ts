@@ -1,8 +1,11 @@
 import type { DurableWorkContext } from "../work/index.ts";
 import { structuredToolResultModelPreview } from "../../tools/tool-result-model-preview.ts";
+import type { GuidedCompactReplayContext } from "./compact-replay-context.ts";
 
 export function renderDurableWorkContext(
   context: DurableWorkContext | null,
+  compactReplay?: GuidedCompactReplayContext | null,
+  characterLimit = 8_000,
 ): string | null {
   if (!context) return null;
   const { work } = context;
@@ -125,13 +128,15 @@ export function renderDurableWorkContext(
       rows.push(`Next step: ${singleLine(work.latestCheckpoint.nextStep, 400)}`);
     }
   }
-  for (const fact of context.resultFacts.slice(-8)) {
-    rows.push(
-      `Result (${singleLine(fact.toolName, 100)}, ${fact.status}): ` +
-        singleLine(resultFactText(fact), 1_000),
-    );
+  if (!compactReplay) {
+    for (const fact of context.resultFacts.slice(-8)) {
+      rows.push(
+        `Result (${singleLine(fact.toolName, 100)}, ${fact.status}): ` +
+          singleLine(resultFactText(fact), 1_000),
+      );
+    }
   }
-  return rows.join("\n").slice(0, 8_000);
+  return renderBoundedWorkRows(rows, [], characterLimit);
 }
 
 export function isDurableWorkResultReviewCurrent(
@@ -247,4 +252,23 @@ function resultFactText(fact: {
     }
   }
   return fact.errorCode ?? "No result body recorded.";
+}
+
+function renderBoundedWorkRows(
+  optionalRows: readonly string[],
+  requiredRows: readonly string[],
+  limit: number,
+): string {
+  if (requiredRows.length === 0) return optionalRows.join("\n").slice(0, limit);
+  const required = requiredRows.join("\n");
+  const available = Math.max(0, limit - required.length - 1);
+  const selected: string[] = [];
+  let used = 0;
+  for (const row of optionalRows) {
+    const cost = row.length + (selected.length > 0 ? 1 : 0);
+    if (used + cost > available) continue;
+    selected.push(row);
+    used += cost;
+  }
+  return [...selected, required].filter(Boolean).join("\n");
 }

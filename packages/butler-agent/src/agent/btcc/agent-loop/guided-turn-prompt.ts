@@ -6,6 +6,8 @@ import type { SqliteGuidedToolJournal } from
 import { guidedPolicy } from "./guided-turn-policy.ts";
 import { projectGuidedToolContext } from
   "./guided-tool-context-projection.ts";
+import type { GuidedCompactReplayContext } from
+  "./compact-replay-context.ts";
 
 export function renderGuidedPrompt(
   turn: TurnRecord,
@@ -15,6 +17,7 @@ export function renderGuidedPrompt(
     toolJournal: SqliteGuidedToolJournal;
     workContext?: string | null;
     effectContext?: string | null;
+    compactReplay?: GuidedCompactReplayContext | null;
   },
 ): string {
   const policy = guidedPolicy(turn);
@@ -26,7 +29,9 @@ export function renderGuidedPrompt(
     maxAttachmentTextChars: 24_000,
     maxTotalTextChars: 60_000,
   });
-  const priorTools = renderPriorToolFacts(input.toolJournal.list(turn.turnId));
+  const priorTools = input.compactReplay
+    ? ""
+    : renderPriorToolFacts(input.toolJournal.list(turn.turnId));
   const workStorage = workStorageForPolicy(policy);
   return [
     `User request:\n${turn.originalMessage}`,
@@ -204,7 +209,7 @@ function workStorageForPolicy(
 function renderCurrentWork(value: string | null | undefined): string {
   const summary = value?.trim();
   if (!summary) return "";
-  return `## Current Work\n\n${summary.slice(0, 8_000)}`;
+  return `## Current Work\n\n${summary}`;
 }
 
 function renderCurrentEffects(value: string | null | undefined): string {

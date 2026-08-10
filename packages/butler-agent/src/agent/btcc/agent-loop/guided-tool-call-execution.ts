@@ -1,16 +1,4 @@
-import type { BtccTurnProgressObserver } from "../contracts.ts";
-import type {
-  DurableWorkService,
-  WorkTurnScope,
-} from "../work/index.ts";
-import type { TurnRecord } from "../turn/index.ts";
-import type {
-  SqliteGuidedToolJournal,
-} from "../../adapters/index.ts";
-import type {
-  ButlerToolExecutor,
-  ContextualButlerToolExecutor,
-} from "../../tools/butler-tools.ts";
+import type { ButlerToolExecutor } from "../../tools/butler-tools.ts";
 import { normalizeGuidedToolCall } from "../../tools/tool-support.ts";
 import {
   effectiveToolNameForCall,
@@ -32,10 +20,7 @@ import {
   safeJson,
   toolResultSucceeded,
 } from "./guided-tool-progress.ts";
-import {
-  createGuidedActivityProjection,
-  type GuidedActivityProjection,
-} from "../projection/index.ts";
+import { createGuidedActivityProjection } from "../projection/index.ts";
 import { createGuidedToolResumePool } from "./guided-tool-resume-pool.ts";
 import {
   guidedToolCatalogId,
@@ -46,24 +31,22 @@ import {
   findLegacyToolRecord,
   replaySummarylessLegacyCall,
 } from "./guided-legacy-tool-replay.ts";
-import { executeGuidedFreshTool } from "./guided-fresh-tool-execution.ts";
+import { executeGuidedFreshToolForCall as executeFreshTool } from
+  "./guided-fresh-tool-execution.ts";
 import { denyUnauthorizedTool } from "./guided-unauthorized-tool.ts";
+import { isM1CompactReplayControlTool } from
+  "../../tools/m1-compact-replay.ts";
+import {
+  envelopeGuidedCompactReplayResult as compactReplayEnvelope,
+  journalGuidedCompactReplayResult as journalResult,
+  rehydrateGuidedCompactReplayResult as completedReplayResult,
+} from "./guided-compact-replay-execution.ts";
+import type { GuidedToolCallExecutionInput } from
+  "./guided-tool-call-contracts.ts";
+import { throwIfExecutionWindowAborted } from "./execution-window.ts";
 
-export type GuidedToolCallExecutionInput = {
-  turn: TurnRecord;
-  signal: AbortSignal;
-  resolveModelRef?: () => string;
-  progress?: BtccTurnProgressObserver;
-  activity?: GuidedActivityProjection;
-  workScope: WorkTurnScope;
-  presentedWorkId?: string;
-  authorizedNames: ReadonlySet<string>;
-  visibleNames: ReadonlySet<string>;
-  describedToolIds: Set<string>;
-  durableWork: DurableWorkService;
-  toolJournal: SqliteGuidedToolJournal;
-  executeButlerTool: ContextualButlerToolExecutor;
-};
+export type { GuidedToolCallExecutionInput } from
+  "./guided-tool-call-contracts.ts";
 
 export function createGuidedToolCallExecutor(
   input: GuidedToolCallExecutionInput,
@@ -82,7 +65,7 @@ export function createGuidedToolCallExecutor(
   );
   const executeTool: ButlerToolExecutor = async (call) => {
     const toolSignal = call.signal ?? input.signal;
-    throwIfToolAborted(toolSignal);
+    throwIfExecutionWindowAborted(toolSignal);
     const effectiveToolName = effectiveToolNameForCall(call.name, call.args);
     const normalizedCall = normalizeGuidedToolCall({
       toolName: effectiveToolName,
@@ -177,12 +160,18 @@ export function createGuidedToolCallExecutor(
 
     const recorded = input.toolJournal.find(callId);
     if (recorded?.status === "completed") {
-      if (!isDurableWorkTool(call.name)) {
+      const completedResult = await completedReplayResult(
+        input,
+        call.name,
+        recorded,
+      );
+      if (!isDurableWorkTool(call.name) &&
+        !isM1CompactReplayControlTool(call.name)) {
         await safeAttachToolResult(input, input.workScope, recorded.callId);
       }
       rememberDescribedTools(
         call.name,
-        recorded.result,
+        completedResult,
         input.describedToolIds,
       );
       await publishOperation(input.progress, {
@@ -210,9 +199,15 @@ export function createGuidedToolCallExecutor(
         toolName: effectiveToolName,
         args: presentationArgs,
         status: toolResultSucceeded(recorded.result) ? "completed" : "failed",
-        resultJson: safeJson(recorded.result),
+        resultJson: safeJson(completedResult),
       });
-      return recorded.result;
+      return compactReplayEnvelope(
+        input,
+        call.name,
+        recorded.callId,
+        completedResult,
+        true,
+      );
     }
     if (recorded?.status === "failed" || recorded?.status === "cancelled") {
       await publishOperation(input.progress, {
@@ -223,7 +218,13 @@ export function createGuidedToolCallExecutor(
         args: presentationArgs,
         status: recorded.status === "cancelled" ? "cancelled" : "failed",
       });
-      return priorToolFailure(recorded.status, effectiveToolName);
+      return compactReplayEnvelope(
+        input,
+        call.name,
+        recorded.callId,
+        priorToolFailure(recorded.status, effectiveToolName),
+        true,
+      );
     }
     if (recorded?.status === "started" && !isReplaySafeTool(effectiveToolName)) {
       await publishOperation(input.progress, {
@@ -244,6 +245,8 @@ export function createGuidedToolCallExecutor(
         toolName: effectiveToolName,
         rawArguments: call.rawArguments,
         arguments: presentationArgs,
+        operationBatchId: call.operationBatchId,
+        operationBatchOrdinal: call.operationBatchOrdinal,
       });
     }
     if (
@@ -268,10 +271,15 @@ export function createGuidedToolCallExecutor(
     try {
       const result = await executeFreshTool(input, call, callId, toolSignal);
       rememberDescribedTools(call.name, result, input.describedToolIds);
-      input.toolJournal.finish({ callId, status: "completed", result });
+      input.toolJournal.finish({
+        callId,
+        status: "completed",
+        result: journalResult(call.name, result),
+      });
       if (call.name === "replace_work_plan" && toolResultSucceeded(result)) {
         await backfillTurnToolResults(input, input.workScope);
-      } else if (!isDurableWorkTool(call.name)) {
+      } else if (!isDurableWorkTool(call.name) &&
+        !isM1CompactReplayControlTool(call.name)) {
         await safeAttachToolResult(input, input.workScope, callId);
       }
       if (isDurableWorkTool(call.name) && toolResultSucceeded(result)) {
@@ -293,9 +301,15 @@ export function createGuidedToolCallExecutor(
         status: toolResultSucceeded(result) ? "completed" : "failed",
         resultJson: safeJson(result),
       });
-      return result;
+      return compactReplayEnvelope(
+        input,
+        call.name,
+        callId,
+        result,
+        false,
+      );
     } catch (error) {
-      return finishFailedTool(
+      const failure = await finishFailedTool(
         input,
         call.name,
         callId,
@@ -305,30 +319,14 @@ export function createGuidedToolCallExecutor(
         error,
         activity,
       );
+      return compactReplayEnvelope(
+        input,
+        call.name,
+        callId,
+        failure,
+        false,
+      );
     }
   };
   return { executeTool, usedTools };
-}
-
-async function executeFreshTool(
-  input: GuidedToolCallExecutionInput,
-  call: Parameters<ButlerToolExecutor>[0],
-  callId: string,
-  toolSignal: AbortSignal,
-): Promise<unknown> {
-  return executeGuidedFreshTool({
-    durableWork: input.durableWork,
-    toolJournal: input.toolJournal,
-    workScope: input.workScope,
-    call,
-    callId,
-    toolSignal,
-    executeButlerTool: input.executeButlerTool,
-  });
-}
-
-function throwIfToolAborted(signal: AbortSignal): void {
-  if (!signal.aborted) return;
-  if (signal.reason instanceof Error) throw signal.reason;
-  throw new Error("Guided tool execution was cancelled");
 }

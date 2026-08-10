@@ -160,6 +160,13 @@ function isUnsafeDimensionKey(key: string, value: unknown): boolean {
 }
 
 function sanitizeDimensionValue(key: string, value: unknown): string | number | boolean | null | undefined {
+  if (key === "resultRef") {
+    if (value === null) return null;
+    if (typeof value !== "string" || !/^guided-result-[a-f0-9]{64}$/u.test(value.trim())) {
+      return undefined;
+    }
+    return value.trim();
+  }
   if (isUnsafeDimensionKey(key, value)) return undefined;
   if (value === null) return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : undefined;

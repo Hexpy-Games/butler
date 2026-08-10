@@ -13,6 +13,8 @@ import type { FunctionToolDefinition } from
   "../../../integrations/providers/runtime-contracts.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from "./durable-work-tools.ts";
 import { guidedToolDefinition } from "./guided-tool-definition.ts";
+import { M1_COMPACT_REPLAY_TOOL_DEFINITIONS } from
+  "../../tools/m1-compact-replay.ts";
 import { GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES } from
   "./guided-project-ledger-effect.ts";
 import {
@@ -83,6 +85,7 @@ export function prepareGuidedToolSurfaceBoundary(
 }
 
 export function finalizeGuidedToolSurface(input: {
+  compactReplayEnabled?: boolean;
   env: NodeJS.ProcessEnv;
   guidedLedgerEffects: ReadonlySet<string>;
   minimal: boolean;
@@ -119,6 +122,7 @@ export function finalizeGuidedToolSurface(input: {
   const authorizedTools = [
     ...sourceTools.filter((tool) => names.has(tool.name)),
     ...(policy.trackingMode === "none" ? [] : DURABLE_WORK_TOOL_DEFINITIONS),
+    ...(input.compactReplayEnabled ? M1_COMPACT_REPLAY_TOOL_DEFINITIONS : []),
   ];
   return {
     authorizedTools,
@@ -139,6 +143,11 @@ export function visibleToolDefinitions(
   const visible = carrier === "progressive"
     ? progressiveCarrierNames(policy)
     : expandedCarrierNames(policy);
+  for (const tool of M1_COMPACT_REPLAY_TOOL_DEFINITIONS) {
+    if (authorized.some((candidate) => candidate.name === tool.name)) {
+      visible.add(tool.name);
+    }
+  }
   return authorized.filter((tool) => visible.has(tool.name))
     .map(guidedToolDefinition);
 }

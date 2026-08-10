@@ -18,8 +18,18 @@ import {
 } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
+import { migrateBtccSchema } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/migrate-schema.ts";
+import { guidedWorkResultRef } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/guided-work-tool-result-writer.ts";
 import { backfillTurnToolResults } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
+import { readGuidedOperationResultViews } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operation-result-read.ts";
+import { createGuidedCompactReplayContext } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/compact-replay-context.ts";
+import { resolveGuidedCompactReplayBudget } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-compact-replay-budget.ts";
 import { coordinateSharedSqliteWriter } from
   "../../packages/butler-agent/src/foundation/sqlite-writer-coordination.ts";
 
@@ -327,6 +337,410 @@ test("tool results stay in the journal, bind to checkpoints, and exclude Work co
     expect(fixture.count("btcc_guided_work_results")).toBe(2);
   } finally {
     fixture.close();
+  }
+});
+
+test("T3 migration backfills indexed result refs without materializing result bodies", () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(`
+      CREATE TABLE btcc_guided_tool_calls (
+        call_id TEXT PRIMARY KEY,
+        turn_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        raw_arguments TEXT NOT NULL,
+        arguments_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        result_json TEXT,
+        result_sha256 TEXT,
+        error_code TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        UNIQUE(turn_id, call_id)
+      );
+      INSERT INTO btcc_guided_tool_calls (
+        call_id, turn_id, tool_name, raw_arguments, arguments_json,
+        status, result_json, started_at
+      ) VALUES (
+        'legacy-result-call', 'legacy-turn', 'read_file', '{}', '{}',
+        'completed', '{"private":"unchanged"}', '2026-08-10T00:00:00.000Z'
+      );
+    `);
+
+    migrateBtccSchema(db);
+
+    expect(db.query<{
+      result_ref: string;
+      result_json: string;
+      operation_batch_id: string | null;
+    }, []>(`
+      SELECT result_ref, result_json, operation_batch_id
+      FROM btcc_guided_tool_calls WHERE call_id = 'legacy-result-call'
+    `).get()).toEqual({
+      result_ref: guidedWorkResultRef("legacy-result-call"),
+      result_json: '{"private":"unchanged"}',
+      operation_batch_id: null,
+    });
+    expect(db.query<{ name: string }, []>(`
+      PRAGMA index_list(btcc_guided_tool_calls)
+    `).all().map((row) => row.name)).toContain(
+      "idx_btcc_guided_tool_calls_result_ref",
+    );
+    expect(new SqliteGuidedToolJournal(db)
+      .listForCompactReplay("legacy-turn")[0]?.result).toBeUndefined();
+    expect(new SqliteGuidedToolJournal(db)
+      .listForCompactReplay("legacy-turn")[0]?.structuralFacts).toEqual({
+        outcome: "unknown",
+        completeness: "incomplete",
+      });
+  } finally {
+    db.close();
+  }
+});
+
+test("T3 restart keeps failed command facts after compact replay drops raw results", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-t3-structural-facts-"));
+  const dbPath = join(root, "butler.sqlite");
+  let db: Database | null = new Database(dbPath);
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    migrateBtccSchema(db);
+    insertGuidedTurn(
+      db,
+      "t3-structural-turn",
+      "t3-structural-session",
+      "명령 결과를 이어서 검토해 주세요.",
+    );
+    const journal = new SqliteGuidedToolJournal(db);
+    journal.start({
+      turnId: "t3-structural-turn",
+      callId: "a-old-failed-command",
+      toolName: "run_command",
+      rawArguments: "PRIVATE COMMAND",
+      arguments: { command: "private command" },
+      operationBatchId: "older-command-batch",
+      operationBatchOrdinal: 0,
+    });
+    journal.finish({
+      callId: "a-old-failed-command",
+      status: "completed",
+      result: {
+        ok: false,
+        exit_code: 7,
+        timed_out: false,
+        signal: "SIGTERM",
+        stdout: "PRIVATE STDOUT",
+        stderr: "PRIVATE STDERR",
+      },
+    });
+    journal.start({
+      turnId: "t3-structural-turn",
+      callId: "z-newest-read",
+      toolName: "read_file",
+      rawArguments: '{"path":"current.txt"}',
+      arguments: { path: "current.txt" },
+      operationBatchId: "newest-read-batch",
+      operationBatchOrdinal: 0,
+    });
+    journal.finish({
+      callId: "z-newest-read",
+      status: "completed",
+      result: { ok: true, content: "current" },
+    });
+    const storedFacts = db.query<{
+      structural_facts_json: string;
+      result_json: string;
+    }, []>(`
+      SELECT structural_facts_json, result_json
+      FROM btcc_guided_tool_calls WHERE call_id = 'a-old-failed-command'
+    `).get()!;
+    expect(Buffer.byteLength(storedFacts.structural_facts_json, "utf8"))
+      .toBeLessThanOrEqual(512);
+    expect(storedFacts.structural_facts_json).not.toContain("PRIVATE");
+    expect(storedFacts.result_json).toContain("PRIVATE STDOUT");
+
+    db.close();
+    db = new Database(dbPath);
+    migrateBtccSchema(db);
+    const reopenedJournal = new SqliteGuidedToolJournal(db);
+    const replayRows = reopenedJournal.listForCompactReplay("t3-structural-turn");
+    expect(replayRows.map((row) => row.result)).toEqual([undefined, undefined]);
+    expect(replayRows[0]?.structuralFacts).toEqual({
+      outcome: "failed",
+      completeness: "complete",
+      command_execution_summary: {
+        exit_status: 7,
+        timed_out: false,
+        signal: "SIGTERM",
+      },
+    });
+
+    const context = await createGuidedCompactReplayContext({
+      toolJournal: reopenedJournal,
+      turnId: "t3-structural-turn",
+      sessionId: "t3-structural-session",
+      work: null,
+      budget: resolveGuidedCompactReplayBudget("openai/gpt-5.6-sol"),
+    });
+    expect(context.initialProjection.older).toEqual([
+      expect.objectContaining({
+        result_ref: guidedWorkResultRef("a-old-failed-command"),
+        outcome: "failed",
+        completeness: "complete",
+        command_execution_summary: {
+          exit_status: 7,
+          timed_out: false,
+          signal: "SIGTERM",
+        },
+      }),
+    ]);
+    expect(JSON.stringify(context.initialProjection.older)).not.toContain("PRIVATE");
+  } finally {
+    db?.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("T3 exact result reads validate hash and scope, support ranges, and survive restart", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-t3-exact-read-"));
+  const dbPath = join(root, "butler.sqlite");
+  let db: Database | null = new Database(dbPath);
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    migrateBtccSchema(db);
+    const scope = insertGuidedTurn(
+      db,
+      "t3-exact-origin",
+      "t3-exact-session",
+      "저장된 결과를 다시 읽어 주세요.",
+    );
+    const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const journal = new SqliteGuidedToolJournal(db);
+    const opened = await service.replacePlan(planInput(scope, "t3-exact-plan"));
+
+    for (const [index, content] of ["alpha", "beta"].entries()) {
+      const callId = `t3-exact-call-${index}`;
+      journal.start({
+        turnId: scope.turnId,
+        callId,
+        toolName: "read_file",
+        rawArguments: JSON.stringify({ path: `${content}.txt` }),
+        arguments: { path: `${content}.txt` },
+      });
+      journal.finish({
+        callId,
+        status: "completed",
+        result: { ok: true, content },
+      });
+      await service.attachToolResult({
+        ...scope,
+        mutationCallId: `t3-exact-attach-${index}`,
+        toolCallId: callId,
+      });
+    }
+
+    const work = await service.loadContext(scope);
+    const firstRef = work!.work.resultRefs[0]!;
+    const secondRef = work!.work.resultRefs[1]!;
+    const readScope = {
+      sessionId: scope.sessionId,
+      workId: opened.workId,
+    };
+    expect(journal.readExactResultRange({
+      selectors: [firstRef, secondRef].map((result) => ({
+        kind: "work" as const,
+        resultRef: result.resultRef,
+        workId: opened.workId,
+        revision: result.sequence!,
+        resultSha256: result.resultSha256 ?? null,
+      })),
+      scope: readScope,
+    }).map((result) => result.result)).toEqual([
+      { ok: true, content: "alpha" },
+      { ok: true, content: "beta" },
+    ]);
+    expect(() => journal.readExactResultRange({
+      selectors: [{
+        kind: "work",
+        resultRef: firstRef.resultRef,
+        workId: opened.workId,
+        revision: firstRef.sequence!,
+        resultSha256: "0".repeat(64),
+      }],
+      scope: readScope,
+    })).toThrow("guided_result_hash_mismatch");
+    expect(journal.readExactResultRange({
+      selectors: [firstRef, firstRef].map((result) => ({
+        kind: "work" as const,
+        resultRef: result.resultRef,
+        workId: opened.workId,
+        revision: result.sequence!,
+        resultSha256: result.resultSha256 ?? null,
+      })),
+      scope: readScope,
+    }).map((result) => result.resultRef)).toEqual([
+      firstRef.resultRef,
+      firstRef.resultRef,
+    ]);
+    const firstRead = {
+      kind: "work",
+      result_ref: firstRef.resultRef,
+      work_id: opened.workId,
+      revision: firstRef.sequence!,
+      result_sha256: firstRef.resultSha256 ?? null,
+    };
+    expect(readGuidedOperationResultViews({
+      args: {
+        reads: [
+          {
+            ...firstRead,
+            selector: { kind: "json_pointer", pointer: "/result" },
+          },
+          {
+            ...firstRead,
+            selector: {
+              kind: "json_pointer",
+              pointer: "/result/content",
+            },
+          },
+        ],
+      },
+      toolJournal: journal,
+      boundWorkId: opened.workId,
+      scope: readScope,
+      maxOutputTokens: 1_000,
+    }).views).toHaveLength(2);
+    expect(() => readGuidedOperationResultViews({
+      args: {
+        reads: [0, 1].map(() => ({
+          ...firstRead,
+          selector: { kind: "json_pointer", pointer: "/result" },
+        })),
+      },
+      toolJournal: journal,
+      boundWorkId: opened.workId,
+      scope: readScope,
+      maxOutputTokens: 1_000,
+    })).toThrow("guided_result_range_duplicate_selector");
+    expect(() => journal.readExactResultRange({
+      selectors: Array.from({ length: 5 }, (_, index) => ({
+        kind: "work" as const,
+        resultRef: `${firstRef.resultRef}${index}`,
+        workId: opened.workId,
+        revision: firstRef.sequence!,
+        resultSha256: firstRef.resultSha256 ?? null,
+      })),
+      scope: readScope,
+    })).toThrow("guided_result_range_too_large");
+    expect(journal.readExactResult({
+      selector: {
+        kind: "work",
+        resultRef: firstRef.resultRef,
+        workId: opened.workId,
+        revision: firstRef.sequence!,
+        resultSha256: firstRef.resultSha256 ?? null,
+      },
+      scope: readScope,
+    })).toMatchObject({
+      resultRef: firstRef.resultRef,
+      revision: firstRef.sequence,
+      result: { ok: true, content: "alpha" },
+    });
+    expect(() => journal.readExactResult({
+      selector: {
+        kind: "work", resultRef: firstRef.resultRef, workId: opened.workId,
+        revision: firstRef.sequence!, resultSha256: "0".repeat(64),
+      },
+      scope: readScope,
+    })).toThrow("guided_result_hash_mismatch");
+    expect(() => journal.readExactResult({
+      selector: {
+        kind: "work", resultRef: firstRef.resultRef, workId: opened.workId,
+        revision: firstRef.sequence! + 1,
+        resultSha256: firstRef.resultSha256 ?? null,
+      },
+      scope: readScope,
+    })).toThrow("guided_result_revision_mismatch");
+    expect(() => journal.readExactResult({
+      selector: {
+        kind: "work", resultRef: firstRef.resultRef, workId: opened.workId,
+        revision: firstRef.sequence!, resultSha256: null,
+      },
+      scope: readScope,
+    })).toThrow("guided_result_hash_mismatch");
+    expect(() => journal.readExactResult({
+      selector: {
+        kind: "direct", resultRef: firstRef.resultRef, revision: null,
+        resultSha256: firstRef.resultSha256 ?? null,
+      },
+      scope: readScope,
+    })).toThrow("guided_result_kind_mismatch");
+    expect(() => journal.readExactResult({
+      selector: {
+        kind: "work", resultRef: firstRef.resultRef, workId: opened.workId,
+        revision: firstRef.sequence!, resultSha256: firstRef.resultSha256 ?? null,
+      },
+      scope: { sessionId: "other-session", workId: opened.workId },
+    })).toThrow("guided_result_session_mismatch");
+
+    journal.start({
+      turnId: scope.turnId,
+      callId: "t3-exact-direct-call",
+      toolName: "read_file",
+      rawArguments: JSON.stringify({ path: "direct.txt" }),
+      arguments: { path: "direct.txt" },
+    });
+    journal.finish({
+      callId: "t3-exact-direct-call",
+      status: "completed",
+      result: { ok: true, content: "direct" },
+    });
+    const direct = journal.find("t3-exact-direct-call")!;
+    expect(journal.readExactResult({
+      selector: {
+        kind: "direct",
+        resultRef: direct.resultRef!,
+        revision: null,
+        resultSha256: direct.resultSha256 ?? null,
+      },
+      scope: { sessionId: scope.sessionId },
+    })).toMatchObject({
+      revision: null,
+      result: { ok: true, content: "direct" },
+    });
+    const directLookupPlan = db.query<{ detail: string }, [string, string]>(`
+      EXPLAIN QUERY PLAN
+      SELECT call.call_id
+      FROM btcc_guided_tool_calls call
+      JOIN btcc_turns turn ON turn.turn_id = call.turn_id
+      WHERE call.result_ref = ? AND turn.session_id = ?
+        AND call.status IN ('completed', 'failed', 'cancelled')
+      LIMIT 1
+    `).all(direct.resultRef!, scope.sessionId);
+    expect(directLookupPlan.map((row) => row.detail).join("\n"))
+      .toContain("idx_btcc_guided_tool_calls_result_ref");
+
+    db.close();
+    db = null;
+    db = new Database(dbPath);
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const reopenedJournal = new SqliteGuidedToolJournal(db);
+    expect(reopenedJournal.readExactResult({
+      selector: {
+        kind: "work",
+        resultRef: firstRef.resultRef,
+        workId: opened.workId,
+        revision: firstRef.sequence!,
+        resultSha256: firstRef.resultSha256 ?? null,
+      },
+      scope: readScope,
+    })).toMatchObject({
+      resultRef: firstRef.resultRef,
+      result: { ok: true, content: "alpha" },
+    });
+  } finally {
+    db?.close();
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

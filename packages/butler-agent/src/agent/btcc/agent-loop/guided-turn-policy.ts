@@ -78,6 +78,7 @@ export function selectGuidedToolSurface(
   turn: TurnRecord,
   env: NodeJS.ProcessEnv = process.env,
   workspaceReference?: WorkspaceReference,
+  compactReplayEnabled = false,
 ): GuidedToolSurface {
   const policy = guidedPolicy(turn);
   const boundary = prepareGuidedToolSurfaceBoundary(turn, policy);
@@ -98,6 +99,7 @@ export function selectGuidedToolSurface(
     tools: BUTLER_TOOLS,
   }).tools;
   return finalizeGuidedToolSurface({
+    compactReplayEnabled,
     env,
     guidedLedgerEffects: boundary.guidedLedgerEffects,
     minimal,

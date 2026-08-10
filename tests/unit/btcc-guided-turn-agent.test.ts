@@ -41,6 +41,8 @@ import {
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-report.ts";
 import { createGuidedToolCallExecutor } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-call-execution.ts";
+import { createDisabledGuidedCompactReplayRuntime } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-compact-replay-runtime.ts";
 import { guidedToolOccurrence } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-occurrence.ts";
 import { createToolCallToolHandler } from
@@ -58,6 +60,8 @@ import { upsertMcpServer } from
 import { ModelProviderRequestError } from
   "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { buildModelRoute } from
+  "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
+import { ModelRouteDurabilityError } from
   "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { readOperationalMetricEvents } from
   "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
@@ -97,6 +101,16 @@ function toolCall(
     arguments: arguments_,
     rawArguments: JSON.stringify(arguments_),
   };
+}
+
+function continuityCall(id: string, nextBatchPurpose: string) {
+  return toolCall(id, "replace_phase_continuity", {
+    objective_state: "Preserve exact durable facts across restart.",
+    integrated_decisions: ["Use result references instead of rerunning reads."],
+    unresolved_questions: [],
+    next_batch_purpose: nextBatchPurpose,
+    public_activity: "Restoring durable evidence.",
+  });
 }
 
 function toolResponse(
@@ -151,6 +165,440 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
     });
   } finally {
     fixture.close();
+  }
+});
+
+test("T3 compact replay flag is default-off and rollback restores the legacy context section", async () => {
+  const previousFlag = process.env.BUTLER_M1_COMPACT_REPLAY;
+  const previousMinimalFlag = process.env.BUTLER_M1_MINIMAL_TOOL_SURFACE;
+  const capturePrompt = async (
+    label: string,
+    flag?: string,
+    minimalFlag?: string,
+  ): Promise<{ prompt: string; tools: string; content: string }> => {
+    const fixture = createFixture(label);
+    try {
+      if (flag === undefined) delete process.env.BUTLER_M1_COMPACT_REPLAY;
+      else process.env.BUTLER_M1_COMPACT_REPLAY = flag;
+      if (minimalFlag === undefined) {
+        delete process.env.BUTLER_M1_MINIMAL_TOOL_SURFACE;
+      } else process.env.BUTLER_M1_MINIMAL_TOOL_SURFACE = minimalFlag;
+      let prompt = "";
+      let tools = "";
+      const turn = turnRecord("/tmp/m1-t3-rollback-workspace", {
+        turnId: `${label}-turn`,
+      });
+      fixture.stores.guidedToolJournal.start({
+        turnId: turn.turnId,
+        callId: `${label}-recorded-call`,
+        toolName: "read_file",
+        rawArguments: JSON.stringify({ path: "fact.txt" }),
+        arguments: { path: "fact.txt" },
+      });
+      const agent = fixture.agent({
+        async runRound(request) {
+          prompt = request.messages.map((message) => message.content).join("\n");
+          tools = JSON.stringify(request.tools);
+          return { text: "확인했습니다.", toolCalls: [] };
+        },
+      });
+      const result = await agent.run({
+        turn,
+        signal: new AbortController().signal,
+      });
+      return { prompt, tools, content: result.content };
+    } finally {
+      fixture.close();
+    }
+  };
+
+  try {
+    const defaultPrompt = await capturePrompt("guided-t3-flag-default");
+    const compactPrompt = await capturePrompt("guided-t3-flag-on", "on");
+    const rollbackPrompt = await capturePrompt("guided-t3-flag-off", "off");
+    const minimalDefault = await capturePrompt(
+      "guided-t3-minimal-default",
+      undefined,
+      "on",
+    );
+    const minimalRollback = await capturePrompt(
+      "guided-t3-minimal-off",
+      "off",
+      "on",
+    );
+
+    expect(defaultPrompt.prompt).toContain("## Previously recorded tool calls for this turn");
+    expect(defaultPrompt.prompt).not.toContain("## Canonical compact replay for this phase");
+    expect(compactPrompt.prompt).toContain("## Canonical compact replay for this phase");
+    expect(rollbackPrompt.prompt).toBe(defaultPrompt.prompt);
+    expect(rollbackPrompt.tools).toBe(defaultPrompt.tools);
+    expect(rollbackPrompt.content).toBe(defaultPrompt.content);
+    expect(minimalRollback).toEqual(minimalDefault);
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_COMPACT_REPLAY;
+    else process.env.BUTLER_M1_COMPACT_REPLAY = previousFlag;
+    if (previousMinimalFlag === undefined) {
+      delete process.env.BUTLER_M1_MINIMAL_TOOL_SURFACE;
+    } else process.env.BUTLER_M1_MINIMAL_TOOL_SURFACE = previousMinimalFlag;
+  }
+});
+
+test("T3 production Guided Turn reuses a completed operation without duplicate dispatch", async () => {
+  const previousFlag = process.env.BUTLER_M1_COMPACT_REPLAY;
+  const fixture = createFixture("guided-t3-replay");
+  try {
+    process.env.BUTLER_M1_COMPACT_REPLAY = "on";
+    writeFileSync(join(fixture.root, "fact.txt"), "first value");
+    const turn = turnRecord(fixture.root, { turnId: "guided-t3-replay-turn" });
+    let modelCalls = 0;
+    const agent = fixture.agent({
+      async runRound(request) {
+        modelCalls += 1;
+        if (modelCalls <= 2) {
+          return toolResponse([
+            toolCall(`continuity-${modelCalls}`, "replace_phase_continuity", {
+              objective_state: "Reuse the completed read safely.",
+              integrated_decisions: [],
+              unresolved_questions: [],
+              next_batch_purpose: "Read the existing fact once.",
+              public_activity: "Checking the saved fact.",
+            }),
+            toolCall("same-read-operation", "read_file", { path: "fact.txt" }),
+          ]);
+        }
+        expect(messagesWithToolResults(request)).toHaveLength(0);
+        const compactRequest = request.messages.map((message) => message.content)
+          .join("\n");
+        expect(compactRequest).toContain("first value");
+        expect(compactRequest).toContain("Newest completed source batch");
+        return { text: "같은 결과를 중복 실행 없이 재사용했습니다.", toolCalls: [] };
+      },
+    });
+
+    const result = await agent.run({
+      turn,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.content).toBe("같은 결과를 중복 실행 없이 재사용했습니다.");
+    const readRecords = fixture.stores.guidedToolJournal.list(turn.turnId)
+      .filter((record) => record.toolName === "read_file");
+    expect(readRecords).toHaveLength(1);
+    expect(readRecords[0]).toMatchObject({
+      toolName: "read_file",
+      status: "completed",
+      result: { content: "first value" },
+    });
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_COMPACT_REPLAY;
+    else process.env.BUTLER_M1_COMPACT_REPLAY = previousFlag;
+    fixture.close();
+  }
+});
+
+test("T3 restart resumes the same in-flight Turn with PhaseContinuity and exact Work views", async () => {
+  const previousFlag = process.env.BUTLER_M1_COMPACT_REPLAY;
+  const root = mkdtempSync(join(tmpdir(), "guided-t3-restart-"));
+  const dbPath = join(root, "butler.sqlite");
+  let stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-t3-restart-setup",
+    storageProfile: "ephemeral",
+  });
+  try {
+    process.env.BUTLER_M1_COMPACT_REPLAY = "on";
+    for (let index = 0; index < 6; index += 1) {
+      writeFileSync(join(root, `fact-${index}.txt`), `durable fact ${index}`);
+    }
+    const setupTurnId = "guided-t3-restart-setup-turn";
+    const setupScope = {
+      turnId: setupTurnId,
+      sessionId: "guided-local-session",
+    };
+    let setupRound = 0;
+    let rejectedReadPrompt = "";
+    const setupAgent = createProductionGuidedTurnAgent({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: dbPath,
+      contextDocuments: stores.contextDocuments,
+      toolJournal: stores.guidedToolJournal,
+      effectJournal: stores.guidedEffectJournal,
+      durableWork: stores.durableWork,
+      modelRound: {
+        async runRound(request) {
+          setupRound += 1;
+          if (setupRound === 1) {
+            return toolResponse([
+              continuityCall("restart-continuity-open", "Open the durable Work."),
+              toolCall("restart-plan", "replace_work_plan", {
+                start_new: true,
+                objective: "Keep six durable facts available across restart.",
+                actions: [{ action_key: "preserve-six-facts" }],
+                checks: ["An older exact result remains readable after restart."],
+              }),
+              ...Array.from({ length: 6 }, (_, index) =>
+                toolCall(`restart-read-${index}`, "read_file", {
+                  path: `fact-${index}.txt`,
+                })),
+            ]);
+          }
+          if (setupRound === 2) {
+            const work = await stores.durableWork.loadContext(setupScope);
+            const oldest = work!.work.resultRefs[0]!;
+            return toolResponse([
+              continuityCall(
+                "restart-continuity-bound",
+                "Select two distinct exact views before restart.",
+              ),
+              toolCall("restart-invalid-exact-read", "read_operation_results", {
+                reads: [{
+                  kind: "work",
+                  result_ref: oldest.resultRef,
+                  work_id: work!.work.workId,
+                  revision: oldest.sequence,
+                  result_sha256: oldest.resultSha256 ?? null,
+                  selector: {
+                    kind: "line_range",
+                    pointer: "/result/content",
+                    start_line: 99,
+                    end_line: 100,
+                  },
+                }],
+              }),
+              toolCall("restart-exact-read", "read_operation_results", {
+                reads: [
+                  {
+                    kind: "work",
+                    result_ref: oldest.resultRef,
+                    work_id: work!.work.workId,
+                    revision: oldest.sequence,
+                    result_sha256: oldest.resultSha256 ?? null,
+                    selector: { kind: "json_pointer", pointer: "/result" },
+                  },
+                  {
+                    kind: "work",
+                    result_ref: oldest.resultRef,
+                    work_id: work!.work.workId,
+                    revision: oldest.sequence,
+                    result_sha256: oldest.resultSha256 ?? null,
+                    selector: {
+                      kind: "json_pointer",
+                      pointer: "/result/content",
+                    },
+                  },
+                ],
+              }),
+            ]);
+          }
+          const compactRequest = request.messages.map((message) => message.content)
+            .join("\n");
+          expect(compactRequest).toContain("durable fact 0");
+          rejectedReadPrompt = compactRequest;
+          throw new ModelRouteDurabilityError("response_acceptance_write");
+        },
+      },
+    });
+    const setupRuntime = createGuidedTurnRuntime({
+      admission: stores.admission,
+      turns: stores.turns,
+      messages: stores.messages,
+      committedSuccessorReadiness: stores.committedSuccessorReadiness,
+      agent: setupAgent,
+    });
+    await expect(setupRuntime.runTurn(localRunCommand(root, setupTurnId)))
+      .rejects.toBeInstanceOf(ModelRouteDurabilityError);
+    expect(rejectedReadPrompt).toContain("operation_rejected");
+    expect(rejectedReadPrompt).toContain(
+      "guided_result_view_line_range_out_of_bounds",
+    );
+    const beforeRestart = await stores.durableWork.loadContext(setupScope);
+    expect(beforeRestart?.work.resultRefs).toHaveLength(6);
+    const oldest = beforeRestart!.work.resultRefs[0]!;
+    expect(stores.guidedToolJournal.list(setupTurnId)
+      .filter((record) => record.toolName === "read_file")).toHaveLength(6);
+    const sourceBatchRecords = stores.guidedToolJournal.list(setupTurnId)
+      .filter((record) => record.toolName === "read_file");
+    expect(new Set(sourceBatchRecords.map((record) => record.operationBatchId)).size)
+      .toBe(1);
+    expect(sourceBatchRecords.map((record) => record.operationBatchOrdinal))
+      .toEqual([2, 3, 4, 5, 6, 7]);
+    const beforeRestartExactReads = stores.guidedToolJournal.list(setupTurnId)
+      .filter((record) => record.toolName === "read_operation_results");
+    expect(beforeRestartExactReads).toHaveLength(2);
+    expect(beforeRestartExactReads.find((record) =>
+      (record.result as { ok?: boolean } | undefined)?.ok === false)?.result)
+      .toEqual({
+        ok: false,
+        reference_only: true,
+        read_count: 0,
+        result_refs: [],
+        error_code: "guided_result_view_line_range_out_of_bounds",
+      });
+    expect(beforeRestartExactReads.find((record) =>
+      (record.result as { ok?: boolean } | undefined)?.ok === true)?.result)
+      .toMatchObject({
+      ok: true,
+      reference_only: true,
+      read_count: 2,
+      result_refs: [oldest.resultRef, oldest.resultRef],
+    });
+    expect(JSON.stringify(beforeRestartExactReads[0]?.result)).not.toContain(
+      "durable fact 0",
+    );
+
+    stores.close();
+    stores = openBtccSqliteStores({
+      dbPath,
+      ownerId: "guided-t3-restart-resume",
+      storageProfile: "ephemeral",
+    });
+    let resumeRound = 0;
+    const resumeAgent = createProductionGuidedTurnAgent({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: dbPath,
+      contextDocuments: stores.contextDocuments,
+      toolJournal: stores.guidedToolJournal,
+      effectJournal: stores.guidedEffectJournal,
+      durableWork: stores.durableWork,
+      modelRound: {
+        async runRound(request) {
+          resumeRound += 1;
+          if (resumeRound === 1) {
+            const prompt = request.messages.map((message) => message.content).join("\n");
+            expect(prompt).toContain(oldest.resultRef);
+            expect(prompt).toContain("Select two distinct exact views before restart.");
+            expect(prompt).toContain("durable fact 0");
+            for (let index = 1; index < 6; index += 1) {
+              expect(prompt).toContain(`durable fact ${index}`);
+            }
+            expect(prompt.match(/## Canonical compact replay for this phase/gu))
+              .toHaveLength(1);
+            return { text: "Oldest result restored exactly.", toolCalls: [] };
+          }
+          throw new Error("restart_should_finish_from_rehydrated_view");
+        },
+      },
+    });
+    const resumeRuntime = createGuidedTurnRuntime({
+      admission: stores.admission,
+      turns: stores.turns,
+      messages: stores.messages,
+      committedSuccessorReadiness: stores.committedSuccessorReadiness,
+      agent: resumeAgent,
+    });
+    const resumed = await resumeRuntime.runTurn({
+      kind: "resume",
+      turnId: setupTurnId,
+    });
+    const afterRestart = await stores.durableWork.loadContext(setupScope);
+
+    expect(resumed).toMatchObject({
+      kind: "delivered",
+      content: "Oldest result restored exactly.",
+    });
+    expect(afterRestart?.work.resultRefs).toHaveLength(6);
+    expect(stores.guidedToolJournal.list(setupTurnId)
+      .filter((record) => record.toolName === "read_file")).toHaveLength(6);
+    const exactReadRecords = stores.guidedToolJournal.list(setupTurnId)
+      .filter((record) => record.toolName === "read_operation_results");
+    expect(exactReadRecords).toHaveLength(2);
+    expect(exactReadRecords.find((record) =>
+      (record.result as { ok?: boolean } | undefined)?.ok === true)?.result)
+      .toMatchObject({
+      ok: true,
+      reference_only: true,
+      read_count: 2,
+      result_refs: [oldest.resultRef, oldest.resultRef],
+    });
+    expect(JSON.stringify(exactReadRecords[0]?.result)).not.toContain(
+      "durable fact 0",
+    );
+
+    let newTurnPrompt = "";
+    const newTurnId = "guided-t3-fresh-turn";
+    const newTurnAgent = createProductionGuidedTurnAgent({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: dbPath,
+      contextDocuments: stores.contextDocuments,
+      toolJournal: stores.guidedToolJournal,
+      effectJournal: stores.guidedEffectJournal,
+      durableWork: stores.durableWork,
+      modelRound: {
+        async runRound(request) {
+          newTurnPrompt = request.messages.map((message) => message.content)
+            .join("\n");
+          return { text: "Fresh phase.", toolCalls: [] };
+        },
+      },
+    });
+    await createGuidedTurnRuntime({
+      admission: stores.admission,
+      turns: stores.turns,
+      messages: stores.messages,
+      committedSuccessorReadiness: stores.committedSuccessorReadiness,
+      agent: newTurnAgent,
+    }).runTurn(localRunCommand(root, newTurnId));
+    expect(newTurnPrompt).not.toContain(
+      "Resume from the oldest durable result after restart.",
+    );
+
+    const newestSourceCallId = afterRestart!.work.resultRefs.at(-1)!.toolCallId;
+    stores.close();
+    const corruptDb = new Database(dbPath);
+    try {
+      corruptDb.query(`
+        UPDATE btcc_guided_tool_calls SET result_json = ? WHERE call_id = ?
+      `).run(JSON.stringify({ content: "corrupt body" }), newestSourceCallId);
+    } finally {
+      corruptDb.close(false);
+    }
+    stores = openBtccSqliteStores({
+      dbPath,
+      ownerId: "guided-t3-restart-corrupt",
+      storageProfile: "ephemeral",
+    });
+    let corruptModelCalls = 0;
+    const corruptTurnId = "guided-t3-restart-corrupt-turn";
+    const corruptAgent = createProductionGuidedTurnAgent({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: dbPath,
+      contextDocuments: stores.contextDocuments,
+      toolJournal: stores.guidedToolJournal,
+      effectJournal: stores.guidedEffectJournal,
+      durableWork: stores.durableWork,
+      modelRound: {
+        async runRound() {
+          corruptModelCalls += 1;
+          return { text: "must not dispatch", toolCalls: [] };
+        },
+      },
+    });
+    const corruptRuntime = createGuidedTurnRuntime({
+      admission: stores.admission,
+      turns: stores.turns,
+      messages: stores.messages,
+      committedSuccessorReadiness: stores.committedSuccessorReadiness,
+      agent: corruptAgent,
+    });
+    const corruptResult = await corruptRuntime.runTurn(
+      localRunCommand(root, corruptTurnId),
+    );
+    expect(corruptModelCalls).toBe(0);
+    expect(corruptResult).toMatchObject({ kind: "delivered" });
+    expect(corruptResult).not.toMatchObject({ content: "must not dispatch" });
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_COMPACT_REPLAY;
+    else process.env.BUTLER_M1_COMPACT_REPLAY = previousFlag;
+    try {
+      stores.close();
+    } catch {
+      // A failed reopen may already have closed the active stores.
+    }
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -2061,6 +2509,7 @@ test("Guided tool restart reuses a prestarted occurrence after call order change
       describedToolIds: new Set(),
       durableWork: fixture.stores.durableWork,
       toolJournal: fixture.stores.guidedToolJournal,
+      compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
       executeButlerTool: async (call, context) => {
         occurrences.push({
           toolName: call.name,
@@ -2147,6 +2596,7 @@ test("provider call identity replays one occurrence but admits an identical new 
       describedToolIds: new Set(),
       durableWork: fixture.stores.durableWork,
       toolJournal: fixture.stores.guidedToolJournal,
+      compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
       executeButlerTool: async (_call, context) => {
         if (!context?.effectOccurrenceId) {
           throw new Error("Expected a runtime-owned effect occurrence");
@@ -2243,6 +2693,7 @@ test("provider v1 progressive mutation records remain authoritative across the i
       describedToolIds: new Set(),
       durableWork: fixture.stores.durableWork,
       toolJournal: fixture.stores.guidedToolJournal,
+      compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
       executeButlerTool: async (_call, context) => {
         effectOccurrences.push(context?.effectOccurrenceId ?? "");
         return { ok: true, resumed: true };
@@ -2345,6 +2796,7 @@ test("summaryless provider v1 responses replay without public activity or duplic
       describedToolIds: new Set(),
       durableWork: fixture.stores.durableWork,
       toolJournal: fixture.stores.guidedToolJournal,
+      compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
       executeButlerTool: async (_call, context) => {
         effectOccurrences.push(context?.effectOccurrenceId ?? "");
         return { ok: true, resumed: true };
@@ -2452,6 +2904,7 @@ test("summaryless provider v1 started progressive replay crosses the real bridge
       describedToolIds: new Set(),
       durableWork: fixture.stores.durableWork,
       toolJournal: fixture.stores.guidedToolJournal,
+      compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
       executeButlerTool,
     });
 
@@ -2552,6 +3005,7 @@ test("v2 exact records win when a provider v1 alias points at another replay", a
       describedToolIds: new Set(),
       durableWork: fixture.stores.durableWork,
       toolJournal: fixture.stores.guidedToolJournal,
+      compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
       executeButlerTool: async () => {
         dispatches += 1;
         return { ok: true, source: "dispatch" };
@@ -2613,6 +3067,7 @@ test("summaryless provider v1 started direct replay injects only an execution su
       describedToolIds: new Set(),
       durableWork: fixture.stores.durableWork,
       toolJournal: fixture.stores.guidedToolJournal,
+      compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
       executeButlerTool: async (call, context) => {
         dispatched.push({
           args: call.args,
@@ -2703,6 +3158,7 @@ test("summaryless provider v1 failed and cancelled records remain terminal", asy
       describedToolIds: new Set(),
       durableWork: fixture.stores.durableWork,
       toolJournal: fixture.stores.guidedToolJournal,
+      compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
       executeButlerTool: async () => {
         dispatches += 1;
         return { ok: true };
@@ -2765,6 +3221,7 @@ test("fresh progressive tool execution publishes its nested command summary", as
       describedToolIds: new Set(),
       durableWork: fixture.stores.durableWork,
       toolJournal: fixture.stores.guidedToolJournal,
+      compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
       executeButlerTool: async () => ({ ok: true, exit_code: 0 }),
     });
 
@@ -2824,6 +3281,7 @@ test("progressive run_command without summary returns validation before public p
       describedToolIds: new Set(),
       durableWork: fixture.stores.durableWork,
       toolJournal: fixture.stores.guidedToolJournal,
+      compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
       executeButlerTool: async () => {
         dispatches += 1;
         return { ok: true };
@@ -2894,6 +3352,7 @@ test("run_command rejects a sanitizer-empty public summary before journal or dis
         describedToolIds: new Set(),
         durableWork: fixture.stores.durableWork,
         toolJournal: fixture.stores.guidedToolJournal,
+        compactReplayRuntime: createDisabledGuidedCompactReplayRuntime(),
         executeButlerTool: async () => {
           dispatches += 1;
           return { ok: true };

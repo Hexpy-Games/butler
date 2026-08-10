@@ -17,6 +17,10 @@ import type {
   ReasoningEffort,
 } from "../../../integrations/providers/runtime-contracts.ts";
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
+import type {
+  BtccCompactReplayInput,
+  BtccCompactReplayMetadata,
+} from "./compact-replay-messages.ts";
 
 export type BtccAgentLoopMessage = ModelRoundMessage;
 export type BtccAgentLoopToolDefinition = ModelRoundTool;
@@ -75,6 +79,7 @@ export interface BtccAgentLoopToolResult {
   ok: boolean;
   output?: unknown;
   error?: string;
+  compactReplay?: BtccCompactReplayMetadata;
 }
 
 export type BtccTextToolCallDisposition =
@@ -124,6 +129,7 @@ export interface BtccAgentLoopInput {
     reportedModel: string;
   }) => void;
   providerRetryAttempts?: number;
+  compactReplay?: BtccCompactReplayInput;
   progress?: BtccTurnProgressObserver;
   toolChoice?: "auto" | "required";
   tools: readonly BtccAgentLoopToolDefinition[];
@@ -152,6 +158,8 @@ export interface BtccAgentLoopInput {
     name: string;
     arguments: Record<string, unknown>;
     rawArguments: string;
+    operationBatchId: string;
+    operationBatchOrdinal: number;
     signal?: AbortSignal;
   }) => Promise<unknown>;
   onTextToolCalls?: (input: {

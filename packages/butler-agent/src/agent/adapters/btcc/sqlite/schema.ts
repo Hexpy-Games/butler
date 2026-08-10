@@ -220,13 +220,17 @@ CREATE TABLE IF NOT EXISTS btcc_delivery_outbox (
 
 CREATE TABLE IF NOT EXISTS btcc_guided_tool_calls (
   call_id TEXT PRIMARY KEY,
+  result_ref TEXT UNIQUE,
   turn_id TEXT NOT NULL,
   tool_name TEXT NOT NULL,
   raw_arguments TEXT NOT NULL,
   arguments_json TEXT NOT NULL,
+  operation_batch_id TEXT,
+  operation_batch_ordinal INTEGER,
   status TEXT NOT NULL,
   result_json TEXT,
   result_sha256 TEXT,
+  structural_facts_json TEXT,
   error_code TEXT,
   started_at TEXT NOT NULL,
   finished_at TEXT,
