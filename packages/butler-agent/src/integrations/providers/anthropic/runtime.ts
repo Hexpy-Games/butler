@@ -136,15 +136,34 @@ export function anthropicUsageSample(
   response: Record<string, any>,
 ): ProviderUsageSample | null {
   const uncachedTokens = numberOrNull(response.usage?.input_tokens);
-  const cachedTokens = numberOrNull(response.usage?.cache_read_input_tokens) ?? 0;
-  const cacheCreationTokens = numberOrNull(response.usage?.cache_creation_input_tokens) ?? 0;
+  const providerCacheReadTokens = numberOrNull(response.usage?.cache_read_input_tokens);
+  const providerCacheWriteTokens = numberOrNull(response.usage?.cache_creation_input_tokens);
+  const cachedTokens = providerCacheReadTokens ?? 0;
+  const cacheCreationTokens = providerCacheWriteTokens ?? 0;
   const promptTokens = uncachedTokens === null
     ? null
     : uncachedTokens + cachedTokens + cacheCreationTokens;
-  const outputTokens = numberOrNull(response.usage?.output_tokens) ?? 0;
+  const providerOutputTokens = numberOrNull(response.usage?.output_tokens);
+  const outputTokens = providerOutputTokens ?? 0;
   const totalTokens = promptTokens === null ? null : promptTokens + outputTokens;
-  if (promptTokens === null && totalTokens === null) return null;
-  return { promptTokens, cachedTokens, outputTokens, totalTokens };
+  if (
+    promptTokens === null &&
+    totalTokens === null &&
+    providerCacheReadTokens === null &&
+    providerCacheWriteTokens === null &&
+    providerOutputTokens === null
+  ) return null;
+  return {
+    promptTokens,
+    cachedTokens,
+    outputTokens,
+    totalTokens,
+    providerPromptTokens: promptTokens,
+    providerCacheReadTokens,
+    providerCacheWriteTokens,
+    providerOutputTokens,
+    providerTotalTokens: null,
+  };
 }
 
 export function anthropicTools(tools: FunctionToolDefinition[]): Array<Record<string, unknown>> {

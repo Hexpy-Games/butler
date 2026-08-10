@@ -68,18 +68,21 @@ export function extractPromptCacheStats(
   const promptTokens =
     numberOrNull(response.usage?.input_tokens) ??
     numberOrNull(response.usage?.prompt_tokens);
+  const outputTokens = numberOrNull(response.usage?.output_tokens);
   const totalTokens = numberOrNull(response.usage?.total_tokens);
-  const cachedTokens =
+  const providerCacheReadTokens =
     numberOrNull(response.usage?.prompt_tokens_details?.cached_tokens) ??
     numberOrNull(response.usage?.input_tokens_details?.cached_tokens);
+  const cachedTokens = providerCacheReadTokens ?? 0;
   const cacheWriteTokens =
     numberOrNull(response.usage?.prompt_tokens_details?.cache_write_tokens) ??
     numberOrNull(response.usage?.input_tokens_details?.cache_write_tokens);
 
   if (
     promptTokens === null &&
+    outputTokens === null &&
     totalTokens === null &&
-    cachedTokens === null &&
+    providerCacheReadTokens === null &&
     cacheWriteTokens === null
   ) {
     return null;
@@ -87,8 +90,10 @@ export function extractPromptCacheStats(
 
   return {
     promptTokens,
-    cachedTokens: cachedTokens ?? 0,
+    cachedTokens,
+    providerCacheReadTokens,
     cacheWriteTokens,
+    outputTokens,
     totalTokens,
   };
 }
@@ -98,16 +103,21 @@ export function usageReportFromStats(input: {
   stats: PromptCacheStats;
   roundIndex: number;
 }): PromptUsageReport & { outputTokens: number; roundIndex: number } {
-  const outputTokens =
-    input.stats.totalTokens === null || input.stats.promptTokens === null
+  const outputTokens = input.stats.outputTokens ??
+    (input.stats.totalTokens === null || input.stats.promptTokens === null
       ? 0
-      : Math.max(0, input.stats.totalTokens - input.stats.promptTokens);
+      : Math.max(0, input.stats.totalTokens - input.stats.promptTokens));
   return {
     model: input.model,
     promptTokens: input.stats.promptTokens,
     cachedTokens: input.stats.cachedTokens,
     totalTokens: input.stats.totalTokens,
     outputTokens,
+    providerPromptTokens: input.stats.promptTokens,
+    providerCacheReadTokens: input.stats.providerCacheReadTokens ?? null,
+    providerCacheWriteTokens: input.stats.cacheWriteTokens,
+    providerOutputTokens: input.stats.outputTokens,
+    providerTotalTokens: input.stats.totalTokens,
     roundIndex: input.roundIndex,
   };
 }
@@ -190,7 +200,7 @@ export function afterAttributedModelResponse(input: {
   roundIndex: number;
 }): void {
   const stats = extractPromptCacheStats(input.response);
-  if (!stats || stats.promptTokens === null) return;
+  if (!stats) return;
   input.attribution?.afterModelResponseUsage?.(
     usageReportFromStats({
       model: input.model,
@@ -205,6 +215,11 @@ export interface ProviderUsageSample {
   cachedTokens: number;
   outputTokens: number;
   totalTokens: number | null;
+  providerPromptTokens?: number | null;
+  providerCacheReadTokens?: number | null;
+  providerCacheWriteTokens?: number | null;
+  providerOutputTokens?: number | null;
+  providerTotalTokens?: number | null;
 }
 
 export interface ProviderRequestAttributor {
@@ -282,19 +297,42 @@ export function openAICompatibleUsageSample(
     numberOrNull(response.usage?.completion_tokens) ??
     numberOrNull(response.usage?.output_tokens) ??
     0;
+  const providerOutputTokens =
+    numberOrNull(response.usage?.completion_tokens) ??
+    numberOrNull(response.usage?.output_tokens);
   const totalTokens =
     numberOrNull(response.usage?.total_tokens) ??
     (promptTokens === null ? null : promptTokens + outputTokens);
+  const providerTotalTokens = numberOrNull(response.usage?.total_tokens);
   const cachedTokens =
     numberOrNull(
       response.usage?.prompt_tokens_details?.cached_tokens ??
         response.usage?.input_tokens_details?.cached_tokens,
     ) ?? 0;
-  if (promptTokens === null && totalTokens === null) return null;
+  const providerCacheReadTokens = numberOrNull(
+    response.usage?.prompt_tokens_details?.cached_tokens ??
+      response.usage?.input_tokens_details?.cached_tokens,
+  );
+  const providerCacheWriteTokens = numberOrNull(
+    response.usage?.prompt_tokens_details?.cache_write_tokens ??
+      response.usage?.input_tokens_details?.cache_write_tokens,
+  );
+  if (
+    promptTokens === null &&
+    totalTokens === null &&
+    providerCacheReadTokens === null &&
+    providerCacheWriteTokens === null &&
+    providerOutputTokens === null
+  ) return null;
   return {
     promptTokens,
     cachedTokens,
     outputTokens,
     totalTokens,
+    providerPromptTokens: promptTokens,
+    providerCacheReadTokens,
+    providerCacheWriteTokens,
+    providerOutputTokens,
+    providerTotalTokens,
   };
 }

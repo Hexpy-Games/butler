@@ -367,6 +367,7 @@ export interface OpenAIResponse {
   usage?: {
     input_tokens?: number;
     prompt_tokens?: number;
+    output_tokens?: number;
     total_tokens?: number;
     prompt_tokens_details?: {
       cached_tokens?: number;
@@ -389,7 +390,9 @@ export interface OpenAIPromptCacheConfig {
 export interface PromptCacheStats {
   promptTokens: number | null;
   cachedTokens: number;
+  providerCacheReadTokens?: number | null;
   cacheWriteTokens: number | null;
+  outputTokens: number | null;
   totalTokens: number | null;
 }
 
@@ -400,6 +403,12 @@ export interface PromptUsageReport {
   cachedTokens: number;
   totalTokens: number | null;
   outputTokens: number;
+  /** Raw provider classes are additive telemetry and do not change legacy fields. */
+  providerPromptTokens?: number | null;
+  providerCacheReadTokens?: number | null;
+  providerCacheWriteTokens?: number | null;
+  providerOutputTokens?: number | null;
+  providerTotalTokens?: number | null;
 }
 
 

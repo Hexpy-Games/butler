@@ -269,6 +269,7 @@ export interface BtccTurnRuntime {
     command: BtccRunCommand,
     progress?: BtccTurnProgressObserver,
     onAdmitted?: (isFresh: boolean) => void | Promise<void>,
+    observationStartedAtMs?: number,
   ): Promise<BtccTurnOutcome>;
   stopTurn(command: BtccStopCommand): Promise<BtccTurnOutcome>;
 }

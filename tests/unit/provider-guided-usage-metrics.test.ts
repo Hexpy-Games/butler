@@ -44,9 +44,16 @@ test("real OpenAI guided model-round persists exactly one sample before usage ca
     },
   });
 
-  await runOpenAIModelRound(request, openAiAuth());
+  const result = await runOpenAIModelRound(request, openAiAuth());
 
   expect(observations).toEqual([1]);
+  expect(result.usage).toMatchObject({
+    providerPromptTokens: 64,
+    providerCacheReadTokens: 8,
+    providerCacheWriteTokens: null,
+    providerOutputTokens: 4,
+    providerTotalTokens: 68,
+  });
   expect(readPromptCacheMetrics({ butlerData })).toEqual([
     expect.objectContaining({
       scope: "btcc-guided:butler/app-general",
@@ -55,6 +62,113 @@ test("real OpenAI guided model-round persists exactly one sample before usage ca
       cachedTokens: 8,
     }),
   ]);
+});
+
+test("OpenAI output-only usage keeps direct provider output and null prompt fields", async () => {
+  globalThis.fetch = (async () =>
+    Response.json({
+      id: "response-guided-openai-output-only",
+      output: [
+        { type: "message", content: [{ type: "output_text", text: "ok" }] },
+      ],
+      usage: { output_tokens: 4 },
+    })) as unknown as typeof fetch;
+  const butlerData = temporaryButlerData();
+  const observed: Array<{
+    promptTokens: number | null;
+    providerOutputTokens?: number | null;
+  }> = [];
+
+  const result = await runOpenAIModelRound(modelRoundRequest(butlerData, {
+    afterModelResponseUsage: (usage) => {
+      observed.push({
+        promptTokens: usage.promptTokens,
+        providerOutputTokens: usage.providerOutputTokens,
+      });
+    },
+  }), openAiAuth());
+
+  expect(observed).toEqual([{
+    promptTokens: null,
+    providerOutputTokens: 4,
+  }]);
+  expect(result.usage).toMatchObject({
+    providerPromptTokens: null,
+    providerOutputTokens: 4,
+    providerTotalTokens: null,
+  });
+});
+
+test("partial provider usage remains observable when prompt and total are unavailable", async () => {
+  const cases = [
+    {
+      name: "google-output-only",
+      run: (request: ModelRoundRequest) =>
+        runGeminiModelRound(googleConfig(), request),
+      response: {
+        candidates: [{ content: { parts: [{ text: "ok" }] } }],
+        usageMetadata: { candidatesTokenCount: 5 },
+      },
+      expected: {
+        providerPromptTokens: null,
+        providerCacheReadTokens: null,
+        providerOutputTokens: 5,
+        providerTotalTokens: null,
+      },
+    },
+    {
+      name: "anthropic-cache-only",
+      run: (request: ModelRoundRequest) =>
+        runAnthropicModelRound(anthropicConfig(), request),
+      response: {
+        content: [{ type: "text", text: "ok" }],
+        usage: { cache_read_input_tokens: 10 },
+      },
+      expected: {
+        providerPromptTokens: null,
+        providerCacheReadTokens: 10,
+        providerOutputTokens: null,
+        providerTotalTokens: null,
+      },
+    },
+    {
+      name: "local-output-only",
+      run: (request: ModelRoundRequest) =>
+        runLocalModelRound(localConfig(), request),
+      response: {
+        choices: [{ message: { role: "assistant", content: "ok" } }],
+        usage: { completion_tokens: 5 },
+      },
+      expected: {
+        providerPromptTokens: null,
+        providerCacheReadTokens: null,
+        providerOutputTokens: 5,
+        providerTotalTokens: null,
+      },
+    },
+  ] as const;
+
+  for (const providerCase of cases) {
+    const butlerData = temporaryButlerData();
+    globalThis.fetch = (async () =>
+      Response.json(providerCase.response)) as unknown as typeof fetch;
+    const observed: Array<Record<string, number | null | undefined>> = [];
+
+    const result = await providerCase.run(modelRoundRequest(butlerData, {
+      afterModelResponseUsage: (usage) => {
+        observed.push({
+          providerPromptTokens: usage.providerPromptTokens,
+          providerCacheReadTokens: usage.providerCacheReadTokens,
+          providerOutputTokens: usage.providerOutputTokens,
+          providerTotalTokens: usage.providerTotalTokens,
+        });
+      },
+    }));
+
+    expect(result.text, providerCase.name).toBe("ok");
+    expect(observed, providerCase.name).toEqual([providerCase.expected]);
+    expect(result.usage, providerCase.name).toMatchObject(providerCase.expected);
+  }
 });
 
 test("real Gemini, Anthropic, and local guided model-rounds persist normalized usage", async () => {
@@ -72,7 +186,14 @@ test("real Gemini, Anthropic, and local guided model-rounds persist normalized u
           cachedContentTokenCount: 6,
         },
       },
-      expected: { promptTokens: 32, cachedTokens: 6 },
+      expectedMetric: { promptTokens: 32, cachedTokens: 6 },
+      expectedUsage: {
+        providerPromptTokens: 32,
+        providerCacheReadTokens: 6,
+        providerCacheWriteTokens: null,
+        providerOutputTokens: 5,
+        providerTotalTokens: 37,
+      },
     },
     {
       name: "anthropic",
@@ -86,7 +207,14 @@ test("real Gemini, Anthropic, and local guided model-rounds persist normalized u
           cache_read_input_tokens: 10,
         },
       },
-      expected: { promptTokens: 50, cachedTokens: 10 },
+      expectedMetric: { promptTokens: 50, cachedTokens: 10 },
+      expectedUsage: {
+        providerPromptTokens: 50,
+        providerCacheReadTokens: 10,
+        providerCacheWriteTokens: null,
+        providerOutputTokens: 5,
+        providerTotalTokens: null,
+      },
     },
     {
       name: "local",
@@ -96,7 +224,14 @@ test("real Gemini, Anthropic, and local guided model-rounds persist normalized u
         choices: [{ message: { role: "assistant", content: "ok" } }],
         usage: { prompt_tokens: 48, completion_tokens: 5, total_tokens: 53 },
       },
-      expected: { promptTokens: 48, cachedTokens: 0 },
+      expectedMetric: { promptTokens: 48, cachedTokens: 0 },
+      expectedUsage: {
+        providerPromptTokens: 48,
+        providerCacheReadTokens: null,
+        providerCacheWriteTokens: null,
+        providerOutputTokens: 5,
+        providerTotalTokens: 53,
+      },
     },
   ] as const;
 
@@ -111,14 +246,15 @@ test("real Gemini, Anthropic, and local guided model-rounds persist normalized u
       },
     });
 
-    await providerCase.run(request);
+    const result = await providerCase.run(request);
 
     expect(observations, providerCase.name).toEqual([1]);
+    expect(result.usage, providerCase.name).toMatchObject(providerCase.expectedUsage);
     expect(readPromptCacheMetrics({ butlerData }), providerCase.name).toEqual([
       expect.objectContaining({
         scope: "btcc-guided:butler/app-general",
         turnId: "turn-guided",
-        ...providerCase.expected,
+        ...providerCase.expectedMetric,
       }),
     ]);
   }

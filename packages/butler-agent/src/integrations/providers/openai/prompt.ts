@@ -78,9 +78,14 @@ export async function runOpenAIPromptWithUsage(
           promptTokens: stats.promptTokens,
           cachedTokens: stats.cachedTokens,
           totalTokens: stats.totalTokens,
-          outputTokens: stats.totalTokens === null || stats.promptTokens === null
+          outputTokens: stats.outputTokens ?? (stats.totalTokens === null || stats.promptTokens === null
             ? 0
-            : Math.max(0, stats.totalTokens - stats.promptTokens),
+            : Math.max(0, stats.totalTokens - stats.promptTokens)),
+          providerPromptTokens: stats.promptTokens,
+          providerCacheReadTokens: stats.providerCacheReadTokens ?? null,
+          providerCacheWriteTokens: stats.cacheWriteTokens,
+          providerOutputTokens: stats.outputTokens,
+          providerTotalTokens: stats.totalTokens,
         }
       : null,
   };

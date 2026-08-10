@@ -128,5 +128,10 @@ function usageReport(model: string, sample: ProviderUsageSample) {
     cachedTokens: sample.cachedTokens,
     totalTokens: sample.totalTokens,
     outputTokens: sample.outputTokens,
+    providerPromptTokens: sample.providerPromptTokens,
+    providerCacheReadTokens: sample.providerCacheReadTokens,
+    providerCacheWriteTokens: sample.providerCacheWriteTokens,
+    providerOutputTokens: sample.providerOutputTokens,
+    providerTotalTokens: sample.providerTotalTokens,
   };
 }

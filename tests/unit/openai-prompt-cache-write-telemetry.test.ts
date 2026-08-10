@@ -46,7 +46,9 @@ describe("OpenAI prompt cache write telemetry", () => {
     expect(extractPromptCacheStats(response)).toEqual({
       promptTokens: 2_400,
       cachedTokens: 1_152,
+      providerCacheReadTokens: 1_152,
       cacheWriteTokens: 1_024,
+      outputTokens: null,
       totalTokens: 2_520,
     });
     recordPromptCacheMetric(response, {
@@ -90,7 +92,9 @@ describe("OpenAI prompt cache write telemetry", () => {
     expect(extractPromptCacheStats(response)).toEqual({
       promptTokens: 800,
       cachedTokens: 256,
+      providerCacheReadTokens: 256,
       cacheWriteTokens: null,
+      outputTokens: null,
       totalTokens: 850,
     });
   });

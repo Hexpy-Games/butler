@@ -37,6 +37,7 @@ async function runPreparedTurn(
   request: BtccTurnRequest,
   dependencies: TurnFacadeDependencies,
 ): Promise<BtccTurnOutcome> {
+  const observationStartedAtMs = Date.now();
   const prepared = await dependencies.preparation.prepare(request);
   const admittedTurn = await dependencies.turns.findTurn(request.turnId);
   const progressDestination = admittedTurn?.progressDestination ??
@@ -65,6 +66,7 @@ async function runPreparedTurn(
         event: { kind: "turn.started" },
       });
     },
+    observationStartedAtMs,
   );
   const outcome: BtccTurnOutcome = {
     ...runtimeOutcome,

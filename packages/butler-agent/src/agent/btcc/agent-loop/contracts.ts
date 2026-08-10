@@ -64,6 +64,8 @@ export interface BtccAgentLoop {
       modelRef: string;
       result: import("../ports/model-round.ts").ModelRoundResult;
     }) => Promise<void>;
+    /** Public BTCC ingress timestamp used only for observation latency. */
+    observationStartedAtMs?: number;
   }): Promise<BtccAgentLoopResult>;
 }
 
