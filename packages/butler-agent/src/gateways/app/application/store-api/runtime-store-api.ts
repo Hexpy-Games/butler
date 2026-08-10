@@ -37,7 +37,7 @@ export interface AppStoreRuntimeApi {
   getUsageMonitor(options?: {
     sessionId?: string;
     sinceTs?: number | null;
-  }): UsageMonitorView;
+  }): Promise<UsageMonitorView>;
   syncNextAppTransportBatch(): boolean;
   waitForAppTransportProjection(): Promise<void>;
   latestEventCursor(): number;
@@ -103,8 +103,8 @@ export function createRuntimeStoreApi(
         raw_text_included: true,
       };
     },
-    getUsageMonitor(options = {}) {
-      return kernel.systemMonitor.getUsageMonitor(options);
+    async getUsageMonitor(options = {}) {
+      return await kernel.systemMonitor.getUsageMonitor(options);
     },
     syncNextAppTransportBatch() {
       return kernel.transportProjection.syncNextBatch();
