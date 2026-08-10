@@ -1,15 +1,16 @@
-# M1 Context Efficiency — T1 Baseline and Telemetry Report
+# M1 Context Efficiency — T1 Baseline and T2 Minimal Tool Surface Report
 
 Date: 2026-08-10
-Task: `T-M1-BASELINE-TELEMETRY`
+Tasks: `T-M1-BASELINE-TELEMETRY`, `T-M1-MINIMAL-TOOL-SURFACE`
 Work: `W-M1-CONTEXT-EFFICIENCY-20260810`
 Source revision: `65494154f6e9ddbfb20458bc67250c7d15b5d13d`
-Flag revision: `m1-t1-v1`
+Flag revisions: `m1-t1-v1`, `m1-t2-v1`
 
 ## Gate result
 
-**PASS — all four T1 pairs are reproducible and measurement-eligible.**
-T2–T5 have not started in this report phase.
+**PASS — all four T1 pairs are reproducible and measurement-eligible. T2 is
+implemented and measured, with its feature flag remaining default-off.**
+T3–T5 have not started in this report phase.
 
 The original pre-M1 landing run stopped at initial dispatch with the bounded
 error `database is locked`. A recovery run used a new detached worktree at the
@@ -127,12 +128,13 @@ metric recorder`. The post-run Electron smoke used the actual renderer,
 preload bridge, app gateway, native BTCC runtime, real provider, and delivered
 renderer path.
 
-Implementation is limited to T1 telemetry and its provider-nullability
-plumbing: a typed M1 recorder, ingress timestamp propagation, cohesive Guided
-Turn observation/route-event helpers, provider-reported token-class fields,
-fallback ineligibility handling, SQLite result normalization, and unit/real
-path tests. No tool-surface, replay, continuation/cache-prefix, or aggregation
-implementation was started.
+T1 implementation is limited to telemetry and provider-nullability plumbing: a
+typed M1 recorder, ingress timestamp propagation, cohesive Guided Turn
+observation/route-event helpers, provider-reported token-class fields, fallback
+ineligibility handling, SQLite result normalization, and unit/real path tests.
+T2 adds the default-off minimal carrier and its typed observation through the
+same production Guided Turn path. Replay, continuation/cache-prefix, and
+aggregation implementation has not started.
 
 ## Validation and review
 
@@ -159,6 +161,16 @@ implementation was started.
   M1 Work remains open for T2–T4. Derived index/views and final check are
   refreshed after lifecycle closeout.
 - Targeted ESLint: 0 errors.
+- T2 focused suite: 273/273 passed across nine files, including the real Guided
+  Turn route-fallback metric test and the native flag-on file-agent product
+  loop. `bun run typecheck`, `bun run lint:btcc-shape` (4 domains, 207 files),
+  targeted ESLint, and `git diff --check` passed.
+- The ordinary `bun run check` wrapper reached its repository-wide 301-second
+  timeout while the suite was still progressing. Running the same `check:run`
+  pipeline without that wrapper limit completed 2,541 pass / 1 unrelated
+  existing failure: the CLI reference still contains 102 documented commands
+  while the registry exposes 101. T2 does not change CLI docs or registry
+  files. Repository lint completed with 0 errors and the same 20 warnings.
 - Windows CI was excluded per the governing decision.
 - First independent gpt-5.6-sol high review: **changes required**. Findings
   were addressed: ingress timing now begins before preparation, metadata uses
@@ -184,6 +196,86 @@ claim. #142 was not merged and was not rerun. A four-way Hermes/OpenCode,
 pre-M1 Butler, and post-M1 Butler comparison is explicitly deferred until the
 full M1 work is complete.
 
+## T2 minimal tool surface
+
+### Product-path design and rollback
+
+- `BUTLER_M1_MINIMAL_TOOL_SURFACE` is read once at the immutable Guided policy
+  boundary immediately before the existing surface controller. It defaults
+  off. Removing the variable or setting it to a non-true value selects the
+  byte-identical legacy provider carrier without changing the executor,
+  provider adapter, or route authority.
+- Selection uses typed phase policy plus the canonical session
+  `WorkspaceReference`; prompt text is not inspected. Full typed authorization
+  remains available to the one real executor, while the fixed provider carrier
+  presents direct common schemas and the existing progressive discovery bridge.
+- The provider carrier is fixed for the phase. Dynamic App/native availability
+  changes local admission metadata only and does not rebuild provider schemas.
+  Route cursor changes continue through `ModelRouteState` and the existing
+  provider route port; the telemetry provider/model pair is derived together
+  from the active route candidate.
+- A full-access project carrier changed from 19,743 to 12,800 serialized schema
+  bytes (−35.17%, 14 model-facing tools). A full-access non-project carrier
+  changed from 16,105 to 7,519 bytes (−53.31%, 8 model-facing tools). Flag-off
+  schemas are byte-identical to the pre-T2 path.
+
+### Paired Butler measurements
+
+All rows use the frozen pre-M1 source/configuration/fixtures and
+`openai/gpt-5.6-sol` with low reasoning. Each T2 arm used a fresh isolated run
+root and workspace. Hermes/OpenCode were not run.
+
+| Arm | Fixed pre-M1 Butler | T2 flag-on Butler | Pair result |
+| --- | --- | --- | --- |
+| `direct-cold` | delivered; 1 request; 37,476 serialized bytes; 3,572 ms; provider prompt 7,154 / cache read 0 / total 7,181 | delivered and reload matched; 1 request; 28,336 bytes; 4,069 ms; provider prompt 5,540 / cache read 0 / total 5,564; first useful 3,353 ms; 0 tool calls / 0 failures | bytes −24.39%; requests unchanged; elapsed +13.91% |
+| `direct-warm` target | delivered; 1 request; 38,116 serialized bytes; 5,512 ms; provider prompt 7,371 / cache read 0 / total 7,404 | delivered and reload matched; 1 request; 28,979 bytes; 3,413 ms; provider prompt 5,764 / cache read 0 / total 5,797; first useful 2,041 ms; 0 tool calls / 0 failures | bytes −23.97%; requests unchanged; elapsed −38.08%; observed cache read remained 0 |
+| `current-web-cold` | delivered; 4 requests; 165,709 serialized bytes; 23,096 ms; provider prompt 32,880 / cache read 6,656 / total 33,383 | delivered, source expectation and reload matched; 3 requests; 103,688 bytes; 15,443 ms; provider prompt 21,230 / cache read 6,656 / total 21,618; first useful 3,477 ms; 3 tool calls / 0 failures | bytes −37.43%; requests −25.00%; elapsed −33.14% |
+| `landing-cold` | delivered; 24 attempted requests (15 completed and 9 failed transport attempts); 2,019,518 serialized bytes; 323,542 ms; provider prompt 213,541 / cache read 134,656 / total 222,377 across completed rounds | delivered and reload matched; 12 completed requests; 923,351 bytes; 481,642 ms; provider prompt 142,301 / cache read 48,128 / total 151,074; first useful 11,096 ms; 15 tool calls / 0 failures | bytes −54.28%; attempted requests −50.00%; elapsed +48.87% |
+
+Across the four arms, serialized request bytes changed from 2,260,819 to
+1,084,354 (−52.04%), requests from 30 to 17 (−43.33%), and elapsed time from
+355,722 ms to 504,567 ms (+41.84%). Provider prompt totals changed from 260,946
+to 174,835 (−33.00%), provider total tokens from 270,345 to 184,053 (−31.92%),
+and cache reads from 141,312 to 54,784 (−61.23%). Provider output tokens remain
+nullable and are not treated as zero.
+
+The raw-input and request-count hypotheses pass for this slice, but the elapsed
+hypothesis fails because the landing arm regressed. T2 is therefore complete as
+a default-off implementation slice, not accepted for default-on. T3/T4 may
+address replay and continuation overhead, but they cannot retroactively turn
+this elapsed result into a pass; the combined four-arm measurement must pass
+before any final default-on decision.
+
+### T2 quality, privacy, and operational evidence
+
+- All four final observations delivered and matched after reload. The web arm
+  passed its source expectation. The landing arm changed the expected HTML/CSS
+  artifacts, passed its build and preview checks, and used the actual project
+  workspace/native tool path. Its Work remained open, matching the fixed
+  pre-M1 baseline state; the elapsed regression remains explicitly recorded.
+- Applied landing effects had unique receipt and idempotency identities. No
+  duplicate effects, stalls, lost corrections, workspace-authority violations,
+  or tool failures were observed.
+- The real native file agent-loop smoke discovers, reads, edits, rereads, and
+  delivers workspace files with the flag on. It uses no shell or Python
+  fallback and shares the same executor and `WorkspaceReference` as direct
+  tools and progressive calls.
+- `m1_tool_surface_admission` records only the approved typed dimensions:
+  phase/policy/authority digests, provider/model, stable schema hash, dynamic
+  availability hash, flag revision, and nullable count/byte/token estimates.
+  It measures the actual model-facing provider carrier. Invalid identifiers,
+  paths, credential-like values, prompts, transcripts, URLs, queries, and raw
+  tool payloads are not persisted.
+- The independent gpt-5.6-sol high review first required a real provider-carrier
+  reduction, fixed-schema dynamic admission, actual carrier telemetry, and
+  closeout evidence. A progressive-only carrier was rejected because it added
+  web requests and allowed a landing run to finish without changing expected
+  files. The corrected hybrid carrier retained direct common typed tools while
+  keeping less-common authorized capabilities behind the existing progressive
+  bridge. A follow-up review found and corrected provider/model telemetry drift
+  after a route cursor fallback; the production Guided Turn regression now
+  covers an active provider different from the original selection.
+
 ## Recovery integrity evidence
 
 - Exact detached source: `65494154f6e9ddbfb20458bc67250c7d15b5d13d`;
@@ -208,7 +300,10 @@ full M1 work is complete.
 ## Decision
 
 The four-arm T1 evidence is complete and passes M1-SC01, M1-SC05, and M1-SC06.
-The recovered baseline integrity is independently approved. T2 may begin only
-after the recovery phase commit and Ledger attempt/Task/views/check closeout.
-This report authorizes no optimization success claim, default-on decision,
-push, PR, or merge.
+The recovered baseline integrity is independently approved. T2 implementation,
+measurement, rollback, and whole-Spec review are complete and approved for its
+phase commit only. It remains default-off because the elapsed hypothesis failed.
+After that commit, the exact revision must be recorded through the Project
+Ledger CLI and the T2 Attempt/Task/views/check closeout must pass before T3
+begins. This report authorizes no combined M1 optimization success claim,
+default-on decision, push, PR, or merge.

@@ -13,6 +13,7 @@ import { TOOL_CAPABILITY_METADATA } from "../../packages/butler-agent/src/agent/
 import { PROJECT_LEDGER_MUTATION_TOOL_NAMES } from "../../packages/butler-agent/src/agent/tools/project-ledger/mutation-tools.ts";
 import { canBridgeNativeTool } from "../../packages/butler-agent/src/agent/tools/tool-bridge/scope.ts";
 import { selectInitialToolsFromSurfaceController } from "../../packages/butler-agent/src/agent/tools/tool-surface-selection.ts";
+import { createWorkspaceReference } from "../../packages/butler-agent/src/agent/session-workspaces/index.ts";
 
 function createStructuredInitialState(): ToolSurfaceControllerState {
   return createInitialToolSurfaceControllerState({
@@ -164,6 +165,30 @@ test("initial surface selection does not infer Project Ledger tools from message
   expect(selection.toolNames).not.toContain("inspect_project_status");
   expect(selection.toolNames).not.toContain("query_project_work");
   expect(selection.toolNames).not.toContain("render_project_dashboard");
+});
+
+test("initial surface selection accepts canonical workspace state without prompt data", () => {
+  const selection = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "private prompt text must not select tools",
+    workspaceReference: createWorkspaceReference("/private/workspace"),
+    sessionMetadata: {
+      runtimePolicy: {
+        toolSurfaceMode: "fixed",
+        requiredNativeToolProfiles: ["workspace"],
+      },
+    },
+  });
+
+  expect(selection.state.context.sessionMetadata).toMatchObject({
+    workspaceReferenceState: "available",
+    runtimePolicy: {
+      toolSurfaceMode: "fixed",
+      requiredNativeToolProfiles: ["workspace"],
+    },
+  });
+  expect(JSON.stringify(selection.state)).not.toContain("/private/workspace");
+  expect(JSON.stringify(selection.state)).not.toContain("private prompt text");
 });
 
 test("initial surface selection preserves tracking closeout metadata for lifecycle tools", () => {

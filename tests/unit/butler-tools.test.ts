@@ -3352,6 +3352,30 @@ test("tool capability discovery marks tools callable when the current profile ex
   }));
 });
 
+test("dynamic local admission changes callable status without rebuilding registered tool schemas", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+    currentToolNames: ["list_tool_capabilities", "read_file"],
+  });
+
+  const result = await execute({
+    name: "list_tool_capabilities",
+    args: { category: "file", include_disabled: false },
+    rawArguments: "{}",
+  }) as {
+    capabilities: Array<{ name: string; current_turn_callable: boolean | null }>;
+  };
+  const read = result.capabilities.find((capability) => capability.name === "read_file");
+  const write = result.capabilities.find((capability) => capability.name === "write_file");
+
+  expect(read?.current_turn_callable).toBe(true);
+  expect(write?.current_turn_callable).toBe(false);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "write_file")?.parameters.properties)
+    .toHaveProperty("content");
+});
+
 test("tool capability discovery supports file category and execution aliases", async () => {
   const execute = createButlerToolExecutor({
     butlerHome: root,

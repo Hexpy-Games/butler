@@ -16,6 +16,25 @@ export type ToolSurfaceToolName = string;
 
 export type ToolSurfaceSessionMode = "interactive" | "worker" | "automation" | "background";
 
+/**
+ * The immutable authority snapshot used for a phase-boundary selection.
+ *
+ * This deliberately contains policy facts only. It has no prompt, message,
+ * semantic label, or workspace path; the live WorkspaceReference is carried
+ * separately by the selection input.
+ */
+export interface ToolSurfacePhasePolicy {
+  readonly phaseId: string;
+  readonly policyRevision: string;
+  readonly role: string;
+  readonly accessMode: "full_access" | "ask_first" | "read_only";
+  readonly trackingMode: "ledger" | "local" | "none";
+  readonly requiredNativeToolProfiles: readonly string[];
+  readonly requiredNativeTools: readonly ToolSurfaceToolName[];
+  readonly toolSurfaceMode: "fixed";
+  readonly projectId?: string;
+}
+
 export type ToolSurfaceProviderCapabilities = Readonly<Record<string, unknown>> & {
   supportsToolCalls?: boolean;
   supportsStreaming?: boolean;
