@@ -27,6 +27,11 @@ import { estimateContextTokensForModel } from
   "../../packages/butler-agent/src/agent/context/budget.ts";
 import { resolveGuidedCompactReplayBudget } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-compact-replay-budget.ts";
+import {
+  M1_COMPACT_REPLAY_TOOL_DEFINITIONS,
+  withM1CompactReplayOperationCarrier,
+} from
+  "../../packages/butler-agent/src/agent/tools/m1-compact-replay.ts";
 
 const echoTool: BtccAgentLoopToolDefinition = {
   name: "echo",
@@ -494,6 +499,164 @@ test("T3 malformed carrier batches return only the latest coherent rejection bat
   expect(toolMessages(requests[2])).toEqual([]);
 });
 
+test("T3 continuity-only carrier is rejected before a corrected operation executes once", async () => {
+  const sourceTool = { ...echoTool, name: "web_search" };
+  const baseContinuityTool = M1_COMPACT_REPLAY_TOOL_DEFINITIONS.find((tool) =>
+    tool.name === "replace_phase_continuity")!;
+  const [continuityTool] = withM1CompactReplayOperationCarrier([
+    baseContinuityTool,
+    sourceTool as typeof baseContinuityTool,
+  ]);
+  const privateMarker = "CONTINUITY_ONLY_PRIVATE_MARKER_91d8";
+  const { port, requests } = scriptedModelRound([
+    response({ toolCalls: [
+      call("continuity-only", "replace_phase_continuity", {
+        objective_state: privateMarker,
+        integrated_decisions: [],
+        unresolved_questions: [],
+        next_batch_purpose: "Search after a valid carrier.",
+        public_activity: "Preparing the search.",
+      }),
+    ] }),
+    (request) => {
+      const correction = request.messages.map((message) => message.content)
+        .join("\n");
+      expect(correction).toContain("compact_replay_operation_required");
+      expect(correction).toContain(
+        '"schema_path":"$.toolCalls[0].arguments.operations"',
+      );
+      expect(correction).toContain('"reason":"operation_required"');
+      expect(correction).toContain(
+        '"name":"objective_state","type":"string"',
+      );
+      expect(correction).not.toContain(privateMarker);
+      expect(request.instructions).toContain(
+        "required operations array",
+      );
+      expect(correction).toContain(
+        "at least one requested operation",
+      );
+      expect(correction).toContain(
+        "Never omit operations or emit separate top-level operation calls",
+      );
+      return response({ toolCalls: [
+        call("corrected-continuity", "replace_phase_continuity", {
+          objective_state: "Search with the corrected carrier.",
+          integrated_decisions: [],
+          unresolved_questions: [],
+          next_batch_purpose: "Execute the nested search once.",
+          public_activity: "Searching the web.",
+          operations: [{
+            operation_id: "corrected-source",
+            name: "web_search",
+            arguments: { message: "safe query" },
+          }],
+        }),
+      ] });
+    },
+    response({ text: "corrected carrier completed" }),
+  ]);
+  const dispatched: string[] = [];
+
+  const result = await runBtccAgentLoop({
+    prompt: "Search with a coherent compact operation carrier.",
+    model: "openai/gpt-5.6-sol",
+    instructions: "Keep the response concise.",
+    tools: [continuityTool!, sourceTool],
+    compactReplay: { enabled: true, initialPhaseContinuity: null },
+    maxIterations: 4,
+    modelRound: port,
+    executeTool: async (toolCall) => {
+      dispatched.push(toolCall.name);
+      if (toolCall.name === "replace_phase_continuity") {
+        return createBtccToolExecutionEnvelope(
+          { ok: true },
+          { kind: "phase_continuity", value: { corrected: true } },
+        );
+      }
+      return createBtccToolExecutionEnvelope(
+        { ok: true, result: "bounded" },
+        {
+          kind: "source",
+          identity: {
+            kind: "direct",
+            result_ref: `guided-result-${"e".repeat(64)}`,
+            revision: null,
+            tool_name: toolCall.name,
+            status: "completed",
+            result_sha256: null,
+            outcome: "succeeded",
+            completeness: "complete",
+          },
+        },
+      );
+    },
+  });
+
+  expect(result.finalText).toBe("corrected carrier completed");
+  expect(requests).toHaveLength(3);
+  expect(dispatched).toEqual(["replace_phase_continuity", "web_search"]);
+  expect(toolMessages(requests[1])).toEqual([]);
+});
+
+test("T3 mixed atomic and top-level operations reject the whole carrier", async () => {
+  const sourceTool = { ...echoTool, name: "web_search" };
+  const baseContinuityTool = M1_COMPACT_REPLAY_TOOL_DEFINITIONS.find((tool) =>
+    tool.name === "replace_phase_continuity")!;
+  const [continuityTool] = withM1CompactReplayOperationCarrier([
+    baseContinuityTool,
+    sourceTool as typeof baseContinuityTool,
+  ]);
+  const marker = "MIXED_CARRIER_PRIVATE_MARKER_f890";
+  const { port } = scriptedModelRound([
+    response({ toolCalls: [
+      call("mixed-carrier", "replace_phase_continuity", {
+        objective_state: "Use one atomic carrier.",
+        integrated_decisions: [],
+        unresolved_questions: [],
+        next_batch_purpose: "Reject the mixed carrier.",
+        public_activity: "Correcting the carrier.",
+        operations: [{
+          operation_id: "nested-source",
+          name: "web_search",
+          arguments: { message: marker },
+        }],
+      }),
+      call("separate-source", "web_search", { message: marker }),
+    ] }),
+    (request) => {
+      const correction = request.messages.map((message) => message.content)
+        .join("\n");
+      expect(correction).toContain("compact_replay_operation_carrier_mixed");
+      expect(correction).toContain('"schema_path":"$.toolCalls[1]"');
+      expect(correction).toContain('"reason":"operation_carrier_mixed"');
+      expect(correction).not.toContain(marker);
+      return response({ text: "mixed carrier rejected" });
+    },
+  ]);
+  const dispatched: string[] = [];
+
+  const result = await runBtccAgentLoop({
+    prompt: "Reject mixed compact operation carriers.",
+    model: "openai/gpt-5.6-sol",
+    instructions: "Keep the response concise.",
+    tools: [continuityTool!, sourceTool],
+    compactReplay: { enabled: true, initialPhaseContinuity: null },
+    maxIterations: 3,
+    modelRound: port,
+    executeTool: async (toolCall) => {
+      dispatched.push(toolCall.name);
+      return createBtccToolExecutionEnvelope(
+        { ok: true },
+        { kind: "phase_continuity", value: { corrected: true } },
+      );
+    },
+  });
+
+  expect(result.finalText).toBe("mixed carrier rejected");
+  expect(dispatched).toEqual([]);
+});
+
 test("T3 compact replay blocks the carrier remainder until continuity rewrites", async () => {
   const continuityTool = { ...echoTool, name: "replace_phase_continuity" };
   const writeFileTool = { ...echoTool, name: "write_file" };
@@ -848,7 +1011,7 @@ test("BTCC exposes assistant text before executing selected tools", async () => 
     "tool:echo",
   ]);
   expect(result.messages.some((message) =>
-    message.role === "assistant" && message.content === "I will run the echo check now."
+    message.role === "assistant" && message.content === "I will run the echo check now.",
   )).toBe(true);
 });
 

@@ -8,6 +8,13 @@ import type {
   ModelRoundToolCall,
 } from "../ports/model-round.ts";
 import { parseCompactReplayPhaseContinuity } from "./phase-continuity.ts";
+import {
+  boundedCompactReplayIdentifier,
+  compactReplayArgumentPropertyShape,
+  compactReplayCarrierDiagnostic,
+  type CompactReplayCarrierDiagnostic,
+  type CompactReplayCarrierRejectionReason,
+} from "./carrier-diagnostic.ts";
 
 export const COMPACT_REPLAY_PHASE_CONTINUITY_REQUIRED_FIRST =
   "compact_replay_phase_continuity_required_first" as const;
@@ -15,37 +22,18 @@ export const COMPACT_REPLAY_PHASE_CONTINUITY_SCHEMA_INVALID =
   "compact_replay_phase_continuity_schema_invalid" as const;
 export const COMPACT_REPLAY_PHASE_CONTINUITY_REWRITE_FAILED =
   "compact_replay_phase_continuity_rewrite_failed" as const;
-
-export type CompactReplayCarrierRejectionReason =
-  | "phase_continuity_required_first"
-  | "phase_continuity_schema_invalid"
-  | "phase_continuity_rewrite_failed";
-
-export type CompactReplayCarrierPropertyType =
-  | "array"
-  | "boolean"
-  | "null"
-  | "number"
-  | "object"
-  | "string"
-  | "unknown";
-
-export type CompactReplayCarrierPropertyShape = {
-  name: string;
-  type: CompactReplayCarrierPropertyType;
-};
-
-export type CompactReplayCarrierDiagnostic = {
-  schemaPath: string;
-  reason: CompactReplayCarrierRejectionReason;
-  properties: CompactReplayCarrierPropertyShape[];
-};
+export const COMPACT_REPLAY_OPERATION_REQUIRED =
+  "compact_replay_operation_required" as const;
+export const COMPACT_REPLAY_OPERATION_CARRIER_MIXED =
+  "compact_replay_operation_carrier_mixed" as const;
 
 export type CompactReplayToolBatchRejection = CompactReplayCarrierDiagnostic & {
   code:
     | typeof COMPACT_REPLAY_PHASE_CONTINUITY_REQUIRED_FIRST
     | typeof COMPACT_REPLAY_PHASE_CONTINUITY_SCHEMA_INVALID
-    | typeof COMPACT_REPLAY_PHASE_CONTINUITY_REWRITE_FAILED;
+    | typeof COMPACT_REPLAY_PHASE_CONTINUITY_REWRITE_FAILED
+    | typeof COMPACT_REPLAY_OPERATION_REQUIRED
+    | typeof COMPACT_REPLAY_OPERATION_CARRIER_MIXED;
   summary: string;
 };
 
@@ -75,6 +63,31 @@ export function compactReplayToolBatchRejection(input: {
       summary: "Carrier rejected before execution: replace_phase_continuity must be the first call and appear exactly once.",
     };
   }
+  const embeddedOperations = input.calls[0]?.arguments?.operations;
+  if (input.calls.length > 1 && Array.isArray(embeddedOperations) &&
+    embeddedOperations.length > 0) {
+    return {
+      code: COMPACT_REPLAY_OPERATION_CARRIER_MIXED,
+      schemaPath: "$.toolCalls[1]",
+      reason: "operation_carrier_mixed",
+      properties: compactReplayArgumentPropertyShape(
+        input.calls[0]?.arguments ?? {},
+      ),
+      summary: "Carrier rejected before execution: nested operations cannot be mixed with separate top-level operation calls.",
+    };
+  }
+  if (input.calls.length === 1 &&
+    (!Array.isArray(embeddedOperations) || embeddedOperations.length === 0)) {
+    return {
+      code: COMPACT_REPLAY_OPERATION_REQUIRED,
+      schemaPath: "$.toolCalls[0].arguments.operations",
+      reason: "operation_required",
+      properties: compactReplayArgumentPropertyShape(
+        input.calls[0]?.arguments ?? {},
+      ),
+      summary: "Carrier rejected before execution: replace_phase_continuity requires at least one nested operation in its operations array.",
+    };
+  }
   if (input.calls[0].validationError) {
     return {
       code: COMPACT_REPLAY_PHASE_CONTINUITY_SCHEMA_INVALID,
@@ -86,6 +99,7 @@ export function compactReplayToolBatchRejection(input: {
       summary: "Carrier rejected before execution: replace_phase_continuity arguments do not match its schema.",
     };
   }
+  if (input.calls.length === 1) return null;
   return null;
 }
 
@@ -166,7 +180,7 @@ function rejectedCarrierToolCall(
 ): ModelRoundToolCall {
   return {
     id: `compact-replay-rejected-${index}`,
-    name: boundedIdentifier(call.name, `invalid_tool_${index}`),
+    name: boundedCompactReplayIdentifier(call.name, `invalid_tool_${index}`),
     arguments: {
       carrier_rejection: {
         schema_path: rejection.schemaPath,
@@ -178,109 +192,57 @@ function rejectedCarrierToolCall(
   };
 }
 
-export function compactReplayArgumentPropertyShape(
-  value: Record<string, unknown>,
-): CompactReplayCarrierPropertyShape[] {
-  return Object.keys(value).sort().slice(0, 24).map((name, index) => ({
-    name: boundedIdentifier(name, `property_${index}`, 80),
-    type: argumentValueType(value[name]),
-  }));
-}
-
-export function compactReplayCarrierDiagnostic(
-  value: Record<string, unknown> | undefined,
-): CompactReplayCarrierDiagnostic | null {
-  if (!value || Object.keys(value).length !== 1) return null;
-  const diagnostic = record(value.carrier_rejection);
-  if (!diagnostic || Object.keys(diagnostic).some((key) =>
-    !["schema_path", "reason", "properties"].includes(key))) return null;
-  if (!isRejectionReason(diagnostic.reason) ||
-    diagnostic.schema_path !== schemaPathForReason(diagnostic.reason) ||
-    !Array.isArray(diagnostic.properties) || diagnostic.properties.length > 24) {
-    return null;
-  }
-  const properties = diagnostic.properties.flatMap((property) => {
-    const shape = record(property);
-    return shape && Object.keys(shape).length === 2 &&
-        typeof shape.name === "string" && isBoundedIdentifier(shape.name, 80) &&
-        isPropertyType(shape.type)
-      ? [{ name: shape.name, type: shape.type }]
-      : [];
-  });
-  if (properties.length !== diagnostic.properties.length) return null;
-  return {
-    schemaPath: diagnostic.schema_path,
-    reason: diagnostic.reason,
-    properties,
-  };
-}
-
 export function compactReplayRejectionForArguments(
   rejection: CompactReplayToolBatchRejection,
   arguments_: Record<string, unknown>,
 ): CompactReplayToolBatchRejection {
   const diagnostic = compactReplayCarrierDiagnostic(arguments_);
+  if (diagnostic) {
+    return {
+      ...rejection,
+      ...diagnostic,
+      code: rejectionCodeForReason(diagnostic.reason),
+      summary: rejectionSummaryForReason(diagnostic.reason),
+    };
+  }
   return {
     ...rejection,
-    ...(diagnostic ?? {
-      properties: compactReplayArgumentPropertyShape(arguments_),
-    }),
+    properties: compactReplayArgumentPropertyShape(arguments_),
   };
 }
 
-function argumentValueType(value: unknown): CompactReplayCarrierPropertyType {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
-  const type = typeof value;
-  if (type === "boolean" || type === "number" || type === "string") {
-    return type;
-  }
-  if (type === "object") return "object";
-  return "unknown";
-}
-
-function schemaPathForReason(reason: CompactReplayCarrierRejectionReason): string {
+function rejectionCodeForReason(
+  reason: CompactReplayCarrierRejectionReason,
+): CompactReplayToolBatchRejection["code"] {
   if (reason === "phase_continuity_required_first") {
-    return "$.toolCalls[0].name";
+    return COMPACT_REPLAY_PHASE_CONTINUITY_REQUIRED_FIRST;
   }
   if (reason === "phase_continuity_schema_invalid") {
-    return "$.toolCalls[0].arguments";
+    return COMPACT_REPLAY_PHASE_CONTINUITY_SCHEMA_INVALID;
   }
-  return "$.toolCalls[0]";
+  if (reason === "phase_continuity_rewrite_failed") {
+    return COMPACT_REPLAY_PHASE_CONTINUITY_REWRITE_FAILED;
+  }
+  if (reason === "operation_carrier_mixed") {
+    return COMPACT_REPLAY_OPERATION_CARRIER_MIXED;
+  }
+  return COMPACT_REPLAY_OPERATION_REQUIRED;
 }
 
-function isRejectionReason(
-  value: unknown,
-): value is CompactReplayCarrierRejectionReason {
-  return value === "phase_continuity_required_first" ||
-    value === "phase_continuity_schema_invalid" ||
-    value === "phase_continuity_rewrite_failed";
-}
-
-function isPropertyType(
-  value: unknown,
-): value is CompactReplayCarrierPropertyType {
-  return value === "array" || value === "boolean" || value === "null" ||
-    value === "number" || value === "object" || value === "string" ||
-    value === "unknown";
-}
-
-function isBoundedIdentifier(value: string, maxLength: number): boolean {
-  return value.length > 0 && value.length <= maxLength &&
-    /^[A-Za-z0-9_.:-]+$/u.test(value);
-}
-
-function record(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
-function boundedIdentifier(
-  value: string,
-  fallback: string,
-  maxLength = 120,
+function rejectionSummaryForReason(
+  reason: CompactReplayCarrierRejectionReason,
 ): string {
-  const bounded = value.slice(0, maxLength).replace(/[^A-Za-z0-9_.:-]/gu, "_");
-  return bounded || fallback;
+  if (reason === "phase_continuity_required_first") {
+    return "Carrier rejected before execution: replace_phase_continuity must be the only top-level call.";
+  }
+  if (reason === "phase_continuity_schema_invalid") {
+    return "Carrier rejected before execution: replace_phase_continuity arguments do not match its schema.";
+  }
+  if (reason === "phase_continuity_rewrite_failed") {
+    return "Carrier rejected before remainder execution: replace_phase_continuity did not complete its rewrite.";
+  }
+  if (reason === "operation_carrier_mixed") {
+    return "Carrier rejected before execution: nested operations cannot be mixed with separate top-level operation calls.";
+  }
+  return "Carrier rejected before execution: replace_phase_continuity requires at least one nested operation in its operations array.";
 }

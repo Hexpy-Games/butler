@@ -13,7 +13,10 @@ import type { FunctionToolDefinition } from
   "../../../integrations/providers/runtime-contracts.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from "./durable-work-tools.ts";
 import { guidedToolDefinition } from "./guided-tool-definition.ts";
-import { M1_COMPACT_REPLAY_TOOL_DEFINITIONS } from
+import {
+  M1_COMPACT_REPLAY_TOOL_DEFINITIONS,
+  withM1CompactReplayOperationCarrier,
+} from
   "../../tools/m1-compact-replay.ts";
 import { GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES } from
   "./guided-project-ledger-effect.ts";
@@ -124,13 +127,16 @@ export function finalizeGuidedToolSurface(input: {
     ...(policy.trackingMode === "none" ? [] : DURABLE_WORK_TOOL_DEFINITIONS),
     ...(input.compactReplayEnabled ? M1_COMPACT_REPLAY_TOOL_DEFINITIONS : []),
   ];
+  const providerTools = visibleToolDefinitions(
+    authorizedTools,
+    policy,
+    minimal ? "progressive" : "expanded",
+  );
   return {
     authorizedTools,
-    providerTools: visibleToolDefinitions(
-      authorizedTools,
-      policy,
-      minimal ? "progressive" : "expanded",
-    ),
+    providerTools: input.compactReplayEnabled
+      ? withM1CompactReplayOperationCarrier(providerTools)
+      : providerTools,
     minimalProviderCarrier: minimal,
   };
 }

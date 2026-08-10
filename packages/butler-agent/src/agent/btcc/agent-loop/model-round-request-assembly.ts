@@ -11,6 +11,8 @@ import { assembleBtccCompactReplayMessages } from
   "./compact-replay-messages.ts";
 import { resolveGuidedCompactReplayBudget } from
   "./guided-compact-replay-budget.ts";
+import { M1_COMPACT_REPLAY_OPERATION_CARRIER_INSTRUCTION } from
+  "../../tools/m1-compact-replay.ts";
 
 const COMPACT_REPLAY_ASSEMBLY = "__butler_btcc_compact_replay" as const;
 
@@ -44,10 +46,13 @@ export function assembleBtccModelRoundRequest(input: {
         toolResults: input.toolResults,
       }
     : undefined;
+  const instructions = metadata
+    ? appendCompactReplayCarrierInstruction(input.instructions)
+    : input.instructions;
   const messages = metadata
     ? compactMessagesForModel(metadata, {
         model: input.modelRef,
-        instructions: input.instructions,
+        instructions,
         tools: input.tools,
       })
     : [...input.messages];
@@ -55,7 +60,7 @@ export function assembleBtccModelRoundRequest(input: {
     roundId: input.requestId,
     model: input.modelRef,
     messages,
-    instructions: input.instructions,
+    instructions,
     tools: input.tools,
     toolChoice: input.toolChoice,
     reasoningEffort: loop.reasoningEffort,
@@ -72,6 +77,14 @@ export function assembleBtccModelRoundRequest(input: {
     onProviderResponseIdentity: loop.onProviderResponseIdentity,
     ...(metadata ? { [COMPACT_REPLAY_ASSEMBLY]: metadata } : {}),
   };
+}
+
+function appendCompactReplayCarrierInstruction(
+  instructions: string | undefined,
+): string {
+  return instructions
+    ? `${instructions}\n${M1_COMPACT_REPLAY_OPERATION_CARRIER_INSTRUCTION}`
+    : M1_COMPACT_REPLAY_OPERATION_CARRIER_INSTRUCTION;
 }
 
 /** Reassembles compact replay after the route has selected its actual model. */

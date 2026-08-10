@@ -8,6 +8,8 @@ import type {
   CompactReplayCarrierPropertyShape,
   CompactReplayCarrierRejectionReason,
 } from "../compact-replay/index.ts";
+import { M1_COMPACT_REPLAY_OPERATION_CARRIER_INSTRUCTION } from
+  "../../tools/m1-compact-replay.ts";
 
 export type BtccCompactReplayIdentity = {
   kind: "work" | "direct";
@@ -254,6 +256,7 @@ function renderProjection(input: {
     "Older operation identity index:",
     JSON.stringify(dedupeIdentities(input.older)),
     "Use read_operation_results for an older exact view. Never rerun its source operation.",
+    M1_COMPACT_REPLAY_OPERATION_CARRIER_INSTRUCTION,
   ].join("\n");
 }
 

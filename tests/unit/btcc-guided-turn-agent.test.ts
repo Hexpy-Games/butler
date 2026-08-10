@@ -103,13 +103,22 @@ function toolCall(
   };
 }
 
-function continuityCall(id: string, nextBatchPurpose: string) {
+function compactCarrierCall(
+  id: string,
+  nextBatchPurpose: string,
+  operations: Array<NonNullable<ModelRoundResult["toolCalls"]>[number]>,
+) {
   return toolCall(id, "replace_phase_continuity", {
     objective_state: "Preserve exact durable facts across restart.",
     integrated_decisions: ["Use result references instead of rerunning reads."],
     unresolved_questions: [],
     next_batch_purpose: nextBatchPurpose,
     public_activity: "Restoring durable evidence.",
+    operations: operations.map((operation) => ({
+      operation_id: operation.id,
+      name: operation.name,
+      arguments: operation.arguments,
+    })),
   });
 }
 
@@ -175,7 +184,12 @@ test("T3 compact replay flag is default-off and rollback restores the legacy con
     label: string,
     flag?: string,
     minimalFlag?: string,
-  ): Promise<{ prompt: string; tools: string; content: string }> => {
+  ): Promise<{
+    prompt: string;
+    tools: string;
+    instructions: string;
+    content: string;
+  }> => {
     const fixture = createFixture(label);
     try {
       if (flag === undefined) delete process.env.BUTLER_M1_COMPACT_REPLAY;
@@ -185,6 +199,7 @@ test("T3 compact replay flag is default-off and rollback restores the legacy con
       } else process.env.BUTLER_M1_MINIMAL_TOOL_SURFACE = minimalFlag;
       let prompt = "";
       let tools = "";
+      let instructions = "";
       const turn = turnRecord("/tmp/m1-t3-rollback-workspace", {
         turnId: `${label}-turn`,
       });
@@ -199,6 +214,7 @@ test("T3 compact replay flag is default-off and rollback restores the legacy con
         async runRound(request) {
           prompt = request.messages.map((message) => message.content).join("\n");
           tools = JSON.stringify(request.tools);
+          instructions = request.instructions ?? "";
           return { text: "확인했습니다.", toolCalls: [] };
         },
       });
@@ -206,7 +222,7 @@ test("T3 compact replay flag is default-off and rollback restores the legacy con
         turn,
         signal: new AbortController().signal,
       });
-      return { prompt, tools, content: result.content };
+      return { prompt, tools, instructions, content: result.content };
     } finally {
       fixture.close();
     }
@@ -230,8 +246,12 @@ test("T3 compact replay flag is default-off and rollback restores the legacy con
     expect(defaultPrompt.prompt).toContain("## Previously recorded tool calls for this turn");
     expect(defaultPrompt.prompt).not.toContain("## Canonical compact replay for this phase");
     expect(compactPrompt.prompt).toContain("## Canonical compact replay for this phase");
+    expect(compactPrompt.instructions).toContain(
+      "required operations array",
+    );
     expect(rollbackPrompt.prompt).toBe(defaultPrompt.prompt);
     expect(rollbackPrompt.tools).toBe(defaultPrompt.tools);
+    expect(rollbackPrompt.instructions).toBe(defaultPrompt.instructions);
     expect(rollbackPrompt.content).toBe(defaultPrompt.content);
     expect(minimalRollback).toEqual(minimalDefault);
   } finally {
@@ -256,14 +276,13 @@ test("T3 production Guided Turn reuses a completed operation without duplicate d
         modelCalls += 1;
         if (modelCalls <= 2) {
           return toolResponse([
-            toolCall(`continuity-${modelCalls}`, "replace_phase_continuity", {
-              objective_state: "Reuse the completed read safely.",
-              integrated_decisions: [],
-              unresolved_questions: [],
-              next_batch_purpose: "Read the existing fact once.",
-              public_activity: "Checking the saved fact.",
-            }),
-            toolCall("same-read-operation", "read_file", { path: "fact.txt" }),
+            compactCarrierCall(
+              `continuity-${modelCalls}`,
+              "Read the existing fact once.",
+              [toolCall("same-read-operation", "read_file", {
+                path: "fact.txt",
+              })],
+            ),
           ]);
         }
         expect(messagesWithToolResults(request)).toHaveLength(0);
@@ -329,8 +348,7 @@ test("T3 restart resumes the same in-flight Turn with PhaseContinuity and exact 
         async runRound(request) {
           setupRound += 1;
           if (setupRound === 1) {
-            return toolResponse([
-              continuityCall("restart-continuity-open", "Open the durable Work."),
+            const operations = [
               toolCall("restart-plan", "replace_work_plan", {
                 start_new: true,
                 objective: "Keep six durable facts available across restart.",
@@ -341,16 +359,19 @@ test("T3 restart resumes the same in-flight Turn with PhaseContinuity and exact 
                 toolCall(`restart-read-${index}`, "read_file", {
                   path: `fact-${index}.txt`,
                 })),
+            ];
+            return toolResponse([
+              compactCarrierCall(
+                "restart-continuity-open",
+                "Open the durable Work.",
+                operations,
+              ),
             ]);
           }
           if (setupRound === 2) {
             const work = await stores.durableWork.loadContext(setupScope);
             const oldest = work!.work.resultRefs[0]!;
-            return toolResponse([
-              continuityCall(
-                "restart-continuity-bound",
-                "Select two distinct exact views before restart.",
-              ),
+            const operations = [
               toolCall("restart-invalid-exact-read", "read_operation_results", {
                 reads: [{
                   kind: "work",
@@ -389,6 +410,13 @@ test("T3 restart resumes the same in-flight Turn with PhaseContinuity and exact 
                   },
                 ],
               }),
+            ];
+            return toolResponse([
+              compactCarrierCall(
+                "restart-continuity-bound",
+                "Select two distinct exact views before restart.",
+                operations,
+              ),
             ]);
           }
           const compactRequest = request.messages.map((message) => message.content)
@@ -1076,7 +1104,6 @@ test("Guided agent leaves web query planning to the selected model", async () =>
     writeFileSync(join(fixture.root, "butler.config.json"), JSON.stringify({
       webSearch: { provider: "mock" },
     }));
-    let searchResult: Record<string, any> | undefined;
     const turnId = "guided-model-owned-search";
     const agent = fixture.agent(scriptedModelRound([
       toolResponse([toolCall("search-1", "web_search", {
@@ -1089,7 +1116,7 @@ test("Guided agent leaves web query planning to the selected model", async () =>
       turn: turnRecord(fixture.root, { turnId }),
       signal: new AbortController().signal,
     });
-    searchResult = fixture.stores.guidedToolJournal.list(turnId)[0]?.result as
+    const searchResult = fixture.stores.guidedToolJournal.list(turnId)[0]?.result as
       Record<string, any> | undefined;
 
     expect(searchResult?.search_plan).toMatchObject({
@@ -1135,13 +1162,13 @@ test("T3 Guided web carrier rejection reaches correction without dispatch or Tur
           expect(correction).toContain("web_search");
           expect(messagesWithToolResults(request)).toEqual([]);
           return toolResponse([
-            continuityCall(
+            compactCarrierCall(
               "corrected-web-continuity",
               "Search only after rewriting PhaseContinuity.",
+              [toolCall("corrected-web-search", "web_search", {
+                query: "Butler compact replay correction",
+              })],
             ),
-            toolCall("corrected-web-search", "web_search", {
-              query: "Butler compact replay correction",
-            }),
           ]);
         }
         expect(fixture.stores.guidedToolJournal.list(turnId)
@@ -1190,14 +1217,18 @@ test("T3 Guided runtime continuity failure blocks the source and effect remainde
               unresolved_questions: [],
               next_batch_purpose: "Reject the carrier before its remainder.",
               public_activity: "Validating phase continuity.",
-            }),
-            toolCall("runtime-blocked-web", "web_search", {
-              query: "RUNTIME_PRIVATE_QUERY",
-            }),
-            toolCall("runtime-blocked-effect", "write_file", {
-              path: "runtime-blocked.txt",
-              content: "RUNTIME_PRIVATE_EFFECT",
-              overwrite: false,
+              operations: [{
+                operation_id: "runtime-blocked-web",
+                name: "web_search",
+                arguments: { query: "RUNTIME_PRIVATE_QUERY" },
+              }, {
+                operation_id: "runtime-blocked-effect",
+                name: "write_file",
+                arguments: {
+                  path: "runtime-blocked.txt",
+                  content: "RUNTIME_PRIVATE_EFFECT",
+                },
+              }],
             }),
           ]);
         }
@@ -1229,13 +1260,13 @@ test("T3 Guided runtime continuity failure blocks the source and effect remainde
           expect(correction).not.toContain("RUNTIME_PRIVATE_QUERY");
           expect(correction).not.toContain("RUNTIME_PRIVATE_EFFECT");
           return toolResponse([
-            continuityCall(
+            compactCarrierCall(
               "runtime-corrected-continuity",
               "Execute the corrected source operation once.",
+              [toolCall("runtime-corrected-web", "web_search", {
+                query: "safe runtime correction",
+              })],
             ),
-            toolCall("runtime-corrected-web", "web_search", {
-              query: "safe runtime correction",
-            }),
           ]);
         }
         return { text: "runtime continuity 교정을 완료했습니다.", toolCalls: [] };
@@ -1308,11 +1339,18 @@ test("T3 routed Guided redacts whitespace-invalid continuity before acceptance",
                   unresolved_questions: [],
                   next_batch_purpose: `private purpose ${marker}`,
                   public_activity: `private activity ${marker}`,
-                }),
-                toolCall("routed-rejected-web", "web_search", { query: marker }),
-                toolCall("routed-rejected-effect", "write_file", {
-                  path: "rejected.txt",
-                  content: marker,
+                  operations: [{
+                    operation_id: "routed-rejected-web",
+                    name: "web_search",
+                    arguments: { query: marker },
+                  }, {
+                    operation_id: "routed-rejected-effect",
+                    name: "write_file",
+                    arguments: {
+                      path: "rejected.txt",
+                      content: marker,
+                    },
+                  }],
                 }),
               ],
               assistantMessage: {
@@ -1341,19 +1379,19 @@ test("T3 routed Guided redacts whitespace-invalid continuity before acceptance",
             expect(correction).toContain(
               '"name":"objective_state","type":"string"',
             );
-            expect(correction).toContain('"name":"query","type":"string"');
+            expect(correction).toContain('"name":"operations","type":"array"');
             expect(correction).not.toContain(
               "compact_replay_objective_state_invalid",
             );
             expect(correction).not.toContain(marker);
             return toolResponse([
-              continuityCall(
+              compactCarrierCall(
                 "routed-corrected-continuity",
                 "Execute the corrected search carrier once.",
+                [toolCall("routed-corrected-web", "web_search", {
+                  query: "safe corrected compact replay query",
+                })],
               ),
-              toolCall("routed-corrected-web", "web_search", {
-                query: "safe corrected compact replay query",
-              }),
             ]);
           }
           return { text: "교정된 routed carrier를 완료했습니다.", toolCalls: [] };
@@ -1410,7 +1448,149 @@ test("T3 routed Guided redacts whitespace-invalid continuity before acceptance",
         '"reason":"phase_continuity_schema_invalid"',
       );
       expect(accepted[0]?.normalized_response_json).toContain(
-        '"name":"query","type":"string"',
+        '"name":"operations","type":"array"',
+      );
+      expect(durableTextLocations(db, marker)).toEqual([]);
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_model_route_events
+        WHERE turn_id = ? AND event_type = 'model.fallback.selected'
+      `).get(turnId)?.count).toBe(0);
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_effects
+      `).get()?.count).toBe(0);
+    } finally {
+      db.close();
+    }
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_COMPACT_REPLAY;
+    else process.env.BUTLER_M1_COMPACT_REPLAY = previousFlag;
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("T3 routed Guided redacts continuity-only carrier before correction", async () => {
+  const previousFlag = process.env.BUTLER_M1_COMPACT_REPLAY;
+  const root = mkdtempSync(join(tmpdir(), "guided-t3-continuity-only-"));
+  const dbPath = join(root, "butler.sqlite");
+  let stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-t3-continuity-only",
+    storageProfile: "ephemeral",
+  });
+  const marker = "CONTINUITY_ONLY_DURABLE_PRIVATE_c7b2";
+  const turnId = "guided-t3-continuity-only-turn";
+  let round = 0;
+  try {
+    process.env.BUTLER_M1_COMPACT_REPLAY = "on";
+    writeFileSync(join(root, "butler.config.json"), JSON.stringify({
+      webSearch: { provider: "mock" },
+    }));
+    const agent = createProductionGuidedTurnAgent({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: dbPath,
+      contextDocuments: stores.contextDocuments,
+      toolJournal: stores.guidedToolJournal,
+      effectJournal: stores.guidedEffectJournal,
+      durableWork: stores.durableWork,
+      modelRound: {
+        async runRound(request) {
+          round += 1;
+          if (round === 1) {
+            expect(request.instructions).toContain(
+              "required operations array",
+            );
+            return {
+              text: `private prose ${marker}`,
+              toolCalls: [toolCall(
+                "routed-continuity-only",
+                "replace_phase_continuity",
+                {
+                  objective_state: `private objective ${marker}`,
+                  integrated_decisions: [],
+                  unresolved_questions: [],
+                  next_batch_purpose: `private purpose ${marker}`,
+                  public_activity: `private activity ${marker}`,
+                },
+              )],
+              assistantMessage: {
+                role: "assistant",
+                content: `private assistant ${marker}`,
+                providerData: { private_payload: marker },
+              },
+              continuation: { private_continuation: marker },
+              raw: { private_raw: marker },
+            };
+          }
+          if (round === 2) {
+            expect(stores.guidedToolJournal.list(turnId)).toEqual([]);
+            const correction = request.messages.map((message) => message.content)
+              .join("\n");
+            expect(correction).toContain("compact_replay_operation_required");
+            expect(correction).toContain(
+              '"schema_path":"$.toolCalls[0].arguments.operations"',
+            );
+            expect(correction).toContain('"reason":"operation_required"');
+            expect(correction).toContain(
+              '"name":"objective_state","type":"string"',
+            );
+            expect(correction).not.toContain(marker);
+            return toolResponse([
+              compactCarrierCall(
+                "routed-continuity-only-corrected",
+                "Execute the corrected operation in this carrier.",
+                [toolCall("routed-continuity-only-web", "web_search", {
+                  query: "safe continuity-only correction",
+                })],
+              ),
+            ]);
+          }
+          return { text: "continuity-only 교정을 완료했습니다.", toolCalls: [] };
+        },
+      },
+    });
+    const command = localRunCommand(root, turnId);
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol",
+      backupModelRefs: ["zai/glm-5.2"],
+      reasoningEffort: "low",
+      retryCeiling: 1,
+    });
+    const runtime = createGuidedTurnRuntime({
+      admission: stores.admission,
+      turns: stores.turns,
+      messages: stores.messages,
+      committedSuccessorReadiness: stores.committedSuccessorReadiness,
+      agent,
+    });
+
+    await expect(runtime.runTurn(command)).resolves.toMatchObject({
+      kind: "delivered",
+      content: "continuity-only 교정을 완료했습니다.",
+    });
+    expect(round).toBe(3);
+
+    stores.close();
+    stores = openBtccSqliteStores({
+      dbPath,
+      ownerId: "guided-t3-continuity-only-reopen",
+      storageProfile: "ephemeral",
+    });
+    expect(stores.guidedToolJournal.list(turnId).map((record) => record.toolName))
+      .toEqual(["replace_phase_continuity", "web_search"]);
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      const accepted = db.query<{ normalized_response_json: string }, [string]>(`
+        SELECT normalized_response_json FROM btcc_model_round_acceptances
+        WHERE turn_id = ? ORDER BY created_at, round_id
+      `).all(turnId);
+      expect(accepted).toHaveLength(3);
+      expect(accepted[0]?.normalized_response_json).toContain(
+        '"schema_path":"$.toolCalls[0].arguments.operations"',
+      );
+      expect(accepted[0]?.normalized_response_json).toContain(
+        '"reason":"operation_required"',
       );
       expect(durableTextLocations(db, marker)).toEqual([]);
       expect(db.query<{ count: number }, [string]>(`
@@ -1435,7 +1615,6 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
   const fixture = createFixture("guided-policy");
   try {
     const availability = async (turn: TurnRecord, query = "project_ledger_create") => {
-      let result: unknown;
       const agent = fixture.agent(scriptedModelRound([
         toolResponse([toolCall("search-1", "tool_search", {
           query,
@@ -1444,12 +1623,11 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
         { text: "확인했습니다.", toolCalls: [] },
       ]));
       await agent.run({ turn, signal: new AbortController().signal });
-      result = fixture.stores.guidedToolJournal.list(turn.turnId)[0]?.result;
+      const result = fixture.stores.guidedToolJournal.list(turn.turnId)[0]?.result;
       const results = (result as { results?: Array<{ id: string; enabled: boolean }> }).results ?? [];
       return results.find((entry) => entry.id === `native:${query}`)?.enabled;
     };
 
-    let updateDescription: unknown;
     const descriptionTurnId = "turn-project-description";
     const descriptionAgent = fixture.agent(scriptedModelRound([
       toolResponse([toolCall("describe-1", "tool_describe", {
@@ -1474,7 +1652,9 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
       },
       signal: new AbortController().signal,
     });
-    updateDescription = fixture.stores.guidedToolJournal.list(descriptionTurnId)[0]?.result;
+    const updateDescription = fixture.stores.guidedToolJournal.list(
+      descriptionTurnId,
+    )[0]?.result;
     expect(JSON.stringify(updateDescription)).toContain('"required":["kind","id"]');
     expect(await availability(fullAccessProjectTurn, "render_project_dashboard"))
       .toBeUndefined();
@@ -3709,7 +3889,7 @@ test("Guided agent turns provider failure into one fact-based final report", asy
     writeFileSync(join(fixture.root, "settings.json"), '{"enabled":true}\n');
     let calls = 0;
     const fallbackAgent = fixture.agent(scriptedModelRound([
-      (request) => {
+      (_request) => {
         calls += 1;
         return toolResponse([
           toolCall("read-1", "read_file", { path: "settings.json" }),

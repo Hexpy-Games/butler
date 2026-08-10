@@ -350,6 +350,20 @@ test("M1 T3 adds one fixed control surface only at the enabled phase boundary", 
   expect(off.providerTools.map((tool) => tool.name)).not.toContain(
     "replace_phase_continuity",
   );
+  const continuityTool = first.providerTools.find((tool) =>
+    tool.name === "replace_phase_continuity")!;
+  expect(continuityTool.description).toContain(
+    "required operations array",
+  );
+  expect(continuityTool.description).toContain(
+    "Never omit operations or emit separate top-level operation calls",
+  );
+  const continuitySchema = JSON.stringify(continuityTool.parameters);
+  expect(continuitySchema).toContain(
+    '"operations":{"type":"array","minItems":1',
+  );
+  expect(continuitySchema).toContain('"operation_id"');
+  expect(continuitySchema).toContain('"const":"web_search"');
   const readTool = first.providerTools.find((tool) =>
     tool.name === "read_operation_results")!;
   const schema = JSON.stringify(readTool.parameters);
