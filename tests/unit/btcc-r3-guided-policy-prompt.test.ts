@@ -290,6 +290,17 @@ test("R3 Conception guidance actively selects associative recall and exposes cro
   expect(visible).toContain("read_conversation_session");
 });
 
+test("guided read-only policy authorizes and visibly exposes list_files", () => {
+  const turn = turnRecord({ accessMode: "read_only" });
+  const policy = guidedPolicy(turn);
+  const authorized = authorizedToolDefinitions(turn, {});
+  const visible = visibleToolDefinitions(authorized, policy);
+
+  expect(authorized.find((tool) => tool.name === "list_files")).toBeDefined();
+  expect(visible.find((tool) => tool.name === "list_files")).toBeDefined();
+  expect(visible.find((tool) => tool.name === "list_files")?.parameters.properties).toHaveProperty("include_globs");
+});
+
 test("session worktree binding is visible only on full-access project surfaces", () => {
   const projectFullAccess = turnRecord({
     projectRef: "butler",
@@ -321,6 +332,48 @@ test("session worktree binding is visible only on full-access project surfaces",
   });
   expect(authorizedToolDefinitions(generalFullAccess, {}).map((tool) => tool.name))
     .not.toContain("bind_session_git_worktree");
+});
+
+test("guided workspace visibility owns the exact native workspace surface", () => {
+  const projectFullAccess = turnRecord({
+    projectRef: "butler",
+    accessMode: "full_access",
+    executionPolicy: {
+      ...executionPolicy("ledger"),
+      accessMode: "full_access",
+    },
+  });
+  const fullNames = visibleToolDefinitions(
+    guidedNativeToolDefinitions(),
+    guidedPolicy(projectFullAccess),
+  ).map((tool) => tool.name);
+  for (const name of [
+    "run_command",
+    "write_file",
+    "edit_file",
+    "inspect_workspace_page",
+    "bind_session_git_worktree",
+  ]) {
+    expect(fullNames.filter((visibleName) => visibleName === name)).toHaveLength(1);
+  }
+
+  const readOnly = turnRecord({ accessMode: "read_only" });
+  const readOnlyNames = visibleToolDefinitions(
+    authorizedToolDefinitions(readOnly, {}),
+    guidedPolicy(readOnly),
+  ).map((tool) => tool.name);
+  for (const name of ["list_files", "read_file", "grep_files"]) {
+    expect(readOnlyNames.filter((visibleName) => visibleName === name)).toHaveLength(1);
+  }
+  for (const name of [
+    "run_command",
+    "write_file",
+    "edit_file",
+    "inspect_workspace_page",
+    "bind_session_git_worktree",
+  ]) {
+    expect(readOnlyNames).not.toContain(name);
+  }
 });
 
 test("R3 guided prompt reports disabled Work without inventing a Work context", () => {

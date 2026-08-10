@@ -5,9 +5,18 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
+import { openBtccSqliteStores } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+import { createGuidedEffectService } from "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
+import { createGuidedPersistentEffectResolver } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-persistent-effect-resolution.ts";
+import { createGuidedToolExecutionBoundary } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-execution-boundary.ts";
+import { createGuidedToolCallExecutor } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-call-execution.ts";
+import { ActiveProjectLedgerResolver } from "../../packages/butler-agent/src/integrations/project-ledger/active-project-ledger-reference.ts";
+import { createPlatformCommandExecutor } from "../../packages/butler-agent/src/runtime/command/platform-command-executor.ts";
+import { admitTurn } from "../../packages/butler-agent/src/agent/btcc/turn/admission/admit-turn.ts";
 import {
   bindSessionGitWorktree,
   createWorkspaceReference,
+  recoverSessionWorkspaceReference,
 } from "../../packages/butler-agent/src/agent/session-workspaces/index.ts";
 import { deterministicTargetPath } from "../../packages/butler-agent/src/agent/session-workspaces/path.ts";
 import { createFileToolHandlers } from "../../packages/butler-agent/src/agent/tools/file-tools/index.ts";
@@ -145,6 +154,13 @@ describe("session-owned Git worktree lifecycle", () => {
     expect(written).toMatchObject({ ok: true, path: "same-turn.txt" });
     expect(readFileSync(join(reference.get(), "same-turn.txt"), "utf8")).toBe("bound\n");
     expect(readFileSync(join(fixture.repository, "README.md"), "utf8")).toBe("source\n");
+    writeFileSync(join(reference.get(), "rebound-list.txt"), "rebound\n");
+    const listed = await fileHandlers.list_files({ name: "list_files", args: { root: "." }, rawArguments: "{}" });
+    expect(listed).toMatchObject({ ok: true });
+    expect((listed as { files?: Array<{ path?: string; bytes?: number }> }).files)
+      .toContainEqual({ path: "rebound-list.txt", bytes: 8 });
+    const reread = await fileHandlers.read_file({ name: "read_file", args: { path: "rebound-list.txt" }, rawArguments: "{}" });
+    expect(reread).toMatchObject({ ok: true, path: "rebound-list.txt", content: "rebound\n" });
     expect(store.getBySessionId("session-1")?.metadata?.sessionWorkspace).toMatchObject({
       schema: "butler.session-workspace-binding.v1",
       ownership: "session",
@@ -547,5 +563,223 @@ describe("session-owned Git worktree lifecycle", () => {
       signal: new AbortController().signal,
     });
     expect(dispatched).toMatchObject({ status: "applied", result: { ok: true, branch: "effect-branch" } });
+  });
+
+  test("resumes a started bind journal by reconciling the applied effect after workspace recovery", async () => {
+    const fixture = gitRepository();
+    const store = bindingStore(fixture.data, fixture.repository);
+    const stores = openBtccSqliteStores({
+      dbPath: join(fixture.data, "btcc.sqlite"),
+      ownerId: "session-workspace-bind-replay",
+      storageProfile: "ephemeral",
+    });
+    const sessionId = "session-1";
+    const turnId = "session-workspace-bind-replay-turn";
+    const scope = { sessionId, turnId };
+    const signal = new AbortController().signal;
+    try {
+      const turn = await admitTurn({
+        kind: "run",
+        turnId,
+        sessionId,
+        triggerKey: "session-workspace-bind-replay-trigger",
+        message: {
+          messageId: "session-workspace-bind-replay-message",
+          content: "Create the reviewed session worktree.",
+        },
+        modelSelection: {
+          provider: "openai",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "low",
+          controls: { accessMode: "full_access" },
+          controlsHash: "session-workspace-bind-replay-controls",
+        },
+        context: {
+          userRef: "session-workspace-bind-replay-user",
+          profileRefs: [],
+          recentFeedbackRefs: [],
+          mandatoryHotCacheRefs: [],
+          optionalHotCacheRefs: [],
+          baselineObservationScopeRefs: [`workspace:${fixture.repository}`],
+          executionPolicy: {
+            role: "butler",
+            accessMode: "full_access",
+            trackingMode: "local",
+            requiredNativeToolProfiles: ["workspace"],
+            requiredNativeTools: [],
+            workspacePath: fixture.repository,
+          },
+        },
+      }, stores.admission, stores.turns);
+      await stores.durableWork.replacePlan({
+        ...scope,
+        mutationCallId: "bind-replay-plan",
+        startNew: true,
+        objective: "Bind the session worktree through the reviewed effect path.",
+        actions: [{
+          actionKey: "bind-session-worktree",
+          description: "Create and bind the requested session worktree.",
+          dependencyKeys: [],
+          effect: {
+            capability: "bind_session_git_worktree",
+            target: "session-worktree/create/feature/replay",
+          },
+        }],
+        checks: ["The session binding and active workspace reference agree."],
+      });
+      await stores.durableWork.bindOpenWork(scope);
+      const reviewed = await stores.durableWork.recordReview({
+        ...scope,
+        mutationCallId: "bind-replay-plan-review",
+        subject: "plan",
+        verdict: "accept",
+        summary: "The reviewed session worktree effect is authorized.",
+        corrections: [],
+      });
+      expect(reviewed.latestPlanReview?.verdict).toBe("accept");
+
+      const faultPoints: string[] = [];
+      const makeExecutor = (
+        workspaceReference: ReturnType<typeof createWorkspaceReference>,
+        options: { faultAfterDispatch?: boolean; forceInitialDispatch?: boolean } = {},
+      ) => {
+        const effectService = createGuidedEffectService(
+          stores.guidedEffectJournal,
+          options.faultAfterDispatch
+            ? {
+                faultHook(point) {
+                  faultPoints.push(point);
+                  if (point === "after_dispatch") {
+                    throw new Error("simulated crash after bind effect dispatch");
+                  }
+                },
+              }
+            : {},
+        );
+        const resolveBase = createGuidedPersistentEffectResolver({
+          butlerHome: fixture.root,
+          butlerData: fixture.data,
+          appMessageDbPath: join(fixture.root, "app-message.sqlite"),
+          workspacePath: fixture.repository,
+          workspaceReference,
+          sessionId,
+          sessionBindingStore: store,
+          trackingMode: "local",
+          projectLedgerResolver: new ActiveProjectLedgerResolver(),
+          effectJournal: stores.guidedEffectJournal,
+          originalRequest: "Create the reviewed session worktree.",
+        });
+        let initialReconcile = true;
+        const resolvePersistentEffect = async (...args: Parameters<typeof resolveBase>) => {
+          const resolved = await resolveBase(...args);
+          if (!options.forceInitialDispatch || !initialReconcile || !resolved || "error" in resolved) {
+            return resolved;
+          }
+          initialReconcile = false;
+          return {
+            ...resolved,
+            adapter: {
+              ...resolved.adapter,
+              async reconcile(_input: Parameters<typeof resolved.adapter.reconcile>[0]) {
+                return { status: "not_applied" as const };
+              },
+            },
+          };
+        };
+        const executionBoundary = createGuidedToolExecutionBoundary({
+          durableWork: stores.durableWork,
+          workScope: scope,
+          effectService,
+          accessMode: "full_access",
+          signal,
+          executeCommand: async () => ({ ok: true }),
+          resolvePersistentEffect,
+        });
+        const executeButlerTool = createButlerToolExecutor({
+          butlerHome: fixture.root,
+          butlerData: fixture.data,
+          appMessageDbPath: join(fixture.root, "app-message.sqlite"),
+          workspacePath: fixture.repository,
+          workspaceReference,
+          sessionId,
+          turnId,
+          originChatId: sessionId,
+          turnContext: "Create the reviewed session worktree.",
+          executionBoundary,
+          sessionBindingStore: store,
+        });
+        return createGuidedToolCallExecutor({
+          turn,
+          signal,
+          workScope: scope,
+          authorizedNames: new Set(["bind_session_git_worktree"]),
+          visibleNames: new Set(["bind_session_git_worktree"]),
+          describedToolIds: new Set(),
+          durableWork: stores.durableWork,
+          toolJournal: stores.guidedToolJournal,
+          executeButlerTool,
+        });
+      };
+      const call = {
+        name: "bind_session_git_worktree",
+        args: { action: "create", branch: "feature/replay" },
+        rawArguments: JSON.stringify({ action: "create", branch: "feature/replay" }),
+        providerCallId: "bind-replay-provider-call",
+        signal,
+      } as const;
+
+      const firstReference = createWorkspaceReference(fixture.repository);
+      const firstExecutor = makeExecutor(firstReference, {
+        faultAfterDispatch: true,
+        forceInitialDispatch: true,
+      });
+      const originalFinish = stores.guidedToolJournal.finish;
+      stores.guidedToolJournal.finish = () => {};
+      let firstResult: unknown;
+      try {
+        firstResult = await firstExecutor.executeTool(call);
+      } finally {
+        stores.guidedToolJournal.finish = originalFinish;
+      }
+      expect(faultPoints).toContain("after_dispatch");
+      expect(firstResult).toMatchObject({ ok: false });
+      expect(stores.guidedToolJournal.list(turnId)).toHaveLength(1);
+      expect(stores.guidedToolJournal.list(turnId)[0]?.status).toBe("started");
+      const work = await stores.durableWork.boundWorkForTurn(turnId);
+      expect(work).not.toBeNull();
+      expect(stores.guidedEffectJournal.listForWork(work!.workId)).toMatchObject([
+        { capability: "bind_session_git_worktree", status: "dispatching" },
+      ]);
+      const binding = store.getBySessionId(sessionId);
+      if (!binding) {
+        throw new Error("session workspace binding was not persisted after dispatch");
+      }
+      const boundPath = binding.workspacePath;
+      expect(boundPath).not.toBe(fixture.repository);
+      expect(firstReference.get()).toBe(boundPath);
+
+      const recovered = await recoverSessionWorkspaceReference({
+        sessionId,
+        bindingStore: store,
+        projectWorkspacePath: fixture.repository,
+        commandExecutor: createPlatformCommandExecutor(),
+        signal,
+      });
+      expect(recovered.validation).toMatchObject({ ok: true, path: boundPath });
+      const resumedExecutor = makeExecutor(recovered.workspaceReference);
+      const resumed = await resumedExecutor.executeTool(call);
+      expect(resumed).toMatchObject({
+        ok: true,
+        branch: "feature/replay",
+        idempotent: true,
+        effect_receipt: { replayed: false },
+      });
+      expect(recovered.workspaceReference.get()).toBe(boundPath);
+      expect(stores.guidedToolJournal.list(turnId)[0]?.status).toBe("completed");
+    } finally {
+      stores.close();
+      store.close();
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
   });
 });

@@ -18,6 +18,15 @@ import {
 } from "../../packages/butler-agent/src/agent/tools/file-tools/edit_file/index.ts";
 import { sha256Hex } from
   "../../packages/butler-agent/src/agent/tools/file-tools/shared/evidence.ts";
+import {
+  commitWorkspaceFileMutation,
+  cleanupCommittedWorkspaceCreate,
+  observeWorkspaceFileMutation,
+  prepareWorkspaceFileMutation,
+} from
+  "../../packages/butler-agent/src/agent/tools/file-tools/shared/workspace-file-mutation.ts";
+import { commitWorkspaceFileMutationBatch } from
+  "../../packages/butler-agent/src/agent/tools/file-tools/shared/workspace-file-batch-commit.ts";
 import { withButlerFileMutationLock } from
   "../../packages/butler-agent/src/agent/tools/file-tools/shared/workspace-file-mutation-lock.ts";
 import {
@@ -48,14 +57,10 @@ function call(args: Record<string, unknown>) {
 describe("edit_file definition", () => {
   test("separates exact edits from complete-file writes", () => {
     const parameters = editFileToolDefinition.parameters as {
-      properties: Record<string, { minLength?: number }>;
-      required: string[];
+      properties: Record<string, { minLength?: number; pattern?: string }>;
+      oneOf: Array<Record<string, unknown>>;
     };
-    expect(parameters.required).toEqual([
-      "path",
-      "old_text",
-      "new_text",
-    ]);
+    expect(parameters.oneOf).toHaveLength(2);
     expect(parameters.properties.start_line).toMatchObject({
       type: "integer",
       minimum: 1,
@@ -63,6 +68,13 @@ describe("edit_file definition", () => {
     expect(parameters.properties.old_text.minLength).toBe(1);
     expect(parameters.properties.new_text.minLength).toBeUndefined();
     expect(parameters.properties).toHaveProperty("expected_sha256");
+    expect(parameters.properties.expected_sha256.pattern).toBe("^[a-fA-F0-9]{64}$");
+    expect(parameters.properties.edits).toMatchObject({
+      type: "array",
+      minItems: 2,
+      maxItems: 20,
+    });
+    expect((parameters.properties.edits as any).items.properties.expected_sha256.pattern).toBe("^[a-fA-F0-9]{64}$");
     expect(editFileToolDefinition.description).toContain("small, exact change");
     expect(editFileToolDefinition.description).toContain("location hint");
     expect(writeFileToolDefinition.description).toContain("complete desired content");
@@ -71,6 +83,270 @@ describe("edit_file definition", () => {
 });
 
 describe("edit_file execution", () => {
+  test("reports temporary cleanup failure without throwing after commit boundary", async () => {
+    const cleanupFailurePath = join(workspace, "cleanup-dir");
+    await mkdir(cleanupFailurePath);
+
+    const result = await cleanupCommittedWorkspaceCreate(cleanupFailurePath);
+    expect(result).toEqual({ cleanup_failed: true });
+  });
+
+  test("write-style replacement re-observes before replacing an existing target", async () => {
+    const path = join(workspace, "race.txt");
+    await writeFile(path, "before\n", "utf8");
+    const snapshot = await observeWorkspaceFileMutation({
+      path: "race.txt",
+      absolutePath: path,
+    });
+    expect(snapshot.ok).toBe(true);
+    if (!snapshot.ok) return;
+    const prepared = prepareWorkspaceFileMutation({
+      snapshot,
+      data: Buffer.from("prepared\n", "utf8"),
+      expectedSha256: sha256Hex("before\n"),
+      requireExpectedForExisting: true,
+    });
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    await writeFile(path, "external\n", "utf8");
+    const result = await commitWorkspaceFileMutation(prepared);
+    expect(result).toMatchObject({
+      ok: false,
+      error: "external_change_conflict",
+      path: "race.txt",
+    });
+    expect(await readFile(path, "utf8")).toBe("external\n");
+  });
+
+  test("single edit-style replacement distinguishes a post-preflight conflict", async () => {
+    const path = join(workspace, "edit-race.txt");
+    await writeFile(path, "before\n", "utf8");
+    const snapshot = await observeWorkspaceFileMutation({ path: "edit-race.txt", absolutePath: path });
+    expect(snapshot.ok).toBe(true);
+    if (!snapshot.ok) return;
+    const prepared = prepareWorkspaceFileMutation({ snapshot, data: Buffer.from("edited\n", "utf8") });
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    await writeFile(path, "external\n", "utf8");
+    const result = await commitWorkspaceFileMutation(prepared);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe("external_change_conflict");
+    expect(await readFile(path, "utf8")).toBe("external\n");
+  });
+
+  test("single edit normalizes uppercase SHA-256 and rejects malformed guards", async () => {
+    const path = join(workspace, "uppercase-edit.txt");
+    const before = "before\n";
+    await writeFile(path, before, "utf8");
+    const success = await executeEditFileTool(call({
+      path: "uppercase-edit.txt",
+      old_text: "before",
+      new_text: "after",
+      expected_sha256: sha256Hex(before).toUpperCase(),
+    }), { workspacePath: workspace }) as { ok: true; after_sha256: string };
+    expect(success.ok).toBe(true);
+    expect(await readFile(path, "utf8")).toBe("after\n");
+
+    const invalid = await executeEditFileTool(call({
+      path: "uppercase-edit.txt",
+      old_text: "after",
+      new_text: "again",
+      expected_sha256: "malformed",
+    }), { workspacePath: workspace }) as { ok: false; error: string };
+    expect(invalid.error).toBe("invalid_arguments");
+  });
+
+  test("does not overwrite a target that appears after create preflight", async () => {
+    const path = join(workspace, "appeared.txt");
+    const snapshot = await observeWorkspaceFileMutation({
+      path: "appeared.txt",
+      absolutePath: path,
+    });
+    expect(snapshot.ok).toBe(true);
+    if (!snapshot.ok) return;
+    const prepared = prepareWorkspaceFileMutation({
+      snapshot,
+      data: Buffer.from("prepared\n", "utf8"),
+    });
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    await writeFile(path, "external\n", "utf8");
+    const result = await commitWorkspaceFileMutation(prepared);
+    expect(result).toMatchObject({ ok: false, error: "external_change_conflict" });
+    expect(await readFile(path, "utf8")).toBe("external\n");
+  });
+
+  test("reports zero-applied early batch conflicts at the shared commit boundary", async () => {
+    const first = join(workspace, "early-a.txt");
+    const second = join(workspace, "early-b.txt");
+    await writeFile(first, "a\n", "utf8");
+    await writeFile(second, "b\n", "utf8");
+    const snapshots = await Promise.all([
+      observeWorkspaceFileMutation({ path: "early-a.txt", absolutePath: first }),
+      observeWorkspaceFileMutation({ path: "early-b.txt", absolutePath: second }),
+    ]);
+    if (!snapshots[0]!.ok || !snapshots[1]!.ok) throw new Error("preflight failed");
+    const prepared = [
+      prepareWorkspaceFileMutation({ snapshot: snapshots[0]!, data: Buffer.from("A\n", "utf8"), expectedSha256: sha256Hex("a\n") }),
+      prepareWorkspaceFileMutation({ snapshot: snapshots[1]!, data: Buffer.from("B\n", "utf8"), expectedSha256: sha256Hex("b\n") }),
+    ];
+    if (!prepared[0]!.ok || !prepared[1]!.ok) throw new Error("prepare failed");
+    await writeFile(first, "external\n", "utf8");
+    const result = await commitWorkspaceFileMutationBatch(prepared as any);
+    expect(result).toMatchObject({ ok: false, error: "external_change_conflict", applied: [] });
+    expect(result.ok ? [] : result.not_attempted).toEqual([{ index: 1, path: "early-b.txt" }]);
+    expect(await readFile(first, "utf8")).toBe("external\n");
+    expect(await readFile(second, "utf8")).toBe("b\n");
+  });
+
+  test("reports a zero-applied non-conflict batch failure with its typed error", async () => {
+    const parent = join(workspace, "early-io");
+    const first = join(parent, "a.txt");
+    const second = join(parent, "b.txt");
+    await mkdir(parent);
+    await writeFile(first, "a\n", "utf8");
+    await writeFile(second, "b\n", "utf8");
+    const snapshots = await Promise.all([
+      observeWorkspaceFileMutation({ path: "early-io/a.txt", absolutePath: first }),
+      observeWorkspaceFileMutation({ path: "early-io/b.txt", absolutePath: second }),
+    ]);
+    if (!snapshots[0]!.ok || !snapshots[1]!.ok) throw new Error("preflight failed");
+    const prepared = [
+      prepareWorkspaceFileMutation({ snapshot: snapshots[0]!, data: Buffer.from("A\n", "utf8"), expectedSha256: sha256Hex("a\n") }),
+      prepareWorkspaceFileMutation({ snapshot: snapshots[1]!, data: Buffer.from("B\n", "utf8"), expectedSha256: sha256Hex("b\n") }),
+    ];
+    if (!prepared[0]!.ok || !prepared[1]!.ok) throw new Error("prepare failed");
+    await rm(parent, { recursive: true, force: true });
+    const result = await commitWorkspaceFileMutationBatch(prepared as any);
+    expect(result).toMatchObject({ ok: false, error: "parent_directory_missing", applied: [] });
+    expect(result.ok ? [] : result.conflicting[0]).toMatchObject({ result: { error: "parent_directory_missing" } });
+  });
+
+  test("does not expose rejected absolute single-edit paths", async () => {
+    const absolutePath = join(outside, "secret.txt");
+    const result = await executeEditFileTool(call({
+      path: absolutePath,
+      old_text: "secret",
+      new_text: "redacted",
+      expected_sha256: sha256Hex("secret"),
+    }), { workspacePath: workspace }) as { ok: false; error: string };
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(absolutePath);
+    expect(JSON.stringify(result)).not.toContain(outside);
+  });
+
+  test("does not expose rejected absolute paths in a batch preflight result", async () => {
+    const first = join(workspace, "batch-safe-a.txt");
+    await writeFile(first, "a\n", "utf8");
+    const absolutePath = join(outside, "secret.txt");
+    const result = await executeEditFileTool(call({
+      edits: [
+        { path: "batch-safe-a.txt", old_text: "a", new_text: "A", expected_sha256: sha256Hex("a\n") },
+        { path: absolutePath, old_text: "secret", new_text: "redacted", expected_sha256: sha256Hex("secret") },
+      ],
+    }), { workspacePath: workspace }) as { ok: false; error: string };
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("batch_preflight_failed");
+    expect(JSON.stringify(result)).not.toContain(absolutePath);
+    expect(JSON.stringify(result)).not.toContain(outside);
+    expect(await readFile(first, "utf8")).toBe("a\n");
+  });
+
+  test("reports applied/conflicting/not-attempted state after a late batch conflict without rollback", async () => {
+    const first = join(workspace, "late-a.txt");
+    const second = join(workspace, "late-b.txt");
+    const third = join(workspace, "late-c.txt");
+    await writeFile(first, "a\n", "utf8");
+    await writeFile(second, "b\n", "utf8");
+    await writeFile(third, "c\n", "utf8");
+    const paths = ["late-a.txt", "late-b.txt", "late-c.txt"];
+    const snapshots = await Promise.all(paths.map((path) => observeWorkspaceFileMutation({ path, absolutePath: join(workspace, path) })));
+    if (snapshots.some((snapshot) => !snapshot.ok)) throw new Error("preflight failed");
+    const prepared = snapshots.map((snapshot, index) => prepareWorkspaceFileMutation({
+      snapshot: snapshot as any,
+      data: Buffer.from(`${String.fromCharCode(65 + index)}\n`, "utf8"),
+      expectedSha256: sha256Hex(`${String.fromCharCode(97 + index)}\n`),
+    }));
+    if (prepared.some((entry) => !entry.ok)) throw new Error("prepare failed");
+    await writeFile(second, "external\n", "utf8");
+    const result = await commitWorkspaceFileMutationBatch(prepared as any);
+    expect(result).toMatchObject({ ok: false, error: "partial_apply" });
+    if (result.ok) return;
+    expect(result.applied.map((entry) => entry.index)).toEqual([0]);
+    expect(result.conflicting.map((entry) => entry.index)).toEqual([1]);
+    expect(result.not_attempted).toEqual([{ index: 2, path: "late-c.txt" }]);
+    expect(await readFile(first, "utf8")).toBe("A\n");
+    expect(await readFile(second, "utf8")).toBe("external\n");
+    expect(await readFile(third, "utf8")).toBe("c\n");
+  });
+
+  test("preflights every batch entry and preserves deterministic request order", async () => {
+    const a = join(workspace, "batch-a.txt");
+    const b = join(workspace, "batch-b.txt");
+    await writeFile(a, "alpha\n", "utf8");
+    await writeFile(b, "beta\n", "utf8");
+    const result = await executeEditFileTool(call({
+      workspace_root: workspace,
+      edits: [
+        { path: "batch-b.txt", old_text: "beta", new_text: "BETA", expected_sha256: sha256Hex("beta\n") },
+        { path: "batch-a.txt", old_text: "alpha", new_text: "ALPHA", expected_sha256: sha256Hex("alpha\n") },
+      ],
+    })) as any;
+    expect(result.ok).toBe(true);
+    expect(result.applied.map((entry: { path: string }) => entry.path)).toEqual([
+      "batch-b.txt",
+      "batch-a.txt",
+    ]);
+    expect(result.metrics).toMatchObject({ files_written: 2, bytes_written: 11 });
+    expect(result.evidence_capability_receipts[0].references.map((entry: { path: string }) => entry.path)).toEqual([
+      "batch-b.txt",
+      "batch-a.txt",
+    ]);
+    expect(JSON.stringify(result)).not.toContain(workspace);
+    expect(await readFile(a, "utf8")).toBe("ALPHA\n");
+    expect(await readFile(b, "utf8")).toBe("BETA\n");
+  });
+
+  test("rejects duplicate guarded actual targets before changing any file", async () => {
+    await mkdir(join(workspace, "real"));
+    await symlink("real", join(workspace, "alias"));
+    const path = join(workspace, "real", "same.txt");
+    await writeFile(path, "same\n", "utf8");
+    const result = await executeEditFileTool(call({
+      workspace_root: workspace,
+      edits: [
+        { path: "real/same.txt", old_text: "same", new_text: "one", expected_sha256: sha256Hex("same\n") },
+        { path: "alias/same.txt", old_text: "same", new_text: "two", expected_sha256: sha256Hex("same\n") },
+      ],
+    })) as any;
+    expect(result).toMatchObject({ ok: false, error: "batch_preflight_failed" });
+    expect(result.preflight_failures).toEqual([
+      expect.objectContaining({ error: "duplicate_target" }),
+    ]);
+    expect(await readFile(path, "utf8")).toBe("same\n");
+  });
+
+  test("applies nothing when one batch entry is stale or ambiguous", async () => {
+    const a = join(workspace, "preflight-a.txt");
+    const b = join(workspace, "preflight-b.txt");
+    await writeFile(a, "alpha\n", "utf8");
+    await writeFile(b, "beta beta\n", "utf8");
+    const result = await executeEditFileTool(call({
+      workspace_root: workspace,
+      edits: [
+        { path: "preflight-a.txt", old_text: "alpha", new_text: "ALPHA", expected_sha256: sha256Hex("alpha\n") },
+        { path: "preflight-b.txt", old_text: "beta", new_text: "BETA", expected_sha256: sha256Hex("beta beta\n") },
+      ],
+    })) as any;
+    expect(result.error).toBe("batch_preflight_failed");
+    expect(result.preflight_failures).toEqual([
+      expect.objectContaining({ path: "preflight-b.txt", error: "old_text_ambiguous" }),
+    ]);
+    expect(await readFile(a, "utf8")).toBe("alpha\n");
+    expect(await readFile(b, "utf8")).toBe("beta beta\n");
+  });
+
   test("locates large repeated text with bounded occurrence state", () => {
     const text = "needle\n".repeat(100_000);
     expect(locateExactText({ text, oldText: "needle" })).toEqual({
@@ -313,7 +589,7 @@ describe("edit_file execution", () => {
       start_line: 2,
       old_text: "beta",
       new_text: "changed",
-      expected_sha256: "stale",
+      expected_sha256: "f".repeat(64),
     }), { workspacePath: workspace }) as any;
     expect(stale.error).toBe("expected_sha256_mismatch");
 

@@ -1,88 +1,211 @@
-import { constants } from "node:fs";
-import { access, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { randomUUID } from "node:crypto";
-import { resolveWorkspacePathGuard } from "../shared/workspace-path-guard.ts";
-import { withButlerFileMutationLock } from "../shared/workspace-file-mutation-lock.ts";
-import { fileToolCapabilityReceipt, fileToolEvidenceReceipt, sha256Hex } from "../shared/evidence.ts";
+import { relative } from "node:path";
+import {
+  resolveWorkspacePathGuard,
+  safeWorkspaceGuardResult,
+  safeWorkspaceResultPath,
+} from "../shared/workspace-path-guard.ts";
+import {
+  commitWorkspaceFileMutation,
+  ensureWorkspaceMutationParent,
+  observeWorkspaceFileMutation,
+  prepareWorkspaceFileMutation,
+  workspaceMutationFailure,
+  withButlerFileMutationLock,
+  type WorkspaceMutationFailure,
+} from "../shared/workspace-file-mutation.ts";
+import {
+  fileToolCapabilityReceipt,
+  fileToolEvidenceReceipt,
+} from "../shared/evidence.ts";
 import { getWorkspaceRoot, tryParseToolArgs } from "../shared/args.ts";
+import { normalizeWorkspaceSha256 } from "../shared/workspace-sha256.ts";
 import type { FileToolExecutionContext } from "../read_file/executor.ts";
 
-function isNodeFsError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
+function publicMutationPath(workspaceRoot: string, absolutePath: string): string {
+  const value = relative(workspaceRoot, absolutePath).replaceAll("\\", "/");
+  return value || ".";
 }
 
-async function inspectExistingTarget(filePath: string, path: string) {
-  try {
-    const st = await stat(filePath);
-    if (!st.isFile()) return { ok: false as const, error: "target_not_regular_file", path };
-    const before = await readFile(filePath);
-    return { ok: true as const, existed: true, beforeSha256: sha256Hex(before) };
-  } catch (error) {
-    if (isNodeFsError(error) && error.code === "ENOENT") {
-      return { ok: true as const, existed: false, beforeSha256: undefined };
-    }
-    return { ok: false as const, error: "target_stat_failed", path, detail: error instanceof Error ? error.message : String(error) };
-  }
+function failedResult(
+  failure: WorkspaceMutationFailure,
+  extra: Record<string, unknown> = {},
+) {
+  return {
+    ok: false as const,
+    error: failure.error,
+    ...(failure.path ? { path: failure.path } : {}),
+    message: failure.message,
+    recovery_hint: failure.recovery_hint,
+    ...(failure.before_sha256 === undefined ? {} : { before_sha256: failure.before_sha256 }),
+    ...(failure.expected_sha256 === undefined ? {} : { expected_sha256: failure.expected_sha256 }),
+    ...extra,
+    evidence_capability_receipts: fileToolCapabilityReceipt({
+      toolName: "write_file",
+      ok: false,
+      path: failure.path || undefined,
+      error: failure.error,
+    }),
+  };
 }
 
-async function ensureParentPolicy(filePath: string, createParents: boolean) {
-  const parent = dirname(filePath);
-  if (createParents) {
-    await mkdir(parent, { recursive: true });
-    return;
-  }
-  await access(parent, constants.W_OK);
+function parseFailure(error: string, detail: string) {
+  return {
+    ok: false as const,
+    error,
+    detail,
+    message: "Tool arguments must be a JSON object.",
+    recovery_hint: "Retry write_file with path, content, and overwrite.",
+    evidence_capability_receipts: fileToolCapabilityReceipt({
+      toolName: "write_file",
+      ok: false,
+      error,
+    }),
+  };
 }
 
-export async function executeWriteFileTool(call: { arguments?: unknown; input?: unknown; args?: unknown }, context: FileToolExecutionContext = {}) {
+export async function executeWriteFileTool(
+  call: { arguments?: unknown; input?: unknown; args?: unknown },
+  context: FileToolExecutionContext = {},
+) {
   const parsed = tryParseToolArgs(call);
-  if (!parsed.ok) return { ok: false, error: parsed.error, detail: parsed.detail, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, error: parsed.error }) };
-  const a = parsed.args;
-  const workspaceRoot = getWorkspaceRoot(a, context.workspaceReference?.get() ?? context.workspacePath);
-  const path = String(a.path ?? "");
-  const content = String(a.content ?? "");
-  const overwrite = Boolean(a.overwrite);
-  const createParents = Boolean(a.create_parents);
-  const expected = typeof a.expected_sha256 === "string" ? a.expected_sha256 : undefined;
+  if (!parsed.ok) return parseFailure(parsed.error, parsed.detail);
+
+  const args = parsed.args;
+  const workspaceRoot = getWorkspaceRoot(
+    args,
+    context.workspaceReference?.get() ?? context.workspacePath,
+  );
+  const requestedPath = typeof args.path === "string" ? args.path.trim() : "";
+  const content = typeof args.content === "string" ? args.content : undefined;
+  // Preserve the established runtime default for direct callers while the
+  // canonical schema continues to advertise overwrite as required.
+  const overwrite = args.overwrite === undefined ? false : args.overwrite;
+  const createParents = args.create_parents === true;
+  const expectedSha256 = normalizeWorkspaceSha256(args.expected_sha256);
+  const suppliedExpectedSha256 = args.expected_sha256 !== undefined;
+  if (!requestedPath || content === undefined || typeof overwrite !== "boolean") {
+    const safePath = safeWorkspaceResultPath({ workspaceRoot, requestedPath });
+    return failedResult(workspaceMutationFailure(
+      safePath ?? "",
+      "invalid_arguments",
+      { message: "write_file requires path, content, and boolean overwrite.", recovery_hint: "Retry with path, content, and overwrite=false or true." },
+    ));
+  }
+  if (suppliedExpectedSha256 && expectedSha256 === undefined) {
+    const safePath = safeWorkspaceResultPath({ workspaceRoot, requestedPath });
+    return failedResult(workspaceMutationFailure(
+      safePath ?? "",
+      "invalid_arguments",
+      {
+        message: "expected_sha256 must be a 64-character hexadecimal SHA-256 digest.",
+        recovery_hint: "Retry with the complete current lowercase or uppercase SHA-256.",
+      },
+    ));
+  }
 
   const guard = await resolveWorkspacePathGuard({
     workspaceRoot,
-    relativePath: path,
+    relativePath: requestedPath,
     allowMissingLeaf: true,
     rejectProtectedProjectLedgerWrites: true,
     protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
   });
-  if (!guard.ok) return { ok: false, error: guard.reason, path, guard, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: guard.reason }) };
+  if (!guard.ok) {
+    const safePath = safeWorkspaceResultPath({
+      workspaceRoot: guard.workspaceRoot,
+      requestedPath,
+      absolutePath: guard.absolutePath,
+    });
+    return {
+      ok: false as const,
+      error: guard.reason,
+      ...(safePath === undefined ? {} : { path: safePath }),
+      guard: safeWorkspaceGuardResult(guard),
+      message: "The requested workspace path was rejected.",
+      recovery_hint: "Retry with a regular workspace-relative file path.",
+      evidence_capability_receipts: fileToolCapabilityReceipt({
+        toolName: "write_file",
+        ok: false,
+        path: safePath,
+        error: guard.reason,
+      }),
+    };
+  }
 
-  const filePath = guard.absolutePath!;
+  const path = publicMutationPath(guard.workspaceRoot, guard.absolutePath!);
+  const startedAt = Date.now();
   return withButlerFileMutationLock(async () => {
-    const existing = await inspectExistingTarget(filePath, path);
-    if (!existing.ok) return { ...existing, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: existing.error }) };
-    if (existing.existed && !overwrite) return { ok: false, error: "file_exists", path, before_sha256: existing.beforeSha256, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: "file_exists" }) };
-    if (existing.existed && expected && existing.beforeSha256 !== expected) return { ok: false, error: "expected_sha256_mismatch", path, before_sha256: existing.beforeSha256, expected_sha256: expected, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: "expected_sha256_mismatch" }) };
-    if (!existing.existed && expected) return { ok: false, error: "expected_sha256_on_missing_file", path, expected_sha256: expected, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: "expected_sha256_on_missing_file" }) };
-
-    try {
-      await ensureParentPolicy(filePath, createParents);
-    } catch (error) {
-      const code = isNodeFsError(error) ? error.code : undefined;
-      const failure = code === "ENOENT" ? "parent_directory_missing" : "parent_directory_unwritable";
-      return { ok: false, error: failure, path, create_parents: createParents, detail: error instanceof Error ? error.message : String(error), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: failure }) };
+    const snapshot = await observeWorkspaceFileMutation({
+      path,
+      absolutePath: guard.absolutePath!,
+      createParents,
+    });
+    if (!snapshot.ok) return failedResult(snapshot);
+    if (snapshot.exists && !overwrite) {
+      return failedResult(workspaceMutationFailure(path, "file_exists", {
+        before_sha256: snapshot.sha256,
+      }));
+    }
+    if (!snapshot.exists && overwrite) {
+      return failedResult(workspaceMutationFailure(path, "invalid_arguments", {
+        message: "Creation requires overwrite=false.",
+        recovery_hint: "Retry creation with overwrite=false.",
+      }));
     }
 
-    const tmp = `${filePath}.butler-${process.pid}-${randomUUID()}.tmp`;
-    const data = Buffer.from(content, "utf8");
-    try {
-      await writeFile(tmp, data, { flag: "wx" });
-      await rename(tmp, filePath);
-    } catch (error) {
-      await rm(tmp, { force: true }).catch(() => {});
-      throw error;
-    }
+    const prepared = prepareWorkspaceFileMutation({
+      snapshot,
+      data: Buffer.from(content, "utf8"),
+      expectedSha256,
+      requireExpectedForExisting: true,
+    });
+    if (!prepared.ok) return failedResult(prepared);
 
-    const after = await readFile(filePath);
-    const afterSha256 = sha256Hex(after);
-    return { ok: true, path, created: !existing.existed, overwritten: existing.existed, bytes: after.length, before_sha256: existing.beforeSha256, after_sha256: afterSha256, atomic_write: true, create_parents: createParents, evidence_receipts: fileToolEvidenceReceipt({ toolName: "write_file", summary: `${existing.existed ? "Overwrote" : "Created"} workspace file ${path}`, references: { path, created: !existing.existed, overwritten: existing.existed, before_sha256: existing.beforeSha256, after_sha256: afterSha256, atomic_write: true, create_parents: createParents }, satisfies: ["durable_artifact"] }), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: true, path, created: !existing.existed, overwritten: existing.existed, bytes: after.length }) };
+    const parentFailure = await ensureWorkspaceMutationParent({
+      path,
+      absolutePath: guard.absolutePath!,
+      createParents,
+      workspaceRoot: guard.workspaceRoot,
+    });
+    if (parentFailure) return failedResult(parentFailure);
+
+    const committed = await commitWorkspaceFileMutation(prepared);
+    if (!committed.ok) return failedResult(committed);
+    return {
+      ok: true as const,
+      path: committed.path,
+      created: committed.created,
+      overwritten: committed.overwritten,
+      bytes: committed.bytes,
+      before_sha256: committed.before_sha256,
+      after_sha256: committed.after_sha256,
+      atomic_write: true as const,
+      ...(committed.cleanup_failed ? { cleanup_failed: true } : {}),
+      create_parents: createParents,
+      metrics: { elapsed_ms: Math.max(0, Date.now() - startedAt), files_written: 1, bytes_written: committed.bytes },
+      evidence_receipts: fileToolEvidenceReceipt({
+        toolName: "write_file",
+        summary: `${committed.created ? "Created" : "Overwrote"} workspace file ${committed.path}`,
+        references: {
+          path: committed.path,
+          created: committed.created,
+          overwritten: committed.overwritten,
+          before_sha256: committed.before_sha256,
+          after_sha256: committed.after_sha256,
+          atomic_write: true,
+          ...(committed.cleanup_failed ? { cleanup_failed: true } : {}),
+          create_parents: createParents,
+        },
+        satisfies: ["durable_artifact"],
+      }),
+      evidence_capability_receipts: fileToolCapabilityReceipt({
+        toolName: "write_file",
+        ok: true,
+        path: committed.path,
+        created: committed.created,
+        overwritten: committed.overwritten,
+        bytes: committed.bytes,
+      }),
+    };
   });
 }

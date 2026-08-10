@@ -1,6 +1,7 @@
 import { TodoListStore } from "../work/todo-list.ts";
 import { WorkStreamStore } from "../work/work-stream.ts";
 import {
+  createUnavailableWorkspaceReference,
   createWorkspaceReference,
   type SessionWorkspaceBindingStore,
   type WorkspaceReference,
@@ -164,8 +165,9 @@ export function createButlerToolExecutor(input: {
   workspaceReference?: WorkspaceReference;
   sessionBindingStore?: SessionWorkspaceBindingStore;
 }): ContextualButlerToolExecutor {
-  const workspaceReference = input.workspaceReference ??
-    createWorkspaceReference(input.workspacePath ?? input.butlerHome);
+  const workspaceReference = input.workspaceReference ?? (input.sessionId && input.sessionBindingStore
+    ? createUnavailableWorkspaceReference()
+    : createWorkspaceReference(input.workspacePath ?? input.butlerHome));
   const projectLedgerWorkspaceReference = input.workspaceReference || input.sessionId
     ? workspaceReference
     : undefined;
