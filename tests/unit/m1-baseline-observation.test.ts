@@ -54,7 +54,7 @@ test("M1 baseline observation records safe dimensions and redacts unsafe metadat
       metadata: {
         ...acceptedMetadata(),
         modelRef: "https://secret.example/prompt?value=raw-message",
-        sourceRevision: "/Users/yeonwoo/private/project",
+        sourceRevision: "/srv/private/project",
       },
       env: { BUTLER_M1_BASELINE_TELEMETRY: "on" },
     });
@@ -98,7 +98,7 @@ test("M1 baseline observation records safe dimensions and redacts unsafe metadat
     const raw = readFileSync(operationalMetricsPath(butlerData), "utf8");
     expect(raw).not.toContain("secret.example");
     expect(raw).not.toContain("raw-message");
-    expect(raw).not.toContain("/Users/yeonwoo/private/project");
+    expect(raw).not.toContain("/srv/private/project");
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
