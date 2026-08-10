@@ -12,8 +12,12 @@ import {
   compactReplayContinuityRewriteFailure,
   compactReplayRejectionForArguments,
   compactReplayToolBatchRejection,
+  expandCompactReplayOperationCarrierCalls,
+  withoutCompactReplayCarrierOperations,
   type CompactReplayToolBatchRejection,
 } from "../compact-replay/index.ts";
+import { REPLACE_PHASE_CONTINUITY_TOOL_NAME } from
+  "../../tools/m1-compact-replay.ts";
 
 const BTCC_TOOL_EXECUTION_ENVELOPE = Symbol("btcc-tool-execution-envelope");
 
@@ -79,12 +83,24 @@ export function prepareBtccToolBatch(
   input: Pick<BtccAgentLoopInput, "tools" | "compactReplay">,
   calls: readonly BtccAgentLoopToolCall[],
 ): PreparedBtccToolCall[] {
-  const prepared = calls.map((call) => prepareBtccToolCall(input, call));
+  const executableCalls = expandCompactReplayOperationCarrierCalls({
+    enabled: input.compactReplay?.enabled === true,
+    calls,
+  });
+  const prepared = executableCalls.map((call) =>
+    prepareBtccToolCall(input, call));
+  const rawCarrierArguments = calls[0]?.arguments;
+  const hasMixedProviderCarrier = calls.length > 1 &&
+    calls[0]?.name === REPLACE_PHASE_CONTINUITY_TOOL_NAME &&
+    Array.isArray(rawCarrierArguments?.operations) &&
+    rawCarrierArguments.operations.length > 0;
   const rejection = compactReplayToolBatchRejection({
     enabled: input.compactReplay?.enabled === true,
-    calls: prepared.map((item) => ({
+    calls: prepared.map((item, index) => ({
       name: item.call.name,
-      arguments: item.call.arguments,
+      arguments: hasMixedProviderCarrier && index === 0
+        ? rawCarrierArguments
+        : item.call.arguments,
       validationError: item.validationError,
     })),
   });
@@ -121,13 +137,19 @@ export function prepareBtccToolCall(
   const persistedCarrierDiagnostic = compactReplayCarrierDiagnostic(
     call.arguments,
   );
+  const executionArguments = call.name === REPLACE_PHASE_CONTINUITY_TOOL_NAME &&
+      validation.error === null && Array.isArray(validation.arguments.operations)
+    ? withoutCompactReplayCarrierOperations(validation.arguments)
+    : validation.arguments;
   return {
     call: {
       ...call,
       arguments: persistedCarrierDiagnostic
         ? call.arguments
-        : validation.arguments,
-      rawArguments: validation.rawArguments,
+        : executionArguments,
+      rawArguments: persistedCarrierDiagnostic
+        ? validation.rawArguments
+        : JSON.stringify(executionArguments),
     },
     tool,
     validationError: tool

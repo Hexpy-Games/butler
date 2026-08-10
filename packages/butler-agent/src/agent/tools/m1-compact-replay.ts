@@ -7,6 +7,12 @@ export const READ_OPERATION_RESULTS_TOOL_NAME =
   "read_operation_results" as const;
 export const REPLACE_PHASE_CONTINUITY_TOOL_NAME =
   "replace_phase_continuity" as const;
+export const M1_COMPACT_REPLAY_OPERATION_CARRIER_INSTRUCTION = [
+  "Every tool-calling model response is one complete compact replay operation carrier.",
+  "Emit exactly one replace_phase_continuity call and put at least one requested operation in its required operations array.",
+  "The runtime rewrites continuity first, then dispatches the nested operations in array order only after that rewrite succeeds.",
+  "Never omit operations or emit separate top-level operation calls; an incomplete or mixed carrier is rejected and nothing is dispatched.",
+].join(" ");
 
 export type GuidedOperationResultViewSelector =
   | { kind: "json_pointer"; pointer: string }
@@ -83,7 +89,7 @@ export const M1_COMPACT_REPLAY_TOOL_DEFINITIONS: readonly FunctionToolDefinition
       name: REPLACE_PHASE_CONTINUITY_TOOL_NAME,
       description: [
         "Replace the durable model-authored continuity state for this Guided phase.",
-        "Call this exactly once as the first tool in every tool batch while compact replay is enabled.",
+        M1_COMPACT_REPLAY_OPERATION_CARRIER_INSTRUCTION,
         "State only integrated decisions and unresolved work; do not copy raw tool payloads.",
       ].join(" "),
       concurrencySafe: false,
@@ -104,6 +110,21 @@ export const M1_COMPACT_REPLAY_TOOL_DEFINITIONS: readonly FunctionToolDefinition
           },
           next_batch_purpose: { type: "string", minLength: 1, maxLength: 800 },
           public_activity: { type: "string", minLength: 1, maxLength: 500 },
+          operations: {
+            type: "array",
+            minItems: 1,
+            maxItems: 8,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                name: { type: "string", minLength: 1, maxLength: 120 },
+                operation_id: { type: "string", minLength: 1, maxLength: 160 },
+                arguments: { type: "object" },
+              },
+              required: ["operation_id", "name", "arguments"],
+            },
+          },
         },
         required: [
           "objective_state",
@@ -111,6 +132,7 @@ export const M1_COMPACT_REPLAY_TOOL_DEFINITIONS: readonly FunctionToolDefinition
           "unresolved_questions",
           "next_batch_purpose",
           "public_activity",
+          "operations",
         ],
       },
     },
@@ -183,6 +205,52 @@ export const M1_COMPACT_REPLAY_TOOL_DEFINITIONS: readonly FunctionToolDefinition
       },
     },
   ]);
+
+/** Derives the atomic carrier's operation union from the fixed phase tools. */
+export function withM1CompactReplayOperationCarrier(
+  tools: readonly FunctionToolDefinition[],
+): FunctionToolDefinition[] {
+  const operations = tools.filter((tool) =>
+    tool.name !== REPLACE_PHASE_CONTINUITY_TOOL_NAME);
+  return tools.map((tool) => {
+    if (tool.name !== REPLACE_PHASE_CONTINUITY_TOOL_NAME) return tool;
+    const properties = tool.parameters.properties &&
+        typeof tool.parameters.properties === "object" &&
+        !Array.isArray(tool.parameters.properties)
+      ? tool.parameters.properties as Record<string, unknown>
+      : {};
+    return {
+      ...tool,
+      parameters: {
+        ...tool.parameters,
+        properties: {
+          ...properties,
+          operations: {
+            type: "array",
+            minItems: 1,
+            maxItems: 8,
+            items: {
+              oneOf: operations.map((operation) => ({
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  name: { type: "string", const: operation.name },
+                  operation_id: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 160,
+                  },
+                  arguments: operation.parameters,
+                },
+                required: ["operation_id", "name", "arguments"],
+              })),
+            },
+          },
+        },
+      },
+    };
+  });
+}
 
 export type PhaseContinuity = {
   objectiveState: string;

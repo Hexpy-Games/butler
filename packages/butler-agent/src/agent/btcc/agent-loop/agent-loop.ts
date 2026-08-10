@@ -94,7 +94,6 @@ export async function runBtccAgentLoop(
       throw error;
     }
   };
-
   const appendAssistantResponse = (response: ModelRoundResult): {
     text: string;
     calls: BtccAgentLoopToolCall[];
@@ -111,7 +110,6 @@ export async function runBtccAgentLoop(
     }
     return { text, calls };
   };
-
   const synthesizeFinalResponseForLoop = (iterationBase: number) => synthesizeFinalResponse({
     synthesis: input.finalSynthesis,
     messages,
@@ -120,7 +118,6 @@ export async function runBtccAgentLoop(
     appendAssistantResponse,
     emit: (event) => emit(events, input.onEvent, event),
   });
-
   const recordToolResult = async (record: {
     call: BtccAgentLoopToolCall;
     result: BtccAgentLoopToolResult;
@@ -255,7 +252,10 @@ export async function runBtccAgentLoop(
       return { finalText: text, messages, events, stoppedByLimit: false };
     }
 
-    const preparedCalls = prepareBtccToolBatch({ tools, compactReplay: input.compactReplay }, calls);
+    const preparedCalls = prepareBtccToolBatch(
+      { tools, compactReplay: input.compactReplay },
+      calls,
+    );
     const callIds = preparedCalls.map((prepared) => prepared.call.id);
     const operationBatchId = digest(stableJson({ turnId: input.turnId ?? null, callIds }));
     await input.onAssistantTextBeforeTools?.({
