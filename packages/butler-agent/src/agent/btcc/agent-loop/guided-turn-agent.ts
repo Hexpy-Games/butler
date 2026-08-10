@@ -297,7 +297,6 @@ export function createProductionGuidedTurnAgent(input: {
         },
         onAssistantTextBeforeTools: ({ text, toolCalls: calls }) =>
           observeCompactReplayToolBatch({
-            enabled: compactReplayEnabled,
             activity,
             text,
             calls,

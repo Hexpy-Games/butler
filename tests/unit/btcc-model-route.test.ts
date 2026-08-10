@@ -13,6 +13,8 @@ import {
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { createTurnRuntime } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import { openBtccSqliteStores } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+import { M1_COMPACT_REPLAY_TOOL_DEFINITIONS } from
+  "../../packages/butler-agent/src/agent/tools/m1-compact-replay.ts";
 
 test("model route advances once after bounded provider exhaustion and preserves order", async () => {
   const route = buildModelRoute({
@@ -748,4 +750,81 @@ test("accepted model response is linked to the active checkpoint and replays aft
     stores.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("sanitized compact carrier acceptance replays byte-identically without provider dispatch", async () => {
+  const route = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.6-sol",
+    reasoningEffort: "low",
+  });
+  const tools = M1_COMPACT_REPLAY_TOOL_DEFINITIONS.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+    concurrencySafe: tool.concurrencySafe,
+  }));
+  const request = {
+    roundId: "compact-rejected-resume-round",
+    model: "openai/gpt-5.6-sol",
+    messages: [],
+    tools,
+  };
+  let accepted: Awaited<ReturnType<ModelRoundPort["runRound"]>> | undefined;
+  let firstProviderCalls = 0;
+  const first = createModelRoutePort({
+    turnId: "compact-rejected-resume-turn",
+    route,
+    base: {
+      async runRound() {
+        firstProviderCalls += 1;
+        return {
+          text: "private provider prose",
+          toolCalls: [
+            {
+              id: "invalid-continuity",
+              name: "replace_phase_continuity",
+              arguments: {},
+              rawArguments: "{}",
+            },
+            {
+              id: "private-web",
+              name: "web_search",
+              arguments: { query: "PRIVATE_RESTART_QUERY" },
+              rawArguments: '{"query":"PRIVATE_RESTART_QUERY"}',
+            },
+          ],
+        };
+      },
+    },
+    recordAcceptedResponse: async (input) => {
+      accepted = input.result;
+    },
+  });
+
+  const firstResult = await first.runRound(request);
+  expect(firstProviderCalls).toBe(1);
+  expect(accepted).toEqual(firstResult);
+  const acceptedBytes = JSON.stringify(accepted);
+  expect(acceptedBytes).toContain('"name":"query","type":"string"');
+  expect(acceptedBytes).not.toContain("PRIVATE_RESTART_QUERY");
+
+  let resumedProviderCalls = 0;
+  const resumed = createModelRoutePort({
+    turnId: "compact-rejected-resume-turn",
+    route,
+    base: {
+      async runRound() {
+        resumedProviderCalls += 1;
+        return { text: "must not dispatch", toolCalls: [] };
+      },
+    },
+    loadAcceptedResponse: async () => JSON.parse(acceptedBytes),
+  });
+  const resumedResult = await resumed.runRound(request);
+
+  expect(resumedProviderCalls).toBe(0);
+  expect(JSON.stringify(resumedResult)).toBe(acceptedBytes);
+  expect(JSON.stringify(resumedResult)).not.toContain(
+    '"name":"carrier_rejection","type":"object"',
+  );
 });

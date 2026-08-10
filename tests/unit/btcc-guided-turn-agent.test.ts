@@ -1106,6 +1106,331 @@ test("Guided agent leaves web query planning to the selected model", async () =>
   }
 });
 
+test("T3 Guided web carrier rejection reaches correction without dispatch or Turn fault", async () => {
+  const previousFlag = process.env.BUTLER_M1_COMPACT_REPLAY;
+  const fixture = createFixture("guided-t3-web-carrier-correction");
+  try {
+    process.env.BUTLER_M1_COMPACT_REPLAY = "on";
+    writeFileSync(join(fixture.root, "butler.config.json"), JSON.stringify({
+      webSearch: { provider: "mock" },
+    }));
+    const turnId = "guided-t3-web-carrier-correction-turn";
+    let round = 0;
+    const agent = fixture.agent({
+      async runRound(request) {
+        round += 1;
+        if (round === 1) {
+          return toolResponse([toolCall("invalid-web-only", "web_search", {
+            query: "Butler compact replay correction",
+          })]);
+        }
+        if (round === 2) {
+          expect(fixture.stores.guidedToolJournal.list(turnId)).toEqual([]);
+          const correction = request.messages.map((message) => message.content)
+            .join("\n");
+          expect(correction).toContain("operation_rejected");
+          expect(correction).toContain(
+            "compact_replay_phase_continuity_required_first",
+          );
+          expect(correction).toContain("web_search");
+          expect(messagesWithToolResults(request)).toEqual([]);
+          return toolResponse([
+            continuityCall(
+              "corrected-web-continuity",
+              "Search only after rewriting PhaseContinuity.",
+            ),
+            toolCall("corrected-web-search", "web_search", {
+              query: "Butler compact replay correction",
+            }),
+          ]);
+        }
+        expect(fixture.stores.guidedToolJournal.list(turnId)
+          .map((record) => record.toolName)).toEqual([
+          "replace_phase_continuity",
+          "web_search",
+        ]);
+        return { text: "교정된 검색 batch를 완료했습니다.", toolCalls: [] };
+      },
+    });
+
+    const result = await agent.run({
+      turn: turnRecord(fixture.root, { turnId }),
+      signal: new AbortController().signal,
+    });
+
+    expect(result.content).toBe("교정된 검색 batch를 완료했습니다.");
+    expect(round).toBe(3);
+    expect(fixture.stores.guidedToolJournal.list(turnId)
+      .filter((record) => record.toolName === "web_search")).toHaveLength(1);
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_COMPACT_REPLAY;
+    else process.env.BUTLER_M1_COMPACT_REPLAY = previousFlag;
+    fixture.close();
+  }
+});
+
+test("T3 Guided runtime continuity failure blocks the source and effect remainder", async () => {
+  const previousFlag = process.env.BUTLER_M1_COMPACT_REPLAY;
+  const fixture = createFixture("guided-t3-continuity-runtime-failure");
+  try {
+    process.env.BUTLER_M1_COMPACT_REPLAY = "on";
+    writeFileSync(join(fixture.root, "butler.config.json"), JSON.stringify({
+      webSearch: { provider: "mock" },
+    }));
+    const turnId = "guided-t3-continuity-runtime-failure-turn";
+    let round = 0;
+    const agent = fixture.agent({
+      async runRound(request) {
+        round += 1;
+        if (round === 1) {
+          return toolResponse([
+            toolCall("runtime-invalid-continuity", "replace_phase_continuity", {
+              objective_state: " ",
+              integrated_decisions: [],
+              unresolved_questions: [],
+              next_batch_purpose: "Reject the carrier before its remainder.",
+              public_activity: "Validating phase continuity.",
+            }),
+            toolCall("runtime-blocked-web", "web_search", {
+              query: "RUNTIME_PRIVATE_QUERY",
+            }),
+            toolCall("runtime-blocked-effect", "write_file", {
+              path: "runtime-blocked.txt",
+              content: "RUNTIME_PRIVATE_EFFECT",
+              overwrite: false,
+            }),
+          ]);
+        }
+        if (round === 2) {
+          const records = fixture.stores.guidedToolJournal.list(turnId);
+          expect(records).toHaveLength(1);
+          expect(records[0]).toMatchObject({
+            toolName: "replace_phase_continuity",
+            status: "completed",
+            result: {
+              ok: false,
+              error: {
+                code: "tool_error",
+                message: expect.stringContaining(
+                  "compact_replay_objective_state_invalid",
+                ),
+              },
+            },
+          });
+          expect(existsSync(join(fixture.root, "runtime-blocked.txt"))).toBe(false);
+          const correction = request.messages.map((message) => message.content)
+            .join("\n");
+          expect(correction).toContain(
+            "compact_replay_phase_continuity_rewrite_failed",
+          );
+          expect(correction).toContain('"schema_path":"$.toolCalls[0]"');
+          expect(correction).toContain('"name":"objective_state","type":"string"');
+          expect(correction).toContain('"name":"query","type":"string"');
+          expect(correction).not.toContain("RUNTIME_PRIVATE_QUERY");
+          expect(correction).not.toContain("RUNTIME_PRIVATE_EFFECT");
+          return toolResponse([
+            continuityCall(
+              "runtime-corrected-continuity",
+              "Execute the corrected source operation once.",
+            ),
+            toolCall("runtime-corrected-web", "web_search", {
+              query: "safe runtime correction",
+            }),
+          ]);
+        }
+        return { text: "runtime continuity 교정을 완료했습니다.", toolCalls: [] };
+      },
+    });
+
+    const result = await agent.run({
+      turn: turnRecord(fixture.root, { turnId }),
+      signal: new AbortController().signal,
+    });
+
+    expect(result.content).toBe("runtime continuity 교정을 완료했습니다.");
+    expect(round).toBe(3);
+    expect(fixture.stores.guidedToolJournal.list(turnId).map((record) =>
+      record.toolName)).toEqual([
+      "replace_phase_continuity",
+      "replace_phase_continuity",
+      "web_search",
+    ]);
+    const db = new Database(fixture.dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_effects
+      `).get()?.count).toBe(0);
+    } finally {
+      db.close();
+    }
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_COMPACT_REPLAY;
+    else process.env.BUTLER_M1_COMPACT_REPLAY = previousFlag;
+    fixture.close();
+  }
+});
+
+test("T3 routed Guided redacts whitespace-invalid continuity before acceptance", async () => {
+  const previousFlag = process.env.BUTLER_M1_COMPACT_REPLAY;
+  const root = mkdtempSync(join(tmpdir(), "guided-t3-routed-carrier-"));
+  const dbPath = join(root, "butler.sqlite");
+  let stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-t3-routed-carrier",
+    storageProfile: "ephemeral",
+  });
+  const marker = "REJECTED_CARRIER_PRIVATE_7f14a9";
+  const turnId = "guided-t3-routed-carrier-turn";
+  const providerModels: string[] = [];
+  try {
+    process.env.BUTLER_M1_COMPACT_REPLAY = "on";
+    writeFileSync(join(root, "butler.config.json"), JSON.stringify({
+      webSearch: { provider: "mock" },
+    }));
+    const agent = createProductionGuidedTurnAgent({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: dbPath,
+      contextDocuments: stores.contextDocuments,
+      toolJournal: stores.guidedToolJournal,
+      effectJournal: stores.guidedEffectJournal,
+      durableWork: stores.durableWork,
+      modelRound: {
+        async runRound(request) {
+          providerModels.push(String(request.model));
+          if (providerModels.length === 1) {
+            return {
+              text: `provider prose ${marker}`,
+              toolCalls: [
+                toolCall("routed-invalid-continuity", "replace_phase_continuity", {
+                  objective_state: " ",
+                  integrated_decisions: [`private decision ${marker}`],
+                  unresolved_questions: [],
+                  next_batch_purpose: `private purpose ${marker}`,
+                  public_activity: `private activity ${marker}`,
+                }),
+                toolCall("routed-rejected-web", "web_search", { query: marker }),
+                toolCall("routed-rejected-effect", "write_file", {
+                  path: "rejected.txt",
+                  content: marker,
+                }),
+              ],
+              assistantMessage: {
+                role: "assistant",
+                content: `private assistant ${marker}`,
+                providerData: { private_payload: marker },
+              },
+              continuation: { private_continuation: marker },
+              raw: { private_raw: marker },
+            };
+          }
+          if (providerModels.length === 2) {
+            expect(stores.guidedToolJournal.list(turnId)).toEqual([]);
+            expect(existsSync(join(root, "rejected.txt"))).toBe(false);
+            const correction = request.messages.map((message) => message.content)
+              .join("\n");
+            expect(correction).toContain(
+              "compact_replay_phase_continuity_schema_invalid",
+            );
+            expect(correction).toContain(
+              '"schema_path":"$.toolCalls[0].arguments"',
+            );
+            expect(correction).toContain(
+              '"reason":"phase_continuity_schema_invalid"',
+            );
+            expect(correction).toContain(
+              '"name":"objective_state","type":"string"',
+            );
+            expect(correction).toContain('"name":"query","type":"string"');
+            expect(correction).not.toContain(
+              "compact_replay_objective_state_invalid",
+            );
+            expect(correction).not.toContain(marker);
+            return toolResponse([
+              continuityCall(
+                "routed-corrected-continuity",
+                "Execute the corrected search carrier once.",
+              ),
+              toolCall("routed-corrected-web", "web_search", {
+                query: "safe corrected compact replay query",
+              }),
+            ]);
+          }
+          return { text: "교정된 routed carrier를 완료했습니다.", toolCalls: [] };
+        },
+      },
+    });
+    const command = localRunCommand(root, turnId);
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol",
+      backupModelRefs: ["zai/glm-5.2"],
+      reasoningEffort: "low",
+      retryCeiling: 1,
+    });
+    const runtime = createGuidedTurnRuntime({
+      admission: stores.admission,
+      turns: stores.turns,
+      messages: stores.messages,
+      committedSuccessorReadiness: stores.committedSuccessorReadiness,
+      agent,
+    });
+
+    await expect(runtime.runTurn(command)).resolves.toMatchObject({
+      kind: "delivered",
+      content: "교정된 routed carrier를 완료했습니다.",
+    });
+    expect(providerModels).toEqual([
+      "openai/gpt-5.6-sol",
+      "openai/gpt-5.6-sol",
+      "openai/gpt-5.6-sol",
+    ]);
+
+    stores.close();
+    stores = openBtccSqliteStores({
+      dbPath,
+      ownerId: "guided-t3-routed-carrier-reopen",
+      storageProfile: "ephemeral",
+    });
+    expect(stores.guidedToolJournal.list(turnId).map((record) => record.toolName))
+      .toEqual(["replace_phase_continuity", "web_search"]);
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      const accepted = db.query<{ normalized_response_json: string }, [string]>(`
+        SELECT normalized_response_json FROM btcc_model_round_acceptances
+        WHERE turn_id = ? ORDER BY created_at, round_id
+      `).all(turnId);
+      expect(accepted).toHaveLength(3);
+      expect(Object.keys(JSON.parse(
+        accepted[0]!.normalized_response_json,
+      ))).toEqual(["toolCalls"]);
+      expect(accepted[0]?.normalized_response_json).toContain(
+        '"schema_path":"$.toolCalls[0].arguments"',
+      );
+      expect(accepted[0]?.normalized_response_json).toContain(
+        '"reason":"phase_continuity_schema_invalid"',
+      );
+      expect(accepted[0]?.normalized_response_json).toContain(
+        '"name":"query","type":"string"',
+      );
+      expect(durableTextLocations(db, marker)).toEqual([]);
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_model_route_events
+        WHERE turn_id = ? AND event_type = 'model.fallback.selected'
+      `).get(turnId)?.count).toBe(0);
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_effects
+      `).get()?.count).toBe(0);
+    } finally {
+      db.close();
+    }
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_COMPACT_REPLAY;
+    else process.env.BUTLER_M1_COMPACT_REPLAY = previousFlag;
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("Guided agent exposes only typed Project Ledger effects in a writable project turn", async () => {
   const fixture = createFixture("guided-policy");
   try {
@@ -3906,6 +4231,36 @@ function createFixture(label: string) {
       rmSync(root, { recursive: true, force: true });
     },
   };
+}
+
+function durableTextLocations(
+  db: Database,
+  marker: string,
+): Array<{ table: string; column: string }> {
+  const matches: Array<{ table: string; column: string }> = [];
+  const tables = db.query<{ name: string }, []>(`
+    SELECT name FROM sqlite_schema
+    WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+  `).all();
+  for (const table of tables) {
+    const tableName = quoteSqlIdentifier(table.name);
+    const columns = db.query<{ name: string }, []>(
+      `PRAGMA table_info(${tableName})`,
+    ).all();
+    for (const column of columns) {
+      const columnName = quoteSqlIdentifier(column.name);
+      const found = db.query<{ found: number }, [string]>(`
+        SELECT COUNT(*) AS found FROM ${tableName}
+        WHERE instr(CAST(${columnName} AS TEXT), ?) > 0
+      `).get(marker)?.found ?? 0;
+      if (found > 0) matches.push({ table: table.name, column: column.name });
+    }
+  }
+  return matches;
+}
+
+function quoteSqlIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
 }
 
 function runGit(args: string[], cwd: string, gitDir = false): string {
