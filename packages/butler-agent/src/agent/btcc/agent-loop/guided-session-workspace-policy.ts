@@ -42,8 +42,17 @@ export function applyGuidedWorkspaceAuthorization(input: {
   names: Set<string>;
   policy: WorkspacePolicy;
   projectRef?: string;
+  fixedSurface?: boolean;
 }): void {
   const hasProject = Boolean(input.policy.projectId || input.projectRef);
+  if (input.fixedSurface) {
+    if (input.policy.accessMode !== "full_access") {
+      for (const name of input.names) {
+        if (!NON_FULL_ACCESS_TOOL_NAMES.has(name)) input.names.delete(name);
+      }
+    }
+    return;
+  }
   if (input.policy.accessMode === "full_access") {
     for (const tool of BUTLER_TOOLS) {
       if (

@@ -51,7 +51,7 @@ import type { ContextualButlerToolExecutor } from
   "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { createGuidedActivityProjection } from
   "../../packages/butler-agent/src/agent/btcc/projection/index.ts";
-import { authorizedToolDefinitions, isReplaySafeTool } from
+import { isReplaySafeTool, selectGuidedToolSurface } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
 import { upsertMcpServer } from
   "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";
@@ -61,6 +61,8 @@ import { buildModelRoute } from
   "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { readOperationalMetricEvents } from
   "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
+import { createWorkspaceReference } from
+  "../../packages/butler-agent/src/agent/session-workspaces/index.ts";
 
 type ScriptedModelRoundStep =
   | ModelRoundResult
@@ -305,6 +307,51 @@ test("Guided fallback projects the cursor model into public iteration and fallba
     ]);
     expect(fallbackModels).toEqual(["zai/glm-5.2"]);
   } finally {
+    fixture.close();
+  }
+});
+
+test("Guided tool-surface telemetry binds provider and model to the active route candidate", async () => {
+  const fixture = createFixture("guided-tool-surface-active-route");
+  const previousMetricsEnabled = process.env.BUTLER_METRICS_ENABLED;
+  try {
+    process.env.BUTLER_METRICS_ENABLED = "true";
+    const agent = fixture.agent({
+      async runRound(request) {
+        expect(request.model).toBe("zai/glm-5.2");
+        return { text: "active candidate answer", toolCalls: [] };
+      },
+    });
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-tool-surface-active-route",
+    });
+    const route = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.5",
+      backupModelRefs: ["zai/glm-5.2"],
+      reasoningEffort: "medium",
+      retryCeiling: 1,
+    });
+    turn.modelRoute = { ...route, activeCursor: 1 };
+
+    await agent.run({
+      turn,
+      signal: new AbortController().signal,
+    });
+
+    const [event] = readOperationalMetricEvents({ butlerData: fixture.root })
+      .filter((candidate) => candidate.name === "m1_tool_surface_admission");
+    expect(event).toMatchObject({
+      category: "tool",
+      status: "ok",
+      unit: "tools",
+      dimensions: {
+        providerId: "zai",
+        modelRef: "zai/glm-5.2",
+      },
+    });
+  } finally {
+    if (previousMetricsEnabled === undefined) delete process.env.BUTLER_METRICS_ENABLED;
+    else process.env.BUTLER_METRICS_ENABLED = previousMetricsEnabled;
     fixture.close();
   }
 });
@@ -1128,7 +1175,11 @@ test("Guided discovery exposes registry read tools without enabling unsupported 
       accessMode: "full_access",
       trackingMode: "local",
     });
-    const authorizedNames = authorizedToolDefinitions(turn)
+    const authorizedNames = selectGuidedToolSurface(
+      turn,
+      {},
+      createWorkspaceReference(fixture.root),
+    ).authorizedTools
       .map((tool) => tool.name);
     expect(authorizedNames).toContain("list_automations");
     expect(authorizedNames).toContain("list_mcp_capabilities");

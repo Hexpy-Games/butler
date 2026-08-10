@@ -206,6 +206,30 @@ describe("list_files", () => {
     expect(result.evidence_capability_receipts[0].verified).toBe(false);
   });
 
+  test("native discovery keeps canonical workspace authority and redacted output separate", async () => {
+    const boundRoot = await mkdtemp(join(tmpdir(), "butler-native-discovery-bound-"));
+    try {
+      await writeFile(join(boundRoot, "bound.txt"), "bound workspace content\n", "utf8");
+      const handlers = createFileToolHandlers({
+        workspacePath: root,
+        workspaceReference: createWorkspaceReference(boundRoot),
+      });
+      const result = await handlers.list_files!({
+        name: "list_files",
+        args: { workspace_root: root },
+        rawArguments: "{\"workspace_root\":\"redacted\"}",
+      } as any) as any;
+
+      expect(result.ok).toBe(true);
+      expect(result.files).toEqual([{ path: "bound.txt", bytes: 24 }]);
+      expect(JSON.stringify(result)).not.toContain(root);
+      expect(JSON.stringify(result)).not.toContain(boundRoot);
+      expect(JSON.stringify(result)).not.toMatch(/python|shell/iu);
+    } finally {
+      await rm(boundRoot, { recursive: true, force: true });
+    }
+  });
+
   test("continues deterministic discovery pages, prunes globs, and skips symlinks", async () => {
     await mkdir(join(root, "nested"), { recursive: true });
     await writeFile(join(root, "a.txt"), "a", "utf8");

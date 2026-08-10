@@ -4,12 +4,13 @@ import type { TurnRecord } from
 import type { SqliteGuidedToolJournal } from
   "../../packages/butler-agent/src/agent/adapters/index.ts";
 import {
-  authorizedToolDefinitions,
   guidedNativeToolDefinitions,
   guidedPolicy,
-  visibleToolDefinitions,
+  selectGuidedToolSurface,
 } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
+import { visibleToolDefinitions } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-surface.ts";
 import {
   guidedInstructions,
   renderGuidedPrompt,
@@ -21,6 +22,16 @@ import { workScopeForTurn } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { appRuntimePolicy } from
   "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
+import { createWorkspaceReference } from
+  "../../packages/butler-agent/src/agent/session-workspaces/index.ts";
+
+function authorizedToolDefinitions(
+  turn: TurnRecord,
+  env: NodeJS.ProcessEnv = {},
+  workspaceReference = createWorkspaceReference("/tmp/workspace"),
+) {
+  return selectGuidedToolSurface(turn, env, workspaceReference).authorizedTools;
+}
 
 test("R3 guided web_read keeps reader backend runtime-owned", () => {
   const webRead = guidedNativeToolDefinitions().find((tool) => tool.name === "web_read");
@@ -268,7 +279,7 @@ test("R3 Conception guidance actively selects associative recall and exposes cro
     executionPolicy: executionPolicy("ledger"),
   });
   const instructions = guidedInstructions(guidedPolicy(turn));
-  const definitions = authorizedToolDefinitions(turn, {});
+  const definitions = authorizedToolDefinitions(turn, {}, createWorkspaceReference("/tmp/workspace"));
   const authorized = definitions.map((tool) => tool.name);
   const visible = visibleToolDefinitions(definitions, guidedPolicy(turn))
     .map((tool) => tool.name);
@@ -293,7 +304,7 @@ test("R3 Conception guidance actively selects associative recall and exposes cro
 test("guided read-only policy authorizes and visibly exposes list_files", () => {
   const turn = turnRecord({ accessMode: "read_only" });
   const policy = guidedPolicy(turn);
-  const authorized = authorizedToolDefinitions(turn, {});
+  const authorized = authorizedToolDefinitions(turn, {}, createWorkspaceReference("/tmp/workspace"));
   const visible = visibleToolDefinitions(authorized, policy);
 
   expect(authorized.find((tool) => tool.name === "list_files")).toBeDefined();
@@ -310,7 +321,11 @@ test("session worktree binding is visible only on full-access project surfaces",
       accessMode: "full_access",
     },
   });
-  const projectAuthorized = authorizedToolDefinitions(projectFullAccess, {});
+  const projectAuthorized = authorizedToolDefinitions(
+    projectFullAccess,
+    {},
+    createWorkspaceReference("/tmp/workspace"),
+  );
   expect(projectAuthorized.map((tool) => tool.name)).toContain("bind_session_git_worktree");
   expect(visibleToolDefinitions(projectAuthorized, guidedPolicy(projectFullAccess))
     .map((tool) => tool.name)).toContain("bind_session_git_worktree");
@@ -320,7 +335,11 @@ test("session worktree binding is visible only on full-access project surfaces",
     accessMode: "read_only",
     executionPolicy: executionPolicy("ledger"),
   });
-  expect(authorizedToolDefinitions(readOnlyProject, {}).map((tool) => tool.name))
+  expect(authorizedToolDefinitions(
+    readOnlyProject,
+    {},
+    createWorkspaceReference("/tmp/workspace"),
+  ).map((tool) => tool.name))
     .not.toContain("bind_session_git_worktree");
 
   const generalFullAccess = turnRecord({
@@ -330,7 +349,11 @@ test("session worktree binding is visible only on full-access project surfaces",
       accessMode: "full_access",
     },
   });
-  expect(authorizedToolDefinitions(generalFullAccess, {}).map((tool) => tool.name))
+  expect(authorizedToolDefinitions(
+    generalFullAccess,
+    {},
+    createWorkspaceReference("/tmp/workspace"),
+  ).map((tool) => tool.name))
     .not.toContain("bind_session_git_worktree");
 });
 
@@ -359,7 +382,7 @@ test("guided workspace visibility owns the exact native workspace surface", () =
 
   const readOnly = turnRecord({ accessMode: "read_only" });
   const readOnlyNames = visibleToolDefinitions(
-    authorizedToolDefinitions(readOnly, {}),
+    authorizedToolDefinitions(readOnly, {}, createWorkspaceReference("/tmp/workspace")),
     guidedPolicy(readOnly),
   ).map((tool) => tool.name);
   for (const name of ["list_files", "read_file", "grep_files"]) {
@@ -437,7 +460,7 @@ test("R3 hides page preview when the foreground App host is unavailable", () => 
   });
 
   expect(
-    authorizedToolDefinitions(turn, {}).some(
+    authorizedToolDefinitions(turn, {}, createWorkspaceReference("/tmp/workspace")).some(
       (definition) => definition.name === "inspect_workspace_page",
     ),
   ).toBe(false);

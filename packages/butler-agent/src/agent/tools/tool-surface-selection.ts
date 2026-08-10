@@ -3,16 +3,20 @@ import { BUTLER_TOOLS } from "./butler-tools.ts";
 import {
   createInitialToolSurfaceControllerState,
   type ToolSurfaceControllerInput,
+  type ToolSurfacePhasePolicy,
   type ToolSurfaceProviderCapabilities,
 } from "./tool-surface-controller.ts";
 import { selectButlerToolsForTurn } from "./profiles.ts";
 import { mergeToolNames } from "./tool-surface-validation.ts";
+import type { WorkspaceReference } from "../session-workspaces/index.ts";
 
 type InitialState = ReturnType<typeof createInitialToolSurfaceControllerState>;
 
 export interface InitialToolSurfaceSelectionInput {
   role: string;
   message?: string;
+  workspaceReference?: WorkspaceReference;
+  phasePolicy?: ToolSurfacePhasePolicy;
   sessionMetadata?: Record<string, unknown>;
   turnMetadata?: Record<string, unknown>;
   providerCapabilities?: Readonly<{
@@ -31,20 +35,44 @@ export interface InitialToolSurfaceSelection {
 export function selectInitialToolsFromSurfaceController(
   input: InitialToolSurfaceSelectionInput,
 ): InitialToolSurfaceSelection {
+  const phasePolicy = input.phasePolicy;
+  const structuredMetadata = phasePolicy
+    ? {
+        phaseId: phasePolicy.phaseId,
+        policyRevision: phasePolicy.policyRevision,
+        projectId: phasePolicy.projectId,
+        runtimePolicy: {
+          accessMode: phasePolicy.accessMode,
+          trackingMode: phasePolicy.trackingMode,
+          requiredNativeToolProfiles: [...phasePolicy.requiredNativeToolProfiles],
+          requiredNativeTools: [...phasePolicy.requiredNativeTools],
+          toolSurfaceMode: phasePolicy.toolSurfaceMode,
+          ...(phasePolicy.projectId ? { projectId: phasePolicy.projectId } : {}),
+        },
+      }
+    : undefined;
+  const role = phasePolicy?.role ?? input.role;
   const state = createInitialToolSurfaceControllerState({
-    role: input.role,
-    sessionMode: sessionModeFromRole(input.role),
-    sessionMetadata: surfacePolicyMetadata(input.sessionMetadata),
+    role,
+    sessionMode: sessionModeFromRole(role),
+    sessionMetadata: surfacePolicyMetadata({
+      ...input.sessionMetadata,
+      ...structuredMetadata,
+      ...(input.workspaceReference
+        ? { workspaceReferenceState: workspaceReferenceState(input.workspaceReference) }
+        : {}),
+    }),
     turnMetadata: surfacePolicyMetadata(input.turnMetadata),
     providerCapabilities: surfaceProviderCapabilities(input.providerCapabilities),
     requiredNativeTools: requiredNativeToolsFromRuntimePolicy([
+      structuredMetadata,
       input.sessionMetadata,
       input.turnMetadata,
     ]),
   });
   const tools = selectButlerToolsForTurn({
     role: state.context.role,
-    text: input.message,
+    ...(phasePolicy ? {} : { text: input.message }),
     sessionMetadata: state.context.sessionMetadata,
     turnMetadata: state.context.turnMetadata,
     tools: input.tools ?? BUTLER_TOOLS,
@@ -80,6 +108,8 @@ function surfacePolicyMetadata(
     project_id: record.project_id,
     projectPath: record.projectPath,
     project_path: record.project_path,
+    phaseId: record.phaseId,
+    policyRevision: record.policyRevision,
     requiredNativeTools: record.requiredNativeTools,
     required_tools: record.required_tools,
     requiredNativeToolProfiles: record.requiredNativeToolProfiles,
@@ -97,6 +127,7 @@ function surfacePolicyMetadata(
     validation_state: record.validation_state,
     closeoutStrategy: record.closeoutStrategy,
     closeout_strategy: record.closeout_strategy,
+    workspaceReferenceState: record.workspaceReferenceState,
     runtimePolicy: surfaceRuntimePolicy(runtimePolicy),
   });
   return Object.keys(filtered).length > 0 ? filtered : undefined;
@@ -108,6 +139,8 @@ function surfaceRuntimePolicy(runtimePolicy: Record<string, unknown>): Record<st
     project_id: runtimePolicy.project_id,
     projectPath: runtimePolicy.projectPath,
     project_path: runtimePolicy.project_path,
+    phaseId: runtimePolicy.phaseId,
+    policyRevision: runtimePolicy.policyRevision,
     requiredNativeTools: runtimePolicy.requiredNativeTools,
     required_tools: runtimePolicy.required_tools,
     requiredNativeToolProfiles: runtimePolicy.requiredNativeToolProfiles,
@@ -156,4 +189,12 @@ function policyStringArray(
 
 function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function workspaceReferenceState(reference: WorkspaceReference): "available" | "unavailable" {
+  try {
+    return reference.get().trim() ? "available" : "unavailable";
+  } catch {
+    return "unavailable";
+  }
 }

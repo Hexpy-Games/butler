@@ -3,32 +3,29 @@ import type { BtccAgentLoopResult } from "./contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
 import { parseToolCatalogId } from "../../tools/progressive-catalog.ts";
 import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
+import type { WorkspaceReference } from "../../session-workspaces/index.ts";
+import { isM1MinimalToolSurfaceEnabled } from
+  "../../tools/m1-minimal-tool-surface.ts";
 import { PROJECT_LEDGER_MUTATION_TOOL_NAME_SET } from
   "../../tools/project-ledger/mutation-tools.ts";
+import { WORK_TRACKING_TOOL_NAMES } from "../../tools/work-tracking/shared.ts";
 import { selectInitialToolsFromSurfaceController } from
   "../../tools/tool-surface-selection.ts";
-import { WORK_TRACKING_TOOL_NAMES } from "../../tools/work-tracking/shared.ts";
-import type { FunctionToolDefinition } from
-  "../../../integrations/providers/runtime-contracts.ts";
 import type {
   ButlerToolDefinition,
   NativeToolAvailabilityOverrides,
 } from "../../tools/types.ts";
-import {
-  DURABLE_WORK_TOOL_DEFINITIONS,
-} from "./durable-work-tools.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import { GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES } from
   "./guided-project-ledger-effect.ts";
 import { guidedToolDefinition } from "./guided-tool-definition.ts";
-import { workspacePagePreviewAvailabilityOverride } from
-  "../../tools/workspace-page-preview/index.ts";
 import { safeCommandActionLabel } from "../../output/progress/arguments.ts";
 import { currentModelRouteCandidate } from "../model-route/index.ts";
 import {
-  applyGuidedWorkspaceAuthorization,
-  guidedWorkspaceVisibleToolNames,
-} from "./guided-session-workspace-policy.ts";
+  finalizeGuidedToolSurface,
+  prepareGuidedToolSurfaceBoundary,
+  type GuidedToolSurface,
+} from "./guided-tool-surface.ts";
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
   disabledReason:
@@ -49,7 +46,7 @@ export const GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES = {
   },
 } as const satisfies NativeToolAvailabilityOverrides;
 
-const GUIDED_UNAVAILABLE_NATIVE_TOOL_NAMES = new Set(
+export const GUIDED_UNAVAILABLE_NATIVE_TOOL_NAMES = new Set(
   Object.keys(GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES),
 );
 
@@ -77,68 +74,45 @@ export function guidedPolicy(turn: TurnRecord): ButlerExecutionPolicy {
   };
 }
 
-export function authorizedToolDefinitions(
+export function selectGuidedToolSurface(
   turn: TurnRecord,
   env: NodeJS.ProcessEnv = process.env,
-): FunctionToolDefinition[] {
+  workspaceReference?: WorkspaceReference,
+): GuidedToolSurface {
   const policy = guidedPolicy(turn);
-  const requiredProfiles = new Set([
-    ...policy.requiredNativeToolProfiles,
-    "public-web",
-    "memory-read",
-    ...(policy.accessMode === "full_access" ? ["workspace"] : []),
-    ...(policy.projectId || turn.context.projectRef ? ["project"] : []),
-  ]);
-  const runtimePolicy = {
-    accessMode: policy.accessMode,
-    trackingMode: policy.trackingMode,
-    requiredNativeToolProfiles: [...requiredProfiles],
-    requiredNativeTools: policy.requiredNativeTools,
-    ...(policy.projectId ? { projectId: policy.projectId } : {}),
-  };
+  const boundary = prepareGuidedToolSurfaceBoundary(turn, policy);
+  // The feature flag is read exactly once at the named policy boundary.
+  const minimal = isM1MinimalToolSurfaceEnabled(env);
   const selected = selectInitialToolsFromSurfaceController({
     role: policy.role,
-    message: turn.originalMessage,
+    ...(minimal
+      ? {
+          phasePolicy: boundary.minimalPhasePolicy,
+          workspaceReference: requiredWorkspaceReference(workspaceReference),
+        }
+      : { message: turn.originalMessage }),
     sessionMetadata: {
       ...(policy.projectId ? { projectId: policy.projectId } : {}),
-      runtimePolicy,
+      runtimePolicy: boundary.runtimePolicy,
     },
     tools: BUTLER_TOOLS,
   }).tools;
-  const names = new Set(selected.map((tool) => tool.name));
-  for (const name of [
-    "tool_search",
-    "tool_describe",
-    "tool_call",
-    "web_search",
-    "web_read",
-    "read_file",
-    "grep_files",
-    "list_files",
-  ]) names.add(name);
-  for (const name of GUIDED_UNAVAILABLE_NATIVE_TOOL_NAMES) names.delete(name);
-  applyGuidedWorkspaceAuthorization({
-    names,
+  return finalizeGuidedToolSurface({
+    env,
+    guidedLedgerEffects: boundary.guidedLedgerEffects,
+    minimal,
     policy,
-    projectRef: turn.context.projectRef,
+    selected,
+    turn,
+    unavailableToolNames: GUIDED_UNAVAILABLE_NATIVE_TOOL_NAMES,
   });
-  if (workspacePagePreviewAvailabilityOverride(env)) {
-    names.delete("inspect_workspace_page");
-  }
-  for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
-  const guidedLedgerEffects = new Set<string>(
-    policy.accessMode === "full_access" &&
-      policy.trackingMode === "ledger" &&
-      (policy.projectId || turn.context.projectRef)
-      ? GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES
-      : [],
-  );
-  for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
-  for (const name of guidedLedgerEffects) names.add(name);
-  return [
-    ...BUTLER_TOOLS.filter((tool) => names.has(tool.name)),
-    ...(policy.trackingMode === "none" ? [] : DURABLE_WORK_TOOL_DEFINITIONS),
-  ];
+}
+
+function requiredWorkspaceReference(
+  reference: WorkspaceReference | undefined,
+): WorkspaceReference {
+  if (reference) return reference;
+  throw new Error("m1_minimal_tool_surface_workspace_reference_required");
 }
 
 export function hiddenNativeToolNamesForGuidedTurn(
@@ -152,43 +126,6 @@ export function hiddenNativeToolNamesForGuidedTurn(
     ...[...PROJECT_LEDGER_MUTATION_TOOL_NAME_SET]
       .filter((name) => !supported.has(name)),
   ];
-}
-
-export function visibleToolDefinitions(
-  authorized: readonly FunctionToolDefinition[],
-  policy: Pick<
-    ButlerExecutionPolicy,
-    "accessMode" | "trackingMode" | "projectId"
-  >,
-): FunctionToolDefinition[] {
-  const projectLedgerWork =
-    policy.trackingMode === "ledger" && Boolean(policy.projectId);
-  const visible = new Set([
-    "tool_search",
-    "tool_describe",
-    "tool_call",
-    "web_search",
-    "web_read",
-    "read_file",
-    "grep_files",
-    "list_files",
-    "recall_memory",
-    "list_conversation_sessions",
-    "read_conversation_session",
-    ...DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name),
-    "project_ledger_status",
-    ...(projectLedgerWork
-      ? ["project_ledger_list"]
-      : []),
-    ...(projectLedgerWork && policy.accessMode === "full_access"
-      ? [
-          "project_ledger_create",
-          "project_ledger_work_complete",
-        ]
-      : []),
-    ...guidedWorkspaceVisibleToolNames(policy),
-  ]);
-  return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
 }
 
 export function guidedNativeToolDefinitions(): ButlerToolDefinition[] {

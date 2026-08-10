@@ -30,6 +30,7 @@ export {
   type ToolSurfaceDiscovery,
   type ToolSurfaceDiscoveryAction,
   type ToolSurfaceMetadata,
+  type ToolSurfacePhasePolicy,
   type ToolSurfacePromotion,
   type ToolSurfaceProviderCapabilities,
   type ToolSurfaceSessionMode,

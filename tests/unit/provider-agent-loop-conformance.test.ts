@@ -89,6 +89,7 @@ test("BTCC owns tool batches, result handoff, and the next model round", async (
   expect(requests).toHaveLength(2);
   expect(requests[1]?.continuation).toEqual({ provider: "test", token: "opaque-1" });
   expect(requests[1]?.messages.filter((message) => message.role === "tool")).toHaveLength(2);
+  expect(JSON.stringify(requests[1]?.tools)).toBe(JSON.stringify(requests[0]?.tools));
   expect(result.events.filter((event) => event.type === "model_call")).toHaveLength(2);
 });
 

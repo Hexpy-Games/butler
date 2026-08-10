@@ -4,8 +4,7 @@ import type { ModelRoundPort } from "../ports/model-round.ts";
 import { createGuidedEffectService } from "../effects/index.ts";
 import type { BtccAgentLoop, BtccAgentLoopResult } from "./contracts.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
-import type { SqliteGuidedEffectJournal, SqliteGuidedToolJournal } from
-  "../../adapters/index.ts";
+import type { SqliteGuidedEffectJournal, SqliteGuidedToolJournal } from "../../adapters/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { createProviderModelRoundPort } from
@@ -18,15 +17,16 @@ import {
   renderGuidedPrompt,
 } from "./guided-turn-prompt.ts";
 import {
-  authorizedToolDefinitions,
   GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES,
   guidedNativeToolDefinitions,
   guidedPolicy,
   hiddenNativeToolNamesForGuidedTurn,
   routeForUsedTools,
+  selectGuidedToolSurface,
   selectedModelRef,
-  visibleToolDefinitions,
 } from "./guided-turn-policy.ts";
+import { createGuidedToolSurfaceObservation, type GuidedToolSurfaceObservation } from
+  "./guided-tool-surface-observation.ts";
 import { createGuidedToolExecutionBoundary } from
   "./guided-tool-execution-boundary.ts";
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
@@ -54,9 +54,8 @@ import {
 } from "../model-route/index.ts";
 import { renderExecutionWindowObservation } from "./execution-window-observation.ts";
 import { createGuidedSessionWorkspaceRuntime, type GuidedSessionWorkspaceBindingStore } from "./guided-session-workspace-recovery.ts";
-import {
-  createGuidedTurnBaselineObservation,
-} from "./guided-turn-baseline-observation.ts";
+import { createGuidedTurnBaselineObservation } from
+  "./guided-turn-baseline-observation.ts";
 import { createGuidedRouteEventHandler } from "./guided-turn-route-events.ts";
 
 export function createProductionGuidedTurnAgent(input: {
@@ -99,9 +98,17 @@ export function createProductionGuidedTurnAgent(input: {
         startedAtMs: observationStartedAtMs,
         resolveModelRef: () => activeModelRef,
       });
+      let m1ToolSurfaceAdmission: GuidedToolSurfaceObservation | undefined;
       try {
       const policy = guidedPolicy(turn);
       const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
+      m1ToolSurfaceAdmission = createGuidedToolSurfaceObservation({
+        butlerData: input.butlerData,
+        modelRef: activeModelRef,
+        policy,
+        turn,
+        workspaceReference,
+      });
       const workScope = workScopeForTurn(turn, policy.trackingMode);
       let initialWork = policy.trackingMode === "none"
         ? null
@@ -120,9 +127,15 @@ export function createProductionGuidedTurnAgent(input: {
         }
       }
       const presentedWorkId = initialWork?.work.workId;
-      const authorizedTools = authorizedToolDefinitions(turn);
+      const toolSurface = selectGuidedToolSurface(
+        turn,
+        process.env,
+        workspaceReference,
+      );
+      const authorizedTools = toolSurface.authorizedTools;
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
-      const visibleTools = visibleToolDefinitions(authorizedTools, policy);
+      const visibleTools = toolSurface.providerTools;
+      m1ToolSurfaceAdmission.observeProviderTools(visibleTools);
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
       const describedToolIds = new Set<string>();
       const effectService = createGuidedEffectService(input.effectJournal);
@@ -324,6 +337,7 @@ export function createProductionGuidedTurnAgent(input: {
         ),
       };
       } finally {
+        m1ToolSurfaceAdmission?.finalize(signal.aborted ? "skipped" : "error");
         m1Observation.finalize(signal.aborted ? "skipped" : "error");
       }
     },

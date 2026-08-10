@@ -57,3 +57,23 @@ test("provider model-facing schemas omit nested descriptions and concurrency met
     },
   }]);
 });
+
+test("provider-facing tool schema carrier stays byte-identical across rounds", () => {
+  const tool: ModelRoundTool = {
+    name: "read_file",
+    description: "Read a bounded workspace file",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        path: { type: "string" },
+      },
+      required: ["path"],
+    },
+  };
+
+  const first = modelFacingFunctionTools([tool]);
+  const second = modelFacingFunctionTools([tool]);
+  expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+  expect(JSON.stringify(first)).not.toContain("/private/");
+});

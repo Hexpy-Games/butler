@@ -13,13 +13,16 @@ import { openBtccSqliteStores } from
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import {
-  authorizedToolDefinitions,
   guidedPolicy,
-  visibleToolDefinitions,
+  selectGuidedToolSurface,
 } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
+import { visibleToolDefinitions } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-surface.ts";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
+import { createWorkspaceReference } from
+  "../../packages/butler-agent/src/agent/session-workspaces/index.ts";
 import {
   createTurnRuntime,
   type BtccRunCommand,
@@ -37,6 +40,12 @@ import { TOOL_CAPABILITY_METADATA } from
   "../../packages/butler-agent/src/agent/tools/registry.ts";
 import { selectButlerToolsForTurn } from
   "../../packages/butler-agent/src/agent/tools/profiles.ts";
+import { M1_TOOL_SURFACE_ADMISSION_EVENT_NAME } from
+  "../../packages/butler-agent/src/operations/metrics/m1-tool-surface-admission.ts";
+import { readOperationalMetricEvents } from
+  "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
+import { modelFacingFunctionTools } from
+  "../../packages/butler-agent/src/integrations/providers/shared/tools.ts";
 
 const FILE_TOOL_NAMES = [
   "list_files",
@@ -45,6 +54,14 @@ const FILE_TOOL_NAMES = [
   "write_file",
   "edit_file",
 ] as const;
+
+function authorizedToolDefinitions(
+  turn: TurnRecord,
+  env: NodeJS.ProcessEnv = {},
+  workspaceReference = createWorkspaceReference("/tmp/workspace"),
+) {
+  return selectGuidedToolSurface(turn, env, workspaceReference).authorizedTools;
+}
 
 type ToolCall = NonNullable<ModelRoundResult["toolCalls"]>[number];
 
@@ -63,6 +80,17 @@ function toolCall(
 
 function toolResponse(call: ToolCall): ModelRoundResult {
   return { toolCalls: [call] };
+}
+
+function nativeToolCall(
+  id: string,
+  name: string,
+  arguments_: Record<string, unknown>,
+): ToolCall {
+  return toolCall(id, "tool_call", {
+    id: `native:${name}`,
+    arguments: arguments_,
+  });
 }
 
 function toolOutput(request: ModelRoundRequest, callId: string): Record<string, unknown> {
@@ -215,7 +243,7 @@ test("native file capability registry and guided surfaces keep the five-tool con
   const workspace = join(tmpdir(), "native-file-capability-surface");
   const readOnlyTurn = guidedTurn(workspace, "read_only");
   const readOnlyVisible = visibleToolDefinitions(
-    authorizedToolDefinitions(readOnlyTurn),
+    authorizedToolDefinitions(readOnlyTurn, {}, createWorkspaceReference(workspace)),
     guidedPolicy(readOnlyTurn),
   )
     .filter((tool) => FILE_TOOL_NAMES.includes(tool.name as typeof FILE_TOOL_NAMES[number]))
@@ -224,7 +252,7 @@ test("native file capability registry and guided surfaces keep the five-tool con
 
   const fullTurn = guidedTurn(workspace, "full_access");
   const fullVisible = visibleToolDefinitions(
-    authorizedToolDefinitions(fullTurn),
+    authorizedToolDefinitions(fullTurn, {}, createWorkspaceReference(workspace)),
     guidedPolicy(fullTurn),
   )
     .filter((tool) => FILE_TOOL_NAMES.includes(tool.name as typeof FILE_TOOL_NAMES[number]))
@@ -272,13 +300,34 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
   let grepPageCount = 0;
   let grepContinuationCount = 0;
   const grepMatchKeys: string[] = [];
+  let providerCarrierBytes: number | null = null;
+  const previousMinimalSurface = process.env.BUTLER_M1_MINIMAL_TOOL_SURFACE;
+  process.env.BUTLER_M1_MINIMAL_TOOL_SURFACE = "on";
 
   const modelRound: ModelRoundPort = {
     async runRound(request) {
       const toolMessages = request.messages.filter((message) => message.role === "tool");
       if (toolMessages.length === 0) {
-        const requestToolNames = new Set(request.tools.map((tool) => tool.name));
-        expect(FILE_TOOL_NAMES.every((name) => requestToolNames.has(name))).toBe(true);
+        expect(request.tools.map((tool) => tool.name)).toEqual([
+          "web_search",
+          "web_read",
+          "run_command",
+          "read_file",
+          "write_file",
+          "grep_files",
+          "list_files",
+          "inspect_workspace_page",
+          "tool_search",
+          "tool_describe",
+          "tool_call",
+          "replace_work_plan",
+          "record_work_checkpoint",
+          "record_work_review",
+        ]);
+        providerCarrierBytes = Buffer.byteLength(
+          JSON.stringify(modelFacingFunctionTools(request.tools)),
+          "utf8",
+        );
         return toolResponse(toolCall("discover-files", "tool_search", {
           provider: "native",
           category: "file",
@@ -289,8 +338,16 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
 
       const lastTool = toolMessages.at(-1)!;
       const lastOutput = toolOutput(request, lastTool.toolCallId!);
-      providerCalls.push(lastTool.name!);
-      switch (lastTool.name) {
+      const bridgeId = lastOutput.bridge_invocation &&
+          typeof lastOutput.bridge_invocation === "object"
+        ? (lastOutput.bridge_invocation as { id?: unknown }).id
+        : null;
+      const effectiveToolName = lastTool.name === "tool_call" &&
+          typeof bridgeId === "string" && bridgeId.startsWith("native:")
+        ? bridgeId.slice("native:".length)
+        : lastTool.name!;
+      providerCalls.push(effectiveToolName);
+      switch (effectiveToolName) {
         case "tool_search": {
           const results = Array.isArray(lastOutput.results) ? lastOutput.results : [];
           expect(results.map((result) => (result as { name?: string }).name).sort())
@@ -310,38 +367,6 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
             arguments: { root: "src", max_results: 1 },
           }));
         }
-        case "tool_call": {
-          listPageCount += 1;
-          expectNoWorkspaceRoot(lastOutput, workspace);
-          expectRedactedCapabilityReceipts(lastOutput, workspace, ["needle", "edited"]);
-          expect(lastOutput.bridge_invocation).toEqual({
-            id: "native:list_files",
-            provider: "native",
-            affordance: "native_tool",
-          });
-          expect(lastOutput.files).toEqual([{ path: "src/one.txt", bytes: 11 }]);
-          expect(lastOutput.truncated).toBe(true);
-          expect(typeof lastOutput.next_cursor).toBe("string");
-          const listedFiles = Array.isArray(lastOutput.files) ? lastOutput.files : [];
-          listedPaths.push(...listedFiles.flatMap((file) => {
-            const path = (file as Record<string, unknown>).path;
-            return typeof path === "string" ? [path] : [];
-          }));
-          const listEvidence = (lastOutput.evidence_capability_receipts as Array<Record<string, unknown>>)[0];
-          expect(listEvidence).toMatchObject({
-            capability: "workspace_file_list",
-            evidence_kind: "workspace_inspection",
-            maturity: "candidate",
-            verified: false,
-          });
-          expect(JSON.stringify(listEvidence)).not.toContain("needle");
-          expect(JSON.stringify(listEvidence)).not.toContain("edited");
-          return toolResponse(toolCall("list-continue", "list_files", {
-            root: "src",
-            max_results: 1,
-            cursor: lastOutput.next_cursor,
-          }));
-        }
         case "list_files": {
           listPageCount += 1;
           expectNoWorkspaceRoot(lastOutput, workspace);
@@ -353,8 +378,10 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
           }));
           if (lastOutput.next_cursor) {
             listContinuationCount += 1;
-            expect(lastOutput.files).toEqual([{ path: "src/two.txt", bytes: 11 }]);
-            return toolResponse(toolCall("list-final", "list_files", {
+            expect(lastOutput.files).toEqual([
+              { path: listPageCount === 1 ? "src/one.txt" : "src/two.txt", bytes: 11 },
+            ]);
+            return toolResponse(nativeToolCall(`list-continue-${listPageCount}`, "list_files", {
               root: "src",
               max_results: 1,
               cursor: lastOutput.next_cursor,
@@ -362,7 +389,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
           }
           listTerminalPageCount += 1;
           expect(lastOutput.files).toEqual([]);
-          return toolResponse(toolCall("read-batch", "read_file", readBatchArgs));
+          return toolResponse(nativeToolCall("read-batch", "read_file", readBatchArgs));
         }
         case "read_file": {
           expectNoWorkspaceRoot(lastOutput, workspace);
@@ -395,7 +422,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
           }
           if (lastOutput.next_cursor) {
             readBatchContinuationCount += 1;
-            return toolResponse(toolCall("read-continue", "read_file", {
+            return toolResponse(nativeToolCall("read-continue", "read_file", {
               ...readBatchArgs,
               cursor: lastOutput.next_cursor,
             }));
@@ -408,7 +435,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
               next_step: "Deliver the completed reviewed Work.",
             }));
           }
-          return toolResponse(toolCall("grep-batch", "grep_files", grepArgs));
+          return toolResponse(nativeToolCall("grep-batch", "grep_files", grepArgs));
         }
         case "grep_files": {
           grepPageCount += 1;
@@ -425,7 +452,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
           }));
           if (lastOutput.next_cursor) {
             grepContinuationCount += 1;
-            return toolResponse(toolCall("grep-continue", "grep_files", {
+            return toolResponse(nativeToolCall("grep-continue", "grep_files", {
               ...grepArgs,
               cursor: lastOutput.next_cursor,
             }));
@@ -459,7 +486,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
               ],
             };
             expect(JSON.stringify(editBatch)).not.toMatch(/sha/u);
-            return toolResponse(toolCall("edit-batch", "edit_file", editBatch));
+            return toolResponse(nativeToolCall("edit-batch", "edit_file", editBatch));
           }
           if (!resultReviewed) {
             resultReviewed = true;
@@ -486,7 +513,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
           expect((lastOutput.effect_receipt as { target?: unknown }).target)
             .toMatch(/^workspace:batch:[a-f0-9]{64}$/u);
           rereadRequested = true;
-          return toolResponse(toolCall("reread", "read_file", {
+          return toolResponse(nativeToolCall("reread", "read_file", {
             requests: [{ path: "src/one.txt" }, { path: "src/two.txt" }],
             max_total_bytes: 1_024,
           }));
@@ -572,7 +599,30 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
     expect(JSON.stringify(effect)).not.toContain(workspace);
     expect(JSON.stringify(effect)).not.toContain("needle");
     expect(JSON.stringify(effect)).not.toContain("edited");
+
+    const admissionEvents = readOperationalMetricEvents({ butlerData: data })
+      .filter((event) => event.name === M1_TOOL_SURFACE_ADMISSION_EVENT_NAME);
+    expect(admissionEvents).toHaveLength(1);
+    expect(admissionEvents[0]?.dimensions?.schemaByteLength)
+      .toBe(providerCarrierBytes);
+    expect(admissionEvents[0]).toMatchObject({
+      category: "tool",
+      status: "ok",
+      unit: "tools",
+      dimensions: {
+        phaseId: "guided",
+        selectedToolCount: expect.any(Number),
+        schemaByteLength: expect.any(Number),
+        tokenEstimate: expect.any(Number),
+      },
+    });
+    expect(JSON.stringify(admissionEvents[0])).not.toContain(workspace);
   } finally {
+    if (previousMinimalSurface === undefined) {
+      delete process.env.BUTLER_M1_MINIMAL_TOOL_SURFACE;
+    } else {
+      process.env.BUTLER_M1_MINIMAL_TOOL_SURFACE = previousMinimalSurface;
+    }
     stores.close();
     rmSync(root, { recursive: true, force: true });
   }
