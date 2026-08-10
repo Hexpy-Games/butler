@@ -160,7 +160,10 @@ test("T3 canonical replay replaces the restart snapshot payload after a newer so
   const oldRef = `guided-result-${"a".repeat(64)}`;
   const { port, requests } = scriptedModelRound([
     response({
-      toolCalls: [call("new-source", "read_file", { message: "new" })],
+      toolCalls: [
+        call("new-continuity", "replace_phase_continuity", { message: "new" }),
+        call("new-source", "read_file", { message: "new" }),
+      ],
     }),
     response({ text: "done" }),
   ]);
@@ -168,7 +171,10 @@ test("T3 canonical replay replaces the restart snapshot payload after a newer so
   await runBtccAgentLoop({
     prompt: "resume the same turn",
     model: "openai/gpt-5.6-sol",
-    tools: [{ ...echoTool, name: "read_file" }],
+    tools: [
+      { ...echoTool, name: "replace_phase_continuity" },
+      { ...echoTool, name: "read_file" },
+    ],
     compactReplay: {
       enabled: true,
       initialPhaseContinuity: { objective: "resume" },
@@ -192,22 +198,27 @@ test("T3 canonical replay replaces the restart snapshot payload after a newer so
       },
     },
     modelRound: port,
-    executeTool: async () => createBtccToolExecutionEnvelope(
-      { content: "NEW_CANONICAL_PAYLOAD" },
-      {
-        kind: "source",
-        identity: {
-          kind: "direct",
-          result_ref: `guided-result-${"b".repeat(64)}`,
-          revision: null,
-          tool_name: "read_file",
-          status: "completed",
-          result_sha256: null,
-          outcome: "succeeded",
-          completeness: "complete",
-        },
-      },
-    ),
+    executeTool: async (call) => call.name === "replace_phase_continuity"
+      ? createBtccToolExecutionEnvelope(
+          { ok: true },
+          { kind: "phase_continuity", value: { batch: "new" } },
+        )
+      : createBtccToolExecutionEnvelope(
+          { content: "NEW_CANONICAL_PAYLOAD" },
+          {
+            kind: "source",
+            identity: {
+              kind: "direct",
+              result_ref: `guided-result-${"b".repeat(64)}`,
+              revision: null,
+              tool_name: "read_file",
+              status: "completed",
+              result_sha256: null,
+              outcome: "succeeded",
+              completeness: "complete",
+            },
+          },
+        ),
   });
 
   const first = JSON.stringify(requests[0]!.messages);
@@ -323,11 +334,14 @@ test("T3 routed compact replay refits against the selected fallback model", asyn
 });
 
 test("T3 compact replay preserves schema and unknown-tool rejections without dispatch", async () => {
+  const continuityTool = { ...echoTool, name: "replace_phase_continuity" };
   const { port, requests } = scriptedModelRound([
     response({ toolCalls: [
+      call("old-continuity", "replace_phase_continuity", { message: "old" }),
       call("old-unknown-tool", "old_not_available", {}),
     ] }),
     response({ toolCalls: [
+      call("new-continuity", "replace_phase_continuity", { message: "new" }),
       call("invalid-echo", "echo", { private: "NEW_PRIVATE_ARGUMENT" }),
       call("unknown-tool", "not_available", {}),
     ] }),
@@ -338,10 +352,16 @@ test("T3 compact replay preserves schema and unknown-tool rejections without dis
   const result = await runBtccAgentLoop({
     prompt: "Validate the proposed operations.",
     model: "openai/gpt-5.6-sol",
-    tools: [echoTool],
+    tools: [continuityTool, echoTool],
     compactReplay: { enabled: true, initialPhaseContinuity: null },
     modelRound: port,
-    executeTool: async () => {
+    executeTool: async (call) => {
+      if (call.name === "replace_phase_continuity") {
+        return createBtccToolExecutionEnvelope(
+          { ok: true },
+          { kind: "phase_continuity", value: { call: call.id } },
+        );
+      }
       dispatches += 1;
       return { ok: true };
     },
@@ -361,6 +381,155 @@ test("T3 compact replay preserves schema and unknown-tool rejections without dis
   expect(canonical).toContain("not_available");
   expect(canonical).not.toContain("old_not_available");
   expect(canonical).not.toContain("PRIVATE_ARGUMENT");
+});
+
+test("T3 malformed carrier batches return only the latest coherent rejection batch", async () => {
+  const continuityTool = { ...echoTool, name: "replace_phase_continuity" };
+  const webSearchTool = {
+    ...echoTool,
+    name: "web_search",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: { query: { type: "string" } },
+      required: ["query"],
+    },
+  };
+  const readFileTool = { ...echoTool, name: "read_file" };
+  const webReadTool = { ...echoTool, name: "web_read" };
+  const writeFileTool = {
+    ...echoTool,
+    name: "write_file",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        path: { type: "string" },
+        content: { type: "string" },
+      },
+      required: ["path", "content"],
+    },
+  };
+  const { port, requests } = scriptedModelRound([
+    response({ toolCalls: [
+      call("invalid-continuity", "replace_phase_continuity", {}),
+      call("invalid-web-search", "web_search", { query: "FIRST_PRIVATE_PAYLOAD" }),
+      call("invalid-write-file", "write_file", {
+        path: "private.txt",
+        content: "FIRST_PRIVATE_PAYLOAD",
+      }),
+    ] }),
+    response({ toolCalls: [
+      call("invalid-read-file", "read_file", { message: "SECOND_PRIVATE_PAYLOAD" }),
+      call("invalid-web-read", "web_read", { message: "SECOND_PRIVATE_PAYLOAD" }),
+    ] }),
+    response({ toolCalls: [
+      call("corrected-continuity", "replace_phase_continuity", {
+        message: "corrected",
+      }),
+      call("corrected-web-search", "web_search", { query: "corrected" }),
+    ] }),
+    response({ text: "corrected batch completed" }),
+  ]);
+  const dispatched: string[] = [];
+
+  const result = await runBtccAgentLoop({
+    prompt: "Search using the compact phase carrier.",
+    model: "openai/gpt-5.6-sol",
+    tools: [
+      continuityTool,
+      webSearchTool,
+      readFileTool,
+      webReadTool,
+      writeFileTool,
+    ],
+    compactReplay: { enabled: true, initialPhaseContinuity: null },
+    modelRound: port,
+    executeTool: async (toolCall) => {
+      dispatched.push(toolCall.name);
+      if (toolCall.name === "replace_phase_continuity") {
+        return createBtccToolExecutionEnvelope(
+          { ok: true },
+          { kind: "phase_continuity", value: { corrected: true } },
+        );
+      }
+      return createBtccToolExecutionEnvelope(
+        { ok: true, result: "bounded" },
+        {
+          kind: "source",
+          identity: {
+            kind: "direct",
+            result_ref: `guided-result-${"c".repeat(64)}`,
+            revision: null,
+            tool_name: toolCall.name,
+            status: "completed",
+            result_sha256: null,
+            outcome: "succeeded",
+            completeness: "complete",
+          },
+        },
+      );
+    },
+  });
+
+  expect(result.finalText).toBe("corrected batch completed");
+  expect(dispatched).toEqual(["replace_phase_continuity", "web_search"]);
+  const firstCorrection = requests[1]?.messages.map((message) =>
+    message.content).join("\n") ?? "";
+  expect(firstCorrection).toContain("compact_replay_phase_continuity_schema_invalid");
+  expect(firstCorrection).toContain('"schema_path":"$.toolCalls[0].arguments"');
+  expect(firstCorrection).toContain('"reason":"phase_continuity_schema_invalid"');
+  expect(firstCorrection).toContain('"name":"query","type":"string"');
+  expect(firstCorrection).toContain('"name":"content","type":"string"');
+  expect(firstCorrection).toContain("web_search");
+  expect(firstCorrection).toContain("write_file");
+  expect(firstCorrection).not.toContain("FIRST_PRIVATE_PAYLOAD");
+  const latestCorrection = JSON.stringify(requests[2]?.messages);
+  expect(latestCorrection).toContain("read_file");
+  expect(latestCorrection).toContain("web_read");
+  expect(latestCorrection).not.toContain("web_search");
+  expect(latestCorrection).not.toContain("SECOND_PRIVATE_PAYLOAD");
+  expect(latestCorrection.match(/operation_rejected/gu)).toHaveLength(2);
+  expect(toolMessages(requests[1])).toEqual([]);
+  expect(toolMessages(requests[2])).toEqual([]);
+});
+
+test("T3 compact replay blocks the carrier remainder until continuity rewrites", async () => {
+  const continuityTool = { ...echoTool, name: "replace_phase_continuity" };
+  const writeFileTool = { ...echoTool, name: "write_file" };
+  const { port, requests } = scriptedModelRound([
+    response({ toolCalls: [
+      call("continuity-without-rewrite", "replace_phase_continuity", {
+        message: "valid schema",
+      }),
+      call("blocked-write", "write_file", { message: "must not dispatch" }),
+    ] }),
+    response({ text: "rewrite failure received" }),
+  ]);
+  const dispatched: string[] = [];
+
+  const result = await runBtccAgentLoop({
+    prompt: "Apply the compact carrier only after continuity rewrites.",
+    model: "openai/gpt-5.6-sol",
+    tools: [continuityTool, writeFileTool],
+    compactReplay: { enabled: true, initialPhaseContinuity: null },
+    modelRound: port,
+    executeTool: async (toolCall) => {
+      dispatched.push(toolCall.name);
+      return { ok: true };
+    },
+  });
+
+  expect(result.finalText).toBe("rewrite failure received");
+  expect(dispatched).toEqual(["replace_phase_continuity"]);
+  const correction = JSON.stringify(requests[1]?.messages);
+  expect(correction).toContain(
+    "compact_replay_phase_continuity_rewrite_failed",
+  );
+  expect(correction).toContain("replace_phase_continuity");
+  expect(correction).toContain("write_file");
+  expect(correction).not.toContain("must not dispatch");
+  expect(toolMessages(requests[1])).toEqual([]);
 });
 
 test("BTCC returns a text-only model response", async () => {

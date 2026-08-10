@@ -3,6 +3,8 @@ import {
   READ_OPERATION_RESULTS_TOOL_NAME,
   REPLACE_PHASE_CONTINUITY_TOOL_NAME,
 } from "../../tools/m1-compact-replay.ts";
+import { parseCompactReplayPhaseContinuity } from
+  "../compact-replay/index.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import type { DurableWorkService, WorkTurnScope } from "../work/index.ts";
 import type {
@@ -119,7 +121,8 @@ async function compactReplayMetadata(
 ): Promise<BtccCompactReplayMetadata | null> {
   const value = asRecord(result);
   if (toolName === REPLACE_PHASE_CONTINUITY_TOOL_NAME) {
-    return { kind: "phase_continuity", value: value?.phase_continuity ?? null };
+    const continuity = successfulPhaseContinuity(value);
+    return continuity ? { kind: "phase_continuity", value: continuity } : null;
   }
   if (toolName === READ_OPERATION_RESULTS_TOOL_NAME) {
     if (value?.ok !== true) {
@@ -166,6 +169,25 @@ async function compactReplayMetadata(
         ...guidedOperationStructuralFacts(record),
       };
   return { kind: "source", identity };
+}
+
+function successfulPhaseContinuity(
+  result: Record<string, unknown> | null,
+): ReturnType<typeof parseCompactReplayPhaseContinuity> | null {
+  if (result?.ok !== true) return null;
+  const value = asRecord(result.phase_continuity);
+  if (!value) return null;
+  try {
+    return parseCompactReplayPhaseContinuity({
+      objective_state: value.objectiveState,
+      integrated_decisions: value.integratedDecisions,
+      unresolved_questions: value.unresolvedQuestions,
+      next_batch_purpose: value.nextBatchPurpose,
+      public_activity: value.publicActivity,
+    });
+  } catch {
+    return null;
+  }
 }
 
 function nestedErrorCode(value: Record<string, unknown> | null): string | null {

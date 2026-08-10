@@ -4,6 +4,10 @@ import type {
   BtccAgentLoopToolDefinition,
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
+import type {
+  CompactReplayCarrierPropertyShape,
+  CompactReplayCarrierRejectionReason,
+} from "../compact-replay/index.ts";
 
 export type BtccCompactReplayIdentity = {
   kind: "work" | "direct";
@@ -41,6 +45,9 @@ export type BtccCompactReplayMetadata =
     code: string;
     toolName?: string;
     summary?: string;
+    schemaPath?: string;
+    reason?: CompactReplayCarrierRejectionReason;
+    properties?: CompactReplayCarrierPropertyShape[];
     batchIndex?: number;
   };
 
@@ -142,6 +149,15 @@ export function assembleBtccCompactReplayMessages(input: {
           ...(result.compactReplay.summary
             ? { summary: result.compactReplay.summary }
             : {}),
+          ...(result.compactReplay.schemaPath
+            ? { schema_path: result.compactReplay.schemaPath }
+            : {}),
+          ...(result.compactReplay.reason
+            ? { reason: result.compactReplay.reason }
+            : {}),
+          ...(result.compactReplay.properties
+            ? { properties: result.compactReplay.properties }
+            : {}),
         }]
       : []);
   const retainedMessages = input.messages.flatMap((message, index) => {
@@ -218,6 +234,9 @@ function renderProjection(input: {
     code: string;
     tool_name?: string;
     summary?: string;
+    schema_path?: string;
+    reason?: CompactReplayCarrierRejectionReason;
+    properties?: CompactReplayCarrierPropertyShape[];
   }>;
 }): string {
   return [

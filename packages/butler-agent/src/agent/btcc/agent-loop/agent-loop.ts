@@ -12,8 +12,9 @@ import type {
 } from "./contracts.ts";
 import type { ModelRoundResult } from "../ports/model-round.ts";
 import {
+  canExecutePreparedBtccToolBatchConcurrently,
   executePreparedBtccToolCall,
-  prepareBtccToolCall,
+  prepareBtccToolBatch,
 } from "./tool-execution.ts";
 import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
 import { publishModelRoundWaiting } from "./guided-tool-progress.ts";
@@ -254,7 +255,7 @@ export async function runBtccAgentLoop(
       return { finalText: text, messages, events, stoppedByLimit: false };
     }
 
-    const preparedCalls = calls.map((call) => prepareBtccToolCall({ tools }, call));
+    const preparedCalls = prepareBtccToolBatch({ tools, compactReplay: input.compactReplay }, calls);
     const callIds = preparedCalls.map((prepared) => prepared.call.id);
     const operationBatchId = digest(stableJson({ turnId: input.turnId ?? null, callIds }));
     await input.onAssistantTextBeforeTools?.({
@@ -262,9 +263,8 @@ export async function runBtccAgentLoop(
       toolCalls: preparedCalls.map((prepared) => prepared.call),
       iteration: currentIteration,
     });
-    const canRunBatchConcurrently = preparedCalls.length > 1 && preparedCalls.every((prepared) =>
-      prepared.validationError === null && prepared.tool?.concurrencySafe === true,
-    );
+    const canRunBatchConcurrently =
+      canExecutePreparedBtccToolBatchConcurrently(preparedCalls);
 
     if (canRunBatchConcurrently) {
       for (const prepared of preparedCalls) {

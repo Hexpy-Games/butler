@@ -7,6 +7,13 @@ import type {
 import { validateToolCallArguments } from "../../tools/schema-validation.ts";
 import type { BtccCompactReplayMetadata } from
   "./compact-replay-messages.ts";
+import {
+  compactReplayCarrierDiagnostic,
+  compactReplayContinuityRewriteFailure,
+  compactReplayRejectionForArguments,
+  compactReplayToolBatchRejection,
+  type CompactReplayToolBatchRejection,
+} from "../compact-replay/index.ts";
 
 const BTCC_TOOL_EXECUTION_ENVELOPE = Symbol("btcc-tool-execution-envelope");
 
@@ -23,10 +30,80 @@ export function createBtccToolExecutionEnvelope(
   return { [BTCC_TOOL_EXECUTION_ENVELOPE]: true, output, compactReplay };
 }
 
+function createBtccOperationRejectedResult(input: {
+  call: BtccAgentLoopToolCall;
+} & CompactReplayToolBatchRejection): BtccAgentLoopToolResult {
+  const summary = input.summary.slice(0, 1_000);
+  return {
+    toolCallId: input.call.id,
+    name: input.call.name,
+    ok: false,
+    error: summary,
+    output: {
+      ok: false,
+      observation: {
+        kind: "operation_rejected",
+        visibility: "model",
+        code: input.code,
+        tool_name: input.call.name,
+        summary,
+      },
+      observation_kind: "operation_rejected",
+      summary,
+    },
+    compactReplay: {
+      kind: "operation_rejected",
+      code: input.code,
+      toolName: input.call.name,
+      summary,
+      schemaPath: input.schemaPath,
+      reason: input.reason,
+      properties: input.properties,
+    },
+  };
+}
+
 export interface PreparedBtccToolCall {
   call: BtccAgentLoopToolCall;
   tool: BtccAgentLoopToolDefinition | undefined;
   validationError: string | null;
+  compactReplayExecutionGate?: CompactReplayExecutionGate;
+}
+
+interface CompactReplayExecutionGate {
+  rejection: CompactReplayToolBatchRejection | null;
+  phaseContinuityRewritten: boolean;
+}
+
+export function prepareBtccToolBatch(
+  input: Pick<BtccAgentLoopInput, "tools" | "compactReplay">,
+  calls: readonly BtccAgentLoopToolCall[],
+): PreparedBtccToolCall[] {
+  const prepared = calls.map((call) => prepareBtccToolCall(input, call));
+  const rejection = compactReplayToolBatchRejection({
+    enabled: input.compactReplay?.enabled === true,
+    calls: prepared.map((item) => ({
+      name: item.call.name,
+      arguments: item.call.arguments,
+      validationError: item.validationError,
+    })),
+  });
+  if (input.compactReplay?.enabled !== true || prepared.length === 0) {
+    return prepared;
+  }
+  const compactReplayExecutionGate: CompactReplayExecutionGate = {
+    rejection,
+    phaseContinuityRewritten: false,
+  };
+  return prepared.map((item) => ({ ...item, compactReplayExecutionGate }));
+}
+
+export function canExecutePreparedBtccToolBatchConcurrently(
+  prepared: readonly PreparedBtccToolCall[],
+): boolean {
+  return prepared.length > 1 && prepared.every((item) =>
+    !item.compactReplayExecutionGate &&
+    item.validationError === null && item.tool?.concurrencySafe === true);
 }
 
 export function prepareBtccToolCall(
@@ -41,10 +118,15 @@ export function prepareBtccToolCall(
       : call.arguments,
     schema: tool?.parameters,
   });
+  const persistedCarrierDiagnostic = compactReplayCarrierDiagnostic(
+    call.arguments,
+  );
   return {
     call: {
       ...call,
-      arguments: validation.arguments,
+      arguments: persistedCarrierDiagnostic
+        ? call.arguments
+        : validation.arguments,
       rawArguments: validation.rawArguments,
     },
     tool,
@@ -60,6 +142,23 @@ export async function executePreparedBtccToolCall(
   operationBatch: { id: string; ordinal: number },
   signal?: AbortSignal,
 ): Promise<BtccAgentLoopToolResult> {
+  const compactReplayGate = prepared.compactReplayExecutionGate;
+  if (compactReplayGate?.rejection) {
+    return createBtccOperationRejectedResult({
+      call: prepared.call,
+      ...compactReplayRejectionForArguments(
+        compactReplayGate.rejection,
+        prepared.call.arguments,
+      ),
+    });
+  }
+  if (compactReplayGate && operationBatch.ordinal > 0 &&
+    !compactReplayGate.phaseContinuityRewritten) {
+    return createBtccOperationRejectedResult({
+      call: prepared.call,
+      ...compactReplayContinuityRewriteFailure(prepared.call.arguments),
+    });
+  }
   if (prepared.validationError) {
     const observation = invalidArgumentsObservation({
       call: prepared.call,
@@ -86,49 +185,64 @@ export async function executePreparedBtccToolCall(
     };
   }
 
-  return input.executeTool({
-    id: prepared.call.id,
-    name: prepared.call.name,
-    arguments: prepared.call.arguments,
-    rawArguments: prepared.call.rawArguments,
-    operationBatchId: operationBatch.id,
-    operationBatchOrdinal: operationBatch.ordinal,
-    signal,
-  }).then(
-    (output): BtccAgentLoopToolResult => {
-      if (isBtccToolExecutionEnvelope(output)) {
-        return {
-          toolCallId: prepared.call.id,
-          name: prepared.call.name,
-          ok: true,
-          output: output.output,
-          compactReplay: output.compactReplay,
-        };
+  try {
+    const output = await input.executeTool({
+      id: prepared.call.id,
+      name: prepared.call.name,
+      arguments: prepared.call.arguments,
+      rawArguments: prepared.call.rawArguments,
+      operationBatchId: operationBatch.id,
+      operationBatchOrdinal: operationBatch.ordinal,
+      signal,
+    });
+    if (compactReplayGate && operationBatch.ordinal === 0 &&
+      (!isBtccToolExecutionEnvelope(output) ||
+        output.compactReplay.kind !== "phase_continuity")) {
+      return createBtccOperationRejectedResult({
+        call: prepared.call,
+        ...compactReplayContinuityRewriteFailure(prepared.call.arguments),
+      });
+    }
+    if (isBtccToolExecutionEnvelope(output)) {
+      if (compactReplayGate && operationBatch.ordinal === 0) {
+        compactReplayGate.phaseContinuityRewritten = true;
       }
       return {
         toolCallId: prepared.call.id,
         name: prepared.call.name,
         ok: true,
-        output,
+        output: output.output,
+        compactReplay: output.compactReplay,
       };
-    },
-    (error): BtccAgentLoopToolResult => {
-      const summary = (error instanceof Error ? error.message : String(error))
-        .slice(0, 1_000);
-      return {
-        toolCallId: prepared.call.id,
-        name: prepared.call.name,
-        ok: false,
-        error: summary,
-        compactReplay: {
-          kind: "operation_rejected",
-          code: "tool_execution_rejected",
-          toolName: prepared.call.name,
-          summary,
-        },
-      };
-    },
-  );
+    }
+    return {
+      toolCallId: prepared.call.id,
+      name: prepared.call.name,
+      ok: true,
+      output,
+    };
+  } catch (error) {
+    if (compactReplayGate && operationBatch.ordinal === 0) {
+      return createBtccOperationRejectedResult({
+        call: prepared.call,
+        ...compactReplayContinuityRewriteFailure(prepared.call.arguments),
+      });
+    }
+    const summary = (error instanceof Error ? error.message : String(error))
+      .slice(0, 1_000);
+    return {
+      toolCallId: prepared.call.id,
+      name: prepared.call.name,
+      ok: false,
+      error: summary,
+      compactReplay: {
+        kind: "operation_rejected",
+        code: "tool_execution_rejected",
+        toolName: prepared.call.name,
+        summary,
+      },
+    };
+  }
 }
 
 function isBtccToolExecutionEnvelope(

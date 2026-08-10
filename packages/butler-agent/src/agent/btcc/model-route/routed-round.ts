@@ -6,6 +6,8 @@ import type {
   ModelRoundRequest,
   ModelRoundResult,
 } from "../ports/model-round.ts";
+import { sanitizeCompactReplayCarrierForAcceptance } from
+  "../compact-replay/index.ts";
 import {
   advanceModelRoute,
   currentModelRouteCandidate,
@@ -236,12 +238,16 @@ export function createModelRoutePort(input: {
 
         // Acceptance durability is intentionally outside the provider catch:
         // a storage fault never becomes a provider failure or fallback.
+        const acceptedResult = sanitizeCompactReplayCarrierForAcceptance({
+          request,
+          result,
+        });
         await input.recordAcceptedResponse?.({
           roundId,
           candidateIndex: route.activeCursor,
           transportAttempt,
           modelRef: candidate.modelRef,
-          result,
+          result: acceptedResult,
         });
         if (!input.recordAcceptedResponse) {
           await input.onRouteEvent?.({
@@ -252,7 +258,7 @@ export function createModelRoutePort(input: {
             modelRef: candidate.modelRef,
           });
         }
-        return result;
+        return acceptedResult;
       }
 
       // The loop either returns a provider result or throws a typed failure.
