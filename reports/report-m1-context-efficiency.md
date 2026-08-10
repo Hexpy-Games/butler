@@ -1,16 +1,23 @@
-# M1 Context Efficiency — T1 Baseline and T2 Minimal Tool Surface Report
+# M1 Context Efficiency — T1 Baseline, T2 Minimal Surface, and T3 Compact Replay Report
 
 Date: 2026-08-10
-Tasks: `T-M1-BASELINE-TELEMETRY`, `T-M1-MINIMAL-TOOL-SURFACE`
+Tasks: `T-M1-BASELINE-TELEMETRY`, `T-M1-MINIMAL-TOOL-SURFACE`,
+`T-M1-COMPACT-REPLAY-REFERENCES`
 Work: `W-M1-CONTEXT-EFFICIENCY-20260810`
 Source revision: `65494154f6e9ddbfb20458bc67250c7d15b5d13d`
-Flag revisions: `m1-t1-v1`, `m1-t2-v1`
+T3 implementation revision: `19bb803a815e4437edc2ebc55c0564aa0b12779d`
+Flag revisions: `m1-t1-v1`, `m1-t2-v1`, `m1-t3-v1`
 
 ## Gate result
 
 **PASS — all four T1 pairs are reproducible and measurement-eligible. T2 is
 implemented and measured, with its feature flag remaining default-off.**
-T3–T5 have not started in this report phase.
+T3 is implemented and measured at the exact implementation revision above.
+Its final eligible arms all delivered and passed quality/reload checks, and its
+aggregate serialized-byte and request-count hypotheses pass. The elapsed-time
+target and the all-four-arm optimization condition fail, so T3 does not pass
+its optimization target and both optimization flags remain default-off. T4 is
+the next ordered slice; T5 remains optional and dependency-gated.
 
 The original pre-M1 landing run stopped at initial dispatch with the bounded
 error `database is locked`. A recovery run used a new detached worktree at the
@@ -133,8 +140,11 @@ typed M1 recorder, ingress timestamp propagation, cohesive Guided Turn
 observation/route-event helpers, provider-reported token-class fields, fallback
 ineligibility handling, SQLite result normalization, and unit/real path tests.
 T2 adds the default-off minimal carrier and its typed observation through the
-same production Guided Turn path. Replay, continuation/cache-prefix, and
-aggregation implementation has not started.
+same production Guided Turn path. T3 adds default-off exact-first compact replay,
+durable result references, deterministic exact-read recovery, restart continuity,
+mechanical Work-state receipts, and bounded typed operation rejection through
+that same Guided Turn path. Continuation/cache-prefix and aggregation
+implementation has not started.
 
 ## Validation and review
 
@@ -276,6 +286,83 @@ before any final default-on decision.
   after a route cursor fallback; the production Guided Turn regression now
   covers an active provider different from the original selection.
 
+## T3 exact-first compact replay and durable references
+
+### Frozen boundary and eligibility
+
+- Exact implementation revision:
+  `19bb803a815e4437edc2ebc55c0564aa0b12779d`.
+- All final arms used the frozen direct-cold, direct-warm, current-web, and
+  landing fixture hashes recorded above, model `openai/gpt-5.6-sol`, reasoning
+  `low`, fresh isolation, and the T2 plus T3 default-off flags explicitly
+  enabled for measurement. No Hermes, OpenCode, T4, fallback benchmark path,
+  or unfrozen fixture was used.
+- The first warm run delivered but reported provider cache read `0`; it is
+  measurement-ineligible for the frozen warm-cache comparison. The clean warm
+  retry reported cache read `6,656` and is the eligible row below.
+- One fresh landing setup attempt failed before provider dispatch because the
+  bundled archive extraction exceeded its setup timeout. It recorded zero
+  provider requests and is excluded. A clean retry, followed by the exact-SHA
+  final run, succeeded; only the final eligible exact-SHA observation is scored.
+
+### Final eligible paired measurements
+
+Elapsed values in this table and its aggregate math are App observation
+elapsed on both sides; metric-event elapsed is not used in the paired
+comparison.
+
+| Arm | Fixed pre-M1 Butler | T3 flag-on Butler | Pair result |
+| --- | --- | --- | --- |
+| `direct-cold` | 37,476 serialized bytes; 1 request; 3,572 ms | delivered and reload matched; 43,850 bytes; 1 request; 7,010 ms | bytes +17.01%; requests unchanged; elapsed +96.25% |
+| `direct-warm` eligible retry | 38,116 serialized bytes; 1 request; 5,512 ms | delivered and reload matched; 44,502 bytes; 1 request; 3,410 ms; provider cache read 6,656 | bytes +16.75%; requests unchanged; elapsed −38.13% |
+| `current-web-cold` | 165,709 serialized bytes; 4 requests; 23,096 ms | delivered, source expectation passed, and reload matched; 211,882 bytes; 4 requests; 52,284 ms | bytes +27.86%; requests unchanged; elapsed +126.38% |
+| `landing-cold` | 2,019,518 serialized bytes; 24 attempted requests; 323,542 ms | delivered and reload matched; 706,912 bytes; 10 requests; 264,178 ms | bytes −65.00%; requests −58.33%; elapsed −18.35% |
+
+Across the four eligible arms, exact serialized request bytes changed from
+2,260,819 pre-M1 to 1,007,146 under T3 (−55.45%), requests from 30 to 16
+(−46.67%), and elapsed time from 355,722 ms to 326,882 ms (−8.11%). Relative
+to the T2 aggregate, T3 changed bytes from 1,084,354 to 1,007,146 (−7.12%),
+requests from 17 to 16 (−5.88%), and elapsed time from 504,567 ms to 326,882 ms
+(−35.22%).
+
+The aggregate serialized-byte and request-count hypotheses pass. The registered
+18–30% elapsed-time target fails because the eligible pre-M1 aggregate improved
+by only 8.11%, and the all-four-arm optimization condition fails because direct
+cold and current web regressed materially. T3 is therefore implemented and
+measured with hypotheses partially unmet. This is not a T3 target-success or
+default-on claim; `BUTLER_M1_MINIMAL_TOOL_SURFACE` and
+`BUTLER_M1_COMPACT_REPLAY` remain default-off.
+
+### Quality, exact-read, effect, and review evidence
+
+- All four eligible arms delivered, passed their frozen quality expectations,
+  and matched after reload. The web arm passed its source requirement.
+- The final landing Work reached `completed` / `reporting`; its Plan Review,
+  result Review, and completion Validation were all `accept`.
+- Landing exact reads were 2 attempts / 2 successes / 0 failures, with
+  `duplicateEffect: false`. Its two applied effects had two distinct
+  idempotency keys; no duplicate effect was observed.
+- Compact replay retained newest coherent batches, exact result identities,
+  selected views, structural operation outcomes, and mechanical Work state
+  across same-Turn restart. Invalid reads and correction-recovery admission
+  remained typed same-phase operation rejections and did not mutate Work or
+  redispatch source/effect operations.
+- No private path, prompt, transcript, raw operation payload, semantic
+  correction text, provider prose, credential, or hidden reasoning is included
+  in this report or the compact optimization records.
+
+### Validation and independent review
+
+- The final full check completed with 2,584 tests passed and one unrelated known
+  failure: CLI documentation lists 102 commands while the registry exposes 101.
+  T3 changes neither CLI documentation nor the command registry.
+- Focused compact-replay, Guided production-path, restart, route, Work-state,
+  exact-read, privacy, typecheck, targeted lint, BTCC shape, module, and diff
+  checks passed at the implementation revision.
+- Final independent `gpt-5.6-sol` high review: **APPROVED**, with no P0, P1, or
+  P2 findings remaining after the bounded carrier, persistence privacy,
+  restart, Work-state, and correction-recovery fixes.
+
 ## Recovery integrity evidence
 
 - Exact detached source: `65494154f6e9ddbfb20458bc67250c7d15b5d13d`;
@@ -300,10 +387,10 @@ before any final default-on decision.
 ## Decision
 
 The four-arm T1 evidence is complete and passes M1-SC01, M1-SC05, and M1-SC06.
-The recovered baseline integrity is independently approved. T2 implementation,
-measurement, rollback, and whole-Spec review are complete and approved for its
-phase commit only. It remains default-off because the elapsed hypothesis failed.
-After that commit, the exact revision must be recorded through the Project
-Ledger CLI and the T2 Attempt/Task/views/check closeout must pass before T3
-begins. This report authorizes no combined M1 optimization success claim,
-default-on decision, push, PR, or merge.
+The recovered baseline integrity is independently approved. T2 and T3 are
+implemented, measured, rollback-covered, and independently reviewed at their
+recorded revisions. T3's aggregate bytes/request hypotheses pass, but its
+elapsed target and all-four-arm condition fail. T3 is closed as an implemented
+and measured default-off slice with hypotheses partially unmet, not as a target
+success. T4 remains the next ordered Task. This report authorizes no combined
+M1 optimization success claim, default-on decision, push, PR, or merge.
