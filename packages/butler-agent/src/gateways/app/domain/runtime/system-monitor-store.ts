@@ -1,10 +1,21 @@
 import { readUsageMonitor } from "../../../../operations/metrics/usage-monitor.ts";
+import {
+  unavailableProviderQuota,
+  type ProviderQuotaMonitor,
+} from "../../../../operations/metrics/provider-quota.ts";
 import { systemEventsForButlerData } from "./system-events-read-model.ts";
 import { paginationInput } from "../sessions/session-read-model.ts";
 import type { SystemEventListView, UsageMonitorView } from "../../interface/protocol/app-protocol.ts";
 
 export class AppSystemMonitorStore {
-  constructor(private readonly butlerData: string) {}
+  private readonly providerQuotaMonitor: ProviderQuotaMonitor;
+
+  constructor(
+    private readonly butlerData: string,
+    providerQuotaMonitor: ProviderQuotaMonitor,
+  ) {
+    this.providerQuotaMonitor = providerQuotaMonitor;
+  }
 
   listSystemEvents(
     options: { limit?: number; offset?: number } = {},
@@ -25,13 +36,32 @@ export class AppSystemMonitorStore {
 
   getUsageMonitor(
     options: { sessionId?: string; sinceTs?: number | null } = {},
-  ): UsageMonitorView {
+  ): Promise<UsageMonitorView> {
+    const local = readUsageMonitor({
+      butlerData: this.butlerData,
+      sessionId: options.sessionId,
+      sinceTs: options.sinceTs ?? null,
+    });
+    return this.mergeProviderQuota(local);
+  }
+
+  private async mergeProviderQuota(
+    local: ReturnType<typeof readUsageMonitor>,
+  ): Promise<UsageMonitorView> {
+    const providerIds = local.providerUsage.providers.map((provider) => provider.providerId);
+    const quotaByProvider = await this.providerQuotaMonitor.refresh(providerIds);
     return {
-      ...readUsageMonitor({
-        butlerData: this.butlerData,
-        sessionId: options.sessionId,
-        sinceTs: options.sinceTs ?? null,
-      }),
+      ...local,
+      providerUsage: {
+        ...local.providerUsage,
+        providers: local.providerUsage.providers.map((provider) => ({
+          ...provider,
+          remaining: quotaByProvider.get(provider.providerId) ?? unavailableProviderQuota({
+            code: "provider_quota_surface_unavailable",
+            message: "No provider quota result was returned.",
+          }),
+        })),
+      },
       generated_at: new Date().toISOString(),
       raw_text_included: false,
     };

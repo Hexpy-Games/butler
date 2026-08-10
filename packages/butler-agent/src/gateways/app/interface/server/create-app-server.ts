@@ -147,6 +147,7 @@ function createStore(
     serviceClient: options.serviceClient,
     conversationProjectionReader,
     sessionBindingStore: options.sessionBindingStore,
+    providerQuotaMonitor: options.providerQuotaMonitor,
   });
 }
 
