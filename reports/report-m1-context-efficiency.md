@@ -1,23 +1,32 @@
-# M1 Context Efficiency — T1 Baseline, T2 Minimal Surface, and T3 Compact Replay Report
+# M1 Context Efficiency — T1–T4 Final Report
 
-Date: 2026-08-10
+Date: 2026-08-11
 Tasks: `T-M1-BASELINE-TELEMETRY`, `T-M1-MINIMAL-TOOL-SURFACE`,
-`T-M1-COMPACT-REPLAY-REFERENCES`
+`T-M1-COMPACT-REPLAY-REFERENCES`, `T-M1-BOUNDED-CONTINUATION-CACHE-PREFIX`
 Work: `W-M1-CONTEXT-EFFICIENCY-20260810`
 Source revision: `65494154f6e9ddbfb20458bc67250c7d15b5d13d`
 T3 implementation revision: `19bb803a815e4437edc2ebc55c0564aa0b12779d`
-Flag revisions: `m1-t1-v1`, `m1-t2-v1`, `m1-t3-v1`
+T4 implementation commit: `9ca8406de3e71ca05cae54375a16db22889b1d36`
+Flag revisions: `m1-t1-v1`, `m1-t2-v1`, `m1-t3-v1`, `m1-t4-v1`
 
 ## Gate result
 
-**PASS — all four T1 pairs are reproducible and measurement-eligible. T2 is
-implemented and measured, with its feature flag remaining default-off.**
+**PARTIAL — all four T1 pairs are reproducible and measurement-eligible. T2
+and T3 are implemented and measured, with their feature flags remaining
+default-off. T4 is implemented, measured, rollback-covered, and independently
+approved, but its elapsed-time target and all-four-arm optimization condition
+fail.**
 T3 is implemented and measured at the exact implementation revision above.
-Its final eligible arms all delivered and passed quality/reload checks, and its
-aggregate serialized-byte and request-count hypotheses pass. The elapsed-time
-target and the all-four-arm optimization condition fail, so T3 does not pass
-its optimization target and both optimization flags remain default-off. T4 is
-the next ordered slice; T5 remains optional and dependency-gated.
+Its selected controlled observations all delivered and passed quality/reload
+checks. The observed descriptive aggregate exceeds the registered byte/request
+hypotheses numerically, but the fixed pre-M1 direct-warm cache read `0` differs
+from the selected retry's cache read `6,656`; this is not cache-state-matched
+causal proof and cannot establish paired target success or default-on. The
+elapsed-time target and the all-four-arm optimization condition fail, so T3
+does not pass its optimization target and both optimization flags remain
+default-off. T4's controlled measurement is recorded below; its flag also
+remains default-off.
+T5 remains optional, off by default, and pending a separate decision.
 
 The original pre-M1 landing run stopped at initial dispatch with the bounded
 error `database is locked`. A recovery run used a new detached worktree at the
@@ -143,8 +152,10 @@ T2 adds the default-off minimal carrier and its typed observation through the
 same production Guided Turn path. T3 adds default-off exact-first compact replay,
 durable result references, deterministic exact-read recovery, restart continuity,
 mechanical Work-state receipts, and bounded typed operation rejection through
-that same Guided Turn path. Continuation/cache-prefix and aggregation
-implementation has not started.
+that same Guided Turn path. T4 bounded continuation/cache-prefix
+implementation, measurement, rollback, and review are recorded in the T4
+section below. T5 aggregation remains an optional todo candidate, off by
+default, pending a separate decision.
 
 ## Validation and review
 
@@ -168,8 +179,8 @@ implementation has not started.
   historical evidence. Recovery attempt
   `A-M1-T1-LANDING-RECOVERY-20260810` and Task
   `T-M1-BASELINE-TELEMETRY` are closed after this report's phase commit; the
-  M1 Work remains open for T2–T4. Derived index/views and final check are
-  refreshed after lifecycle closeout.
+  M1 Work remains open for the optional T5 decision. Derived index/views and
+  final check are refreshed after lifecycle closeout.
 - Targeted ESLint: 0 errors.
 - T2 focused suite: 273/273 passed across nine files, including the real Guided
   Turn route-fallback metric test and the native flag-on file-agent product
@@ -251,10 +262,10 @@ nullable and are not treated as zero.
 
 The raw-input and request-count hypotheses pass for this slice, but the elapsed
 hypothesis fails because the landing arm regressed. T2 is therefore complete as
-a default-off implementation slice, not accepted for default-on. T3/T4 may
-address replay and continuation overhead, but they cannot retroactively turn
-this elapsed result into a pass; the combined four-arm measurement must pass
-before any final default-on decision.
+a default-off implementation slice, not accepted for default-on. T3 and T4 are
+reported in their own sections below; neither can retroactively turn this
+slice-local elapsed result into a pass. The combined four-arm measurement must
+pass before any final default-on decision.
 
 ### T2 quality, privacy, and operational evidence
 
@@ -288,55 +299,67 @@ before any final default-on decision.
 
 ## T3 exact-first compact replay and durable references
 
-### Frozen boundary and eligibility
+### Frozen boundary and observation selection
 
 - Exact implementation revision:
   `19bb803a815e4437edc2ebc55c0564aa0b12779d`.
-- All final arms used the frozen direct-cold, direct-warm, current-web, and
-  landing fixture hashes recorded above, model `openai/gpt-5.6-sol`, reasoning
-  `low`, fresh isolation, and the T2 plus T3 default-off flags explicitly
-  enabled for measurement. No Hermes, OpenCode, T4, fallback benchmark path,
-  or unfrozen fixture was used.
-- The first warm run delivered but reported provider cache read `0`; it is
-  measurement-ineligible for the frozen warm-cache comparison. The clean warm
-  retry reported cache read `6,656` and is the eligible row below.
+- All four selected T3 observations used the frozen direct-cold, direct-warm,
+  current-web, and landing fixture hashes recorded above, model
+  `openai/gpt-5.6-sol`, reasoning `low`, fresh isolation, and the T2 plus T3
+  default-off flags explicitly enabled for measurement. No Hermes, OpenCode,
+  T4, fallback benchmark path, or unfrozen fixture was used.
+- The fixed pre-M1 direct-warm observation reported provider cache read `0`. A
+  delivered T3 warm-cache-read-`0` observation was excluded from the selected
+  controlled observation. The selected retry reported provider cache read
+  `6,656` and is the controlled observation shown below; it is not
+  cache-state-matched paired-eligible with the fixed pre-M1 observation.
 - One fresh landing setup attempt failed before provider dispatch because the
   bundled archive extraction exceeded its setup timeout. It recorded zero
   provider requests and is excluded. A clean retry, followed by the exact-SHA
-  final run, succeeded; only the final eligible exact-SHA observation is scored.
+  final run, succeeded; only the final selected exact-SHA controlled observation
+  is used below.
 
-### Final eligible paired measurements
+### Controlled descriptive observations
 
 Elapsed values in this table and its aggregate math are App observation
-elapsed on both sides; metric-event elapsed is not used in the paired
-comparison.
+elapsed on both sides; metric-event elapsed is not used in the comparison. The
+selected direct-warm retry is a controlled descriptive observation, not a
+cache-state-matched paired-eligible observation or causal proof.
 
-| Arm | Fixed pre-M1 Butler | T3 flag-on Butler | Pair result |
+| Arm | Fixed pre-M1 Butler | T3 selected controlled observation | Descriptive delta / evidence |
 | --- | --- | --- | --- |
 | `direct-cold` | 37,476 serialized bytes; 1 request; 3,572 ms | delivered and reload matched; 43,850 bytes; 1 request; 7,010 ms | bytes +17.01%; requests unchanged; elapsed +96.25% |
-| `direct-warm` eligible retry | 38,116 serialized bytes; 1 request; 5,512 ms | delivered and reload matched; 44,502 bytes; 1 request; 3,410 ms; provider cache read 6,656 | bytes +16.75%; requests unchanged; elapsed −38.13% |
+| `direct-warm` selected retry | 38,116 serialized bytes; 1 request; 5,512 ms; provider cache read 0 | delivered and reload matched; 44,502 bytes; 1 request; 3,410 ms; provider cache read 6,656 | bytes +16.75%; requests unchanged; elapsed −38.13%; not cache-state-matched paired-eligible |
 | `current-web-cold` | 165,709 serialized bytes; 4 requests; 23,096 ms | delivered, source expectation passed, and reload matched; 211,882 bytes; 4 requests; 52,284 ms | bytes +27.86%; requests unchanged; elapsed +126.38% |
 | `landing-cold` | 2,019,518 serialized bytes; 24 attempted requests; 323,542 ms | delivered and reload matched; 706,912 bytes; 10 requests; 264,178 ms | bytes −65.00%; requests −58.33%; elapsed −18.35% |
 
-Across the four eligible arms, exact serialized request bytes changed from
+Across the four selected controlled observations, exact serialized request bytes changed from
 2,260,819 pre-M1 to 1,007,146 under T3 (−55.45%), requests from 30 to 16
 (−46.67%), and elapsed time from 355,722 ms to 326,882 ms (−8.11%). Relative
 to the T2 aggregate, T3 changed bytes from 1,084,354 to 1,007,146 (−7.12%),
 requests from 17 to 16 (−5.88%), and elapsed time from 504,567 ms to 326,882 ms
-(−35.22%).
+(−35.22%). These exact arithmetic results are descriptive controlled-observation
+deltas only. Because the fixed pre-M1 direct-warm cache read was `0` and the
+selected retry cache read was `6,656`, they are not cache-state-matched causal
+proof and cannot establish paired target success or default-on.
 
-The aggregate serialized-byte and request-count hypotheses pass. The registered
-18–30% elapsed-time target fails because the eligible pre-M1 aggregate improved
-by only 8.11%, and the all-four-arm optimization condition fails because direct
-cold and current web regressed materially. T3 is therefore implemented and
+The observed descriptive aggregate exceeds the registered byte/request
+hypotheses numerically, but the cache mismatch means it cannot establish
+cache-state-matched paired target success or default-on. The registered 18–30%
+elapsed-time target fails because the aggregate elapsed time improved by only
+8.11%, and the all-four-arm optimization condition fails because direct cold
+and current web regressed materially. T3 is therefore implemented and
 measured with hypotheses partially unmet. This is not a T3 target-success or
 default-on claim; `BUTLER_M1_MINIMAL_TOOL_SURFACE` and
 `BUTLER_M1_COMPACT_REPLAY` remain default-off.
 
 ### Quality, exact-read, effect, and review evidence
 
-- All four eligible arms delivered, passed their frozen quality expectations,
-  and matched after reload. The web arm passed its source requirement.
+- All four selected controlled observations delivered, passed their frozen
+  quality expectations, and matched after reload. The web arm passed its source
+  requirement. This is retained as quality/reload evidence; it does not make
+  the selected warm observation cache-state-matched or establish causal
+  optimization evidence.
 - The final landing Work reached `completed` / `reporting`; its Plan Review,
   result Review, and completion Validation were all `accept`.
 - Landing exact reads were 2 attempts / 2 successes / 0 failures, with
@@ -387,10 +410,132 @@ default-on claim; `BUTLER_M1_MINIMAL_TOOL_SURFACE` and
 ## Decision
 
 The four-arm T1 evidence is complete and passes M1-SC01, M1-SC05, and M1-SC06.
-The recovered baseline integrity is independently approved. T2 and T3 are
+The recovered baseline integrity is independently approved. T2, T3, and T4 are
 implemented, measured, rollback-covered, and independently reviewed at their
-recorded revisions. T3's aggregate bytes/request hypotheses pass, but its
-elapsed target and all-four-arm condition fail. T3 is closed as an implemented
-and measured default-off slice with hypotheses partially unmet, not as a target
-success. T4 remains the next ordered Task. This report authorizes no combined
-M1 optimization success claim, default-on decision, push, PR, or merge.
+recorded revisions. T3's selected controlled observations show descriptive
+aggregate byte/request deltas that numerically exceed the registered
+hypotheses, but the warm cache mismatch means they are not cache-state-matched
+causal proof and cannot establish paired target success or default-on. T3's
+elapsed target and all-four-arm condition fail. T4's selected controlled
+observations likewise remain descriptive and non-causal; its elapsed target and
+all-four-arm condition fail. T4 is closed as an implemented, measured, and
+rollback-covered default-off slice, not as a target success. T5 remains
+optional and todo pending a separate decision. This report authorizes no
+combined M1 optimization success claim, default-on decision, push, PR, or
+merge.
+
+## T4 bounded continuation and stable cache prefix
+
+### Implementation and authority
+
+- Implementation commit: `9ca8406de3e71ca05cae54375a16db22889b1d36`
+  (`feat(agent): bound turn continuation and cache prefix`). The final Sol
+  high review is **APPROVE**; after review/fix cycles there are no P0, P1, or
+  P2 findings.
+- The latest higher-priority once-admitted/no-reset invariant moved flag/env
+  selection out of SQLite and into Turn-admission composition. SQLite persists
+  only the injected selection. The Guided route derives enablement solely from
+  persisted Turn state, preserving one authority and avoiding a second reset
+  source.
+- A T4-enabled `createModelRoutePort` requires the prepared provider-adapter
+  request and all durability collaborators. The real route therefore cannot
+  silently omit the request-admission or persistence boundary.
+- Local exact serialization is measured after the T3 transformation and before
+  the provider adapter. It is not a raw HTTP measurement; Sol explicitly
+  reviewed this placement and ruled that it matches the Spec.
+- The Turn-v1 durable ref bound is a stable domain invariant of 8 refs per tool
+  round, bound to the Turn schema version. It has no dependency on a T3
+  compact-replay constant.
+
+### Controlled conditions and limits
+
+- Model: `openai/gpt-5.6-sol`; reasoning: `low`; same frozen fixture hashes
+  recorded in the preceding T1–T3 sections; T2, T3, and T4 were enabled for
+  this controlled measurement only. No Hermes/OpenCode run was performed.
+- The final controlled T4 limits were explicitly set once at Turn admission:
+
+| Limit | Value |
+| --- | ---: |
+| `maxModelRequests` | 60 |
+| `maxToolRounds` | 60 |
+| `maxPromptTokens` | 2,000,000 |
+| `maxOutputTokens` | 500,000 |
+| `maxElapsedMs` | 1,800,000 |
+| `maxIdleMs` | 300,000 |
+
+- Measurement flags were on only for the controlled run. T2, T3, and T4 remain
+  default-off operationally; the verified T4 flag revision is `m1-t4-v1`;
+  Windows was excluded.
+
+### Real smoke and rollback evidence
+
+- Exhaustion web smoke: `maxModelRequests=1` delivered and reloaded with
+  exactly one provider request. Persisted state recorded model `1`, tool `1`,
+  and terminal reason `max_model_requests`; the typed terminal metric had
+  `rawTextStored=false`. No second dispatch occurred and SQLite `quick_check`
+  was `ok`.
+- Flag-off direct smoke delivered and passed quality/reload checks with one
+  provider request, zero T4 metrics, and zero budgeted Turns. This is the
+  rollback/default-off evidence.
+
+### Controlled T4 observations
+
+The T4 comparison uses the fixed pre-M1 observations already recorded above
+and one transparently selected controlled observation for each arm. It is not a
+cache-state-matched eligible set: fixed pre-M1 direct-warm provider cache read
+was `0`; two delivered T4 warm attempts also reported cache read `0` and were
+excluded; the reported third controlled T4 warm observation reported cache read
+`4,608`. Any warm or aggregate delta using that third observation is therefore
+descriptive controlled-observation evidence, not cache-state-matched causal
+proof, and cannot support default-on or target success.
+
+| Arm | Fixed pre | T4 controlled observation | Delta / evidence |
+| --- | --- | --- | --- |
+| `direct-cold` | 37,476 bytes / 1 request / 3,572 ms | 43,926 bytes / 1 request / 5,874 ms; prompt 8,016 / cache 0 / total 8,046 | bytes +17.21%; requests 0%; elapsed +64.45% |
+| `direct-warm` third controlled observation | 38,116 / 1 / 5,512 ms; provider cache read 0 | 44,580 / 1 / 5,369 ms; prompt 8,237 / cache read 4,608 / total 8,270 | bytes +16.96%; requests 0%; elapsed −2.59%; not cache-state-matched paired-eligible |
+| `web` | 165,709 / 4 / 23,096 ms | 159,394 / 3 / 34,182 ms; prompt 31,142 / cache 0 / total 32,357; budget model 3 / tool 2 / refs 4 active | bytes −3.81%; requests −25%; elapsed +48%; source, quality, and reload passed |
+| `landing` | 2,019,518 / 24 / 323,542 ms | 873,525 / 12 / 282,985 ms; prompt 179,391 / cache 39,936 / total 191,727; budget model 12 / tool 10 / refs 15 active | bytes −56.75%; requests −50%; elapsed −12.54%; Work completed/reporting, Plan/result/completion reviews accepted, exact reads 2/2/0, duplicate effect false, applied effects 2 with 2 unique keys, 3 DB `quick_check` calls `ok` |
+
+### Per-arm T4 state and quality evidence
+
+- Direct cold: delivered; scenario expectations passed; reload matched; accepted
+  quality/measurement observation.
+- Direct warm, third controlled observation: delivered; scenario expectations
+  passed; reload matched; controlled-observation only and not
+  cache-state-matched paired-eligible.
+- Web: delivered; source/quality expectations passed; reload matched; accepted
+  controlled observation.
+- Landing: delivered; expectations passed; reload matched; Work completed /
+  reporting with Plan/result/completion reviews accepted. Build exit `0` and
+  desktop `1,440` / mobile `390` rendering with no horizontal overflow were
+  recorded in the model-owned completion review. This is separate
+  quality/visual report evidence, not an operational metric and not a #142
+  score/ranking; no manual visual scoring is claimed.
+
+Aggregate fixed pre is 2,260,819 bytes / 30 requests / 355,722 ms. T4 is
+1,121,425 bytes / 17 requests / 328,410 ms: bytes −50.40%, requests −43.33%,
+elapsed −7.68%. These are descriptive controlled-observation deltas, not
+cache-state-matched causal proof, because the selected direct-warm observation
+does not match the fixed pre cache state. Against T3's 1,007,146 bytes / 16
+requests / 326,882 ms, T4 is +11.35% bytes, +6.25% requests, and +0.47%
+elapsed. None of these deltas supports default-on or target success.
+
+### T4 validation and decision
+
+- Focused T4 validation covered 114 tests and 789 assertions. Typecheck,
+  changed lint, BTCC shape (`4 domains / 238 files`), and `git diff --check`
+  passed. The changed-lint result contains only two pre-existing migration
+  warnings; no new warning is attributed to T4.
+- Full `bun run check` did not pass: it timed out at `300.10s` with an
+  unrelated app-session-summary detached-worktree git-availability assertion.
+  This is a known non-T4 failure and is not recorded as a full-check pass.
+- The selected observations show aggregate byte/request reductions against
+  fixed pre, but these are descriptive controlled-observation deltas only. The
+  registered 18–30% elapsed target fails: direct warm improved by 2.59%, but
+  the aggregate was only −7.68%, while direct cold and web elapsed results
+  regressed. The all-four-arm optimization condition therefore fails. T4 is
+  implemented, measured, and rollback-covered, but it is not target success.
+- `BUTLER_M1_MINIMAL_TOOL_SURFACE`, `BUTLER_M1_COMPACT_REPLAY`, and
+  `BUTLER_M1_BOUNDED_CONTINUATION_CACHE` remain default-off. No M1 default-on
+  decision is authorized. T5 remains an optional todo candidate pending a
+  separate decision, and no Hermes/OpenCode comparison was run.
