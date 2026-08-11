@@ -186,9 +186,8 @@ relaxed.
   reviewer independently passed 77 core and 30 additional related tests and
   confirmed the stored smoke arithmetic, row cardinality, privacy scan, and
   installation-key mode. This approval does not satisfy the missing baseline.
-- Project Ledger status was non-stale with zero source issues. Ledger check was
-  gated by three pre-existing stale generated views (dashboard, handoff,
-  roadmap); this Task did not mutate or regenerate Ledger-owned derived files.
+- Project Ledger index plus dashboard, handoff, and roadmap renders completed;
+  final status was non-stale and `check --verbose` passed with zero issues.
 
 ## Remaining hard blockers
 
