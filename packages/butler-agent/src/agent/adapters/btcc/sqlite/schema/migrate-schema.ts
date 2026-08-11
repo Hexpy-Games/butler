@@ -20,6 +20,7 @@ export function migrateBtccSchema(db: Database): void {
     ensureGuidedToolResultRecord(db);
     ensureTurnProgressDestination(db);
     ensureTurnRouteState(db);
+    ensureTurnContinuationBudget(db);
     ensureModelRoundAcceptanceCheckpoint(db);
     ensureModelRouteFailureDisposition(db);
     migrateGuidedWorkSixStageConstraints(db);
@@ -79,6 +80,9 @@ function ensureGuidedEffectRecoveryPayloadTable(db: Database): void {
 function ensureModelRouteFailureDisposition(db: Database): void {
   if (!tableExists(db, "btcc_model_route_events")) return;
   ensureColumn(db, "btcc_model_route_events", "failure_disposition", "TEXT");
+  ensureColumn(db, "btcc_model_route_events", "request_hash", "TEXT");
+  ensureColumn(db, "btcc_model_route_events", "serialized_request_bytes", "INTEGER");
+  ensureColumn(db, "btcc_model_route_events", "durable_result_ref_count", "INTEGER");
 }
 
 function ensureTurnProgressDestination(db: Database): void {
@@ -89,6 +93,11 @@ function ensureTurnProgressDestination(db: Database): void {
 function ensureTurnRouteState(db: Database): void {
   if (!tableExists(db, "btcc_turns")) return;
   ensureColumn(db, "btcc_turns", "route_state_json", "TEXT");
+}
+
+function ensureTurnContinuationBudget(db: Database): void {
+  if (!tableExists(db, "btcc_turns")) return;
+  ensureColumn(db, "btcc_turns", "continuation_budget_json", "TEXT");
 }
 
 function ensureModelRoundAcceptanceCheckpoint(db: Database): void {

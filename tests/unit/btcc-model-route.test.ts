@@ -3,7 +3,10 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ModelRoundPort } from "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
+import {
+  modelRoundRequestSerializedBytes,
+  type ModelRoundPort,
+} from "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 import {
   buildModelRoute,
   classifyModelRouteFailure,
@@ -96,6 +99,142 @@ test("model route advances once after bounded provider exhaustion and preserves 
     "model.attempt.started",
     "model.attempt.succeeded",
   ]);
+});
+
+test("T4 fallback rebuilds physical request evidence and clears provider continuation", async () => {
+  const route = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.6-sol",
+    backupModelRefs: ["zai/glm-5.2"],
+    reasoningEffort: "low",
+    retryCeiling: 1,
+  });
+  const requests: Array<{ model: string; continuation: unknown; cacheScope?: string }> = [];
+  const startedHashes: string[] = [];
+  const startedBytes: number[] = [];
+  const dispatchedBytes: number[] = [];
+  const routed = createModelRoutePort({
+    base: {
+      prepareRequest: (request) => ({
+        ...request,
+        messages: [
+          ...request.messages,
+          { role: "user", content: `prepared:${String(request.model)}` },
+        ],
+      }),
+      async runRound(request) {
+        dispatchedBytes.push(modelRoundRequestSerializedBytes(request));
+        requests.push({
+          model: String(request.model),
+          continuation: request.continuation,
+          cacheScope: request.cacheScope,
+        });
+        if (requests.length === 1) {
+          throw new ModelProviderRequestError({
+            code: "provider_rate_limited",
+            message: "fallback",
+            provider: "openai",
+            retryable: true,
+          });
+        }
+        return { text: "backup", toolCalls: [] };
+      },
+    },
+    turnId: "turn-t4-fallback-evidence",
+    route,
+    continuationBudget: {
+      limits: {
+        maxModelRequests: 3,
+        maxToolRounds: 3,
+        maxPromptTokens: 10_000,
+        maxOutputTokens: 10_000,
+        maxElapsedMs: 60_000,
+        maxIdleMs: 60_000,
+      },
+    },
+    onRouteEvent(event) {
+      if (event.type === "model.attempt.started" && event.requestHash) {
+        startedHashes.push(event.requestHash);
+        startedBytes.push(event.serializedRequestBytes!);
+      }
+    },
+    loadAttemptHistory: async () => ({
+      started: [], failed: [], succeeded: [], abandoned: [],
+    }),
+    loadAcceptedResponse: async () => undefined,
+    recordAcceptedResponse: async () => {},
+  });
+  await expect(routed.runRound({
+    roundId: "t4-fallback-round",
+    model: "openai/gpt-5.6-sol",
+    messages: [{ role: "user", content: "continue" }],
+    tools: [],
+    cacheScope: "guided-scope",
+    continuation: { provider: "openai", responseId: "private-primary" },
+  })).resolves.toMatchObject({ text: "backup" });
+  expect(requests).toEqual([
+    {
+      model: "openai/gpt-5.6-sol",
+      continuation: { provider: "openai", responseId: "private-primary" },
+      cacheScope: expect.stringContaining(":0"),
+    },
+    {
+      model: "zai/glm-5.2",
+      continuation: undefined,
+      cacheScope: expect.stringContaining(":1"),
+    },
+  ]);
+  expect(startedHashes).toHaveLength(2);
+  expect(startedHashes[0]).not.toBe(startedHashes[1]);
+  expect(startedBytes).toEqual(dispatchedBytes);
+});
+
+test("T4 accepted replay returns before route event or provider dispatch", async () => {
+  const route = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.6-sol",
+    reasoningEffort: "low",
+  });
+  let providerCalls = 0;
+  let routeEvents = 0;
+  const routed = createModelRoutePort({
+    base: {
+      prepareRequest: (request) => request,
+      async runRound() {
+        providerCalls += 1;
+        return { text: "must not run", toolCalls: [] };
+      },
+    },
+    turnId: "turn-t4-accepted-replay",
+    route,
+    continuationBudget: {
+      limits: {
+        maxModelRequests: 1,
+        maxToolRounds: 1,
+        maxPromptTokens: 1,
+        maxOutputTokens: 1,
+        maxElapsedMs: 1,
+        maxIdleMs: 1,
+      },
+    },
+    loadAcceptedResponse: async () => ({
+      text: "durable accepted",
+      toolCalls: [],
+    }),
+    loadAttemptHistory: async () => ({
+      started: [], failed: [], succeeded: [], abandoned: [],
+    }),
+    recordAcceptedResponse: async () => {},
+    onRouteEvent() {
+      routeEvents += 1;
+    },
+  });
+  await expect(routed.runRound({
+    roundId: "accepted-round",
+    model: "openai/gpt-5.6-sol",
+    messages: [],
+    tools: [],
+  })).resolves.toMatchObject({ text: "durable accepted" });
+  expect(providerCalls).toBe(0);
+  expect(routeEvents).toBe(0);
 });
 
 test("model route surfaces auth and admission failures without fallback", async () => {

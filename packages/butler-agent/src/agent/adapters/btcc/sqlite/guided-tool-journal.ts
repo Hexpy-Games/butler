@@ -20,6 +20,9 @@ import {
   legacyGuidedOperationResultStructuralFacts,
   type GuidedOperationResultStructuralFacts,
 } from "../../../btcc/operation-results/index.ts";
+import type { StateExecutionClaim } from "../../../btcc/turn/index.ts";
+import { SqliteGuidedToolContinuationBudget } from
+  "./guided-tool-continuation-budget.ts";
 
 export type GuidedToolJournalRecord = {
   callId: string;
@@ -58,9 +61,11 @@ type PhaseContinuityRow = {
 
 export class SqliteGuidedToolJournal {
   private readonly resultReader: GuidedWorkToolResultReader;
+  private readonly continuationBudget: SqliteGuidedToolContinuationBudget;
 
   constructor(private readonly db: Database) {
     this.resultReader = new GuidedWorkToolResultReader(db);
+    this.continuationBudget = new SqliteGuidedToolContinuationBudget(db);
   }
 
   start(input: {
@@ -71,10 +76,21 @@ export class SqliteGuidedToolJournal {
     arguments: Record<string, unknown>;
     operationBatchId?: string;
     operationBatchOrdinal?: number;
+    continuationBudgetClaim?: StateExecutionClaim;
   }): void {
     const argumentsJson = stableJson(input.arguments);
     const resultRef = guidedWorkResultRef(input.callId);
-    this.db.query(`
+    let terminal = null as ReturnType<
+      SqliteGuidedToolContinuationBudget["recordBatchStartInTransaction"]
+    >;
+    this.db.transaction(() => {
+      terminal = this.continuationBudget.recordBatchStartInTransaction({
+        turnId: input.turnId,
+        operationBatchId: input.operationBatchId,
+        claim: input.continuationBudgetClaim,
+      });
+      if (terminal) return;
+      this.db.query(`
       INSERT OR IGNORE INTO btcc_guided_tool_calls (
         call_id, result_ref, turn_id, tool_name, raw_arguments, arguments_json,
         operation_batch_id, operation_batch_ordinal, status, started_at
@@ -90,7 +106,7 @@ export class SqliteGuidedToolJournal {
       input.operationBatchOrdinal ?? null,
       new Date().toISOString(),
     );
-    const current = this.db.query<{
+      const current = this.db.query<{
       result_ref: string | null;
       turn_id: string;
       tool_name: string;
@@ -103,16 +119,18 @@ export class SqliteGuidedToolJournal {
         operation_batch_id, operation_batch_ordinal
       FROM btcc_guided_tool_calls WHERE call_id = ?
     `).get(input.callId);
-    const currentArgumentsJson = current
-      ? stableJson(JSON.parse(current.arguments_json) as unknown)
-      : null;
-    if (!current || current.result_ref !== resultRef ||
-      current.turn_id !== input.turnId || current.tool_name !== input.toolName ||
-      currentArgumentsJson !== argumentsJson ||
-      current.operation_batch_id !== (input.operationBatchId ?? null) ||
-      current.operation_batch_ordinal !== (input.operationBatchOrdinal ?? null)) {
-      throw new Error("Guided tool call identity conflict");
-    }
+      const currentArgumentsJson = current
+        ? stableJson(JSON.parse(current.arguments_json) as unknown)
+        : null;
+      if (!current || current.result_ref !== resultRef ||
+        current.turn_id !== input.turnId || current.tool_name !== input.toolName ||
+        currentArgumentsJson !== argumentsJson ||
+        current.operation_batch_id !== (input.operationBatchId ?? null) ||
+        current.operation_batch_ordinal !== (input.operationBatchOrdinal ?? null)) {
+        throw new Error("Guided tool call identity conflict");
+      }
+    })();
+    if (terminal) throw terminal;
   }
 
   finish(input: {
@@ -120,6 +138,7 @@ export class SqliteGuidedToolJournal {
     status: "completed" | "failed" | "cancelled";
     result?: unknown;
     errorCode?: string;
+    continuationBudgetClaim?: StateExecutionClaim;
   }): void {
     const resultJson = input.result === undefined ? null : json(input.result);
     const resultSha256 = resultJson === null ? null : digest(resultJson);
@@ -134,7 +153,11 @@ export class SqliteGuidedToolJournal {
         ...(input.result === undefined ? {} : { result: input.result }),
       }),
     );
-    const updated = this.db.query(`
+    let terminal = null as ReturnType<
+      SqliteGuidedToolContinuationBudget["recordCompletedResultInTransaction"]
+    >;
+    this.db.transaction(() => {
+      const updated = this.db.query(`
       UPDATE btcc_guided_tool_calls SET status = ?, result_json = ?,
         result_sha256 = ?, structural_facts_json = ?, error_code = ?, finished_at = ?
       WHERE call_id = ? AND status = 'started'
@@ -147,8 +170,17 @@ export class SqliteGuidedToolJournal {
       new Date().toISOString(),
       input.callId,
     );
-    if (updated.changes === 1) return;
-    const current = this.db.query<{
+      if (updated.changes === 1) {
+        terminal = this.continuationBudget.recordCompletedResultInTransaction({
+          callId: input.callId,
+          toolName,
+          status: input.status,
+          result: input.result,
+          claim: input.continuationBudgetClaim,
+        });
+        return;
+      }
+      const current = this.db.query<{
       status: string;
       result_json: string | null;
       structural_facts_json: string | null;
@@ -158,11 +190,14 @@ export class SqliteGuidedToolJournal {
       FROM btcc_guided_tool_calls
       WHERE call_id = ?
     `).get(input.callId);
-    if (!current || current.status !== input.status || current.result_json !== resultJson ||
-      current.structural_facts_json !== structuralFactsJson ||
-      current.error_code !== (input.errorCode ?? null)) {
-      throw new Error("Guided tool result identity conflict");
-    }
+      if (!current || current.status !== input.status ||
+        current.result_json !== resultJson ||
+        current.structural_facts_json !== structuralFactsJson ||
+        current.error_code !== (input.errorCode ?? null)) {
+        throw new Error("Guided tool result identity conflict");
+      }
+    })();
+    if (terminal) throw terminal;
   }
 
   find(callId: string): GuidedToolJournalRecord | null {

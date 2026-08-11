@@ -8,9 +8,17 @@ import type {
   SqliteModelRouteAttemptHistoryInput,
   SqliteModelRouteEventInput,
 } from "./sqlite-model-route-types.ts";
+import {
+  SqliteTurnContinuationBudgetStore,
+  type SqliteContinuationBudgetMutation,
+} from "./sqlite-turn-continuation-budget.ts";
 
 export class SqliteModelRouteEventJournal {
-  constructor(private readonly db: Database) {}
+  private readonly continuationBudget: SqliteTurnContinuationBudgetStore;
+
+  constructor(private readonly db: Database) {
+    this.continuationBudget = new SqliteTurnContinuationBudgetStore(db);
+  }
 
   async persistModelRoute(input: {
     turnId: string;
@@ -37,20 +45,27 @@ export class SqliteModelRouteEventJournal {
   async recordModelRouteEvent(
     input: SqliteModelRouteEventInput,
   ): Promise<ModelRouteEventResult> {
-    return this.db.transaction((): ModelRouteEventResult => {
+    let terminal: SqliteContinuationBudgetMutation["terminal"] = null;
+    const result = this.db.transaction((): ModelRouteEventResult => {
       this.assertTurnClaim(input);
+      const continuationBudgetEnabled =
+        this.continuationBudget.load(input.turnId) !== null;
       const routeJson = this.db.query<{ route_state_json: string | null }, [string]>(
         "SELECT route_state_json FROM btcc_turns WHERE turn_id = ?",
       ).get(input.turnId)?.route_state_json;
       const routeDigest = input.route?.routeDigest ??
         (routeJson ? JSON.parse(routeJson).routeDigest : "unknown");
       const eventId = `${input.turnId}:${input.event.type}:${input.event.roundId}:${input.event.candidateIndex}:${input.event.transportAttempt ?? 0}:${input.event.modelRef}`;
+
       if (input.event.type === "model.attempt.started") {
         const existing = this.db.query<{ event_type: string }, [string]>(`
           SELECT event_type FROM btcc_model_route_events WHERE event_id = ?
         `).get(eventId);
         if (existing) {
-          const terminal = this.db.query<{ event_type: string }, [string, string, number, number, string]>(`
+          const terminalEvent = this.db.query<
+            { event_type: string },
+            [string, string, number, number, string]
+          >(`
             SELECT event_type FROM btcc_model_route_events
             WHERE turn_id = ? AND round_id = ? AND candidate_index = ?
               AND transport_attempt = ? AND model_ref = ?
@@ -67,16 +82,17 @@ export class SqliteModelRouteEventJournal {
             input.event.transportAttempt ?? 0,
             input.event.modelRef,
           );
-          if (terminal?.event_type === "model.attempt.abandoned_after_restart") {
+          if (terminalEvent?.event_type === "model.attempt.abandoned_after_restart") {
             return { status: "abandoned_after_restart" };
           }
-          if (terminal) return { status: "already_terminal" };
+          if (terminalEvent) return { status: "already_terminal" };
           this.db.query(`
             INSERT OR IGNORE INTO btcc_model_route_events (
               event_id, turn_id, route_digest, event_type, round_id,
-              candidate_index, transport_attempt, model_ref, error_code,
+              candidate_index, transport_attempt, model_ref, request_hash,
+              serialized_request_bytes, durable_result_ref_count, error_code,
               failure_disposition, created_at
-            ) VALUES (?, ?, ?, 'model.attempt.abandoned_after_restart', ?, ?, ?, ?, NULL, NULL, ?)
+            ) VALUES (?, ?, ?, 'model.attempt.abandoned_after_restart', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)
           `).run(
             `${eventId}:abandoned_after_restart`,
             input.turnId,
@@ -85,17 +101,55 @@ export class SqliteModelRouteEventJournal {
             input.event.candidateIndex,
             input.event.transportAttempt ?? null,
             input.event.modelRef,
+            input.event.requestHash ?? null,
+            input.event.serializedRequestBytes ?? null,
+            input.event.durableResultRefCount ?? null,
             new Date().toISOString(),
           );
           return { status: "abandoned_after_restart" };
         }
+
+        if (continuationBudgetEnabled &&
+            input.event.serializedRequestBytes !== undefined &&
+            this.hasPriorLogicalRequest(input)) {
+          const mutation = this.continuationBudget.recordNoProgressInTransaction({
+            turnId: input.turnId,
+            expectedRevision: input.expectedRevision,
+            executionFence: input.executionFence,
+            claimId: input.claimId,
+            nowMs: Date.now(),
+          });
+          terminal = mutation.terminal;
+          return { status: "recorded" };
+        }
       }
-      this.db.query(`
+
+      const durableResultRefCount = continuationBudgetEnabled
+        ? this.continuationBudget.currentResultRefCountInTransaction({
+            turnId: input.turnId,
+          })
+        : null;
+
+      if (input.event.type === "model.attempt.started" &&
+          continuationBudgetEnabled) {
+        const mutation = this.continuationBudget.recordModelDispatchInTransaction({
+          turnId: input.turnId,
+          expectedRevision: input.expectedRevision,
+          executionFence: input.executionFence,
+          claimId: input.claimId,
+          nowMs: Date.now(),
+        });
+        terminal = mutation.terminal;
+        if (terminal) return { status: "recorded" };
+      }
+
+      const inserted = this.db.query(`
         INSERT OR IGNORE INTO btcc_model_route_events (
           event_id, turn_id, route_digest, event_type, round_id,
-          candidate_index, transport_attempt, model_ref, error_code,
+          candidate_index, transport_attempt, model_ref, request_hash,
+          serialized_request_bytes, durable_result_ref_count, error_code,
           failure_disposition, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         eventId,
         input.turnId,
@@ -105,19 +159,34 @@ export class SqliteModelRouteEventJournal {
         input.event.candidateIndex,
         input.event.transportAttempt ?? null,
         input.event.modelRef,
+        input.event.requestHash ?? null,
+        input.event.serializedRequestBytes ?? null,
+        durableResultRefCount ?? input.event.durableResultRefCount ?? null,
         input.event.errorCode ?? null,
         input.event.failureDisposition ?? null,
         new Date().toISOString(),
       );
+
+      if (input.event.type === "model.attempt.started" &&
+          continuationBudgetEnabled && inserted.changes !== 1) {
+        throw new Error("BTCC model attempt idempotency changed during transaction");
+      }
       if (input.route) {
         const updated = this.db.query(`
           UPDATE btcc_turns SET route_state_json = ?
           WHERE turn_id = ? AND revision = ? AND execution_fence = ?
-        `).run(JSON.stringify(input.route), input.turnId, input.expectedRevision, input.executionFence);
+        `).run(
+          JSON.stringify(input.route),
+          input.turnId,
+          input.expectedRevision,
+          input.executionFence,
+        );
         if (updated.changes !== 1) throw new Error("BTCC model route persistence lost Turn CAS");
       }
       return { status: "recorded" };
     })();
+    if (terminal) throw terminal;
+    return result;
   }
 
   async loadModelRouteAttemptHistory(
@@ -170,6 +239,28 @@ export class SqliteModelRouteEventJournal {
       succeeded,
       abandoned,
     };
+  }
+
+  private hasPriorLogicalRequest(input: SqliteModelRouteEventInput): boolean {
+    if (input.event.serializedRequestBytes === undefined) return false;
+    const currentRefCount = this.continuationBudget
+      .currentResultRefCountInTransaction({ turnId: input.turnId });
+    return Boolean(this.db.query<
+      { event_id: string },
+      [string, number, string, number]
+    >(`
+      SELECT event_id
+      FROM btcc_model_route_events
+      WHERE turn_id = ? AND event_type = 'model.attempt.started'
+        AND serialized_request_bytes = ? AND round_id <> ?
+        AND COALESCE(durable_result_ref_count, 0) >= ?
+      LIMIT 1
+    `).get(
+      input.turnId,
+      input.event.serializedRequestBytes,
+      input.event.roundId,
+      currentRefCount,
+    ));
   }
 
   private assertTurnClaim(input: SqliteModelRouteEventInput): void {

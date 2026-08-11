@@ -21,6 +21,7 @@ import type {
   BtccCompactReplayInput,
   BtccCompactReplayMetadata,
 } from "./compact-replay-messages.ts";
+import type { StateExecutionClaim } from "../turn/contracts.ts";
 
 export type BtccAgentLoopMessage = ModelRoundMessage;
 export type BtccAgentLoopToolDefinition = ModelRoundTool;
@@ -47,6 +48,10 @@ export interface BtccAgentLoop {
       candidateIndex: number;
       transportAttempt?: number;
       modelRef: string;
+      continuationBudgetEnabled?: boolean;
+      requestHash?: string;
+      serializedRequestBytes?: number;
+      durableResultRefCount?: number;
       errorCode?: string;
       failureDisposition?: import("../model-route/index.ts").ModelRouteFailureDisposition;
       route?: import("../model-route/index.ts").ModelRouteState;
@@ -66,8 +71,14 @@ export interface BtccAgentLoop {
       candidateIndex: number;
       transportAttempt: number;
       modelRef: string;
+      continuationBudgetEnabled?: boolean;
+      requestHash?: string;
+      serializedRequestBytes?: number;
+      durableResultRefCount?: number;
       result: import("../ports/model-round.ts").ModelRoundResult;
     }) => Promise<void>;
+    /** Exact durable claim used by the guided tool journal budget boundary. */
+    executionClaim?: StateExecutionClaim;
     /** Public BTCC ingress timestamp used only for observation latency. */
     observationStartedAtMs?: number;
   }): Promise<BtccAgentLoopResult>;

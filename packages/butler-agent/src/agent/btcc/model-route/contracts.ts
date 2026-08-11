@@ -52,6 +52,11 @@ export type ModelRouteEvent = {
   candidateIndex: number;
   transportAttempt?: number;
   modelRef: string;
+  continuationBudgetEnabled?: boolean;
+  /** Digest-only durable request identity used for no-progress recovery. */
+  requestHash?: string;
+  serializedRequestBytes?: number;
+  durableResultRefCount?: number;
   errorCode?: string;
   failureDisposition?: ModelRouteFailureDisposition;
   route?: ModelRouteState;
@@ -66,6 +71,10 @@ export type ModelRouteAcceptance = {
   candidateIndex: number;
   transportAttempt: number;
   modelRef: string;
+  continuationBudgetEnabled?: boolean;
+  requestHash?: string;
+  serializedRequestBytes?: number;
+  durableResultRefCount?: number;
   result: ModelRoundResult;
 };
 

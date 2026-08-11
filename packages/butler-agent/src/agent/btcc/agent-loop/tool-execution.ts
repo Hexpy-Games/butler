@@ -4,6 +4,10 @@ import type {
   BtccAgentLoopToolDefinition,
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
+import {
+  TurnContinuationBudgetExhaustedError,
+  TurnContinuationBudgetStorageError,
+} from "../turn/continuation-budget.ts";
 import { validateToolCallArguments } from "../../tools/schema-validation.ts";
 import type { BtccCompactReplayMetadata } from
   "./compact-replay-messages.ts";
@@ -244,6 +248,8 @@ export async function executePreparedBtccToolCall(
       output,
     };
   } catch (error) {
+    if (error instanceof TurnContinuationBudgetExhaustedError ||
+        error instanceof TurnContinuationBudgetStorageError) throw error;
     if (compactReplayGate && operationBatch.ordinal === 0) {
       return createBtccOperationRejectedResult({
         call: prepared.call,

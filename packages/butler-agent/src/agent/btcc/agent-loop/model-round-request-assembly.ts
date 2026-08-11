@@ -1,6 +1,7 @@
 import type {
   ModelRoundPort,
   ModelRoundRequest,
+  PreparedModelRoundPort,
 } from "../ports/model-round.ts";
 import type {
   BtccAgentLoopInput,
@@ -47,7 +48,7 @@ export function assembleBtccModelRoundRequest(input: {
       }
     : undefined;
   const instructions = metadata
-    ? appendCompactReplayCarrierInstruction(input.instructions)
+    ? assembleBtccProviderInstructions(input.instructions)
     : input.instructions;
   const messages = metadata
     ? compactMessagesForModel(metadata, {
@@ -79,7 +80,7 @@ export function assembleBtccModelRoundRequest(input: {
   };
 }
 
-function appendCompactReplayCarrierInstruction(
+export function assembleBtccProviderInstructions(
   instructions: string | undefined,
 ): string {
   return instructions
@@ -90,20 +91,24 @@ function appendCompactReplayCarrierInstruction(
 /** Reassembles compact replay after the route has selected its actual model. */
 export function createBtccCompactReplayModelRoundPort(
   base: ModelRoundPort,
-): ModelRoundPort {
+): PreparedModelRoundPort {
   return {
-    async runRound(request) {
+    prepareRequest(request) {
       const internal = request as CompactReplayModelRoundRequest;
       const metadata = internal[COMPACT_REPLAY_ASSEMBLY];
       const {
         [COMPACT_REPLAY_ASSEMBLY]: _compactReplayAssembly,
         ...providerRequest
       } = internal;
-      if (!metadata) return base.runRound(providerRequest);
-      return base.runRound({
-        ...providerRequest,
-        messages: compactMessagesForModel(metadata, providerRequest),
-      });
+      return metadata
+        ? {
+            ...providerRequest,
+            messages: compactMessagesForModel(metadata, providerRequest),
+          }
+        : providerRequest;
+    },
+    async runRound(request) {
+      return base.runRound(this.prepareRequest(request));
     },
   };
 }

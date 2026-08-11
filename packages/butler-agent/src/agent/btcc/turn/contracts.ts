@@ -24,6 +24,43 @@ export type TurnCheckpoint = {
   semanticState: TurnSemanticState;
 };
 
+export type TurnContinuationBudgetTerminalReason =
+  | "max_model_requests"
+  | "max_tool_rounds"
+  | "max_prompt_tokens"
+  | "max_output_tokens"
+  | "max_elapsed_ms"
+  | "max_idle_ms"
+  | "no_progress"
+  | "storage_failure";
+
+export type TurnContinuationBudgetLimits = {
+  maxModelRequests: number;
+  maxToolRounds: number;
+  maxPromptTokens: number;
+  maxOutputTokens: number;
+  maxElapsedMs: number;
+  maxIdleMs: number;
+};
+
+export type TurnContinuationBudgetState = {
+  schemaVersion: "butler.turn-continuation-budget.v1";
+  turnId: string;
+  consumedModelRequests: number;
+  consumedToolRounds: number;
+  consumedPromptTokens: number;
+  consumedOutputTokens: number;
+  startedAtMs: number;
+  lastProgressAtMs: number;
+  seenDurableResultRefs: readonly string[];
+  limits: TurnContinuationBudgetLimits;
+  terminal: {
+    status: "active" | "exhausted";
+    reason: TurnContinuationBudgetTerminalReason | null;
+    exhaustedAtMs: number | null;
+  };
+};
+
 export type DeliveryOutbox = {
   outboxId: string;
   finalPayloadRef: ContentRef;
@@ -47,6 +84,7 @@ export type TurnRecord = {
   };
   modelSelection: AdmittedModelSelection;
   modelRoute?: ModelRouteState;
+  continuationBudget?: TurnContinuationBudgetState;
   context: ButlerContextInput;
   progressDestination?: BtccProgressDestination;
   semanticState: TurnSemanticState;
@@ -152,6 +190,10 @@ export interface TurnStateRepository {
       candidateIndex: number;
       transportAttempt?: number;
       modelRef: string;
+      continuationBudgetEnabled?: boolean;
+      requestHash?: string;
+      serializedRequestBytes?: number;
+      durableResultRefCount?: number;
       errorCode?: string;
       failureDisposition?: import("../model-route/index.ts").ModelRouteFailureDisposition;
     };
@@ -185,6 +227,10 @@ export interface TurnStateRepository {
     candidateIndex: number;
     transportAttempt: number;
     modelRef: string;
+    continuationBudgetEnabled?: boolean;
+    requestHash?: string;
+    serializedRequestBytes?: number;
+    durableResultRefCount?: number;
     result: import("../ports/model-round.ts").ModelRoundResult;
   }): Promise<void>;
   stopTurn(turnId: string): Promise<StopPersistenceOutcome>;

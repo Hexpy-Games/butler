@@ -7,6 +7,7 @@ import type { ContextualButlerToolExecutor } from
   "../../tools/butler-tools.ts";
 import type { GuidedCompactReplayRuntime } from
   "./guided-compact-replay-runtime.ts";
+import type { StateExecutionClaim } from "../turn/contracts.ts";
 
 export type GuidedToolCallExecutionInput = {
   turn: TurnRecord;
@@ -23,4 +24,7 @@ export type GuidedToolCallExecutionInput = {
   toolJournal: SqliteGuidedToolJournal;
   executeButlerTool: ContextualButlerToolExecutor;
   compactReplayRuntime: GuidedCompactReplayRuntime;
+  continuationBudget?: {
+    claim: StateExecutionClaim;
+  };
 };

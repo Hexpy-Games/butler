@@ -44,6 +44,10 @@ import {
 import type { GuidedToolCallExecutionInput } from
   "./guided-tool-call-contracts.ts";
 import { throwIfExecutionWindowAborted } from "./execution-window.ts";
+import {
+  TurnContinuationBudgetExhaustedError,
+  TurnContinuationBudgetStorageError,
+} from "../turn/continuation-budget.ts";
 
 export type { GuidedToolCallExecutionInput } from
   "./guided-tool-call-contracts.ts";
@@ -247,6 +251,7 @@ export function createGuidedToolCallExecutor(
         arguments: presentationArgs,
         operationBatchId: call.operationBatchId,
         operationBatchOrdinal: call.operationBatchOrdinal,
+        continuationBudgetClaim: input.continuationBudget?.claim,
       });
     }
     if (
@@ -275,6 +280,7 @@ export function createGuidedToolCallExecutor(
         callId,
         status: "completed",
         result: journalResult(call.name, result),
+        continuationBudgetClaim: input.continuationBudget?.claim,
       });
       if (call.name === "replace_work_plan" && toolResultSucceeded(result)) {
         await backfillTurnToolResults(input, input.workScope);
@@ -309,6 +315,8 @@ export function createGuidedToolCallExecutor(
         false,
       );
     } catch (error) {
+      if (error instanceof TurnContinuationBudgetExhaustedError ||
+          error instanceof TurnContinuationBudgetStorageError) throw error;
       const failure = await finishFailedTool(
         input,
         call.name,

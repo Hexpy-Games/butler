@@ -10,6 +10,14 @@ import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { SqliteGuidedTurnStateRepository } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/sqlite-guided-turn-state-repository.ts";
+import { SqliteGuidedToolJournal } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/guided-tool-journal.ts";
+import {
+  createTurnContinuationBudgetState,
+  TurnContinuationBudgetExhaustedError,
+  type TurnContinuationBudgetLimits,
+} from
+  "../../packages/butler-agent/src/agent/btcc/turn/continuation-budget.ts";
 import type {
   AcceptedTurnTransition,
   TurnRecord,
@@ -179,6 +187,278 @@ test("R3 schema rejects legacy states and repository rejects R2 transitions", as
   }
 });
 
+test("Turn continuation budget increments atomically with the first route dispatch and hydrates", async () => {
+  const fixture = createFixture("guided-continuation-budget");
+  try {
+    insertTurn(fixture.db, "turn-continuation-budget", "admitted");
+    const turn = await requireTurn(fixture.turns, "turn-continuation-budget");
+    const claim = await fixture.turns.acquireStateExecutionClaim(turn);
+    const limits = {
+        maxModelRequests: 3,
+        maxToolRounds: 4,
+        maxPromptTokens: 5,
+        maxOutputTokens: 6,
+        maxElapsedMs: 7_000,
+        maxIdleMs: 8_000,
+    };
+    setContinuationBudget(fixture.db, turn.turnId, limits);
+    const input = {
+      turnId: turn.turnId,
+      expectedRevision: turn.revision,
+      executionFence: turn.executionFence,
+      claimId: claim.claimId,
+      event: {
+        type: "model.attempt.started",
+        roundId: "round-1",
+        candidateIndex: 0,
+        transportAttempt: 1,
+        modelRef: "openai/gpt-5.6-sol",
+        continuationBudgetEnabled: true,
+        requestHash: "a".repeat(64),
+        serializedRequestBytes: 100,
+      },
+    };
+    await fixture.turns.recordModelRouteEvent(input);
+    expect((await requireTurn(fixture.turns, turn.turnId)).continuationBudget)
+      .toMatchObject({
+        turnId: turn.turnId,
+        consumedModelRequests: 1,
+        limits,
+        terminal: { status: "active" },
+      });
+    await fixture.turns.recordModelRouteEvent(input);
+    expect((await requireTurn(fixture.turns, turn.turnId)).continuationBudget)
+      .toMatchObject({ consumedModelRequests: 1 });
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Turn continuation same-size no-progress persists before redispatch", async () => {
+  const fixture = createFixture("guided-continuation-no-progress");
+  try {
+    insertTurn(fixture.db, "turn-continuation-no-progress", "admitted");
+    const turn = await requireTurn(fixture.turns, "turn-continuation-no-progress");
+    const claim = await fixture.turns.acquireStateExecutionClaim(turn);
+    const limits = continuationLimits();
+    setContinuationBudget(fixture.db, turn.turnId, limits);
+    const record = (roundId: string, requestHash: string) =>
+      fixture.turns.recordModelRouteEvent({
+        turnId: turn.turnId,
+        expectedRevision: turn.revision,
+        executionFence: turn.executionFence,
+        claimId: claim.claimId,
+        event: {
+          type: "model.attempt.started",
+          roundId,
+          candidateIndex: 0,
+          transportAttempt: 1,
+          modelRef: "openai/gpt-5.6-sol",
+          continuationBudgetEnabled: true,
+          requestHash,
+          serializedRequestBytes: 100,
+        },
+      });
+
+    await record("round-1", "a".repeat(64));
+    await expect(record("round-2", "b".repeat(64)))
+      .rejects.toBeInstanceOf(TurnContinuationBudgetExhaustedError);
+    expect((await requireTurn(fixture.turns, turn.turnId)).continuationBudget)
+      .toMatchObject({
+        consumedModelRequests: 1,
+        terminal: { status: "exhausted", reason: "no_progress" },
+      });
+    expect(rowCount(
+      fixture.db,
+      "btcc_model_route_events",
+      "event_type = 'model.attempt.started'",
+    )).toBe(1);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Turn continuation admits one same-size request after a novel durable ref", async () => {
+  const fixture = createFixture("guided-continuation-novel-ref");
+  try {
+    insertTurn(fixture.db, "turn-continuation-novel-ref", "admitted");
+    const turn = await requireTurn(fixture.turns, "turn-continuation-novel-ref");
+    const claim = await fixture.turns.acquireStateExecutionClaim(turn);
+    setContinuationBudget(fixture.db, turn.turnId, continuationLimits());
+    const record = (roundId: string) => fixture.turns.recordModelRouteEvent({
+      turnId: turn.turnId,
+      expectedRevision: turn.revision,
+      executionFence: turn.executionFence,
+      claimId: claim.claimId,
+      event: {
+        type: "model.attempt.started",
+        roundId,
+        candidateIndex: 0,
+        transportAttempt: 1,
+        modelRef: "openai/gpt-5.6-sol",
+        continuationBudgetEnabled: true,
+        requestHash: roundId.repeat(8),
+        serializedRequestBytes: 100,
+      },
+    });
+    await record("round-1");
+    const journal = new SqliteGuidedToolJournal(fixture.db);
+    journal.start({
+      turnId: turn.turnId,
+      callId: "novel-ref-call",
+      toolName: "read_file",
+      rawArguments: '{"path":"a.txt"}',
+      arguments: { path: "a.txt" },
+      operationBatchId: "novel-ref-batch",
+      operationBatchOrdinal: 0,
+      continuationBudgetClaim: claim,
+    });
+    journal.finish({
+      callId: "novel-ref-call",
+      status: "completed",
+      result: { content: "bounded" },
+      continuationBudgetClaim: claim,
+    });
+    await expect(record("round-2")).resolves.toMatchObject({ status: "recorded" });
+    await expect(record("round-3"))
+      .rejects.toBeInstanceOf(TurnContinuationBudgetExhaustedError);
+    expect((await requireTurn(fixture.turns, turn.turnId)).continuationBudget)
+      .toMatchObject({
+        consumedModelRequests: 2,
+        seenDurableResultRefs: [expect.any(String)],
+        terminal: { status: "exhausted", reason: "no_progress" },
+      });
+  } finally {
+    fixture.close();
+  }
+});
+
+test("accepted replay survives token exhaustion and nullable usage is counted once", async () => {
+  const fixture = createFixture("guided-continuation-acceptance");
+  try {
+    insertTurn(fixture.db, "turn-continuation-acceptance", "admitted");
+    const turn = await requireTurn(fixture.turns, "turn-continuation-acceptance");
+    const claim = await fixture.turns.acquireStateExecutionClaim(turn);
+    const routeDigest = "route-acceptance";
+    setContinuationBudget(fixture.db, turn.turnId, {
+      ...continuationLimits(),
+      maxOutputTokens: 4,
+    });
+    await fixture.turns.recordModelRouteEvent({
+      turnId: turn.turnId,
+      expectedRevision: turn.revision,
+      executionFence: turn.executionFence,
+      claimId: claim.claimId,
+      event: {
+        type: "model.attempt.started",
+        roundId: "round-1",
+        candidateIndex: 0,
+        transportAttempt: 1,
+        modelRef: "openai/gpt-5.6-sol",
+        continuationBudgetEnabled: true,
+        requestHash: "c".repeat(64),
+        serializedRequestBytes: 101,
+      },
+    });
+    const acceptance = {
+      turnId: turn.turnId,
+      expectedRevision: turn.revision,
+      executionFence: turn.executionFence,
+      claimId: claim.claimId,
+      checkpointId: claim.checkpointId,
+      checkpointRevision: claim.checkpointRevision,
+      roundId: "round-1",
+      routeDigest,
+      candidateIndex: 0,
+      transportAttempt: 1,
+      modelRef: "openai/gpt-5.6-sol",
+      continuationBudgetEnabled: true,
+      requestHash: "c".repeat(64),
+      serializedRequestBytes: 101,
+      result: {
+        text: "accepted",
+        toolCalls: [],
+        usage: {
+          model: "openai/gpt-5.6-sol",
+          promptTokens: null,
+          cachedTokens: 0,
+          outputTokens: 4,
+          totalTokens: 4,
+        },
+      },
+    };
+    await fixture.turns.recordModelRoundAcceptance(acceptance);
+    await fixture.turns.recordModelRoundAcceptance(acceptance);
+    const beforeReplay = (await requireTurn(fixture.turns, turn.turnId))
+      .continuationBudget;
+    await expect(fixture.turns.loadModelRoundAcceptance({
+      turnId: turn.turnId,
+      roundId: "round-1",
+      routeDigest,
+      candidateIndex: 0,
+      modelRef: "openai/gpt-5.6-sol",
+      checkpointId: claim.checkpointId,
+      checkpointRevision: claim.checkpointRevision,
+    })).resolves.toMatchObject({ text: "accepted" });
+    expect((await requireTurn(fixture.turns, turn.turnId)).continuationBudget)
+      .toEqual(beforeReplay);
+    expect(beforeReplay).toMatchObject({
+      consumedModelRequests: 1,
+      consumedPromptTokens: 0,
+      consumedOutputTokens: 4,
+      terminal: { status: "exhausted", reason: "max_output_tokens" },
+    });
+  } finally {
+    fixture.close();
+  }
+});
+
+test("one tool round is counted per durable operation batch across journal restart", async () => {
+  const fixture = createFixture("guided-continuation-tool-batch");
+  try {
+    insertTurn(fixture.db, "turn-continuation-tool-batch", "admitted");
+    const turn = await requireTurn(fixture.turns, "turn-continuation-tool-batch");
+    const claim = await fixture.turns.acquireStateExecutionClaim(turn);
+    setContinuationBudget(fixture.db, turn.turnId, continuationLimits());
+    await fixture.turns.recordModelRouteEvent({
+      turnId: turn.turnId,
+      expectedRevision: turn.revision,
+      executionFence: turn.executionFence,
+      claimId: claim.claimId,
+      event: {
+        type: "model.attempt.started",
+        roundId: "round-1",
+        candidateIndex: 0,
+        transportAttempt: 1,
+        modelRef: "openai/gpt-5.6-sol",
+        continuationBudgetEnabled: true,
+        requestHash: "d".repeat(64),
+        serializedRequestBytes: 102,
+      },
+    });
+    const start = (journal: SqliteGuidedToolJournal, callId: string, ordinal: number) =>
+      journal.start({
+        turnId: turn.turnId,
+        callId,
+        toolName: "read_file",
+        rawArguments: '{"path":"a.txt"}',
+        arguments: { path: "a.txt" },
+        operationBatchId: "durable-batch-1",
+        operationBatchOrdinal: ordinal,
+        continuationBudgetClaim: claim,
+      });
+    const firstJournal = new SqliteGuidedToolJournal(fixture.db);
+    start(firstJournal, "call-batch-1", 0);
+    start(firstJournal, "call-batch-2", 1);
+    const restartedJournal = new SqliteGuidedToolJournal(fixture.db);
+    start(restartedJournal, "call-batch-3", 2);
+    expect((await requireTurn(fixture.turns, turn.turnId)).continuationBudget)
+      .toMatchObject({ consumedToolRounds: 1 });
+  } finally {
+    fixture.close();
+  }
+});
+
 function createFixture(ownerId: string) {
   const db = new Database(":memory:");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
@@ -199,6 +479,31 @@ function createFixture(ownerId: string) {
       db.close();
     },
   };
+}
+
+function continuationLimits(): TurnContinuationBudgetLimits {
+  return {
+    maxModelRequests: 10,
+    maxToolRounds: 10,
+    maxPromptTokens: 10_000,
+    maxOutputTokens: 10_000,
+    maxElapsedMs: 60_000,
+    maxIdleMs: 60_000,
+  };
+}
+
+function setContinuationBudget(
+  db: Database,
+  turnId: string,
+  limits: TurnContinuationBudgetLimits,
+): void {
+  db.query(`
+    UPDATE btcc_turns SET continuation_budget_json = ? WHERE turn_id = ?
+  `).run(JSON.stringify(createTurnContinuationBudgetState({
+    turnId,
+    limits,
+    nowMs: Date.now(),
+  })), turnId);
 }
 
 function insertTurn(
