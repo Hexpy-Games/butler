@@ -8,6 +8,7 @@ import type {
   ProviderStreamProjectionHandler,
   ReasoningEffort,
 } from "../../../integrations/providers/runtime-contracts.ts";
+import { digest, stableJson } from "../identity/index.ts";
 
 export type ModelRoundRole = "system" | "user" | "assistant" | "tool";
 
@@ -89,4 +90,43 @@ export interface ModelRoundResult {
 export interface ModelRoundPort {
   /** Performs exactly one provider model request and returns its normalized response. */
   runRound(request: ModelRoundRequest): Promise<ModelRoundResult>;
+}
+
+/** Required by bounded continuation so evidence describes the dispatched adapter input. */
+export interface PreparedModelRoundPort extends ModelRoundPort {
+  prepareRequest(request: ModelRoundRequest): ModelRoundRequest;
+}
+
+/** Digest-only request identity for durable route no-progress evidence. */
+export function modelRoundRequestDigest(request: ModelRoundRequest): string {
+  return digest(modelRoundRequestProjection(request));
+}
+
+export function modelRoundRequestSerializedBytes(
+  request: ModelRoundRequest,
+): number {
+  return Buffer.byteLength(modelRoundRequestProjection(request), "utf8");
+}
+
+function modelRoundRequestProjection(request: ModelRoundRequest): string {
+  const projection = {
+    roundId: request.roundId ?? null,
+    model: request.model,
+    messages: request.messages,
+    instructions: request.instructions ?? null,
+    tools: request.tools,
+    toolChoice: request.toolChoice ?? null,
+    reasoningEffort: request.reasoningEffort ?? null,
+    attachments: request.attachments ?? [],
+    butlerData: request.butlerData ?? null,
+    usageAttribution: request.usageAttribution ?? null,
+    cacheScope: request.cacheScope ?? null,
+    providerRetryAttempts: request.providerRetryAttempts ?? null,
+    continuation: request.continuation ?? null,
+  };
+  const serialized = JSON.stringify(projection);
+  if (serialized === undefined) {
+    throw new Error("BTCC model request evidence is not JSON serializable");
+  }
+  return stableJson(JSON.parse(serialized) as unknown);
 }

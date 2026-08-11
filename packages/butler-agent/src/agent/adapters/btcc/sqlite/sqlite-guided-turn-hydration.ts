@@ -4,6 +4,8 @@ import type {
   TurnCheckpoint,
   TurnRecord,
 } from "../../../btcc/turn/index.ts";
+import { parseTurnContinuationBudgetState } from
+  "../../../btcc/turn/index.ts";
 import {
   assertGuidedTurnSemanticState,
   type GuidedTurnSemanticState,
@@ -18,6 +20,7 @@ export type TurnRow = {
   original_message: string;
   model_selection_json: string;
   route_state_json: string | null;
+  continuation_budget_json: string | null;
   context_json: string;
   progress_destination_json: string | null;
   semantic_state: string;
@@ -185,6 +188,14 @@ export function hydrateFinalDisposition(
     throw new Error(`BTCC R3 final disposition is invalid: ${value}`);
   }
   return value;
+}
+
+export function hydrateContinuationBudget(
+  value: string | null,
+  turnId: string,
+): TurnRecord["continuationBudget"] | undefined {
+  if (!value) return undefined;
+  return parseTurnContinuationBudgetState(JSON.parse(value), turnId);
 }
 
 export function assertGuidedTurnRecord(turn: TurnRecord): void {

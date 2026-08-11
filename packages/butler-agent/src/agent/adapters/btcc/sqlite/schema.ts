@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS btcc_turns (
   admission_snapshot_ref TEXT NOT NULL,
   model_selection_json TEXT NOT NULL,
   route_state_json TEXT,
+  continuation_budget_json TEXT,
   context_json TEXT NOT NULL,
   progress_destination_json TEXT,
   semantic_state TEXT NOT NULL CHECK (
@@ -145,6 +146,9 @@ CREATE TABLE IF NOT EXISTS btcc_model_route_events (
   candidate_index INTEGER NOT NULL,
   transport_attempt INTEGER,
   model_ref TEXT NOT NULL,
+  request_hash TEXT,
+  serialized_request_bytes INTEGER,
+  durable_result_ref_count INTEGER,
   error_code TEXT,
   failure_disposition TEXT CHECK (
     failure_disposition IS NULL OR failure_disposition IN ('retry', 'advance', 'surface')

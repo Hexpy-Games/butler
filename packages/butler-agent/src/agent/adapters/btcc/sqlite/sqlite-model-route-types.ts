@@ -14,6 +14,10 @@ export type SqliteModelRouteEventInput = {
     candidateIndex: number;
     transportAttempt?: number;
     modelRef: string;
+    continuationBudgetEnabled?: boolean;
+    requestHash?: string;
+    serializedRequestBytes?: number;
+    durableResultRefCount?: number;
     errorCode?: string;
     failureDisposition?: import("../../../btcc/model-route/index.ts").ModelRouteFailureDisposition;
   };
@@ -33,6 +37,7 @@ export type SqliteModelRoundAcceptanceInput = {
   expectedRevision: number;
   executionFence: number;
   claimId: string;
+  continuationBudgetEnabled?: boolean;
   checkpointId: string;
   checkpointRevision: number;
   roundId: string;
@@ -40,5 +45,8 @@ export type SqliteModelRoundAcceptanceInput = {
   candidateIndex: number;
   transportAttempt: number;
   modelRef: string;
+  requestHash?: string;
+  serializedRequestBytes?: number;
+  durableResultRefCount?: number;
   result: ModelRoundResult;
 };

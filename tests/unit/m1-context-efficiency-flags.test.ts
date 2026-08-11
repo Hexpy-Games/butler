@@ -31,6 +31,12 @@ import { createGuidedCompactReplayRuntime } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-compact-replay-runtime.ts";
 import type { SqliteGuidedToolJournal } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+import {
+  isM1BoundedContinuationCacheEnabled,
+  resolveTurnContinuationBudgetLimits,
+  selectM1BoundedContinuationCache,
+} from
+  "../../packages/butler-agent/src/agent/tools/m1-bounded-continuation-cache.ts";
 
 function tempRoot(suffix: string): string {
   return join(tmpdir(), `butler-m1-t2-${suffix}-${Date.now()}-${Math.random()}`);
@@ -77,6 +83,41 @@ function turnRecord(options: {
 function schemaBytes(value: unknown): string {
   return JSON.stringify(value);
 }
+
+test("M1 T4 is default-off and flag-on fails closed without numeric defaults", () => {
+  expect(isM1BoundedContinuationCacheEnabled({})).toBe(false);
+  expect(selectM1BoundedContinuationCache({})).toEqual({ enabled: false });
+  expect(() => selectM1BoundedContinuationCache({
+    BUTLER_M1_BOUNDED_CONTINUATION_CACHE: "on",
+  })).toThrow("Missing explicit finite positive continuation limit");
+  expect(() => resolveTurnContinuationBudgetLimits({
+    BUTLER_M1_CONTINUATION_MAX_MODEL_REQUESTS: "2",
+    BUTLER_M1_CONTINUATION_MAX_TOOL_ROUNDS: "2",
+    BUTLER_M1_CONTINUATION_MAX_PROMPT_TOKENS: "20",
+    BUTLER_M1_CONTINUATION_MAX_OUTPUT_TOKENS: "10",
+    BUTLER_M1_CONTINUATION_MAX_ELAPSED_MS: "1000",
+    BUTLER_M1_CONTINUATION_MAX_IDLE_MS: "500",
+  })).not.toThrow();
+  expect(selectM1BoundedContinuationCache({
+    BUTLER_M1_BOUNDED_CONTINUATION_CACHE: "on",
+    BUTLER_M1_CONTINUATION_MAX_MODEL_REQUESTS: "2",
+    BUTLER_M1_CONTINUATION_MAX_TOOL_ROUNDS: "2",
+    BUTLER_M1_CONTINUATION_MAX_PROMPT_TOKENS: "20",
+    BUTLER_M1_CONTINUATION_MAX_OUTPUT_TOKENS: "10",
+    BUTLER_M1_CONTINUATION_MAX_ELAPSED_MS: "1000",
+    BUTLER_M1_CONTINUATION_MAX_IDLE_MS: "500",
+  })).toEqual({
+    enabled: true,
+    limits: {
+      maxModelRequests: 2,
+      maxToolRounds: 2,
+      maxPromptTokens: 20,
+      maxOutputTokens: 10,
+      maxElapsedMs: 1000,
+      maxIdleMs: 500,
+    },
+  });
+});
 
 test("M1 T2 minimal surface is default-off and flag-off is byte-identical", () => {
   const turn = turnRecord({ accessMode: "full_access" });

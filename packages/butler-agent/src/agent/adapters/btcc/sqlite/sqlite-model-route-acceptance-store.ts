@@ -5,9 +5,18 @@ import {
   normalizeAcceptedModelRound,
 } from "./sqlite-model-response-normalizer.ts";
 import type { SqliteModelRoundAcceptanceInput } from "./sqlite-model-route-types.ts";
+import {
+  SqliteTurnContinuationBudgetStore,
+} from "./sqlite-turn-continuation-budget.ts";
+import { TurnContinuationBudgetExhaustedError } from
+  "../../../btcc/turn/index.ts";
 
 export class SqliteModelRouteAcceptanceStore {
-  constructor(private readonly db: Database) {}
+  private readonly continuationBudget: SqliteTurnContinuationBudgetStore;
+
+  constructor(private readonly db: Database) {
+    this.continuationBudget = new SqliteTurnContinuationBudgetStore(db);
+  }
 
   async loadModelRoundAcceptance(input: {
     turnId: string;
@@ -37,8 +46,17 @@ export class SqliteModelRouteAcceptanceStore {
       input.checkpointId,
       input.checkpointRevision,
     );
-    if (!row) return undefined;
-    return hydrateAcceptedModelRound(row.normalized_response_json, row.provider_identity_json);
+    if (row) {
+      return hydrateAcceptedModelRound(
+        row.normalized_response_json,
+        row.provider_identity_json,
+      );
+    }
+    const continuationBudget = this.continuationBudget.load(input.turnId);
+    if (continuationBudget?.terminal.status === "exhausted") {
+      throw new TurnContinuationBudgetExhaustedError(continuationBudget);
+    }
+    return undefined;
   }
 
   async recordModelRoundAcceptance(input: SqliteModelRoundAcceptanceInput): Promise<void> {
@@ -47,7 +65,7 @@ export class SqliteModelRouteAcceptanceStore {
       this.assertActiveCheckpoint(input);
       const normalized = normalizeAcceptedModelRound(input.result);
       const acceptanceId = `${input.turnId}:${input.roundId}:${input.routeDigest}:${input.candidateIndex}:${input.modelRef}`;
-      this.db.query(`
+      const accepted = this.db.query(`
         INSERT OR IGNORE INTO btcc_model_round_acceptances (
           acceptance_id, turn_id, round_id, route_digest, candidate_index,
           checkpoint_id, checkpoint_revision, model_ref, transport_attempt,
@@ -72,9 +90,10 @@ export class SqliteModelRouteAcceptanceStore {
       this.db.query(`
         INSERT OR IGNORE INTO btcc_model_route_events (
           event_id, turn_id, route_digest, event_type, round_id,
-          candidate_index, transport_attempt, model_ref, error_code,
+          candidate_index, transport_attempt, model_ref, request_hash,
+          serialized_request_bytes, durable_result_ref_count, error_code,
           failure_disposition, created_at
-        ) VALUES (?, ?, ?, 'model.attempt.succeeded', ?, ?, ?, ?, NULL, NULL, ?)
+        ) VALUES (?, ?, ?, 'model.attempt.succeeded', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)
       `).run(
         eventId,
         input.turnId,
@@ -83,14 +102,38 @@ export class SqliteModelRouteAcceptanceStore {
         input.candidateIndex,
         input.transportAttempt,
         input.modelRef,
+        input.requestHash ?? null,
+        input.serializedRequestBytes ?? null,
+        input.durableResultRefCount ?? null,
         new Date().toISOString(),
       );
+      if (accepted.changes === 1 &&
+          this.continuationBudget.load(input.turnId) !== null) {
+        const usage = input.result.usage;
+        const promptTokens = usage?.promptTokens ?? null;
+        const outputTokens = usage
+          ? usage.providerOutputTokens !== undefined
+            ? usage.providerOutputTokens
+            : usage.outputTokens
+          : null;
+        this.continuationBudget.recordTokenUsageInTransaction({
+          turnId: input.turnId,
+          expectedRevision: input.expectedRevision,
+          executionFence: input.executionFence,
+          claimId: input.claimId,
+          nowMs: Date.now(),
+          promptTokens,
+          outputTokens,
+        });
+      }
       this.projectAcceptedExecutionModel({
         turnId: input.turnId,
         modelRef: input.modelRef,
         providerIdentity: normalized.providerIdentity,
       });
     })();
+    // An accepted response remains consumable. Any terminal token transition
+    // blocks the next provider dispatch instead of suppressing this round.
   }
 
   private projectAcceptedExecutionModel(input: {

@@ -10,6 +10,8 @@ import type {
   TurnRecord,
   TurnStateRepository,
 } from "./contracts.ts";
+import { isTurnContinuationBudgetExhaustedError } from
+  "./continuation-budget.ts";
 
 type AgentRunInput = Parameters<BtccAgentLoop["run"]>[0];
 type RouteRuntimeHooks = Pick<AgentRunInput,
@@ -17,6 +19,7 @@ type RouteRuntimeHooks = Pick<AgentRunInput,
   | "loadModelRouteAttemptHistory"
   | "loadModelRoundAcceptance"
   | "recordModelRoundAcceptance"
+  | "executionClaim"
 >;
 
 const MAX_DURABILITY_ATTEMPTS = 3;
@@ -31,6 +34,7 @@ export function createModelRouteRuntimeHooks(input: {
   const routeDigest = input.turn.modelRoute?.routeDigest ?? "unknown";
 
   return {
+    executionClaim: input.claim,
     recordModelRouteEvent: (event) => withDurabilityRetry(
       "attempt_event_write",
       () => input.turns.recordModelRouteEvent?.({
@@ -86,6 +90,10 @@ function recordAcceptance(
     candidateIndex: number;
     transportAttempt: number;
     modelRef: string;
+    continuationBudgetEnabled?: boolean;
+    requestHash?: string;
+    serializedRequestBytes?: number;
+    durableResultRefCount?: number;
     result: ModelRoundResult;
   }) => {
     return withDurabilityRetry("response_acceptance_write", () => writer({
@@ -110,6 +118,7 @@ async function withDurabilityRetry<T>(
     try {
       return await operation();
     } catch (error) {
+      if (isTurnContinuationBudgetExhaustedError(error)) throw error;
       lastError = error;
       if (!isSqliteContention(error) || attempt === MAX_DURABILITY_ATTEMPTS) {
         throw new ModelRouteDurabilityError(phase, error);

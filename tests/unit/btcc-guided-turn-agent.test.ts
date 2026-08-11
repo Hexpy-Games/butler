@@ -18,6 +18,8 @@ import type { DurableWorkView } from
   "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import { createTurnRuntime as createGuidedTurnRuntime } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
+import { admitTurn } from
+  "../../packages/butler-agent/src/agent/btcc/turn/admission/index.ts";
 import {
   digest,
   stableJson,
@@ -67,6 +69,8 @@ import { readOperationalMetricEvents } from
   "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
 import { createWorkspaceReference } from
   "../../packages/butler-agent/src/agent/session-workspaces/index.ts";
+import { runOpenAIModelRound } from
+  "../../packages/butler-agent/src/integrations/providers/openai/model-round.ts";
 
 type ScriptedModelRoundStep =
   | ModelRoundResult
@@ -173,6 +177,587 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
       content: expect.stringContaining("요청을 처리해 주세요"),
     });
   } finally {
+    fixture.close();
+  }
+});
+
+test("T4 real Guided runtime persists one bounded dispatch and keeps dynamic authority after the stable prefix", async () => {
+  const fixture = createFixture("guided-t4-product-path");
+  const previous = continuationEnvSnapshot();
+  try {
+    enableContinuationEnv({ maxModelRequests: 3 });
+    let captured: ModelRoundRequest | undefined;
+    const agent = fixture.agent({
+      async runRound(request) {
+        captured = request;
+        return {
+          text: "T4 bounded answer",
+          toolCalls: [],
+          usage: {
+            model: "openai/gpt-5.6-sol",
+            promptTokens: 11,
+            cachedTokens: 0,
+            outputTokens: 4,
+            totalTokens: 15,
+          },
+        };
+      },
+    });
+    const turnId = "guided-t4-product-path-turn";
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+
+    const command = localRunCommand(fixture.root, turnId);
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol",
+      reasoningEffort: "low",
+      catalogGeneration: "t4-test",
+      retryCeiling: 1,
+    });
+    expect(await runtime.runTurn(command))
+      .toMatchObject({ kind: "delivered", content: "T4 bounded answer" });
+    expect(captured?.instructions).not.toContain("The admitted access is");
+    expect(captured?.messages[0]?.content).toContain("The admitted access is full_access");
+    expect(captured?.messages[0]?.content).toContain("User request:");
+    expect((await fixture.stores.turns.findTurn(turnId))?.continuationBudget)
+      .toMatchObject({
+        consumedModelRequests: 1,
+        consumedPromptTokens: 11,
+        consumedOutputTokens: 4,
+        terminal: { status: "active" },
+      });
+    const progress = readOperationalMetricEvents({ butlerData: fixture.root })
+      .filter((event) => event.name === "m1_continuation_progress");
+    expect(progress).toHaveLength(1);
+    expect(progress[0]).toMatchObject({
+      status: "ok",
+      unit: "model_round",
+      rawTextStored: false,
+      dimensions: {
+        turnId,
+        phaseId: "guided",
+        terminalReason: null,
+        flagRevision: "m1-t4-v1",
+      },
+    });
+  } finally {
+    restoreContinuationEnv(previous);
+    fixture.close();
+  }
+});
+
+test("T4 limits are fixed at Turn admission and hydrate unchanged after SQLite reopen", async () => {
+  const root = mkdtempSync(join(tmpdir(), "guided-t4-admission-restart-"));
+  const dbPath = join(root, "butler.sqlite");
+  const previous = continuationEnvSnapshot();
+  try {
+    enableContinuationEnv({ maxModelRequests: 3, maxToolRounds: 2 });
+    const command = localRunCommand(root, "guided-t4-admission-restart-turn");
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol",
+      reasoningEffort: "low",
+      catalogGeneration: "t4-admission-test",
+      retryCeiling: 1,
+    });
+    const first = openBtccSqliteStores({
+      dbPath,
+      ownerId: "guided-t4-admission-first",
+      storageProfile: "ephemeral",
+    });
+    const admitted = await admitTurn(command, first.admission, first.turns);
+    expect(admitted.continuationBudget).toMatchObject({
+      consumedModelRequests: 0,
+      consumedToolRounds: 0,
+      limits: { maxModelRequests: 3, maxToolRounds: 2 },
+      terminal: { status: "active" },
+    });
+    const startedAtMs = admitted.continuationBudget?.startedAtMs;
+    first.close();
+
+    for (const key of CONTINUATION_ENV_KEYS) delete process.env[key];
+    const second = openBtccSqliteStores({
+      dbPath,
+      ownerId: "guided-t4-admission-second",
+      storageProfile: "ephemeral",
+    });
+    try {
+      const hydrated = await second.turns.findTurn(command.turnId);
+      expect(hydrated?.continuationBudget).toMatchObject({
+        startedAtMs,
+        consumedModelRequests: 0,
+        limits: { maxModelRequests: 3, maxToolRounds: 2 },
+      });
+      expect((await admitTurn(command, second.admission, second.turns))
+        .continuationBudget).toEqual(hydrated?.continuationBudget);
+    } finally {
+      second.close();
+    }
+  } finally {
+    restoreContinuationEnv(previous);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("T4 durable operation batch remains one tool round after full store reopen", async () => {
+  const root = mkdtempSync(join(tmpdir(), "guided-t4-tool-restart-"));
+  const dbPath = join(root, "butler.sqlite");
+  const previous = continuationEnvSnapshot();
+  try {
+    enableContinuationEnv({ maxModelRequests: 3, maxToolRounds: 2 });
+    const command = localRunCommand(root, "guided-t4-tool-restart-turn");
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol",
+      reasoningEffort: "low",
+      catalogGeneration: "t4-tool-restart-test",
+      retryCeiling: 1,
+    });
+    const first = openBtccSqliteStores({
+      dbPath,
+      ownerId: "guided-t4-tool-restart-first",
+      storageProfile: "ephemeral",
+    });
+    const admitted = await admitTurn(command, first.admission, first.turns);
+    const firstClaim = await first.turns.acquireStateExecutionClaim(admitted);
+    await first.turns.recordModelRouteEvent({
+      turnId: admitted.turnId,
+      expectedRevision: admitted.revision,
+      executionFence: admitted.executionFence,
+      claimId: firstClaim.claimId,
+      event: {
+        type: "model.attempt.started",
+        roundId: "round-1",
+        candidateIndex: 0,
+        transportAttempt: 1,
+        modelRef: "openai/gpt-5.6-sol",
+        continuationBudgetEnabled: true,
+        requestHash: "e".repeat(64),
+        serializedRequestBytes: 100,
+      },
+    });
+    first.guidedToolJournal.start({
+      turnId: admitted.turnId,
+      callId: "restart-batch-call-1",
+      toolName: "read_file",
+      rawArguments: '{"path":"a.txt"}',
+      arguments: { path: "a.txt" },
+      operationBatchId: "restart-batch",
+      operationBatchOrdinal: 0,
+      continuationBudgetClaim: firstClaim,
+    });
+    expect((await first.turns.findTurn(admitted.turnId))?.continuationBudget)
+      .toMatchObject({ consumedToolRounds: 1 });
+    first.close();
+
+    const second = openBtccSqliteStores({
+      dbPath,
+      ownerId: "guided-t4-tool-restart-second",
+      storageProfile: "ephemeral",
+    });
+    try {
+      const hydrated = await second.turns.findTurn(admitted.turnId);
+      if (!hydrated) throw new Error("missing hydrated Turn");
+      const secondClaim = await second.turns.acquireStateExecutionClaim(hydrated);
+      second.guidedToolJournal.start({
+        turnId: hydrated.turnId,
+        callId: "restart-batch-call-2",
+        toolName: "read_file",
+        rawArguments: '{"path":"b.txt"}',
+        arguments: { path: "b.txt" },
+        operationBatchId: "restart-batch",
+        operationBatchOrdinal: 1,
+        continuationBudgetClaim: secondClaim,
+      });
+      expect((await second.turns.findTurn(hydrated.turnId))?.continuationBudget)
+        .toMatchObject({ consumedToolRounds: 1 });
+    } finally {
+      second.close();
+    }
+  } finally {
+    restoreContinuationEnv(previous);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("T4 max model requests persists a typed terminal and canonical delivery without redispatch", async () => {
+  const fixture = createFixture("guided-t4-terminal");
+  const previous = continuationEnvSnapshot();
+  try {
+    enableContinuationEnv({ maxModelRequests: 1 });
+    writeFileSync(join(fixture.root, "bounded.txt"), "bounded\n");
+    let providerCalls = 0;
+    const agent = fixture.agent({
+      async runRound() {
+        providerCalls += 1;
+        return providerCalls === 1
+          ? toolResponse([toolCall("t4-read", "read_file", { path: "bounded.txt" })])
+          : { text: "must not dispatch", toolCalls: [] };
+      },
+    });
+    const turnId = "guided-t4-terminal-turn";
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+
+    const command = localRunCommand(fixture.root, turnId);
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol",
+      reasoningEffort: "low",
+      catalogGeneration: "t4-test",
+      retryCeiling: 1,
+    });
+    const outcome = await runtime.runTurn(command);
+    expect((await fixture.stores.turns.findTurn(turnId))?.continuationBudget)
+      .toMatchObject({
+        consumedModelRequests: 1,
+        consumedToolRounds: 1,
+        terminal: { status: "exhausted", reason: "max_model_requests" },
+      });
+    expect(providerCalls).toBe(1);
+    expect(outcome.kind).toBe("delivered");
+    if (outcome.kind !== "delivered") throw new Error("expected delivered outcome");
+    expect(outcome.content).toContain("연속 실행 한도(max_model_requests)");
+    const terminalMetrics = readOperationalMetricEvents({ butlerData: fixture.root })
+      .filter((event) => event.name === "m1_continuation_progress" &&
+        event.status === "error");
+    expect(terminalMetrics).toHaveLength(1);
+    expect(terminalMetrics[0]?.dimensions?.terminalReason)
+      .toBe("max_model_requests");
+  } finally {
+    restoreContinuationEnv(previous);
+    fixture.close();
+  }
+});
+
+test("T4 exhausted Turn restart emits its typed terminal before any provider dispatch", async () => {
+  const fixture = createFixture("guided-t4-exhausted-restart");
+  const previous = continuationEnvSnapshot();
+  try {
+    enableContinuationEnv({ maxModelRequests: 2 });
+    const turnId = "guided-t4-exhausted-restart-turn";
+    const command = localRunCommand(fixture.root, turnId);
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol",
+      reasoningEffort: "low",
+      catalogGeneration: "t4-exhausted-restart-test",
+      retryCeiling: 1,
+    });
+    const admitted = await admitTurn(
+      command,
+      fixture.stores.admission,
+      fixture.stores.turns,
+    );
+    if (!admitted.continuationBudget) throw new Error("missing admitted budget");
+    const exhausted = {
+      ...admitted.continuationBudget,
+      terminal: {
+        status: "exhausted" as const,
+        reason: "no_progress" as const,
+        exhaustedAtMs: Date.now(),
+      },
+    };
+    const db = new Database(fixture.dbPath);
+    try {
+      db.query(`
+        UPDATE btcc_turns SET continuation_budget_json = ? WHERE turn_id = ?
+      `).run(JSON.stringify(exhausted), turnId);
+    } finally {
+      db.close();
+    }
+    let providerCalls = 0;
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent: fixture.agent({
+        async runRound() {
+          providerCalls += 1;
+          return { text: "must not dispatch", toolCalls: [] };
+        },
+      }),
+    });
+    await expect(runtime.runTurn(command)).resolves.toMatchObject({
+      kind: "delivered",
+      content: expect.stringContaining("연속 실행 한도(no_progress)"),
+    });
+    expect(providerCalls).toBe(0);
+  } finally {
+    restoreContinuationEnv(previous);
+    fixture.close();
+  }
+});
+
+test("T4 counts each physical fallback dispatch and rotates provider-private cache scope", async () => {
+  const fixture = createFixture("guided-t4-fallback-count");
+  const previous = continuationEnvSnapshot();
+  try {
+    enableContinuationEnv({ maxModelRequests: 3 });
+    const requests: Array<{ model: string; cacheScope?: string }> = [];
+    const agent = fixture.agent({
+      async runRound(request) {
+        requests.push({ model: String(request.model), cacheScope: request.cacheScope });
+        if (requests.length === 1) {
+          throw new ModelProviderRequestError({
+            code: "provider_rate_limited",
+            message: "retry primary",
+            provider: "openai",
+            retryable: true,
+          });
+        }
+        return { text: "fallback bounded answer", toolCalls: [] };
+      },
+    });
+    const turnId = "guided-t4-fallback-count-turn";
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    const command = localRunCommand(fixture.root, turnId);
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol",
+      backupModelRefs: ["zai/glm-5.2"],
+      reasoningEffort: "low",
+      catalogGeneration: "t4-fallback-test",
+      retryCeiling: 1,
+    });
+
+    await expect(runtime.runTurn(command)).resolves.toMatchObject({
+      kind: "delivered",
+      content: "fallback bounded answer",
+    });
+    expect(requests.map((request) => request.model)).toEqual([
+      "openai/gpt-5.6-sol",
+      "zai/glm-5.2",
+    ]);
+    expect(requests[0]?.cacheScope).not.toBe(requests[1]?.cacheScope);
+    expect(requests[0]?.cacheScope).toContain(":route:");
+    expect(requests[1]?.cacheScope).toContain(":route:");
+    expect((await fixture.stores.turns.findTurn(turnId))?.continuationBudget)
+      .toMatchObject({ consumedModelRequests: 2 });
+  } finally {
+    restoreContinuationEnv(previous);
+    fixture.close();
+  }
+});
+
+test("T4 counts each same-candidate physical retry exactly once", async () => {
+  const fixture = createFixture("guided-t4-retry-count");
+  const previous = continuationEnvSnapshot();
+  try {
+    enableContinuationEnv({ maxModelRequests: 3 });
+    let providerCalls = 0;
+    const agent = fixture.agent({
+      async runRound() {
+        providerCalls += 1;
+        if (providerCalls === 1) {
+          throw new ModelProviderRequestError({
+            code: "provider_rate_limited",
+            message: "retry same candidate",
+            provider: "openai",
+            retryable: true,
+          });
+        }
+        return { text: "retried bounded answer", toolCalls: [] };
+      },
+    });
+    const turnId = "guided-t4-retry-count-turn";
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    const command = localRunCommand(fixture.root, turnId);
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol",
+      reasoningEffort: "low",
+      catalogGeneration: "t4-retry-test",
+      retryCeiling: 2,
+    });
+    await expect(runtime.runTurn(command)).resolves.toMatchObject({
+      kind: "delivered",
+      content: "retried bounded answer",
+    });
+    expect(providerCalls).toBe(2);
+    expect((await fixture.stores.turns.findTurn(turnId))?.continuationBudget)
+      .toMatchObject({ consumedModelRequests: 2 });
+  } finally {
+    restoreContinuationEnv(previous);
+    fixture.close();
+  }
+});
+
+test("T4 invalid tool admission is zero-cost and one valid batch counts once", async () => {
+  const fixture = createFixture("guided-t4-invalid-tool");
+  const previous = continuationEnvSnapshot();
+  try {
+    enableContinuationEnv({ maxModelRequests: 4, maxToolRounds: 1 });
+    writeFileSync(join(fixture.root, "bounded.txt"), "bounded\n");
+    let providerCalls = 0;
+    const agent = fixture.agent({
+      async runRound() {
+        providerCalls += 1;
+        if (providerCalls === 1) {
+          return toolResponse([toolCall("invalid-read", "read_file", {
+            path: "bounded.txt",
+            start_line: 0,
+          })]);
+        }
+        if (providerCalls === 2) {
+          return toolResponse([
+            toolCall("valid-read", "read_file", { path: "bounded.txt" }),
+          ]);
+        }
+        return { text: "validated bounded answer", toolCalls: [] };
+      },
+    });
+    const turnId = "guided-t4-invalid-tool-turn";
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    const command = localRunCommand(fixture.root, turnId);
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol",
+      reasoningEffort: "low",
+      catalogGeneration: "t4-invalid-tool-test",
+      retryCeiling: 1,
+    });
+
+    await expect(runtime.runTurn(command)).resolves.toMatchObject({
+      kind: "delivered",
+      content: "validated bounded answer",
+    });
+    expect(providerCalls).toBe(3);
+    expect((await fixture.stores.turns.findTurn(turnId))?.continuationBudget)
+      .toMatchObject({
+        consumedModelRequests: 3,
+        consumedToolRounds: 1,
+      });
+  } finally {
+    restoreContinuationEnv(previous);
+    fixture.close();
+  }
+});
+
+test("T4 flag-off preserves the legacy Guided request and creates no budget state", async () => {
+  const fixture = createFixture("guided-t4-rollback");
+  const previous = continuationEnvSnapshot();
+  try {
+    for (const key of CONTINUATION_ENV_KEYS) delete process.env[key];
+    let captured: ModelRoundRequest | undefined;
+    const agent = fixture.agent({
+      async runRound(request) {
+        captured = request;
+        return { text: "legacy rollback answer", toolCalls: [] };
+      },
+    });
+    const turnId = "guided-t4-rollback-turn";
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    const command = localRunCommand(fixture.root, turnId);
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol",
+      reasoningEffort: "low",
+      catalogGeneration: "t4-rollback-test",
+      retryCeiling: 1,
+    });
+    await expect(runtime.runTurn(command)).resolves.toMatchObject({
+      kind: "delivered",
+      content: "legacy rollback answer",
+    });
+    expect(captured?.cacheScope).toBe("btcc-guided:guided-local-session");
+    expect((await fixture.stores.turns.findTurn(turnId))?.continuationBudget)
+      .toBeUndefined();
+  } finally {
+    restoreContinuationEnv(previous);
+    fixture.close();
+  }
+});
+
+test("T4 actual OpenAI adapter keeps stable prefix bytes ahead of dynamic Turn input", async () => {
+  const fixture = createFixture("guided-t4-openai-adapter");
+  const previous = continuationEnvSnapshot();
+  const originalFetch = globalThis.fetch;
+  try {
+    enableContinuationEnv({ maxModelRequests: 2 });
+    const bodies: Array<{ raw: string; parsed: Record<string, unknown> }> = [];
+    globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const raw = String(init?.body);
+      bodies.push({ raw, parsed: JSON.parse(raw) as Record<string, unknown> });
+      return Response.json({
+        id: `response-${bodies.length}`,
+        model: "gpt-5.6-sol",
+        output: [{
+          type: "message",
+          content: [{ type: "output_text", text: `adapter answer ${bodies.length}` }],
+        }],
+        usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+      });
+    }) as typeof fetch;
+    const agent = fixture.agent({
+      runRound: (request) => runOpenAIModelRound(request, {
+        mode: "api_key",
+        authorization: "Bearer test-only",
+      }),
+    });
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    for (const [index, marker] of ["dynamic-alpha", "dynamic-beta"].entries()) {
+      const command = localRunCommand(fixture.root, `guided-t4-adapter-turn-${index}`);
+      command.message.content = `요청 ${marker}`;
+      command.modelSelection.modelRoute = buildModelRoute({
+        primaryModelRef: "openai/gpt-5.6-sol",
+        reasoningEffort: "low",
+        catalogGeneration: "t4-adapter-test",
+        retryCeiling: 1,
+      });
+      await expect(runtime.runTurn(command)).resolves.toMatchObject({
+        kind: "delivered",
+        content: `adapter answer ${index + 1}`,
+      });
+    }
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]?.parsed.instructions).toBe(bodies[1]?.parsed.instructions);
+    expect(JSON.stringify(bodies[0]?.parsed.tools))
+      .toBe(JSON.stringify(bodies[1]?.parsed.tools));
+    expect(JSON.stringify(bodies[0]?.parsed.input)).toContain("dynamic-alpha");
+    expect(JSON.stringify(bodies[1]?.parsed.input)).toContain("dynamic-beta");
+    for (const body of bodies) {
+      expect(body.raw.indexOf('"instructions"'))
+        .toBeLessThan(body.raw.indexOf('"tools"'));
+      expect(body.raw.indexOf('"tools"'))
+        .toBeLessThan(body.raw.indexOf('"input"'));
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreContinuationEnv(previous);
     fixture.close();
   }
 });
@@ -5007,6 +5592,46 @@ function createFixture(label: string) {
       rmSync(root, { recursive: true, force: true });
     },
   };
+}
+
+const CONTINUATION_ENV_KEYS = [
+  "BUTLER_M1_BOUNDED_CONTINUATION_CACHE",
+  "BUTLER_M1_CONTINUATION_MAX_MODEL_REQUESTS",
+  "BUTLER_M1_CONTINUATION_MAX_TOOL_ROUNDS",
+  "BUTLER_M1_CONTINUATION_MAX_PROMPT_TOKENS",
+  "BUTLER_M1_CONTINUATION_MAX_OUTPUT_TOKENS",
+  "BUTLER_M1_CONTINUATION_MAX_ELAPSED_MS",
+  "BUTLER_M1_CONTINUATION_MAX_IDLE_MS",
+] as const;
+
+function continuationEnvSnapshot(): Record<string, string | undefined> {
+  return Object.fromEntries(CONTINUATION_ENV_KEYS.map((key) =>
+    [key, process.env[key]])) as Record<string, string | undefined>;
+}
+
+function enableContinuationEnv(input: {
+  maxModelRequests: number;
+  maxToolRounds?: number;
+}): void {
+  process.env.BUTLER_M1_BOUNDED_CONTINUATION_CACHE = "on";
+  process.env.BUTLER_M1_CONTINUATION_MAX_MODEL_REQUESTS =
+    String(input.maxModelRequests);
+  process.env.BUTLER_M1_CONTINUATION_MAX_TOOL_ROUNDS =
+    String(input.maxToolRounds ?? 4);
+  process.env.BUTLER_M1_CONTINUATION_MAX_PROMPT_TOKENS = "100000";
+  process.env.BUTLER_M1_CONTINUATION_MAX_OUTPUT_TOKENS = "100000";
+  process.env.BUTLER_M1_CONTINUATION_MAX_ELAPSED_MS = "60000";
+  process.env.BUTLER_M1_CONTINUATION_MAX_IDLE_MS = "60000";
+}
+
+function restoreContinuationEnv(
+  snapshot: Record<string, string | undefined>,
+): void {
+  for (const key of CONTINUATION_ENV_KEYS) {
+    const value = snapshot[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 }
 
 function durableTextLocations(

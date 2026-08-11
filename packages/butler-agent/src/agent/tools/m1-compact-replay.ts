@@ -3,6 +3,7 @@ import type { FunctionToolDefinition } from
 
 export const M1_COMPACT_REPLAY_FLAG = "BUTLER_M1_COMPACT_REPLAY" as const;
 export const M1_COMPACT_REPLAY_FLAG_REVISION = "m1-t3-v1" as const;
+export const M1_COMPACT_REPLAY_CARRIER_MAX_OPERATIONS = 8 as const;
 export const READ_OPERATION_RESULTS_TOOL_NAME =
   "read_operation_results" as const;
 export const REPLACE_PHASE_CONTINUITY_TOOL_NAME =
@@ -113,7 +114,7 @@ export const M1_COMPACT_REPLAY_TOOL_DEFINITIONS: readonly FunctionToolDefinition
           operations: {
             type: "array",
             minItems: 1,
-            maxItems: 8,
+            maxItems: M1_COMPACT_REPLAY_CARRIER_MAX_OPERATIONS,
             items: {
               type: "object",
               additionalProperties: false,
@@ -228,7 +229,7 @@ export function withM1CompactReplayOperationCarrier(
           operations: {
             type: "array",
             minItems: 1,
-            maxItems: 8,
+            maxItems: M1_COMPACT_REPLAY_CARRIER_MAX_OPERATIONS,
             items: {
               oneOf: operations.map((operation) => ({
                 type: "object",

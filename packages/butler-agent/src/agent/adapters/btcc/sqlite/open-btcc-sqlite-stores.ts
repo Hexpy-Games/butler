@@ -35,6 +35,8 @@ import { SqliteBtccProgressEventRepository } from
   "./sqlite-btcc-progress-event-repository.ts";
 import { SqliteBtccWakeAuthorizationRepository } from
   "./sqlite-btcc-wake-authorization-repository.ts";
+import { selectM1BoundedContinuationCache } from
+  "../../../tools/m1-bounded-continuation-cache.ts";
 
 export function openBtccSqliteStores(input: {
   dbPath: string;
@@ -69,6 +71,7 @@ export function openBtccSqliteStores(input: {
       db,
       turns,
       owner,
+      () => selectM1BoundedContinuationCache(process.env),
     ),
     turns,
     progressEvents: new SqliteBtccProgressEventRepository(db),

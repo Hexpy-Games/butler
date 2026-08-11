@@ -19,6 +19,7 @@ import {
   assertGuidedTurnRecord,
   hydrateFinalDisposition,
   hydrateFinalPayload,
+  hydrateContinuationBudget,
   hydrateProgressDestination,
   hydrateRoute,
   SqliteGuidedTurnHydration,
@@ -47,7 +48,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     const row = this.db.query<TurnRow, [string]>(`
       SELECT turn_id, session_id, inbox_id, trigger_key, original_message_id,
         original_message, model_selection_json, context_json,
-        route_state_json,
+        route_state_json, continuation_budget_json,
         progress_destination_json, semantic_state,
         active_checkpoint_id, route, final_payload_json, delivery_outbox_id,
         canonical_assistant_message_id, revision, execution_fence,
@@ -63,6 +64,10 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     const route = hydrateRoute(row.route);
     const finalDisposition = hydrateFinalDisposition(row.final_disposition);
     const wakeIdentity = this.hydration.loadWakeIdentity(row.turn_id);
+    const continuationBudget = hydrateContinuationBudget(
+      row.continuation_budget_json,
+      row.turn_id,
+    );
     const turn: TurnRecord = {
       turnId: row.turn_id,
       sessionId: row.session_id,
@@ -73,6 +78,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
       ...(wakeIdentity ? { wakeIdentity } : {}),
       modelSelection: JSON.parse(row.model_selection_json),
       ...(row.route_state_json ? { modelRoute: JSON.parse(row.route_state_json) } : {}),
+      ...(continuationBudget ? { continuationBudget } : {}),
       context: JSON.parse(row.context_json),
       ...(row.progress_destination_json
         ? { progressDestination: hydrateProgressDestination(row.progress_destination_json) }

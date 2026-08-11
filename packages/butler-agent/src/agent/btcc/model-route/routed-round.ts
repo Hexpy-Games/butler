@@ -5,7 +5,9 @@ import type {
   ModelRoundPort,
   ModelRoundRequest,
   ModelRoundResult,
+  PreparedModelRoundPort,
 } from "../ports/model-round.ts";
+import type { TurnContinuationBudgetLimits } from "../turn/contracts.ts";
 import { sanitizeCompactReplayCarrierForAcceptance } from
   "../compact-replay/index.ts";
 import {
@@ -20,14 +22,16 @@ import type {
   ModelRouteState,
 } from "./contracts.ts";
 import {
-  MODEL_ROUTE_MAX_CANDIDATES,
-  MODEL_ROUTE_MAX_DISPATCHES,
-  MODEL_ROUTE_MAX_RETRY_ATTEMPTS,
   ModelRouteDispatchLimitError,
   ModelRouteRecoveredFailureError,
 } from "./contracts.ts";
+import {
+  modelRouteDispatchBudget,
+  providerRouteRequest,
+  requestEvidence,
+} from "./route-request-policy.ts";
 
-export function createModelRoutePort(input: {
+type ModelRoutePortCommon = {
   base: ModelRoundPort;
   turnId: string;
   route: ModelRouteState;
@@ -47,9 +51,27 @@ export function createModelRoutePort(input: {
     candidateIndex: number;
     transportAttempt: number;
     modelRef: string;
+    continuationBudgetEnabled?: boolean;
+    requestHash?: string;
+    serializedRequestBytes?: number;
+    durableResultRefCount?: number;
     result: ModelRoundResult;
   }) => Promise<void>;
-}): ModelRoundPort {
+};
+
+type ModelRoutePortInput = ModelRoutePortCommon & (
+  | {
+    base: PreparedModelRoundPort;
+    continuationBudget: { limits: TurnContinuationBudgetLimits };
+    onRouteEvent: ModelRouteEventHandler;
+    loadAcceptedResponse: NonNullable<ModelRoutePortCommon["loadAcceptedResponse"]>;
+    loadAttemptHistory: NonNullable<ModelRoutePortCommon["loadAttemptHistory"]>;
+    recordAcceptedResponse: NonNullable<ModelRoutePortCommon["recordAcceptedResponse"]>;
+  }
+  | { continuationBudget?: undefined }
+);
+
+export function createModelRoutePort(input: ModelRoutePortInput): ModelRoundPort {
   let route = input.route;
   let generatedRoundSequence = 0;
   return {
@@ -66,6 +88,16 @@ export function createModelRoutePort(input: {
       while (true) {
         const candidate = currentModelRouteCandidate(route);
         if (!candidate) throw new Error("model_route_exhausted");
+        const routedRequest = providerRouteRequest({
+          request,
+          candidate,
+          continuation,
+          route,
+          continuationBudgetEnabled: Boolean(input.continuationBudget),
+        });
+        const providerRequest = input.continuationBudget
+          ? input.base.prepareRequest(routedRequest)
+          : routedRequest;
         const attemptKey = routeAttemptKey(input.turnId, roundId, route);
         const accepted = await input.loadAcceptedResponse?.({
           roundId,
@@ -89,6 +121,7 @@ export function createModelRoutePort(input: {
           for (const startedAttempt of [...attemptHistory.started].sort((a, b) => a - b)) {
             if (terminalAttempts.has(startedAttempt)) continue;
             await input.onRouteEvent?.({
+              ...requestEvidence(providerRequest, input.continuationBudget),
               type: "model.attempt.abandoned_after_restart",
               roundId,
               candidateIndex: route.activeCursor,
@@ -135,7 +168,11 @@ export function createModelRoutePort(input: {
           }
         }
 
+        if (dispatchCount >= dispatchBudget) {
+          throw new ModelRouteDispatchLimitError(dispatchBudget);
+        }
         const startedResult = await input.onRouteEvent?.({
+          ...requestEvidence(providerRequest, input.continuationBudget),
           type: "model.attempt.started",
           roundId,
           candidateIndex: route.activeCursor,
@@ -179,25 +216,8 @@ export function createModelRoutePort(input: {
 
         let result: ModelRoundResult;
         try {
-          if (dispatchCount >= dispatchBudget) {
-            throw new ModelRouteDispatchLimitError(dispatchBudget);
-          }
           dispatchCount += 1;
-          result = await input.base.runRound({
-            ...request,
-            model: candidate.modelRef,
-            reasoningEffort: candidate.reasoningEffort,
-            ...(request.usageAttribution
-              ? {
-                  usageAttribution: {
-                    ...request.usageAttribution,
-                    reasoningEffort: candidate.reasoningEffort,
-                  },
-                }
-              : {}),
-            providerRetryAttempts: 1,
-            continuation,
-          });
+          result = await input.base.runRound(providerRequest);
         } catch (error) {
           const disposition = classifyModelRouteFailure(error);
           const errorCode = error instanceof ModelProviderRequestError
@@ -206,6 +226,7 @@ export function createModelRoutePort(input: {
               ? error.code
               : "provider_unknown_error";
           await input.onRouteEvent?.({
+            ...requestEvidence(providerRequest, input.continuationBudget),
             type: "model.attempt.failed",
             roundId,
             candidateIndex: route.activeCursor,
@@ -243,6 +264,7 @@ export function createModelRoutePort(input: {
           result,
         });
         await input.recordAcceptedResponse?.({
+          ...requestEvidence(providerRequest, input.continuationBudget),
           roundId,
           candidateIndex: route.activeCursor,
           transportAttempt,
@@ -251,6 +273,7 @@ export function createModelRoutePort(input: {
         });
         if (!input.recordAcceptedResponse) {
           await input.onRouteEvent?.({
+            ...requestEvidence(providerRequest, input.continuationBudget),
             type: "model.attempt.succeeded",
             roundId,
             candidateIndex: route.activeCursor,
@@ -269,7 +292,7 @@ export function createModelRoutePort(input: {
 }
 
 async function selectFallback(
-  input: Parameters<typeof createModelRoutePort>[0],
+  input: ModelRoutePortInput,
   route: ModelRouteState,
   attemptKey: string,
   roundId: string,
@@ -313,18 +336,6 @@ function recoveredFailure(
     detail.errorCode,
     detail.disposition,
   );
-}
-
-function modelRouteDispatchBudget(route: ModelRouteState): number {
-  const retryCeiling = Math.min(
-    MODEL_ROUTE_MAX_RETRY_ATTEMPTS,
-    Math.max(1, Math.trunc(route.retryCeiling)),
-  );
-  const candidateCount = Math.min(
-    MODEL_ROUTE_MAX_CANDIDATES,
-    Math.max(0, route.candidates.length),
-  );
-  return Math.min(MODEL_ROUTE_MAX_DISPATCHES, retryCeiling * candidateCount);
 }
 
 function maxAttempt(history: ModelRouteAttemptHistory): number {

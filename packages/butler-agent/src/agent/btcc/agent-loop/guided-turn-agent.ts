@@ -8,13 +8,7 @@ import type { SqliteGuidedEffectJournal, SqliteGuidedToolJournal } from "../../a
 import { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { createProviderModelRoundPort } from "../../../integrations/providers/runtime.ts";
-import {
-  guidedInstructions,
-  providerImageAttachments,
-  renderGuidedPersonaInstructions,
-  renderGuidedResponseLanguage,
-  renderGuidedPrompt,
-} from "./guided-turn-prompt.ts";
+import { providerImageAttachments } from "./guided-turn-prompt.ts";
 import {
   GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES,
   guidedNativeToolDefinitions,
@@ -28,8 +22,6 @@ import { createGuidedToolSurfaceObservation, type GuidedToolSurfaceObservation }
 import { createGuidedToolExecutionBoundary } from
   "./guided-tool-execution-boundary.ts";
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
-import { renderGuidedEffectContext } from "./guided-effect-context.ts";
-import { renderDurableWorkContext } from "./durable-work-tools.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import {
   safeBoundWork,
@@ -42,19 +34,27 @@ import { createGuidedActivityProjection } from
 import { createGuidedPersistentEffectResolver } from
   "./guided-persistent-effect-resolution.ts";
 import {
-  createModelRoutePort,
   currentModelRouteCandidate,
 } from "../model-route/index.ts";
 import { renderGuidedExecutionWindowObservation } from "./execution-window-observation.ts";
 import { createGuidedSessionWorkspaceRuntime, type GuidedSessionWorkspaceBindingStore } from "./guided-session-workspace-recovery.ts";
 import { createGuidedTurnBaselineObservation } from "./guided-turn-baseline-observation.ts";
-import { createGuidedRouteEventHandler } from "./guided-turn-route-events.ts";
 import { isM1CompactReplayEnabled } from "../../tools/m1-compact-replay.ts";
 import type { GuidedCompactReplayRuntime } from "./guided-compact-replay-runtime.ts";
 import { assembleGuidedTurnContext } from "./guided-turn-context-assembly.ts";
 import { observeCompactReplayToolBatch } from "./guided-compact-replay-control.ts";
 import { throwIfExecutionWindowAborted } from "./execution-window.ts";
-import { createBtccCompactReplayModelRoundPort } from "./model-round-request-assembly.ts";
+import {
+  createBtccCompactReplayModelRoundPort,
+} from "./model-round-request-assembly.ts";
+import {
+  admitGuidedTurnContinuation,
+  createGuidedContinuationModelRound,
+  observeGuidedTurnContinuation,
+  type GuidedTurnContinuationObservation,
+} from "./guided-turn-continuation.ts";
+import { assembleGuidedTurnPrompt } from
+  "./guided-turn-prompt-assembly.ts";
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
   butlerData: string;
@@ -79,6 +79,7 @@ export function createProductionGuidedTurnAgent(input: {
       loadModelRouteAttemptHistory,
       loadModelRoundAcceptance,
       recordModelRoundAcceptance,
+      executionClaim,
       onProviderResponseIdentity,
       observationStartedAtMs,
     }): Promise<BtccAgentLoopResult> {
@@ -97,8 +98,13 @@ export function createProductionGuidedTurnAgent(input: {
       });
       let m1ToolSurfaceAdmission: GuidedToolSurfaceObservation | undefined;
       let compactReplayRuntime: GuidedCompactReplayRuntime | undefined;
+      let continuationObservation: GuidedTurnContinuationObservation | undefined;
       try {
       const policy = guidedPolicy(turn);
+      const continuationSelection = admitGuidedTurnContinuation({
+        turn, recordModelRouteEvent, loadModelRouteAttemptHistory,
+        loadModelRoundAcceptance, recordModelRoundAcceptance, executionClaim,
+      });
       const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
       m1ToolSurfaceAdmission = createGuidedToolSurfaceObservation({
         butlerData: input.butlerData,
@@ -132,6 +138,10 @@ export function createProductionGuidedTurnAgent(input: {
       const authorizedTools = toolSurface.authorizedTools;
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
       const visibleTools = toolSurface.providerTools;
+      continuationObservation = observeGuidedTurnContinuation({
+        selection: continuationSelection, turn, butlerData: input.butlerData,
+        policy, compactReplayEnabled,
+      });
       m1ToolSurfaceAdmission.observeProviderTools(visibleTools);
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
       const describedToolIds = new Set<string>();
@@ -214,52 +224,36 @@ export function createProductionGuidedTurnAgent(input: {
         toolJournal: input.toolJournal,
         executeButlerTool: execute,
         compactReplayRuntime,
+        ...(continuationSelection.enabled
+          ? { continuationBudget: { claim: executionClaim! } }
+          : {}),
       });
       const baseModelRound = createBtccCompactReplayModelRoundPort(input.modelRound ?? createProviderModelRoundPort());
-      const onRouteEvent = createGuidedRouteEventHandler({
-        turn,
-        progress,
-        recordModelRouteEvent,
+      const modelRound = createGuidedContinuationModelRound({
+        base: baseModelRound, turn, progress, recordModelRouteEvent,
+        observation: continuationObservation,
         onFallbackSelected: (event) => {
           m1Observation.markMeasurementIneligible();
           activeModelRef = event.modelRef;
         },
+        loadAttemptHistory: loadModelRouteAttemptHistory,
+        loadAcceptedResponse: loadModelRoundAcceptance,
+        recordAcceptedResponse: recordModelRoundAcceptance,
+        selection: continuationSelection,
       });
-      const modelRound = turn.modelRoute
-        ? createModelRoutePort({
-            base: baseModelRound,
-            turnId: turn.turnId,
-            route: turn.modelRoute,
-            onRouteEvent,
-            loadAttemptHistory: loadModelRouteAttemptHistory,
-            loadAcceptedResponse: loadModelRoundAcceptance,
-            recordAcceptedResponse: recordModelRoundAcceptance,
-          })
-        : baseModelRound;
-      const responseLanguage = renderGuidedResponseLanguage(
-        turn,
-        input.contextDocuments,
-      );
+      const promptAssembly = assembleGuidedTurnPrompt({
+        turn, policy, contextDocuments: input.contextDocuments,
+        butlerData: input.butlerData, toolJournal: input.toolJournal,
+        effectJournal: input.effectJournal, initialWork, compactReplay,
+        compactReplayEnabled,
+        compactReplayWorkCharacterLimit:
+          compactReplayRuntime.budget.workContextCharacters,
+        continuationEnabled: continuationSelection.enabled,
+      });
       const loopOptions: BtccAgentLoopInput = {
-        prompt: renderGuidedPrompt(turn, {
-          ...input,
-          workContext: renderDurableWorkContext(
-            initialWork, compactReplay, compactReplayEnabled
-              ? compactReplayRuntime.budget.workContextCharacters : undefined,
-          ),
-          effectContext: initialWork
-            ? renderGuidedEffectContext(
-                input.effectJournal.listForWork(initialWork.work.workId),
-            )
-            : "",
-          compactReplay,
-        }),
+        prompt: promptAssembly.prompt,
         turnId: turn.turnId,
-        instructions: guidedInstructions(
-          policy,
-          renderGuidedPersonaInstructions(turn, input.contextDocuments),
-          responseLanguage,
-        ),
+        instructions: promptAssembly.instructions,
         progress,
         model: activeModelRef,
         resolveModelRef: () => activeModelRef,
@@ -325,7 +319,7 @@ export function createProductionGuidedTurnAgent(input: {
             work: currentWork,
             toolCalls: input.toolJournal.list(turn.turnId),
             effects: workId ? input.effectJournal.listForWork(workId) : [],
-            responseLanguage,
+            responseLanguage: promptAssembly.responseLanguage,
           };
         },
       });
@@ -339,7 +333,11 @@ export function createProductionGuidedTurnAgent(input: {
             toolCalls.usedTools.some(isDurableWorkTool),
         ),
       };
+      } catch (error) {
+        continuationObservation?.observeError(error);
+        throw error;
       } finally {
+        continuationObservation?.finalize();
         compactReplayRuntime?.finalize(signal.aborted);
         m1ToolSurfaceAdmission?.finalize(signal.aborted ? "skipped" : "error");
         m1Observation.finalize(signal.aborted ? "skipped" : "error");

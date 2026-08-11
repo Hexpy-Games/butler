@@ -4,6 +4,22 @@ export { projectTerminalOutcome } from "./project-terminal-outcome.ts";
 export { stopTurn } from "./stop-turn.ts";
 export { createTurnRuntime, type TurnRuntimeDependencies } from "./runtime.ts";
 export {
+  createTurnContinuationBudgetState,
+  continuationResultRefLimit,
+  isTurnContinuationBudgetExhaustedError,
+  modelRoundRequestDigest,
+  parseTurnContinuationBudgetState,
+  terminalReceiptFromState,
+  transitionTurnContinuationBudget,
+  TURN_CONTINUATION_BUDGET_SCHEMA_VERSION,
+  TurnContinuationBudgetConfigurationError,
+  TurnContinuationBudgetExhaustedError,
+  TurnContinuationBudgetStorageError,
+  type TurnContinuationBudgetEvent,
+  type TurnContinuationBudgetLimits,
+  type TurnContinuationTerminalReceipt,
+} from "./continuation-budget.ts";
+export {
   createTurnFacade,
   type TurnFacade,
   type TurnFacadeDependencies,
@@ -23,6 +39,8 @@ export type {
   StopPersistenceOutcome,
   TurnAdmissionRepository,
   TurnCheckpoint,
+  TurnContinuationBudgetState,
+  TurnContinuationBudgetTerminalReason,
   TurnRecord,
   TurnSemanticState,
   TurnStateRepository,

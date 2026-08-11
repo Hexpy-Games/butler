@@ -23,6 +23,7 @@ test("opening an existing R3 database migrates Work columns and anchors idempote
       "  ),\n  source_revision TEXT NOT NULL,\n",
       "",
     )
+      .replace("  continuation_budget_json TEXT,\n", "")
       .replace("  governing_refs_json TEXT NOT NULL,\n", "")
       .replace("  plan_revision_id TEXT NOT NULL,\n", "")
       .replace("  action_states_json TEXT NOT NULL,\n", ""),
@@ -127,6 +128,12 @@ test("opening an existing R3 database migrates Work columns and anchors idempote
     .toMatchObject({ notnull: 0, dflt_value: null });
   expect(checkpointColumns.find((column) => column.name === "action_states_json"))
     .toMatchObject({ notnull: 1, dflt_value: "'[]'" });
+  const turnColumns = migrated.query<{ name: string }, []>(
+    "PRAGMA table_info(btcc_turns)",
+  ).all();
+  expect(turnColumns.map((column) => column.name)).toContain(
+    "continuation_budget_json",
+  );
   migrated.close();
   rmSync(root, { recursive: true, force: true });
 });
