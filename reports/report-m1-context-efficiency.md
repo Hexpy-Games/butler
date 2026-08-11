@@ -695,3 +695,166 @@ The request hypothesis (45 → 38–40) is not met under attempted accounting
 (`28` → `34`), and the elapsed hypothesis (18–30%) regresses (`+42.86%`). No
 default-on or M1-success claim is authorized. The M1 flags remain default-off;
 Work remains `in_progress`; T5 remains skipped. Windows CI remains excluded.
+
+## Post-M1 token attribution (diagnostic; ordinary medium replication)
+
+This section answers which costs can be proven from the accepted medium
+replication without pretending that a feature-level attribution exists. The
+four accepted post-M1 evidence handles were recorded in the manifest as
+`butler-m1-medium-post-direct-cold-accepted.8EJRne`,
+`butler-m1-medium-post-direct-warm.rU3li1`,
+`butler-m1-medium-post-current-web-cold.Fz18ID`, and
+`butler-m1-medium-post-landing-cold.2IGikC`. A read-only recheck on 2026-08-11
+found no copy in `/private/tmp` or the macOS Trash. They are therefore
+**currently unrecoverable**. The figures below are rechecked algebraically
+from the committed report/manifest arm totals and from the current source
+contracts; no raw prompt, transcript, tool payload, credential, or new
+request/round decomposition was reconstructed.
+
+### Exactly attributable arm totals and shares
+
+The absolute values repeat the accepted arm table above so that the share
+calculation is auditable. A percentage is that arm's share of the post-medium
+target aggregate for the same column. `cache-read` is a provider usage class,
+not an inferred additional billable-token amount.
+
+| arm | attempted bytes (share) | completed bytes (share) | attempted requests (share) | completed requests (share) | provider prompt (share) | cache-read (share) | provider total (share) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `direct-cold` | 87,888 (3.765%) | 43,944 (2.047%) | 2 (5.882%) | 1 (3.333%) | 8,016 (1.793%) | 0 (0.000%) | 8,048 (1.704%) |
+| `direct-warm` target | 44,575 (1.910%) | 44,575 (2.077%) | 1 (2.941%) | 1 (3.333%) | 8,241 (1.844%) | 4,608 (3.863%) | 8,269 (1.751%) |
+| `current-web-cold` | 398,786 (17.084%) | 309,192 (14.406%) | 8 (23.529%) | 6 (20.000%) | 62,290 (13.934%) | 21,504 (18.026%) | 64,817 (13.724%) |
+| `landing-cold` | 1,803,062 (77.242%) | 1,748,517 (81.469%) | 23 (67.647%) | 22 (73.333%) | 368,474 (82.429%) | 93,184 (78.112%) | 391,156 (82.821%) |
+| **post target total** | **2,334,311** | **2,146,228** | **34** | **30** | **447,021** | **119,296** | **472,290** |
+
+### Observable cost concentration
+
+The accepted arm totals also show where the observable completed work is
+concentrated. The tool count is the arm recorder's count, not a claim that
+every tool-result byte can be priced separately.
+
+| arm | completed requests | tool calls | provider prompt | provider total | prompt / completed request |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `direct-cold` | 1 | 0 | 8,016 | 8,048 | 8,016 |
+| `direct-warm` target | 1 | 0 | 8,241 | 8,269 | 8,241 |
+| `current-web-cold` | 6 | 15 | 62,290 | 64,817 | 10,382 |
+| `landing-cold` | 22 | 59 | 368,474 | 391,156 | 16,749 |
+
+This is observable evidence of multi-round/tool-heavy execution and cost
+concentration in the web and landing arms. It is not causal attribution to
+Work/Ledger, memory, tool results, or any individual M1 slice. Across the
+post target aggregate, cache-read is a provider usage subset of prompt usage:
+`119,296 / 447,021 = 26.69%`, leaving `327,725` prompt tokens outside that
+cache-read class. The corresponding pre-medium ratio was
+`230,912 / 449,293 = 51.39%` (uncached arithmetic `218,381`), so the cache-state change prevents a
+causal pre/post cache comparison. Retry-byte residuals below are serialized
+transport proxies, not token counts.
+
+The completed-byte column is secondary: it must not be used to erase failed
+transport payloads from the product-cost view. The exact algebraic retry
+residual is:
+
+- `direct-cold`: `87,888 − 43,944 = 43,944` failed-attempt bytes (one failed
+  request);
+- `current-web-cold`: `398,786 − 309,192 = 89,594` failed-attempt bytes (two
+  failed requests);
+- `landing-cold`: `1,803,062 − 1,748,517 = 54,545` failed-attempt bytes (one
+  failed request).
+
+Across the four target arms this is **188,083 bytes over four failed requests**
+(8.057% of attempted bytes and 4/34 attempted requests). The direct-warm
+warmup had its own one failed attempt and is intentionally outside the target
+aggregate. Arm elapsed time is known, but per-attempt timestamps were in the
+removed roots; exact retry-only elapsed time is therefore unavailable and is
+not inferred from arm elapsed time.
+
+The same boundary applies to provider usage: prompt/cache-read/total are exact
+completed usage-bearing arm totals, while failed transport attempts have no
+provider usage row. Cache-read must remain a separate provider metric; it is
+not evidence of extra charge or savings without the provider's billing rule.
+
+### What the current telemetry does and does not attribute
+
+The current source was read at the following authority points:
+
+| source event/contract | exact data available | attribution boundary |
+| --- | --- | --- |
+| `m1_baseline_arm_observed` (`operations/metrics/m1-baseline-observation.ts`) | one arm's serialized-input estimate, provider prompt/cache-write/cache-read/output/total classes, model-request count, tool counts, first-useful and elapsed values | arm totals only; no round ID, segment ID, or request-to-segment join |
+| `m1_tool_surface_admission` (`operations/metrics/m1-tool-surface-admission.ts`) | selected tool count, stable/dynamic digests, schema byte length, caller-supplied token estimate | one final tool-surface admission; no per-tool bytes or provider usage reconciliation |
+| `m1_compact_replay` (`operations/metrics/m1-compact-replay.ts`) | projection/anchor/replay and exact-read counters, safe result reference, duplicate-effect bit | operation counts only; no replay bytes/tokens or link to a provider request |
+| `m1_continuation_progress` (`operations/metrics/m1-continuation-progress.ts`) | route-start value, route/request/cache-prefix digests, cursor, typed terminal reason | `remainingBudget` and `novelResultRef` are currently null; no round-level usage or byte fields |
+| `prompt-cache-usage.jsonl` (`integrations/providers/prompt-cache-metrics.ts`) | provider usage row; optional `roundIndex` and optional `promptSections` carrier | provider response totals; accepted medium rows are not recoverable for a fresh per-round inspection |
+
+`PromptUsageSectionAttribution` exists as a typed optional carrier, but the
+current prompt assembler → model-round path does not populate it. The context
+monitor records section and runtime-context **characters** separately; it does
+not attach them to a provider request or reconcile them with provider tokens.
+Likewise, `modelRoundRequestSerializedBytes` is a whole-request projection,
+not a partition by Work/Ledger, memory, tools, replay, or user content.
+`PromptUsageBudgetState` remains telemetry-only in
+`integrations/providers/shared/usage.ts`; it is not an agent-loop stop
+condition. Turn-scoped continuation control belongs to the separate durable
+`TurnContinuationBudgetState` contract.
+
+Consequently the following are **not exactly attributable** in this accepted
+replication: Work/Project Ledger context, memory/context recall, durable-result
+references and exact-read views, tool schema versus tool results, base system
+contract/persona, user request, model reasoning, and model output. The provider
+prompt/cache/total numbers are whole-request observations; the accepted
+provider output field is nullable and remains unavailable where reported null.
+No T2/T3/T4 byte or token saving is claimed from these arm totals.
+
+### Minimal future typed instrumentation (proposal only; no implementation)
+
+If M1 is revisited, add one privacy-safe discriminated
+`butler.m1.segment-usage.v1` event family owned by the BTCC model-round
+assembly/provider-usage reconciler. The UI, Project Ledger, and individual
+tool implementations must not become competing attribution authorities. Each
+physical dispatch (including a failed retry) has digest-only identity fields:
+`turnDigest`, `roundDigest`, `attemptDigest`, `phaseId`, `routeDigest`, and
+`flagRevision`. The digests are bounded validated identifiers; raw turn,
+round, attempt IDs, paths, and credentials are never emitted.
+
+The family has three explicit row kinds. A `request_segment` row is emitted once
+per `(attemptDigest, segmentId)` for mutually exclusive request segments only:
+`base_system`, `persona_profile`, `phase_contract`, `work_ledger`,
+`workspace_context`, `memory_recall`, `tool_schema`, `tool_result`,
+`replay_projection`, `durable_result_refs`, and `user_request`. It carries
+`segmentRevision`, `serializedBytes`, `estimatedPromptTokens`, and
+`tokenizerVersion` (the last two are `null` when no deterministic estimator is
+available), but never provider response usage. A `request_envelope` row is
+emitted once per physical attempt and carries `totalSerializedBytes`,
+`transportStatus: started | failed | completed`, `elapsedMs`, and a stable
+`cachePrefixHash` (a request-level digest, not a summable segment). Its
+response usage is not stored on this envelope. A third `response_usage` row is
+emitted once for each usage-bearing provider response (or once with
+`usageStatus=unavailable` when the response carries no usage) and contains
+nullable provider prompt/cache-read/cache-write/output/total and reasoning
+fields. Response-only classes such as `model_reasoning` and `model_output`
+belong on this row, not in the request segment vocabulary; the provider's
+whole-request usage stays authoritative unless it supplies segment-level
+attribution.
+
+The reconciliation invariant is explicit: when `segmentCoverage=complete`,
+the sum of `request_segment.serializedBytes` for the same `attemptDigest`
+equals `request_envelope.totalSerializedBytes` **at the provider-send boundary**;
+response/usage rows and the non-additive `cachePrefixHash` are never included
+in that sum. When coverage is partial or unavailable, the envelope reports
+that state rather than inventing a residual. `attributionStatus: exact |
+estimated | unavailable` describes the provider usage join. One envelope per
+attempt preserves retry bytes and retry elapsed without a hidden retry, while
+one row per `(attemptDigest, segmentId)` prevents segment overlap. Raw prompt,
+transcript, tool arguments/results, private paths, and credentials remain
+excluded. This proposal supplies attribution evidence; it does not alter
+M1's default-off decision or the Turn continuation authority.
+
+### Causal and evidence limits
+
+The medium pairs have cache-state and retry asymmetries, so the figures are
+descriptive rather than cache-matched causal evidence. The arm-level table
+supports the exact arithmetic above, but it cannot tell whether a byte or
+token came from T2, T3, T4, Work/Ledger, memory, or the model itself. The
+unrecoverable handles are retained as historical identifiers only; no raw-root
+request/round re-decomposition is claimed. Frozen #142 remains a separate
+strict-evaluator-rejected benchmark branch with no ranking or accepted-result
+claim. Flags stay default-off, Work stays `in_progress`, Plan stays active, and
+Windows CI remains release-tag-only.
