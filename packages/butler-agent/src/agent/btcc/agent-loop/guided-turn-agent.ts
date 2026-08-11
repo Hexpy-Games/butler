@@ -11,11 +11,9 @@ import { ActiveProjectLedgerResolver } from
 import { createProviderModelRoundPort } from
   "../../../integrations/providers/runtime.ts";
 import {
-  guidedInstructionsAttribution,
   providerImageAttachments,
-  renderGuidedPersonaInstructions,
   renderGuidedResponseLanguage,
-  renderGuidedPromptAttribution,
+  renderGuidedTurnRequestAttribution,
 } from "./guided-turn-prompt.ts";
 import {
   authorizedToolDefinitions,
@@ -245,32 +243,26 @@ export function createProductionGuidedTurnAgent(input: {
             recordAcceptedResponse: recordModelRoundAcceptance,
           })
         : baseModelRound;
-      const responseLanguage = renderGuidedResponseLanguage(
+      const responseLanguage = renderGuidedResponseLanguage(turn, input.contextDocuments);
+      const requestAttribution = renderGuidedTurnRequestAttribution(
         turn,
-        input.contextDocuments,
-      );
-      const promptAttribution = renderGuidedPromptAttribution(turn, {
-        ...input,
-        workContext: renderDurableWorkContext(initialWork),
-        effectContext: initialWork
-          ? renderGuidedEffectContext(
-              input.effectJournal.listForWork(initialWork.work.workId),
-          )
-          : "",
-      });
-      const instructionAttribution = guidedInstructionsAttribution(
         policy,
-        renderGuidedPersonaInstructions(turn, input.contextDocuments),
         responseLanguage,
+        {
+          ...input,
+          workContext: renderDurableWorkContext(initialWork),
+          effectContext: initialWork
+            ? renderGuidedEffectContext(
+                input.effectJournal.listForWork(initialWork.work.workId),
+            )
+            : "",
+        },
       );
       const loopOptions: BtccAgentLoopInput = {
-        prompt: promptAttribution.text,
+        prompt: requestAttribution.prompt,
         turnId: turn.turnId,
-        instructions: instructionAttribution.text,
-        requestSegmentSources: {
-          input: promptAttribution.sources,
-          instructions: instructionAttribution.sources,
-        },
+        instructions: requestAttribution.instructions,
+        requestSegmentSources: requestAttribution.requestSegmentSources,
         progress,
         model: activeModelRef,
         resolveModelRef: () => activeModelRef,
@@ -282,8 +274,7 @@ export function createProductionGuidedTurnAgent(input: {
         },
         cacheScope: `btcc-guided:${turn.sessionId}`,
         attributionArmId: turn.context.providerRequestAttribution?.armId,
-        cacheBoundaryEvidence:
-          turn.context.providerRequestAttribution?.cacheBoundaryEvidence,
+        cacheBoundaryEvidence: turn.context.providerRequestAttribution?.cacheBoundaryEvidence,
         signal,
         butlerData: input.butlerData,
         attachments: providerImageAttachments(turn),

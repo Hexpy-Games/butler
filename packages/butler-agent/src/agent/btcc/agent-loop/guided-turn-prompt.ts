@@ -13,6 +13,37 @@ export interface GuidedTextAttribution {
   sources: readonly M1RequestSegmentSource[];
 }
 
+export interface GuidedTurnRequestAttribution {
+  prompt: string;
+  instructions: string;
+  requestSegmentSources: {
+    input: readonly M1RequestSegmentSource[];
+    instructions: readonly M1RequestSegmentSource[];
+  };
+}
+
+export function renderGuidedTurnRequestAttribution(
+  turn: TurnRecord,
+  policy: Pick<ButlerExecutionPolicy, "accessMode" | "trackingMode">,
+  responseLanguage: string,
+  input: Parameters<typeof renderGuidedPromptAttribution>[1],
+): GuidedTurnRequestAttribution {
+  const prompt = renderGuidedPromptAttribution(turn, input);
+  const instructions = guidedInstructionsAttribution(
+    policy,
+    renderGuidedPersonaInstructions(turn, input.contextDocuments),
+    responseLanguage,
+  );
+  return {
+    prompt: prompt.text,
+    instructions: instructions.text,
+    requestSegmentSources: {
+      input: prompt.sources,
+      instructions: instructions.sources,
+    },
+  };
+}
+
 export function renderGuidedPrompt(
   turn: TurnRecord,
   input: {
