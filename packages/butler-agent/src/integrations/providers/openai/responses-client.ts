@@ -10,6 +10,29 @@ import {
   raceProviderRoundWithSignal,
   type ProviderRoundPolicy,
 } from "../shared/provider-round-guard.ts";
+import {
+  observeM1ProviderAttempt,
+  finalizeM1ProviderAttempt,
+  recordM1ResponseUsage,
+} from "../shared/m1-segment-attribution.ts";
+import type {
+  M1CacheBoundaryEvidence,
+  M1ProviderRequestSegmentManifestEntry,
+} from "../../../agent/btcc/ports/provider-request-attribution.ts";
+
+export interface OpenAIProviderBudgetContext {
+  attribution?: PromptUsageAttribution;
+  roundIndex: number;
+  routeTransportAttemptOrdinal?: number;
+  providerRetryOrdinal?: number;
+  butlerData?: string;
+  attributionArmId?: string;
+  segmentManifests?: {
+    official: readonly M1ProviderRequestSegmentManifestEntry[];
+    codex: readonly M1ProviderRequestSegmentManifestEntry[];
+  };
+  cacheBoundaryEvidence?: M1CacheBoundaryEvidence;
+}
 
 
 
@@ -19,7 +42,7 @@ export async function createOpenAIResponse(
   signal?: AbortSignal,
   authOverride?: OpenAIAuthOverride,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
-  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
+  budgetContext?: OpenAIProviderBudgetContext,
   providerRoundPolicy?: Partial<ProviderRoundPolicy>,
   retryAttempts?: number,
 ): Promise<OpenAIResponse> {
@@ -28,6 +51,7 @@ export async function createOpenAIResponse(
     signal,
     policy: openAIProviderRoundPolicy(providerRoundPolicy),
   });
+  let providerRetryOrdinal = 0;
   try {
     return await raceProviderRoundWithSignal(
       withModelApiRetry(
@@ -36,7 +60,11 @@ export async function createOpenAIResponse(
           guard.signal,
           auth,
           onProviderStreamEvent,
-          budgetContext,
+          {
+            ...budgetContext,
+            roundIndex: budgetContext?.roundIndex ?? 0,
+            providerRetryOrdinal: providerRetryOrdinal++,
+          },
           () => guard.recordProgress(),
           () => guard.start(),
         ),
@@ -77,7 +105,7 @@ export async function createOpenAIResponseOnce(
   signal?: AbortSignal,
   authOverride?: OpenAIAuthOverride,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
-  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
+  budgetContext?: OpenAIProviderBudgetContext,
   onProviderRoundProgress?: () => void,
   onProviderRoundStarted?: () => void,
 ): Promise<OpenAIResponse> {
@@ -112,6 +140,22 @@ export async function createOpenAIResponseOnce(
     usageAttribution: budgetContext?.attribution,
     roundIndex: budgetContext?.roundIndex,
   });
+  const observedRequest = observeM1ProviderAttempt({
+    providerId: "openai",
+    modelRef: admittedRequest.plan.model_ref,
+    body: officialBody,
+    turnId: budgetContext?.attribution?.turnId,
+    phase: budgetContext?.attribution?.phase,
+    roundIndex: budgetContext?.roundIndex ?? 0,
+    routeTransportAttemptOrdinal: budgetContext?.routeTransportAttemptOrdinal ?? 0,
+    providerRetryOrdinal: budgetContext?.providerRetryOrdinal ?? 0,
+    estimatedInputTokens: admittedRequest.plan.compiled_input_tokens,
+    armId: budgetContext?.attributionArmId,
+    segmentManifest: budgetContext?.segmentManifests?.official,
+    butlerData: budgetContext?.butlerData,
+    deferRecord: true,
+    cacheBoundaryRevision: budgetContext?.cacheBoundaryEvidence?.observedRevision,
+  });
 
   let response: Response;
   try {
@@ -122,10 +166,11 @@ export async function createOpenAIResponseOnce(
         Authorization: auth.authorization,
         "Content-Type": "application/json",
       },
-      body: admittedRequest.serialized_request,
+      body: observedRequest.serializedRequest,
       signal,
     });
   } catch (error) {
+    finalizeOpenAIAttempt(observedRequest.observation, budgetContext, "rejected");
     throw providerNetworkError({
       provider: "openai",
       api: "responses",
@@ -145,6 +190,7 @@ export async function createOpenAIResponseOnce(
       parsed = JSON.parse(raw);
       detail = parsed?.error?.message || raw;
     } catch {}
+    finalizeOpenAIAttempt(observedRequest.observation, budgetContext, "rejected");
     throw providerHttpError({
       provider: "openai",
       api: "responses",
@@ -158,7 +204,48 @@ export async function createOpenAIResponseOnce(
     });
   }
 
-  return (await response.json()) as OpenAIResponse;
+  let parsed: OpenAIResponse;
+  try {
+    parsed = (await response.json()) as OpenAIResponse;
+  } catch (error) {
+    finalizeOpenAIAttempt(observedRequest.observation, budgetContext, "rejected");
+    throw error;
+  }
+  finalizeOpenAIAttempt(
+    observedRequest.observation,
+    budgetContext,
+    parsed.usage ? "eligible" : "usage_unavailable",
+  );
+  recordM1ResponseUsage({
+    attemptDigest: observedRequest.observation?.envelope.attemptDigest,
+    response: parsed,
+    butlerData: budgetContext?.butlerData,
+  });
+  return parsed;
+}
+
+function finalizeOpenAIAttempt(
+  observation: ReturnType<typeof observeM1ProviderAttempt>["observation"],
+  context: OpenAIProviderBudgetContext | undefined,
+  terminal: "eligible" | "usage_unavailable" | "rejected",
+): void {
+  const eligibility = terminal === "rejected"
+    ? "rejected"
+    : (context?.routeTransportAttemptOrdinal ?? 0) > 0 ||
+        (context?.providerRetryOrdinal ?? 0) > 0
+      ? "retry_contaminated"
+      : cacheBoundaryMismatch(context?.cacheBoundaryEvidence)
+        ? "cache_mismatch"
+        : terminal;
+  finalizeM1ProviderAttempt({
+    observation,
+    eligibility,
+    butlerData: context?.butlerData,
+  });
+}
+
+function cacheBoundaryMismatch(evidence: M1CacheBoundaryEvidence | undefined): boolean {
+  return Boolean(evidence && evidence.expectedRevision !== evidence.observedRevision);
 }
 
 

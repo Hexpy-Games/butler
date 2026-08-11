@@ -1,0 +1,27 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "m1-v2-segment-attribution-direct-smoke",
+  "model": "openai/gpt-5.6-sol",
+  "reasoningEffort": "medium",
+  "accessMode": "read_only",
+  "attributionArmId": "direct-smoke",
+  "cacheBoundaryEvidence": {
+    "expectedRevision": "m1-smoke-v2",
+    "observedRevision": "m1-smoke-v2"
+  },
+  "session": {
+    "id": "m1-v2-segment-attribution-direct-smoke",
+    "title": "M1 v2 segment attribution direct smoke"
+  },
+  "steps": [
+    {
+      "id": "direct-greeting",
+      "prompt": "안녕하세요. 오늘도 잘 부탁해요.",
+      "timeoutMs": 300000,
+      "reloadAfter": true,
+      "expect": {
+        "terminalState": "delivered"
+      }
+    }
+  ]
+}

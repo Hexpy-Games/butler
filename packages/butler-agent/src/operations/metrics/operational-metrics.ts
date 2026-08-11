@@ -155,6 +155,9 @@ function isMetricCountKey(key: string, value: unknown): boolean {
 function isUnsafeDimensionKey(key: string, value: unknown): boolean {
   const lower = key.toLowerCase();
   if (isMetricCountKey(lower, value)) return false;
+  if (key === "keyedContentDigest") {
+    return typeof value !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(value);
+  }
   return /(^|[_-])(prompt|message|transcript|query|url|uri|args?|arguments?|result|content|raw|secret|password|credential|apikey|api_key|key|token)([_-]|$)/.test(lower) ||
     /^(prompt|message|transcript|query|url|uri|args?|arguments?|result|content|raw|secret|password|credential|apikey|api_key|key|token)$/i.test(key);
 }

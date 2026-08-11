@@ -88,7 +88,10 @@ export async function runBtccAgentLoop(
         usageAttribution: input.usageAttribution
           ? { ...input.usageAttribution, roundIndex }
           : undefined,
+        requestSegmentSources: input.requestSegmentSources,
         cacheScope: input.cacheScope,
+        attributionArmId: input.attributionArmId,
+        cacheBoundaryEvidence: input.cacheBoundaryEvidence,
         providerRetryAttempts: input.providerRetryAttempts,
         continuation,
         onProviderStreamEvent: input.onProviderStreamEvent,

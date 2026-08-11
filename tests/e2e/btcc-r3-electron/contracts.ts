@@ -88,6 +88,8 @@ export interface ElectronScenario {
   model?: string;
   reasoningEffort?: ReasoningEffort;
   accessMode?: AccessMode;
+  attributionArmId?: string;
+  cacheBoundaryEvidence?: { expectedRevision: string; observedRevision: string };
   modelFallback?: {
     enabled: boolean;
     models: string[];
@@ -125,6 +127,8 @@ export interface ElectronHarnessOptions {
 
 export interface PreparedRun {
   accessMode: AccessMode;
+  attributionArmId?: string;
+  cacheBoundaryEvidence?: { expectedRevision: string; observedRevision: string };
   agentOwnership: AgentOwnership;
   bundledAgentResourceDir: string | null;
   dataRoot: string;

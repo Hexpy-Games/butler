@@ -21,6 +21,7 @@ import {
   snapshotContextDocuments,
   type BtccContextDocumentWriter,
 } from "./context-documents.ts";
+import { providerRequestAttributionMetadata } from "./cache-boundary-attribution.ts";
 import type {
   AdmittedModelSelection,
   ButlerContextInput,
@@ -198,6 +199,7 @@ export function snapshotTurnContext(input: {
   }, input.documents);
   return {
     ...snapshot,
+    ...providerRequestAttributionMetadata(input.binding.metadata),
     executionPolicy: {
       role: input.binding.role,
       accessMode: input.turnAccessMode ?? accessMode(
