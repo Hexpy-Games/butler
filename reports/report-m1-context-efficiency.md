@@ -6,16 +6,29 @@ Governing Spec: `SPEC-M1-CONTEXT-EFFICIENCY` revision 2
 
 ## Status
 
-**IMPLEMENTATION APPROVED / CAMPAIGNS PRESERVED, GOVERNING ACCEPTANCE NOT YET PROVEN.**
-The exact-source authenticated campaign completed all 12 fixed observations:
-`9 accepted`, `3 rejected`, `0 gated`. Direct-cold, direct-warm, and
-current-web-cold each supplied three accepted repetitions. All three
+**SEGMENT TASK DONE; WORK AND PLAN REMAIN ACTIVE; FINAL BENCHMARK IS TODO.**
+The governing acceptance boundary separates SC01 production
+instrumentation from statistical campaign acceptance. This Task owns the real
+Session Actor -> BTCC -> provider serialization/fetch -> operational metrics
+path, physical-attempt cardinality, exact additive bytes, typed coverage,
+nullable usage, privacy/non-interference, arm-tagged authenticated smoke, gates,
+and independent Sol-high implementation approval. It does not require a 4x3
+campaign or a statistical reduction result.
+
+The exact accepted implementation source is
+`049b24d0edd988cf058c81fd49661d44963e2e20`. The final independent ordinary
+non-fast `gpt-5.6-sol` high rereview found no actionable P0-P3 findings and
+returned **APPROVE** for this implementation boundary. The governing Work and
+Plan stay active, `T-M1-V2-FINAL-BENCHMARK` stays `todo`, and the Segment Task
+is accepted as `done`.
+
+The exact-source authenticated historical campaign completed 12 fixed
+observations: `9 accepted`, `3 rejected`, `0 gated`. Direct-cold, direct-warm,
+and current-web-cold each supplied three runner-accepted repetitions. All three
 landing-cold repetitions were honestly rejected because
-`other_typed_context` was 22.846–24.698%, above the Spec's 2% ceiling. No result
-was replaced or rerun. Those are the immutable campaign file's historical
-statuses. The later Sol-high review found that its quality/safety rubric did
-not yet measure all governing Spec conditions, so the nine historical
-`accepted` labels are not final Task acceptance.
+`other_typed_context` was 22.846–24.698%. No result was replaced or rerun. A
+later review found the historical runner's quality/safety rubric incomplete, so
+these labels are provenance only and do not satisfy final M1 acceptance.
 
 The rejection exposed an attribution observation defect:
 Codex stateless continuation omitted exact manifests for provider-generated
@@ -30,7 +43,9 @@ campaign remains immutable evidence. The repair was phase-committed at
 stopped after `3 accepted / 0 rejected / 1 gated`: direct-warm rep 1 hit an
 Electron-managed Agent archive-extraction infrastructure timeout before any
 renderer observation. The remaining eight repetitions are unscheduled, not
-fabricated as gated. This Task is not complete and no later M1 v2 Task may start.
+fabricated as gated. This evidence and the archive repeatability issue are owned
+by `T-M1-V2-FINAL-BENCHMARK`; they do not negate SC01 implementation acceptance
+or block the next implementation Task.
 
 ## Source and fixture provenance repair
 
@@ -191,44 +206,54 @@ bounding, or batching behavior was added.
 
 ## Authenticated real smoke
 
-One direct scenario used the existing Electron driver with fresh isolated
-Butler data, Electron profile, workspace, and App database. It used ordinary
-`openai/gpt-5.6-sol`, reasoning `medium`, and the real configured auth route.
-The final corrected implementation rerun was delivered in `4,206 ms`; renderer
-text matched after reload. It was invoked from the repository root with this
-fresh-root pattern (the driver refuses an already-created run root):
+The final acceptance smoke ran once at exact source
+`049b24d0edd988cf058c81fd49661d44963e2e20` with the existing Electron driver,
+fresh isolated Butler data, Electron profile, workspace, App database, ordinary
+non-fast `openai/gpt-5.6-sol`, reasoning `medium`, `read_only`, and the real
+configured auth route. It was delivered in `5,305 ms`; renderer final text
+matched after reload. The evidence records Electron renderer, preload bridge,
+App gateway, native BTCC runtime, real provider, renderer-visible final, ordered
+activity projection, and App database lifecycle in the actual product path.
+
+It was invoked from the repository root with this fresh-root pattern (the driver
+refuses an already-created run root):
 
 ```sh
-smoke_parent="$(mktemp -d /tmp/butler-m1-v2-final-smoke.XXXXXX)"
-BUTLER_M1_V2_SEGMENT_ATTRIBUTION=1 bun run tests/e2e/btcc-r3-electron-driver.ts \
+smoke_parent="$(mktemp -d /tmp/butler-m1-v2-acceptance-smoke.XXXXXX)"
+BUTLER_M1_V2_SEGMENT_ATTRIBUTION=1 \
+BUTLER_M1_SOURCE_REVISION=049b24d0edd988cf058c81fd49661d44963e2e20 \
+bun run tests/e2e/btcc-r3-electron-driver.ts \
   --scenario tests/support/m1-v2-segment-attribution-smoke.json \
   --run-root "$smoke_parent/run" --source-data "$HOME/.butler" \
   --model openai/gpt-5.6-sol --reasoning medium --access-mode read_only --keep-logs
 ```
 
-The driver observed one semantic Agent request and two auxiliary product
-requests. All three physical provider attempts completed with HTTP 200:
+The one authorized run exited 0 with `evidence.ok=true`. Its evidence is retained
+at `run/evidence.json` beneath the fresh smoke root. The driver observed one
+semantic Agent request and two unarmed product requests. All three physical
+provider attempts completed with HTTP 200:
 
 | request | provider-send bytes | segment sum | response usage rows |
 | --- | ---: | ---: | ---: |
-| Agent | 35,447 | 35,447 | 1 |
+| Agent | 34,099 | 34,099 | 1 |
 | title | 624 | 624 | 1 |
-| auxiliary | 1,123 | 1,123 | 1 |
-| total | 37,194 | 37,194 | 3 |
+| auxiliary | 1,166 | 1,166 | 1 |
+| total | 35,889 | 35,889 | 3 |
 
 There were 3 envelopes, 14 segment rows, and 3 usage rows. Aggregate segment
-bytes were: carrier overhead 7,278; other typed context 1,419; stable safety/role
-374; stable BTCC protocol 10,096; memory context 10,429; tool schema 7,489;
+bytes were: carrier overhead 7,230; other typed context 1,467; stable safety/role
+374; stable BTCC protocol 9,697; memory context 10,435; tool schema 6,577;
 accepted corrections/unresolved obligations 50; current request 59.
 
 The Agent attempt alone carried `armId=direct-smoke` and matched the explicit
 Session benchmark cache boundary `m1-smoke-v2`. Its other share was
-`334 / 35,447 = 0.942%`. Title and auxiliary attempts were still observed as
+`339 / 34,099 = 0.994%`, below the 2% SC01 smoke ceiling. Title and auxiliary
+attempts were still observed as
 physical attempts, but had `armId=null`: their product-owned inputs do not carry
 the Session/BTCC arm metadata and no typed source manifest was invented for them.
 Accordingly their unknown payload bytes are honestly `other_typed_context`.
 Across all three attempts, including those two unarmed requests, other was
-`1,419 / 37,194 = 3.815%`, above 2%. The Spec arm gate applies only to attempts
+`1,467 / 35,889 = 4.088%`, above 2%. The Spec arm gate applies only to attempts
 explicitly bound to that arm; unarmed title/auxiliary attempts remain in path and
 privacy coverage but are not mixed into corrected arm acceptance.
 
@@ -247,11 +272,20 @@ regression. Assistant messages do not shift provider input paths. Real
 nonzero web and landing coverage was subsequently exercised by the canonical
 campaign described below.
 
-Completed provider usage was prompt `6,693 + 79 + 194 = 6,966`, cache-read 0,
-cache-write 0, and total `6,769 + 89 + 291 = 7,149` tokens. Provider output and
+Completed provider usage was prompt `6,555 + 79 + 200 = 6,834`, cache-read 0,
+cache-write 0, and total `6,635 + 89 + 280 = 7,004` tokens. Provider output and
 reasoning token fields were unavailable and remained `null`, not zero. There
-were no provider retries in this smoke. It is post-implementation smoke evidence,
-not a corrected pre-change baseline repetition.
+were no provider retries; all three envelopes were eligible and carried the exact
+source revision. Digest-grouped analysis found zero byte-sum mismatches, duplicate
+envelopes, or duplicate usage rows.
+
+All 20 M1 rows had `rawTextStored=false`. Exact-needle scans of the M1 metrics
+found zero raw prompt, raw final, raw Turn ID, private run path, URL/query, or
+credential markers. The current default-off regression separately passed three
+focused tests: absent flag preserves exact JSON and returns no observation, the
+disabled provider request emits no private attempt header, and enabled partition
+stores no raw content while covering every UTF-8 byte exactly once. This is
+post-implementation SC01 smoke evidence, not a baseline or campaign repetition.
 
 ### Landing attribution defect and repair smoke
 
@@ -302,8 +336,8 @@ screenshots, changed starter files, Butler grounding, 11 feature blocks, usage
 scene, CTA, responsive CSS, basic Work completion/reviews/validation, and SQLite
 quick-check all passed. The later frozen-rubric review means this is attribution
 and product-path evidence, not final landing quality acceptance. This is
-post-repair smoke evidence, not a replacement
-for any first-campaign repetition or the required second fixed campaign.
+post-repair smoke evidence, not a replacement for any preserved campaign
+observation or final benchmark repetition.
 
 ## Privacy and rollback evidence
 
@@ -321,7 +355,12 @@ Flag-off returns exact `JSON.stringify(body)` with no v2 observation. The code
 does not store raw prompts, transcripts, tool payloads/results, URLs/queries,
 private paths, credentials, or unkeyed low-entropy hashes.
 
-## Corrected baseline and hypotheses
+## Historical campaigns and hypotheses
+
+Both campaigns below are immutable provenance-only observations. They are not
+the final M1 before/after 4x3 and are not Segment Task acceptance evidence.
+`T-M1-V2-FINAL-BENCHMARK` owns frozen fixture/rubric authority, archive
+extraction repeatability, missing-arm evidence, and the single final comparison.
 
 First campaign at `93ee0079`:
 
@@ -414,7 +453,8 @@ prompt totals were 497,346 / 290,234 / 490,933; cache reads 186,880 / 163,840 /
 283,648; totals 512,152 / 302,497 / 504,167. Cache write was zero and provider
 output/reasoning usage remained unavailable, not zero.
 
-The 30% byte, 45-to-38–40 request, and 18–30% elapsed figures remain hypotheses.
+The 30% byte, 45-to-38–40 request, and 18–30% elapsed figures remain Work-level
+hypotheses owned for final decision by `T-M1-V2-FINAL-BENCHMARK`.
 The accepted arms now suggest a 72.1–77.5% reducible byte share, while substantial
 landing Work showed 17–25 completed semantic rounds and 84.98–87.96% apparent
 reducible share before the manifest repair. These are attribution inputs, not
@@ -473,14 +513,13 @@ comparison. The Spec is not relaxed.
   incomplete governing quality/safety rubric, and positional unarmed-overhead
   accounting. The review-fix cycles below closed those findings and their
   follow-up false-accept cases. The final independent Sol-high rereview reports
-  no actionable P0-P3 findings and **APPROVE** for the implementation; Task
-  acceptance remains separately **NOT APPROVED** because the canonical 4x3
-  campaign is incomplete.
-- A historical Project Ledger render/check passed, but it predates the repaired
-  campaigns and current review. The governing Work and Task remain `in_progress`;
-  the old attempt is stale/failed and is not current acceptance evidence. A new
-  recovery Attempt was started for this continuation and failed with the
-  preserved campaign blocker during final Ledger closeout.
+  no actionable P0-P3 findings and **APPROVE** for the implementation. The Task
+  is `done`; a canonical 4x3 is not part of Segment acceptance.
+- Historical failed Attempts remain lifecycle provenance and are not current
+  acceptance evidence. The authority reconciliation supersedes their campaign
+  blocker as a Segment criterion without deleting or rewriting those records.
+  The Segment Task is `done`; the governing Work and Plan remain active and the
+  benchmark Task remains `todo`.
 
 Current review-fix validation (no campaign run):
 
@@ -550,28 +589,27 @@ manifest/source/run identity, exact digest/ordinal/bytes/time join, observer-off
 header absence, observer-on proxy capture and upstream stripping, versioned
 capability claims, production leaf/card DOM boundaries, and exact final
 plan/result/review/action/effect-receipt preservation checks. Its implementation
-verdict is **APPROVE**; its Task acceptance verdict is **NOT APPROVED**. The
+verdict is **APPROVE** for the governing Segment implementation boundary. The
 final targeted gate is 45/45 tests with 201 assertions, with typecheck, lint,
 BTCC shape, module audit, and `git diff --check` passing.
 
-Final Project Ledger closeout kept the governing Work and Task `in_progress`,
-failed `A-M1-V2-SEGMENT-ATTRIBUTION-RECOVERY-20260811` with the preserved
-campaign blocker, refreshed index/dashboard/handoff/roadmap, and completed
-status/check with no stale views and zero issues. PR #146 remains open and
-draft; its rewritten provenance contains only the five Task-scope commits on
-`origin/main`. The automatically triggered Windows package workflow was
-cancelled in accordance with the release-tag-only policy.
+The final authority reconciliation closes the Segment Task as `done`, keeps the
+governing Work and Plan active, keeps `T-M1-V2-FINAL-BENCHMARK` `todo`, and
+removes the historical campaign/archive gate from Segment acceptance. No
+benchmark, archive diagnosis, Hermes/OpenCode run, merge, default-on change, or
+Windows run is part of this closeout. Report commit and push follow in the
+delivery step.
 
-## Remaining hard blockers
+## Remaining Work ownership
 
-1. Resolve or explicitly authorize a new observation window after the external
-   archive-extraction resource gate. The preserved second campaign is 3/0/1
-   with eight unscheduled; it cannot be called a completed 4x3 campaign.
-2. Obtain three accepted repetitions for direct-warm, current-web-cold, and
-   landing-cold on one exact repaired source under controlled host resources,
-   without replacing either preserved campaign's observations.
-3. Recompute all-arm medians/ranges, retry/cache strata, completed rounds, and
-   reducible shares, then complete independent and parent whole-task review.
-
-Until those gates close, `T-M1-V2-SEGMENT-ATTRIBUTION`, the Work, and the Plan
-remain open. No default-on or subsequent M1 implementation is authorized.
+- Segment attribution: implementation evidence and independent Sol-high
+  approval are present at exact source
+  `049b24d0edd988cf058c81fd49661d44963e2e20`; this Task is `done`.
+- Final benchmark: `T-M1-V2-FINAL-BENCHMARK` owns the external archive-extraction
+  repeatability gate, frozen fixtures/rubric, missing direct-warm/web/landing arm
+  evidence, each optimization's preregistered affected-arm paired evidence, and
+  one final before/after 4x3 with three accepted repetitions per arm. The
+  preserved `9/3/0`, repair smoke, and `3/0/1 + 8 unscheduled` evidence cannot be
+  substituted for that final decision.
+- Work/Plan: remain active until SC01-SC08, the final quantitative/quality gates,
+  and whole-goal review pass. No default-on or merge is authorized by this Task.
