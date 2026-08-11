@@ -709,6 +709,12 @@ claim.
   no `eslint` executable (`eslint: command not found`). This is dependency drift,
   not a passing lint result. The bounded docs commit used `--no-verify` after the
   source/report/module/Ledger checks above and final diff validation was repeated.
+- The bounded audit report was committed as
+  `4a861059556ec3e935731a9ded6a71cc9967f678` and pushed on
+  `feature/m1-v2-implementation-audit`. Draft PR #147 is separate from ready/open
+  PR #146; neither PR was modified or merged. The automatically queued Windows
+  package workflow for PR #147 was explicitly cancelled because Windows CI is
+  release-tag-only for this Work.
 
 ## Validation
 
