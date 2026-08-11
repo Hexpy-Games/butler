@@ -6,19 +6,63 @@ Governing Spec: `SPEC-M1-CONTEXT-EFFICIENCY` revision 2
 
 ## Status
 
-**PARTIAL / HARD STOP.** The observation slice is implemented on the production
-provider path and one authenticated direct smoke passed. The corrected
-pre-change baseline has `0 accepted`, `0 rejected`, and `12 gated` required
-repetitions. Therefore this Task is not complete and no later M1 v2 Task may
-start.
+**PARTIAL / CAMPAIGN PENDING.** The observation slice is implemented on the
+production provider path, one authenticated direct smoke passed, and the four
+canonical scenarios plus bounded real-product campaign runner are now restored.
+The new corrected campaign has not run yet: `0 accepted`, `0 rejected`,
+`0 gated`, and `12 scheduled`. Therefore this Task is not complete and no later
+M1 v2 Task may start.
 
-The gate is evidence availability, not a provider failure: the current branch
-did not contain the historical four-arm runner/report, the historical accepted
-run roots were deleted, and the historical report does not retain the exact
-scenario files, commands, direct-warm cache/session composition, or dated web
-rubric needed to reproduce all four arms without inventing inputs. The existing
-Electron scenario driver can drive the real product path, but a runner without
-the frozen authoritative scenarios would not satisfy the Spec.
+The former scenario-availability blocker is closed. The remaining gate is the
+authenticated sequential four-arm campaign on the exact phase-commit SHA and
+its independent review. No missing repetition is pre-labelled as gated.
+
+## Source and fixture provenance repair
+
+The old local/remote feature tip was `5e15095750288ac660b30f85f1076a4160294ad6`
+with attribution commit `5b39d859ece425d27188f66e96951d54c97cd387`.
+It incorrectly inherited 18 unrelated local-main commits after `dd19567b`.
+Before repair, that exact state was preserved as
+`recovery/m1-v2-pre-rebase-5e150957`. The two Task commits were then replayed
+onto authoritative `origin/main` `65494154f6e9ddbfb20458bc67250c7d15b5d13d`
+(which includes #141 and #143) as `2a299af7` and `7b109476`. Conflicts retained
+current-main Session/workspace contracts and manually reintroduced only the
+attribution fields; the unrelated 213-file source delta was not revived.
+
+The authoritative source for the benchmark bodies is
+`rollout-2026-08-10T14-23-27-019fea20-37ab-7780-a38b-ca33c846ef9e.jsonl`, not
+the `/tmp` auxiliary copy. The tracked verifier JSON-decodes each exact
+`response_item.payload.input`, checks its UTF-8 byte length and SHA-256, recovers
+the added JSON body, and compares every prompt and landing starter byte with the
+checked-in public benchmark fixtures:
+
+| arm | authoritative timestamp | payload bytes | payload SHA-256 | target prompt SHA-256 |
+| --- | --- | ---: | --- | --- |
+| direct-cold | 2026-08-10T05:37:26.195Z | 628 | `8d2f5511825835c10cb1d5bd63cf41ac2071eb7b111d1d475f9abef568ccdb8d` | `3235f8b0c1704899168c9da7ed0cf466b052873f74fb0fe7e40cd95138a9c827` |
+| direct-warm | 2026-08-10T05:39:42.966Z | 814 | `98598a14029c9fd810ef8576af50ad3504bcba08b56fa09ee84b12b308f4d17e` | `1c77b5e04e4e0539ee73078e5594ddbdec2a4feecac5889aaffc977c5ef1684b` |
+| current-web-cold | 2026-08-10T05:41:31.789Z | 734 | `696617468e0277e614d5b72287fcf1cc520e580001f93da497bf210e9430f95e` | `1a005e359be608b217f2f7b9d11831fc96357be514a1b29b5f66441b4d293f2b` |
+| landing-cold | 2026-08-10T05:43:23.720Z | 1,903 | `661cf5d91129b974382266d3174c891756688d1e83af0987a224654d4a29efdb` | `13abcbe43bb495137e2f01c9c2e824211dae7b189361fa3b2141b64781a054ff` |
+
+The direct-warm public warmup prompt hash is
+`3235f8b0c1704899168c9da7ed0cf466b052873f74fb0fe7e40cd95138a9c827`.
+Landing starter hashes are package
+`95ecbc5ceb44f1aef70447a3f32a53875f6ac518b3b6cc47d173cb6be7b15acc`,
+index `a63afd07e728a2055133510f0cc1ad65140dd25ec495d342d6cce2e55d157dc1`,
+and styles `f5fcb45b67a99855be1a908025d8bbdd3685c788f1ee391e741c9d988629dcd1`.
+The source scenarios' `low` setting is provenance only. The canonical fixtures
+preserve prompt/starter bytes but version the execution metadata to ordinary,
+non-fast `openai/gpt-5.6-sol` reasoning `medium`.
+
+The runner calls `runBtccR3ElectronHarness` directly. It schedules exactly
+four arms by three repetitions, sequentially, with fresh Butler data, Electron
+profile, Session, workspace, and SQLite state. Direct-warm keeps warmup and
+target in one Session with matched expected/observed cache revision. Before the
+first run it writes `manifest.json` with source SHA, fixture hashes, product
+path, provider and route maximum attempts fixed at 3, no retry acceptance, and
+no replacement runs. Raw evidence remains per-run; privacy-safe `campaign.json`
+contains nullable usage ranges, segment medians/ranges, retry rate/bytes,
+unarmed title/aux/tool-provider count/bytes, Work/DB/quality evidence, elapsed,
+and first-useful timing without raw content or private paths.
 
 ## Implemented production path
 
@@ -113,7 +157,7 @@ not merged into memory, instructions, or `other_typed_context`. Their nonzero
 classification is covered by an actual BTCC agent-loop -> OpenAI adapter ->
 three-fetch Codex cumulative regression, plus an official Responses continuation
 regression. Assistant messages do not shift provider input paths. Real
-nonzero web/landing coverage remains gated with the missing baseline scenarios.
+nonzero web/landing coverage is pending the restored canonical campaign.
 
 Completed provider usage was prompt `6,693 + 79 + 194 = 6,966`, cache-read 0,
 cache-write 0, and total `6,769 + 89 + 291 = 7,149` tokens. Provider output and
@@ -139,14 +183,14 @@ private paths, credentials, or unkeyed low-entropy hashes.
 
 ## Corrected baseline and hypotheses
 
-| arm | accepted | rejected | gated | blocker |
-| --- | ---: | ---: | ---: | --- |
-| direct-cold | 0 | 0 | 3 | frozen pre-change scenario/run recipe not fully retained |
-| direct-warm | 0 | 0 | 3 | exact warmup/session/cache composition not retained |
-| current-web-cold | 0 | 0 | 3 | authoritative dated scenario and source rubric not retained |
-| landing-cold | 0 | 0 | 3 | exact runner recipe absent; historical run also encountered a DB lock |
+| arm | accepted | rejected | gated | scheduled | state |
+| --- | ---: | ---: | ---: | ---: | --- |
+| direct-cold | 0 | 0 | 0 | 3 | not run |
+| direct-warm | 0 | 0 | 0 | 3 | not run |
+| current-web-cold | 0 | 0 | 0 | 3 | not run |
+| landing-cold | 0 | 0 | 0 | 3 | not run |
 
-Accordingly no corrected baseline median/range, reducible share, completed
+Accordingly no corrected campaign median/range, reducible share, completed
 semantic-round distribution, retry rate, or cache variance is claimed. The
 historical ordinary-medium v1 evidence remains descriptive only: 30 completed
 semantic requests across the selected post target arms, four failed requests,
@@ -175,9 +219,17 @@ relaxed.
   final combined targeted gate passed 107/107 tests (599 assertions).
 - Authenticated Electron direct smoke: passed, real provider and reload verified.
 - Windows CI was not run.
-- Typecheck and lint passed. Full lint reported 24 existing warnings and no
-  errors; targeted changed-file lint was clean.
-- BTCC source shape passed (`4 domains / 210 files`); `git diff --check` passed.
+- The historical pre-rebase typecheck and lint passed; that full lint reported
+  24 existing warnings and no errors.
+- Rebased current-main runner/attribution gate: 72/72 tests passed with 428
+  assertions, including 11 campaign tests, current-main Guided arm/cache
+  propagation, exact carrier paths, typed failure classification, six nullable
+  usage aggregates, retry bytes/rate, unarmed overhead bytes, and bounded
+  Work/DB/quality evidence. Full typecheck, full lint (20 existing warnings,
+  zero errors), changed-file lint, BTCC shape (`4 domains / 205 files`), and
+  `git diff --check` passed.
+- Authoritative JSONL verifier passed all four payload input byte/hash checks
+  and every prompt/landing byte comparison. Campaign execution remains pending.
 - The repository-wide `bun run check` wrapper reached its 301-second process
   limit and terminated the still-passing test run with SIGTERM. This is recorded
   as a timeout gate, not as a passing whole-repository check or a test failure.
@@ -191,10 +243,10 @@ relaxed.
 
 ## Remaining hard blockers
 
-1. Restore or re-authorize the exact frozen four scenarios and direct-warm/cache
-   recipe, then run at least three accepted isolated repetitions per arm at the
-   pre-change revision.
-2. Separate retry/cache-ineligible observations and compute arm medians/ranges,
+1. Phase-commit the restored runner and execute exactly three sequential,
+   isolated observations per arm at that new exact SHA; preserve every
+   accepted/rejected/gated outcome without replacement.
+2. Separate retry/cache-ineligible observations and finalize arm medians/ranges,
    completed semantic rounds, reducible segment share, and variance.
 3. Complete the parent whole-task review after the corrected baseline evidence
    exists; the implementation-only Sol-high re-review is approved.

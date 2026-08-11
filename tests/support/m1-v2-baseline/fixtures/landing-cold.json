@@ -1,0 +1,42 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "m1-v2-landing-cold",
+  "model": "openai/gpt-5.6-sol",
+  "reasoningEffort": "medium",
+  "accessMode": "full_access",
+  "attributionArmId": "landing-cold",
+  "session": {
+    "id": "m1-v2-landing-cold",
+    "kind": "project",
+    "projectDisplayName": "M1 landing baseline",
+    "title": "M1 landing baseline"
+  },
+  "fixtures": [
+    {
+      "path": "package.json",
+      "text": "{\"name\":\"m1-landing-fixture\",\"private\":true,\"scripts\":{\"build\":\"node -e \\\"console.log('build ok')\\\"\"}}\n"
+    },
+    {
+      "path": "index.html",
+      "text": "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Starter</title><link rel=\"stylesheet\" href=\"styles.css\"></head><body><main><h1>Starter</h1><p>Replace this page.</p></main></body></html>\n"
+    },
+    {
+      "path": "styles.css",
+      "text": "body { margin: 0; font-family: system-ui, sans-serif; }\nmain { padding: 4rem; }\n"
+    }
+  ],
+  "steps": [
+    {
+      "id": "landing-cold",
+      "prompt": "이 프로젝트의 기존 정적 스택을 유지해 Butler를 소개하는 세련된 반응형 랜딩페이지를 만들어 주세요. 핵심 기능 3가지, 사용 장면, 명확한 CTA를 담고 desktop/mobile 화면과 build를 실제로 검증한 뒤 결과를 간단히 보고해 주세요.",
+      "timeoutMs": 600000,
+      "expect": {
+        "terminalState": "delivered",
+        "files": [
+          { "path": "index.html" },
+          { "path": "styles.css" }
+        ]
+      }
+    }
+  ]
+}

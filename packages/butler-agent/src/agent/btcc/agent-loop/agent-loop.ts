@@ -1,7 +1,5 @@
 import { createToolResultModelPreviewContext } from
   "../../tools/tool-result-serialization.ts";
-import type { ToolResultModelPreviewContext } from
-  "../../tools/tool-result-model-preview.ts";
 import { emptyResponseRecoveryObservation } from
   "./empty-response-recovery.ts";
 import type {
