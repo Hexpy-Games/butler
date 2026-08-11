@@ -25,8 +25,13 @@ causal proof and cannot establish paired target success or default-on. The
 elapsed-time target and the all-four-arm optimization condition fail, so T3
 does not pass its optimization target and both optimization flags remain
 default-off. T4's controlled measurement is recorded below; its flag also
-remains default-off.
-T5 remains optional, off by default, and pending a separate decision.
+remains default-off. M1 Work remains `in_progress`, not done or accepted,
+because the registered 18–30% elapsed target and the all-four-arm optimization
+condition fail. T5 is cancelled at the dependency gate: no Attempt, code, or
+provider run occurred; no reviewed deterministic counts/IDs/ranges residual
+target was identified; broad model-plan variance remained; exact cost and a
+safe authority boundary were unproven; the explicit do-not-implement condition
+therefore applies. No M1 success or default-on claim is authorized.
 
 The original pre-M1 landing run stopped at initial dispatch with the bounded
 error `database is locked`. A recovery run used a new detached worktree at the
@@ -154,8 +159,11 @@ durable result references, deterministic exact-read recovery, restart continuity
 mechanical Work-state receipts, and bounded typed operation rejection through
 that same Guided Turn path. T4 bounded continuation/cache-prefix
 implementation, measurement, rollback, and review are recorded in the T4
-section below. T5 aggregation remains an optional todo candidate, off by
-default, pending a separate decision.
+section below. T5 was cancelled at the dependency gate without an Attempt,
+code, or provider run; no reviewed deterministic counts/IDs/ranges residual
+target existed, broad model-plan variance remained, exact cost and a safe
+authority boundary were unproven, and the explicit do-not-implement condition
+applies. No M1 success or default-on claim is authorized.
 
 ## Validation and review
 
@@ -179,8 +187,13 @@ default, pending a separate decision.
   historical evidence. Recovery attempt
   `A-M1-T1-LANDING-RECOVERY-20260810` and Task
   `T-M1-BASELINE-TELEMETRY` are closed after this report's phase commit; the
-  M1 Work remains open for the optional T5 decision. Derived index/views and
-  final check are refreshed after lifecycle closeout.
+  M1 Work remains `in_progress`, not done or accepted, because the registered
+  18–30% elapsed target and all-four-arm optimization condition fail. T5 was
+  cancelled at the dependency gate without an Attempt, code, or provider run;
+  no reviewed deterministic counts/IDs/ranges residual target existed, broad
+  model-plan variance remained, exact cost and a safe authority boundary were
+  unproven, and the explicit do-not-implement condition applies. Derived
+  index/views and final check are refreshed after lifecycle closeout.
 - Targeted ESLint: 0 errors.
 - T2 focused suite: 273/273 passed across nine files, including the real Guided
   Turn route-fallback metric test and the native flag-on file-agent product
@@ -209,13 +222,35 @@ default, pending a separate decision.
   the inspected BTCC/metrics roots. This recovery changes no source module
   boundary; BTCC shape remains passing (4 domains, 205 files).
 
-## Frozen comparison boundary
+## Frozen comparison boundary and final adjacent diagnostic table
 
-The existing #142 diagnostic result remains unchanged: Hermes/OpenCode rows
-were rejected in all 12/12 evaluations and had no ranking or accepted-result
-claim. #142 was not merged and was not rerun. A four-way Hermes/OpenCode,
-pre-M1 Butler, and post-M1 Butler comparison is explicitly deferred until the
-full M1 work is complete.
+The final adjacent diagnostic table below uses only the frozen #142
+commit/report data; no benchmark rerun occurred. The frozen #142 pilot used
+baseline commit `549463fbe074fc25042f9302cd330699948dab50`, model
+`openai/gpt-5.6-sol`, and medium reasoning. All 12/12 observations across
+Butler+Hermes+OpenCode were rejected; ranking and accepted-result-per-token
+claims remain withheld. #142 was not merged and was not rerun.
+
+| Arm | frozen #142 Hermes total tokens / requests / elapsed | frozen #142 OpenCode total tokens / requests / elapsed | fixed pre-M1 Butler serialized bytes / requests / elapsed | post-M1 T4 selected controlled observation serialized bytes / requests / elapsed |
+| --- | --- | --- | --- | --- |
+| direct cold | 9,169 / 4 / 27,914 ms | 14,357 / 4 / 17,004 ms | 37,476 / 1 / 3,572 ms | 43,926 / 1 / 5,874 ms |
+| direct warm | 5,598 / 4 / 25,873 ms | 14,467 / 4 / 22,390 ms | 38,116 / 1 / 5,512 ms | 44,580 / 1 / 5,369 ms |
+| current web cold | 64,609 / 7 / 130,470 ms | 130,714 / 2 / 49,769 ms | 165,709 / 4 / 23,096 ms | 159,394 / 3 / 34,182 ms |
+| landing cold | 178,205 / 9 / 307,708 ms | 114,001 / 5 / 245,574 ms | 2,019,518 / 24 / 323,542 ms | 873,525 / 12 / 282,985 ms |
+
+The #142 columns are provider total tokens, requests, and elapsed under a
+different baseline and medium reasoning. M1 reports exact serialized bytes,
+requests, and elapsed under low reasoning at source revision
+`65494154f6e9ddbfb20458bc67250c7d15b5d13d`. These are adjacent diagnostic
+context only, not a direct ratio, paired causal comparison, or ranking. The
+T3/T4 warm cache mismatch remains disclosed in the respective sections below.
+
+The fixed pre-M1 aggregate is 2,260,819 bytes / 30 requests / 355,722 ms;
+the post-M1 T4 selected controlled observation is 1,121,425 bytes / 17
+requests / 328,410 ms: descriptive deltas of −50.40% / −43.33% / −7.68%.
+Because the selected post-M1 warm cache read differs from the fixed pre-M1
+warm cache read, these are not cache-state-matched causal proof; the registered
+18–30% elapsed target fails.
 
 ## T2 minimal tool surface
 
@@ -419,10 +454,15 @@ causal proof and cannot establish paired target success or default-on. T3's
 elapsed target and all-four-arm condition fail. T4's selected controlled
 observations likewise remain descriptive and non-causal; its elapsed target and
 all-four-arm condition fail. T4 is closed as an implemented, measured, and
-rollback-covered default-off slice, not as a target success. T5 remains
-optional and todo pending a separate decision. This report authorizes no
-combined M1 optimization success claim, default-on decision, push, PR, or
-merge.
+rollback-covered default-off slice, not as a target success. T5 is cancelled at
+the dependency gate without an Attempt, code, or provider run; no reviewed
+deterministic counts/IDs/ranges residual target existed, broad model-plan
+variance remained, exact cost and a safe authority boundary were unproven, and
+the explicit do-not-implement condition applies. M1 Work remains
+`in_progress`, not done or accepted, because the 18–30% elapsed target and
+all-four-arm condition fail. No M1 success or default-on claim is authorized;
+no completed push or PR is recorded here, and no merge is authorized. Any
+push/PR action may occur later outside this report.
 
 ## T4 bounded continuation and stable cache prefix
 
@@ -537,5 +577,9 @@ elapsed. None of these deltas supports default-on or target success.
   implemented, measured, and rollback-covered, but it is not target success.
 - `BUTLER_M1_MINIMAL_TOOL_SURFACE`, `BUTLER_M1_COMPACT_REPLAY`, and
   `BUTLER_M1_BOUNDED_CONTINUATION_CACHE` remain default-off. No M1 default-on
-  decision is authorized. T5 remains an optional todo candidate pending a
-  separate decision, and no Hermes/OpenCode comparison was run.
+  decision is authorized. T5 is cancelled at the dependency gate without an
+  Attempt, code, or provider run; no reviewed deterministic counts/IDs/ranges
+  residual target existed, broad model-plan variance remained, exact cost and a
+  safe authority boundary were unproven, and the explicit do-not-implement
+  condition applies. No M1 success or default-on claim is authorized, and no
+  Hermes/OpenCode rerun was performed.
