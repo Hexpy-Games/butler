@@ -583,3 +583,115 @@ elapsed. None of these deltas supports default-on or target success.
   safe authority boundary were unproven, and the explicit do-not-implement
   condition applies. No M1 success or default-on claim is authorized, and no
   Hermes/OpenCode rerun was performed.
+
+## Sol-medium replication (ordinary mode)
+
+This section is an additive replication record. It does not overwrite the
+earlier low-reasoning observations or the frozen #142 diagnostic table. The
+replication used `openai/gpt-5.6-sol` with reasoning `medium`, the exact fixed
+pre-M1 source `65494154f6e9ddbfb20458bc67250c7d15b5d13d`, and the current M1
+source `20054194d1d404c38ba84ab8632b6fce98377c9f`. The same four fixture
+hashes, Electron → preload → App gateway → native BTCC → authenticated real
+provider → renderer final → persistence/reload path, and fresh run-local
+workspace/DB/profile/ports/process lifecycle were used. T2, T3, and T4 were
+explicitly enabled only for post-M1; T5 was not implemented or run. Baseline
+recorder metadata used the accepted `m1-t1-v1` format while the implementation
+events retained `m1-t2-v1`, `m1-t3-v1`, and `m1-t4-v1` revisions.
+
+The finite T4 admission limits were fixed for every post arm: 60 model
+requests, 60 tool rounds, 2,000,000 prompt tokens, 500,000 output tokens,
+1,800,000 elapsed milliseconds, and 300,000 idle milliseconds. These are
+Turn-scoped physical measurement bounds for this replication, not a default-on
+decision. No hidden retry was introduced: every provider retry is represented
+as an attempted request and route event, while usage totals include only
+completed usage-bearing provider records.
+
+### Before → change → effect
+
+**Before.** The pre-medium control is Butler-only at the fixed source and the
+same authenticated provider route. Direct-warm uses its first delivered turn
+as warmup; only the second delivered turn is the target. The pre warmup was
+`37,528` serialized bytes / 1 completed request / `8,281` ms; it is retained
+outside the target aggregate.
+
+**Change.** The post-medium run turned on the three default-off M1 flags at the
+existing Guided Turn boundary. No benchmark-only executor, fake provider,
+semantic router, extra authority, or source-string proof was used. Work/Plan/
+Review/Project Ledger, memory/context recall, durable references, exact-read,
+restart continuity, and typed effect boundaries remained in the product
+envelope. The arm recorder and provider usage fields are diagnostic; they do
+not attribute token cost to an individual M1 slice.
+
+**Effect.** The table uses `attempted/completed` requests and serialized bytes
+so transport retries cannot disappear from the raw product-cost view. Provider
+usage is `prompt/cache-read/total`; output tokens were unavailable and remain
+`null` rather than being coerced to zero. Direct-warm rows are target-only;
+warmup details follow the table.
+
+| arm | pre-medium bytes; requests; elapsed | post-medium bytes; requests; elapsed | pre provider prompt/cache/total | post provider prompt/cache/total | quality/capability evidence |
+| --- | --- | --- | --- | --- | --- |
+| direct-cold | 37,540; 1/1; 10,636 ms | 87,888; 2/1; 11,899 ms | 7,174 / 6,656 / 7,204 | 8,016 / 0 / 8,048 | delivered, expectations/reload pass; one provider retry recorded |
+| direct-warm target | 38,180; 1/1; 8,293 ms | 44,575; 1/1; 10,417 ms | 7,383 / 0 / 7,412 | 8,241 / 4,608 / 8,269 | delivered, expectations/reload pass; cache state differs |
+| current-web-cold | 221,929; 5/5; 60,166 ms | 398,786; 8/6; 103,942 ms | 44,537 / 33,280 / 45,551 | 62,290 / 21,504 / 64,817 | delivered, source/reload expectations pass; two provider retries recorded |
+| landing-cold | 2,106,025; 21/21; 404,237 ms | 1,803,062; 23/22; 564,210 ms | 390,199 / 190,976 / 402,727 | 368,474 / 93,184 / 391,156 | delivered, build/artifact/reload checks pass; Work completed with accepted Plan/result/completion reviews |
+
+The post direct-warm warmup itself was `43,914` bytes per attempted request,
+2 attempted / 1 completed request, `10,115` ms, and provider
+`8,012 / 0 / 8,044`; the target comparison intentionally excludes it. The
+post direct-cold first provider attempt failed with a typed provider error and
+the second succeeded; the first post metadata-only run using invalid
+`m1-t4-v1` was excluded before this accepted rerun and is not included in any
+row or aggregate. That excluded run still delivered/reloaded with one
+usage-bearing request (`43,926` serialized bytes; provider `8,012 / 0 / 8,042`)
+and is retained only as setup evidence, never as an accepted observation.
+
+Using attempted product cost for all four target arms, pre-medium is
+`2,403,674` bytes / `28` requests / `483,332` ms and post-medium is
+`2,334,311` bytes / `34` requests / `690,468` ms: −2.89% bytes, +21.43%
+requests, and +42.86% elapsed. Completed-only post usage is
+`2,146,228` bytes / `30` requests; it is secondary evidence and does not erase
+the failed transport payloads. Completed usage-bearing provider totals across
+the target arms are pre `449,293` prompt / `230,912` cache-read / `462,894`
+total tokens and post `447,021` / `119,296` / `472,290`. These aggregate token
+classes are end-to-end observations, not feature-level attribution, and do not
+establish raw-input-token reduction.
+
+### Eligibility, low comparison, and frozen adjacent diagnostics
+
+The medium pairs are descriptive only. Direct-cold, web, and landing have
+different retry asymmetries between pre and post; provider cache-read values
+also differ for direct-cold (`6,656` → `0`), direct-warm (`0` → `4,608`), web
+(`33,280` → `21,504`), and landing (`190,976` → `93,184`). No
+cache-state-matched causal claim is therefore eligible. All eight target observations delivered,
+matched after reload, and passed frozen expectations; landing additionally
+persisted the expected files and completed its build/work review path. Quality,
+source, and visual findings remain separate review evidence rather than metric
+dimensions. Independent ordinary-mode Sol-high review approved this evidence
+after the manifest cache correction, with no remaining P0/P1/P2 findings; this
+is review approval of the evidence, not an M1 optimization or default-on claim.
+
+For context, the earlier low-reasoning T4 selected observations were
+`2,260,819` → `1,121,425` serialized bytes, `30` → `17` requests, and
+`355,722` → `328,410` ms (−50.40%, −43.33%, −7.68%). That is a distinct,
+warm-cache-mismatched, descriptive set and must not be combined with this
+medium replication.
+
+The frozen #142 adjacent figures are unchanged and remain non-ranking
+diagnostics because all 12/12 Hermes/OpenCode/Butler observations were strict
+evaluator-rejected: direct-cold Hermes `9,169 / 4 / 27,914 ms`, OpenCode
+`14,357 / 4 / 17,004 ms`; direct-warm `5,598 / 4 / 25,873 ms` and
+`14,467 / 4 / 22,390 ms`; current-web `64,609 / 7 / 130,470 ms` and
+`130,714 / 2 / 49,769 ms`; landing `178,205 / 9 / 307,708 ms` and
+`114,001 / 5 / 245,574 ms`. Those provider-total-token figures used a
+different frozen pilot and are adjacent context only—not a ratio, ranking, or
+accepted-result-per-token claim. #142 remains a separate benchmark branch/PR.
+
+### Acceptance and continuation decision
+
+The registered raw-input target (≥30% reduction) is not met or measurable from
+these medium pairs: serialized bytes are a request-size proxy, and the paired
+provider prompt aggregate changes by only −0.51% without raw-input attribution.
+The request hypothesis (45 → 38–40) is not met under attempted accounting
+(`28` → `34`), and the elapsed hypothesis (18–30%) regresses (`+42.86%`). No
+default-on or M1-success claim is authorized. The M1 flags remain default-off;
+Work remains `in_progress`; T5 remains skipped. Windows CI remains excluded.
