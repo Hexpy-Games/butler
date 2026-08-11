@@ -440,7 +440,10 @@ describe("M1 v2 provider-send segment attribution", () => {
         }] : [{ type: "message", content: [{ type: "output_text", text: "done" }] }]),
         ...toolNames.map((name, index) => ({
           type: "function_call", call_id: `call-${responseIndex}-${index}`,
-          name, arguments: "{}",
+          name,
+          arguments: responseIndex === 1 && index === 0
+            ? JSON.stringify({ path: `/${"x".repeat(5_000)}` })
+            : "{}",
         })),
       ];
       const output = outputItems.map((item) =>
@@ -491,9 +494,21 @@ describe("M1 v2 provider-send segment attribution", () => {
         event.name === "m1_v2_request_segment" && event.dimensions.attemptDigest === lastAttempt)
         .map((event) => event.dimensions.kind));
       for (const kind of ["older_tool_result_projection", "latest_tool_result_delivery",
-        "memory_recall_context", "source_reference", "exact_result_view", "work_recovery_receipt"]) {
+        "memory_recall_context", "source_reference", "exact_result_view", "work_recovery_receipt",
+        "phase_continuity"]) {
         expect(kinds.has(kind)).toBe(true);
       }
+      const bytesByKind = new Map<string, number>();
+      for (const event of events.filter((event) =>
+        event.name === "m1_v2_request_segment" && event.dimensions.attemptDigest === lastAttempt,
+      )) {
+        bytesByKind.set(
+          event.dimensions.kind,
+          (bytesByKind.get(event.dimensions.kind) ?? 0) + event.dimensions.providerSendBytes,
+        );
+      }
+      expect(bytesByKind.get("phase_continuity") ?? 0).toBeGreaterThan(5_000);
+      expect(bytesByKind.get("other_typed_context") ?? 0).toBeLessThan(1_000);
       expect(JSON.stringify(requestBodies.at(-1))).not.toContain("assistant-1");
       expect(JSON.stringify(requestBodies.at(-1))).not.toContain("assistant-2");
       expect(requestBodies).toHaveLength(3);

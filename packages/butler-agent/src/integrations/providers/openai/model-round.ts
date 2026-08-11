@@ -29,6 +29,7 @@ import type { OpenAIAuthOverride } from "../runtime-contracts.ts";
 import type { M1RequestSegmentKind } from
   "../../../agent/btcc/ports/provider-request-attribution.ts";
 import {
+  appendOpenAIFunctionCallContinuityManifest,
   buildOpenAIRequestSegmentManifests,
   isOpenAIRequestSegmentContinuation,
   type OpenAIRequestSegmentContinuation,
@@ -178,7 +179,11 @@ export async function runOpenAIModelRound(
     responseId: response.id,
     sent: continuationMessages?.sent ?? { toolMessages: 0, userMessages: 1 },
     statelessInput,
-    statelessManifest: segmentManifests.continuation,
+    statelessManifest: appendOpenAIFunctionCallContinuityManifest(
+      segmentManifests.continuation,
+      functionCalls,
+      statelessRequestInput.length,
+    ),
   };
   if (continuationMessages) {
     nextContinuation.sent = continuationMessages.sent;

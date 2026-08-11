@@ -58,6 +58,31 @@ export function buildOpenAIRequestSegmentManifests(input: {
   };
 }
 
+/**
+ * Codex OAuth replays provider-produced function calls in the next stateless
+ * request so their matching outputs retain protocol continuity. These exact
+ * fields are neither Butler tool results nor provider-owned JSON structure:
+ * they are dynamic phase continuity authored by the preceding model response.
+ */
+export function appendOpenAIFunctionCallContinuityManifest(
+  manifest: readonly M1ProviderRequestSegmentManifestEntry[],
+  functionCalls: readonly Record<string, unknown>[],
+  indexOffset: number,
+): M1ProviderRequestSegmentManifestEntry[] {
+  const continuity = functionCalls.flatMap((item, localIndex) =>
+    (["name", "arguments"] as const).flatMap((field) =>
+      typeof item[field] === "string"
+        ? [{
+            path: ["input", indexOffset + localIndex, field],
+            kind: "phase_continuity" as const,
+            stability: "dynamic" as const,
+          }]
+        : [],
+    ),
+  );
+  return [...manifest, ...continuity];
+}
+
 function instructionManifest(
   instructions: string | undefined,
   sources: readonly M1RequestSegmentSource[] | undefined,
