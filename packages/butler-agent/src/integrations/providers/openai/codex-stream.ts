@@ -7,6 +7,7 @@ import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../p
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 import {
   observeM1ProviderAttempt,
+  M1_PHYSICAL_ATTEMPT_HEADER,
   finalizeM1ProviderAttempt,
   recordM1ResponseUsage,
 } from "../shared/m1-segment-attribution.ts";
@@ -351,6 +352,9 @@ export async function createCodexResponse(
         "User-Agent": getCodexUserAgent(),
         "chatgpt-account-id": accountId,
         originator: getCodexOriginator(),
+        ...(observedRequest.observation
+          ? { [M1_PHYSICAL_ATTEMPT_HEADER]: observedRequest.observation.envelope.attemptDigest }
+          : {}),
       },
       body: observedRequest.serializedRequest,
       signal,

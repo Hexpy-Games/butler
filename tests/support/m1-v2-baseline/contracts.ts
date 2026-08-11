@@ -48,6 +48,9 @@ export interface M1V2DbEvidence {
   pagePreviewToolCalls: number;
   buildCommandToolCalls: number;
   fileMutationToolCalls: number;
+  duplicateAppliedEffects: number | null;
+  unresolvedCorrections: number | null;
+  lostRequiredAnchors: number | null;
 }
 
 export interface M1V2LandingValidation {
@@ -63,6 +66,28 @@ export interface M1V2LandingValidation {
   usageScenePresent: boolean;
   ctaPresent: boolean;
   responsiveCssPresent: boolean;
+  durableProjectWorkGrounded: boolean;
+  memoryContextGrounded: boolean;
+  toolsWorkspaceGrounded: boolean;
+  providerRoutingGrounded: boolean;
+  recoveryGrounded: boolean;
+  genericCopyAbsent: boolean;
+  approvedCapabilityClaims: M1V2ApprovedCapabilityClaim[];
+}
+
+export type M1V2ApprovedCapabilityClaimId =
+  | "butler.durable_project_work.v1"
+  | "butler.memory_context.v1"
+  | "butler.tools_workspace_authority.v1"
+  | "butler.provider_routing.v1"
+  | "butler.recovery.v1";
+
+export interface M1V2ApprovedCapabilityClaim {
+  id: M1V2ApprovedCapabilityClaimId;
+  requiredElementsPresent: boolean[];
+  negated: boolean;
+  misrepresented: boolean;
+  passed: boolean;
 }
 
 export interface M1V2QualitySummary {
@@ -88,7 +113,10 @@ export interface M1V2WorkEvidence {
   projectLedgerCompletedWorkRecords: number;
   projectLedgerCloseoutObserved: boolean;
   duplicateEvidenceCount: number | null;
-  lostCorrectionEvidenceCount: null;
+  lostCorrectionEvidenceCount: number | null;
+  lostRequiredAnchorCount: number | null;
+  workspaceAuthorityPassed: boolean | null;
+  providerRoutingPassed: boolean | null;
   stallObserved: boolean | null;
 }
 
@@ -184,7 +212,10 @@ export interface M1V2ArmAggregate {
     acceptedCompletionValidations: number;
     projectLedgerCloseouts: number;
     duplicateEvidenceCount: number | null;
-    lostCorrectionEvidenceCount: null;
+    lostCorrectionEvidenceCount: number | null;
+    lostRequiredAnchorCount: number | null;
+    workspaceAuthorityFailures: number | null;
+    providerRoutingFailures: number | null;
     stalledRepetitions: number | null;
   };
   segmentProviderSendBytes: Partial<Record<
@@ -209,6 +240,7 @@ export interface M1V2AssessmentInput {
   metrics: OperationalMetricEvent[];
   db?: M1V2DbEvidence | null;
   landingValidation?: M1V2LandingValidation | null;
+  sourceRevision?: string;
 }
 
 export interface M1V2CampaignConfig {
@@ -216,7 +248,7 @@ export interface M1V2CampaignConfig {
   sourceData: string;
   repoRoot: string;
   repetitions: number;
-  sourceRevision?: string;
+  sourceRevision: string;
   browserExecutablePath?: string;
 }
 

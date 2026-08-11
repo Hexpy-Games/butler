@@ -13,6 +13,7 @@ import {
   summarizePhysicalRequests,
   summarizeWorkEvidence,
 } from "./evidence-summary.ts";
+import { applyM1V2StabilityReasons } from "./stability-assessment.ts";
 
 const POTENTIALLY_REDUCIBLE = new Set<M1RequestSegmentKind>([
   "stable_btcc_protocol",
@@ -52,6 +53,10 @@ export function assessM1V2Repetition(
     event.name === "m1_v2_request_envelope" &&
     event.dimensions?.armId === input.armId);
   if (envelopes.length === 0) reasons.push("agent_attempt_missing");
+  if (input.sourceRevision && envelopes.some((event) =>
+    event.dimensions?.sourceRevision !== input.sourceRevision)) {
+    reasons.push("source_revision_identity_mismatch");
+  }
   const duplicateAttempts = duplicateValues(envelopes.map((event) =>
     stringValue(event.dimensions?.attemptDigest)).filter(Boolean) as string[]);
   if (duplicateAttempts.length > 0) reasons.push("duplicate_request_envelope");
@@ -78,7 +83,15 @@ export function assessM1V2Repetition(
     return started !== null && submittedAtMs !== null && terminalAtMs !== null &&
       started >= submittedAtMs && started <= terminalAtMs + 5_000;
   });
-  const physical = summarizePhysicalRequests(providerRequests, envelopes.length);
+  const allEnvelopes = intervalMetrics.filter((event) =>
+    event.name === "m1_v2_request_envelope");
+  const physical = summarizePhysicalRequests(providerRequests, allEnvelopes, input.armId);
+  if (physical.unmatchedEnvelopeDigests.length > 0 ||
+    physical.unmatchedRequestOrdinals.length > 0 ||
+    physical.invalidRequestIdentityCount > 0 ||
+    physical.duplicateEnvelopeDigests.length > 0) {
+    reasons.push("physical_attempt_identity_join_failed");
+  }
   const db = input.db ?? null;
   if (!db) reasons.push("database_evidence_missing");
   if (db && !db.quickCheckPassed) reasons.push("database_quick_check_failed");
@@ -86,7 +99,12 @@ export function assessM1V2Repetition(
   const quality = qualitySummary(input, finalText, attempts);
   applyQualityReasons(input.armId, quality, db, reasons);
   const firstUseful = firstUsefulMs(providerRequests, target, submittedAtMs);
-  const work = summarizeWorkEvidence(target, terminalState, firstUseful);
+  const work = summarizeWorkEvidence(target, terminalState, firstUseful, {
+    db,
+    evidence: input.evidence,
+    expectedModel: "openai/gpt-5.6-sol",
+  });
+  applyM1V2StabilityReasons(input.armId, work, reasons);
 
   return {
     armId: input.armId,
@@ -241,8 +259,11 @@ function applyQualityReasons(
   }
   if (armId === "landing-cold") {
     const landing = quality.landing;
-    if (!landing || Object.entries(landing).some(([key, value]) =>
-      key === "featureBlockCount" ? Number(value) < 3 : value !== true)) {
+    if (!landing || Object.entries(landing).some(([key, value]) => {
+      if (key === "approvedCapabilityClaims") return false;
+      return key === "featureBlockCount" ? Number(value) < 3 : value !== true;
+    }) || landing.approvedCapabilityClaims.length !== 5 ||
+      landing.approvedCapabilityClaims.some((claim) => !claim.passed)) {
       reasons.push("landing_quality_or_visual_gate_failed");
     }
     if (!db || db.pagePreviewToolCalls < 1 || db.buildCommandToolCalls < 1 ||

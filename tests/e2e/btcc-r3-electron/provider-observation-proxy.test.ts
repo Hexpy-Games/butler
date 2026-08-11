@@ -66,6 +66,8 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
   let capturedBody: Buffer = Buffer.alloc(0);
   let capturedAuthorization = "";
   let capturedAcceptEncoding = "";
+  let capturedAttemptDigest = "";
+  const attemptDigest = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
   let upstreamCompleted = false;
   let releaseUpstream: (() => void) | undefined;
   const upstreamGate = new Promise<void>((resolve) => {
@@ -76,6 +78,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       capturedBody = await bodyOf(request);
       capturedAuthorization = String(request.headers.authorization ?? "");
       capturedAcceptEncoding = String(request.headers["accept-encoding"] ?? "");
+      capturedAttemptDigest = String(request.headers["x-butler-m1-physical-attempt"] ?? "");
       response.writeHead(202, {
         "content-type": "application/octet-stream",
         "x-upstream-header": "preserved",
@@ -113,6 +116,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
         authorization,
         "content-type": "application/json",
         "x-forwarded-fixture": "yes",
+        "x-butler-m1-physical-attempt": attemptDigest,
       },
       body: requestBody,
     });
@@ -135,8 +139,10 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
     expect(capturedBody.equals(requestBody)).toBe(true);
     expect(capturedAuthorization).toBe(authorization);
     expect(capturedAcceptEncoding).toBe("identity");
+    expect(capturedAttemptDigest).toBe("");
     expect(proxy.observations()).toEqual([{
       ordinal: 1,
+      attemptDigest,
       requestKind: "agent",
       requestedModel: "gpt-test",
       requestStartedAtMs: 100,

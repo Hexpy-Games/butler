@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { readOperationalMetricEvents } from
   "../../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
@@ -15,7 +15,7 @@ import type {
 import { readM1V2DbEvidence } from "./db-evidence.ts";
 import { loadCanonicalM1V2Fixtures } from "./fixtures.ts";
 import { validateM1V2Landing } from "./landing-validation.ts";
-import { writeM1V2Manifest } from "./manifest.ts";
+import { type M1V2ManifestRun, writeM1V2Manifest } from "./manifest.ts";
 
 export async function runM1V2BaselineCampaign(
   config: M1V2CampaignConfig,
@@ -28,9 +28,9 @@ export async function runM1V2BaselineCampaign(
   const outputRoot = resolve(config.outputRoot);
   const repoRoot = resolve(config.repoRoot);
   const sourceData = resolve(config.sourceData);
-  mkdirSync(outputRoot, { recursive: true });
   const fixtures = loadCanonicalM1V2Fixtures(repoRoot);
-  writeM1V2Manifest(outputRoot, config, fixtures);
+  mkdirSync(outputRoot, { recursive: false, mode: 0o700 });
+  const manifest = writeM1V2Manifest(outputRoot, config, fixtures);
   const runHarness = dependencies.runHarness ?? runBtccR3ElectronHarness;
   const readMetrics = dependencies.readMetrics ?? ((butlerData: string) =>
     readOperationalMetricEvents({ butlerData }));
@@ -49,14 +49,15 @@ export async function runM1V2BaselineCampaign(
     for (const fixture of fixtures) {
       for (let repetition = 1; repetition <= config.repetitions; repetition += 1) {
         if (infrastructureStopped) break;
-        const runRoot = join(
-          outputRoot,
-          fixture.armId,
-          `rep-${String(repetition).padStart(2, "0")}`,
-        );
+        const manifestRun = manifest.runs.find((run) =>
+          run.armId === fixture.armId && run.repetition === repetition);
+        if (!manifestRun) throw new Error("M1 v2 manifest run identity is missing.");
+        const runRoot = join(outputRoot, manifestRun.runKey);
+        reserveFreshRun(outputRoot, runRoot, manifest.campaignId, manifestRun);
         const scenario = structuredClone(fixture.scenario);
-        scenario.id = `${scenario.id}-rep-${String(repetition).padStart(2, "0")}`;
+        scenario.id = manifestRun.scenarioId;
         if (scenario.session) scenario.session.id = scenario.id;
+        const attemptStartedAtMs = Date.now();
         try {
           let evidence: Record<string, unknown>;
           try {
@@ -69,7 +70,7 @@ export async function runM1V2BaselineCampaign(
               sourceData,
             });
           } catch {
-            const failedEvidence = readFailedEvidence(runRoot);
+            const failedEvidence = readFailedEvidence(runRoot, manifestRun, attemptStartedAtMs);
             const gateReason = infrastructureGateReason(failedEvidence);
             if (gateReason) throw new M1CampaignInfrastructureGate(gateReason);
             if (!failedEvidence) {
@@ -77,6 +78,13 @@ export async function runM1V2BaselineCampaign(
             }
             evidence = failedEvidence;
           }
+          validateEvidenceIdentity(
+            evidence,
+            manifestRun,
+            runRoot,
+            attemptStartedAtMs,
+            evidence.ok === true,
+          );
           const run = recordValue(evidence.run);
           const dataRoot = stringValue(run?.dataRoot);
           const workspaceRoot = stringValue(run?.workspaceRoot);
@@ -114,6 +122,7 @@ export async function runM1V2BaselineCampaign(
             metrics: readMetrics(dataRoot),
             db,
             landingValidation,
+            sourceRevision: manifest.sourceRevision,
           }));
         } catch (error) {
           if (!(error instanceof M1CampaignInfrastructureGate)) throw error;
@@ -164,14 +173,74 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function readFailedEvidence(runRoot: string): Record<string, unknown> | null {
+function reserveFreshRun(
+  outputRoot: string,
+  runRoot: string,
+  campaignId: string,
+  run: M1V2ManifestRun,
+): void {
+  if (existsSync(runRoot)) {
+    throw new M1CampaignInfrastructureGate("run_root_not_fresh");
+  }
+  mkdirSync(join(outputRoot, run.armId), { recursive: true, mode: 0o700 });
+  writeFileSync(`${runRoot}.reservation.json`, `${JSON.stringify({
+    schema: "butler.m1-v2-run-reservation.v1",
+    campaignId,
+    runKey: run.runKey,
+    scenarioId: run.scenarioId,
+  })}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  if (existsSync(runRoot)) {
+    throw new M1CampaignInfrastructureGate("run_root_raced_before_launch");
+  }
+}
+
+function readFailedEvidence(
+  runRoot: string,
+  manifestRun: M1V2ManifestRun,
+  attemptStartedAtMs: number,
+): Record<string, unknown> | null {
   const path = join(runRoot, "evidence.json");
   if (!existsSync(path)) return null;
+  if (statSync(path).mtimeMs < attemptStartedAtMs) {
+    throw new M1CampaignInfrastructureGate("stale_failure_evidence");
+  }
+  let evidence: Record<string, unknown> | null;
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8"));
-    return recordValue(parsed) ?? null;
+    evidence = recordValue(parsed) ?? null;
   } catch {
     return null;
+  }
+  if (!evidence) return null;
+  validateEvidenceIdentity(evidence, manifestRun, runRoot, attemptStartedAtMs, false);
+  return evidence;
+}
+
+function validateEvidenceIdentity(
+  evidence: Record<string, unknown>,
+  manifestRun: M1V2ManifestRun,
+  runRoot: string,
+  attemptStartedAtMs: number,
+  requireComplete: boolean,
+): void {
+  const run = recordValue(evidence.run);
+  const evidenceRunRoot = stringValue(run?.runRoot);
+  const runId = stringValue(run?.runId);
+  const generatedAt = stringValue(evidence.generatedAt);
+  const generatedAtMs = generatedAt ? Date.parse(generatedAt) : Number.NaN;
+  if (evidenceRunRoot === null || resolve(evidenceRunRoot) !== resolve(runRoot) ||
+    !runId?.startsWith(`${manifestRun.scenarioId}-`) ||
+    !Number.isFinite(generatedAtMs) || generatedAtMs < attemptStartedAtMs - 1_000) {
+    throw new M1CampaignInfrastructureGate("evidence_identity_mismatch");
+  }
+  if (!requireComplete) return;
+  const session = recordValue(evidence.session);
+  const target = recordArray(evidence.observations).find((row) =>
+    row.stepId === manifestRun.targetStepId);
+  if (run?.model !== "openai/gpt-5.6-sol" || run?.reasoningEffort !== "medium" ||
+    session?.id !== manifestRun.scenarioId ||
+    target?.promptSha256 !== manifestRun.targetPromptSha256) {
+    throw new M1CampaignInfrastructureGate("evidence_manifest_binding_mismatch");
   }
 }
 

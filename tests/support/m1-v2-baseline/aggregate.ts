@@ -106,6 +106,9 @@ function emptyWorkEvidence(): M1V2RepetitionResult["work"] {
     projectLedgerCloseoutObserved: false,
     duplicateEvidenceCount: null,
     lostCorrectionEvidenceCount: null,
+    lostRequiredAnchorCount: null,
+    workspaceAuthorityPassed: null,
+    providerRoutingPassed: null,
     stallObserved: null,
   };
 }
@@ -171,7 +174,18 @@ function aggregateArm(
         item.work.projectLedgerCloseoutObserved).length,
       duplicateEvidenceCount: sumNullable(all.map((item) =>
         item.work.duplicateEvidenceCount)),
-      lostCorrectionEvidenceCount: null,
+      lostCorrectionEvidenceCount: sumNullable(all.map((item) =>
+        item.work.lostCorrectionEvidenceCount)),
+      lostRequiredAnchorCount: sumNullable(all.map((item) =>
+        item.work.lostRequiredAnchorCount)),
+      workspaceAuthorityFailures: sumNullable(all.map((item) =>
+        item.work.workspaceAuthorityPassed === null
+          ? null
+          : Number(!item.work.workspaceAuthorityPassed))),
+      providerRoutingFailures: sumNullable(all.map((item) =>
+        item.work.providerRoutingPassed === null
+          ? null
+          : Number(!item.work.providerRoutingPassed))),
       stalledRepetitions: sumNullable(all.map((item) =>
         item.work.stallObserved === null ? null : Number(item.work.stallObserved))),
     },
