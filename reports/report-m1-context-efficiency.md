@@ -1,7 +1,7 @@
-# M1 Context Efficiency — corrected v2 Task 1 report
+# M1 Context Efficiency — corrected v2 report
 
-Date: 2026-08-11
-Task: `T-M1-V2-SEGMENT-ATTRIBUTION`
+Date: 2026-08-12
+Tasks: `T-M1-V2-SEGMENT-ATTRIBUTION`, `T-M1-V2-IMPLEMENTATION-AUDIT`
 Governing Spec: `SPEC-M1-CONTEXT-EFFICIENCY` revision 2
 
 ## Status
@@ -461,6 +461,254 @@ reducible share before the manifest repair. These are attribution inputs, not
 permission to freeze or relax targets: landing still lacks three accepted
 phase-committed repetitions, and cache variance must be controlled in the final
 comparison. The Spec is not relaxed.
+
+## T-M1-V2 implementation audit
+
+### Audit boundary and source truth
+
+This audit changes no runtime source, feature flag, provider route, or existing
+pull request. The accepted attribution source is current branch commit
+`2b22e90f51274744ef0f4d9d99cc0762a52024b4`. Historical M1 v1 is PR #145
+branch `feature/context-efficiency-m1` at
+`c41506b9091acd0195260c974ee3fb500db1f84c`; both branches fork from
+`65494154f6e9ddbfb20458bc67250c7d15b5d13d`. Neither tip is an ancestor of the
+other. Therefore there is no accepted product path containing both the v1
+optimization mechanisms and the v2 final-serialization attribution. Historical
+v1 code is design evidence to classify, not code to preserve or merge.
+
+The audit dependency is the accepted SC01 attribution contract and frozen
+fixture/protocol/rubric authority. It is not a completed statistical baseline.
+Archive repeatability, missing-arm evidence, and the single final before/after
+4x3 campaign remain owned by `T-M1-V2-FINAL-BENCHMARK`.
+
+### Real product call path
+
+The current production path is:
+
+1. `runNativeButlerMain` constructs the gateway and its message handling reaches
+   `createBtccGatewayHandlers`, then the `createBtcc` facade and its Turn
+   command. This is the real Session ingress; tests are not the caller.
+2. `createProductionBtccComposition` creates SQLite-backed Turn, Work,
+   conversation, tool/effect, model-route, and metrics collaborators.
+3. `createTurnFacade.run` admits the Session request;
+   `DefaultBtccTurnPreparation.prepare` loads conversation/context documents,
+   guided policy inputs, and the initial `ModelRouteState`.
+4. `DefaultTurnRuntime.runAgentAndCommit` acquires the Turn execution claim and
+   invokes `createProductionGuidedTurnAgent`.
+5. The guided agent selects authorized/visible tools, assembles Work and prompt
+   context, and calls `runBtccAgentLoop`.
+6. The loop appends assistant and tool-result messages and dispatches through
+   `createModelRoutePort`, whose durable route journal and acceptance store own
+   retries, fallback, recovered acceptance, and route-cursor resets.
+7. OpenAI official mode sends incremental `requestItems` with
+   `previous_response_id`; Codex mode deliberately removes that identifier and
+   sends cumulative `previous.statelessInput` plus current stateless items.
+8. `observeM1ProviderAttempt` receives the exact post-transform JSON body, and
+   the identical serialized string is sent by `responses-client.ts` or
+   `codex-stream.ts` to the physical provider fetch. Terminal usage remains
+   nullable.
+9. The accepted normalized provider response, tool result journal, effect
+   journal, route event/acceptance journal, and Turn outbox are durably recorded.
+   Restart hydration reuses durable route acceptance before dispatch. The Turn
+   transition is committed before canonical assistant delivery finalizes the
+   conversation.
+
+Primary current-source evidence is in `application/native-butler.ts`,
+`interfaces/gateway/btcc/create-btcc-gateway-handlers.ts`,
+`agent/btcc/btcc.ts`, `agent/composition/create-btcc-composition.ts`,
+`agent/btcc/turn/turn.ts`,
+`agent/btcc/turn/prepare-turn.ts`, `agent/btcc/turn/runtime.ts`,
+`agent/btcc/agent-loop/guided-turn-agent.ts`,
+`agent/btcc/agent-loop/agent-loop.ts`,
+`agent/btcc/model-route/routed-round.ts`, and
+`integrations/providers/openai/{model-round,responses-client,codex-stream}.ts`.
+
+### Mechanism and authority classification
+
+| mechanism / exact owner and consumer | affected segment and serialized-input effect | authority / risk | classification and downstream owner |
+| --- | --- | --- | --- |
+| Current `m1-segment-attribution.ts`, `request-segment-manifest.ts`, and provider fetch observers; consumed by official and Codex OpenAI adapters | Classifies every final request path into SC01 segments and writes `request_envelope`, `request_segment`, and nullable `response_usage`; observer returns the same serialized body and changes no provider input | Final fetch body is authoritative; keyed digests and aggregate bytes are privacy-safe. The manifest is observational, not request authority | **keep** under provider attribution/operational metrics; retain default-off non-interference |
+| Historical `m1-baseline-observation.ts`; guided-agent wrapper/metrics consumer | Emits estimates/aggregates only; no serialized-input change | Default-on when operational metrics are enabled, segment-poor, and duplicates exact SC01 evidence | **remove**, owned by the first optimization Task that touches the legacy module; do not carry it into v2 |
+| Current `tool-surface-selection.ts` and `guided-turn-policy.ts`; policy is the real product consumer | Current selection controls visible provider tool schemas and `tool_schema` bytes | Initial-state creation is used, but most public FSM transitions/types have only tests as consumers | **rework** in `T-M1-V2-TOOL-INSTRUCTION-SURFACE`; make one BTCC phase-policy API and remove test-only public FSM surface |
+| Historical `guided-tool-surface.ts` and `BUTLER_M1_MINIMAL_TOOL_SURFACE`, read once by guided policy | Actually changes serialized provider schemas | Authorization and visibility are separated, but fixed profiles still admit broad tools and the experimental `m1-*` module creates a permanent-dual-path risk | **rework**, not wholesale keep; Task 3 owns one selection point, final cutover, legacy flag/module deletion |
+| Historical compact replay context/messages projection | Replaces old tool-role replay with latest result batch, references, selected exact views, Work projection, and continuity; affects `phase_continuity`, `prior_tool_result`, `exact_result_view`, and Work segments | Useful bounded projections exist, but all user messages and every non-empty assistant text remain independently unbounded, and Codex cumulative history can re-carry them | **rework** in Tasks 4 and 6; projection is input, not an authority, and both user/assistant accumulation require an explicit 100-round cap |
+| Historical `replace_phase_continuity` / `read_operation_results` carrier and `withM1CompactReplayOperationCarrier` | Changes messages and duplicates every visible operation schema inside a nested `oneOf` while leaving original schemas present | Duplicated schema authority; mandatory model-authored control operation; route sanitizer owns replay semantics and drops typed transport metadata on rejection | **remove** the mandatory nested carrier and route sanitizer; Task 4 may replace them with a BTCC-owned delivery protocol |
+| Historical exact-result selector/reader and journal identities/hashes | Exact bounded reads add `exact_result_view` only when explicitly requested | Scope/revision/hash checks and restart-safe reads are legitimate; BTCC imports concrete SQLite journal and adapter-owned DTOs | **keep semantics / rework dependency direction** in Task 4: BTCC owns required reader/journal ports, SQLite implements them |
+| `DurableWorkService` plus historical compact Work projection | Projection affects `work_state`, `work_control_receipt`, and result references; Work remains semantic authority | Projection preserves revisions/references, but `safeLoad*`, `safeBind*`, and `safeAttach*` turn storage/integrity faults into absent Work/no-op. Legacy Work import is a second fallback path | **rework** in Task 5: only true not-found is nullable, failures are typed/fail-closed, attachment is reconciled, and legacy import receives a deletion gate |
+| Historical `TurnContinuationBudgetState`, SQLite continuation store/controller/hydration, and `BUTLER_M1_BOUNDED_CONTINUATION_CACHE` read at admission | Safety/control only; does not bound normal provider input | Turn JSON is the right single state owner and CAS/fencing/restart are valuable. Controller triggers are spread across route/tool/acceptance adapters; equal byte length is incorrectly treated as no progress; unavailable output can become zero progress | **keep state model / rework controller** in Task 6; compare durable request identity/frontier, preserve nullable usage, and keep it a fuse rather than claiming token reduction |
+| Current `ModelRouteState` and `createModelRoutePort`; prepared Turn/guided agent are consumers | Controls provider candidate/retry/fallback, continuation reset, and accepted response; not itself a token reduction | Mutable authority belongs in `route_state_json`, event journal, and acceptance store. Optional route/collaborators permit direct base-provider bypass; `model_selection_json.modelRoute` is a stale duplicate | **keep route/acceptance concepts; rework requiredness; remove duplicate state and direct bypass** in Task 6 |
+| Official incremental continuation in `model-round.ts` | Sends current `requestItems` plus `previous_response_id` | Provider continuation is private adapter state; final request attribution observes it | **keep**, adapt behind Task 6 envelope port |
+| Codex cumulative `statelessInput` in `model-round.ts` | Re-sends all prior stateless input and directly drives cumulative provider bytes | Explicit append remains the normal path; compact replay alone cannot undo bytes already accumulated | **rework/remove on M1-enabled path** in Task 6; no second permanent carrier |
+| Current request manifest and terminal response usage | `request_segment` observes exact paths; `response_usage` records provider-owned cache/input/output/reasoning values or null | Function-call continuity is now typed; unavailable values must never be synthesized as zero | **keep**; Task 8 consumes evidence but does not own runtime telemetry |
+| Guided tool journal, effect store, model-route acceptance store, Turn outbox, and hydration | Journals do not reduce bytes themselves; they provide result identities, effect idempotency, retry acceptance, restart state, and accepted output | These are distinct single authorities. A replay layer must reference them rather than copy or reinterpret effect/result truth | **keep/adapt through required ports**; Tasks 4–6 may add delivery state but may not duplicate result/effect/route authority |
+| Historical M1-specific tool-surface, compact-replay, continuation, and route-request metrics | Telemetry/control only, except where their adjacent policies alter input | Duplicate/superseded measurements can falsely imply causality or no duplicate effect | **remove** when the owning experimental path is replaced; retain only SC01 exact final-body evidence and durable safety invariants |
+| Current same-response concurrency and future read batching | Existing loop executes only explicit model-issued concurrency-safe calls; no additional serialized-input change today | There is no attributed residual proving another batching mechanism is warranted | **defer** to conditional Task 7; reject without code if Tasks 3–6 leave no eligible residual |
+| Archive repeatability, missing-arm evidence, and final statistics | No runtime input change in this audit | Historical observations cannot substitute for paired causal evidence or one accepted final campaign | **defer** exclusively to `T-M1-V2-FINAL-BENCHMARK` |
+
+No classification depends on sunk cost, test count, or prior approval.
+
+### Product-public API and selection-point audit
+
+| public surface | legitimate outside product consumer | no legitimate outside product consumer / required action |
+| --- | --- | --- |
+| Current `tool-surface-selection.ts` | `selectInitialToolsFromSurfaceController` and its input/output contracts are consumed by `guided-turn-policy.ts` | None once kept as the single boundary |
+| Current `tool-surface-controller.ts` | `createInitialToolSurfaceControllerState` and the minimum input/provider-capability types are consumed by `tool-surface-selection.ts` | `transitionToolSurfaceControllerState`, `isToolSurfaceTransitionAllowed`, transition errors, the state-machine constants, discovery/description/promotion/event/status types, and non-initial state variants are test/internal-only; privatize or remove |
+| Historical `compact-replay/index.ts` | Agent-loop consumes argument validation, operation expansion, continuity parsing, and batch rejection; model-route consumes acceptance sanitization | Diagnostic/property-shape exports and public rejection constants are implementation details. The entire mandatory carrier/sanitizer is deleted rather than promoted to product authority; keep only replacement BTCC ports/projections |
+| Current `model-route/index.ts` | `buildModelRoute` is consumed by Turn preparation; `createModelRoutePort`, current-candidate selection, route state/events, history/acceptance port types, and durability/recovery errors are consumed by guided Turn/runtime/SQLite adapters | `MODEL_ROUTE_*` constants, acceptance/candidate/event-handler/failure-record internals, `advanceModelRoute`, retry clamp, attempt key, failure classifier, and dispatch-limit error are model-route-internal; stop exporting them |
+| Historical Turn continuation barrel | Creation/parse/transition/exhaustion errors and state/event/limits are consumed by admission, guided continuation, and SQLite stores/hydration | `continuationResultRefLimit`, `terminalReceiptFromState`, schema version, terminal-receipt type, and internal validators have no outside product consumer; keep them private. Move request digest to a route/request identity contract, not the Turn barrel |
+| Current `provider-request-attribution.ts` | Segment kind/source and manifest/cache contracts are consumed by guided prompt, model-round contracts, manifest builder, shared partitioning, and official/Codex adapters | Envelope/segment/usage/attempt observation DTOs are consumed only by the metrics implementation. Narrow the cross-domain public contract and expose it through an explicit port boundary rather than deep imports |
+| Historical `PreparedModelRoundPort` | Consumed by compact request assembly, guided continuation, and `createModelRoutePort`; `prepareRequest` reassembles after the actual route/model is chosen | **rework** in Task 6 into the single `TurnContextEnvelope` provider translation port; do not keep a second prepared-request authority |
+| Historical `modelRoundRequestDigest` and `modelRoundRequestSerializedBytes` | Consumed by `model-route/route-request-policy.ts`, whose `requestEvidence` feeds route events and continuation control | They hash/count a BTCC request projection, not the exact final provider body; byte-length-only progress comparison is unsafe. **remove/rework** in Task 6 using durable identity/frontier and SC01 final-body evidence |
+| Historical `modelRouteDispatchBudget`, `requestEvidence`, and `providerRouteRequest` | Consumed only by `routed-round.ts`; they compute dispatch ceiling/evidence and rewrite route model/reasoning/continuation/cache scope | Dispatch ceiling and route rewrite remain internal model-route policy; keep them private. Remove duplicate request-byte telemetry and rework continuation coupling in Task 6 |
+| Current provider-neutral `ProviderUsageSample`, `ProviderRequestAttributor`, and `createProviderRequestAttributor` | `anthropic/{model-round,runtime}.ts`, `google/{model-round,runtime}.ts`, and `local/{model-round,execution}.ts` are real consumers; the wrapper calls `PromptUsageAttribution` hooks and writes cache metrics only when a usage sample exists | It does not change serialized input and is not SC01 final-body attribution. **keep** the provider-neutral request/usage wrapper; Task 6 must not let missing usage become legacy zero/progress, and each provider model round must continue returning nullable usage |
+
+- `createProductionGuidedTurnAgent` is legitimately consumed by
+  `createProductionBtccComposition`; `openBtccSqliteStores` is consumed by the
+  same composition. Optional `modelRound`, session binding, conversation, and
+  execution-window test seams on production factories are not justified by
+  outside product consumers. Move them to a separate test composition and make
+  production dependencies required.
+- The compact-replay index is the historical external boundary for agent-loop
+  and model-route consumers, but its broad set of diagnostic/carrier helpers is
+  not a product API. Narrow it to domain ports and projections during Tasks 4–6.
+- Exact-result DTOs and `SqliteGuidedToolJournal` exported through adapter
+  indexes have no legitimate reason to define BTCC domain contracts. Replace
+  those deep/concrete dependencies with BTCC-owned ports.
+- `model-route/index.ts` has legitimate outside consumers for
+  `buildModelRoute`, `createModelRoutePort`, current candidate selection, route
+  state/events, durable errors, and history/acceptance port types. Constants,
+  acceptance/candidate internals, failure classifiers, retry clamps, attempt
+  keys, and dispatch errors used only inside model-route must stop being public.
+- Historical Turn public exports for continuation schema constants, internal
+  result-ref limits, terminal receipt construction, and validators have no
+  outside product consumer. Keep one cohesive Turn continuation API and private
+  implementation details.
+- The current provider-attribution port is deep-imported from
+  `agent/btcc/ports/provider-request-attribution.ts` by provider integrations and
+  is absent from the ports index. Its cross-domain contract must receive an
+  explicit public boundary before further provider work; the current audit does
+  not move it.
+- Current production composition imports a session binding store from
+  `test-support/harness/session-store.ts`. This is a production/test boundary
+  violation; the responsible Session workspace composition Task must replace it
+  with a production-owned adapter rather than preserve it as test convenience.
+- The historical T2/T3/T4 default-off flags have real single read points, but
+  all are migration paths, not permanent architecture. Their owning Task must
+  either adopt one canonical path and delete the old path/flag or delete the
+  experiment after failed acceptance.
+
+Exact flag and configuration selection points are:
+
+| flag/config | production read point and effect | classification / owner |
+| --- | --- | --- |
+| `BUTLER_M1_V2_SEGMENT_ATTRIBUTION` | `observeM1ProviderAttempt` reads it at each official/Codex physical fetch; off returns the same serialized body without rows | **keep**, SC01 attribution owner |
+| `BUTLER_M1_BASELINE_TELEMETRY` plus baseline arm/scenario/cache/source/model/reasoning/revision/state keys | Historical `m1-baseline-observation.ts` reads them for descriptive metrics only; no provider-input effect | **remove** with legacy baseline telemetry in Task 3 |
+| `BUTLER_M1_MINIMAL_TOOL_SURFACE` | Historical guided policy reads once per guided Turn policy selection and changes visible schemas/instructions | **rework then remove** in Task 3 after one canonical policy is selected |
+| `BUTLER_M1_COMPACT_REPLAY` | Historical guided agent reads once when creating the agent-loop path; changes messages, continuation, and nested carrier schemas | **remove** in Task 4; retain only replacement exact-read/delivery semantics behind one new selection path |
+| `BUTLER_M1_BOUNDED_CONTINUATION_CACHE` | Historical SQLite store composition selects the policy for one new Turn admission; admitted state, not later environment reads, controls the Turn | **rework then remove** in Task 6 after the bounded envelope path is canonical |
+| `BUTLER_M1_CONTINUATION_MAX_MODEL_REQUESTS`, `MAX_TOOL_ROUNDS`, `MAX_PROMPT_TOKENS`, `MAX_OUTPUT_TOKENS`, `MAX_ELAPSED_MS`, `MAX_IDLE_MS` | Read together by `resolveTurnContinuationBudgetLimits` only when the historical bounded flag is enabled; they affect safety control, never serialized provider bytes | **rework** as one typed Task 6 admission configuration; preserve finite fail-closed validation, remove direct cross-domain/env coupling and obsolete keys at cutover |
+
+### Original six cost sources
+
+| original cost source | audited state | evidence and owner |
+| --- | --- | --- |
+| 1. Cumulative Codex stateless request history | **merely observed / untouched** | Current Codex assembly explicitly appends `previous.statelessInput`; v2 measures exact bytes. Task 6 owns removal behind one bounded envelope path |
+| 2. Repeated consumed tool-result payloads | **partially solved in historical v1 only** | References, exact reads, and compact projections exist, but there is no durable pending -> in-flight -> acknowledged -> reference-only delivery lifecycle, and cumulative Codex input still replays history. Task 4 owns it |
+| 3. Phase-ineligible tool schemas | **partially solved in historical v1 only** | One phase selection changes real schemas, but broad profiles and a duplicated nested carrier remain; valid attribution is descriptive, not causal. Task 3 owns it |
+| 4. Repeated stable instructions and cache-unstable guidance | **merely observed / partially structured** | Historical code separates some stable/dynamic guidance but lacks canonical final-byte identity and adds carrier prose/schema. SC01 observes exact segments. Tasks 3 then 6 own it |
+| 5. Work mistakes and recovery loops | **partially represented, not solved** | Historical projection preserves state/references but receipt fields are incomplete and fail-open helpers can erase Work faults. Task 5 owns typed legal recovery and measured affected-arm reduction |
+| 6. Independent read/search rounds | **untouched as an optimization** | Current loop already executes multiple explicitly model-issued concurrency-safe calls together; it does not invent cross-round batches. Task 7 remains conditional and must be rejected if residual attribution is absent |
+
+No source supports converting the Work-level 30%, 45-to-38–40, or 18–30%
+hypotheses into a narrower promise. The 72.1–77.5% reducible shares in accepted
+historical arms are descriptive attribution, not causal paired evidence.
+
+### Corrected downstream ownership
+
+1. `T-M1-V2-TOOL-INSTRUCTION-SURFACE` owns the next single change: one BTCC
+   phase policy and one provider schema/stable-prefix projection. It must remove
+   the unused FSM surface, temporary baseline/tool metrics, legacy flag/path,
+   and any duplicated carrier schema after cutover. Before implementation it
+   freezes eligible direct-cold, direct-warm, current-web, and landing affected-arm pairs,
+   revisions, repetitions, cache rules, and exact SC01 segments.
+2. `T-M1-V2-EXACT-ONCE-REPLAY` owns a BTCC delivery journal with
+   pending/in-flight/acknowledged/reference-only states tied to physical attempt
+   acceptance. It reuses durable result/effect identities and exact-read
+   validation, removes the mandatory nested carrier/route sanitizer, and must
+   not duplicate result or effect authority.
+3. `T-M1-V2-WORK-RECOVERY` owns a typed mechanical Work rejection/receipt with
+   revision, rejection code, legal next operations, missing evidence, and
+   idempotency state. It must remove fail-open recovery and the superseded legacy
+   import after an explicit migration gate; Project Ledger and semantic review
+   remain outside this optimization's authority.
+4. `T-M1-V2-BOUNDED-STATELESS-CONTEXT` owns a BTCC
+   `TurnContextEnvelope`/provider translation boundary, required model-route
+   durability, one mutable route state, nullable usage-safe continuation
+   control, explicit bounds for retained user and assistant text, and deletion
+   of cumulative Codex append on the enabled path. It
+   retains the Turn budget only as a safety fuse and deletes superseded v1
+   wrappers/metrics rather than forming another dual path.
+5. `T-M1-V2-READ-BATCHING-ROUND-REDUCTION` remains conditional. Existing
+   same-response concurrency is the baseline. Only explicit model-issued
+   independent reads are eligible, and no implementation begins without a
+   preregistered attributed residual.
+6. `T-M1-V2-FINAL-BENCHMARK` alone owns archive repeatability, missing arms,
+   review of each frozen affected-arm pair, and the single final 4x3 campaign.
+
+Task 3 is the next recommended Task because the current real path always sends
+the selected provider schemas, accepted SC01 observations show `tool_schema` as
+a material exact-byte segment, and direct turns have no corresponding tool use
+in the preserved evidence. Historical phase selection proves a real
+serialization lever exists, but its regressions require reimplementation rather
+than merge. This recommendation is not permission to start or a statistical
+claim.
+
+### Audit validation and open risks
+
+- Source assertions checked current imports/callers/composition and exact Git
+  objects from PR #145; sibling branches were never treated as one runtime.
+- No provider call, benchmark repetition, Hermes/OpenCode run, runtime test, or
+  Windows CI was needed or performed. Runtime source did not change.
+- Module audit findings are explicit: concrete adapter dependencies from BTCC,
+  a production import from test support, optional required collaborators,
+  broad public indexes, duplicated mutable route state, and migration dual
+  paths. These are assigned deletion/rework owners above.
+- The principal unresolved risks are the absence of an integrated v1/v2 path,
+  fail-open Work recovery, optional route durability/direct fallback, incorrect
+  v1 no-progress identity, nullable usage coercion, and historical compact
+  carrier schema expansion. All block wholesale v1 reuse; none changes current
+  default-off runtime behavior in this audit.
+- Targeted source-trace, report arithmetic/privacy, module-shape, Git, Ledger,
+  and independent Sol-high results are recorded below.
+- Source/import/caller assertions passed for Session composition, guided agent,
+  model route, Codex cumulative continuation, official/Codex final observers,
+  the sibling merge base, all three historical flags/mechanisms, and all six
+  cost-source rows.
+- Report consistency/arithmetic checks reproduced the 72.1–77.5% descriptive
+  range from the preserved medians and the immutable campaign counts. The audit
+  section passed the privacy scan for credentials, authorization headers, raw
+  prompts/tool payloads, and private user paths. `git diff --check` passed.
+- The domain shape script audited the current relevant roots: BTCC 121 files / 12
+  review findings, OpenAI 20 / 6, and tools 262 / 30. Findings were size,
+  broad-index, and generic-bucket review signals; the M1-relevant ownership and
+  public-surface issues are classified above. No source was changed to hide
+  unrelated existing shape findings.
+- Ledger index, dashboard, handoff, and roadmap renders succeeded; status was
+  fresh with 2,792 records and zero issues; `project-ledger check` passed with
+  zero issues. Work and Plan remained active and Final Benchmark remained todo.
+- The first independent ordinary non-fast Sol-high review found incomplete
+  symbol/config inventory, missing landing paired evidence, stale Plan sibling
+  wording, and an omitted assistant-text bound. The review cycle added the exact
+  consumers/classifications, all four Task 3 affected arms, corrected Plan
+  authority, and Task 6's user/assistant cap. Final Sol-high rereview returned
+  **APPROVE** with no actionable P0–P3 finding.
+- Code tests were intentionally not run: this Task changes only the report and
+  Ledger authority, and source-trace/contract checks were sufficient. No runtime
+  test, provider token, benchmark, external agent, or Windows CI was consumed.
+- The repository pre-commit hook could not start lint because this worktree has
+  no `eslint` executable (`eslint: command not found`). This is dependency drift,
+  not a passing lint result. The bounded docs commit used `--no-verify` after the
+  source/report/module/Ledger checks above and final diff validation was repeated.
 
 ## Validation
 
