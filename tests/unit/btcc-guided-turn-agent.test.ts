@@ -116,10 +116,20 @@ function toolMessageOutput(message: ModelRoundMessage | undefined): unknown {
 test("real Guided Turn enters the BTCC agent-loop through the one-round port", async () => {
   const fixture = createFixture("guided-btcc-loop-entry");
   try {
-    const requests: Array<{ messages: readonly { role: string; content: string }[] }> = [];
+    const requests: Array<{
+      messages: readonly { role: string; content: string }[];
+      requestSegmentSources: ModelRoundRequest["requestSegmentSources"];
+      attributionArmId: ModelRoundRequest["attributionArmId"];
+      cacheBoundaryEvidence: ModelRoundRequest["cacheBoundaryEvidence"];
+    }> = [];
     const modelRound: ModelRoundPort = {
       async runRound(request) {
-        requests.push({ messages: request.messages });
+        requests.push({
+          messages: request.messages,
+          requestSegmentSources: request.requestSegmentSources,
+          attributionArmId: request.attributionArmId,
+          cacheBoundaryEvidence: request.cacheBoundaryEvidence,
+        });
         return { text: "BTCC final answer", toolCalls: [] };
       },
     };
@@ -135,12 +145,24 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
     });
 
     const result = await agent.run({
-      turn: turnRecord(fixture.root, { turnId: "guided-btcc-loop-entry" }),
+      turn: turnRecord(fixture.root, {
+        turnId: "guided-btcc-loop-entry",
+        attributionArmId: "direct-cold",
+        cacheBoundaryEvidence: { expectedRevision: "expected", observedRevision: "observed" },
+      }),
       signal: new AbortController().signal,
     });
 
     expect(result.content).toBe("BTCC final answer");
     expect(requests).toHaveLength(1);
+    expect(requests[0]?.requestSegmentSources?.input?.map((source) => source.kind))
+      .toContain("current_user_request");
+    expect(requests[0]?.requestSegmentSources?.instructions?.map((source) => source.kind))
+      .toContain("stable_btcc_protocol");
+    expect(requests[0]?.cacheBoundaryEvidence).toEqual({
+      expectedRevision: "expected", observedRevision: "observed",
+    });
+    expect(requests[0]?.attributionArmId).toBe("direct-cold");
     expect(requests[0]?.messages[0]).toMatchObject({
       role: "user",
       content: expect.stringContaining("요청을 처리해 주세요"),
@@ -3345,6 +3367,10 @@ function turnRecord(
     trackingMode?: "ledger" | "local" | "none";
     projectId?: string;
     attachments?: NonNullable<TurnRecord["context"]["attachments"]>;
+    attributionArmId?: string;
+    cacheBoundaryEvidence?: NonNullable<
+      TurnRecord["context"]["providerRequestAttribution"]
+    >["cacheBoundaryEvidence"];
   } = {},
 ): TurnRecord {
   const turnId = options.turnId ?? "guided-agent-turn";
@@ -3370,6 +3396,14 @@ function turnRecord(
       mandatoryHotCacheRefs: [],
       optionalHotCacheRefs: [],
       baselineObservationScopeRefs: [`workspace:${workspacePath}`],
+      ...(options.attributionArmId || options.cacheBoundaryEvidence
+        ? { providerRequestAttribution: {
+            ...(options.attributionArmId ? { armId: options.attributionArmId } : {}),
+            ...(options.cacheBoundaryEvidence
+              ? { cacheBoundaryEvidence: options.cacheBoundaryEvidence }
+              : {}),
+          } }
+        : {}),
       executionPolicy: {
         role: "butler",
         accessMode: options.accessMode ?? "full_access",

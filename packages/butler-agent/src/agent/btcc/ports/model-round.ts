@@ -8,6 +8,10 @@ import type {
   ProviderStreamProjectionHandler,
   ReasoningEffort,
 } from "../../../integrations/providers/runtime-contracts.ts";
+import type {
+  M1CacheBoundaryEvidence,
+  M1RequestSegmentSource,
+} from "./provider-request-attribution.ts";
 
 export type ModelRoundRole = "system" | "user" | "assistant" | "tool";
 
@@ -35,6 +39,8 @@ export interface ModelRoundMessage {
   imageAttachments?: readonly ModelRoundImageAttachment[];
   /** Provider-owned protocol data. BTCC stores and returns it without interpreting it. */
   providerData?: unknown;
+  /** Observation-only source kind for the exact provider-visible content. */
+  requestSegmentKind?: M1RequestSegmentSource["kind"];
 }
 
 export interface ModelRoundTool {
@@ -56,8 +62,16 @@ export interface ModelRoundRequest {
   attachments?: readonly AttachmentRef[];
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
+  requestSegmentSources?: Partial<Record<
+    "instructions" | "input",
+    readonly M1RequestSegmentSource[]
+  >>;
   cacheScope?: string;
+  attributionArmId?: string;
+  cacheBoundaryEvidence?: M1CacheBoundaryEvidence;
   providerRetryAttempts?: number;
+  /** Zero-based physical provider attempt offset owned by the route journal. */
+  routeTransportAttemptOrdinal?: number;
   /** Opaque provider continuation returned by the preceding round. */
   continuation?: unknown;
   onProviderStreamEvent?: ProviderStreamProjectionHandler;

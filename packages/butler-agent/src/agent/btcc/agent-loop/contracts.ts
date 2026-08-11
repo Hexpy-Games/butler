@@ -17,6 +17,8 @@ import type {
   ReasoningEffort,
 } from "../../../integrations/providers/runtime-contracts.ts";
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
+import type { M1RequestSegmentSource } from
+  "../ports/provider-request-attribution.ts";
 
 export type BtccAgentLoopMessage = ModelRoundMessage;
 export type BtccAgentLoopToolDefinition = ModelRoundTool;
@@ -111,10 +113,16 @@ export interface BtccAgentLoopInput {
   instructions?: string;
   reasoningEffort?: ReasoningEffort;
   cacheScope?: string;
+  attributionArmId?: string;
+  cacheBoundaryEvidence?: import("../ports/provider-request-attribution.ts").M1CacheBoundaryEvidence;
   signal?: AbortSignal;
   attachments?: readonly AttachmentRef[];
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
+  requestSegmentSources?: Partial<Record<
+    "instructions" | "input",
+    readonly M1RequestSegmentSource[]
+  >>;
   onProviderStreamEvent?: ProviderStreamProjectionHandler;
   onProviderResponseIdentity?: (identity: {
     provider: string;

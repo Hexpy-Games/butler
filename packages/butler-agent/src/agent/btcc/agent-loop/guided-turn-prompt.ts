@@ -6,6 +6,12 @@ import type { SqliteGuidedToolJournal } from
 import { guidedPolicy } from "./guided-turn-policy.ts";
 import { projectGuidedToolContext } from
   "./guided-tool-context-projection.ts";
+import type { M1RequestSegmentSource } from "../ports/provider-request-attribution.ts";
+
+export interface GuidedTextAttribution {
+  text: string;
+  sources: readonly M1RequestSegmentSource[];
+}
 
 export function renderGuidedPrompt(
   turn: TurnRecord,
@@ -17,6 +23,19 @@ export function renderGuidedPrompt(
     effectContext?: string | null;
   },
 ): string {
+  return renderGuidedPromptAttribution(turn, input).text;
+}
+
+export function renderGuidedPromptAttribution(
+  turn: TurnRecord,
+  input: {
+    butlerData: string;
+    contextDocuments: { resolve(contextRef: string): string };
+    toolJournal: SqliteGuidedToolJournal;
+    workContext?: string | null;
+    effectContext?: string | null;
+  },
+): GuidedTextAttribution {
   const policy = guidedPolicy(turn);
   const context = renderContextDocuments(turn, input.contextDocuments);
   const attachments = renderAttachmentContext(turn.context.attachments, {
@@ -28,17 +47,29 @@ export function renderGuidedPrompt(
   });
   const priorTools = renderPriorToolFacts(input.toolJournal.list(turn.turnId));
   const workStorage = workStorageForPolicy(policy);
-  return [
-    `User request:\n${turn.originalMessage}`,
-    `Current scope:\n- role: ${policy.role}\n- workspace: ${policy.workspacePath}` +
+  const entries: Array<{ text: string; kind: M1RequestSegmentSource["kind"] }> = [
+    { text: `User request:\n${turn.originalMessage}`, kind: "current_user_request" },
+    { text: `Current scope:\n- role: ${policy.role}\n- workspace: ${policy.workspacePath}` +
       `\n- access: ${policy.accessMode}\n- work storage: ${workStorage}` +
       (policy.projectId ? `\n- project: ${policy.projectId}` : ""),
-    renderCurrentWork(input.workContext),
-    renderCurrentEffects(input.effectContext),
-    context,
-    attachments,
-    priorTools,
-  ].filter(Boolean).join("\n\n");
+      kind: policy.trackingMode === "ledger"
+        ? "project_ledger_and_work_authority"
+        : "other_typed_context" },
+    { text: renderCurrentWork(input.workContext), kind: "project_ledger_and_work_authority" },
+    { text: renderCurrentEffects(input.effectContext), kind: "phase_continuity" },
+    { text: context, kind: "memory_recall_context" },
+    { text: attachments, kind: "source_reference" },
+    { text: priorTools, kind: "older_tool_result_projection" },
+  ];
+  const sources: M1RequestSegmentSource[] = [];
+  for (const entry of entries.filter((candidate) => Boolean(candidate.text))) {
+    sources.push({
+      kind: entry.kind,
+      stability: "dynamic",
+      text: `${sources.length > 0 ? "\n\n" : ""}${entry.text}`,
+    });
+  }
+  return { text: sources.map((source) => source.text).join(""), sources };
 }
 
 export function guidedInstructions(
@@ -99,6 +130,47 @@ export function guidedInstructions(
         ]
       : []),
   ].join("\n");
+}
+
+export function guidedInstructionsAttribution(
+  policy: Pick<ButlerExecutionPolicy, "accessMode" | "trackingMode">,
+  personaAndProfile = "",
+  responseLanguage = "",
+): GuidedTextAttribution {
+  const text = guidedInstructions(policy, personaAndProfile, responseLanguage);
+  const persona = personaAndProfile.trim();
+  const roleEnd = Math.max(0, text.indexOf("\n") + 1);
+  const responseDirective = responseLanguage.trim()
+    ? `Use ${responseLanguage.trim()} for every user-facing message in this Turn.`
+    : "";
+  const responseStart = responseDirective ? text.indexOf(responseDirective, roleEnd) : -1;
+  const responseEnd = responseStart >= 0 ? responseStart + responseDirective.length : -1;
+  const personaStart = persona ? text.lastIndexOf(persona) : -1;
+  const boundaries = [responseStart, responseEnd, personaStart]
+    .filter((value) => value >= roleEnd)
+    .sort((left, right) => left - right);
+  const sources: M1RequestSegmentSource[] = [{
+    kind: "stable_safety_and_role_instructions", stability: "stable", text: text.slice(0, roleEnd),
+  }];
+  let cursor = roleEnd;
+  for (const boundary of boundaries) {
+    if (boundary <= cursor) continue;
+    const isResponse = cursor === responseStart;
+    sources.push({
+      kind: isResponse ? "accepted_corrections_and_unresolved_obligations" : "stable_btcc_protocol",
+      stability: isResponse ? "dynamic" : "stable",
+      text: text.slice(cursor, boundary),
+    });
+    cursor = boundary;
+  }
+  if (cursor < text.length) {
+    sources.push({
+      kind: cursor === personaStart ? "memory_recall_context" : "stable_btcc_protocol",
+      stability: cursor === personaStart ? "dynamic" : "stable",
+      text: text.slice(cursor),
+    });
+  }
+  return { text, sources: sources.filter((source) => source.text.length > 0) };
 }
 
 export function renderGuidedPersonaInstructions(

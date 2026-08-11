@@ -2,6 +2,8 @@ import type { StopPersistenceOutcome } from "./turn/index.ts";
 import type { RuntimeTurnEventInput } from "../events/turn-events.ts";
 import type { ToolProgressSummary } from "../tools/tool-support.ts";
 import type { ModelRouteState } from "./model-route/index.ts";
+import type { M1CacheBoundaryEvidence } from
+  "./ports/provider-request-attribution.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -25,6 +27,10 @@ export type ButlerContextInput = {
   baselineObservationScopeRefs: string[];
   executionPolicy?: ButlerExecutionPolicy;
   attachments?: ButlerAttachmentRef[];
+  providerRequestAttribution?: {
+    armId?: string;
+    cacheBoundaryEvidence?: M1CacheBoundaryEvidence;
+  };
 };
 
 export type ButlerExecutionPolicy = {

@@ -194,6 +194,7 @@ export function createModelRoutePort(input: {
                 }
               : {}),
             providerRetryAttempts: 1,
+            routeTransportAttemptOrdinal: transportAttempt - 1,
             continuation,
           });
         } catch (error) {

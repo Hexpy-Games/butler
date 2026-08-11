@@ -26,20 +26,17 @@ import {
 import { logPromptCacheStats, recordPromptCacheMetric } from "./usage.ts";
 import { resolveDynamicOpenAIModel } from "./models.ts";
 import type { OpenAIAuthOverride } from "../runtime-contracts.ts";
+import type { M1RequestSegmentKind } from
+  "../../../agent/btcc/ports/provider-request-attribution.ts";
+import {
+  buildOpenAIRequestSegmentManifests,
+  isOpenAIRequestSegmentContinuation,
+  type OpenAIRequestSegmentContinuation,
+} from "./request-segment-manifest.ts";
 import {
   extractPromptCacheStats,
   usageReportFromStats,
 } from "../shared/runtime-support.ts";
-
-interface OpenAIContinuation {
-  provider: "openai";
-  responseId: string;
-  sent: {
-    toolMessages: number;
-    userMessages: number;
-  };
-  statelessInput: Array<Record<string, unknown>>;
-}
 
 export async function runOpenAIModelRound(
   request: ModelRoundRequest,
@@ -55,7 +52,7 @@ export async function runOpenAIModelRound(
   const promptCache = resolveOpenAIPromptCacheConfig(
     request.cacheScope ?? "btcc-agent-loop",
   );
-  const previous = isOpenAIContinuation(request.continuation)
+  const previous = isOpenAIRequestSegmentContinuation(request.continuation)
     ? request.continuation
     : null;
   const firstUser = request.messages.find((message) => message.role === "user");
@@ -76,6 +73,18 @@ export async function runOpenAIModelRound(
     ? [...previous.statelessInput, ...continuationMessages!.statelessItems]
     : initialStatelessInput;
   const roundIndex = request.usageAttribution?.roundIndex ?? 0;
+  const segmentManifests = buildOpenAIRequestSegmentManifests({
+    instructions: request.instructions,
+    instructionSources: request.requestSegmentSources?.instructions,
+    officialInput: requestItems,
+    codexAppendedInput: previous
+      ? continuationMessages!.statelessItems
+      : initialStatelessInput,
+    appendedItemKinds: continuationMessages?.itemKinds,
+    promptSources: previous ? [] : request.requestSegmentSources?.input,
+    previousCodexInput: previous?.statelessInput,
+    previousCodexManifest: previous?.statelessManifest,
+  });
   beforeAttributedModelRequest({
     attribution: request.usageAttribution,
     roundIndex,
@@ -111,6 +120,11 @@ export async function runOpenAIModelRound(
     {
       attribution: request.usageAttribution,
       roundIndex,
+      butlerData: request.butlerData,
+      routeTransportAttemptOrdinal: request.routeTransportAttemptOrdinal ?? 0,
+      attributionArmId: request.attributionArmId,
+      segmentManifests,
+      cacheBoundaryEvidence: request.cacheBoundaryEvidence,
     },
     undefined,
     request.providerRetryAttempts,
@@ -159,11 +173,12 @@ export async function runOpenAIModelRound(
   const statelessInput = [...statelessRequestInput, ...functionCalls].map(
     retainTextOnlyAfterSuccessfulImageReplay,
   );
-  const nextContinuation: OpenAIContinuation = {
+  const nextContinuation: OpenAIRequestSegmentContinuation = {
     provider: "openai",
     responseId: response.id,
     sent: continuationMessages?.sent ?? { toolMessages: 0, userMessages: 1 },
     statelessInput,
+    statelessManifest: segmentManifests.continuation,
   };
   if (continuationMessages) {
     nextContinuation.sent = continuationMessages.sent;
@@ -186,26 +201,19 @@ export async function runOpenAIModelRound(
   };
 }
 
-function isOpenAIContinuation(value: unknown): value is OpenAIContinuation {
-  return Boolean(
-    value &&
-    typeof value === "object" &&
-    (value as Record<string, unknown>).provider === "openai" &&
-    typeof (value as Record<string, unknown>).responseId === "string",
-  );
-}
-
 function newOpenAIContinuationMessages(
   messages: readonly ModelRoundMessage[],
-  alreadySent: OpenAIContinuation["sent"],
+  alreadySent: OpenAIRequestSegmentContinuation["sent"],
   butlerData?: string,
 ): {
   items: Array<Record<string, unknown>>;
   statelessItems: Array<Record<string, unknown>>;
-  sent: OpenAIContinuation["sent"];
+  itemKinds: Array<M1RequestSegmentKind | undefined>;
+  sent: OpenAIRequestSegmentContinuation["sent"];
 } {
   const items: Array<Record<string, unknown>> = [];
   const statelessItems: Array<Record<string, unknown>> = [];
+  const itemKinds: Array<M1RequestSegmentKind | undefined> = [];
   let toolMessages = 0;
   let userMessages = 0;
   for (const message of messages) {
@@ -215,6 +223,7 @@ function newOpenAIContinuationMessages(
       const [item, statelessItem] = openAIToolMessageItems(message, butlerData);
       items.push(item);
       statelessItems.push(statelessItem);
+      itemKinds.push(message.requestSegmentKind ?? "latest_tool_result_delivery");
       continue;
     }
     if (message.role !== "user") continue;
@@ -226,8 +235,9 @@ function newOpenAIContinuationMessages(
     };
     items.push(item);
     statelessItems.push(item);
+    itemKinds.push(message.requestSegmentKind ?? "other_typed_context");
   }
-  return { items, statelessItems, sent: { toolMessages, userMessages } };
+  return { items, statelessItems, itemKinds, sent: { toolMessages, userMessages } };
 }
 
 function openAIToolMessageItems(
