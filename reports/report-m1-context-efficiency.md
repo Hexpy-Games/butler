@@ -6,22 +6,31 @@ Governing Spec: `SPEC-M1-CONTEXT-EFFICIENCY` revision 2
 
 ## Status
 
-**PARTIAL / FIRST CAMPAIGN PRESERVED, ATTRIBUTION REPAIR PENDING RE-CAMPAIGN.**
+**IMPLEMENTATION APPROVED / CAMPAIGNS PRESERVED, GOVERNING ACCEPTANCE NOT YET PROVEN.**
 The exact-source authenticated campaign completed all 12 fixed observations:
 `9 accepted`, `3 rejected`, `0 gated`. Direct-cold, direct-warm, and
 current-web-cold each supplied three accepted repetitions. All three
 landing-cold repetitions were honestly rejected because
 `other_typed_context` was 22.846–24.698%, above the Spec's 2% ceiling. No result
-was replaced or rerun.
+was replaced or rerun. Those are the immutable campaign file's historical
+statuses. The later Sol-high review found that its quality/safety rubric did
+not yet measure all governing Spec conditions, so the nine historical
+`accepted` labels are not final Task acceptance.
 
-The rejection exposed an observation defect, not a product-quality failure:
+The rejection exposed an attribution observation defect:
 Codex stateless continuation omitted exact manifests for provider-generated
 function-call `name` and `arguments` paths. The bounded repair now classifies
 those provider-authored action-history bytes as dynamic `phase_continuity`; an
-authenticated landing smoke subsequently passed at 0.118% other. The first
-campaign remains immutable evidence. A new phase-commit SHA and full fixed 4x3
-campaign are still required, so this Task is not complete and no later M1 v2
-Task may start.
+authenticated landing smoke subsequently measured 0.118% other. That smoke
+passed the then-implemented build/visual/basic Work checks, but did not prove
+the frozen Butler grounding or all-arms duplicate-effect, lost-correction,
+required-anchor, workspace-authority, and stall contract. The first
+campaign remains immutable evidence. The repair was phase-committed at
+`07aea5f1019764e0509e5a0de9db725fe6521c8d`, but its second fixed campaign
+stopped after `3 accepted / 0 rejected / 1 gated`: direct-warm rep 1 hit an
+Electron-managed Agent archive-extraction infrastructure timeout before any
+renderer observation. The remaining eight repetitions are unscheduled, not
+fabricated as gated. This Task is not complete and no later M1 v2 Task may start.
 
 ## Source and fixture provenance repair
 
@@ -65,9 +74,15 @@ The runner calls `runBtccR3ElectronHarness` directly. It schedules exactly
 four arms by three repetitions, sequentially, with fresh Butler data, Electron
 profile, Session, workspace, and SQLite state. Direct-warm keeps warmup and
 target in one Session with matched expected/observed cache revision. Before the
-first run it writes `manifest.json` with source SHA, fixture hashes, product
+first run it atomically creates a previously absent output root and writes
+`manifest.json` with a campaign identity, exact 40-character source SHA,
+fixture hashes, product
 path, provider and route maximum attempts fixed at 3, no retry acceptance, and
-no replacement runs. Raw evidence remains per-run; privacy-safe `campaign.json`
+no replacement runs. Every run root receives an exclusive reservation, and its
+evidence must bind to the manifest run/scenario/session, target prompt hash,
+source revision, exact run root, fresh timestamp, model, and reasoning mode;
+preflight failures cannot reuse an old success file. Raw evidence remains
+per-run; privacy-safe `campaign.json`
 contains nullable usage ranges, segment medians/ranges, retry rate/bytes,
 unarmed title/aux/tool-provider count/bytes, Work/DB/quality evidence, elapsed,
 and first-useful timing without raw content or private paths.
@@ -90,6 +105,51 @@ path, credential, and generated-content hash storage.
 Across those 12 isolated metric files there were 105 envelopes, 939 segment
 rows, and 105 usage rows. A digest-grouped audit found zero exact byte-sum
 mismatches, duplicate envelopes, or duplicate usage rows.
+
+The phase-committed second campaign used the same bounded runner and policy:
+
+```sh
+bun run benchmark:m1-v2-segment-attribution -- \
+  --output-root /tmp/butler-m1-v2-campaign-2.aPski3/output \
+  --source-data "$HOME/.butler" --repetitions 3 \
+  --source-revision 07aea5f1019764e0509e5a0de9db725fe6521c8d
+```
+
+Its stable manifest and aggregate references are
+`/tmp/butler-m1-v2-campaign-2.aPski3/output/manifest.json` and the adjacent
+`campaign.json`.
+
+It preserved three accepted direct-cold repetitions, then stopped at the first
+true infrastructure gate as required. The privacy-safe aggregate reports
+`3 accepted / 0 rejected / 1 gated`, `complete=false`, and four observations;
+the other eight scheduled observations were never run. Direct-cold provider
+bytes were 37,564 `[37,564,37,564]`, reducible share 77.215%, one round and zero
+tools each, elapsed 4,679 `[3,199,6,318]` ms, first useful 82 `[78,86]` ms, and
+other 0.876% each. Prompt tokens were 7,192 each, cache-read was `0, 0, 6,656`,
+cache-write zero, total 7,220 `[7,216,7,222]`, while output/reasoning remained
+unavailable. All three Agent attempts were eligible with zero retry bytes.
+Their unarmed overhead was auxiliary 3 / 3,017 bytes and title 3 / 1,830 bytes.
+Across the three completed run metrics there were 9 envelopes, 42 segments, and
+9 usage rows with zero byte-sum mismatches. All aggregate privacy flags remained
+false for prohibited raw/private content.
+
+Direct-warm rep 1 was recorded as `gated` with reason
+`electron_or_setup_gate`; it had zero Agent attempts, so eligibility, cache,
+quality, Work, and DB evidence are unavailable rather than zero. Its raw product
+evidence error was `Electron exited before its renderer was ready: 0`. Read-only
+diagnosis showed fresh debug/server ports and profile, a created
+`DevToolsActivePort`, no surviving prior-rep/output-root process or listener,
+and the previous Electron/executor PIDs already stopped. App-owned progress had
+passed single-instance acquisition and Electron ready, then stopped at
+`runtime_archive_extraction_starting`. The privacy-safe failure receipt recorded
+`gateway_unavailable`; the runtime receipt rolled back with
+`bundled Agent archive extraction timed out` at the fixed 60-second worker
+timeout. The three preceding extractions activated in 12–13 seconds. Immediate
+post-failure diagnosis measured the data volume at 99% utilized with 15 GiB
+available and system load at 7.45 / 9.63 / 9.65 with unrelated high-CPU
+processes. This supports a transient
+host I/O/resource gate, not a demonstrated deterministic single-instance or
+runner cleanup race. No rerun or speculative harness fix was made.
 
 ## Implemented production path
 
@@ -231,7 +291,7 @@ bun run tests/e2e/btcc-r3-electron-driver.ts \
   --access-mode full_access --keep-logs
 ```
 
-The driver exited 0. The bounded assessment accepted the smoke with 27 Agent
+The driver exited 0. The then-current bounded assessment accepted the smoke with 27 Agent
 attempts/rounds, all eligible, no retry bytes, exact total 3,410,224 provider
 bytes, and 4,023 other bytes (0.118%). Phase continuity was 707,086 bytes;
 latest result delivery 990,011; older replay 497,365; carrier overhead 367,098.
@@ -239,8 +299,10 @@ Across the Agent plus one title request there were 28 envelopes, 322 segment
 rows, and 28 usage rows, with zero byte mismatches or duplicate envelope/usage
 cardinality. Build, desktop/mobile render and
 screenshots, changed starter files, Butler grounding, 11 feature blocks, usage
-scene, CTA, responsive CSS, Work completion/reviews/validation, and SQLite
-quick-check all passed. This is post-repair smoke evidence, not a replacement
+scene, CTA, responsive CSS, basic Work completion/reviews/validation, and SQLite
+quick-check all passed. The later frozen-rubric review means this is attribution
+and product-path evidence, not final landing quality acceptance. This is
+post-repair smoke evidence, not a replacement
 for any first-campaign repetition or the required second fixed campaign.
 
 ## Privacy and rollback evidence
@@ -261,12 +323,23 @@ private paths, credentials, or unkeyed low-entropy hashes.
 
 ## Corrected baseline and hypotheses
 
+First campaign at `93ee0079`:
+
 | arm | accepted | rejected | gated | scheduled | state |
 | --- | ---: | ---: | ---: | ---: | --- |
 | direct-cold | 3 | 0 | 0 | 3 | accepted |
 | direct-warm | 3 | 0 | 0 | 3 | accepted |
 | current-web-cold | 3 | 0 | 0 | 3 | accepted |
 | landing-cold | 0 | 3 | 0 | 3 | rejected: attribution coverage defect |
+
+Second campaign at `07aea5f`:
+
+| arm | accepted | rejected | gated | scheduled | state |
+| --- | ---: | ---: | ---: | ---: | --- |
+| direct-cold | 3 | 0 | 0 | 3 | accepted |
+| direct-warm | 0 | 0 | 1 | 3 | stopped at rep 1 infrastructure gate |
+| current-web-cold | 0 | 0 | 0 | 3 | unscheduled after gate |
+| landing-cold | 0 | 0 | 0 | 3 | unscheduled after gate |
 
 Accepted-arm aggregate values are medians with `[min, max]` ranges:
 
@@ -331,8 +404,12 @@ not used to fabricate accepted medians:
 | 3 | 25 / 25 | 2,624,015 | 22.846% | 87.115% | 26 | 328,374 | 155 |
 
 All 65 landing Agent attempts were eligible with zero retry bytes and exact byte
-sums. Every landing quality, Work/review/validation, and DB quick-check rubric
-passed. The sole rejection reason was the now-diagnosed `other` ceiling. Landing
+sums. The historical runner's build, visual, basic Work/review/validation, and
+DB quick-check fields passed; it did not measure the Spec-level content grounding
+or all-arms duplicate-effect/lost-correction/required-anchor/workspace-authority
+contract. Therefore the recorded `other` ceiling was the sole reason emitted by
+that historical runner, but it is not evidence that product quality had no other
+governing gap. Landing
 prompt totals were 497,346 / 290,234 / 490,933; cache reads 186,880 / 163,840 /
 283,648; totals 512,152 / 302,497 / 504,167. Cache write was zero and provider
 output/reasoning usage remained unavailable, not zero.
@@ -375,30 +452,126 @@ comparison. The Spec is not relaxed.
   assertions. Full typecheck, BTCC shape (`4 domains / 205 files`), changed-file
   lint, and `git diff --check` passed. Full lint had zero errors; only existing
   warnings remained after the three new comma-style warnings were removed.
-- Authenticated canonical landing repair smoke: driver exit 0 and bounded
-  assessment accepted; 27/27 eligible attempts, exact byte sum, 0.118% other,
-  all landing quality/Work/DB checks passed.
-- The repository-wide `bun run check` wrapper reached its 301-second process
-  limit and terminated the still-passing test run with SIGTERM. This is recorded
-  as a timeout gate, not as a passing whole-repository check or a test failure.
-- Final independent ordinary `gpt-5.6-sol` high re-review: **APPROVE** for the
-  attribution implementation slice, with no actionable P0-P3 findings. The
-  reviewer independently passed 77 core and 30 additional related tests and
-  confirmed the stored smoke arithmetic, row cardinality, privacy scan, and
-  installation-key mode. This approval does not satisfy the missing baseline.
-- Project Ledger index plus dashboard, handoff, and roadmap renders completed;
-  final status was non-stale and `check --verbose` passed with zero issues.
+- Authenticated canonical landing repair smoke: driver exit 0; 27/27 eligible
+  attempts, exact byte sum, and 0.118% other. Its historical assessment passed
+  the then-current build/visual/basic Work/DB checks, not the later frozen
+  grounding and all-arms safety rubric.
+- Phase-committed second campaign at exact `07aea5f`: 3 direct-cold accepted,
+  then one direct-warm infrastructure-gated before renderer/Agent attempt; eight
+  later observations remained unscheduled. No replacement run was attempted.
+- Final post-gate validation repeated the 131 related tests (765 assertions),
+  full typecheck, full lint (zero errors / 19 existing warnings), BTCC shape,
+  authoritative JSONL provenance verifier, and `git diff --check`; all passed.
+- The final repository-wide `bun run check` completed without timeout in
+  282.90 seconds: 2,544 tests passed and one existing CLI-reference registry
+  drift test failed (`butler-cli-docs.test.ts`). This Task changes neither the
+  CLI registry nor its reference document, so the failure remains a disclosed
+  whole-repository gate rather than being treated as a pass.
+- A prior independent ordinary `gpt-5.6-sol` high review approved the narrower
+  attribution implementation slice after passing 77 core and 30 additional
+  related tests. The full-diff review then found stale evidence reuse risk, an
+  incomplete governing quality/safety rubric, and positional unarmed-overhead
+  accounting. The review-fix cycles below closed those findings and their
+  follow-up false-accept cases. The final independent Sol-high rereview reports
+  no actionable P0-P3 findings and **APPROVE** for the implementation; Task
+  acceptance remains separately **NOT APPROVED** because the canonical 4x3
+  campaign is incomplete.
+- A historical Project Ledger render/check passed, but it predates the repaired
+  campaigns and current review. The governing Work and Task remain `in_progress`;
+  the old attempt is stale/failed and is not current acceptance evidence. A new
+  recovery Attempt was started for this continuation and failed with the
+  preserved campaign blocker during final Ledger closeout.
+
+Current review-fix validation (no campaign run):
+
+- baseline runner/quality/attribution regressions: 30/30 passed (133 assertions), including
+  existing-output refusal, manifest-bound stale-success rejection, frozen
+  landing/safety unavailable rejection, DB-backed correction/effect/anchor
+  counts, and Agent/tool-provider interleaving;
+- full typecheck passed;
+- full lint passed with zero errors and 19 unrelated existing warnings;
+- BTCC source shape passed (`4 domains / 205 files`);
+- module boundary/provider architecture audit passed 18/18 tests (3,594
+  assertions);
+- `git diff --check` passed.
+
+A second Sol-high review kept the verdict at **CHANGES_REQUIRED** because the
+first fix still used global keyword co-occurrence, inferred correction/anchor
+absence, and correlated physical rows by bytes/time. The follow-up fix replaces
+those with five versioned approved Butler capability claim IDs whose required
+elements must occur in one semantic page element and whose negation or known
+misrepresentation fails. Accepted Work corrections are compared in-process
+against their bound final plan/result/effect receipt carrier, and initial
+governing-reference identities are compared with the final plan; only bounded
+missing counts enter `campaign.json`, never correction, plan, result, or receipt
+content. OpenAI official/Codex fetches now carry the installation-keyed
+`attemptDigest` to the product observation proxy, which records it and strips
+the private correlation header before upstream forwarding. Physical overhead
+joins require that exact digest plus ordinal, serialized bytes, and terminal
+time; ambiguous or missing identity fails closed. Equal-byte, equal-time
+interleaving is covered. These changes were independently rereviewed. No
+campaign was executed during any review-fix phase.
+The final follow-up targeted gate passed 45/45 tests (201 assertions), including
+observer-off header absence, observer-on retry header/envelope identity, proxy
+upstream stripping, equal-byte/equal-time physical joins, approved-claim
+negation/misrepresentation, and accepted-correction/governing-anchor omission.
+Full typecheck passed; full lint again had zero errors and 19 unrelated existing
+warnings; BTCC shape remained `4 domains / 205 files`; the module/provider audit
+passed 18/18 tests (3,594 assertions); and `git diff --check` passed.
+
+The subsequent final rereview reproduced two remaining quality false-accepts,
+so the verdict remains **CHANGES_REQUIRED** pending another review. An accepted
+plan correction now requires `bound_plan_revision_id` to equal the actual final
+plan revision ID exactly; nonexistent or mismatched bindings fail even when the
+final plan happens to contain the same bounded correction text. English scoped
+negation and misrepresentation are rejected alongside Korean forms, and claim
+elements split across nested semantic elements cannot satisfy one approved
+claim. Focused regressions cover mismatched plan identity, English durable-Work
+negation, unlimited-memory misrepresentation, and nested-section co-occurrence.
+No campaign was run for this correction.
+
+The next rereview found two further identity/boundary false-accepts, so the
+verdict remains **CHANGES_REQUIRED**. Result-review corrections now require the
+bound result sequence to equal the actual final result sequence. Completion
+corrections additionally require exact final plan/result identities, the actual
+latest result-review ID, a structurally equal final checkpoint action snapshot,
+and valid applied-effect receipt ID/identity pairs before preservation is
+considered. Bogus sequence `999` and bogus completion bindings fail even when
+carrier content coincidentally matches. The production DOM extractor now admits
+only explicit claim cards or leaf semantic elements; a parent section can no
+longer combine split descendant paragraphs into a passing claim. English
+automatic-completion-without-review, same-provider routing, and guaranteed
+`100%` recovery claims are explicitly rejected. No campaign or commit was
+performed for this correction.
+
+The final independent ordinary non-fast `gpt-5.6-sol` high rereview found no
+actionable P0-P3 findings. It independently confirmed the fresh-only runner,
+manifest/source/run identity, exact digest/ordinal/bytes/time join, observer-off
+header absence, observer-on proxy capture and upstream stripping, versioned
+capability claims, production leaf/card DOM boundaries, and exact final
+plan/result/review/action/effect-receipt preservation checks. Its implementation
+verdict is **APPROVE**; its Task acceptance verdict is **NOT APPROVED**. The
+final targeted gate is 45/45 tests with 201 assertions, with typecheck, lint,
+BTCC shape, module audit, and `git diff --check` passing.
+
+Final Project Ledger closeout kept the governing Work and Task `in_progress`,
+failed `A-M1-V2-SEGMENT-ATTRIBUTION-RECOVERY-20260811` with the preserved
+campaign blocker, refreshed index/dashboard/handoff/roadmap, and completed
+status/check with no stale views and zero issues. PR #146 remains open and
+draft; its rewritten provenance contains only the five Task-scope commits on
+`origin/main`. The automatically triggered Windows package workflow was
+cancelled in accordance with the release-tag-only policy.
 
 ## Remaining hard blockers
 
-1. Phase-commit the exact-path phase-continuity repair, then execute a second
-   fixed 4x3 sequential isolated campaign at that exact SHA. Preserve the first
-   9/3/0 campaign and every second-campaign status without replacement.
-2. Require three accepted landing repetitions and recompute the all-arm
-   medians/ranges, retry/cache strata, completed rounds, and reducible shares.
-3. Complete independent review and the parent whole-task review on the repaired
-   source plus accepted all-arm evidence. The earlier implementation-only
-   Sol-high approval predates this bounded repair.
+1. Resolve or explicitly authorize a new observation window after the external
+   archive-extraction resource gate. The preserved second campaign is 3/0/1
+   with eight unscheduled; it cannot be called a completed 4x3 campaign.
+2. Obtain three accepted repetitions for direct-warm, current-web-cold, and
+   landing-cold on one exact repaired source under controlled host resources,
+   without replacing either preserved campaign's observations.
+3. Recompute all-arm medians/ranges, retry/cache strata, completed rounds, and
+   reducible shares, then complete independent and parent whole-task review.
 
 Until those gates close, `T-M1-V2-SEGMENT-ATTRIBUTION`, the Work, and the Plan
 remain open. No default-on or subsequent M1 implementation is authorized.

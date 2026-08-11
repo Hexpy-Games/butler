@@ -12,6 +12,7 @@ import {
 } from "../shared/provider-round-guard.ts";
 import {
   observeM1ProviderAttempt,
+  M1_PHYSICAL_ATTEMPT_HEADER,
   finalizeM1ProviderAttempt,
   recordM1ResponseUsage,
 } from "../shared/m1-segment-attribution.ts";
@@ -165,6 +166,9 @@ export async function createOpenAIResponseOnce(
       headers: {
         Authorization: auth.authorization,
         "Content-Type": "application/json",
+        ...(observedRequest.observation
+          ? { [M1_PHYSICAL_ATTEMPT_HEADER]: observedRequest.observation.envelope.attemptDigest }
+          : {}),
       },
       body: observedRequest.serializedRequest,
       signal,

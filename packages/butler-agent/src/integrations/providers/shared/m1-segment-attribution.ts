@@ -26,6 +26,8 @@ import type {
   M1SegmentStability,
 } from "../../../agent/btcc/ports/provider-request-attribution.ts";
 
+export const M1_PHYSICAL_ATTEMPT_HEADER = "x-butler-m1-physical-attempt";
+
 const FLAG_NAME = "BUTLER_M1_V2_SEGMENT_ATTRIBUTION";
 const TRUE_VALUES = new Set(["1", "true", "on", "yes"]);
 const INSTALLATION_KEY_FILE = ".m1-v2-attribution.key";

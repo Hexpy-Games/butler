@@ -13,6 +13,8 @@ import { loadCanonicalM1V2Fixtures } from
   "../support/m1-v2-baseline/fixtures.ts";
 import { runM1V2BaselineCampaign } from
   "../support/m1-v2-baseline/runner.ts";
+import { summarizePhysicalRequests } from
+  "../support/m1-v2-baseline/evidence-summary.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -91,6 +93,9 @@ describe("M1 v2 canonical baseline campaign", () => {
         pagePreviewToolCalls: 0,
         buildCommandToolCalls: 0,
         fileMutationToolCalls: 0,
+        duplicateAppliedEffects: 0,
+        unresolvedCorrections: 0,
+        lostRequiredAnchors: 0,
       },
     });
     expect(result.status).toBe("accepted");
@@ -145,6 +150,9 @@ describe("M1 v2 canonical baseline campaign", () => {
         pagePreviewToolCalls: 0,
         buildCommandToolCalls: 0,
         fileMutationToolCalls: 0,
+        duplicateAppliedEffects: 0,
+        unresolvedCorrections: 0,
+        lostRequiredAnchors: 0,
       },
     });
     expect(result.status).toBe("rejected");
@@ -158,9 +166,36 @@ describe("M1 v2 canonical baseline campaign", () => {
     });
   });
 
+  test("joins interleaved Agent and tool-provider attempts by digest, ordinal, bytes, and terminal time", () => {
+    const requests = [
+      physicalRequest(1, "title", 20, 120, "title-digest"),
+      physicalRequest(2, "agent", 100, 130, "agent-digest"),
+      physicalRequest(3, "auxiliary", 30, 140, "aux-digest"),
+      physicalRequest(4, "tool_provider", 100, 130, "web-agent-digest"),
+      physicalRequest(5, "tool_provider", 40, 160, "tool-aux-digest"),
+    ];
+    const envelopes = [
+      envelopeMetric("title-digest", null, 20, 120),
+      envelopeMetric("agent-digest", "direct-cold", 100, 130),
+      envelopeMetric("aux-digest", null, 30, 140),
+      envelopeMetric("web-agent-digest", "direct-cold", 100, 130),
+      envelopeMetric("tool-aux-digest", null, 40, 160),
+    ];
+    expect(summarizePhysicalRequests(requests, envelopes, "direct-cold")).toEqual({
+      auxiliary: { attempts: 1, providerSendBytes: 30 },
+      title: { attempts: 1, providerSendBytes: 20 },
+      toolProvider: { attempts: 1, providerSendBytes: 40 },
+      unmatchedEnvelopeDigests: [],
+      unmatchedRequestOrdinals: [],
+      invalidRequestIdentityCount: 0,
+      duplicateEnvelopeDigests: [],
+    });
+  });
+
   test("runs four by three sequential fresh roots and preserves every status", async () => {
-    const outputRoot = mkdtempSync(join(tmpdir(), "m1-v2-campaign-test-"));
-    roots.push(outputRoot);
+    const parentRoot = mkdtempSync(join(tmpdir(), "m1-v2-campaign-test-"));
+    roots.push(parentRoot);
+    const outputRoot = join(parentRoot, "output");
     let active = 0;
     let peak = 0;
     const seenRoots: string[] = [];
@@ -169,6 +204,7 @@ describe("M1 v2 canonical baseline campaign", () => {
       repetitions: 3,
       repoRoot: process.cwd(),
       sourceData: "/source-data",
+      sourceRevision: "a".repeat(40),
     }, {
       runHarness: async (scenario, options) => {
         active += 1;
@@ -176,7 +212,13 @@ describe("M1 v2 canonical baseline campaign", () => {
         seenRoots.push(options.runRoot!);
         await Promise.resolve();
         active -= 1;
-        return directEvidence("not persisted", scenario.steps.at(-1)!.id, options.runRoot!);
+        return directEvidence(
+          "not persisted",
+          scenario.steps.at(-1)!.id,
+          options.runRoot!,
+          scenario.id,
+          scenario.steps.at(-1)!.prompt,
+        );
       },
       readMetrics: () => attemptMetrics({
         armId: "direct-cold",
@@ -212,6 +254,18 @@ describe("M1 v2 canonical baseline campaign", () => {
         expectedObservedBoundaryMustMatch: true,
       },
       observerOnly: true,
+      acceptanceRubric: {
+        version: "spec-m1-context-efficiency-r2-v1",
+        landingGrounding: [
+          "butler.durable_project_work.v1",
+          "butler.memory_context.v1",
+          "butler.tools_workspace_authority.v1",
+          "butler.provider_routing.v1",
+          "butler.recovery.v1",
+          "generic_copy_absent",
+        ],
+        unavailableFails: true,
+      },
     });
   });
 });
@@ -224,12 +278,29 @@ function directEvidence(
   finalText: string,
   stepId = "direct-cold",
   runRoot = "/run",
+  scenarioId = "scenario",
+  prompt = "prompt",
 ): Record<string, unknown> {
   return {
     ok: true,
-    run: { dataRoot: `${runRoot}/data`, runRoot, workspaceRoot: `${runRoot}/workspace` },
+    generatedAt: new Date().toISOString(),
+    run: {
+      dataRoot: `${runRoot}/data`,
+      runRoot,
+      workspaceRoot: `${runRoot}/workspace`,
+      runId: `${scenarioId}-${Date.now()}-test`,
+      model: "openai/gpt-5.6-sol",
+      reasoningEffort: "medium",
+    },
+    isolation: {
+      bindingWorkspace: `${runRoot}/workspace`,
+      workspaceInsideRunRoot: true,
+      sourceDataIsRunData: false,
+    },
+    session: { id: scenarioId },
     observations: [{
       stepId,
+      promptSha256: sha256(prompt),
       turnId: `turn-${stepId}`,
       terminalState: "delivered",
       finalText,
@@ -249,27 +320,42 @@ function directEvidence(
     }],
     providerRequests: [{
       ordinal: 1,
+      attemptDigest: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       requestKind: "agent",
       requestStartedAtMs: 130,
       firstContentBearingDeltaAtMs: 10,
       termination: "completed",
       status: 200,
       serializedRequestBytes: 100,
+      completedAtMs: 130,
+      terminatedAtMs: 130,
     }, {
+      ordinal: 2,
+      attemptDigest: "UNARMED0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       requestKind: "title",
       requestStartedAtMs: 140,
       firstContentBearingDeltaAtMs: 5,
       serializedRequestBytes: 20,
+      completedAtMs: 140,
+      terminatedAtMs: 140,
     }, {
+      ordinal: 3,
+      attemptDigest: "UNARMED1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       requestKind: "auxiliary",
       requestStartedAtMs: 150,
       firstContentBearingDeltaAtMs: 5,
       serializedRequestBytes: 30,
+      completedAtMs: 150,
+      terminatedAtMs: 150,
     }, {
+      ordinal: 4,
+      attemptDigest: "UNARMED2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       requestKind: "tool_provider",
       requestStartedAtMs: 160,
       firstContentBearingDeltaAtMs: 5,
       serializedRequestBytes: 40,
+      completedAtMs: 160,
+      terminatedAtMs: 160,
     }],
   };
 }
@@ -311,7 +397,16 @@ function attemptMetrics(input: {
     reasoningTokens: null,
     totalTokens: input.usage ? 90 : null,
   });
-  return [envelope, ...segments, usage];
+  const unarmed = [[20, 40], [30, 50], [40, 60]].map(([bytes, offset], index) =>
+    metric(input.submittedAtMs + offset, "m1_v2_request_envelope", {
+      attemptDigest: `UNARMED${index}AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`,
+      armId: null,
+      providerSendBytes: bytes,
+      eligibility: "eligible",
+      retryOrdinal: 0,
+      roundIndex: 0,
+    }));
+  return [envelope, ...segments, usage, ...unarmed];
 }
 
 function metric(
@@ -328,4 +423,35 @@ function metric(
     dimensions,
     rawTextStored: false,
   };
+}
+
+function physicalRequest(
+  ordinal: number,
+  requestKind: string,
+  serializedRequestBytes: number,
+  terminalAtMs: number,
+  attemptDigest = `${requestKind}-${ordinal}`,
+): Record<string, unknown> {
+  return {
+    ordinal,
+    attemptDigest,
+    requestKind,
+    requestStartedAtMs: terminalAtMs - 10,
+    completedAtMs: terminalAtMs,
+    terminatedAtMs: terminalAtMs,
+    serializedRequestBytes,
+  };
+}
+
+function envelopeMetric(
+  attemptDigest: string,
+  armId: string | null,
+  providerSendBytes: number,
+  ts: number,
+): OperationalMetricEvent {
+  return metric(ts, "m1_v2_request_envelope", {
+    attemptDigest,
+    armId,
+    providerSendBytes,
+  });
 }

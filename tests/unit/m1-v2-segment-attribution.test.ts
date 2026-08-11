@@ -54,6 +54,32 @@ describe("M1 v2 provider-send segment attribution", () => {
     expect(observed.observation).toBeNull();
   });
 
+  test("does not emit a physical-attempt header when the observer is disabled", async () => {
+    const originalFetch = globalThis.fetch;
+    const previousFlag = process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION;
+    delete process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION;
+    let attemptHeader: string | null = "not-called";
+    globalThis.fetch = (async (
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      attemptHeader = new Headers(init?.headers).get("x-butler-m1-physical-attempt");
+      return new Response(JSON.stringify({ id: "response-id", output: [] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    try {
+      await createOpenAIResponse(
+        { model: "gpt-5.4-mini", input: "hello" },
+        undefined,
+        { mode: "api_key", authorization: "Bearer test" },
+      );
+      expect(attemptHeader).toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION;
+      else process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION = previousFlag;
+    }
+  });
+
   test("partitions every final UTF-8 byte exactly once without raw content", () => {
     const butlerData = mkdtempSync(join(tmpdir(), "butler-m1-v2-test-"));
     const body = {
@@ -275,9 +301,16 @@ describe("M1 v2 provider-send segment attribution", () => {
     const previousFlag = process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION;
     const previousData = process.env.BUTLER_DATA;
     let calls = 0;
+    const physicalAttemptIds: string[] = [];
     process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION = "on";
     process.env.BUTLER_DATA = butlerData;
-    globalThis.fetch = (async () => {
+    globalThis.fetch = (async (
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      physicalAttemptIds.push(new Headers(init?.headers).get(
+        "x-butler-m1-physical-attempt",
+      ) ?? "");
       calls += 1;
       if (calls === 1) {
         return new Response(JSON.stringify({ error: { message: "retry" } }), { status: 500 });
@@ -310,6 +343,8 @@ describe("M1 v2 provider-send segment attribution", () => {
       expect(envelopes.map((event) => event.dimensions.eligibility))
         .toEqual(["rejected", "retry_contaminated"]);
       expect(new Set(envelopes.map((event) => event.dimensions.attemptDigest)).size).toBe(2);
+      expect(physicalAttemptIds).toEqual(envelopes.map((event) =>
+        event.dimensions.attemptDigest));
       expect(usages).toHaveLength(1);
       expect(usages[0]?.dimensions.attemptDigest)
         .toBe(envelopes[1]?.dimensions.attemptDigest);

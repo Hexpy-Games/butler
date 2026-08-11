@@ -29,6 +29,8 @@ const HOP_BY_HOP_HEADERS = new Set([
   "transfer-encoding",
   "upgrade",
 ]);
+const M1_PHYSICAL_ATTEMPT_HEADER = "x-butler-m1-physical-attempt";
+const M1_ATTEMPT_DIGEST = /^[A-Za-z0-9_-]{43}$/u;
 
 export type ProviderRequestKind =
   | "agent"
@@ -42,6 +44,7 @@ export type ProviderRequestTermination =
 
 export interface ProviderRequestObservation {
   ordinal: number;
+  attemptDigest: string | null;
   requestKind: ProviderRequestKind;
   requestedModel: string | null;
   requestStartedAtMs: number;
@@ -132,6 +135,7 @@ function safeObservation(
 ): ProviderRequestObservation {
   return {
     ordinal: observation.ordinal,
+    attemptDigest: observation.attemptDigest,
     requestKind: observation.requestKind,
     requestedModel: observation.requestedModel,
     requestStartedAtMs: observation.requestStartedAtMs,
@@ -156,7 +160,8 @@ function forwardedRequestHeaders(
 ): IncomingHttpHeaders {
   const forwarded: IncomingHttpHeaders = {};
   for (const [name, value] of Object.entries(headers)) {
-    if (HOP_BY_HOP_HEADERS.has(name.toLowerCase()) || value === undefined) {
+    if (HOP_BY_HOP_HEADERS.has(name.toLowerCase()) ||
+      name.toLowerCase() === M1_PHYSICAL_ATTEMPT_HEADER || value === undefined) {
       continue;
     }
     forwarded[name] = value;
@@ -607,6 +612,12 @@ async function forwardRequest(input: {
     isClosing,
   } = input;
   const body = await readRequestBody(request);
+  const attemptHeader = request.headers[M1_PHYSICAL_ATTEMPT_HEADER];
+  const attemptDigest = Array.isArray(attemptHeader) ? attemptHeader[0] : attemptHeader;
+  observation.attemptDigest = typeof attemptDigest === "string" &&
+      M1_ATTEMPT_DIGEST.test(attemptDigest)
+    ? attemptDigest
+    : null;
   observation.serializedRequestBytes = body.byteLength;
   observation.requestKind = providerRequestKind(body);
   observation.requestedModel = requestedModel(body);
@@ -789,6 +800,7 @@ export async function startProviderObservationProxy(
     }
     const observation: MutableProviderRequestObservation = {
       ordinal: nextOrdinal,
+      attemptDigest: null,
       requestKind: "auxiliary",
       requestedModel: null,
       requestStartedAtMs: now(),
