@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { join, relative } from "node:path";
 import { runBtccR3ElectronHarness, type ElectronScenario } from "../../e2e/btcc-r3-electron-harness.ts";
 import type { AdapterRunInput, AdapterRunResult, AgentAdapter, PreflightResult } from "./contracts.ts";
@@ -22,6 +22,16 @@ import {
   withButlerM1V2Environment,
 } from "./butler-m1-observation.ts";
 import { butlerM1V2InfrastructureGate } from "./butler-infrastructure-gate.ts";
+import {
+  PreparedButlerResourceError,
+  type PreparedButlerResourceReference,
+  withPreparedButlerResource,
+} from "./prepared-butler-resource.ts";
+import {
+  electronReasoning,
+  promptCacheKeyPrefixForPair,
+} from "./electron-runner-config.ts";
+export { promptCacheKeyPrefixForPair } from "./electron-runner-config.ts";
 
 export type ButlerBenchmarkRunner = (input: AdapterRunInput) => Promise<Record<string, unknown>>;
 
@@ -66,6 +76,9 @@ export function createButlerAdapter(
       try {
         evidence = await runner(input);
       } catch (error) {
+        if (error instanceof PreparedButlerResourceError) {
+          return gatedAdapterResult("measurement_unavailable", error.code, adapterVersion);
+        }
         const recoveredEvidence = readButlerHarnessEvidence(input.arm.evidenceRoot);
         if (!recoveredEvidence && input.fixture.m1V2) {
           return gatedAdapterResult("measurement_unavailable", "Butler M1 product-path evidence was unavailable after harness failure.", adapterVersion);
@@ -99,7 +112,7 @@ export function createButlerAdapter(
         if (!adapterResult) {
           copyGeneratedArtifacts(evidence, input);
           adapterResult = { ...parseButlerEvidence(evidence, startedAtMs, Date.now(), input), adapterVersion };
-          if (input.fixture.m1V2) {
+          if (input.fixture.m1V2 && evidence.kind !== "launch_smoke") {
             adapterResult.m1V2Evidence = await collectButlerM1V2Evidence({
               benchmark: input, evidence, attemptStartedAtMs: startedAtMs,
             });
@@ -120,51 +133,57 @@ export function createButlerAdapter(
   };
 }
 
-export function createElectronButlerRunner(): ButlerBenchmarkRunner {
-  return async (input): Promise<Record<string, unknown>> => {
-    const scenario: ElectronScenario = input.fixture.m1V2
-      ? structuredClone(input.fixture.m1V2.scenario)
-      : {
-      schema: "butler.btcc-r3-electron-scenario.v1",
-      id: `agent-benchmark-${input.arm.cachePairId}`,
-      model: input.arm.effectiveConfig.model ?? undefined,
-      reasoningEffort: toReasoning(input.arm.effectiveConfig.reasoning),
-      accessMode: "full_access",
-      session: {
-        id: randomUUID(),
-        kind: input.fixture.id === "butler_landing_page" ? "project" : "chat",
-        projectDisplayName: input.fixture.id === "butler_landing_page" ? "Butler benchmark landing page" : undefined,
-        title: `Agent benchmark ${input.fixture.id}`,
-      },
-      fixtures: input.fixture.id === "butler_landing_page"
-        ? readRepositoryEvidenceFiles(input.sourceEvidenceRoot)
-        : [],
-      steps: input.fixture.prompts.map((prompt, index) => ({
-        id: `turn-${index + 1}`,
-        prompt: `${prompt}\n\n${input.runtimeInstructions}`,
-        timeoutMs: input.arm.timeoutMs,
-        reloadAfter: index === input.fixture.prompts.length - 1,
-        expect: { terminalState: "delivered" },
-      })),
-    };
-    scenario.id = `agent-benchmark-${input.arm.key.replaceAll(":", "-")}`;
-    if (scenario.session) scenario.session.id = scenario.id;
-    return withButlerM1V2Environment(input, () => runBtccR3ElectronHarness(scenario, {
-      repoRoot: input.arm.sourceRoot,
-      runRoot: input.arm.evidenceRoot,
-      model: input.arm.effectiveConfig.model ?? undefined,
-      reasoningEffort: toReasoning(input.arm.effectiveConfig.reasoning),
-      accessMode: "full_access",
-      keepLogs: true,
-      promptCacheKeyPrefix: promptCacheKeyPrefixForPair(input.arm.cachePairId),
-    }));
-  };
-}
-
-/** Stable provider-cache namespace shared by the cold/warm arms in one pair. */
-export function promptCacheKeyPrefixForPair(cachePairId: string): string {
-  const digest = createHash("sha256").update(cachePairId).digest("hex").slice(0, 24);
-  return `agent-benchmark-${digest}`;
+export function createElectronButlerRunner(
+  preparedResource?: PreparedButlerResourceReference,
+  options: { rendererStartSmoke?: boolean } = {},
+): ButlerBenchmarkRunner {
+  return (input): Promise<Record<string, unknown>> => withPreparedButlerResource({
+      reference: preparedResource,
+      sourceRoot: input.arm.sourceRoot,
+      sourceRevision: input.arm.sourceRevision,
+    }, async (preparedResourceOptions) => {
+      const scenario: ElectronScenario = input.fixture.m1V2
+        ? structuredClone(input.fixture.m1V2.scenario)
+        : {
+            schema: "butler.btcc-r3-electron-scenario.v1",
+            id: `agent-benchmark-${input.arm.cachePairId}`,
+            model: input.arm.effectiveConfig.model ?? undefined,
+            reasoningEffort: electronReasoning(input.arm.effectiveConfig.reasoning),
+            accessMode: "full_access",
+            session: {
+              id: randomUUID(),
+              kind: input.fixture.id === "butler_landing_page" ? "project" : "chat",
+              projectDisplayName: input.fixture.id === "butler_landing_page" ? "Butler benchmark landing page" : undefined,
+              title: `Agent benchmark ${input.fixture.id}`,
+            },
+            fixtures: input.fixture.id === "butler_landing_page"
+              ? readRepositoryEvidenceFiles(input.sourceEvidenceRoot)
+              : [],
+            steps: input.fixture.prompts.map((prompt, index) => ({
+              id: `turn-${index + 1}`,
+              prompt: `${prompt}\n\n${input.runtimeInstructions}`,
+              timeoutMs: input.arm.timeoutMs,
+              reloadAfter: index === input.fixture.prompts.length - 1,
+              expect: { terminalState: "delivered" },
+            })),
+          };
+      scenario.id = `agent-benchmark-${input.arm.key.replaceAll(":", "-")}`;
+      if (scenario.session) scenario.session.id = scenario.id;
+      if (options.rendererStartSmoke === true) {
+        scenario.providerFixture = { responses: [] };
+      }
+      return withButlerM1V2Environment(input, () => runBtccR3ElectronHarness(scenario, {
+        repoRoot: input.arm.sourceRoot,
+        runRoot: input.arm.evidenceRoot,
+        model: input.arm.effectiveConfig.model ?? undefined,
+        reasoningEffort: electronReasoning(input.arm.effectiveConfig.reasoning),
+        accessMode: "full_access",
+        keepLogs: true,
+        smoke: options.rendererStartSmoke === true,
+        ...preparedResourceOptions,
+        promptCacheKeyPrefix: promptCacheKeyPrefixForPair(input.arm.cachePairId),
+      }));
+    });
 }
 
 function parseButlerEvidence(
@@ -253,43 +272,29 @@ function parseButlerEvidence(
       : [],
   };
 }
-
 function syntheticTarget(model: string): BenchmarkTarget {
   return {
-    revision: "r3",
-    worktreePath: "<benchmark-source>",
+    revision: "r3", worktreePath: "<benchmark-source>",
     commit: "549463fbe074fc25042f9302cd330699948dab50",
     buildId: "agent-benchmark",
     appBaseUrl: "http://127.0.0.1",
     electronDebugPort: 0,
-    dataRoot: "<benchmark-data>",
-    electronUserData: "<benchmark-profile>",
+    dataRoot: "<benchmark-data>", electronUserData: "<benchmark-profile>",
     workspaceRoot: "<benchmark-workspace>",
-    model,
-    reasoningEffort: "medium",
-    permissionMode: "full_access",
+    model, reasoningEffort: "medium", permissionMode: "full_access",
     fixtureHash: "agent-benchmark",
   };
 }
-
 function normalizeObservedModel(observed: string | null, requested: string | null): string | null {
   if (!observed) return null;
   if (requested && (observed === requested || requested.endsWith(`/${observed}`))) return requested;
   return observed;
 }
-
 function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
-}
-
-function toReasoning(value: string | null): "high" | "low" | "max" | "medium" | "none" | "xhigh" | undefined {
-  return value === "high" || value === "low" || value === "max" || value === "medium" || value === "none" || value === "xhigh"
-    ? value
-    : undefined;
 }

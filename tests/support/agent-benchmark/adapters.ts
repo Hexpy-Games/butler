@@ -6,6 +6,7 @@ import {
   type ButlerBenchmarkRunner,
 } from "./butler-adapter.ts";
 import { ExternalCliAdapter } from "./external-adapter.ts";
+import type { PreparedButlerResourceReference } from "./prepared-butler-resource.ts";
 
 export type { ButlerBenchmarkRunner } from "./butler-adapter.ts";
 export { createButlerAdapter, createElectronButlerRunner } from "./butler-adapter.ts";
@@ -32,10 +33,21 @@ export function createAgentAdapters(input: DefaultAdapterInput): AgentAdapterSet
   };
 }
 
-export function createProductionAgentAdapters(sourceRoot: string): AgentAdapterSet {
+export interface ProductionAgentAdapterOptions {
+  preparedButlerResource?: PreparedButlerResourceReference;
+  rendererStartSmoke?: boolean;
+}
+
+export function createProductionAgentAdapters(
+  sourceRoot: string,
+  options: ProductionAgentAdapterOptions = {},
+): AgentAdapterSet {
   return createAgentAdapters({
     sourceRoot,
     commandExecutor: createProcessExecutor(),
-    butlerRunner: createElectronButlerRunner(),
+    butlerRunner: createElectronButlerRunner(
+      options.preparedButlerResource,
+      { rendererStartSmoke: options.rendererStartSmoke === true },
+    ),
   });
 }

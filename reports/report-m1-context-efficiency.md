@@ -273,3 +273,73 @@ Validation evidence:
 No provider campaign, final 4x3, Hermes/OpenCode run, product optimization,
 merge, or default-on change was performed. The preserved failures remain
 unavailable measurements and were not cleaned, renamed, or promoted.
+
+## Prepared-resource public consumer wiring correction
+
+Task: `T-M1-V2-BENCHMARK-PREPARED-RESOURCE-CONSUMER-WIRING-20260812`
+
+The canonical benchmark composition now accepts one explicit typed prepared
+Butler resource reference and carries it through the existing single path:
+CLI pin, path-free plan identity, `createProductionAgentAdapters`,
+`createElectronButlerRunner`, and `runBtccR3ElectronHarness`. If the reference
+is absent, the existing packaging path and 8.5 GiB preflight remain canonical.
+If it is present, the harness verifies and uses only that resource with the
+4.5 GiB prepared-resource preflight; any missing or unverifiable identity fails
+closed as `measurement_unavailable` without packaging fallback or product
+launch.
+
+The preregistered public identity contains the build revision, exact packaging
+input compatibility digest, producer manifest and dependency-closure digests,
+mode-aware full resource digest and byte count, and archive digest and byte
+count. The runtime-only directory is not included in the plan, evidence
+diagnostic, observation, or this report. Verification requires the current arm
+checkout revision, current packaging-input digest, producer-owned full release
+manifest and dependency closure, current host artifact/launcher platform, and
+the archive and complete resource identity. It rejects symlinks, special file
+types, permission-mode changes, closure or manifest forgery, and mutation
+during each harness call. Cross-revision reuse is allowed only when the exact
+packaging-input digest is unchanged; any source-affecting change requires a new
+build and pin.
+
+The existing artifact format has no producer-owned cryptographic Git-revision
+receipt, so `sourceRevision` remains an explicit preregistered build-provenance
+claim rather than an invented receipt. The current checkout revision,
+packaging inputs, producer manifest and closure, archive, and full resource are
+independently and cryptographically verified. The accepted prepared artifact
+identity is:
+
+- build revision `c46aae1af1b78a6f81ea40c3099edde0ba35ebd5`
+- source compatibility
+  `5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162`
+- manifest `a67130bb07fdf85102e2f0ceb422e6dd4fd6d1f9797207caa594cc63dedd1b0b`
+- dependency closure
+  `77710d83e4e6216381e9fa08c958cb562abb7ad64037479ca1bd3d1e6b082102`
+- resource: 274,983,193 bytes,
+  `34e8a634cc086813ccc33ab71d5f1c9fa6ceff550211ca03f3b0e337f1adc165`
+- archive: 213,866,608 bytes,
+  `ce92403fe6897f511de41dec9f08da69c3797c826bcbc014972f145057d26b4f`
+
+Acceptance evidence:
+
+- Failing-first production composition proved that the prepared pin was not
+  previously consumed. A second failing-first live check proved that a
+  successful renderer launch smoke was incorrectly passed to the turn-only M1
+  collector. Both gaps were repaired in the same public adapter and runner.
+- One provider-free current-web public adapter smoke performed two sequential
+  Electron renderer-ready launches, restart persistence, and normal cleanup.
+  Both Electron and executor processes stopped, `providerRequests` and Step
+  observations remained empty, and the full resource identity was identical
+  before and after the call.
+- Valid, absent, missing, source, compatibility, manifest, closure, archive,
+  size, hash, host-platform, mode, special-file, post-consumption mutation,
+  path privacy, sequential reuse, CLI handoff, and resume-identity cases are
+  regression-covered. Existing current-web, direct-warm, identity, temporal,
+  disk, port, and renderer-readiness coverage remains green.
+- Targeted prepared-resource validation passed 31 tests. Typecheck and lint
+  passed; module-shape and direction review found no new issue;
+  `git diff --check` passed. Independent ordinary non-fast Sol-high review
+  approved the fixed public path with no remaining P0-P3 findings.
+
+No provider token, campaign, final 4x3, Hermes/OpenCode run, product policy
+change, retry, fallback, second adapter/runner, merge, or default-on change was
+used. Existing diagnostic roots and prepared resources remain preserved.

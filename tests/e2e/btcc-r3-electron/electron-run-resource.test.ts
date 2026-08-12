@@ -42,6 +42,10 @@ test("same-volume reserve is the lifecycle peak rather than a sequential sum", (
     runBytes: runPeak,
     packageStageBytes: packagePeak,
   });
+  expect(bundledAgentFilesystemRequirements(true, false)).toEqual({
+    runBytes: 2 * 2 * 1024 * 1024 * 1024 + 512 * 1024 * 1024,
+    packageStageBytes: null,
+  });
   expect(evaluateBundledAgentDiskCapacity(runPeak)).toEqual({ ok: true });
 });
 
@@ -88,7 +92,17 @@ test("bundled Agent preparation accepts capacity above its deterministic reserve
 test("bundled Agent disk adapter checks the real run-root filesystem", () => {
   const runRoot = mkdtempSync(join(tmpdir(), "butler-electron-resource-"));
   try {
-    expect(() => preflightBundledAgentDiskCapacity(runRoot)).not.toThrow();
+    try {
+      preflightBundledAgentDiskCapacity(runRoot, false);
+    } catch (error) {
+      expect(error).toMatchObject({
+        failure: {
+          stage: "bundled_agent_preparation",
+          cause: "disk_space_exhausted",
+          requiredBytes: 2 * 2 * 1024 * 1024 * 1024 + 512 * 1024 * 1024,
+        },
+      });
+    }
   } finally {
     rmSync(runRoot, { recursive: true, force: true });
   }

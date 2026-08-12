@@ -1,5 +1,4 @@
 /** Public contract for the Butler agent benchmark domain.
- *
  * This file deliberately contains data only.  Adapters and workflow code are
  * kept in separate modules so that the report cannot become a second source of
  * truth for run state.
@@ -91,6 +90,7 @@ export interface BenchmarkPlan {
   harnessRoot: string;
   provenanceJsonlPath?: string;
   provenance?: M1V2ProvenanceIdentity;
+  preparedButlerResource?: import("./prepared-butler-resource.ts").PreparedButlerResourceIdentity;
   tracks: readonly BenchmarkTrack[];
   fixtures: readonly BenchmarkFixtureSummary[];
   repositoryEvidence?: { relativeRoot: string; files: readonly string[]; sha256: string };

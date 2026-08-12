@@ -17,7 +17,11 @@ const PREPARED_RESOURCE_REQUIRED_BYTES =
 
 export function bundledAgentFilesystemRequirements(
   packageStageSharesRunDevice: boolean,
+  packageBundledAgent = true,
 ): { packageStageBytes: number | null; runBytes: number } {
+  if (!packageBundledAgent) {
+    return { runBytes: PREPARED_RESOURCE_REQUIRED_BYTES, packageStageBytes: null };
+  }
   return {
     runBytes: BUNDLED_AGENT_PREPARATION_REQUIRED_BYTES,
     packageStageBytes: packageStageSharesRunDevice
@@ -108,6 +112,7 @@ export function preflightBundledAgentDiskCapacity(
     }
     const requirements = bundledAgentFilesystemRequirements(
       runDevice === packageDevice,
+      packageBundledAgent,
     );
     if (requirements.packageStageBytes === null) {
       // Packaging staging is removed before the run-volume four-copy peak.

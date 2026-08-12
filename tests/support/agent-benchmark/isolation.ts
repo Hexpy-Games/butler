@@ -25,6 +25,20 @@ export function validateBenchmarkPlan(plan: BenchmarkPlan): void {
       .every((value) => typeof value === "string" && /^[a-f0-9]{64}$/u.test(value)))) {
     throw new Error("M1 v2 provenance identity is missing or invalid");
   }
+  if (plan.preparedButlerResource && (
+    !/^[a-f0-9]{40}$/u.test(plan.preparedButlerResource.sourceRevision) ||
+    ![
+      plan.preparedButlerResource.sourceCompatibilitySha256,
+      plan.preparedButlerResource.manifestSha256,
+      plan.preparedButlerResource.dependencyClosureSha256,
+      plan.preparedButlerResource.resourceSha256,
+      plan.preparedButlerResource.archiveSha256,
+    ].every((value) => /^[a-f0-9]{64}$/u.test(value)) ||
+    !Number.isSafeInteger(plan.preparedButlerResource.archiveBytes) ||
+    plan.preparedButlerResource.archiveBytes <= 0 ||
+    !Number.isSafeInteger(plan.preparedButlerResource.resourceBytes) ||
+    plan.preparedButlerResource.resourceBytes <= 0
+  )) throw new Error("Prepared Butler resource plan identity is invalid");
   const fixtureHashes = new Map(plan.fixtures.map((fixture) => [fixture.id, fixture.sha256]));
   for (const arm of plan.arms) {
     if (arm.fixtureHash !== fixtureHashes.get(arm.scenario)) throw new Error(`Fixture hash mismatch for arm ${arm.key}`);

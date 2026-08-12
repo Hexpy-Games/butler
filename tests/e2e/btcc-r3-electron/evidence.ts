@@ -119,6 +119,9 @@ export function successEvidence(input: {
     observations,
     providerRequests,
     generatedAt: new Date().toISOString(),
+    ...(options.bundledAgentResourceIdentity
+      ? { bundledAgentResource: { ...options.bundledAgentResourceIdentity } }
+      : {}),
   };
 }
 
@@ -154,6 +157,9 @@ export function failureEvidence(input: {
     observations,
     providerRequests: input.providerRequests,
     generatedAt: new Date().toISOString(),
+    ...(options.bundledAgentResourceIdentity
+      ? { bundledAgentResource: { ...options.bundledAgentResourceIdentity } }
+      : {}),
     ...(options.keepLogs && input.electronOutput
       ? { sanitizedElectronLogTail: safeOutputTail(input.electronOutput) }
       : {}),

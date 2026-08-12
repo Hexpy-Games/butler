@@ -25,6 +25,9 @@ export function evaluateM1V2AdapterEvidence(input: {
   const evidence = input.result.m1V2Evidence;
   if (!evidence) {
     const status = input.terminalState === "gated" ? "gated" : "rejected";
+    const preparedResourceDiagnostic = input.result.stderr.match(
+      /\bprepared_resource_[a-z_]+\b/u,
+    )?.[0];
     return {
       summary: emptyM1V2Repetition(
         input.fixture.m1V2.armId,
@@ -33,7 +36,10 @@ export function evaluateM1V2AdapterEvidence(input: {
         "m1-v2-evidence-unavailable",
       ),
       terminalState: status,
-      diagnostics: ["m1-v2-evidence-unavailable"],
+      diagnostics: [
+        "m1-v2-evidence-unavailable",
+        ...(preparedResourceDiagnostic ? [preparedResourceDiagnostic] : []),
+      ],
     };
   }
   let summary = assessM1V2Repetition({
