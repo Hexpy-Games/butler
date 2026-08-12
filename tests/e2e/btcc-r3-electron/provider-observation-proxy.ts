@@ -50,7 +50,6 @@ export interface ProviderRequestObservation {
   requestedReasoning?: string | null;
   requestedServiceTier?: string | null;
   authorizationScheme?: string | null;
-  enforcedAuthMode?: "oauth" | "api_key" | "managed" | null;
   requestStartedAtMs: number;
   serializedRequestBytes: number;
   firstContentBearingDeltaAtMs: number | null;
@@ -83,7 +82,6 @@ export interface ProviderObservationProxyOptions {
     model: string;
     reasoning: string;
     serviceTier: "default";
-    authMode: "oauth" | "api_key" | "managed";
   };
 }
 
@@ -152,7 +150,6 @@ function safeObservation(
     requestedReasoning: observation.requestedReasoning,
     requestedServiceTier: observation.requestedServiceTier,
     authorizationScheme: observation.authorizationScheme,
-    enforcedAuthMode: observation.enforcedAuthMode,
     requestStartedAtMs: observation.requestStartedAtMs,
     serializedRequestBytes: observation.serializedRequestBytes,
     firstContentBearingDeltaAtMs:
@@ -651,7 +648,6 @@ async function forwardRequest(input: {
   observation.authorizationScheme = typeof authorization === "string"
     ? authorization.split(/\s+/u, 1)[0]?.toLowerCase() ?? null
     : null;
-  observation.enforcedAuthMode = input.execution?.authMode ?? null;
   if (isClosing() || response.destroyed) {
     terminateObservation(observation, "cancelled", now);
     response.destroy();
@@ -837,7 +833,6 @@ export async function startProviderObservationProxy(
       requestedReasoning: null,
       requestedServiceTier: null,
       authorizationScheme: null,
-      enforcedAuthMode: null,
       requestStartedAtMs: now(),
       serializedRequestBytes: 0,
       firstContentBearingDeltaAtMs: null,

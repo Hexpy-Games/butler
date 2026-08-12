@@ -34,6 +34,7 @@ export interface RunBenchmarkArmInput {
   evidenceSnapshot: RepositoryEvidenceSnapshot | null;
   sourceDiagnostic: string | null;
   evidenceDiagnostic: string | null;
+  pairedAuthReceipt?: import("./paired-contract.ts").ProviderAuthPreflight;
 }
 
 export async function runBenchmarkArm(input: RunBenchmarkArmInput): Promise<BenchmarkObservation> {
@@ -115,7 +116,7 @@ export async function runBenchmarkArm(input: RunBenchmarkArmInput): Promise<Benc
           ...adapterResult,
           gateCode: "configuration_unverifiable",
           stderr: afterEvidence.diagnostic ?? "Pinned repository evidence changed.",
-        }, { diagnostics: [afterEvidence.diagnostic ?? "Pinned repository evidence changed."] });
+        }, { diagnostics: [afterEvidence.diagnostic ?? "Pinned repository evidence changed."], pairedAuthReceipt: input.pairedAuthReceipt });
       }
       if (arm.scenario === "butler_landing_page" && arm.agent !== "butler") {
         const workspaceEvidence = verifyEvidenceWorkspace(evidenceSnapshot, arm.outputRoot);
@@ -179,7 +180,7 @@ export async function runBenchmarkArm(input: RunBenchmarkArmInput): Promise<Benc
     const sourceMutation = sourceIntegrityChanged(sourceBefore, sourceAfter);
     return evaluateAdapterResult(arm, fixture, adapterResult, {
       sourceMutation,
-      repositoryEvidenceRoot: evidenceSnapshot?.root,
+      repositoryEvidenceRoot: evidenceSnapshot?.root, pairedAuthReceipt: input.pairedAuthReceipt,
       diagnostics: sourceMutation ? ["pinned-source-checkout-mutated"] : [],
     });
   } catch (error) {

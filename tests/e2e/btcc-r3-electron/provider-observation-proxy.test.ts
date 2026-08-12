@@ -147,7 +147,6 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       requestedModel: "gpt-test",
       requestedReasoning: null,
       requestedServiceTier: null,
-      enforcedAuthMode: null,
       authorizationScheme: "bearer",
       requestStartedAtMs: 100,
       serializedRequestBytes: requestBody.byteLength,
@@ -179,13 +178,13 @@ test("paired proxy forces ordinary tier in the actual request and rejects confli
     response.end('data: {"type":"response.completed","response":{"status":"completed","service_tier":"default"}}\n\ndata: [DONE]\n\n');
   })(); });
   const proxy = await startProviderObservationProxy({ upstreamBaseUrl: upstream.baseUrl,
-    execution: { model: "openai/gpt-5.6-sol", reasoning: "medium", serviceTier: "default", authMode: "oauth" } });
+    execution: { model: "openai/gpt-5.6-sol", reasoning: "medium", serviceTier: "default" } });
   try {
     const valid = await fetch(proxy.endpoint, { method: "POST", headers: { authorization: "Bearer redacted", "content-type": "application/json" },
       body: JSON.stringify({ model: "gpt-5.6-sol", reasoning: { effort: "medium" } }) });
     await valid.text();
     expect(body.service_tier).toBe("default");
-    expect(proxy.observations()[0]).toMatchObject({ requestedServiceTier: "default", requestedReasoning: "medium", enforcedAuthMode: "oauth", authorizationScheme: "bearer" });
+    expect(proxy.observations()[0]).toMatchObject({ requestedServiceTier: "default", requestedReasoning: "medium", authorizationScheme: "bearer" });
     const conflict = await fetch(proxy.endpoint, { method: "POST", headers: { authorization: "Bearer redacted", "content-type": "application/json" },
       body: JSON.stringify({ model: "gpt-5.6-sol", reasoning: { effort: "medium" }, service_tier: "priority" }) });
     expect(conflict.status).toBeGreaterThanOrEqual(500);

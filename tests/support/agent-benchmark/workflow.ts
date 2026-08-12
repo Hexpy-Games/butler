@@ -176,6 +176,7 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
       evidenceSnapshot: sourceContext.evidenceSnapshot,
       sourceDiagnostic: sourceContext.diagnostic,
       evidenceDiagnostic: sourceContext.evidenceDiagnostic,
+      pairedAuthReceipt: input.plan.pairedCampaign?.authReceipt,
     });
     const existingIndex = result.observations.findIndex((value) => value.arm.key === arm.key);
     if (existingIndex >= 0) result.observations[existingIndex] = observation;

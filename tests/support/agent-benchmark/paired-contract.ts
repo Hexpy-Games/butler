@@ -8,6 +8,16 @@ export const FINAL_BEFORE_REVISION = "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5" 
 export const FINAL_AFTER_REVISION = "394c98a97428b741f8ea54273a226cb062455ab0" as const;
 export const FINAL_MODEL = "openai/gpt-5.6-sol" as const;
 export const FINAL_REASONING = "medium" as const;
+export const FINAL_AUTH_MODE = "managed" as const;
+export const FINAL_EXECUTION = { provider: "openai", authMode: FINAL_AUTH_MODE, model: FINAL_MODEL,
+  reasoning: FINAL_REASONING, executionMode: "ordinary_non_fast", serviceTier: "default",
+  requestOption: { service_tier: "default" } } as const;
+export const FINAL_POLICY = { sequential: true, runtimeReorderAllowed: false,
+  replacementRunsAllowed: "pre_provider_infrastructure_only", preProviderInfrastructureReplacementMax: 1,
+  postProviderReplacementAllowed: false, cacheMismatch: "descriptive_only", usageUnavailable: "nullable" } as const;
+export const FINAL_ACCEPTANCE = { providerSendByteReductionMinimum: 0.30,
+  requestHypothesis: { kind: "frozen_baseline_range", before: 45, afterMinimum: 38, afterMaximum: 40 },
+  elapsedReductionTarget: [0.18, 0.30], zeroQualityRegression: true } as const;
 
 export type BenchmarkVersion = "before" | "after";
 export type ProviderAuthMode = "oauth" | "api_key" | "managed";
@@ -35,7 +45,7 @@ export interface PairedStepIdentity {
 
 export interface PairedExecutionContract {
   provider: "openai";
-  authMode: ProviderAuthMode;
+  authMode: typeof FINAL_AUTH_MODE;
   model: typeof FINAL_MODEL;
   reasoning: typeof FINAL_REASONING;
   executionMode: "ordinary_non_fast";
@@ -48,8 +58,10 @@ export interface PairedCampaignContract {
   before: PairedSourcePin;
   after: PairedSourcePin;
   execution: PairedExecutionContract;
+  authReceipt: ProviderAuthPreflight;
   fixtureHashes: Readonly<Record<M1V2ArmId, string>>;
   provenance: M1V2ProvenanceIdentity;
+  preparedPinsIdentity: string;
   steps: readonly PairedStepIdentity[];
   policy: {
     sequential: true;
@@ -62,6 +74,7 @@ export interface PairedCampaignContract {
   };
   acceptance: {
     providerSendByteReductionMinimum: 0.30;
+    requestHypothesis: typeof FINAL_ACCEPTANCE.requestHypothesis;
     elapsedReductionTarget: readonly [0.18, 0.30];
     zeroQualityRegression: true;
   };
@@ -69,41 +82,43 @@ export interface PairedCampaignContract {
 }
 
 export interface ProviderAuthPreflight {
+  schema: "butler.provider-auth-preflight-receipt.v1";
+  authority: "butler_auth_status_and_model_catalog";
   provider: "openai";
-  authMode: ProviderAuthMode;
+  authMode: typeof FINAL_AUTH_MODE;
+  observedProductAuthMode: "codex_oauth" | "codex_subscription";
   model: typeof FINAL_MODEL;
   reasoning: typeof FINAL_REASONING;
   executionMode: "ordinary_non_fast";
-  modelAvailable: boolean;
-  authenticated: boolean;
+  modelCallability: "available" | "unavailable";
+  configured: boolean;
 }
 
 export function readProviderAuthPreflight(path: string): ProviderAuthPreflight {
   const value = JSON.parse(readFileSync(path, "utf8")) as Partial<ProviderAuthPreflight>;
-  if (value.provider !== "openai" || !["oauth", "api_key", "managed"].includes(value.authMode ?? "") ||
+  if (value.schema !== "butler.provider-auth-preflight-receipt.v1" ||
+      value.authority !== "butler_auth_status_and_model_catalog" || value.provider !== "openai" ||
+      value.authMode !== FINAL_AUTH_MODE || value.observedProductAuthMode !== "codex_oauth" ||
       value.model !== FINAL_MODEL || value.reasoning !== FINAL_REASONING ||
       value.executionMode !== "ordinary_non_fast" ||
-      typeof value.modelAvailable !== "boolean" || typeof value.authenticated !== "boolean") {
+      !["available", "unavailable"].includes(value.modelCallability ?? "") || typeof value.configured !== "boolean") {
     throw new Error("Provider auth preflight is invalid or not the canonical ordinary non-fast model contract.");
   }
   return value as ProviderAuthPreflight;
 }
 
 export function requireAvailableProviderAuth(value: ProviderAuthPreflight): PairedExecutionContract {
-  if (!value.authenticated || !value.modelAvailable) {
+  if (!value.configured || value.modelCallability !== "available") {
     throw new Error("measurement_unavailable: provider authentication or exact model is unavailable");
   }
-  return {
-    provider: "openai", authMode: value.authMode, model: FINAL_MODEL,
-    reasoning: FINAL_REASONING, executionMode: "ordinary_non_fast",
-    serviceTier: "default", requestOption: { service_tier: "default" },
-  };
+  return FINAL_EXECUTION;
 }
 
 export function createPairedCampaignContract(input: {
   before: PairedSourcePin;
   after: PairedSourcePin;
   execution: PairedExecutionContract;
+  authReceipt: ProviderAuthPreflight;
   fixtureHashes: Readonly<Record<M1V2ArmId, string>>;
   provenance: M1V2ProvenanceIdentity;
 }): PairedCampaignContract {
@@ -116,32 +131,28 @@ export function createPairedCampaignContract(input: {
   const steps = canonicalSteps(input.before, input.after, input.fixtureHashes);
   const stable = {
     schema: "butler.agent-benchmark.paired-contract.v1" as const,
-    before: input.before, after: input.after, execution: input.execution,
-    fixtureHashes: input.fixtureHashes, provenance: input.provenance, steps,
-    policy: {
-      sequential: true as const, runtimeReorderAllowed: false as const,
-      replacementRunsAllowed: "pre_provider_infrastructure_only" as const,
-      preProviderInfrastructureReplacementMax: 1 as const,
-      postProviderReplacementAllowed: false as const,
-      cacheMismatch: "descriptive_only" as const, usageUnavailable: "nullable" as const,
-    },
-    acceptance: {
-      providerSendByteReductionMinimum: 0.30 as const,
-      elapsedReductionTarget: [0.18, 0.30] as const,
-      zeroQualityRegression: true as const,
-    },
+    before: input.before, after: input.after, execution: input.execution, authReceipt: input.authReceipt,
+    fixtureHashes: input.fixtureHashes, provenance: input.provenance,
+    preparedPinsIdentity: digest({ before: input.before.preparedResource, after: input.after.preparedResource }), steps,
+    policy: FINAL_POLICY, acceptance: FINAL_ACCEPTANCE,
   };
   return { ...stable, identity: digest(stable) };
 }
 
 export function validatePairedCampaignContract(contract: PairedCampaignContract): void {
+  validatePin(contract.before, "before");
+  validatePin(contract.after, "after");
   const { identity, ...stable } = contract;
   const expected = canonicalSteps(contract.before, contract.after, contract.fixtureHashes);
   if (identity !== digest(stable) || contract.before.revision !== FINAL_BEFORE_REVISION ||
-      contract.after.revision !== FINAL_AFTER_REVISION ||
+      contract.after.revision !== FINAL_AFTER_REVISION || JSON.stringify(contract.execution) !== JSON.stringify(FINAL_EXECUTION) ||
+      contract.authReceipt.authMode !== contract.execution.authMode ||
+      JSON.stringify(requireAvailableProviderAuth(contract.authReceipt)) !== JSON.stringify(FINAL_EXECUTION) ||
+      JSON.stringify(contract.policy) !== JSON.stringify(FINAL_POLICY) || JSON.stringify(contract.acceptance) !== JSON.stringify(FINAL_ACCEPTANCE) ||
+      contract.preparedPinsIdentity !== digest({ before: contract.before.preparedResource, after: contract.after.preparedResource }) ||
       JSON.stringify(contract.steps) !== JSON.stringify(expected) ||
       contract.steps.some((step) => JSON.stringify(step.source) !== JSON.stringify(step.version === "before" ? contract.before : contract.after)) ||
-      contract.provenance.schema !== "butler.agent-benchmark.provenance-identity.v1") {
+      !validProvenance(contract.provenance)) {
     throw new Error("Paired campaign contract identity mismatch.");
   }
 }
@@ -183,21 +194,22 @@ export function corroborateExecution(input: {
   }
 }
 
-export function corroboratePairedRequestEvidence(preregistered: PairedExecutionContract, evidence: {
+export function corroboratePairedRequestEvidence(preregistered: PairedExecutionContract, receipt: ProviderAuthPreflight, evidence: {
   provider: string; model: string; reasoning: string;
   providerServiceTiers: readonly (string | null)[]; requestServiceTiers: readonly (string | null)[];
   requestModels: readonly (string | null)[]; requestReasoning: readonly (string | null)[];
-  enforcedAuthModes: readonly (string | null)[]; authorizationSchemes: readonly (string | null)[];
+  authorizationSchemes: readonly (string | null)[];
 } | undefined): void {
   if (!evidence || evidence.providerServiceTiers.length === 0 ||
       evidence.providerServiceTiers.some((value) => value !== preregistered.serviceTier) ||
       evidence.requestServiceTiers.some((value) => value !== preregistered.serviceTier) ||
       evidence.requestModels.some((value) => value !== preregistered.model) ||
       evidence.requestReasoning.some((value) => value !== preregistered.reasoning) ||
-      evidence.enforcedAuthModes.some((value) => value !== preregistered.authMode) ||
       evidence.authorizationSchemes.some((value) => value !== "bearer")) {
     throw new Error("provider_service_tier_unavailable_or_mismatch");
   }
+  if (receipt.authMode !== preregistered.authMode || !receipt.configured || receipt.modelCallability !== "available")
+    throw new Error("provider_auth_receipt_unavailable_or_mismatch");
   corroborateExecution({ preregistered, observed: { provider: evidence.provider, model: evidence.model,
     reasoning: evidence.reasoning, serviceTier: evidence.providerServiceTiers[0] } });
 }
@@ -215,9 +227,18 @@ function validatePin(pin: PairedSourcePin, version: BenchmarkVersion): void {
   if (pin.version !== version || !/^[a-f0-9]{40}$/u.test(pin.revision) ||
       !/^[a-z0-9_-]+$/u.test(pin.platform) || pin.mode !== "bundled_agent_release" ||
       pin.preparedResource.sourceRevision !== pin.revision ||
-      pin.preparedResource.sourceCompatibilitySha256 !== pin.compatibilitySha256) {
+      pin.preparedResource.sourceCompatibilitySha256 !== pin.compatibilitySha256 ||
+      ![pin.compatibilitySha256, pin.preparedResource.manifestSha256, pin.preparedResource.dependencyClosureSha256,
+        pin.preparedResource.resourceSha256, pin.preparedResource.archiveSha256].every((value) => /^[a-f0-9]{64}$/u.test(value)) ||
+      !Number.isSafeInteger(pin.preparedResource.resourceBytes) || pin.preparedResource.resourceBytes <= 0 ||
+      !Number.isSafeInteger(pin.preparedResource.archiveBytes) || pin.preparedResource.archiveBytes <= 0) {
     throw new Error(`${version} source/prepared-resource pin mismatch`);
   }
+}
+
+function validProvenance(value: M1V2ProvenanceIdentity): boolean {
+  return value.schema === "butler.agent-benchmark.provenance-identity.v1" &&
+    [value.metadataSha256, value.jsonlSha256, value.verifiedSha256].every((digest) => /^[a-f0-9]{64}$/u.test(digest));
 }
 
 function digest(value: unknown): string {

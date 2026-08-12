@@ -29,7 +29,6 @@ import {
   readProviderAuthPreflight,
   requireAvailableProviderAuth,
 } from "./paired-contract.ts";
-
 export interface AgentBenchmarkCliOptions {
   command: "plan" | "pilot" | "run";
   runRoot: string;
@@ -51,14 +50,16 @@ export interface AgentBenchmarkCliOptions {
   pairedPreparedButlerResources: Readonly<Record<"before" | "after", PreparedButlerResourceReference>> | null;
   providerAuthPreflightPath: string | null;
 }
-
 const CANONICAL_PILOT_MODEL = "openai/gpt-5.6-sol";
 const CANONICAL_PILOT_REASONING = "medium";
-
-export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<string> {
+export async function runAgentBenchmarkCli(argv: readonly string[], composition: {
+  createAdapters?: typeof createProductionAgentAdapters;
+  landingValidator?: typeof validateLandingWorkspace;
+} = {}): Promise<string> {
   const options = parseOptions(argv);
+  const authReceipt = options.campaign === "m1-v2-paired" ? readProviderAuthPreflight(options.providerAuthPreflightPath!) : null;
   const pairedExecution = options.campaign === "m1-v2-paired"
-    ? requireAvailableProviderAuth(readProviderAuthPreflight(options.providerAuthPreflightPath!))
+    ? requireAvailableProviderAuth(authReceipt!)
     : null;
   const pairedCampaign = options.campaign === "m1-v2-paired"
     ? createPairedCampaignContract({
@@ -75,6 +76,7 @@ export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<str
           preparedResource: preparedResourceIdentity(options.pairedPreparedButlerResources!.after),
         },
         execution: pairedExecution!,
+        authReceipt: authReceipt!,
         fixtureHashes: Object.fromEntries(loadM1V2BenchmarkFixtures(options.harnessRoot)
           .map((fixture) => [fixture.id, hashBenchmarkFixture(fixture)])) as Record<"direct-cold" | "direct-warm" | "current-web-cold" | "landing-cold", string>,
         provenance: verifyM1V2AuthoritativeProvenance({
@@ -108,7 +110,7 @@ export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<str
   if (options.command === "plan") {
     return JSON.stringify({ planPath: relative(plan.runRoot, planPath), runId: plan.runId, seed: plan.seed, arms: plan.arms.length });
   }
-  const adapters = createProductionAgentAdapters(options.sourceRoot, {
+  const adapters = (composition.createAdapters ?? createProductionAgentAdapters)(options.sourceRoot, {
     ...(options.preparedButlerResource
       ? { preparedButlerResource: options.preparedButlerResource }
       : {}),
@@ -123,7 +125,7 @@ export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<str
     adapters,
     store,
     signal: controller.signal,
-    landingValidator: validateLandingWorkspace,
+    landingValidator: composition.landingValidator ?? validateLandingWorkspace,
     mode: options.command === "pilot" && !options.executeAvailable ? "preflight-only" : "execute",
   });
   let result: BenchmarkResultFile = completed.result;
@@ -284,12 +286,10 @@ function insideRoot(root: string, candidate: string): boolean {
   const rel = relative(resolve(root), resolve(candidate));
   return rel !== "" && rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
 }
-
 function isAlreadyExists(error: unknown): boolean {
   return Boolean(error && typeof error === "object" &&
     (error as { code?: unknown }).code === "EEXIST");
 }
-
 if (import.meta.main) {
   runAgentBenchmarkCli(process.argv.slice(2))
     .then((output) => console.log(output))

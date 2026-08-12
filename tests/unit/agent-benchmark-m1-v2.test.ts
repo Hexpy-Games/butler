@@ -178,6 +178,20 @@ describe("unified agent benchmark M1 v2 campaign", () => {
       exactByteSum: true,
       responseUsageStatus: "unavailable", promptTokens: null, totalTokens: null,
     });
+    const pairedArm = { ...arm, version: "after" as const, pairId: "direct-cold:rep-1", block: 0,
+      pairedExecution: { provider: "openai" as const, authMode: "managed" as const, model: "openai/gpt-5.6-sol" as const,
+        reasoning: "medium" as const, executionMode: "ordinary_non_fast" as const, serviceTier: "default" as const,
+        requestOption: { service_tier: "default" as const } } };
+    const executionRejected = evaluateAdapterResult(pairedArm, fixture, { ...adapterResult,
+      pairedExecutionEvidence: { provider: "openai", model: "openai/gpt-5.6-sol", reasoning: "medium",
+        providerServiceTiers: ["priority"], requestServiceTiers: ["default"], requestModels: ["openai/gpt-5.6-sol"],
+        requestReasoning: ["medium"], authorizationSchemes: ["bearer"] } }, {
+      pairedAuthReceipt: { schema: "butler.provider-auth-preflight-receipt.v1", authority: "butler_auth_status_and_model_catalog",
+        provider: "openai", authMode: "managed", observedProductAuthMode: "codex_oauth", model: "openai/gpt-5.6-sol",
+        reasoning: "medium", executionMode: "ordinary_non_fast", modelCallability: "available", configured: true },
+    });
+    expect(executionRejected.m1V2?.status).toBe("accepted");
+    expect(executionRejected.terminalState).toBe("rejected");
 
     const sourceMismatch = evaluateAdapterResult(arm, fixture, {
       ...adapterResult,

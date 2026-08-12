@@ -287,7 +287,6 @@ export interface AdapterRunResult {
     requestServiceTiers: readonly (string | null)[];
     requestModels: readonly (string | null)[];
     requestReasoning: readonly (string | null)[];
-    enforcedAuthModes: readonly (string | null)[];
     authorizationSchemes: readonly (string | null)[];
   };
   usage: Partial<TokenUsage>;

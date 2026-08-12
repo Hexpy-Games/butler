@@ -480,6 +480,48 @@ repository-wide pass is not claimed. Independent ordinary non-fast Sol-high
 review traced both source paths and the preserved evidence, then approved with
 no actionable P0-P3 findings.
 
+## Second paired contract review repair
+
+Task: `T-M1-V2-PAIRED-CAMPAIGN-REVIEW-REPAIR-2-20260813`
+
+The second Sol-high review found that the prior closeout was premature. The
+contract now freezes and validates the exact managed-auth ordinary execution,
+all prepared-resource fields and their paired digest, complete provenance,
+replacement policy, acceptance policy, and the Spec revision 2 registered
+request hypothesis: exactly 45 baseline physical requests must become 38–40.
+Rehashed priority-tier, auth, policy, request-gate, prepared-pin, and provenance
+forgeries fail closed.
+
+Authentication no longer uses a proxy echo. The public workflow consumes a
+redacted Butler-owned auth-status/model-catalog receipt with observed
+`codex_oauth`, selected provider/model callability, and the public managed auth
+contract. Missing or uncallable receipt evidence stops as
+`measurement_unavailable`; a bearer header alone cannot establish auth mode.
+Pairing identity is formed from observed request-envelope/Agent-attempt fields
+for cache eligibility, route, provider, model, reasoning, auth, execution mode,
+retry, source, and fixture rather than reconstructing them from the Plan.
+
+Execution-identity rejection now has precedence over an otherwise accepted M1
+summary. The aggregate additionally requires every one of the 24 observations
+to remain terminally accepted and quality-accepted. Landing requires all five
+approved content claims, separate internal Ledger closeout, build/reload,
+desktop/mobile screenshots, SQLite integrity, zero duplicate effects,
+corrections or anchor loss, workspace and provider-route authority, and no
+Work stall. Any rejected row keeps the comparison index unranked.
+
+A provider-free integration invokes the exported CLI composition and parser,
+creates the immutable Plan, runs all 24 arms through an available fake adapter
+with complete typed M1 evidence, then exercises evaluator, report, JSON index,
+and HTML index. It proves both accepted/ranked and service-tier-drift
+rejected/unranked outcomes without Electron or a provider call.
+
+The governing Plan says Windows CI is release-tag-only, but the latest explicit
+user operational instruction requires cancelling the unavoidable PR-triggered
+run after every push. That later instruction governs this delivery: the exact
+SHA run is cancelled immediately before build and verified
+`completed/cancelled`. This does not claim the older release-tag-only condition
+was achieved and does not modify the workflow.
+
 ## Final paired campaign contract review repair
 
 Task: `T-M1-V2-PAIRED-CAMPAIGN-REVIEW-REPAIR-20260813`

@@ -62,6 +62,14 @@ export interface M1V2AttemptSummary {
   segmentSendBytes: number;
   retryOrdinal: number;
   eligibility: string;
+  providerId: string | null;
+  modelRef: string | null;
+  reasoning: string | null;
+  routeId: string | null;
+  authMode: string | null;
+  executionMode: string | null;
+  sourceRevision: string | null;
+  fixtureSha256: string | null;
   responseUsageStatus: "unavailable" | "usage_bearing";
   promptTokens: number | null;
   cacheReadTokens: number | null;
