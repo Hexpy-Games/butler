@@ -1,4 +1,28 @@
 import type { ButlerExecutionPolicy } from "../contracts.ts";
+import type { StableProviderCachePrefixContract } from "../ports/model-round.ts";
+
+export const GUIDED_STABLE_PROVIDER_PREFIX_REVISION =
+  "butler.btcc-stable-provider-prefix.v1" as const;
+
+export function phaseMinimalStableInstructionSurface(
+  phase: "direct" | "read_only" | "execution",
+  policy: Pick<ButlerExecutionPolicy, "trackingMode">,
+  toolProfileRevision: string,
+): {
+  stableInstructionPrefix: string;
+  stableProviderCachePrefix: StableProviderCachePrefixContract;
+} {
+  const stableInstructionPrefix = phaseMinimalStableInstructions(phase, policy);
+  return {
+    stableInstructionPrefix,
+    stableProviderCachePrefix: {
+      schemaVersion: "butler.stable-provider-cache-prefix.v1",
+      stablePrefixRevision: GUIDED_STABLE_PROVIDER_PREFIX_REVISION,
+      toolProfileRevision,
+      instructionPrefix: stableInstructionPrefix,
+    },
+  };
+}
 
 export function phaseMinimalStableInstructions(
   phase: "direct" | "read_only" | "execution",

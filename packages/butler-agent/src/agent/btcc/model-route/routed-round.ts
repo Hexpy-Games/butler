@@ -138,7 +138,6 @@ export function createModelRoutePort(input: {
             continue;
           }
         }
-
         const startedResult = await input.onRouteEvent?.({
           type: "model.attempt.started",
           roundId,
@@ -202,6 +201,11 @@ export function createModelRoutePort(input: {
             providerRetryAttempts: 1,
             routeTransportAttemptOrdinal: transportAttempt - 1,
             continuation,
+            routeContext: {
+              schemaVersion: "butler.model-route-request.v1",
+              routeDigest: route.routeDigest,
+              cursor: route.activeCursor, modelRef: candidate.modelRef,
+            },
           });
         } catch (error) {
           const disposition = classifyModelRouteFailure(error);

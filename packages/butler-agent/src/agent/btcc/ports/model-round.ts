@@ -79,6 +79,66 @@ export interface ModelRoundTool {
   concurrencySafe?: boolean;
 }
 
+export interface StableProviderCachePrefixContract {
+  schemaVersion: "butler.stable-provider-cache-prefix.v1";
+  stablePrefixRevision: string;
+  toolProfileRevision: string;
+  /** Existing Tool Instruction Surface owner; never rebuilt by the provider. */
+  instructionPrefix: string;
+}
+
+export interface ProviderRouteCacheIdentity {
+  schemaVersion: "butler.provider-route-cache-identity.v1";
+  routeDigest: string;
+  routeCursor: number;
+  providerId: "openai" | "openai-codex";
+  modelRef: string;
+  authMode: "api_key" | "codex_subscription" | "codex_oauth";
+  capabilityDigest: string;
+  serializerContract:
+    | "butler.openai-responses-final-json.v1"
+    | "butler.openai-codex-final-json.v1";
+  toolProfileRevision: string;
+  stablePrefixRevision: string;
+  serializedStablePrefixSha256: string;
+  serializedStablePrefixBytes: number;
+}
+
+export type StableProviderPrefixInvariantCode =
+  | "stable_provider_prefix_contract_invalid"
+  | "stable_provider_prefix_instruction_mismatch"
+  | "stable_provider_prefix_dynamic_collision"
+  | "stable_provider_prefix_route_context_missing"
+  | "stable_provider_prefix_route_context_invalid"
+  | "stable_provider_prefix_route_model_mismatch"
+  | "stable_provider_prefix_previous_identity_missing"
+  | "stable_provider_prefix_serializer_order_invalid"
+  | "stable_provider_prefix_final_bytes_mismatch"
+  | "stable_provider_prefix_route_identity_mismatch"
+  | "stable_provider_prefix_retry_identity_changed";
+
+/** Provider-neutral invariant: adapters construct it; route authority surfaces it. */
+export class StableProviderPrefixInvariantError extends Error {
+  constructor(readonly code: StableProviderPrefixInvariantCode) {
+    super(code);
+    this.name = "StableProviderPrefixInvariantError";
+  }
+}
+
+export function stableProviderPrefixInvariant(
+  code: StableProviderPrefixInvariantCode,
+): StableProviderPrefixInvariantError {
+  return new StableProviderPrefixInvariantError(code);
+}
+
+/** Route-owned, bounded compatibility facts attached by createModelRoutePort. */
+export interface ModelRouteRequestContext {
+  schemaVersion: "butler.model-route-request.v1";
+  routeDigest: string;
+  cursor: number;
+  modelRef: string;
+}
+
 export interface ModelRoundRequest {
   roundId?: string;
   model: ModelRef | string;
@@ -98,6 +158,10 @@ export interface ModelRoundRequest {
   cacheScope?: string;
   attributionArmId?: string;
   cacheBoundaryEvidence?: M1CacheBoundaryEvidence;
+  /** Present only on the existing default-off phase-minimal selection path. */
+  stableProviderCachePrefix?: StableProviderCachePrefixContract;
+  /** Set only by createModelRoutePort; adapters must fail closed if required and absent. */
+  routeContext?: ModelRouteRequestContext;
   providerRetryAttempts?: number;
   /** Zero-based physical provider attempt offset owned by the route journal. */
   routeTransportAttemptOrdinal?: number;

@@ -20,6 +20,12 @@ import type {
   M1CacheBoundaryEvidence,
   M1ProviderRequestSegmentManifestEntry,
 } from "../../../agent/btcc/ports/provider-request-attribution.ts";
+import type {
+  ModelRouteRequestContext,
+  ProviderRouteCacheIdentity,
+  StableProviderCachePrefixContract,
+} from "../../../agent/btcc/ports/model-round.ts";
+import { establishFinalProviderCacheIdentity } from "./stable-provider-prefix.ts";
 
 export interface OpenAIProviderBudgetContext {
   attribution?: PromptUsageAttribution;
@@ -34,6 +40,14 @@ export interface OpenAIProviderBudgetContext {
   };
   cacheBoundaryEvidence?: M1CacheBoundaryEvidence;
   admitBoundedProviderBody?: (serializedBytes: number) => Promise<void>;
+  stableProviderCachePrefix?: StableProviderCachePrefixContract;
+  routeContext?: ModelRouteRequestContext;
+  previousProviderRouteIdentity?: unknown;
+  onProviderRouteCacheIdentity?: (input: {
+    identity: ProviderRouteCacheIdentity;
+    serializedStablePrefix: string;
+  }) => void;
+  authMode?: import("./auth.ts").OpenAIAuthMode;
 }
 
 
@@ -66,6 +80,7 @@ export async function createOpenAIResponse(
             ...budgetContext,
             roundIndex: budgetContext?.roundIndex ?? 0,
             providerRetryOrdinal: providerRetryOrdinal++,
+            authMode: auth.mode,
           },
           () => guard.recordProgress(),
           () => guard.start(),
@@ -124,12 +139,13 @@ export async function createOpenAIResponseOnce(
     );
   }
   const { __butler_codex_stateless_input: _codexStatelessInput, ...rawOfficialBody } = body;
-  const officialBody: Record<string, any> = {
-    ...(budgetContext?.attribution?.requestedOutputTokens && rawOfficialBody.max_output_tokens === undefined
-      ? { max_output_tokens: budgetContext.attribution.requestedOutputTokens }
-      : {}),
-    ...rawOfficialBody,
-  };
+  const requestedOutput = budgetContext?.attribution?.requestedOutputTokens &&
+      rawOfficialBody.max_output_tokens === undefined
+    ? { max_output_tokens: budgetContext.attribution.requestedOutputTokens }
+    : {};
+  const officialBody: Record<string, any> = budgetContext?.stableProviderCachePrefix
+    ? { ...rawOfficialBody, ...requestedOutput }
+    : { ...requestedOutput, ...rawOfficialBody };
   const endpoint = safeEndpointLabel(getResponsesUrl());
   const model = typeof officialBody.model === "string" ? officialBody.model : undefined;
   const admittedRequest = admitSerializedProviderRequest({
@@ -158,6 +174,18 @@ export async function createOpenAIResponseOnce(
     deferRecord: true,
     cacheBoundaryRevision: budgetContext?.cacheBoundaryEvidence?.observedRevision,
   });
+  if (budgetContext?.stableProviderCachePrefix) {
+    budgetContext.onProviderRouteCacheIdentity?.(establishFinalProviderCacheIdentity({
+      body: officialBody,
+      serializedBody: observedRequest.serializedRequest,
+      stable: budgetContext.stableProviderCachePrefix,
+      route: budgetContext.routeContext,
+      providerId: "openai",
+      authMode: auth.mode,
+      serializerContract: "butler.openai-responses-final-json.v1",
+      previousIdentity: budgetContext.previousProviderRouteIdentity,
+    }));
+  }
   await budgetContext?.admitBoundedProviderBody?.(
     Buffer.byteLength(observedRequest.serializedRequest, "utf8"),
   );
