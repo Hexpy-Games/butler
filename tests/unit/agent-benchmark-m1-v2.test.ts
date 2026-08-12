@@ -107,6 +107,7 @@ describe("unified agent benchmark M1 v2 campaign", () => {
     const result = await adapter.run({
       arm, fixture, prompt: fixture.prompts.join("\n\n"), sessionId: null,
       sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal,
+      benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: arm.evidenceRoot },
     });
     expect(result).toMatchObject({ exitCode: null, gateCode: "measurement_unavailable" });
     const observation = evaluateAdapterResult(arm, fixture, result);
@@ -181,7 +182,7 @@ describe("unified agent benchmark M1 v2 campaign", () => {
     const pairedArm = { ...arm, version: "after" as const, pairId: "direct-cold:rep-1", block: 0,
       pairedExecution: { provider: "openai" as const, authMode: "managed" as const, model: "openai/gpt-5.6-sol" as const,
         reasoning: "medium" as const, executionMode: "ordinary_non_fast" as const, serviceTier: "default" as const,
-        requestOption: { service_tier: "default" as const } } };
+        requestExecutionMode: "auto_by_omission" as const } };
     const executionRejected = evaluateAdapterResult(pairedArm, fixture, { ...adapterResult,
       pairedExecutionEvidence: { provider: "openai", model: "openai/gpt-5.6-sol", reasoning: "medium",
         providerServiceTiers: ["priority"], requestServiceTiers: ["default"], requestModels: ["openai/gpt-5.6-sol"],

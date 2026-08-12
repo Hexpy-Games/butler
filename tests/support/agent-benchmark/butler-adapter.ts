@@ -112,17 +112,29 @@ export function createButlerAdapter(
         if (!adapterResult) {
           copyGeneratedArtifacts(evidence, input);
           adapterResult = { ...parseButlerEvidence(evidence, startedAtMs, Date.now(), input), adapterVersion };
+          adapterResult.providerDispatchState = providerDispatchState(evidence);
           if (input.fixture.m1V2 && evidence.kind !== "launch_smoke") {
-            adapterResult.m1V2Evidence = await collectButlerM1V2Evidence({
-              benchmark: input, evidence, attemptStartedAtMs: startedAtMs,
-            });
+            try {
+              adapterResult.m1V2Evidence = await collectButlerM1V2Evidence({ benchmark: input, evidence, attemptStartedAtMs: startedAtMs });
+              adapterResult.evidenceRefs = [
+                ...adapterResult.evidenceRefs,
+                adapterResult.m1V2Evidence.exportHandle!,
+              ];
+            } catch (_error) {
+              adapterResult = { ...adapterResult, gateCode: "measurement_unavailable",
+                stderr: boundedDiagnostic(adapterResult.stderr, "sc01_durable_evidence_export_failed"), m1V2Evidence: undefined };
+            }
           }
         }
       } finally {
-        const cleanup = cleanupButlerRuntime(evidence, input.arm);
+        const cleanup = cleanupButlerRuntime(evidence, input.arm, !input.fixture.m1V2 || Boolean(adapterResult?.m1V2Evidence?.exportSha256));
         if (adapterResult && (cleanup.status === "unsafe" || cleanup.status === "failed")) {
           const productFailure = adapterResult.exitCode !== 0 || adapterResult.timedOut || adapterResult.cancelled || evidence.error !== undefined || evidence.ok === false;
-          if (!productFailure) {
+          const postDispatch = adapterResult.providerDispatchState === "provider_dispatched" || adapterResult.providerDispatchState === "provider_output_observed";
+          if (!productFailure && postDispatch) {
+            adapterResult = { ...adapterResult, gateCode: "measurement_unavailable",
+              stderr: boundedDiagnostic(adapterResult.stderr, cleanup.diagnostic ?? "Butler runtime cleanup could not be verified.") };
+          } else if (!productFailure) {
             adapterResult = gatedAdapterResult("configuration_unverifiable", cleanup.diagnostic ?? "Butler runtime cleanup could not be verified.", adapterVersion);
           }
         }
@@ -131,6 +143,17 @@ export function createButlerAdapter(
       return adapterResult;
     },
   };
+}
+
+function providerDispatchState(evidence: Record<string, unknown>): "adapter_entered" | "provider_dispatched" | "provider_output_observed" {
+  const requests = Array.isArray(evidence.providerRequests) ? evidence.providerRequests.map(asRecord).filter((row): row is Record<string, unknown> => row !== null) : [];
+  if (requests.some((row) => row.hasTextContent === true || row.hasToolArgumentContent === true || row.hasReasoningContent === true ||
+      typeof row.firstContentBearingDeltaAtMs === "number")) return "provider_output_observed";
+  return requests.length > 0 ? "provider_dispatched" : "adapter_entered";
+}
+
+function boundedDiagnostic(current: string, diagnostic: string): string {
+  return [current.trim(), diagnostic].filter(Boolean).join("\n").slice(-2_000);
 }
 
 export function createElectronButlerRunner(
@@ -271,7 +294,8 @@ function parseButlerEvidence(
           ? request.providerReportedServiceTier
           : null),
       requestServiceTiers: providerRequests.map((request) =>
-        typeof request.requestedServiceTier === "string" ? request.requestedServiceTier : null),
+        request.requestedServiceTierMode === "auto_by_omission" ? "auto_by_omission" :
+          typeof request.requestedServiceTier === "string" ? request.requestedServiceTier : null),
       requestModels: providerRequests.map((request) =>
         typeof request.requestedModel === "string" ? normalizeObservedModel(request.requestedModel, input.arm.effectiveConfig.model) : null),
       requestReasoning: providerRequests.map((request) =>

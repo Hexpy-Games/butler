@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import type {
   AgentAdapter,
   BenchmarkPlan,
@@ -15,6 +17,10 @@ import { materializeRepositoryEvidence, type RepositoryEvidenceSnapshot } from "
 import { runBenchmarkArm, type LandingValidator } from "./workflow-arm.ts";
 import { verifyM1V2AuthoritativeProvenance } from "./m1-v2-provenance.ts";
 import { replacementEligibility } from "./paired-contract.ts";
+import { benchmarkPlanIdentity } from "./planning.ts";
+import { verifyM1V2DurableProjection, type M1V2EvidenceExportIdentity } from "./m1-v2-evidence-export.ts";
+import { emptyM1V2Repetition } from "./m1-v2-aggregate.ts";
+import { getBenchmarkFixture } from "./fixtures.ts";
 
 export { runtimeInstructions } from "./workflow-arm.ts";
 export type { LandingValidator } from "./workflow-arm.ts";
@@ -152,6 +158,9 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
     if (input.signal.aborted) break;
     const prior = completed.get(arm.key);
     if (prior && prior.arm.fixtureHash === arm.fixtureHash && isTerminal(prior)) {
+      verifyTerminalDurableEvidence(input.plan, prior);
+      if (prior.gateCode === "measurement_unavailable" && prior.m1V2 &&
+          (prior.providerDispatchState === "provider_dispatched" || prior.providerDispatchState === "provider_output_observed")) break;
       const replacement = replacementEligibility({
         providerDispatchState: prior.providerDispatchState ?? "adapter_entered",
         infrastructureGateStage: prior.infrastructureGateStage ?? null,
@@ -164,13 +173,24 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
       result.observations = result.observations.filter((item) => item.arm.key !== arm.key);
       completed.delete(arm.key);
     }
+    if (!completed.has(arm.key) && (input.plan.campaign === "m1-v2" || input.plan.campaign === "m1-v2-paired")) {
+      if (existsSync(join(arm.evidenceRoot, "sc01-public-evidence.json.tmp"))) {
+        throw new Error("sc01_export_temporary_state_conflict");
+      }
+      if (existsSync(join(arm.evidenceRoot, "sc01-public-evidence.json"))) {
+        const recovered = recoverOrphanedDurableEvidence(input.plan, arm, preflight[arm.agent]);
+        result.observations.push(recovered); completed.set(arm.key, recovered);
+        await input.store.save(result);
+        break;
+      }
+    }
     const sourceContext = sourceContexts.get(arm.sourceRoot)!;
     const observation = await runBenchmarkArm({
       arm,
       adapter: input.adapters[arm.agent],
       preflight: preflight[arm.agent],
       signal: input.signal,
-      planRunRoot: input.plan.runRoot,
+      evidenceContext: { planIdentity: benchmarkPlanIdentity(input.plan), runRoot: input.plan.runRoot },
       harnessRoot: input.plan.harnessRoot,
       landingValidator: input.landingValidator,
       evidenceSnapshot: sourceContext.evidenceSnapshot,
@@ -188,6 +208,38 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
   result.run.state = result.observations.length === input.plan.arms.length ? "reported" : "running";
   await input.store.save(result);
   return { result, preflight };
+}
+
+function recoverOrphanedDurableEvidence(plan: BenchmarkPlan, arm: import("./contracts.ts").BenchmarkArmPlan, preflight: PreflightResult): import("./contracts.ts").BenchmarkObservation {
+  const path = join(arm.evidenceRoot, "sc01-public-evidence.json");
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as { identity: M1V2EvidenceExportIdentity };
+  const fixture = getBenchmarkFixture(arm.scenario, plan.harnessRoot);
+  const handle = relative(resolve(plan.runRoot), path).replaceAll("\\", "/");
+  const verified = verifyM1V2DurableProjection({ planIdentity: benchmarkPlanIdentity(plan), runRoot: plan.runRoot, arm, fixture,
+    target: { sessionId: parsed.identity.sessionId, turnId: parsed.identity.turnId }, durable: { handle, sha256: null } });
+  const observation = createGatedBenchmarkObservation(arm, { ...preflight, available: false, configVerified: false,
+    gateCode: "measurement_unavailable", diagnostic: "sc01_export_recovered_after_checkpoint_crash" });
+  observation.providerDispatchState = "provider_dispatched";
+  observation.infrastructureGateStage = null;
+  observation.m1V2 = { ...emptyM1V2Repetition(verified.identity.armId, arm.repetition, "gated", "sc01_export_recovered_after_checkpoint_crash"),
+    ...verified.arithmetic, targetEvidenceIdentity: { sessionId: verified.identity.sessionId, turnId: verified.identity.turnId },
+    durableEvidence: { handle: verified.handle, sha256: verified.sha256, identity: verified.identity } };
+  return observation;
+}
+
+function verifyTerminalDurableEvidence(plan: BenchmarkPlan, observation: import("./contracts.ts").BenchmarkObservation): void {
+  const durable = observation.m1V2?.durableEvidence;
+  if (!durable) {
+    const postDispatch = observation.providerDispatchState === "provider_dispatched" || observation.providerDispatchState === "provider_output_observed";
+    if ((plan.campaign === "m1-v2" || plan.campaign === "m1-v2-paired") && observation.m1V2 && postDispatch) {
+      throw new Error("sc01_export_resume_evidence_missing");
+    }
+    return;
+  }
+  const fixture = getBenchmarkFixture(observation.arm.scenario, plan.harnessRoot);
+  if (!observation.m1V2?.targetEvidenceIdentity) throw new Error("sc01_export_resume_target_identity_missing");
+  verifyM1V2DurableProjection({ planIdentity: benchmarkPlanIdentity(plan), runRoot: plan.runRoot, arm: observation.arm, fixture,
+    target: observation.m1V2.targetEvidenceIdentity, durable: { handle: durable.handle, sha256: durable.sha256 } });
 }
 
 function assertAdapterAuthority(

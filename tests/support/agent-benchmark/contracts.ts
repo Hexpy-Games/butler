@@ -265,6 +265,7 @@ export interface AdapterRunInput {
   sourceEvidenceRoot: string;
   runtimeInstructions: string;
   signal: AbortSignal;
+  benchmarkEvidence: { planIdentity: string; runRoot: string };
 }
 
 export interface AdapterRunResult {
@@ -297,6 +298,7 @@ export interface AdapterRunResult {
   landingValidation?: LandingValidation;
   changedPaths: readonly string[];
   evidenceRefs: readonly string[];
+  providerDispatchState?: "adapter_entered" | "provider_dispatched" | "provider_output_observed";
   m1V2Evidence?: {
     evidence: Record<string, unknown>;
     metrics: import("../../../packages/butler-agent/src/operations/metrics/operational-metrics.ts").OperationalMetricEvent[];
@@ -304,6 +306,12 @@ export interface AdapterRunResult {
     landingValidation: import("./m1-v2-types.ts").M1V2LandingValidation | null;
     sourceRevision: string;
     attemptStartedAtMs: number;
+    exportHandle?: string;
+    exportRunRoot?: string;
+    exportPlanIdentity?: string;
+    exportSha256?: string;
+    exportPath?: string;
+    exportIdentity?: import("./m1-v2-evidence-export.ts").M1V2EvidenceExportIdentity;
   };
 }
 

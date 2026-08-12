@@ -35,9 +35,12 @@ only provider, auth mode, exact model, reasoning, execution mode, and
 available/unavailable booleans. Unavailable auth/model stops before manifest
 creation or dispatch as `measurement_unavailable`. Available execution is
 preregistered as ordinary non-fast `openai/gpt-5.6-sol`, reasoning `medium`,
-with actual request option `service_tier=default`. The provider-observation
-adapter records only the returned service-tier scalar and exact model; missing,
-fast/priority, model, reasoning, or provider drift rejects fail closed.
+with request execution mode `auto_by_omission`; the frozen serializer omits
+`service_tier` and the proxy does not mutate its bytes. The provider-observation
+adapter separately records the effective response tier and exact model. Only a
+reported effective `default` Agent attempt is ordinary non-fast eligible;
+missing, fast/priority, model, reasoning, or provider drift is durably typed and
+rejected fail closed without replacement.
 
 Before and after prepared resources have separate pins for source revision,
 source compatibility, producer manifest, dependency closure, full resource,
@@ -170,6 +173,44 @@ This Task does not mark `T-M1-V2-FINAL-BENCHMARK` done. That later Task alone
 may run the final controlled four-by-three and decide the quantitative M1
 criteria. The next optimization Task must use this harness for preregistered
 affected-arm pairs without running the full matrix.
+
+## SC01 durable evidence export repair
+
+Task `T-M1-V2-SC01-DURABLE-EVIDENCE-EXPORT-REPAIR-20260813` adds one
+privacy-safe immutable projection before per-arm Electron `dataRoot` cleanup.
+The existing provider observation now records only an observer-private random-
+key HMAC-SHA-256 and a bounded serializer contract for the exact unchanged final
+Buffer sent upstream; the key is not retained. An absent service-tier field is
+typed `auto_by_omission` without mutating bytes, and only provider-reported
+effective `default` attempts are ordinary-non-fast eligible.
+The exporter joins every arm-tagged SC01 envelope/segment/nullable-usage row to
+exact all-Step Session/Turn/ordinal/role membership, preserving target and
+other-Step Agent attempts while evaluator arithmetic consumes target attempts
+only. It verifies exact segment sum, envelope/provider byte equality, route/
+serializer identity, retry identity, and typed non-Agent overhead.
+
+Publication is create-only and durable: exclusive temporary write, file sync,
+atomic hard-link publication, temporary unlink, directory sync, reopen, schema/
+identity/count/hash verification, then cleanup. An export or verification
+failure returns `measurement_unavailable`, keeps `dataRoot`, and supplies no
+post-dispatch replacement. Identical resume verifies idempotently; temporary,
+stale, conflicting, or mutated evidence fails closed. The evaluator reopens the
+export and reconstructs only operational metric rows from the verified public
+projection before calculating SC01 results. No raw request body, prompt,
+transcript, message, tool payload, response body, credential, private path, or
+hidden reasoning is retained.
+
+A valid export orphaned before checkpoint terminalization is retained as
+`measurement_unavailable` with `provider_dispatched` state. Repeated resume
+reverifies the same handle/hash and cannot authorize adapter/provider dispatch.
+Report generation likewise gates post-dispatch M1 summaries whose durable
+handle is absent or whose export no longer verifies.
+
+Provider-free focused validation passed the durable exporter/cleanup suite and
+provider observation proxy suite. No provider, Electron, prepared resource,
+renderer, campaign, Hermes, or OpenCode execution occurred. Final 4x3 results,
+the immutable failed Attempt `A-M1-V2-FINAL-BENCHMARK-20260813-01`, and its
+manifest were not changed or reconstructed.
 
 ## P1 repair validation
 
@@ -534,10 +575,11 @@ Paired planning requires an explicit durable non-temporary run root and rejects
 overlapping run, harness, source, or prepared-resource roots.
 
 The preregistered `openai/gpt-5.6-sol`, medium reasoning,
-`ordinary_non_fast`, provider, auth mode, and `service_tier=default` contract is
-carried through the actual harness request options and corroborated against
-each target request and response. Missing or conflicting model, reasoning,
-auth, request tier, or response tier is rejected. No credential value is
+`ordinary_non_fast`, provider, auth mode, and `auto_by_omission` request contract
+is carried through the actual harness request identity and corroborated against
+each target request and response. Only provider-reported effective `default`
+is eligible; missing or conflicting model, reasoning, auth, or response tier is
+durably rejected. No credential value is
 retained; only the typed auth mode and authorization scheme are recorded.
 
 Pair eligibility is one typed evaluator decision used by the aggregate and

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -33,6 +33,9 @@ import type { AdapterRunInput, AdapterRunResult, AgentAdapter, BenchmarkResultFi
 import type { CommandExecutor, CommandResult } from "../support/agent-benchmark/command.ts";
 import { createGatedBenchmarkObservation, resumeOrInitialize } from "../support/agent-benchmark/checkpoint.ts";
 import { prepareTestHarnessAuthority } from "./support/m1-v2-provenance-authority.ts";
+import { createButlerAdapter } from "../support/agent-benchmark/butler-adapter.ts";
+import { Database } from "bun:sqlite";
+import { verifyM1V2EvidenceExport } from "../support/agent-benchmark/m1-v2-evidence-export.ts";
 
 const root = mkdtempSync(join(process.cwd(), ".agent-benchmark-paired-contract-"));
 const authority = prepareTestHarnessAuthority(root);
@@ -121,7 +124,7 @@ describe("final paired M1 campaign contract", () => {
     const manifest = readFileSync(join(runRoot, "manifest.json"), "utf8");
     expect(manifest).not.toContain(root);
     expect(manifest).toContain("ordinary_non_fast");
-    expect(manifest).toContain('"service_tier": "default"');
+    expect(manifest).toContain('"requestExecutionMode": "auto_by_omission"');
     await runAgentBenchmarkCli(cliArgs(runRoot, files), { preflightExecutor: executor });
     expect(readFileSync(join(runRoot, "manifest.json"), "utf8")).toBe(manifest);
     expect(manifest).not.toContain("secret-token");
@@ -241,8 +244,8 @@ describe("final paired M1 campaign contract", () => {
     const output = JSON.parse(await runAgentBenchmarkCli(args, { createAdapters: () => ({ butler, hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
       landingValidator: async () => { throw new Error("typed landing-cold uses M1 evidence"); }, preflightExecutor: authExecutor(true) })) as { reportPath: string };
     expect(dispatches).toBe(24);
-    expect(readFileSync(join(runRoot, "report", "comparison-index.json"), "utf8")).toContain('"status": "ranked"');
-    expect(readFileSync(join(runRoot, output.reportPath), "utf8")).toContain("Registered request 45 to 38-40 gate: pass");
+    expect(readFileSync(join(runRoot, "report", "comparison-index.json"), "utf8")).toContain('"status": "unranked"');
+    expect(readFileSync(join(runRoot, output.reportPath), "utf8")).toContain("`measurement_unavailable`");
     for (const publicPath of [join(runRoot, "result.json"), join(runRoot, output.reportPath),
       join(runRoot, "report", "comparison-index.json"), join(runRoot, "report", "comparison-index.html")]) {
       const publicText = readFileSync(publicPath, "utf8");
@@ -275,6 +278,95 @@ describe("final paired M1 campaign contract", () => {
     expect(readFileSync(join(rejectedRoot, "report", "comparison-index.json"), "utf8")).toContain("paired_incomplete_or_rejected");
     const rejectedResult = JSON.parse(readFileSync(join(rejectedRoot, "result.json"), "utf8")) as { observations: Array<{ terminalState: string }> };
     expect(rejectedResult.observations.every((row) => row.terminalState === "rejected")).toBe(true);
+  }, 30_000);
+
+  test("runs public paired CLI through the real Butler adapter, exporter, evaluator, and report provider-free", async () => {
+    const beforeRoot = join(root, "export-cli-before"), afterRoot = join(root, "export-cli-after");
+    for (const [path, revision] of [[beforeRoot, FINAL_BEFORE_REVISION], [afterRoot, FINAL_AFTER_REVISION]] as const) {
+      execFileSync("git", ["clone", "--quiet", "--no-checkout", process.cwd(), path]);
+      execFileSync("git", ["-C", path, "checkout", "--quiet", revision]);
+    }
+    const runRoot = join(root, "export-cli-run"), files = writeCliInputs("export-cli");
+    let runnerCalls = 0;
+    const butler = createButlerAdapter(async (input) => {
+      runnerCalls += 1;
+      const dataRoot = join(input.arm.evidenceRoot, "data"); mkdirSync(join(dataRoot, "metrics"), { recursive: true });
+      const db = new Database(join(dataRoot, "runtime.sqlite")); db.exec("CREATE TABLE safe(value TEXT)"); db.close();
+      const now = Date.now(), digest = "A".repeat(43), turnId = `turn-${input.arm.order}`, sessionId = `session-${input.arm.order}`;
+      const metric = (name: string, dimensions: Record<string, string | number | boolean | null>) => JSON.stringify({ schema: "butler.operational-metric.v1", ts: now + 50,
+        category: "context", name, status: "ok", dimensions, rawTextStored: false });
+      writeFileSync(join(dataRoot, "metrics", "operational-events.jsonl"), [
+        metric("m1_v2_request_envelope", { schemaVersion: "butler.m1-request-envelope.v2", attemptDigest: digest, turnDigest: "T".repeat(43), phaseDigest: "P".repeat(43),
+          roundIndex: 0, retryOrdinal: 0, providerId: "openai-codex", modelRef: "openai/gpt-5.6-sol", armId: input.arm.scenario,
+          sourceRevision: input.arm.sourceRevision, cacheBoundaryRevision: input.fixture.m1V2!.scenario.cacheBoundaryEvidence?.expectedRevision ?? "current", providerSendBytes: 100, estimatedInputTokens: null, eligibility: "usage_unavailable" }),
+        metric("m1_v2_request_segment", { schemaVersion: "butler.m1-request-segment.v2", attemptDigest: digest, segmentId: "segment-01", kind: "provider_carrier_overhead",
+          stability: "dynamic", providerSendBytes: 100, estimatedInputTokens: null, keyedContentDigest: "K".repeat(43) }),
+        metric("m1_v2_response_usage", { schemaVersion: "butler.m1-response-usage.v2", attemptDigest: digest, status: "unavailable", promptTokens: null,
+          cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null, reasoningTokens: null, totalTokens: null }),
+      ].join("\n") + "\n");
+      return { ok: true, generatedAt: new Date(now).toISOString(), run: { dataRoot, runRoot: input.arm.evidenceRoot, workspaceRoot: join(input.arm.evidenceRoot, "workspace"),
+        model: "openai/gpt-5.6-sol", reasoningEffort: "medium" }, session: { id: sessionId }, isolation: { bindingWorkspace: join(input.arm.evidenceRoot, "workspace"), workspaceInsideRunRoot: true, sourceDataIsRunData: false },
+        observations: [{ stepId: input.fixture.m1V2!.targetStepId, sessionId, turnId, providerRequestIdentities: [{ ordinal: 1, sessionId, turnId, requestKind: "agent", attemptDigest: digest }],
+          terminalState: "delivered", finalText: "안녕하세요.", providerReportedModel: "gpt-5.6-sol", providerAgentModels: ["gpt-5.6-sol"], promptSha256: input.fixture.m1V2!.promptSha256[input.fixture.m1V2!.targetStepId],
+          timing: { submittedAtMs: now, terminalAtMs: now + 100, elapsedMs: 100 }, reload: { tested: true, finalMatched: true } }],
+        providerRequests: [{ ordinal: 1, attemptDigest: digest, requestKind: "agent", requestedModel: "gpt-5.6-sol", requestedReasoning: "medium", requestedServiceTier: null, requestedServiceTierMode: "auto_by_omission", authorizationScheme: "bearer",
+          routeId: "openai-codex-responses", requestStartedAtMs: now + 10, serializedRequestBytes: 100, serializedRequestDigest: "d".repeat(64), serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1", serializerContract: "butler.openai-codex-final-json.v1",
+          firstContentBearingDeltaAtMs: 5, completedAtMs: now + 50, terminatedAtMs: now + 50, termination: "completed", status: 200, hasTextContent: true, hasToolArgumentContent: false,
+          hasReasoningContent: false, streamedTextChars: 1, finalTextChars: 0, providerReportedModel: "gpt-5.6-sol", providerReportedServiceTier: "default",
+          effectiveServiceTierAvailability: "reported", effectiveServiceTierReason: "provider_response_reported" }] };
+    }, afterRoot);
+    const unavailable = (agent: "hermes" | "opencode"): AgentAdapter => ({ agent, async preflight() { throw new Error("not scheduled"); }, async run() { throw new Error("not scheduled"); } });
+    const args = cliArgs(runRoot, files).map((value, index) => index === 0 ? "run" : value === join(root, "private-before-source") ? beforeRoot : value === join(root, "private-after-source") ? afterRoot : value);
+    args.push("--execute-available");
+    await runAgentBenchmarkCli(args, { createAdapters: () => ({ butler, hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
+      preflightExecutor: authExecutor(true), landingValidator: async () => { throw new Error("not reached"); } });
+    expect(runnerCalls).toBe(24);
+    expect(existsSync(join(runRoot, "arms", "block-1", "before", "evidence", "sc01-public-evidence.json"))).toBe(true);
+    expect(readFileSync(join(runRoot, "report", "agent-benchmark-report.md"), "utf8")).toContain("Final paired M1 contract");
+    const completedResult = JSON.parse(readFileSync(join(runRoot, "result.json"), "utf8")) as BenchmarkResultFile;
+    const hardPath = join(runRoot, "arms", "block-1", "before", "evidence", "sc01-public-evidence.json");
+    const hardIdentity = (JSON.parse(readFileSync(hardPath, "utf8")) as { identity: import("../support/agent-benchmark/m1-v2-evidence-export.ts").M1V2EvidenceExportIdentity }).identity;
+    expect(() => verifyM1V2EvidenceExport({ path: hardPath, expected: hardIdentity })).not.toThrow();
+    expect(completedResult.observations[0]!.m1V2, JSON.stringify(completedResult.observations[0]!.diagnostics)).not.toBeNull();
+    expect(completedResult.observations[0]!.m1V2!.durableEvidence, JSON.stringify({ gate: completedResult.observations[0]!.gateCode, diagnostics: completedResult.observations[0]!.diagnostics })).toBeDefined();
+    const reportAuthorityResult = { ...completedResult, run: { ...completedResult.run, runRoot }, plan: { ...completedResult.plan, runRoot } };
+    const missingDurable = structuredClone(reportAuthorityResult);
+    delete missingDurable.observations[0]!.m1V2!.durableEvidence;
+    expect(summarizeBenchmarkResult(missingDurable).arms[0]).toMatchObject({ terminalState: "gated", gateCode: "measurement_unavailable" });
+    const tamperedSummary = structuredClone(reportAuthorityResult); tamperedSummary.observations[0]!.m1V2!.agentAttempts[0]!.providerSendBytes += 1;
+    expect(summarizeBenchmarkResult(tamperedSummary).arms[0]).toEqual(summarizeBenchmarkResult(reportAuthorityResult).arms[0]);
+    const completedDurablePath = join(runRoot, completedResult.observations[0]!.m1V2!.durableEvidence!.handle);
+    const copiedDir = join(runRoot, "copied-evidence"); mkdirSync(copiedDir, { recursive: true });
+    const copiedPath = join(copiedDir, "sc01-public-evidence.json"); copyFileSync(completedDurablePath, copiedPath);
+    const copiedHandle = structuredClone(reportAuthorityResult); copiedHandle.observations[0]!.m1V2!.durableEvidence!.handle = "copied-evidence/sc01-public-evidence.json";
+    expect(summarizeBenchmarkResult(copiedHandle).arms[0]).toMatchObject({ terminalState: "gated", gateCode: "measurement_unavailable" });
+    const originalDurable = readFileSync(completedDurablePath, "utf8");
+    writeFileSync(completedDurablePath, originalDurable.replace('"providerSendBytes": 100', '"providerSendBytes": 101'));
+    expect(summarizeBenchmarkResult(reportAuthorityResult).arms[0]).toMatchObject({ terminalState: "gated", gateCode: "measurement_unavailable" });
+    const tamperedReportRoot = join(runRoot, "tampered-report"); writeBenchmarkReport(reportAuthorityResult, tamperedReportRoot);
+    expect(readFileSync(join(tamperedReportRoot, "comparison-index.json"), "utf8")).toContain('"status": "unranked"');
+    expect(readFileSync(join(tamperedReportRoot, "comparison-index.html"), "utf8")).toContain("unranked");
+    expect(readFileSync(join(tamperedReportRoot, "agent-benchmark-report.md"), "utf8")).not.toContain("No adapter gates were recorded.");
+    writeFileSync(completedDurablePath, originalDurable);
+    writeFileSync(join(runRoot, "result.json"), `${JSON.stringify({ ...completedResult, observations: [], run: { ...completedResult.run, state: "running" } }, null, 2)}\n`);
+    let restartDispatches = 0;
+    const mustNotDispatch = createButlerAdapter(async () => { restartDispatches += 1; throw new Error("must not redispatch"); }, afterRoot);
+    await runAgentBenchmarkCli(args, { createAdapters: () => ({ butler: mustNotDispatch, hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
+      preflightExecutor: authExecutor(true), landingValidator: async () => { throw new Error("must not validate"); } });
+    expect(restartDispatches).toBe(0);
+    const persisted = JSON.parse(readFileSync(join(runRoot, "result.json"), "utf8")) as BenchmarkResultFile;
+    expect(persisted.observations[0]).toMatchObject({ terminalState: "gated", gateCode: "measurement_unavailable", providerDispatchState: "provider_dispatched",
+      infrastructureGateStage: null, m1V2: { reasons: ["sc01_export_recovered_after_checkpoint_crash"] } });
+    await runAgentBenchmarkCli(args, { createAdapters: () => ({ butler: mustNotDispatch, hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
+      preflightExecutor: authExecutor(true), landingValidator: async () => { throw new Error("must not validate"); } });
+    expect(restartDispatches).toBe(0);
+    const twiceResumed = JSON.parse(readFileSync(join(runRoot, "result.json"), "utf8")) as BenchmarkResultFile;
+    expect(twiceResumed.replacements ?? []).toHaveLength(0);
+    const durablePath = join(runRoot, persisted.observations[0]!.m1V2!.durableEvidence!.handle);
+    writeFileSync(durablePath, readFileSync(durablePath, "utf8").replace('"providerSendBytes": 100', '"providerSendBytes": 101'));
+    expect(summarizeBenchmarkResult(persisted).pairedCampaign?.acceptance.complete).toBe(false);
+    expect(comparisonIndexForResult({ ...persisted, observations: persisted.observations.map((row, index) => index === 0 ? { ...row, terminalState: "gated" } : row) })
+      .find((entry) => entry.id === "paired-butler")?.status).toBe("unranked");
   }, 30_000);
 
   test("corroborates ordinary non-fast medium and rejects fast/service-tier drift", () => {
@@ -401,7 +493,7 @@ function fixtureHashes() {
 }
 
 function execution() {
-  return { provider: "openai" as const, authMode: "managed" as const, model: "openai/gpt-5.6-sol" as const, reasoning: "medium" as const, executionMode: "ordinary_non_fast" as const, serviceTier: "default" as const, requestOption: { service_tier: "default" as const } };
+  return { provider: "openai" as const, authMode: "managed" as const, model: "openai/gpt-5.6-sol" as const, reasoning: "medium" as const, executionMode: "ordinary_non_fast" as const, serviceTier: "default" as const, requestExecutionMode: "auto_by_omission" as const };
 }
 
 function authReceipt() { return { schema: "butler.provider-auth-preflight-receipt.v1" as const,
@@ -506,7 +598,7 @@ function completeFakeResult(input: AdapterRunInput): AdapterRunResult {
   return { exitCode: 0, gateCode: "none", timedOut: false, cancelled: false, stdout: "", stderr: "", adapterVersion: "fake-1",
     provider: "openai", finalText, sessionId, effectiveConfig: arm.effectiveConfig,
     pairedExecutionEvidence: { provider: execution.provider, model: execution.model, reasoning: execution.reasoning,
-      providerServiceTiers: ["default"], requestServiceTiers: ["default"], requestModels: [execution.model],
+      providerServiceTiers: ["default"], requestServiceTiers: ["auto_by_omission"], requestModels: [execution.model],
       requestReasoning: ["medium"], authorizationSchemes: ["bearer"], routeIds: ["openai-codex-responses"] }, usage: {}, tools: {}, timing: {}, operations: {},
     changedPaths: [], evidenceRefs: [], m1V2Evidence: { evidence, metrics, db: { quickCheckDatabases: 1, quickCheckPassed: true,
       toolCalls: arm.scenario === "landing-cold" ? 3 : 0, webToolCalls: arm.scenario === "current-web-cold" ? 1 : 0,

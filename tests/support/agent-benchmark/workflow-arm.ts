@@ -28,7 +28,7 @@ export interface RunBenchmarkArmInput {
   adapter: AgentAdapter;
   preflight: PreflightResult;
   signal: AbortSignal;
-  planRunRoot: string;
+  evidenceContext: { planIdentity: string; runRoot: string };
   harnessRoot: string;
   landingValidator: LandingValidator;
   evidenceSnapshot: RepositoryEvidenceSnapshot | null;
@@ -107,6 +107,7 @@ export async function runBenchmarkArm(input: RunBenchmarkArmInput): Promise<Benc
       sourceEvidenceRoot: arm.scenario === "butler_landing_page" ? evidenceSnapshot?.root ?? "" : "",
       runtimeInstructions: runtimeInstructions(arm, arm.scenario === "butler_landing_page" ? evidenceSnapshot?.root ?? "" : "", arm.scenario === "butler_landing_page" ? evidenceSnapshot?.sha256 ?? "" : ""),
       signal: controller.signal,
+      benchmarkEvidence: input.evidenceContext,
     });
     const afterFiles = inventoryOutputFiles(arm.outputRoot);
     if (evidenceSnapshot) {
@@ -151,8 +152,8 @@ export async function runBenchmarkArm(input: RunBenchmarkArmInput): Promise<Benc
         },
         evidenceRefs: [
           ...adapterResult.evidenceRefs,
-          ...(landingValidation.desktop.screenshotRef ? [relative(input.planRunRoot, join(arm.evidenceRoot, landingValidation.desktop.screenshotRef))] : []),
-          ...(landingValidation.mobile.screenshotRef ? [relative(input.planRunRoot, join(arm.evidenceRoot, landingValidation.mobile.screenshotRef))] : []),
+          ...(landingValidation.desktop.screenshotRef ? [relative(input.evidenceContext.runRoot, join(arm.evidenceRoot, landingValidation.desktop.screenshotRef))] : []),
+          ...(landingValidation.mobile.screenshotRef ? [relative(input.evidenceContext.runRoot, join(arm.evidenceRoot, landingValidation.mobile.screenshotRef))] : []),
         ],
       };
       if (evidenceSnapshot && arm.agent !== "butler") {

@@ -32,6 +32,7 @@ test.skipIf(!sourceRoot || !referenceJson)(
       sourceEvidenceRoot: "",
       runtimeInstructions: "unused",
       signal: new AbortController().signal,
+      benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: evidenceRoot },
     });
     const after = preparedResourceDirectoryIdentity(reference.resourceDir);
     const evidence = JSON.parse(readFileSync(join(evidenceRoot, "evidence.json"), "utf8"));

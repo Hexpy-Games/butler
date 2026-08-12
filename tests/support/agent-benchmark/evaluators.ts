@@ -98,9 +98,9 @@ export function evaluateAdapterResult(
     changedPaths: result.changedPaths,
     diagnostics: diagnostics.map((value) => boundedText(value)).slice(-8),
     evidenceRefs: safeEvidenceRefs(result.evidenceRefs),
-    providerDispatchState: result.pairedExecutionEvidence?.providerServiceTiers.length
+    providerDispatchState: result.providerDispatchState ?? (result.pairedExecutionEvidence?.providerServiceTiers.length
       ? (result.finalText ? "provider_output_observed" : "provider_dispatched")
-      : "adapter_entered",
+      : "adapter_entered"),
     infrastructureGateStage: null,
     pairedComparableIdentity: comparableIdentityForArm(arm, m1V2, pairedRuntimeIdentity(arm, result, context)),
     m1V2,

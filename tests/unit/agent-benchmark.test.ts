@@ -348,8 +348,9 @@ test("landing evidence failure gates only landing arms, not direct or web arms",
   const preflight: PreflightResult = { available: true, executable: "fixture", version: "fixture", authenticated: true, configVerified: true, gateCode: "none", diagnostic: null };
   const direct = plan.arms.find((arm) => arm.agent === "butler" && arm.scenario === "direct_conversation" && arm.cache === "cold" && arm.track === "controlled")!;
   const landing = plan.arms.find((arm) => arm.agent === "butler" && arm.scenario === "butler_landing_page" && arm.cache === "cold" && arm.track === "controlled")!;
-  const directObservation = await runBenchmarkArm({ arm: direct, adapter, preflight, signal: new AbortController().signal, planRunRoot: plan.runRoot, harnessRoot: plan.harnessRoot, landingValidator: async () => validLanding(), evidenceSnapshot: null, sourceDiagnostic: null, evidenceDiagnostic: "evidence materialization failed" });
-  const landingObservation = await runBenchmarkArm({ arm: landing, adapter, preflight, signal: new AbortController().signal, planRunRoot: plan.runRoot, harnessRoot: plan.harnessRoot, landingValidator: async () => validLanding(), evidenceSnapshot: null, sourceDiagnostic: null, evidenceDiagnostic: "evidence materialization failed" });
+  const evidenceContext = { planIdentity: benchmarkPlanIdentity(plan), runRoot: plan.runRoot };
+  const directObservation = await runBenchmarkArm({ arm: direct, adapter, preflight, signal: new AbortController().signal, evidenceContext, harnessRoot: plan.harnessRoot, landingValidator: async () => validLanding(), evidenceSnapshot: null, sourceDiagnostic: null, evidenceDiagnostic: "evidence materialization failed" });
+  const landingObservation = await runBenchmarkArm({ arm: landing, adapter, preflight, signal: new AbortController().signal, evidenceContext, harnessRoot: plan.harnessRoot, landingValidator: async () => validLanding(), evidenceSnapshot: null, sourceDiagnostic: null, evidenceDiagnostic: "evidence materialization failed" });
   expect(directObservation.gateCode).not.toBe("configuration_unverifiable");
   expect(landingObservation.gateCode).toBe("configuration_unverifiable");
   rmSync(root, { recursive: true, force: true });
@@ -442,7 +443,7 @@ test("Butler adapter uses the last turn and BTCC telemetry when present", async 
     ],
   }), root);
   expect((await adapter.preflight()).version).toBe("fixture-butler-1");
-  const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
+  const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
   expect(result.finalText).toBe("last turn");
   expect(result.sessionId).toBe("product-session");
   expect(result.usage.modelRequests).toBe(2);
@@ -470,7 +471,7 @@ test("Butler harness receives a nonexistent evidence root while external roots r
         providerRequests: [],
       };
     }, process.cwd());
-    const result = await adapter.run({ arm: butlerArm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+    const result = await adapter.run({ arm: butlerArm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
     expect(evidenceRootExistedAtInvocation === false).toBe(true);
     expect(result.gateCode).toBe("none");
 
@@ -506,7 +507,7 @@ test("Butler adapter cleans ephemeral runtime data after successful and failed h
         if (failed) throw new Error("harness failed");
         return evidence;
       }, process.cwd());
-      const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+      const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
       expect(existsSync(join(arm.evidenceRoot, "data"))).toBe(false);
       expect(existsSync(join(arm.evidenceRoot, "evidence.json"))).toBe(true);
       expect(result.exitCode).toBe(failed ? 1 : 0);
@@ -539,7 +540,7 @@ test("Butler runtime cleanup fails closed for out-of-root and symlink data paths
         };
         return evidence;
       }, process.cwd());
-      const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+      const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
       expect(result.gateCode).toBe("configuration_unverifiable");
       expect(evaluateAdapterResult(arm, AGENT_BENCHMARK_FIXTURES[0]!, result).terminalState).toBe("gated");
       expect(existsSync(join(outside, "keep.txt"))).toBe(true);
@@ -754,7 +755,7 @@ test("external direct conversation uses one real session and sequential argv tur
     const preflight = await adapter.preflight();
     expect(preflight.gateCode).toBe("none");
     expect(preflight.effectiveConfig).toMatchObject({ model: "gpt-5.6-sol", provider: "openai-codex", reasoning: "medium" });
-    const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: AGENT_BENCHMARK_FIXTURES[0]!.prompts.join("\n"), sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
+    const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: AGENT_BENCHMARK_FIXTURES[0]!.prompts.join("\n"), sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
     expect(result.gateCode).toBe("none");
     expect(result.sessionId).toBe("real-session");
     expect(result.adapterVersion).toBe("hermes 1.0");
@@ -784,7 +785,7 @@ test("external direct conversation gates when a resumed turn changes the real se
     calls += 1;
     return { exitCode: 0, stdout: JSON.stringify({ sessionID: `session-${calls}`, text: "turn" }), stderr: "", startedAtMs: calls, endedAtMs: calls + 1, firstOutputAtMs: calls, timedOut: false, cancelled: false };
   } });
-  const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+  const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
   expect(result.gateCode).toBe("measurement_unavailable");
 });
 
@@ -812,7 +813,7 @@ test("OpenCode JSON events capture nested tool parts and a real session id", asy
     mkdirSync(arm.outputRoot, { recursive: true });
     const adapter = new ExternalCliAdapter("opencode", { execute: executeCommand });
     expect((await adapter.preflight()).gateCode).toBe("none");
-    const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: AGENT_BENCHMARK_FIXTURES[0]!.prompts.join("\n"), sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
+    const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: AGENT_BENCHMARK_FIXTURES[0]!.prompts.join("\n"), sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
     expect(result.gateCode).toBe("none");
     expect(result.tools.calls).toBeGreaterThan(0);
     expect((await (await import("node:fs/promises")).readFile(logPath, "utf8"))).toContain("--session oc-session");
@@ -1069,9 +1070,9 @@ test("external OpenCode controlled arms isolate legacy config while retaining no
   mkdirSync(warm.outputRoot, { recursive: true });
   mkdirSync(recommended.outputRoot, { recursive: true });
   const fixture = AGENT_BENCHMARK_FIXTURES[1]!;
-  const controlledResult = await adapter.run({ arm: controlled, fixture, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
-  const warmResult = await adapter.run({ arm: warm, fixture, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
-  const recommendedResult = await adapter.run({ arm: recommended, fixture, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal });
+  const controlledResult = await adapter.run({ arm: controlled, fixture, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
+  const warmResult = await adapter.run({ arm: warm, fixture, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
+  const recommendedResult = await adapter.run({ arm: recommended, fixture, prompt: "turn", sessionId: null, sourceEvidenceRoot: join(root, "evidence"), runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
   expect(controlledResult.gateCode).toBe("none");
   expect(warmResult.gateCode).toBe("none");
   expect(recommendedResult.gateCode).toBe("none");
@@ -1102,7 +1103,7 @@ test("controlled command argv uses documented isolation/model flags", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-benchmark-controlled-argv-"));
   const plan = createBenchmarkPlan({ runId: "controlled-argv", seed: 18, runRoot: join(root, "run"), sourceRoot: join(root, "source"), controlledModel: "openai/gpt-5.5" });
   const arm = plan.arms.find((candidate) => candidate.agent === "hermes" && candidate.track === "controlled" && candidate.cache === "cold")!;
-  const hermes = commandFor("hermes", { arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  const hermes = commandFor("hermes", { arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
   expect(hermes.args).toContain("--safe-mode");
   expect(hermes.args).toContain("--toolsets");
   expect(hermes.args).toContain("web,file");
@@ -1120,7 +1121,7 @@ test("controlled command argv uses documented isolation/model flags", () => {
   const queryIndex = hermes.args.indexOf("-q");
   expect(hermes.args[queryIndex + 1]).toBe("turn");
   expect(queryIndex).toBe(hermes.args.length - 2);
-  const resumedHermes = commandFor("hermes", { arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: "session-1", sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  const resumedHermes = commandFor("hermes", { arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: "session-1", sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
   expect(resumedHermes.args).toContain("--resume");
   expect(resumedHermes.args).toContain("session-1");
   const resumedQueryIndex = resumedHermes.args.indexOf("-q");
@@ -1128,13 +1129,13 @@ test("controlled command argv uses documented isolation/model flags", () => {
   expect(resumedHermes.args.indexOf("--resume")).toBeLessThan(resumedQueryIndex);
   expect(resumedQueryIndex).toBe(resumedHermes.args.length - 2);
   const landingArm = plan.arms.find((candidate) => candidate.agent === "hermes" && candidate.scenario === "butler_landing_page" && candidate.track === "controlled" && candidate.cache === "cold")!;
-  const hermesOneShot = commandFor("hermes", { arm: landingArm, fixture: AGENT_BENCHMARK_FIXTURES[2]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  const hermesOneShot = commandFor("hermes", { arm: landingArm, fixture: AGENT_BENCHMARK_FIXTURES[2]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
   expect(hermesOneShot.args).toContain("-z");
   expect(hermesOneShot.args[hermesOneShot.args.indexOf("-z") + 1]).toBe("turn");
   expect(hermesOneShot.args).toContain("--usage-file");
   expect(hermesOneShot.args.find((arg) => arg.endsWith("/evidence/hermes-usage.json"))).toBeTruthy();
   const recommendedArm = recommendedArmFrom(arm);
-  const recommended = commandFor("hermes", { arm: recommendedArm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  const recommended = commandFor("hermes", { arm: recommendedArm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
   expect(recommended.args).toEqual(expect.arrayContaining(["chat", "-Q", "-q"]));
   expect(recommended.args[recommended.args.indexOf("-q") + 1]).toBe("turn");
   expect(recommended.args.indexOf("-q")).toBe(recommended.args.length - 2);
@@ -1147,16 +1148,16 @@ test("controlled command argv uses documented isolation/model flags", () => {
   expect(recommended.args).not.toContain("--toolsets");
   expect(recommended.args).not.toContain("--yolo");
   const recommendedLanding = recommendedArmFrom(landingArm);
-  const recommendedOneShot = commandFor("hermes", { arm: recommendedLanding, fixture: AGENT_BENCHMARK_FIXTURES[2]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  const recommendedOneShot = commandFor("hermes", { arm: recommendedLanding, fixture: AGENT_BENCHMARK_FIXTURES[2]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
   expect(recommendedOneShot.args).toContain("-z");
   expect(recommendedOneShot.args).toContain("--usage-file");
   const nonSolArm = createBenchmarkPlan({ runId: "non-sol-command", seed: 18, runRoot: join(root, "non-sol-run"), sourceRoot: join(root, "non-sol-source"), controlledModel: "anthropic/claude-sonnet-4", controlledReasoning: "low" }).arms.find((candidate) => candidate.agent === "hermes" && candidate.track === "controlled" && candidate.scenario === "current_web_research")!;
-  const nonSolCommand = commandFor("hermes", { arm: nonSolArm, fixture: AGENT_BENCHMARK_FIXTURES[1]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  const nonSolCommand = commandFor("hermes", { arm: nonSolArm, fixture: AGENT_BENCHMARK_FIXTURES[1]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
   expect(nonSolCommand.args).not.toContain("--provider");
   expect(nonSolCommand.args).toContain("--model");
   expect(nonSolCommand.args).toContain("claude-sonnet-4");
   const opencodeArm = plan.arms.find((candidate) => candidate.agent === "opencode" && candidate.track === "controlled" && candidate.cache === "cold")!;
-  const opencode = commandFor("opencode", { arm: opencodeArm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal });
+  const opencode = commandFor("opencode", { arm: opencodeArm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
   expect(opencode.args).toContain("--auto");
   expect(opencode.args).toContain("openai/gpt-5.5");
 });
@@ -1213,7 +1214,7 @@ test("Hermes direct continuation uses stderr session identity and aggregate tele
     mkdirSync(arm.outputRoot, { recursive: true });
     const adapter = new ExternalCliAdapter("hermes", { execute: executeCommand });
     expect((await adapter.preflight()).gateCode).toBe("none");
-    const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+    const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[0]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
     expect(result.gateCode).toBe("measurement_unavailable");
   } finally {
     process.env.PATH = previousPath;
@@ -1277,7 +1278,7 @@ test("Hermes one-shot failures remain failed while successful missing usage is g
       mkdirSync(arm.outputRoot, { recursive: true });
       const adapter = new ExternalCliAdapter("hermes", executor);
       expect((await adapter.preflight()).gateCode).toBe("none");
-      const adapterResult = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[1]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+      const adapterResult = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[1]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
       const observation = evaluateAdapterResult(arm, AGENT_BENCHMARK_FIXTURES[1]!, adapterResult);
       if (mode === "missing-usage") {
         expect(adapterResult.gateCode).toBe("measurement_unavailable");
@@ -1332,7 +1333,7 @@ test("external adapter gates successful runs when command output completeness is
     mkdirSync(arm.outputRoot, { recursive: true });
     const adapter = new ExternalCliAdapter("hermes", executor);
     expect((await adapter.preflight()).gateCode).toBe("none");
-    const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[1]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal });
+    const result = await adapter.run({ arm, fixture: AGENT_BENCHMARK_FIXTURES[1]!, prompt: "turn", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "runtime", signal: new AbortController().signal, benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: "/benchmark" } });
     expect(result.exitCode).toBe(0);
     expect(result.gateCode).toBe("measurement_unavailable");
     expect(result.stderr).toContain("output stream completeness");

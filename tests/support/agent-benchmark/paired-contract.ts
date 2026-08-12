@@ -10,7 +10,7 @@ export const FINAL_REASONING = "medium" as const;
 export const FINAL_AUTH_MODE = "managed" as const;
 export const FINAL_EXECUTION = { provider: "openai", authMode: FINAL_AUTH_MODE, model: FINAL_MODEL,
   reasoning: FINAL_REASONING, executionMode: "ordinary_non_fast", serviceTier: "default",
-  requestOption: { service_tier: "default" } } as const;
+  requestExecutionMode: "auto_by_omission" } as const;
 export const FINAL_POLICY = { sequential: true, runtimeReorderAllowed: false,
   replacementRunsAllowed: "pre_provider_infrastructure_only", preProviderInfrastructureReplacementMax: 1,
   postProviderReplacementAllowed: false, cacheMismatch: "descriptive_only", usageUnavailable: "nullable" } as const;
@@ -49,7 +49,7 @@ export interface PairedExecutionContract {
   reasoning: typeof FINAL_REASONING;
   executionMode: "ordinary_non_fast";
   serviceTier: "default";
-  requestOption: { service_tier: "default" };
+  requestExecutionMode: "auto_by_omission";
 }
 
 export interface PairedCampaignContract {
@@ -209,7 +209,7 @@ export function corroboratePairedRequestEvidence(preregistered: PairedExecutionC
 } | undefined): void {
   if (!evidence || evidence.providerServiceTiers.length === 0 ||
       evidence.providerServiceTiers.some((value) => value !== preregistered.serviceTier) ||
-      evidence.requestServiceTiers.some((value) => value !== preregistered.serviceTier) ||
+      evidence.requestServiceTiers.some((value) => value !== "auto_by_omission") ||
       evidence.requestModels.some((value) => value !== preregistered.model) ||
       evidence.requestReasoning.some((value) => value !== preregistered.reasoning) ||
       evidence.authorizationSchemes.some((value) => value !== "bearer")) {

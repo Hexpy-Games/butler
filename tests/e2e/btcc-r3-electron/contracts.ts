@@ -274,3 +274,7 @@ export interface ProviderRequestTurnIdentity {
   requestKind: ProviderFixtureRequestKind;
   attemptDigest: string | null;
 }
+
+export type ProviderRequestSerializerContract =
+  | "butler.openai-codex-final-json.v1"
+  | "butler.openai-responses-final-json.v1";
