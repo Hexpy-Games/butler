@@ -26,6 +26,12 @@ import type {
   ReasoningEffort,
 } from "./contracts.ts";
 import {
+  bundledAgentPreparationError,
+  preflightBundledAgentDiskCapacity,
+  type ElectronRunResourceError,
+} from "./electron-run-resource.ts";
+import { failureEvidence, writeEvidence } from "./evidence.ts";
+import {
   assert,
   isInside,
   isRecord,
@@ -472,6 +478,19 @@ export async function prepareElectronRun(
 
   mkdirSync(dataRoot, { recursive: true, mode: 0o700 });
   mkdirSync(electronProfile, { recursive: true, mode: 0o700 });
+  if (agentOwnership === "electron") {
+    try {
+      preflightBundledAgentDiskCapacity(
+        runRoot,
+        providedBundledAgentResourceDir === null,
+      );
+    } catch (error) {
+      const resourceError = bundledAgentPreparationError(error);
+      if (!resourceError) throw error;
+      writePreparationFailureEvidence(run, options, resourceError);
+      throw resourceError;
+    }
+  }
   if (sessionKind === "chat") mkdirSync(workspaceRoot, { recursive: true });
   prepareConfig(sourceConfig, run, scenario.modelFallback, scenario.providerFixture, promptCacheKeyPrefix);
   if (scenario.providerFixture) {
@@ -494,10 +513,17 @@ export async function prepareElectronRun(
         `Prepared bundled Agent resource is unavailable: ${providedBundledAgentResourceDir}`,
       );
     } else {
-      run.bundledAgentResourceDir = prepareBundledAgentResource(
-        repoRoot,
-        join(runRoot, "bundled-agent-resource"),
-      ).resourceDir;
+      try {
+        run.bundledAgentResourceDir = prepareBundledAgentResource(
+          repoRoot,
+          join(runRoot, "bundled-agent-resource"),
+        ).resourceDir;
+      } catch (error) {
+        const resourceError = bundledAgentPreparationError(error);
+        if (!resourceError) throw error;
+        writePreparationFailureEvidence(run, options, resourceError);
+        throw resourceError;
+      }
     }
   }
   if (sessionKind === "chat") {
@@ -505,6 +531,21 @@ export async function prepareElectronRun(
     bindPreparedSession(run);
   }
   return run;
+}
+
+function writePreparationFailureEvidence(
+  run: PreparedRun,
+  options: ElectronHarnessOptions,
+  error: ElectronRunResourceError,
+): void {
+  writeEvidence(run.evidencePath, failureEvidence({
+    error,
+    launches: [],
+    observations: [],
+    options,
+    providerRequests: [],
+    run,
+  }));
 }
 
 export function bindingWorkspace(run: PreparedRun): string | null {

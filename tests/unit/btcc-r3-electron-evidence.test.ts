@@ -59,6 +59,7 @@ function evidenceRun(providerFixtureEnabled: boolean) {
 
 test("deterministic fixture evidence does not claim a real provider path", () => {
   const evidence = successEvidence({
+    bindingWorkspace: "/tmp/run/workspace",
     launches: [],
     observations: [observation()],
     options: { smoke: false },
@@ -71,6 +72,7 @@ test("deterministic fixture evidence does not claim a real provider path", () =>
 
 test("non-fixture evidence keeps the real provider path", () => {
   const evidence = successEvidence({
+    bindingWorkspace: "/tmp/run/workspace",
     launches: [],
     observations: [observation()],
     options: { smoke: false },

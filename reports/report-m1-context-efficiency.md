@@ -220,3 +220,56 @@ deterministic selection contract. No final 4x3, Hermes/OpenCode run, product
 runtime change, merge, or default-on change was performed. The clean-campaign
 observations that exposed the gap remain diagnostic provenance only and are not
 promoted to a baseline.
+
+## Current-web renderer-ready resource repair
+
+Task: `T-M1-V2-BENCHMARK-CURRENT-WEB-RENDERER-READY-REPAIR-20260812`
+
+The preserved primary and replacement failures are diagnostic provenance, not
+benchmark acceptance. Their zero Agent attempts, provider requests, and product
+observations are consistent with the earlier complete run evidence: Electron's
+bundled Agent extraction failed with `ENOSPC`, the App fatal-startup path exited
+cleanly with code 0 before renderer readiness, and the harness consequently
+reported only a generic pre-render failure. The proven call path is
+`prepareElectronRun -> prepareBundledAgentResource -> createServiceReleasePackage`
+followed by Electron
+`prepareAppManagedAgentRuntime -> extractAgentArchive -> extractPosixAgentArchive`.
+No defect was found in the separately pinned product policy.
+
+The harness now fails closed before packaging or product launch when the actual
+write-owner filesystems cannot satisfy their bounded archive lifecycle peaks.
+It distinguishes disk exhaustion from capacity-inspection failure, preserves
+typed stage/cause/owner/exit-code/signal evidence, and applies the same typed
+contract to port conflicts and renderer clean/nonzero/signal/timeout exits.
+Only allowlisted resource fields cross the evidence boundary; benchmark
+diagnostics retain no paths, raw payloads, prompts, or credentials. The existing
+adapter consumes recovered prelaunch evidence as `measurement_unavailable` with
+nullable metrics. There is no retry, restart, sleep, timeout extension, second
+driver, or product runtime-policy copy.
+
+Validation evidence:
+
+- The actual Electron runner, Butler adapter, and evaluator integration recovers
+  a preparation failure as a gated unavailable measurement.
+- Bounded localhost CDP tests cover renderer ready and an actual early clean
+  exit; policy regressions cover nonzero exit, signal, and readiness timeout.
+- Disk capacity, filesystem inspection, same/different device lifecycle peaks,
+  App/debug port conflicts, evidence privacy, provider observation, product
+  ownership, identity, temporal join, direct-warm, and run-authority regressions
+  passed in the focused suite.
+- A provider-free local launch smoke against the exact clean product revision
+  reached renderer, preload bridge, App Gateway, and native runtime readiness,
+  recorded zero provider requests, and cleaned both launches normally.
+- Typecheck, lint with zero errors, BTCC/module-shape checks, and
+  `git diff --check` passed. Module review reported only pre-existing large-file
+  review signals and no new boundary or direction defect.
+- Repository-wide `bun run check` emitted no specific failure but did not finish
+  within the bounded 300-second window, so a repo-wide pass is not claimed.
+- Independent ordinary non-fast Sol-high review found lifecycle-accounting,
+  consumer-wiring, privacy, and compile issues over three review cycles. Every
+  finding was repaired; final approval is recorded only after the fixed-diff
+  re-review.
+
+No provider campaign, final 4x3, Hermes/OpenCode run, product optimization,
+merge, or default-on change was performed. The preserved failures remain
+unavailable measurements and were not cleaned, renamed, or promoted.
