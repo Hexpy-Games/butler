@@ -3,6 +3,8 @@ import type {
   M1RequestSegmentKind,
   M1RequestSegmentSource,
 } from "../../../agent/btcc/ports/provider-request-attribution.ts";
+import type { ProviderRouteCacheIdentity } from
+  "../../../agent/btcc/ports/model-round.ts";
 
 export interface OpenAIRequestSegmentContinuation {
   provider: "openai";
@@ -12,6 +14,7 @@ export interface OpenAIRequestSegmentContinuation {
   deliveredThroughOrdinal?: number;
   statelessInput?: Array<Record<string, unknown>>;
   statelessManifest?: M1ProviderRequestSegmentManifestEntry[];
+  providerRouteIdentity?: ProviderRouteCacheIdentity;
 }
 
 export function requiredLegacyOpenAISent(

@@ -25,7 +25,7 @@ import {
   selectExactResultReplayPhase,
   type ExactResultReplayPhaseSelection,
 } from "../operation-result-replay/index.ts";
-import { phaseMinimalStableInstructions } from "./guided-phase-instructions.ts";
+import { phaseMinimalStableInstructionSurface } from "./guided-phase-instructions.ts";
 
 const FLAG_NAME = "BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE";
 const POLICY_REVISION = "butler.btcc-tool-instruction-policy.v1";
@@ -42,6 +42,7 @@ interface GuidedTurnPhasePolicySelection {
   providerTools: FunctionToolDefinition[];
   stableInstructionPrefix: string;
   exactResultReplay: ExactResultReplayPhaseSelection;
+  stableProviderCachePrefix?: import("../ports/model-round.ts").StableProviderCachePrefixContract;
 }
 
 /** Immutable BTCC admission used once by the production guided Turn agent. */
@@ -129,6 +130,9 @@ export function selectGuidedTurnPhasePolicy(
     providerTools,
     phase,
   );
+  const stableInstructions = phaseMinimalStableInstructionSurface(
+    phase, executionPolicy, POLICY_REVISION,
+  );
   return {
     mode: "phase_minimal",
     phase,
@@ -136,10 +140,7 @@ export function selectGuidedTurnPhasePolicy(
     executionPolicy,
     authorizedTools,
     providerTools,
-    stableInstructionPrefix: phaseMinimalStableInstructions(
-      phase,
-      executionPolicy,
-    ),
+    ...stableInstructions,
     exactResultReplay,
   };
 }

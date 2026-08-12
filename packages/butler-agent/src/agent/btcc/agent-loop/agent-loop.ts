@@ -93,6 +93,7 @@ export async function runBtccAgentLoop(
         cacheScope: input.cacheScope,
         attributionArmId: input.attributionArmId,
         cacheBoundaryEvidence: input.cacheBoundaryEvidence,
+        stableProviderCachePrefix: input.stableProviderCachePrefix,
         providerRetryAttempts: input.providerRetryAttempts,
         continuation,
         ...(bounded.envelope
@@ -117,7 +118,6 @@ export async function runBtccAgentLoop(
       throw error;
     }
   };
-
   const synthesizeFinalResponseForLoop = (iterationBase: number) => synthesizeFinalResponse({
     synthesis: input.finalSynthesis,
     messages,

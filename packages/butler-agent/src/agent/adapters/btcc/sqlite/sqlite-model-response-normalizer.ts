@@ -61,7 +61,9 @@ function normalizeBoundedContinuation(value: unknown): Record<string, unknown> {
       value.responseId.length > 200) {
     throw new Error("BTCC bounded continuation has invalid provider identity");
   }
-  const allowed = new Set(["provider", "responseId", "deliveredThroughOrdinal"]);
+  const allowed = new Set([
+    "provider", "responseId", "deliveredThroughOrdinal", "providerRouteIdentity",
+  ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
     throw new Error("BTCC bounded continuation has unknown private fields");
   }
@@ -69,7 +71,36 @@ function normalizeBoundedContinuation(value: unknown): Record<string, unknown> {
     provider: "openai",
     responseId: value.responseId,
     deliveredThroughOrdinal: parseDeliveredThroughOrdinal(value.deliveredThroughOrdinal),
+    ...(value.providerRouteIdentity === undefined
+      ? {}
+      : { providerRouteIdentity: normalizeProviderRouteCacheIdentity(
+          value.providerRouteIdentity,
+        ) }),
   };
+}
+
+function normalizeProviderRouteCacheIdentity(value: unknown): Record<string, unknown> {
+  if (!isRecord(value) ||
+      value.schemaVersion !== "butler.provider-route-cache-identity.v1" ||
+      typeof value.routeDigest !== "string" || !/^[a-f0-9]{64}$/u.test(value.routeDigest) ||
+      !Number.isSafeInteger(value.routeCursor) || Number(value.routeCursor) < 0 ||
+      (value.providerId !== "openai" && value.providerId !== "openai-codex") ||
+      typeof value.modelRef !== "string" || value.modelRef.length === 0 || value.modelRef.length > 200 ||
+      (value.authMode !== "api_key" && value.authMode !== "codex_subscription" &&
+        value.authMode !== "codex_oauth") ||
+      typeof value.capabilityDigest !== "string" || !/^[a-f0-9]{64}$/u.test(value.capabilityDigest) ||
+      (value.serializerContract !== "butler.openai-responses-final-json.v1" &&
+        value.serializerContract !== "butler.openai-codex-final-json.v1") ||
+      typeof value.toolProfileRevision !== "string" || value.toolProfileRevision.length > 120 ||
+      typeof value.stablePrefixRevision !== "string" || value.stablePrefixRevision.length > 120 ||
+      typeof value.serializedStablePrefixSha256 !== "string" ||
+        !/^[a-f0-9]{64}$/u.test(value.serializedStablePrefixSha256) ||
+      !Number.isSafeInteger(value.serializedStablePrefixBytes) ||
+        Number(value.serializedStablePrefixBytes) < 1 ||
+        Number(value.serializedStablePrefixBytes) > 1_000_000) {
+    throw new Error("BTCC bounded continuation has invalid provider route cache identity");
+  }
+  return { ...value };
 }
 
 export function hydrateAcceptedModelRound(

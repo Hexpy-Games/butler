@@ -285,6 +285,7 @@ export function createProductionGuidedTurnAgent(
         cacheScope: `btcc-guided:${turn.sessionId}`,
         attributionArmId: turn.context.providerRequestAttribution?.armId,
         cacheBoundaryEvidence: turn.context.providerRequestAttribution?.cacheBoundaryEvidence,
+        stableProviderCachePrefix: phasePolicy.stableProviderCachePrefix,
         signal,
         butlerData: input.butlerData,
         attachments: providerImageAttachments(turn),

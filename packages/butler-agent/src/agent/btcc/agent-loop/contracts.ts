@@ -120,6 +120,7 @@ export interface BtccAgentLoopInput {
   cacheScope?: string;
   attributionArmId?: string;
   cacheBoundaryEvidence?: import("../ports/provider-request-attribution.ts").M1CacheBoundaryEvidence;
+  stableProviderCachePrefix?: import("../ports/model-round.ts").StableProviderCachePrefixContract;
   signal?: AbortSignal;
   attachments?: readonly AttachmentRef[];
   butlerData?: string;

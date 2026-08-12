@@ -48,6 +48,14 @@ import {
   turnItemOrdinal,
   validateBoundedProviderOrdinals,
 } from "../../../agent/btcc/ports/bounded-provider-continuation.ts";
+import {
+  stableProviderOrderedBody,
+} from "./stable-provider-prefix.ts";
+import {
+  stableProviderPrefixInvariant,
+  type ProviderRouteCacheIdentity,
+} from
+  "../../../agent/btcc/ports/model-round.ts";
 
 export async function runOpenAIModelRound(
   request: ModelRoundRequest,
@@ -66,6 +74,17 @@ export async function runOpenAIModelRound(
   const previous = isOpenAIRequestSegmentContinuation(request.continuation)
     ? request.continuation
     : null;
+  if (request.stableProviderCachePrefix) {
+    if (!request.routeContext) {
+      throw stableProviderPrefixInvariant("stable_provider_prefix_route_context_missing");
+    }
+    if (request.routeContext.modelRef !== request.model) {
+      throw stableProviderPrefixInvariant("stable_provider_prefix_route_model_mismatch");
+    }
+    if (previous && !previous.providerRouteIdentity) {
+      throw stableProviderPrefixInvariant("stable_provider_prefix_previous_identity_missing");
+    }
+  }
   const firstUser = request.messages.find((message) => message.role === "user");
   const initialInput = openAIInputWithAttachments(
     firstUser?.content ?? "",
@@ -143,17 +162,15 @@ export async function runOpenAIModelRound(
     roundIndex,
   });
 
-  const response = await createOpenAIResponse(
-    {
+  const modelTools = request.tools.length > 0
+    ? modelFacingFunctionTools(request.tools)
+    : undefined;
+  const dynamicBody = {
       model,
       store: true,
       ...promptCache,
       instructions: request.instructions,
-      ...(request.tools.length > 0
-        ? {
-            tools: modelFacingFunctionTools(request.tools),
-          }
-        : {}),
+      ...(modelTools ? { tools: modelTools } : {}),
       tool_choice: request.toolChoice ?? "auto",
       reasoning,
       ...(previous
@@ -166,7 +183,23 @@ export async function runOpenAIModelRound(
             input: requestItems,
             __butler_codex_stateless_input: statelessRequestInput,
           }),
-    },
+    };
+  const providerBody = request.stableProviderCachePrefix
+    ? stableProviderOrderedBody({
+        stable: request.stableProviderCachePrefix,
+        model,
+        tools: modelTools,
+        toolChoice: request.toolChoice ?? "auto",
+        reasoning,
+        instructions: request.instructions,
+        dynamic: Object.fromEntries(Object.entries(dynamicBody).filter(([key]) =>
+          !["model", "tools", "tool_choice", "reasoning", "instructions"].includes(key),
+        )),
+      })
+    : dynamicBody;
+  let providerCacheIdentity: ProviderRouteCacheIdentity | undefined;
+  const response = await createOpenAIResponse(
+    providerBody,
     request.signal,
     authOverride,
     request.onProviderStreamEvent,
@@ -179,6 +212,16 @@ export async function runOpenAIModelRound(
       segmentManifests,
       cacheBoundaryEvidence: request.cacheBoundaryEvidence,
       admitBoundedProviderBody: request.boundedContinuation?.admitProviderBody,
+      stableProviderCachePrefix: request.stableProviderCachePrefix,
+      routeContext: request.routeContext,
+      previousProviderRouteIdentity: previous?.providerRouteIdentity,
+      onProviderRouteCacheIdentity: (established) => {
+        if (providerCacheIdentity &&
+            JSON.stringify(providerCacheIdentity) !== JSON.stringify(established.identity)) {
+          throw stableProviderPrefixInvariant("stable_provider_prefix_retry_identity_changed");
+        }
+        providerCacheIdentity = established.identity;
+      },
     },
     undefined,
     request.providerRetryAttempts,
@@ -232,6 +275,9 @@ export async function runOpenAIModelRound(
   const nextContinuation: OpenAIRequestSegmentContinuation = {
     provider: "openai",
     responseId: response.id,
+    ...(providerCacheIdentity
+      ? { providerRouteIdentity: providerCacheIdentity }
+      : {}),
     ...(boundedStatelessInput
       ? { deliveredThroughOrdinal: responseOrdinal }
       : { sent: continuationMessages?.sent ?? { toolMessages: 0, userMessages: 1 } }),

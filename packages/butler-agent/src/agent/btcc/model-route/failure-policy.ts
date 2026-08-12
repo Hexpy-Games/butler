@@ -1,5 +1,6 @@
 import { ModelProviderRequestError } from "../../../integrations/providers/provider-errors.ts";
 import type { ModelRouteFailureDisposition } from "./contracts.ts";
+import { StableProviderPrefixInvariantError } from "../ports/model-round.ts";
 
 /**
  * Provider codes that represent a permanent model/capacity choice. These
@@ -40,6 +41,7 @@ const SURFACE_STATUS_CODES = new Set([400, 401, 403, 405, 406, 409, 415, 422]);
 export function classifyModelRouteFailure(
   error: unknown,
 ): ModelRouteFailureDisposition {
+  if (error instanceof StableProviderPrefixInvariantError) return "surface";
   if (!(error instanceof ModelProviderRequestError)) return "surface";
   if (SURFACE_CODES.has(error.code)) return "surface";
   if (IMMEDIATE_ADVANCE_CODES.has(error.code)) return "advance";

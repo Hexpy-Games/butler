@@ -4,6 +4,93 @@ Date: 2026-08-12
 Task: `T-M1-V2-SEGMENT-ATTRIBUTION`
 Governing spec: `SPEC-M1-CONTEXT-EFFICIENCY` revision 2
 
+## T-M1-V2 stable provider prefix and route reset implementation
+
+This bounded product improvement extends the existing
+`BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE` selection point; it does not add a
+second prefix builder, cache registry, route store, retry loop, or telemetry
+owner. The flag remains default-off. When it is off, the prior OpenAI request
+object and final serialized JSON bytes remain unchanged. When it is on, the
+existing `phaseMinimalStableInstructions` result is the sole stable instruction
+owner, with tool-profile revision `butler.btcc-tool-instruction-policy.v1` and
+stable-prefix revision `butler.btcc-stable-provider-prefix.v1`.
+
+The traced production path is:
+
+`Session/App Turn admission -> createProductionGuidedTurnAgent ->
+selectGuidedTurnPhasePolicy -> createModelRoutePort(ModelRouteState) -> bounded
+TurnContextEnvelope/agent loop -> ModelRoundRequest -> runOpenAIModelRound ->
+official Responses or Codex request-body conversion -> final JSON.stringify ->
+fetch`.
+
+For the enabled path the final request object is ordered as stable route model,
+selected typed tool schemas, tool choice, reasoning contract, and the existing
+stable instruction prefix, followed only then by dynamic instruction suffix,
+current input, continuation, Work/context, results, references, and request-local
+fields. The provider adapter verifies the exact final `JSON.stringify` bytes,
+records only the prefix SHA-256 and byte length in provider-private bounded
+continuation, and never stores the prefix text, prompts, tool results, paths,
+tokens, credentials, or auth/account identifiers.
+
+The bounded route identity is
+`butler.provider-route-cache-identity.v1`: route digest/cursor, provider, model,
+auth mode, selected tool-schema capability digest, official serializer contract,
+tool-profile revision, stable-prefix revision, and exact final serialized-prefix
+digest/byte length. `createModelRoutePort` remains the only cursor authority. A
+cursor advance clears the old provider continuation before dispatch and attaches
+the new cursor context in the same route decision; the receiving serializer then
+establishes the new identity. Same-cursor retry keeps the same admitted request
+and prefix. Restart hydration allowlists and validates the bounded identity.
+Missing, malformed, stale, or incompatible identity throws the bounded
+provider-neutral BTCC `StableProviderPrefixInvariantError` with one finite typed
+code before fetch. OpenAI adapters construct that neutral contract; the route
+domain has no import of the concrete OpenAI prefix adapter. The route failure
+classifier explicitly surfaces this invariant class, so it
+causes zero same-model retry and zero fallback; no
+legacy continuation, cumulative replay, direct-provider bypass, or unbounded
+fallback is revived.
+
+The real official/Codex production serializers produced this deterministic
+static evidence for round A -> round B fixtures. `changedAt` is the first changed
+byte window; it is at or after the reusable prefix boundary. These are serialized
+byte facts, not provider cache-hit or token-saving claims.
+
+| provider serializer | fixture | stable prefix bytes | total A / B bytes | changedAt / reuse boundary |
+| --- | --- | ---: | ---: | ---: |
+| OpenAI Responses | direct | 6,321 | 6,518 / 6,518 | 6,337 / 6,321 |
+| OpenAI Responses | read-only | 9,454 | 9,651 / 9,651 | 9,470 / 9,454 |
+| OpenAI Responses | execution | 17,597 | 17,794 / 17,794 | 17,613 / 17,597 |
+| Codex Responses | direct | 6,321 | 6,532 / 6,532 | 6,337 / 6,321 |
+| Codex Responses | read-only | 9,454 | 9,665 / 9,665 | 9,470 / 9,454 |
+| Codex Responses | execution | 17,597 | 17,808 / 17,808 | 17,613 / 17,597 |
+
+Focused tests cover both final serializers, direct/read-only/execution production
+policy fixtures, multi-round dynamic suffix changes, same-cursor route retry,
+cursor fallback reset, provider/model/auth/capability/serializer/tool-profile and
+prefix-revision invalidation, restart hydration, missing/stale fail-closed,
+private-data exclusion, bounded fallback, and default-off exact bytes. No E2E,
+provider smoke/campaign, prepared resource, affected-arm run, final 4x3,
+Hermes/OpenCode run, merge, or default-on action was performed.
+
+Implementation validation in the delegated worktree passed the final typed
+invariant focused route suite (20 tests / 127 assertions), the prior new focused
+serializer suite (6 tests / 67 assertions), the affected route/tool-surface/bounded-context
+suite (70 tests / 691 assertions), and the broader Guided/OpenAI affected suite
+(197 tests / 1,351 assertions). Full typecheck and lint passed; lint reported the
+same 19 pre-existing warnings and zero errors on the first full run. BTCC shape
+passed at 4 domains / 222 files, the domain module audit completed on the three
+changed source roots, and `git diff --check` passed. The repository-wide
+`bun run check` completed in 284.92 seconds with 2,603 tests passing and 5
+failing. All five failures reproduce in the pre-existing
+`read_operation_results` registry, grouped-entrypoint, effect-boundary, and CLI
+reference shape from the preceding stack; none of those source/test files is
+changed by this Task. This is recorded as an existing stack failure, not a pass
+or a cache-prefix regression. Independent Sol-high whole-goal review completed
+two correction cycles (typed fail-closed contract, then provider-neutral
+dependency direction) and returned final `APPROVE` with no actionable P0-P3
+finding. Ledger lifecycle, commit, push, PR, and Windows workflow handling remain
+steward-owned closeout gates.
+
 ## Status and authority boundary
 
 PR #146 owns only production SC01 provider-request attribution, focused product

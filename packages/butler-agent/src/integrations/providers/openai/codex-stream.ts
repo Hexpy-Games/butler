@@ -3,6 +3,7 @@ import { codexAccountIdFromAuthorization, codexRequestBody } from "./responses-c
 import { codexSseResponseFromAccumulator } from "./codex-response-assembly.ts";
 import { emitProviderStreamProjectionBestEffort } from "../shared/runtime-support.ts";
 import { getCodexOriginator, getCodexResponsesUrl, getCodexUserAgent } from "./config.ts";
+import { establishFinalProviderCacheIdentity } from "./stable-provider-prefix.ts";
 import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 import {
@@ -339,6 +340,20 @@ export async function createCodexResponse(
     deferRecord: true,
     cacheBoundaryRevision: budgetContext?.cacheBoundaryEvidence?.observedRevision,
   });
+  if (budgetContext?.stableProviderCachePrefix) {
+    budgetContext.onProviderRouteCacheIdentity?.(establishFinalProviderCacheIdentity({
+      body: requestBody,
+      serializedBody: observedRequest.serializedRequest,
+      stable: budgetContext.stableProviderCachePrefix,
+      route: budgetContext.routeContext,
+      providerId: "openai-codex",
+      authMode: budgetContext.authMode === "codex_oauth"
+        ? "codex_oauth"
+        : "codex_subscription",
+      serializerContract: "butler.openai-codex-final-json.v1",
+      previousIdentity: budgetContext.previousProviderRouteIdentity,
+    }));
+  }
   await budgetContext?.admitBoundedProviderBody?.(
     Buffer.byteLength(observedRequest.serializedRequest, "utf8"),
   );
