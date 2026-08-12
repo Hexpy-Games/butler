@@ -620,3 +620,59 @@ phase without a product assertion failure attributable to this change, then hit
 its 303-second limit; its interrupted auth-status subprocess reported a null
 status. That exact auth-status test passed independently immediately afterward.
 A full unbounded repository pass is therefore not claimed.
+
+## Fourth paired contract review repair
+
+Task: `T-M1-V2-PAIRED-CAMPAIGN-REVIEW-REPAIR-4-20260813`
+
+The fourth Sol-high review found that repair-3 still depended on a basename
+spawn with an empty environment, normalized only one managed auth shape,
+treated the raw Codex transport provider as the canonical family, and rejected
+the frozen `usage_unavailable` eligibility. The repair-3 closeout was corrected
+through Project Ledger CLI and this final bounded repair owns those findings.
+
+The public paired CLI now resolves `butler` through the existing executable
+resolver and executes its absolute path with the repository safe environment.
+Only privacy-safe PATH, HOME, BUTLER_DATA, and the existing allowlisted runtime
+keys propagate; arbitrary secret variables do not. A real provider-free Butler
+subprocess regression invokes `butler auth status --json` and
+`butler model list --json` through the public paired CLI. It exercises the
+actual bundled model catalog and a temporary local managed profile without a
+provider request.
+
+Both product-owned managed auth shapes normalize to the public `managed`
+contract while preserving their raw evidence: `codex_oauth` must pair exactly
+with `CODEX_AUTH_JSON`, and `codex_subscription` exactly with
+`BUTLER_CODEX_AUTH_PROFILE`. Cross-paired source/mode evidence, API-key auth,
+missing auth, unavailable model, invalid output, and missing executable fail as
+`measurement_unavailable` before manifest creation or dispatch.
+
+Frozen before and after envelope evidence preserves raw transport provider
+`openai-codex`. Runtime/provider evidence remains canonical family `openai`,
+the observed route is `openai-codex-responses`, and the auth family is managed.
+Pairing validates both raw and canonical identities rather than overwriting
+one with the other. Exact frozen revisions
+`c46aae1af1b78a6f81ea40c3099edde0ba35ebd5` and
+`394c98a97428b741f8ea54273a226cb062455ab0` are covered in the public 24-arm
+fixture integration.
+
+`usage_unavailable` is now a normal pairing-eligible envelope state when cache,
+source, retry, model, auth, provider, route, and execution evidence remain
+clean. Its provider usage remains nullable and its availability is preserved
+separately on the comparable identity. Cache mismatch remains descriptive;
+retry or any other ineligible observation remains rejected, including when
+combined with cache mismatch.
+
+No provider, Electron, prepared-resource build, renderer, campaign, Hermes, or
+OpenCode execution was performed. The final benchmark remains todo and the
+governing Work remains in progress. After final Ledger closeout, the canonical
+index and dashboard, handoff, and roadmap views are regenerated through the
+Project Ledger CLI and rechecked so derived-view staleness is not waived.
+
+Validation passed 48 focused tests including the real Butler subprocess and
+139 broad provider-free benchmark/proxy/prepared-resource tests. Typecheck,
+full lint with zero errors and 20 pre-existing warnings, BTCC shape, module
+audit, and `git diff --check` passed. The bounded repository check reached the
+broad unit phase and hit its 300.08-second limit. Its interrupted metrics CLI
+child reported a null status; that exact test passed independently 1/1
+immediately afterward. A full unbounded repository pass is not claimed.

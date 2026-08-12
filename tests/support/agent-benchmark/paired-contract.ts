@@ -86,6 +86,7 @@ export interface ProviderAuthPreflight {
   provider: "openai";
   authMode: typeof FINAL_AUTH_MODE;
   observedProductAuthMode: "codex_oauth" | "codex_subscription";
+  observedProductAuthSource: "CODEX_AUTH_JSON" | "BUTLER_CODEX_AUTH_PROFILE";
   model: typeof FINAL_MODEL;
   reasoning: typeof FINAL_REASONING;
   executionMode: "ordinary_non_fast";
@@ -94,17 +95,22 @@ export interface ProviderAuthPreflight {
 }
 
 export function validateProviderAuthPreflight(value: Partial<ProviderAuthPreflight>): ProviderAuthPreflight {
-  if (Object.keys(value).sort().join("|") !== ["authMode", "authority", "configured", "executionMode", "model", "modelCallability", "observedProductAuthMode", "provider", "reasoning", "schema"].sort().join("|"))
+  if (Object.keys(value).sort().join("|") !== ["authMode", "authority", "configured", "executionMode", "model", "modelCallability", "observedProductAuthMode", "observedProductAuthSource", "provider", "reasoning", "schema"].sort().join("|"))
     throw new Error("Provider auth preflight contains non-allowlisted fields.");
   if (value.schema !== "butler.provider-auth-preflight-receipt.v1" ||
       value.authority !== "butler_auth_status_and_model_catalog" || value.provider !== "openai" ||
-      value.authMode !== FINAL_AUTH_MODE || value.observedProductAuthMode !== "codex_oauth" ||
+      value.authMode !== FINAL_AUTH_MODE || !validManagedAuthEvidence(value) ||
       value.model !== FINAL_MODEL || value.reasoning !== FINAL_REASONING ||
       value.executionMode !== "ordinary_non_fast" ||
       !["available", "unavailable"].includes(value.modelCallability ?? "") || typeof value.configured !== "boolean") {
     throw new Error("Provider auth preflight is invalid or not the canonical ordinary non-fast model contract.");
   }
   return value as ProviderAuthPreflight;
+}
+
+function validManagedAuthEvidence(value: Partial<ProviderAuthPreflight>): boolean {
+  return (value.observedProductAuthMode === "codex_oauth" && value.observedProductAuthSource === "CODEX_AUTH_JSON") ||
+    (value.observedProductAuthMode === "codex_subscription" && value.observedProductAuthSource === "BUTLER_CODEX_AUTH_PROFILE");
 }
 
 export function requireAvailableProviderAuth(value: ProviderAuthPreflight): PairedExecutionContract {
