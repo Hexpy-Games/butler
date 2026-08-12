@@ -20,6 +20,14 @@ landing rubric. It schedules Butler-only repetitions sequentially. Hermes and
 OpenCode remain contract-covered comparison adapters and are not preflighted or
 executed in M1 mode.
 
+M1 physical-attempt attribution starts from each target Electron Step's typed
+`providerRequestIdentities` membership. Envelope timestamps corroborate that
+identity; they never infer Turn ownership. An unarmed request that started in a
+prior Step and terminated during the target interval remains repetition and
+campaign physical overhead, but it is not attached to the target Agent attempt.
+Missing or conflicting target identity, digest, role, bytes, terminal-time, or
+arm evidence rejects the repetition.
+
 M1 composition has two explicit checkout roles. `--harness-root` is the PR
 #142 authority that owns fixtures and provenance; `--source-root` is only the
 clean product revision under evaluation and need not contain benchmark support.

@@ -112,6 +112,125 @@ describe("M1 v2 product-owned evidence identity", () => {
     });
   });
 
+  test("uses the direct-warm Step identity snapshot when prior title overlaps the target interval", () => {
+    const sessionId = "chat-product-session";
+    const targetTurnId = "turn-direct-warm";
+    const priorAgent = timedRequest(1, attemptB, "agent", 80, 90, 100, 100);
+    const overlappingPriorTitle = timedRequest(
+      2, titleAttempt, "title", 17, 90, 130, 130,
+    );
+    const targetAuxiliary = timedRequest(3, null, "auxiliary", 23, 105, 115, 115);
+    const targetAgent = timedRequest(4, attemptA, "agent", 100, 110, 150, 150);
+    const targetTitleAttempt = "U".repeat(43);
+    const targetTitle = timedRequest(
+      5, targetTitleAttempt, "title", 19, 155, 165, 165,
+    );
+    const allRequests = [
+      priorAgent,
+      overlappingPriorTitle,
+      targetAuxiliary,
+      targetAgent,
+      targetTitle,
+    ];
+    const targetIdentities = providerRequestTurnIdentities({
+      requests: allRequests,
+      ordinalsBeforeSubmission: new Set([1, 2]),
+      sessionId,
+      turnId: targetTurnId,
+    });
+
+    expect(targetIdentities.map((identity) => identity.ordinal)).toEqual([3, 4, 5]);
+    const evaluated = evaluateProductEvidence({
+      fixtureId: "direct-warm",
+      requests: allRequests,
+      identities: targetIdentities,
+      metrics: [
+        ...attemptMetrics(attemptA, 100, 0, "eligible", "direct-warm"),
+        envelope(titleAttempt, 17, 130, 0, null),
+        envelope(targetTitleAttempt, 19, 165, 0, null),
+      ],
+      sessionId,
+      turnId: targetTurnId,
+    });
+
+    expect(evaluated.m1V2?.reasons).not.toContain(
+      "physical_attempt_identity_join_failed",
+    );
+    expect(evaluated.terminalState).toBe("accepted");
+    expect(evaluated.m1V2).toMatchObject({
+      agentAttempts: [{ providerSendBytes: 100 }],
+      auxiliaryPhysicalAttempts: 1,
+      titlePhysicalAttempts: 2,
+    });
+  });
+
+  test.each([
+    ["end-before", 80, 95],
+    ["start-during", 120, 130],
+  ] as const)("keeps %s unarmed campaign title overhead outside target Agent ownership", (
+    _boundary,
+    startedAtMs,
+    terminatedAtMs,
+  ) => {
+    const sessionId = "chat-product-session";
+    const turnId = "turn-product-owned";
+    const campaignTitle = timedRequest(
+      1, titleAttempt, "title", 17, startedAtMs, terminatedAtMs, terminatedAtMs,
+    );
+    const targetAgent = timedRequest(2, attemptA, "agent", 100, 110, 150, 150);
+    const identities = providerRequestTurnIdentities({
+      requests: [campaignTitle, targetAgent],
+      ordinalsBeforeSubmission: new Set([1]),
+      sessionId,
+      turnId,
+    });
+    const summary = summarizePhysicalRequests(
+      [campaignTitle, targetAgent],
+      [
+        envelope(titleAttempt, 17, terminatedAtMs, 0, null),
+        envelope(attemptA, 100, 150, 0),
+      ],
+      "direct-cold",
+      { sessionId, turnId, providerRequestIdentities: identities },
+    );
+
+    expect(summary).toMatchObject({
+      title: { attempts: 1, providerSendBytes: 17 },
+      unmatchedEnvelopeDigests: [],
+      unmatchedRequestOrdinals: [],
+      invalidRequestIdentityCount: 0,
+    });
+  });
+
+  test("fails closed on missing, duplicate, and conflicting target identity membership", () => {
+    const sessionId = "chat-product-session";
+    const turnId = "turn-product-owned";
+    const agent = request(4, attemptA, "agent", 100, 150);
+    const matchingEnvelope = envelope(attemptA, 100, 150, 0);
+    const cases = [
+      [ownership(4, sessionId, turnId, "agent", attemptA)],
+      [
+        ownership(4, sessionId, turnId, "agent", attemptA),
+        ownership(4, sessionId, turnId, "agent", attemptA),
+      ],
+      [
+        ownership(4, sessionId, turnId, "agent", attemptA),
+        ownership(5, sessionId, turnId, "title", attemptA),
+      ],
+    ];
+    const requests = [[], [agent], [agent, request(5, attemptA, "title", 17, 155)]];
+
+    for (let index = 0; index < cases.length; index += 1) {
+      const summary = summarizePhysicalRequests(
+        requests[index]!,
+        [matchingEnvelope],
+        "direct-cold",
+        { sessionId, turnId, providerRequestIdentities: cases[index]! },
+      );
+      expect(summary.invalidRequestIdentityCount).toBeGreaterThan(0);
+    }
+  });
+
   test("joins every retry physical attempt exactly and fails closed on a wrong attempt identity", () => {
     const sessionId = "chat-btcc-r3-e2e-agent-benchmark-direct-cold-controlled-rep-1";
     const turnId = "turn-product-owned";
@@ -147,6 +266,37 @@ describe("M1 v2 product-owned evidence identity", () => {
     });
     expect(wrong.invalidRequestIdentityCount).toBeGreaterThan(0);
     expect(wrong.unmatchedEnvelopeDigests).toContain(attemptB);
+  });
+
+  test.each([
+    ["bytes", envelope(attemptA, 99, 150, 0)],
+    ["terminal time", envelope(attemptA, 100, 5_151, 0)],
+    ["arm", envelope(attemptA, 100, 150, 0, null)],
+  ] as const)("fails closed when target Agent %s corroboration differs", (
+    _field,
+    observedEnvelope,
+  ) => {
+    const sessionId = "chat-product-session";
+    const turnId = "turn-product-owned";
+    const summary = summarizePhysicalRequests(
+      [request(4, attemptA, "agent", 100, 150)],
+      [observedEnvelope],
+      "direct-cold",
+      {
+        sessionId,
+        turnId,
+        providerRequestIdentities: [
+          ownership(4, sessionId, turnId, "agent", attemptA),
+        ],
+      },
+    );
+
+    if (_field === "arm") {
+      expect(summary.unmatchedEnvelopeDigests).toContain(attemptA);
+    } else {
+      expect(summary.unmatchedRequestOrdinals).toContain(4);
+      expect(summary.unmatchedEnvelopeDigests).toContain(attemptA);
+    }
   });
 
   test("excludes late typed non-Agent requests that are absent from the target ownership snapshot", () => {
@@ -323,7 +473,7 @@ describe("M1 v2 product-owned evidence identity", () => {
   });
 });
 
-function identityFixture() {
+function identityFixture(fixtureId: "direct-cold" | "direct-warm" = "direct-cold") {
   const plan = createBenchmarkPlan({
     campaign: "m1-v2", runId: "identity", seed: 1,
     runRoot: join(authorityRoot, "run"), sourceRoot: process.cwd(),
@@ -331,7 +481,9 @@ function identityFixture() {
     baselineSha: "a".repeat(40), controlledModel: "openai/gpt-5.6-sol",
     controlledReasoning: "medium",
   });
-  return { arm: plan.arms[0]!, fixture: getBenchmarkFixture("direct-cold") };
+  const arm = plan.arms.find((candidate) => candidate.scenario === fixtureId);
+  if (!arm) throw new Error(`Missing ${fixtureId} test arm`);
+  return { arm, fixture: getBenchmarkFixture(fixtureId) };
 }
 
 function productEvidence(input: {
@@ -377,6 +529,27 @@ function request(
   };
 }
 
+function timedRequest(
+  ordinal: number,
+  attemptDigest: string | null,
+  requestKind: TestProviderRequest["requestKind"],
+  serializedRequestBytes: number,
+  requestStartedAtMs: number,
+  completedAtMs: number,
+  terminatedAtMs: number,
+): TestProviderRequest {
+  return {
+    ordinal,
+    attemptDigest,
+    requestKind,
+    serializedRequestBytes,
+    requestStartedAtMs,
+    firstContentBearingDeltaAtMs: requestKind === "agent" ? 5 : null,
+    completedAtMs,
+    terminatedAtMs,
+  };
+}
+
 function ownership(
   ordinal: number,
   sessionId: string,
@@ -392,7 +565,7 @@ function envelope(
   providerSendBytes: number,
   ts: number,
   retryOrdinal: number,
-  armId: "direct-cold" | null = "direct-cold",
+  armId: "direct-cold" | "direct-warm" | null = "direct-cold",
 ): OperationalMetricEvent {
   return {
     schema: "butler.operational-metric.v1",
@@ -415,7 +588,7 @@ function attemptMetrics(
   bytes: number,
   retryOrdinal: number,
   eligibility: string,
-  armId: "direct-cold" | null = "direct-cold",
+  armId: "direct-cold" | "direct-warm" | null = "direct-cold",
 ): OperationalMetricEvent[] {
   return [
     envelope(attemptDigest, bytes, 150 + retryOrdinal, retryOrdinal, armId),
@@ -458,13 +631,15 @@ function metric(
 }
 
 function evaluateProductEvidence(input: {
+  fixtureId?: "direct-cold" | "direct-warm";
   requests: ReturnType<typeof request>[];
   identities: ReturnType<typeof providerRequestTurnIdentities>;
   metrics: OperationalMetricEvent[];
   sessionId: string;
   turnId: string;
 }) {
-  const { arm, fixture } = identityFixture();
+  const fixtureId = input.fixtureId ?? "direct-cold";
+  const { arm, fixture } = identityFixture(fixtureId);
   const evidence = {
     ok: true,
     generatedAt: "2026-08-12T00:00:01.000Z",
@@ -481,12 +656,12 @@ function evaluateProductEvidence(input: {
     },
     session: { id: input.sessionId },
     observations: [{
-      stepId: "direct-cold",
+      stepId: fixture.m1V2!.targetStepId,
       sessionId: input.sessionId,
       turnId: input.turnId,
       providerRequestIdentities: input.identities,
       terminalState: "delivered",
-      promptSha256: fixture.m1V2!.promptSha256["direct-cold"],
+      promptSha256: fixture.m1V2!.promptSha256[fixture.m1V2!.targetStepId],
       finalText: "안녕하세요.",
       providerReportedModel: "gpt-5.6-sol",
       providerAgentModels: ["gpt-5.6-sol"],

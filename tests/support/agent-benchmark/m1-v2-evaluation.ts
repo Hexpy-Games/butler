@@ -64,11 +64,7 @@ export function assessM1V2Repetition(
     reasons.push("other_typed_context_above_2_percent");
   }
 
-  const providerRequests = recordArray(input.evidence.providerRequests).filter((request) => {
-    const started = numberValue(request.requestStartedAtMs);
-    return started !== null && submittedAtMs !== null && terminalAtMs !== null &&
-      started >= submittedAtMs && started <= terminalAtMs + 5_000;
-  });
+  const providerRequests = recordArray(input.evidence.providerRequests);
   const allEnvelopes = intervalMetrics.filter((event) =>
     event.name === "m1_v2_request_envelope");
   const physical = summarizePhysicalRequests(

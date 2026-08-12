@@ -173,3 +173,50 @@ diagnostic repetitions remain rejected provenance and are not promoted to an
 accepted baseline. A later approved bounded product smoke may verify real
 provider late-arrival timing, but no external campaign is required or claimed
 by this repair Task.
+
+## Benchmark target-membership temporal join correction
+
+Task: `T-M1-V2-BENCHMARK-HARNESS-TEMPORAL-JOIN-CORRECTION-20260812`
+
+The completed identity repair left one temporal edge: interval metrics retained
+a prior-Step title envelope that started before target submission but terminated
+during the target window, while the request snapshot had previously filtered
+that request by start time. The unmatched prior envelope then rejected an
+otherwise valid direct-warm repetition.
+
+The physical join now starts exclusively from the target Step's typed
+`providerRequestIdentities`. Request and envelope time bounds corroborate an
+exact ordinal, role, digest, serialized-byte, terminal-time, and arm join; they
+do not infer ownership. A prior unarmed title envelope that overlaps the target
+interval is therefore not attached to the target Agent attempt and cannot
+reject it. Its typed bytes remain explicit repetition and campaign overhead.
+Missing requests or envelopes, duplicate or conflicting ordinal/digest/role,
+arm-tagged non-Agent requests, ambiguous ownership, and stale or wrong Session
+or Turn identity still reject fail closed. Exact Agent retry joins remain
+separate and complete.
+
+The regression follows the real in-repository operation path from
+`runScenarioStep` through `providerRequestTurnIdentities`, Electron evidence,
+the adapter evaluator, and `summarizePhysicalRequests`. It covers the observed
+start-before/end-during case plus end-before, start-during, target auxiliary and
+title requests, Agent retries, missing membership observations, duplicate and
+conflicting identities, and byte/time/arm corroboration failures.
+
+Validation evidence:
+
+- The broad driver/proxy/evaluator/authority target passed 108 tests with 512
+  assertions; the focused identity suite passed 17 tests.
+- Typecheck and BTCC shape passed; lint passed with zero errors and 20 unrelated
+  existing warnings; module audit exited zero with only existing size-review
+  signals; and `git diff --check` passed.
+- Repository-wide `bun run check` reached the full unit phase without an
+  observed assertion failure but exceeded its bounded 300-second validation
+  window, so a complete repository-wide pass is not claimed.
+- Independent ordinary non-fast Sol-high review approved the fixed diff with no
+  remaining P0-P3 findings.
+
+No external provider smoke or benchmark campaign was needed for this
+deterministic selection contract. No final 4x3, Hermes/OpenCode run, product
+runtime change, merge, or default-on change was performed. The clean-campaign
+observations that exposed the gap remain diagnostic provenance only and are not
+promoted to a baseline.

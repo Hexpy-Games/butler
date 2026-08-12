@@ -35,39 +35,63 @@ export function summarizePhysicalRequests(
     attemptDigest: stringValue(identity.attemptDigest),
   }));
   const ownershipByOrdinal = new Map<number, ProviderRequestTurnIdentity>();
+  const ownershipByDigest = new Map<string, ProviderRequestTurnIdentity>();
+  const invalidAgentOrdinals: number[] = [];
   let invalidRequestIdentityCount = 0;
   for (const identity of targetRequests) {
-    if (identity.requestKind !== "agent") continue;
-    if (ownershipByOrdinal.has(identity.ordinal) ||
-      identity.sessionId !== targetSessionId || identity.turnId !== targetTurnId) {
+    const validKind = isProviderRequestKind(identity.requestKind);
+    const validAgentDigest = identity.requestKind !== "agent" ||
+      identity.attemptDigest !== null;
+    const conflictingDigest = identity.attemptDigest === null
+      ? false
+      : ownershipByDigest.has(identity.attemptDigest);
+    if (!Number.isInteger(identity.ordinal) || identity.ordinal < 1 ||
+      !validKind || !validAgentDigest || ownershipByOrdinal.has(identity.ordinal) ||
+      conflictingDigest || identity.sessionId !== targetSessionId ||
+      identity.turnId !== targetTurnId) {
       invalidRequestIdentityCount += 1;
+      if (identity.requestKind === "agent" && Number.isInteger(identity.ordinal) &&
+        identity.ordinal >= 1) invalidAgentOrdinals.push(identity.ordinal);
       continue;
     }
     ownershipByOrdinal.set(identity.ordinal, identity);
-  }
-  const availableRequests = requests.map((request) => {
-    const ordinal = numberValue(request.ordinal);
-    const identity = ordinal === null ? undefined : ownershipByOrdinal.get(ordinal);
-    const requestKind = request.requestKind;
-    const requestDigest = stringValue(request.attemptDigest);
-    const validKind = requestKind === "agent" || requestKind === "auxiliary" ||
-      requestKind === "title" || requestKind === "tool_provider";
-    const typedNonAgent = validKind && requestKind !== "agent";
-    const identityValid = typedNonAgent || Boolean(identity) &&
-      identity?.requestKind === "agent" &&
-      identity.attemptDigest === requestDigest && requestDigest !== null;
-    if (!identityValid || terminalTimestamp(request) === null ||
-      numberValue(request.serializedRequestBytes) === null) {
-      invalidRequestIdentityCount += 1;
+    if (identity.attemptDigest !== null) {
+      ownershipByDigest.set(identity.attemptDigest, identity);
     }
-    return { request, identity, identityValid, used: false };
-  });
-  const observedOrdinals = new Set(availableRequests.flatMap(({ request }) => {
+  }
+  const requestsByOrdinal = new Map<number, Record<string, unknown>[]>();
+  for (const request of requests) {
     const ordinal = numberValue(request.ordinal);
-    return ordinal === null ? [] : [ordinal];
-  }));
-  invalidRequestIdentityCount += [...ownershipByOrdinal.keys()]
-    .filter((ordinal) => !observedOrdinals.has(ordinal)).length;
+    if (ordinal === null) continue;
+    const matching = requestsByOrdinal.get(ordinal) ?? [];
+    matching.push(request);
+    requestsByOrdinal.set(ordinal, matching);
+  }
+  const targetCandidates: Array<{
+    request: Record<string, unknown>;
+    identity: ProviderRequestTurnIdentity;
+    used: boolean;
+  }> = [];
+  const missingAgentOrdinals: number[] = [];
+  for (const [ordinal, identity] of ownershipByOrdinal) {
+    const matching = requestsByOrdinal.get(ordinal) ?? [];
+    if (matching.length !== 1) {
+      invalidRequestIdentityCount += 1;
+      if (identity.requestKind === "agent") missingAgentOrdinals.push(ordinal);
+      continue;
+    }
+    const request = matching[0]!;
+    const exactIdentity = request.requestKind === identity.requestKind &&
+      stringValue(request.attemptDigest) === identity.attemptDigest;
+    const completeObservation = terminalTimestamp(request) !== null &&
+      numberValue(request.serializedRequestBytes) !== null;
+    if (!exactIdentity || !completeObservation) {
+      invalidRequestIdentityCount += 1;
+      if (identity.requestKind === "agent") missingAgentOrdinals.push(ordinal);
+      continue;
+    }
+    targetCandidates.push({ request, identity, used: false });
+  }
   const joined: Array<{
     digest: string;
     request: Record<string, unknown> | null;
@@ -79,12 +103,10 @@ export function summarizePhysicalRequests(
     const digest = stringValue(envelope.dimensions?.attemptDigest);
     const bytes = numberValue(envelope.dimensions?.providerSendBytes);
     if (!digest || bytes === null) continue;
-    const candidates = availableRequests
-      .filter(({ request, identityValid, used }) => !used && identityValid &&
+    const candidates = targetCandidates
+      .filter(({ request, used }) => !used &&
         stringValue(request.attemptDigest) === digest &&
-        numberValue(request.ordinal) !== null &&
         numberValue(request.serializedRequestBytes) === bytes &&
-        terminalTimestamp(request) !== null &&
         Math.abs(envelope.ts - terminalTimestamp(request)!) <= TERMINAL_JOIN_TOLERANCE_MS)
       .sort((left, right) => {
         const timeDelta = Math.abs(envelope.ts - terminalTimestamp(left.request)!) -
@@ -95,6 +117,7 @@ export function summarizePhysicalRequests(
       });
     const match = candidates[0];
     if (!match) {
+      if (envelope.dimensions?.armId !== armId) continue;
       joined.push({
         digest,
         request: null,
@@ -108,20 +131,33 @@ export function summarizePhysicalRequests(
     joined.push({
       digest,
       request: match.request,
-      armed: match.request.requestKind === "agent" &&
+      armed: match.identity.requestKind === "agent" &&
         envelope.dimensions?.armId === armId,
-      excludedNonAgent: match.request.requestKind !== "agent" &&
+      excludedNonAgent: match.identity.requestKind !== "agent" &&
         envelope.dimensions?.armId === null,
-      requestKind: match.request.requestKind as
-        ProviderRequestTurnIdentity["requestKind"],
+      requestKind: match.identity.requestKind,
     });
   }
-  const excluded = availableRequests.flatMap(({ request, identityValid }) =>
-    identityValid && request.requestKind !== "agent" ? [request] : []);
-  const targetAgentRequests = availableRequests.flatMap(
-    ({ request, identity, identityValid }) =>
-      identityValid && identity?.requestKind === "agent" ? [request] : [],
-  );
+  const targetNonAgentOrdinals = new Set(targetCandidates.flatMap(({ identity }) =>
+    identity.requestKind === "agent" ? [] : [identity.ordinal]));
+  const excluded = requests.filter((request) => {
+    const ordinal = numberValue(request.ordinal);
+    if (!isProviderRequestKind(request.requestKind) || request.requestKind === "agent" ||
+      terminalTimestamp(request) === null ||
+      numberValue(request.serializedRequestBytes) === null) return false;
+    return ordinal === null || targetNonAgentOrdinals.has(ordinal) ||
+      !ownershipByOrdinal.has(ordinal);
+  });
+  const targetAgentRequests = targetCandidates.flatMap(({ request, identity }) =>
+    identity.requestKind === "agent" ? [request] : []);
+  const relevantEnvelopeDigests = new Set([
+    ...targetCandidates.flatMap(({ identity }) =>
+      identity.attemptDigest === null ? [] : [identity.attemptDigest]),
+    ...envelopes.flatMap((envelope) =>
+      envelope.dimensions?.armId === armId
+        ? [stringValue(envelope.dimensions?.attemptDigest)]
+        : []),
+  ].filter((digest): digest is string => digest !== null));
   return {
     auxiliary: physicalOverhead(excluded, "auxiliary"),
     title: physicalOverhead(excluded, "title"),
@@ -130,17 +166,25 @@ export function summarizePhysicalRequests(
       item.request && (item.armed || item.excludedNonAgent)
         ? []
         : [item.digest]),
-    unmatchedRequestOrdinals: availableRequests.flatMap(({ request, used }) => {
-      const ordinal = numberValue(request.ordinal);
-      return used || ordinal === null || request.requestKind !== "agent" ? [] : [ordinal];
-    }),
+    unmatchedRequestOrdinals: [
+      ...new Set([...invalidAgentOrdinals, ...missingAgentOrdinals]),
+      ...targetCandidates.flatMap(({ identity, used }) =>
+        used || identity.attemptDigest === null ? [] : [identity.ordinal]),
+    ],
     invalidRequestIdentityCount,
     targetAgentRequests,
     duplicateEnvelopeDigests: duplicateValues(envelopes.flatMap((envelope) => {
       const digest = stringValue(envelope.dimensions?.attemptDigest);
-      return digest ? [digest] : [];
+      return digest && relevantEnvelopeDigests.has(digest) ? [digest] : [];
     })),
   };
+}
+
+function isProviderRequestKind(
+  value: unknown,
+): value is ProviderRequestTurnIdentity["requestKind"] {
+  return value === "agent" || value === "auxiliary" ||
+    value === "title" || value === "tool_provider";
 }
 function duplicateValues(values: string[]): string[] {
   const seen = new Set<string>();
