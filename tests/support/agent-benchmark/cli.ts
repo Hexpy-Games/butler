@@ -22,6 +22,7 @@ import {
   type PreparedButlerResourceReference,
 } from "./prepared-butler-resource.ts";
 import { hashBenchmarkFixture, loadM1V2BenchmarkFixtures } from "./fixtures.ts";
+import { runPairedLaunchSmokePreflight } from "./paired-launch-smoke-preflight.ts";
 import { verifyM1V2AuthoritativeProvenance } from "./m1-v2-provenance.ts";
 import {
   createPairedCampaignContract,
@@ -31,7 +32,7 @@ import {
 } from "./paired-contract.ts";
 import { observeProviderAuthPreflight } from "./provider-auth-preflight.ts";
 export interface AgentBenchmarkCliOptions {
-  command: "plan" | "pilot" | "run";
+  command: "plan" | "pilot" | "preflight" | "run";
   runRoot: string;
   sourceRoot: string;
   harnessRoot: string;
@@ -110,6 +111,18 @@ export async function runAgentBenchmarkCli(argv: readonly string[], composition:
   const planPath = join(options.runRoot, "manifest.json");
   const resultPath = join(options.runRoot, "result.json");
   const store = createFileCheckpointStore(resultPath);
+  if (options.command === "preflight") {
+    if (options.campaign !== "m1-v2-paired") {
+      throw new Error("The provider-free launch preflight is available only for the paired M1 campaign.");
+    }
+    const result = await runPairedLaunchSmokePreflight({
+      plan: proposedPlan,
+      createAdapters: composition.createAdapters ?? createProductionAgentAdapters,
+      preparedButlerResources: options.pairedPreparedButlerResources!,
+      pairedExecution: pairedExecution!,
+    });
+    return JSON.stringify(result);
+  }
   const plan = await persistBenchmarkManifest(planPath, proposedPlan);
   if (options.command === "plan") {
     return JSON.stringify({ planPath: relative(plan.runRoot, planPath), runId: plan.runId, seed: plan.seed, arms: plan.arms.length });
@@ -149,7 +162,9 @@ export async function runAgentBenchmarkCli(argv: readonly string[], composition:
 
 export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions {
   const command = argv[0];
-  if (command !== "plan" && command !== "run" && command !== "pilot") throw new Error("Unknown benchmark command. Use plan, run, or pilot.");
+  if (command !== "plan" && command !== "run" && command !== "pilot" && command !== "preflight") {
+    throw new Error("Unknown benchmark command. Use plan, preflight, run, or pilot.");
+  }
   validateFlags(argv);
   const seedText = option(argv, "--seed");
   if (!seedText) throw new Error("Missing required option: --seed");

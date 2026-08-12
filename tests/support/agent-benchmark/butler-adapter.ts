@@ -127,11 +127,16 @@ export function createButlerAdapter(
           }
         }
       } finally {
-        const cleanup = cleanupButlerRuntime(evidence, input.arm, !input.fixture.m1V2 || Boolean(adapterResult?.m1V2Evidence?.exportSha256));
+        const durableExport = !input.fixture.m1V2
+          ? "not_armed"
+          : adapterResult?.m1V2Evidence?.exportSha256
+          ? "verified"
+          : "missing_or_failed";
+        const cleanup = cleanupButlerRuntime(evidence, input.arm, durableExport);
         if (adapterResult && (cleanup.status === "unsafe" || cleanup.status === "failed")) {
           const productFailure = adapterResult.exitCode !== 0 || adapterResult.timedOut || adapterResult.cancelled || evidence.error !== undefined || evidence.ok === false;
           const postDispatch = adapterResult.providerDispatchState === "provider_dispatched" || adapterResult.providerDispatchState === "provider_output_observed";
-          if (!productFailure && postDispatch) {
+          if (!productFailure && (cleanup.reason === "durable_export_required" || postDispatch)) {
             adapterResult = { ...adapterResult, gateCode: "measurement_unavailable",
               stderr: boundedDiagnostic(adapterResult.stderr, cleanup.diagnostic ?? "Butler runtime cleanup could not be verified.") };
           } else if (!productFailure) {

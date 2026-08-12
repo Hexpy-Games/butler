@@ -95,3 +95,17 @@ The runner records relative evidence references and bounded diagnostics. It
 does not record raw prompts, transcripts, tool arguments/results, credentials,
 private absolute paths, or hidden reasoning. Product fixes discovered during a
 pilot are follow-up work and must not be applied to the benchmark baseline.
+
+### Paired launch preflight
+
+For `m1-v2-paired`, the public `preflight` command runs before manifest or
+campaign creation. It uses dedicated create-only roots at
+`RUN_ROOT/preflight/launch-smoke/{before,after}` and never creates or reads a
+campaign arm root. Each arm must prove exactly two completed renderer launches,
+the exact renderer/preload/gateway/native readiness set, zero provider requests,
+zero Turn/model-route/accepted-round authority rows, and zero SC01 rows. Only
+that typed zero-dispatch state may remove its runtime without an SC01 export.
+The retained privacy-safe `receipt.json` is an exact, bounded, non-symlink
+identity receipt; an exact safe receipt permits idempotent resume without
+launching again. A partial root, identity drift, ambiguous authority, or unsafe
+path fails closed and cannot create a receipt or campaign acceptance.

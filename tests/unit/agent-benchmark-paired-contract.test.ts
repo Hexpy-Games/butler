@@ -1,8 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
+import { createServer } from "node:net";
+import type { AddressInfo } from "node:net";
 import {
   createBenchmarkPlan,
   createFileCheckpointStore,
@@ -34,6 +37,7 @@ import type { CommandExecutor, CommandResult } from "../support/agent-benchmark/
 import { createGatedBenchmarkObservation, resumeOrInitialize } from "../support/agent-benchmark/checkpoint.ts";
 import { prepareTestHarnessAuthority } from "./support/m1-v2-provenance-authority.ts";
 import { createButlerAdapter } from "../support/agent-benchmark/butler-adapter.ts";
+import type { ProductionAgentAdapterOptions } from "../support/agent-benchmark/adapters.ts";
 import { Database } from "bun:sqlite";
 import { verifyM1V2EvidenceExport } from "../support/agent-benchmark/m1-v2-evidence-export.ts";
 
@@ -369,6 +373,248 @@ describe("final paired M1 campaign contract", () => {
       .find((entry) => entry.id === "paired-butler")?.status).toBe("unranked");
   }, 30_000);
 
+  test("runs public paired CLI through auth preflight, real Butler adapter, launch-smoke runner, and cleanup provider-free", async () => {
+    const beforeRoot = join(root, "launch-cleanup-before");
+    const afterRoot = join(root, "launch-cleanup-after");
+    for (const [path, revision] of [[beforeRoot, FINAL_BEFORE_REVISION], [afterRoot, FINAL_AFTER_REVISION]] as const) {
+      execFileSync("git", ["clone", "--quiet", "--no-checkout", process.cwd(), path]);
+      execFileSync("git", ["-C", path, "checkout", "--quiet", revision]);
+    }
+    const runRoot = join(root, "launch-cleanup-run");
+    const files = writeCliInputs("launch-cleanup");
+    const runtimeRoots: string[] = [];
+    const launchPids: number[] = [];
+    const launchPorts: number[] = [];
+    let compositionOptions: ProductionAgentAdapterOptions | null = null;
+    let runnerCalls = 0;
+    const butler = createButlerAdapter(async (input) => {
+      runnerCalls += 1;
+      const dataRoot = join(input.arm.evidenceRoot, "data");
+      runtimeRoots.push(dataRoot);
+      createLaunchSmokeRuntimeAuthority(dataRoot);
+      const workspaceRoot = join(input.arm.evidenceRoot, "workspace");
+      mkdirSync(workspaceRoot, { recursive: true });
+      const launches = [
+        await exerciseProviderFreeLaunchLifecycle(),
+        await exerciseProviderFreeLaunchLifecycle(),
+      ];
+      launchPids.push(...launches.map((launch) => launch.pid));
+      launchPorts.push(...launches.map((launch) => launch.port));
+      return {
+        kind: "launch_smoke",
+        ok: true,
+        actualProductPath: [
+          "electron_renderer",
+          "electron_preload_bridge",
+          "app_gateway",
+          "native_btcc_runtime",
+        ],
+        run: {
+          dataRoot,
+          runRoot: input.arm.evidenceRoot,
+          workspaceRoot,
+          model: "openai/gpt-5.6-sol",
+          reasoningEffort: "medium",
+        },
+        launches: launches.map((launch) => ({
+          electronPid: launch.pid,
+          executorPid: null,
+          interruptedExecutorReplaced: false,
+          startedAtMs: launch.startedAtMs,
+          stoppedAtMs: launch.stoppedAtMs,
+        })),
+        observations: [],
+        providerRequests: [],
+      };
+    }, afterRoot);
+    const unavailable = (agent: "hermes" | "opencode"): AgentAdapter => ({
+      agent,
+      async preflight() { throw new Error("external preflight must not run"); },
+      async run() { throw new Error("external adapter must not run"); },
+    });
+    const args = cliArgs(runRoot, files).map((value, index) => index === 0 ? "preflight" :
+      value === join(root, "private-before-source") ? beforeRoot :
+      value === join(root, "private-after-source") ? afterRoot : value);
+    const preflight = authExecutor(true);
+
+    const output = JSON.parse(await runAgentBenchmarkCli(args, {
+      createAdapters: (_sourceRoot, options) => {
+        compositionOptions = options ?? null;
+        return { butler, hermes: unavailable("hermes"), opencode: unavailable("opencode") };
+      },
+      preflightExecutor: preflight,
+      landingValidator: async () => { throw new Error("launch smoke has no landing Turn"); },
+    })) as { kind: string; launchSmokes: number; providerRequests: number };
+
+    expect(output).toEqual({ kind: "paired_launch_smoke_preflight", launchSmokes: 2, providerRequests: 0 });
+    expect(preflight.requests).toHaveLength(2);
+    expect(compositionOptions).toMatchObject({
+      rendererStartSmoke: true,
+      pairedPreparedButlerResources: {
+        before: { sourceRevision: FINAL_BEFORE_REVISION },
+        after: { sourceRevision: FINAL_AFTER_REVISION },
+      },
+      pairedExecution: { model: "openai/gpt-5.6-sol", reasoning: "medium", serviceTier: "default" },
+    });
+    expect(runnerCalls).toBe(2);
+    expect(runtimeRoots).toHaveLength(2);
+    expect(new Set(runtimeRoots)).toEqual(new Set([
+      join(runRoot, "preflight", "launch-smoke", "before", "evidence", "data"),
+      join(runRoot, "preflight", "launch-smoke", "after", "evidence", "data"),
+    ]));
+    expect(runtimeRoots.every((path) => !existsSync(path))).toBeTrue();
+    expect(runtimeRoots.every((path) =>
+      !existsSync(join(path, "..", "sc01-public-evidence.json")))).toBeTrue();
+    expect(launchPids).toHaveLength(4);
+    expect(launchPids.every((pid) => !processExists(pid))).toBeTrue();
+    expect(launchPorts).toHaveLength(4);
+    expect(await allPortsCanBind(launchPorts)).toBeTrue();
+    expect(existsSync(join(runRoot, "manifest.json"))).toBeFalse();
+    expect(existsSync(join(runRoot, "result.json"))).toBeFalse();
+    expect(existsSync(join(runRoot, "arms"))).toBeFalse();
+    for (const version of ["before", "after"] as const) {
+      const dedicatedRoot = join(runRoot, "preflight", "launch-smoke", version);
+      expect(existsSync(join(dedicatedRoot, "receipt.json"))).toBeTrue();
+      expect(JSON.parse(readFileSync(join(dedicatedRoot, "receipt.json"), "utf8"))).toMatchObject({
+        schema: "butler.paired-launch-smoke-preflight.v1",
+        version,
+        operationKind: "launch_smoke",
+        launches: 2,
+        actualProductPath: [
+          "electron_renderer",
+          "electron_preload_bridge",
+          "app_gateway",
+          "native_btcc_runtime",
+        ],
+        providerRequests: 0,
+        turnObservations: 0,
+      });
+      expect(existsSync(join(dedicatedRoot, "evidence", "data"))).toBeFalse();
+      expect(existsSync(join(dedicatedRoot, "evidence", "sc01-public-evidence.json"))).toBeFalse();
+    }
+
+    const rerunOutput = JSON.parse(await runAgentBenchmarkCli(args, {
+      createAdapters: (_sourceRoot, options) => {
+        compositionOptions = options ?? null;
+        return { butler, hermes: unavailable("hermes"), opencode: unavailable("opencode") };
+      },
+      preflightExecutor: preflight,
+      landingValidator: async () => { throw new Error("launch smoke has no landing Turn"); },
+    })) as { kind: string; launchSmokes: number; providerRequests: number };
+    expect(rerunOutput).toEqual(output);
+    expect(preflight.requests).toHaveLength(4);
+    expect(runnerCalls).toBe(2);
+    expect(runtimeRoots).toHaveLength(2);
+    expect(existsSync(join(runRoot, "arms"))).toBeFalse();
+    expect(existsSync(join(runRoot, "manifest.json"))).toBeFalse();
+    expect(existsSync(join(runRoot, "result.json"))).toBeFalse();
+
+    const unsafeComposition = {
+      createAdapters: () => ({ butler, hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
+      preflightExecutor: authExecutor(true),
+    };
+    const argsForRoot = (nextRoot: string) => args.map((value) => value === runRoot ? nextRoot :
+      value === join(runRoot, "report") ? join(nextRoot, "report") : value);
+    const callsBeforeUnsafeRecovery = runnerCalls;
+
+    const partialRoot = join(root, "launch-cleanup-partial-run");
+    const staleEvidence = join(partialRoot, "preflight", "launch-smoke", "before", "evidence", "evidence.json");
+    mkdirSync(join(staleEvidence, ".."), { recursive: true });
+    writeFileSync(staleEvidence, "{}\n");
+    await expect(runAgentBenchmarkCli(argsForRoot(partialRoot), unsafeComposition))
+      .rejects.toThrow("launch-smoke root was partial");
+    expect(runnerCalls).toBe(callsBeforeUnsafeRecovery);
+    expect(readFileSync(staleEvidence, "utf8")).toBe("{}\n");
+
+    const symlinkAncestorRoot = join(root, "launch-cleanup-symlink-ancestor-run");
+    const externalPreflight = mkdtempSync(join(root, "external-preflight-"));
+    mkdirSync(symlinkAncestorRoot, { recursive: true });
+    symlinkSync(externalPreflight, join(symlinkAncestorRoot, "preflight"));
+    await expect(runAgentBenchmarkCli(argsForRoot(symlinkAncestorRoot), unsafeComposition))
+      .rejects.toThrow("launch-smoke path was unsafe");
+    expect(runnerCalls).toBe(callsBeforeUnsafeRecovery);
+    expect(existsSync(externalPreflight)).toBeTrue();
+
+    const nonDirectoryRoot = join(root, "launch-cleanup-nondirectory-run");
+    mkdirSync(nonDirectoryRoot, { recursive: true });
+    writeFileSync(join(nonDirectoryRoot, "preflight"), "not-a-directory\n");
+    await expect(runAgentBenchmarkCli(argsForRoot(nonDirectoryRoot), unsafeComposition))
+      .rejects.toThrow("launch-smoke path was unsafe");
+    expect(runnerCalls).toBe(callsBeforeUnsafeRecovery);
+    expect(readFileSync(join(nonDirectoryRoot, "preflight"), "utf8")).toBe("not-a-directory\n");
+
+    const beforeReceipt = join(runRoot, "preflight", "launch-smoke", "before", "receipt.json");
+    chmodSync(beforeReceipt, 0o644);
+    await expect(runAgentBenchmarkCli(args, unsafeComposition))
+      .rejects.toThrow("launch-smoke receipt was unsafe");
+    expect(runnerCalls).toBe(callsBeforeUnsafeRecovery);
+    chmodSync(beforeReceipt, 0o600);
+
+    const changedPinPath = join(root, "launch-cleanup-changed-before-pin.json");
+    writeFileSync(changedPinPath, JSON.stringify({
+      ...reference(FINAL_BEFORE_REVISION, "1"),
+      resourceSha256: "9".repeat(64),
+    }));
+    const changedPinArgs = args.map((value) => value === files.before ? changedPinPath : value);
+    await expect(runAgentBenchmarkCli(changedPinArgs, unsafeComposition))
+      .rejects.toThrow("launch-smoke receipt was invalid");
+    expect(runnerCalls).toBe(callsBeforeUnsafeRecovery);
+
+    const externalReceipt = join(root, "external-exact-preflight-receipt.json");
+    writeFileSync(externalReceipt, readFileSync(beforeReceipt));
+    rmSync(beforeReceipt);
+    symlinkSync(externalReceipt, beforeReceipt);
+    await expect(runAgentBenchmarkCli(args, unsafeComposition))
+      .rejects.toThrow("launch-smoke receipt was unsafe");
+    expect(runnerCalls).toBe(callsBeforeUnsafeRecovery);
+    expect(readFileSync(externalReceipt, "utf8")).toContain("butler.paired-launch-smoke-preflight.v1");
+    expect(readFileSync(beforeReceipt, "utf8")).toBe(readFileSync(externalReceipt, "utf8"));
+
+    const ambiguousRunRoot = join(root, "launch-cleanup-ambiguous-run");
+    const ambiguousArgs = argsForRoot(ambiguousRunRoot);
+    let ambiguousRunnerCalls = 0;
+    const ambiguousButler = createButlerAdapter(async (input) => {
+      ambiguousRunnerCalls += 1;
+      const now = Date.now();
+      return {
+        kind: "launch_smoke",
+        ok: true,
+        actualProductPath: [
+          "electron_renderer", "electron_preload_bridge", "app_gateway", "native_btcc_runtime",
+        ],
+        run: { dataRoot: "", runRoot: input.arm.evidenceRoot,
+          workspaceRoot: join(input.arm.evidenceRoot, "workspace"), model: "openai/gpt-5.6-sol",
+          reasoningEffort: "medium" },
+        launches: [1, 2].map(() => ({ startedAtMs: now, stoppedAtMs: now + 1 })),
+        observations: [],
+        providerRequests: [],
+      };
+    }, afterRoot);
+    await expect(runAgentBenchmarkCli(ambiguousArgs, {
+      createAdapters: () => ({ butler: ambiguousButler,
+        hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
+      preflightExecutor: authExecutor(true),
+    })).rejects.toThrow("launch-smoke preflight failed");
+    expect(ambiguousRunnerCalls).toBe(1);
+    expect(existsSync(join(ambiguousRunRoot, "preflight", "launch-smoke", "before", "receipt.json"))).toBeFalse();
+    expect(existsSync(join(ambiguousRunRoot, "manifest.json"))).toBeFalse();
+
+    const failedRunRoot = join(root, "launch-cleanup-failed-run");
+    const failedArgs = args.map((value) => value === runRoot ? failedRunRoot :
+      value === join(runRoot, "report") ? join(failedRunRoot, "report") : value);
+    const unavailableButler: AgentAdapter = {
+      agent: "butler",
+      async preflight() { return unavailableGate(); },
+      async run() { throw new Error("failed preflight must not run"); },
+    };
+    await expect(runAgentBenchmarkCli(failedArgs, {
+      createAdapters: () => ({ butler: unavailableButler, hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
+      preflightExecutor: authExecutor(true),
+    })).rejects.toThrow("launch-smoke preflight was unavailable");
+    expect(existsSync(join(failedRunRoot, "manifest.json"))).toBeFalse();
+    expect(existsSync(join(failedRunRoot, "result.json"))).toBeFalse();
+  }, 30_000);
+
   test("corroborates ordinary non-fast medium and rejects fast/service-tier drift", () => {
     const preregistered = requireAvailableProviderAuth({
       schema: "butler.provider-auth-preflight-receipt.v1", authority: "butler_auth_status_and_model_catalog",
@@ -537,6 +783,87 @@ CommandExecutor & { requests: import("../support/agent-benchmark/command.ts").Co
   return { exitCode: 0, stdout: JSON.stringify({ ok: true, command: auth ? "butler auth status" : "butler model list", data }),
     stderr: "", startedAtMs: 1, endedAtMs: 2, firstOutputAtMs: 1, outputComplete: true, timedOut: false, cancelled: false } satisfies CommandResult;
   } };
+}
+
+function createLaunchSmokeRuntimeAuthority(dataRoot: string): void {
+  mkdirSync(join(dataRoot, "app-server"), { recursive: true });
+  mkdirSync(join(dataRoot, "runtime"), { recursive: true });
+  const app = new Database(join(dataRoot, "app-server", "butler-client.sqlite"));
+  app.exec(`
+    CREATE TABLE turns (id TEXT);
+    CREATE TABLE btcc_turns (id TEXT);
+    CREATE TABLE btcc_model_route_events (id TEXT);
+    CREATE TABLE btcc_model_round_acceptances (id TEXT);
+  `);
+  app.close();
+  const conversation = new Database(join(dataRoot, "runtime", "conversation-store.sqlite"));
+  conversation.exec("CREATE TABLE conversation_turns (id TEXT)");
+  conversation.close();
+}
+
+async function exerciseProviderFreeLaunchLifecycle(): Promise<{
+  pid: number;
+  port: number;
+  startedAtMs: number;
+  stoppedAtMs: number;
+}> {
+  const listener = createServer();
+  let child: ChildProcess | null = null;
+  try {
+    const listening = once(listener, "listening", { signal: AbortSignal.timeout(3_000) });
+    listener.listen(0, "127.0.0.1");
+    await listening;
+    const address = listener.address();
+    if (!address || typeof address === "string") throw new Error("launch_smoke_listener_address_unavailable");
+    const startedAtMs = Date.now();
+    child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    await once(child, "spawn", { signal: AbortSignal.timeout(3_000) });
+    if (!child.pid) throw new Error("launch_smoke_child_pid_unavailable");
+    const pid = child.pid;
+    const exited = once(child, "exit", { signal: AbortSignal.timeout(3_000) });
+    if (!child.kill("SIGTERM")) throw new Error("launch_smoke_child_stop_failed");
+    await exited;
+    child = null;
+    const closed = once(listener, "close", { signal: AbortSignal.timeout(3_000) });
+    listener.close();
+    await closed;
+    return { pid, port: (address as AddressInfo).port, startedAtMs, stoppedAtMs: Date.now() };
+  } finally {
+    if (child && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    if (listener.listening) listener.close();
+  }
+}
+
+function processExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function portCanBind(port: number): Promise<boolean> {
+  const listener = createServer();
+  try {
+    const listening = once(listener, "listening", { signal: AbortSignal.timeout(3_000) });
+    listener.listen(port, "127.0.0.1");
+    await listening;
+    const closed = once(listener, "close", { signal: AbortSignal.timeout(3_000) });
+    listener.close();
+    await closed;
+    return true;
+  } catch {
+    if (listener.listening) listener.close();
+    return false;
+  }
+}
+
+async function allPortsCanBind(ports: readonly number[]): Promise<boolean> {
+  for (const port of ports) {
+    if (!await portCanBind(port)) return false;
+  }
+  return true;
 }
 
 function comparable(sourceRevision: string) {

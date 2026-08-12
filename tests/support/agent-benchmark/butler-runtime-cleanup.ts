@@ -1,9 +1,17 @@
 import { lstatSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
-import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 import type { BenchmarkArmPlan } from "./contracts.ts";
+import {
+  decideAbsentButlerRuntimeExport,
+  decideButlerRuntimeExport,
+  type ButlerDurableExportState,
+} from "./butler-runtime-export-decision.ts";
+import {
+  hasButlerRuntimeSymlinkComponent,
+  isStrictlyInsideButlerRuntime,
+} from "./butler-runtime-path-safety.ts";
 
 const MAX_HARNESS_EVIDENCE_BYTES = 1 * 1024 * 1024;
-const ALLOWED_SYSTEM_SYMLINKS = new Set(["/var", "/tmp"]);
 const CLEANUP_FAILURE_DIAGNOSTIC = "Butler runtime cleanup could not be verified.";
 
 export type ButlerRuntimeCleanupStatus = "removed" | "absent" | "unsafe" | "failed";
@@ -11,13 +19,20 @@ export type ButlerRuntimeCleanupStatus = "removed" | "absent" | "unsafe" | "fail
 export interface ButlerRuntimeCleanupResult {
   status: ButlerRuntimeCleanupStatus;
   diagnostic: string | null;
+  reason: ButlerRuntimeCleanupReason | null;
 }
+
+export type ButlerRuntimeCleanupReason =
+  | "durable_export_required"
+  | "runtime_observation_ambiguous"
+  | "runtime_removal_failed"
+  | "runtime_root_unsafe";
 
 /** Reads only the bounded structured evidence written by the Electron harness. */
 export function readButlerHarnessEvidence(evidenceRoot: string): Record<string, unknown> | null {
   const root = resolve(evidenceRoot);
   const evidencePath = join(root, "evidence.json");
-  if (hasSymlinkComponent(root) || hasSymlinkComponent(evidencePath)) return null;
+  if (hasButlerRuntimeSymlinkComponent(root) || hasButlerRuntimeSymlinkComponent(evidencePath)) return null;
   try {
     const stat = lstatSync(evidencePath);
     if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_HARNESS_EVIDENCE_BYTES) return null;
@@ -36,62 +51,67 @@ export function readButlerHarnessEvidence(evidenceRoot: string): Record<string, 
 export function cleanupButlerRuntime(
   evidence: Record<string, unknown>,
   arm: Pick<BenchmarkArmPlan, "evidenceRoot" | "outputRoot" | "cacheRoot" | "dataRoot" | "sourceRoot">,
-  durableEvidenceVerified = true,
+  durableExport: ButlerDurableExportState,
 ): ButlerRuntimeCleanupResult {
   const run = asRecord(evidence.run);
   const dataRoot = typeof run?.dataRoot === "string" ? run.dataRoot.trim() : "";
-  if (!dataRoot) return cleanupResult("absent");
+  if (!dataRoot) return absentCleanupResult(durableExport);
   const evidenceRoot = resolve(arm.evidenceRoot);
   const target = resolve(dataRoot);
+  if (!isStrictlyInsideButlerRuntime(evidenceRoot, target)) return cleanupResult("unsafe");
+  const protectedRoots = [arm.outputRoot, arm.cacheRoot, arm.dataRoot, arm.sourceRoot].map((path) => resolve(path));
+  if (protectedRoots.some((protectedRoot) => target === protectedRoot || isStrictlyInsideButlerRuntime(target, protectedRoot) || isStrictlyInsideButlerRuntime(protectedRoot, target))) {
+    return cleanupResult("unsafe");
+  }
   let targetStat;
   try {
     targetStat = lstatSync(target);
-  } catch {
-    return cleanupResult("absent");
+  } catch (error) {
+    return isMissingPath(error)
+      ? absentCleanupResult(durableExport)
+      : cleanupResult("failed", "runtime_observation_ambiguous");
   }
-  if (!durableEvidenceVerified) return cleanupResult("failed");
-  if (targetStat.isSymbolicLink() || !targetStat.isDirectory() || !strictlyInside(evidenceRoot, target) || hasSymlinkComponent(target)) {
-    return cleanupResult("unsafe");
-  }
-  const protectedRoots = [arm.outputRoot, arm.cacheRoot, arm.dataRoot, arm.sourceRoot].map((path) => resolve(path));
-  if (protectedRoots.some((protectedRoot) => target === protectedRoot || strictlyInside(target, protectedRoot) || strictlyInside(protectedRoot, target))) {
+  if (targetStat.isSymbolicLink() || !targetStat.isDirectory() || hasButlerRuntimeSymlinkComponent(target)) {
     return cleanupResult("unsafe");
   }
   try {
     const evidenceReal = realpathSync(evidenceRoot);
     const targetReal = realpathSync(target);
-    if (!strictlyInside(evidenceReal, targetReal) || targetReal === evidenceReal) return cleanupResult("unsafe");
+    if (!isStrictlyInsideButlerRuntime(evidenceReal, targetReal) || targetReal === evidenceReal) return cleanupResult("unsafe");
     const stat = statSync(target);
     if (!stat.isDirectory()) return cleanupResult("unsafe");
+    const decision = decideButlerRuntimeExport({ evidence, durableExport });
+    if (!decision.cleanupAllowed) {
+      return cleanupResult("failed", decision.reason);
+    }
     rmSync(target, { recursive: true, force: false });
     return cleanupResult("removed");
   } catch {
-    return cleanupResult("failed");
+    return cleanupResult("failed", "runtime_removal_failed");
   }
 }
 
-function hasSymlinkComponent(path: string): boolean {
-  const resolved = resolve(path);
-  const parsed = parse(resolved);
-  let current = parsed.root;
-  for (const segment of resolved.slice(parsed.root.length).split(sep).filter(Boolean)) {
-    current = resolve(current, segment);
-    try {
-      if (lstatSync(current).isSymbolicLink() && !ALLOWED_SYSTEM_SYMLINKS.has(current)) return true;
-    } catch {
-      return true;
-    }
-  }
-  return false;
+function absentCleanupResult(durableExport: ButlerDurableExportState): ButlerRuntimeCleanupResult {
+  const decision = decideAbsentButlerRuntimeExport(durableExport);
+  return decision.cleanupAllowed
+    ? cleanupResult("absent")
+    : cleanupResult("failed", decision.reason);
 }
 
-function cleanupResult(status: ButlerRuntimeCleanupStatus): ButlerRuntimeCleanupResult {
-  return { status, diagnostic: status === "unsafe" || status === "failed" ? CLEANUP_FAILURE_DIAGNOSTIC : null };
+function isMissingPath(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" &&
+    (error as { code?: unknown }).code === "ENOENT");
 }
 
-function strictlyInside(root: string, candidate: string): boolean {
-  const rel = relative(resolve(root), resolve(candidate));
-  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel) && !rel.includes("\0");
+function cleanupResult(
+  status: ButlerRuntimeCleanupStatus,
+  reason: ButlerRuntimeCleanupReason | null = status === "unsafe" ? "runtime_root_unsafe" : null,
+): ButlerRuntimeCleanupResult {
+  return {
+    status,
+    diagnostic: status === "unsafe" || status === "failed" ? CLEANUP_FAILURE_DIAGNOSTIC : null,
+    reason,
+  };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

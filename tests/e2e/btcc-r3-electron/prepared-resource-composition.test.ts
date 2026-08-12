@@ -1,12 +1,11 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createProductionAgentAdapters } from
+import { Database } from "bun:sqlite";
+import { createAgentAdapters, createProductionAgentAdapters } from
   "../../support/agent-benchmark/adapters.ts";
-import { createButlerAdapter } from
-  "../../support/agent-benchmark/butler-adapter.ts";
 import type { BenchmarkArmPlan, BenchmarkFixture } from
   "../../support/agent-benchmark/contracts.ts";
 import type { PreparedButlerResourceReference } from
@@ -62,18 +61,47 @@ test("renderer launch-smoke evidence bypasses turn-only M1 collection", async ()
   const root = mkdtempSync(join(tmpdir(), "butler-renderer-smoke-adapter-"));
   try {
     const sourceRoot = process.cwd();
+    const evidenceRoot = join(root, "evidence");
+    const dataRoot = join(evidenceRoot, "data");
+    mkdirSync(join(dataRoot, "app-server"), { recursive: true });
+    mkdirSync(join(dataRoot, "runtime"), { recursive: true });
+    const appDb = new Database(join(dataRoot, "app-server", "butler-client.sqlite"));
+    appDb.exec(`
+      CREATE TABLE turns (id TEXT);
+      CREATE TABLE btcc_turns (id TEXT);
+      CREATE TABLE btcc_model_route_events (id TEXT);
+      CREATE TABLE btcc_model_round_acceptances (id TEXT);
+    `);
+    appDb.close();
+    const conversationDb = new Database(join(dataRoot, "runtime", "conversation-store.sqlite"));
+    conversationDb.exec("CREATE TABLE conversation_turns (id TEXT)");
+    conversationDb.close();
     const sourceRevision = execFileSync(
       "git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8" },
     ).trim();
-    const adapter = createButlerAdapter(async () => ({
-      kind: "launch_smoke",
-      ok: true,
-      observations: [],
-      providerRequests: [],
-      run: { dataRoot: join(root, "data"), workspaceRoot: join(root, "workspace") },
-    }), sourceRoot);
+    const adapter = createAgentAdapters({
+      sourceRoot,
+      commandExecutor: { execute: async () => { throw new Error("external adapter must not run"); } },
+      butlerRunner: async () => ({
+        kind: "launch_smoke",
+        ok: true,
+        actualProductPath: [
+          "electron_renderer",
+          "electron_preload_bridge",
+          "app_gateway",
+          "native_btcc_runtime",
+        ],
+        launches: [
+          { electronPid: 101, executorPid: 201, interruptedExecutorReplaced: false, startedAtMs: 1, stoppedAtMs: 2 },
+          { electronPid: 102, executorPid: 202, interruptedExecutorReplaced: false, startedAtMs: 3, stoppedAtMs: 4 },
+        ],
+        observations: [],
+        providerRequests: [],
+        run: { dataRoot, workspaceRoot: join(evidenceRoot, "workspace") },
+      }),
+    }).butler;
     const result = await adapter.run({
-      arm: arm(sourceRoot, join(root, "evidence"), sourceRevision),
+      arm: arm(sourceRoot, evidenceRoot, sourceRevision),
       fixture: fixture(),
       prompt: "unused",
       sessionId: null,
@@ -84,10 +112,78 @@ test("renderer launch-smoke evidence bypasses turn-only M1 collection", async ()
     });
     expect(result).toMatchObject({ exitCode: 0, gateCode: "none" });
     expect(result.m1V2Evidence).toBeUndefined();
+    expect(existsSync(dataRoot)).toBe(false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("cleanup decision reason classifies observed SC01 as measurement and ambiguity as configuration", async () => {
+  for (const [caseName, mutate, gateCode] of [
+    ["sc01", (dataRoot: string) => {
+      const metrics = join(dataRoot, "metrics");
+      mkdirSync(metrics);
+      writeFileSync(join(metrics, "operational-events.jsonl"), `${JSON.stringify({ name: "m1_v2_request_envelope" })}\n`);
+    }, "measurement_unavailable"],
+    ["route", (dataRoot: string) => {
+      const db = new Database(join(dataRoot, "app-server", "butler-client.sqlite"));
+      db.exec("INSERT INTO btcc_model_route_events VALUES ('route-safe')");
+      db.close();
+    }, "measurement_unavailable"],
+    ["round", (dataRoot: string) => {
+      const db = new Database(join(dataRoot, "app-server", "butler-client.sqlite"));
+      db.exec("INSERT INTO btcc_model_round_acceptances VALUES ('round-safe')");
+      db.close();
+    }, "measurement_unavailable"],
+    ["ambiguous", (dataRoot: string) => {
+      rmSync(join(dataRoot, "runtime", "conversation-store.sqlite"));
+    }, "configuration_unverifiable"],
+  ] as const) {
+    const root = mkdtempSync(join(tmpdir(), `butler-cleanup-${caseName}-`));
+    try {
+      const sourceRoot = process.cwd();
+      const evidenceRoot = join(root, "evidence");
+      const dataRoot = join(evidenceRoot, "data");
+      createRuntimeAuthority(dataRoot);
+      mutate(dataRoot);
+      const adapter = createAgentAdapters({
+        sourceRoot,
+        commandExecutor: { execute: async () => { throw new Error("external adapter must not run"); } },
+        butlerRunner: async () => launchSmokeEvidence(dataRoot, evidenceRoot),
+      }).butler;
+      const result = await adapter.run({
+        arm: arm(sourceRoot, evidenceRoot, execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim()),
+        fixture: fixture(), prompt: "unused", sessionId: null, sourceEvidenceRoot: "",
+        runtimeInstructions: "unused", signal: new AbortController().signal,
+        benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: root },
+      });
+      expect(result.gateCode).toBe(gateCode);
+      expect(existsSync(dataRoot)).toBeTrue();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+function createRuntimeAuthority(dataRoot: string): void {
+  mkdirSync(join(dataRoot, "app-server"), { recursive: true });
+  mkdirSync(join(dataRoot, "runtime"), { recursive: true });
+  const appDb = new Database(join(dataRoot, "app-server", "butler-client.sqlite"));
+  appDb.exec("CREATE TABLE turns(id TEXT); CREATE TABLE btcc_turns(id TEXT); CREATE TABLE btcc_model_route_events(id TEXT); CREATE TABLE btcc_model_round_acceptances(id TEXT)");
+  appDb.close();
+  const conversationDb = new Database(join(dataRoot, "runtime", "conversation-store.sqlite"));
+  conversationDb.exec("CREATE TABLE conversation_turns(id TEXT)");
+  conversationDb.close();
+}
+
+function launchSmokeEvidence(dataRoot: string, evidenceRoot: string): Record<string, unknown> {
+  return {
+    kind: "launch_smoke", ok: true,
+    actualProductPath: ["electron_renderer", "electron_preload_bridge", "app_gateway", "native_btcc_runtime"],
+    launches: [{ startedAtMs: 1, stoppedAtMs: 2 }, { startedAtMs: 3, stoppedAtMs: 4 }],
+    observations: [], providerRequests: [], run: { dataRoot, workspaceRoot: join(evidenceRoot, "workspace") },
+  };
+}
 
 function arm(
   sourceRoot: string,

@@ -722,3 +722,36 @@ After the final Task mutation, Project Ledger index and dashboard, handoff, and
 roadmap views were regenerated with `--write`. Final status reported a fresh
 index, no stale views, and issue count 0; final check also passed with 2,856
 records and issue count 0.
+
+## Launch-smoke cleanup lifecycle repair
+
+Task: `T-M1-V2-LAUNCH-SMOKE-CLEANUP-LIFECYCLE-REPAIR-20260813`
+
+The canonical harness cleanup previously inferred export requirements from
+fixture M1 presence and returned `absent` before consulting typed runtime/export
+authority. Consequently a provider-free renderer launch smoke could be blocked
+despite dispatching no Turn, while an empty or missing runtime path could bypass
+incomplete M1 launch/readiness/database/SC01 evidence.
+
+The repair uses one typed cleanup decision. A missing or failed durable export
+may clean only a successful `launch_smoke` with exactly two stopped launches,
+the exact renderer/preload/gateway/native readiness set, empty provider and Turn
+observations, zero rows in the exact App/BTCC/conversation authority tables, and
+zero SC01 metric rows. Any provider/Turn/route/accepted-round/SC01 row requires
+verified export; missing, malformed, unsafe, or unavailable authority is
+`runtime_observation_ambiguous`. Runtime absence is idempotent only for an
+already verified export or a genuinely not-armed non-M1 operation. It cannot
+stand in for M1 authority verification.
+
+The public paired `preflight` path runs before manifest/campaign creation in
+dedicated create-only roots and records only an exact privacy-safe receipt after
+the typed zero-dispatch cleanup succeeds. Receipt resume skips the adapter;
+partial or symlinked roots, identity drift, ambiguous cleanup, and missing
+runtime authority cannot create or promote a receipt.
+
+Provider-free tests cover the two-launch success, exact readiness equality,
+provider/Turn/route/round/SC01 export requirements, empty or missing runtime,
+non-ENOENT path ambiguity, successful and partial restart, prepared-resource
+identity mutation, safe receipt resume, unsafe/partial roots, adapter
+classification, campaign root preservation, and the real public paired CLI
+composition. No provider, live Electron, prepared build, or campaign was run.
