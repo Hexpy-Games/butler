@@ -21,13 +21,8 @@ import { sanitizeIdentifier } from "./identifiers.ts";
 import { effectiveAgentConfig } from "./track-config.ts";
 import { verifyM1V2AuthoritativeProvenance } from "./m1-v2-provenance.ts";
 
-export const BENCHMARK_AGENTS: readonly BenchmarkAgent[] = [
-  "butler",
-  "hermes",
-  "opencode",
-];
-/**
- * Tracks that are materialized by the compact pilot.  The recommended-default
+export const BENCHMARK_AGENTS: readonly BenchmarkAgent[] = ["butler", "hermes", "opencode"];
+/** Tracks that are materialized by the compact pilot. The recommended-default
  * configuration remains a supported definition, but it is intentionally not
  * an execution arm or separately verified configuration in this pilot.
  */
@@ -43,7 +38,6 @@ export const BENCHMARK_CACHE_STATES: readonly BenchmarkCacheState[] = [
   "warm",
 ];
 export const DEFAULT_BENCHMARK_TIMEOUT_MS = 15 * 60 * 1_000;
-
 export interface CreateBenchmarkPlanInput {
   campaign?: BenchmarkCampaign;
   runId: string;
@@ -57,6 +51,7 @@ export interface CreateBenchmarkPlanInput {
   controlledReasoning?: string;
   repetitionsPerCache?: number;
   createdAt?: string;
+  preparedButlerResource?: BenchmarkPlan["preparedButlerResource"];
 }
 
 export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkPlan {
@@ -172,6 +167,7 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
       provenanceJsonlPath: resolve(input.provenanceJsonlPath!),
       provenance: verifiedProvenance!.identity,
     } : {}),
+    ...(input.preparedButlerResource ? { preparedButlerResource: { ...input.preparedButlerResource } } : {}),
     tracks: BENCHMARK_TRACKS,
     fixtures,
     ...(campaign === "m1-v2" ? { policy: {
@@ -189,7 +185,7 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
 
 /** Stable identity for checkpoint resume; excludes only volatile createdAt. */
 export function benchmarkPlanIdentity(
-  plan: Pick<BenchmarkPlan, "campaign" | "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "harnessRoot" | "provenanceJsonlPath" | "provenance" | "tracks" | "fixtures" | "arms" | "policy">,
+  plan: Pick<BenchmarkPlan, "campaign" | "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "harnessRoot" | "provenanceJsonlPath" | "provenance" | "preparedButlerResource" | "tracks" | "fixtures" | "arms" | "policy">,
 ): string {
   const stable = {
     runId: plan.runId,
@@ -201,6 +197,7 @@ export function benchmarkPlanIdentity(
     harnessRoot: plan.harnessRoot,
     provenanceJsonlPath: plan.provenanceJsonlPath ?? null,
     provenance: plan.provenance ?? null,
+    preparedButlerResource: plan.preparedButlerResource ?? null,
     tracks: plan.tracks,
     fixtures: plan.fixtures,
     policy: plan.policy ?? null,

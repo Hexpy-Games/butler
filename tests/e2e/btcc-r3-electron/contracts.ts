@@ -117,6 +117,16 @@ export interface ElectronHarnessOptions {
   runRoot?: string;
   sourceData?: string;
   bundledAgentResourceDir?: string;
+  bundledAgentResourceIdentity?: {
+    sourceRevision: string;
+    sourceCompatibilitySha256: string;
+    manifestSha256: string;
+    dependencyClosureSha256: string;
+    resourceSha256: string;
+    resourceBytes: number;
+    archiveSha256: string;
+    archiveBytes: number;
+  };
   model?: string;
   reasoningEffort?: ReasoningEffort;
   accessMode?: AccessMode;

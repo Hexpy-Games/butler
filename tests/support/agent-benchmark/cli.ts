@@ -15,6 +15,11 @@ import type { BenchmarkPlan, BenchmarkResultFile } from "./contracts.ts";
 import { sanitizeIdentifier } from "./identifiers.ts";
 import { applyVisualReviews, readVisualReviewFile } from "./visual-review.ts";
 import { assertNoSymlinkComponents } from "./isolation.ts";
+import {
+  readPreparedButlerResourceReference,
+  preparedResourceIdentity,
+  type PreparedButlerResourceReference,
+} from "./prepared-butler-resource.ts";
 
 export interface AgentBenchmarkCliOptions {
   command: "plan" | "pilot" | "run";
@@ -32,6 +37,7 @@ export interface AgentBenchmarkCliOptions {
   campaign: "cross-agent-pilot" | "m1-v2";
   repetitions: number;
   sourceRevision: string;
+  preparedButlerResource: PreparedButlerResourceReference | null;
 }
 
 const CANONICAL_PILOT_MODEL = "openai/gpt-5.6-sol";
@@ -51,6 +57,9 @@ export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<str
     controlledReasoning: options.controlledReasoning,
     repetitionsPerCache: options.repetitions,
     baselineSha: options.sourceRevision,
+    preparedButlerResource: options.preparedButlerResource
+      ? preparedResourceIdentity(options.preparedButlerResource)
+      : undefined,
   });
   const planPath = join(options.runRoot, "manifest.json");
   const resultPath = join(options.runRoot, "result.json");
@@ -59,7 +68,11 @@ export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<str
   if (options.command === "plan") {
     return JSON.stringify({ planPath: relative(plan.runRoot, planPath), runId: plan.runId, seed: plan.seed, arms: plan.arms.length });
   }
-  const adapters = createProductionAgentAdapters(options.sourceRoot);
+  const adapters = createProductionAgentAdapters(options.sourceRoot, {
+    ...(options.preparedButlerResource
+      ? { preparedButlerResource: options.preparedButlerResource }
+      : {}),
+  });
   const controller = new AbortController();
   const completed = await runAgentBenchmark({
     plan,
@@ -112,6 +125,10 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
   }
   const repetitions = Number(option(argv, "--repetitions") ?? (campaign === "m1-v2" ? "3" : "1"));
   const sourceRevision = option(argv, "--source-revision") ?? AGENT_BENCHMARK_BASELINE_SHA;
+  const preparedPinPath = option(argv, "--prepared-butler-resource-pin");
+  const preparedButlerResource = preparedPinPath
+    ? readPreparedButlerResourceReference(resolve(preparedPinPath))
+    : null;
   if (command === "pilot" && (controlledModel.trim() !== CANONICAL_PILOT_MODEL || controlledReasoning.trim() !== CANONICAL_PILOT_REASONING)) {
     throw new Error(`The canonical pilot requires ${CANONICAL_PILOT_MODEL} with ${CANONICAL_PILOT_REASONING} reasoning`);
   }
@@ -133,11 +150,12 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
     campaign,
     repetitions,
     sourceRevision,
+    preparedButlerResource,
   };
 }
 
 function validateFlags(argv: readonly string[]): void {
-  const valueFlags = new Set(["--seed", "--run-id", "--source-root", "--harness-root", "--provenance-jsonl", "--run-root", "--output", "--controlled-model", "--controlled-reasoning", "--visual-review", "--campaign", "--repetitions", "--source-revision"]);
+  const valueFlags = new Set(["--seed", "--run-id", "--source-root", "--harness-root", "--provenance-jsonl", "--run-root", "--output", "--controlled-model", "--controlled-reasoning", "--visual-review", "--campaign", "--repetitions", "--source-revision", "--prepared-butler-resource-pin"]);
   const booleanFlags = new Set(["--execute-available"]);
   for (let index = 1; index < argv.length; index += 1) {
     const flag = argv[index]!;
