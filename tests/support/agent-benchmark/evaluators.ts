@@ -102,9 +102,20 @@ export function evaluateAdapterResult(
       ? (result.finalText ? "provider_output_observed" : "provider_dispatched")
       : "adapter_entered",
     infrastructureGateStage: null,
-    pairedComparableIdentity: comparableIdentityForArm(arm, m1V2),
+    pairedComparableIdentity: comparableIdentityForArm(arm, m1V2, pairedRuntimeIdentity(arm, result, context)),
     m1V2,
   };
+}
+function pairedRuntimeIdentity(arm: BenchmarkArmPlan, result: AdapterRunResult, context: EvaluationContext) {
+  const evidence = result.pairedExecutionEvidence, receipt = context.pairedAuthReceipt;
+  const exact = (values: readonly (string | null)[]): string | null => {
+    const present = [...new Set(values)]; return present.length === 1 && typeof present[0] === "string" ? present[0] : null;
+  };
+  const model = evidence ? exact(evidence.requestModels) : null, reasoning = evidence ? exact(evidence.requestReasoning) : null,
+    route = evidence ? exact(evidence.routeIds) : null;
+  if (!evidence || !receipt || !model || !reasoning || !route || !arm.pairedExecution) return null;
+  return { provider: evidence.provider, model, reasoning, route, authMode: receipt.authMode,
+    executionMode: arm.pairedExecution.executionMode };
 }
 
 export function deriveAcceptedResultPerToken(

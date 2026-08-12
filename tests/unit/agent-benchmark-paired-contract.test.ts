@@ -1,6 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -20,17 +19,18 @@ import {
   replacementEligibility,
   requireAvailableProviderAuth,
   validatePairedCampaignContract,
+  validateProviderAuthPreflight,
 } from "../support/agent-benchmark/paired-contract.ts";
 import {
   aggregatePairedMetrics,
   comparableIdentityForArm,
   comparisonIndexForResult,
-  comparisonIndexHtml,
   pairEligibility,
 } from "../support/agent-benchmark/paired-evaluation.ts";
 import { hashBenchmarkFixture, loadM1V2BenchmarkFixtures } from "../support/agent-benchmark/fixtures.ts";
 import type { PreparedButlerResourceReference } from "../support/agent-benchmark/prepared-butler-resource.ts";
-import type { AdapterRunInput, AdapterRunResult, AgentAdapter } from "../support/agent-benchmark/contracts.ts";
+import type { AdapterRunInput, AdapterRunResult, AgentAdapter, BenchmarkResultFile } from "../support/agent-benchmark/contracts.ts";
+import type { CommandExecutor, CommandResult } from "../support/agent-benchmark/command.ts";
 import { createGatedBenchmarkObservation, resumeOrInitialize } from "../support/agent-benchmark/checkpoint.ts";
 import { prepareTestHarnessAuthority } from "./support/m1-v2-provenance-authority.ts";
 
@@ -111,40 +111,27 @@ describe("final paired M1 campaign contract", () => {
   test("auth unavailable stops before manifest creation and available CLI creates redacted plan", async () => {
     const runRoot = join(root, "cli-run");
     const files = writeCliInputs("cli");
-    const unavailableAuth = join(root, "unavailable-auth.json");
-    writeFileSync(unavailableAuth, JSON.stringify({
-      schema: "butler.provider-auth-preflight-receipt.v1", authority: "butler_auth_status_and_model_catalog",
-      provider: "openai", authMode: "managed", observedProductAuthMode: "codex_oauth", model: "openai/gpt-5.6-sol",
-      reasoning: "medium", executionMode: "ordinary_non_fast",
-      modelCallability: "available", configured: false,
-    }));
-    await expect(runAgentBenchmarkCli(cliArgs(runRoot, files, unavailableAuth)))
+    await expect(runAgentBenchmarkCli(cliArgs(runRoot, files), { preflightExecutor: authExecutor(false) }))
       .rejects.toThrow("measurement_unavailable");
     expect(existsSync(join(runRoot, "manifest.json"))).toBe(false);
 
-    const availableAuth = join(root, "available-auth.json");
-    writeFileSync(availableAuth, JSON.stringify({
-      schema: "butler.provider-auth-preflight-receipt.v1", authority: "butler_auth_status_and_model_catalog",
-      provider: "openai", authMode: "managed", observedProductAuthMode: "codex_oauth", model: "openai/gpt-5.6-sol",
-      reasoning: "medium", executionMode: "ordinary_non_fast",
-      modelCallability: "available", configured: true,
-    }));
-    const output = JSON.parse(await runAgentBenchmarkCli(cliArgs(runRoot, files, availableAuth))) as { arms: number };
+    const executor = authExecutor(true);
+    const output = JSON.parse(await runAgentBenchmarkCli(cliArgs(runRoot, files), { preflightExecutor: executor })) as { arms: number };
     expect(output.arms).toBe(24);
     const manifest = readFileSync(join(runRoot, "manifest.json"), "utf8");
     expect(manifest).not.toContain(root);
     expect(manifest).toContain("ordinary_non_fast");
     expect(manifest).toContain('"service_tier": "default"');
-    await runAgentBenchmarkCli(cliArgs(runRoot, files, availableAuth));
+    await runAgentBenchmarkCli(cliArgs(runRoot, files), { preflightExecutor: executor });
     expect(readFileSync(join(runRoot, "manifest.json"), "utf8")).toBe(manifest);
-    writeFileSync(availableAuth, JSON.stringify({
-      schema: "butler.provider-auth-preflight-receipt.v1", authority: "butler_auth_status_and_model_catalog",
-      provider: "openai", authMode: "managed", observedProductAuthMode: "codex_subscription", model: "openai/gpt-5.6-sol",
-      reasoning: "medium", executionMode: "ordinary_non_fast",
-      modelCallability: "available", configured: true,
-    }));
-    await expect(runAgentBenchmarkCli(cliArgs(runRoot, files, availableAuth)))
-      .rejects.toThrow("Provider auth preflight is invalid");
+    expect(manifest).not.toContain("secret-token");
+    expect(manifest).not.toContain("/private/path");
+    await expect(runAgentBenchmarkCli(cliArgs(join(root, "missing-command-run"), files), {
+      preflightExecutor: { async execute() { throw new Error("ENOENT /private/path secret-token"); } },
+    })).rejects.toThrow("measurement_unavailable");
+    expect(existsSync(join(root, "missing-command-run", "manifest.json"))).toBe(false);
+    expect(() => validateProviderAuthPreflight({ ...authReceipt(), secret: "secret-token" } as never))
+      .toThrow("non-allowlisted");
   });
 
   test("uses the public workflow checkpoint and report path without dispatch when source is unavailable", async () => {
@@ -211,28 +198,43 @@ describe("final paired M1 campaign contract", () => {
       execFileSync("git", ["clone", "--quiet", "--no-checkout", process.cwd(), path]);
       execFileSync("git", ["-C", path, "checkout", "--quiet", revision]);
     }
-    const runRoot = join(root, "available-run"), files = writeCliInputs("available"), auth = join(root, "available-receipt.json");
-    writeFileSync(auth, JSON.stringify(authReceipt()));
+    const runRoot = join(root, "available-run"), files = writeCliInputs("available");
     let dispatches = 0;
     const butler: AgentAdapter = { agent: "butler",
       async preflight() { return { available: true, executable: "provider-free-fake", version: "1", authenticated: true, configVerified: true, gateCode: "none", diagnostic: null }; },
       async run(input) { dispatches += 1; return completeFakeResult(input); } };
     const unavailable = (agent: "hermes" | "opencode"): AgentAdapter => ({ agent,
       async preflight() { throw new Error("external preflight must not run"); }, async run() { throw new Error("external run must not run"); } });
-    const args = cliArgs(runRoot, files, auth).map((value, index) => index === 0 ? "run" :
+    const args = cliArgs(runRoot, files).map((value, index) => index === 0 ? "run" :
       value === join(root, "private-before-source") ? beforeRoot : value === join(root, "private-after-source") ? afterRoot : value);
     args.push("--execute-available");
     const output = JSON.parse(await runAgentBenchmarkCli(args, { createAdapters: () => ({ butler, hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
-      landingValidator: async () => { throw new Error("typed landing-cold uses M1 evidence"); } })) as { reportPath: string };
+      landingValidator: async () => { throw new Error("typed landing-cold uses M1 evidence"); }, preflightExecutor: authExecutor(true) })) as { reportPath: string };
     expect(dispatches).toBe(24);
     expect(readFileSync(join(runRoot, "report", "comparison-index.json"), "utf8")).toContain('"status": "ranked"');
     expect(readFileSync(join(runRoot, output.reportPath), "utf8")).toContain("Registered request 45 to 38-40 gate: pass");
+    for (const publicPath of [join(runRoot, "result.json"), join(runRoot, output.reportPath),
+      join(runRoot, "report", "comparison-index.json"), join(runRoot, "report", "comparison-index.html")]) {
+      const publicText = readFileSync(publicPath, "utf8");
+      expect(publicText).not.toContain("secret-token");
+      expect(publicText).not.toContain("/private/path");
+    }
+    const duplicated = JSON.parse(readFileSync(join(runRoot, "result.json"), "utf8")) as BenchmarkResultFile;
+    const frozenAttempts = duplicated.observations.flatMap((row) => row.m1V2?.agentAttempts ?? []);
+    expect(new Set(frozenAttempts.map((attempt) => attempt.sourceRevision))).toEqual(new Set([FINAL_BEFORE_REVISION, FINAL_AFTER_REVISION]));
+    expect(frozenAttempts.every((attempt) => Object.keys(attempt).includes("providerId") &&
+      Object.keys(attempt).includes("modelRef") && Object.keys(attempt).includes("cacheBoundaryRevision") &&
+      Object.keys(attempt).includes("retryOrdinal") && Object.keys(attempt).includes("eligibility") &&
+      !("reasoning" in attempt) && !("route" in attempt) && !("authMode" in attempt) && !("fixture" in attempt))).toBe(true);
+    duplicated.observations.push(structuredClone(duplicated.observations[0]!));
+    expect(summarizeBenchmarkResult(duplicated).pairedCampaign?.acceptance.complete).toBe(false);
+    expect(comparisonIndexForResult(duplicated).find((entry) => entry.id === "paired-butler")?.status).toBe("unranked");
     const rejectedRoot = join(root, "rejected-run"), rejectedArgs = args.map((value) => value === runRoot ? rejectedRoot :
       value === join(runRoot, "report") ? join(rejectedRoot, "report") : value);
     const rejectedButler: AgentAdapter = { ...butler, async run(input) { const result = completeFakeResult(input);
       return { ...result, pairedExecutionEvidence: { ...result.pairedExecutionEvidence!, providerServiceTiers: ["priority"] } }; } };
     await runAgentBenchmarkCli(rejectedArgs, { createAdapters: () => ({ butler: rejectedButler,
-      hermes: unavailable("hermes"), opencode: unavailable("opencode") }) });
+      hermes: unavailable("hermes"), opencode: unavailable("opencode") }), preflightExecutor: authExecutor(true) });
     expect(readFileSync(join(rejectedRoot, "report", "comparison-index.json"), "utf8")).toContain("paired_incomplete_or_rejected");
     const rejectedResult = JSON.parse(readFileSync(join(rejectedRoot, "result.json"), "utf8")) as { observations: Array<{ terminalState: string }> };
     expect(rejectedResult.observations.every((row) => row.terminalState === "rejected")).toBe(true);
@@ -257,7 +259,10 @@ describe("final paired M1 campaign contract", () => {
     const before = comparable(FINAL_BEFORE_REVISION);
     const after = comparable(FINAL_AFTER_REVISION);
     expect(pairEligibility({ before, after })).toEqual({ status: "eligible", reason: "exact_pair" });
-    expect(pairEligibility({ before, after: { ...after, cache: "miss" } })).toEqual({ status: "descriptive", reason: "cache_mismatch" });
+    expect(pairEligibility({ before: { ...before, cache: "cache_mismatch:before-boundary" }, after })).toEqual({ status: "descriptive", reason: "cache_mismatch" });
+    expect(pairEligibility({ before, after: { ...after, cache: "cache_mismatch:after-boundary" } })).toEqual({ status: "descriptive", reason: "cache_mismatch" });
+    expect(pairEligibility({ before: { ...before, cache: "cache_mismatch:before-boundary" }, after: { ...after, cache: "cache_mismatch:after-boundary" } })).toEqual({ status: "descriptive", reason: "cache_mismatch" });
+    expect(pairEligibility({ before: { ...before, cache: "rejected:ineligible" }, after })).toEqual({ status: "rejected", reason: "ineligible_observation" });
     for (const [field, reason] of [["fixture", "fixture_mismatch"], ["model", "model_mismatch"], ["route", "route_mismatch"]] as const) {
       expect(pairEligibility({ before, after: { ...after, [field]: "changed" } })).toEqual({ status: "rejected", reason });
     }
@@ -270,11 +275,42 @@ describe("final paired M1 campaign contract", () => {
       provenanceJsonlPath: authority.jsonlPath, baselineSha: FINAL_AFTER_REVISION, controlledModel: "openai/gpt-5.6-sol",
       controlledReasoning: "medium", pairedCampaign: pairedContract(), pairedRuntimeSources: {
         before: join(root, "identity-before"), after: join(root, "identity-after") } }).arms[0]!;
+    const runtime = { reasoning: "medium", route: "openai-responses", provider: "openai", model: "openai/gpt-5.6-sol", authMode: "managed", executionMode: "ordinary_non_fast" };
     const observed = comparableIdentityForArm(arm, { agentAttempts: [{ eligibility: "cache_mismatch", retryOrdinal: 0,
-      fixtureSha256: arm.fixtureHash, sourceRevision: arm.sourceRevision, modelRef: "openai/gpt-5.6-sol", reasoning: "medium",
-      providerId: "openai", authMode: "managed", executionMode: "ordinary_non_fast", routeId: "openai-responses" }] } as never);
-    expect(observed?.cache).toBe("cache_mismatch");
-    expect(comparableIdentityForArm(arm, { agentAttempts: [{ ...observedAttempt(arm), routeId: "drift" }, observedAttempt(arm)] } as never)?.route).toBe("observed_conflict:routeId");
+      sourceRevision: arm.sourceRevision, modelRef: "openai/gpt-5.6-sol", providerId: "openai", cacheBoundaryRevision: "cache-v1" }] } as never, runtime);
+    expect(observed?.cache).toBe("cache_mismatch:cache-v1");
+    expect(comparableIdentityForArm(arm, { agentAttempts: [{ ...observedAttempt(arm), providerId: "drift" }, observedAttempt(arm)] } as never, runtime)?.provider).toBe("observed_conflict:providerId");
+  });
+
+  test("rejects forged provenance and non-prefix or duplicate checkpoint observations", () => {
+    const contract = pairedContract();
+    const forged = structuredClone(contract);
+    forged.provenance = { ...forged.provenance, verifiedSha256: "a".repeat(64) };
+    const { identity: _identity, ...stable } = forged;
+    forged.identity = createHash("sha256").update(JSON.stringify(stable)).digest("hex");
+    expect(() => createBenchmarkPlan({ campaign: "m1-v2-paired", runId: "forged-provenance", seed: 1,
+      runRoot: join(root, "forged-run"), sourceRoot: join(root, "forged-after"), harnessRoot: authority.harnessRoot,
+      provenanceJsonlPath: authority.jsonlPath, baselineSha: FINAL_AFTER_REVISION, controlledModel: "openai/gpt-5.6-sol",
+      controlledReasoning: "medium", pairedCampaign: forged, pairedRuntimeSources: {
+        before: join(root, "forged-before"), after: join(root, "forged-after") } })).toThrow("freshly verified");
+
+    const plan = createBenchmarkPlan({ campaign: "m1-v2-paired", runId: "checkpoint-order", seed: 1,
+      runRoot: join(root, "checkpoint-order-run"), sourceRoot: join(root, "checkpoint-after"), harnessRoot: authority.harnessRoot,
+      provenanceJsonlPath: authority.jsonlPath, baselineSha: FINAL_AFTER_REVISION, controlledModel: "openai/gpt-5.6-sol",
+      controlledReasoning: "medium", pairedCampaign: contract, pairedRuntimeSources: {
+        before: join(root, "checkpoint-before"), after: join(root, "checkpoint-after") } });
+    const checkpoint = resumeOrInitialize(plan, null);
+    checkpoint.observations.push(createGatedBenchmarkObservation(plan.arms[0]!, unavailableGate()));
+    expect(() => resumeOrInitialize(plan, checkpoint)).not.toThrow();
+    const duplicate = structuredClone(checkpoint);
+    duplicate.observations.push(structuredClone(duplicate.observations[0]!));
+    expect(() => resumeOrInitialize(plan, duplicate)).toThrow("observation identity/order mismatch");
+    const skipped = structuredClone(checkpoint);
+    skipped.observations = [createGatedBenchmarkObservation(plan.arms[1]!, unavailableGate())];
+    expect(() => resumeOrInitialize(plan, skipped)).toThrow("observation identity/order mismatch");
+    const mutated = structuredClone(checkpoint);
+    mutated.observations[0]!.arm.sourceRevision = FINAL_AFTER_REVISION;
+    expect(() => resumeOrInitialize(plan, mutated)).toThrow("observation identity/order mismatch");
   });
 
   test("reports per-arm/overall paired deltas, nullable usage, and historical unranked index", () => {
@@ -351,19 +387,29 @@ function writeCliInputs(id: string) {
   return { before, after };
 }
 
-function cliArgs(runRoot: string, files: { before: string; after: string }, auth: string): string[] {
-  return ["plan", "--campaign", "m1-v2-paired", "--seed", "20260813", "--run-id", "paired-cli", "--run-root", runRoot, "--output", join(runRoot, "report"), "--harness-root", authority.harnessRoot, "--provenance-jsonl", authority.jsonlPath, "--controlled-model", "openai/gpt-5.6-sol", "--controlled-reasoning", "medium", "--source-revision", FINAL_AFTER_REVISION, "--repetitions", "3", "--before-source-root", join(root, "private-before-source"), "--after-source-root", join(root, "private-after-source"), "--before-prepared-butler-resource-pin", files.before, "--after-prepared-butler-resource-pin", files.after, "--provider-auth-preflight", auth];
+function cliArgs(runRoot: string, files: { before: string; after: string }): string[] {
+  return ["plan", "--campaign", "m1-v2-paired", "--seed", "20260813", "--run-id", "paired-cli", "--run-root", runRoot, "--output", join(runRoot, "report"), "--harness-root", authority.harnessRoot, "--provenance-jsonl", authority.jsonlPath, "--controlled-model", "openai/gpt-5.6-sol", "--controlled-reasoning", "medium", "--source-revision", FINAL_AFTER_REVISION, "--repetitions", "3", "--before-source-root", join(root, "private-before-source"), "--after-source-root", join(root, "private-after-source"), "--before-prepared-butler-resource-pin", files.before, "--after-prepared-butler-resource-pin", files.after];
 }
+
+function authExecutor(configured: boolean): CommandExecutor { return { async execute(request) {
+  const auth = request.args[0] === "auth";
+  const data = auth ? { configured, mode: configured ? "codex_oauth" : "missing", source: configured ? "CODEX_AUTH_JSON" : null,
+    redacted: true, ignoredSecret: "secret-token", ignoredPath: "/private/path" } : { source: "bundled-catalog", models: ["openai/gpt-5.6-sol"] };
+  return { exitCode: 0, stdout: JSON.stringify({ ok: true, command: auth ? "butler auth status" : "butler model list", data }),
+    stderr: "", startedAtMs: 1, endedAtMs: 2, firstOutputAtMs: 1, outputComplete: true, timedOut: false, cancelled: false } satisfies CommandResult;
+} }; }
 
 function comparable(sourceRevision: string) {
   return { fixture: "direct-cold", sourceRevision, model: "openai/gpt-5.6-sol", reasoning: "medium", executionMode: "ordinary_non_fast", provider: "openai", authMode: "managed", cache: "eligible", route: "openai-responses", retryOrdinal: 0 };
 }
 
 function observedAttempt(arm: import("../support/agent-benchmark/contracts.ts").BenchmarkArmPlan) { return {
-  eligibility: "eligible", retryOrdinal: 0, fixtureSha256: arm.fixtureHash, sourceRevision: arm.sourceRevision,
-  modelRef: "openai/gpt-5.6-sol", reasoning: "medium", providerId: "openai", authMode: "managed",
-  executionMode: "ordinary_non_fast", routeId: "openai-responses",
+  eligibility: "eligible", retryOrdinal: 0, sourceRevision: arm.sourceRevision,
+  modelRef: "openai/gpt-5.6-sol", providerId: "openai", cacheBoundaryRevision: "cache-v1",
 }; }
+
+function unavailableGate() { return { available: false, executable: null, version: null, authenticated: true,
+  configVerified: false, gateCode: "measurement_unavailable" as const, diagnostic: "pre-provider infrastructure unavailable" }; }
 
 function completeFakeResult(input: AdapterRunInput): AdapterRunResult {
   const { arm, fixture } = input, before = arm.version === "before";
@@ -392,8 +438,7 @@ function completeFakeResult(input: AdapterRunInput): AdapterRunResult {
     ts: now + 50, category: "context" as const, name, status: "ok" as const, dimensions, rawTextStored: false as const });
   const metrics = attempts.flatMap((item, index) => [
     metric("m1_v2_request_envelope", { attemptDigest: item.attemptDigest, armId: arm.scenario, sourceRevision: arm.sourceRevision,
-      fixtureSha256: arm.fixtureHash, providerId: "openai", modelRef: "openai/gpt-5.6-sol", reasoning: "medium",
-      routeId: "openai-responses", authMode: "managed", executionMode: "ordinary_non_fast", providerSendBytes: before ? 100 : 60,
+      cacheBoundaryRevision: "cache-v1", providerId: "openai", modelRef: "openai/gpt-5.6-sol", providerSendBytes: before ? 100 : 60,
       eligibility: "eligible", retryOrdinal: 0, roundIndex: index }),
     metric("m1_v2_request_segment", { attemptDigest: item.attemptDigest, segmentId: `segment-${index}`, kind: arm.scenario === "current-web-cold" ? "source_reference" : "provider_carrier_overhead",
       stability: "dynamic", providerSendBytes: before ? 100 : 60, keyedContentDigest: "B".repeat(43) }),
@@ -411,7 +456,7 @@ function completeFakeResult(input: AdapterRunInput): AdapterRunResult {
     provider: "openai", finalText, sessionId, effectiveConfig: arm.effectiveConfig,
     pairedExecutionEvidence: { provider: execution.provider, model: execution.model, reasoning: execution.reasoning,
       providerServiceTiers: ["default"], requestServiceTiers: ["default"], requestModels: [execution.model],
-      requestReasoning: ["medium"], authorizationSchemes: ["bearer"] }, usage: {}, tools: {}, timing: {}, operations: {},
+      requestReasoning: ["medium"], authorizationSchemes: ["bearer"], routeIds: ["openai-responses"] }, usage: {}, tools: {}, timing: {}, operations: {},
     changedPaths: [], evidenceRefs: [], m1V2Evidence: { evidence, metrics, db: { quickCheckDatabases: 1, quickCheckPassed: true,
       toolCalls: arm.scenario === "landing-cold" ? 3 : 0, webToolCalls: arm.scenario === "current-web-cold" ? 1 : 0,
       pagePreviewToolCalls: arm.scenario === "landing-cold" ? 1 : 0, buildCommandToolCalls: arm.scenario === "landing-cold" ? 1 : 0,

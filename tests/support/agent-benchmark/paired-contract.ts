@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import type { M1V2ArmId } from "./m1-v2-types.ts";
 import type { PreparedButlerResourceIdentity } from "./prepared-butler-resource.ts";
 import type { M1V2ProvenanceIdentity } from "./m1-v2-types.ts";
@@ -94,8 +93,9 @@ export interface ProviderAuthPreflight {
   configured: boolean;
 }
 
-export function readProviderAuthPreflight(path: string): ProviderAuthPreflight {
-  const value = JSON.parse(readFileSync(path, "utf8")) as Partial<ProviderAuthPreflight>;
+export function validateProviderAuthPreflight(value: Partial<ProviderAuthPreflight>): ProviderAuthPreflight {
+  if (Object.keys(value).sort().join("|") !== ["authMode", "authority", "configured", "executionMode", "model", "modelCallability", "observedProductAuthMode", "provider", "reasoning", "schema"].sort().join("|"))
+    throw new Error("Provider auth preflight contains non-allowlisted fields.");
   if (value.schema !== "butler.provider-auth-preflight-receipt.v1" ||
       value.authority !== "butler_auth_status_and_model_catalog" || value.provider !== "openai" ||
       value.authMode !== FINAL_AUTH_MODE || value.observedProductAuthMode !== "codex_oauth" ||
@@ -108,6 +108,7 @@ export function readProviderAuthPreflight(path: string): ProviderAuthPreflight {
 }
 
 export function requireAvailableProviderAuth(value: ProviderAuthPreflight): PairedExecutionContract {
+  validateProviderAuthPreflight(value);
   if (!value.configured || value.modelCallability !== "available") {
     throw new Error("measurement_unavailable: provider authentication or exact model is unavailable");
   }

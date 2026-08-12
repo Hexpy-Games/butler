@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { createProductionAgentAdapters } from "./adapters.ts";
+import { createProcessExecutor, type CommandExecutor } from "./command.ts";
 import { AGENT_BENCHMARK_BASELINE_SHA } from "./contracts.ts";
 import { createBenchmarkPlan } from "./planning.ts";
 import { writeBenchmarkReport } from "./report.ts";
@@ -26,9 +27,9 @@ import {
   createPairedCampaignContract,
   FINAL_AFTER_REVISION,
   FINAL_BEFORE_REVISION,
-  readProviderAuthPreflight,
   requireAvailableProviderAuth,
 } from "./paired-contract.ts";
+import { observeProviderAuthPreflight } from "./provider-auth-preflight.ts";
 export interface AgentBenchmarkCliOptions {
   command: "plan" | "pilot" | "run";
   runRoot: string;
@@ -48,16 +49,17 @@ export interface AgentBenchmarkCliOptions {
   preparedButlerResource: PreparedButlerResourceReference | null;
   pairedSourceRoots: Readonly<Record<"before" | "after", string>> | null;
   pairedPreparedButlerResources: Readonly<Record<"before" | "after", PreparedButlerResourceReference>> | null;
-  providerAuthPreflightPath: string | null;
 }
 const CANONICAL_PILOT_MODEL = "openai/gpt-5.6-sol";
 const CANONICAL_PILOT_REASONING = "medium";
 export async function runAgentBenchmarkCli(argv: readonly string[], composition: {
   createAdapters?: typeof createProductionAgentAdapters;
   landingValidator?: typeof validateLandingWorkspace;
+  preflightExecutor?: CommandExecutor;
 } = {}): Promise<string> {
   const options = parseOptions(argv);
-  const authReceipt = options.campaign === "m1-v2-paired" ? readProviderAuthPreflight(options.providerAuthPreflightPath!) : null;
+  const authReceipt = options.campaign === "m1-v2-paired"
+    ? await observeProviderAuthPreflight(composition.preflightExecutor ?? createProcessExecutor(), options.sourceRoot) : null;
   const pairedExecution = options.campaign === "m1-v2-paired"
     ? requireAvailableProviderAuth(authReceipt!)
     : null;
@@ -193,9 +195,6 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
     assertPairedRootIsolation(runRoot, harnessRoot, pairedSourceRoots.before, pairedSourceRoots.after,
       pairedPreparedButlerResources.before.resourceDir, pairedPreparedButlerResources.after.resourceDir);
   }
-  const providerAuthPreflightPath = campaign === "m1-v2-paired"
-    ? resolve(requiredOption(argv, "--provider-auth-preflight"))
-    : null;
   if (campaign === "m1-v2-paired" &&
       (controlledModel !== CANONICAL_PILOT_MODEL || controlledReasoning !== CANONICAL_PILOT_REASONING ||
        sourceRevision !== FINAL_AFTER_REVISION || repetitions !== 3)) {
@@ -225,12 +224,11 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
     preparedButlerResource,
     pairedSourceRoots,
     pairedPreparedButlerResources,
-    providerAuthPreflightPath,
   };
 }
 
 function validateFlags(argv: readonly string[]): void {
-  const valueFlags = new Set(["--seed", "--run-id", "--source-root", "--harness-root", "--provenance-jsonl", "--run-root", "--output", "--controlled-model", "--controlled-reasoning", "--visual-review", "--campaign", "--repetitions", "--source-revision", "--prepared-butler-resource-pin", "--before-source-root", "--after-source-root", "--before-prepared-butler-resource-pin", "--after-prepared-butler-resource-pin", "--provider-auth-preflight"]);
+  const valueFlags = new Set(["--seed", "--run-id", "--source-root", "--harness-root", "--provenance-jsonl", "--run-root", "--output", "--controlled-model", "--controlled-reasoning", "--visual-review", "--campaign", "--repetitions", "--source-revision", "--prepared-butler-resource-pin", "--before-source-root", "--after-source-root", "--before-prepared-butler-resource-pin", "--after-prepared-butler-resource-pin"]);
   const booleanFlags = new Set(["--execute-available"]);
   for (let index = 1; index < argv.length; index += 1) {
     const flag = argv[index]!;

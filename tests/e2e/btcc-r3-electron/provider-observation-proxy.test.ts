@@ -147,6 +147,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       requestedModel: "gpt-test",
       requestedReasoning: null,
       requestedServiceTier: null,
+      routeId: "openai-codex-responses",
       authorizationScheme: "bearer",
       requestStartedAtMs: 100,
       serializedRequestBytes: requestBody.byteLength,

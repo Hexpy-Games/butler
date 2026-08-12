@@ -95,6 +95,10 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
         jsonlPath: resolve(input.provenanceJsonlPath!),
       })
     : null;
+  if (input.pairedCampaign &&
+      JSON.stringify(input.pairedCampaign.provenance) !== JSON.stringify(verifiedProvenance?.identity)) {
+    throw new Error("Paired campaign provenance must equal the freshly verified top-level provenance authority.");
+  }
   const campaignFixtures = campaign === "m1-v2" || campaign === "m1-v2-paired"
     ? loadM1V2BenchmarkFixtures(harnessRoot)
     : AGENT_BENCHMARK_FIXTURES;

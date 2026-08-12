@@ -278,6 +278,7 @@ function parseButlerEvidence(
         typeof request.requestedReasoning === "string" ? request.requestedReasoning : null),
       authorizationSchemes: providerRequests.map((request) =>
         typeof request.authorizationScheme === "string" ? request.authorizationScheme : null),
+      routeIds: providerRequests.map((request) => typeof request.routeId === "string" ? request.routeId : null),
     } } : {}),
     usage: {
       inputTokens: usage.promptTokens,

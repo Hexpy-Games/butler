@@ -288,6 +288,7 @@ export interface AdapterRunResult {
     requestModels: readonly (string | null)[];
     requestReasoning: readonly (string | null)[];
     authorizationSchemes: readonly (string | null)[];
+    routeIds: readonly (string | null)[];
   };
   usage: Partial<TokenUsage>;
   tools: Partial<ToolMetrics>;
