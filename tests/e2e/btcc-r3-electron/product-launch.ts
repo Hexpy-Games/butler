@@ -21,6 +21,10 @@ import {
   waitForNativeExecutorReadiness,
 } from "./native-executor.ts";
 import { activateProjectSessionWorkspace } from "./isolation-config.ts";
+import {
+  listenerPids,
+  preflightElectronLaunchPorts,
+} from "./electron-launch-preflight.ts";
 import { assert, isRecord, parseJsonFile } from "./scenario-preflight.ts";
 
 const FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
@@ -71,18 +75,6 @@ export function productLaunchFailureDiagnostics(
       ? candidate.executorOutput.map(String)
       : [],
   };
-}
-
-function listenerPids(port: number): number[] {
-  if (process.platform === "win32") return [];
-  const result = spawnSync("lsof", [`-tiTCP:${port}`, "-sTCP:LISTEN"], {
-    encoding: "utf8",
-  });
-  return result.stdout
-    .split(/\s+/u)
-    .filter(Boolean)
-    .map(Number)
-    .filter((value) => Number.isSafeInteger(value) && value > 0);
 }
 
 async function waitForPortClear(port: number, timeoutMs = 10_000): Promise<void> {
@@ -242,8 +234,10 @@ export async function launchProduct(
   const binary = electronBinary(run.repoRoot);
   assert(existsSync(binary), `Electron binary is missing: ${binary}`);
   assert(existsSync(uiIndex(run.repoRoot)), "UI dist is missing; build the App UI first.");
-  assert(listenerPids(run.serverPort).length === 0, `App server port is in use: ${run.serverPort}`);
-  assert(listenerPids(run.debugPort).length === 0, `Electron debug port is in use: ${run.debugPort}`);
+  preflightElectronLaunchPorts({
+    serverPort: run.serverPort,
+    debugPort: run.debugPort,
+  });
   const executor = run.agentOwnership === "harness"
     ? await startNativeExecutor(run, providerEndpoint)
     : null;

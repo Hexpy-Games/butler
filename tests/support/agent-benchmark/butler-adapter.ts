@@ -18,10 +18,10 @@ import {
 import { sanitizeIdentifier } from "./identifiers.ts";
 import { cleanupButlerRuntime, readButlerHarnessEvidence } from "./butler-runtime-cleanup.ts";
 import {
-  butlerM1V2InfrastructureGate,
   collectButlerM1V2Evidence,
   withButlerM1V2Environment,
 } from "./butler-m1-observation.ts";
+import { butlerM1V2InfrastructureGate } from "./butler-infrastructure-gate.ts";
 
 export type ButlerBenchmarkRunner = (input: AdapterRunInput) => Promise<Record<string, unknown>>;
 

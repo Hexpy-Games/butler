@@ -1,6 +1,10 @@
 import type { ChildProcess } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { assert } from "./scenario-preflight.ts";
+import {
+  evaluateRendererReadiness,
+  requireRendererReadiness,
+} from "./renderer-readiness.ts";
 
 const ELECTRON_RENDERER_STARTUP_TIMEOUT_MS = 195_000;
 
@@ -309,9 +313,12 @@ export async function connectElectronPage(
   const startedAt = Date.now();
   let lastError = "CDP endpoint is not ready.";
   while (Date.now() - startedAt < ELECTRON_RENDERER_STARTUP_TIMEOUT_MS) {
-    if (child.exitCode !== null) {
-      throw new Error(`Electron exited before its renderer was ready: ${child.exitCode}`);
-    }
+    requireRendererReadiness(evaluateRendererReadiness({
+      ready: false,
+      timedOut: false,
+      exitCode: child.exitCode,
+      signal: child.signalCode,
+    }));
     try {
       const response = await fetch(`http://127.0.0.1:${debugPort}/json/list`);
       const targets = await response.json() as CdpTarget[];
@@ -322,6 +329,14 @@ export async function connectElectronPage(
         !candidate.url?.startsWith("devtools://"),
       );
       if (target?.webSocketDebuggerUrl) {
+        const readiness = evaluateRendererReadiness({
+          ready: true,
+          timedOut: false,
+          exitCode: child.exitCode,
+          signal: child.signalCode,
+        });
+        requireRendererReadiness(readiness);
+        if (readiness.state !== "ready") continue;
         const client = await connectCdp(target.webSocketDebuggerUrl);
         await client.send("Runtime.enable");
         await client.send("Page.enable");
@@ -332,5 +347,11 @@ export async function connectElectronPage(
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 200));
   }
-  throw new Error(`Timed out connecting to Electron renderer: ${lastError}`);
+  requireRendererReadiness(evaluateRendererReadiness({
+    ready: false,
+    timedOut: true,
+    exitCode: child.exitCode,
+    signal: child.signalCode,
+  }), lastError);
+  throw new Error("Electron renderer readiness returned an invalid state.");
 }

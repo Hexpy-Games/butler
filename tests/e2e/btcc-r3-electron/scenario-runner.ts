@@ -251,6 +251,7 @@ export async function runBtccR3ElectronHarness(
   }
 
   const evidence = successEvidence({
+    bindingWorkspace: bindingWorkspace(run),
     launches,
     observations,
     options,
