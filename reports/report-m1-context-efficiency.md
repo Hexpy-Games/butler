@@ -468,3 +468,16 @@ quality, Work/Ledger/memory overhead, restart/build/reload correctness, and zero
 capability, authority, safety, native-executor, source, desktop, or mobile
 quality regression. The feature remains default-off and this Task does not
 merge or enable it.
+
+### Delivery
+
+The reviewed product implementation is commit
+`320ba7f7d356ce7106ff07844cc0052483220daf` on
+`feature/m1-v2-tool-instruction-surface`. Draft PR #148 is stacked on the exact
+PR #146 product base and remains unmerged:
+`https://github.com/Hexpy-Games/butler/pull/148`. Push-triggered Windows Package
+workflow `31581272674` was cancelled and confirmed `completed/cancelled` under
+the release-tag-only policy. The Project Ledger Task is `done`, product Attempt
+`-05` is `succeeded`, the parent Work stays `in_progress`, the Plan stays
+active, and the Final Benchmark Task stays `todo`. No next M1 optimization Task
+was started.
