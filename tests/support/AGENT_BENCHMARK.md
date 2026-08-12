@@ -187,6 +187,10 @@ this PR or by a benchmark arm.
 - The source checkout is an explicit read-only input outside the run root.
   Benchmark-owned config, cache, output, and evidence directories resolve under
   the declared run root. Paths escaping their declared authority fail closed.
+- Cross-agent pilot plans retain the historical pinned comparison SHA. M1 plans
+  instead bind every arm and preflight source check to the exact 40-character
+  `--source-revision` recorded by that plan; a checkout mismatch is a typed
+  configuration gate.
 
 ## Typed result contract
 
@@ -257,6 +261,13 @@ schema states above. Evaluation is part of the arm's single terminalization
 step. Persistence occurs after plan creation and after every terminal arm so
 interruption can resume idempotently.
 
+`manifest.json`, `result.json`, and terminal evidence share one plan identity.
+The manifest is create-only for a run root: only an identical plan may resume,
+with its original creation time preserved. A different seed, source revision,
+fixture hash, arm path/config, or corrupt manifest/result fails closed instead
+of creating an empty replacement run. Already terminal evidence cannot be
+removed or replaced during an identity-matched resume.
+
 - SIGINT or operator cancellation stops launching new arms, terminates the active
   child process, persists a failure-safe checkpoint, and leaves pending arms.
 - Timeouts terminate the child process group and record `timed_out`.
@@ -315,9 +326,10 @@ authentication outside the benchmark process.
 4. Randomization is deterministic for one seed and independently orders agents
    per scenario while preserving direct cold-to-warm adjacency. Covered by plan
    tests.
-5. Workspace isolation, canonical/symlink containment, baseline integrity,
+5. Workspace isolation, canonical/symlink containment, campaign-specific source
+   integrity, immutable manifest/result identity, terminal-evidence preservation,
    redaction, timeout, resume, and external gates fail closed. Covered by
-   workflow integration tests.
+   workflow and CLI integration tests.
 6. Web and landing evaluators reject weak sources, stale/incorrect claims, build
    failure, missing files, source mutation, overflow, and privacy leakage. Covered
    by evaluator fixtures and integration tests.

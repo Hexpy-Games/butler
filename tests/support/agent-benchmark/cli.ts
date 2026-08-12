@@ -10,9 +10,8 @@ import {
   createFileCheckpointStore,
   redactBenchmarkPlan,
   runAgentBenchmark,
-  type BenchmarkCheckpointStore,
 } from "./workflow.ts";
-import type { BenchmarkResultFile } from "./contracts.ts";
+import type { BenchmarkPlan, BenchmarkResultFile } from "./contracts.ts";
 import { sanitizeIdentifier } from "./identifiers.ts";
 import { applyVisualReviews, readVisualReviewFile } from "./visual-review.ts";
 import { assertNoSymlinkComponents } from "./isolation.ts";
@@ -38,7 +37,7 @@ const CANONICAL_PILOT_REASONING = "medium";
 
 export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<string> {
   const options = parseOptions(argv);
-  const plan = createBenchmarkPlan({
+  const proposedPlan = createBenchmarkPlan({
     campaign: options.campaign,
     runId: options.runId,
     seed: options.seed,
@@ -52,7 +51,7 @@ export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<str
   const planPath = join(options.runRoot, "manifest.json");
   const resultPath = join(options.runRoot, "result.json");
   const store = createFileCheckpointStore(resultPath);
-  await writeJson(store, planPath, redactBenchmarkPlan(plan));
+  const plan = await persistBenchmarkManifest(planPath, proposedPlan);
   if (options.command === "plan") {
     return JSON.stringify({ planPath: relative(plan.runRoot, planPath), runId: plan.runId, seed: plan.seed, arms: plan.arms.length });
   }
@@ -74,7 +73,7 @@ export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<str
   const reportPaths = writeBenchmarkReport(result, options.outputDirectory);
   return JSON.stringify({
     runId: result.run.runId,
-    baselineSha: AGENT_BENCHMARK_BASELINE_SHA,
+    baselineSha: plan.baselineSha,
     resultPath: relative(plan.runRoot, resultPath),
     reportPath: relative(plan.runRoot, reportPaths.markdownPath),
     gates: result.observations.filter((observation) => observation.terminalState === "gated").length,
@@ -138,15 +137,34 @@ function validateFlags(argv: readonly string[]): void {
   }
 }
 
-async function writeJson(store: BenchmarkCheckpointStore, path: string, value: unknown): Promise<void> {
-  const temporaryStore = createFileCheckpointStore(path);
-  if (isBenchmarkResult(value)) await temporaryStore.save(value);
-  else {
-    const fs = await import("node:fs/promises");
-    await fs.mkdir(resolve(path, ".."), { recursive: true });
-    await fs.writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+async function persistBenchmarkManifest(
+  path: string,
+  plan: BenchmarkPlan,
+): Promise<BenchmarkPlan> {
+  const fs = await import("node:fs/promises");
+  const desired = redactBenchmarkPlan(plan);
+  const desiredText = `${JSON.stringify(desired, null, 2)}\n`;
+  await fs.mkdir(resolve(path, ".."), { recursive: true });
+  try {
+    await fs.writeFile(path, desiredText, { encoding: "utf8", flag: "wx" });
+    return plan;
+  } catch (error) {
+    if (!isAlreadyExists(error)) throw error;
   }
-  void store;
+  let existing: BenchmarkPlan;
+  try {
+    existing = JSON.parse(await fs.readFile(path, "utf8")) as BenchmarkPlan;
+  } catch {
+    throw new Error("Benchmark manifest identity mismatch: existing manifest is unreadable.");
+  }
+  if (typeof existing.createdAt !== "string") {
+    throw new Error("Benchmark manifest identity mismatch: creation time is invalid.");
+  }
+  const comparable = { ...existing, createdAt: desired.createdAt };
+  if (JSON.stringify(comparable) !== JSON.stringify(desired)) {
+    throw new Error("Benchmark manifest identity mismatch: replacement runs are not allowed.");
+  }
+  return { ...plan, createdAt: existing.createdAt };
 }
 
 function option(argv: readonly string[], name: string): string | undefined {
@@ -159,8 +177,9 @@ function insideRoot(root: string, candidate: string): boolean {
   return rel !== "" && rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
 }
 
-function isBenchmarkResult(value: unknown): value is BenchmarkResultFile {
-  return Boolean(value && typeof value === "object" && (value as { kind?: unknown }).kind === "agent_benchmark_result");
+function isAlreadyExists(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" &&
+    (error as { code?: unknown }).code === "EEXIST");
 }
 
 if (import.meta.main) {

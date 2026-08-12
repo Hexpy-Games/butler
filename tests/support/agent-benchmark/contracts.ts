@@ -74,7 +74,7 @@ export interface BenchmarkArmPlan {
   cacheRoot: string;
   cachePairId: string;
   timeoutMs: number;
-  sourceRevision?: string;
+  sourceRevision: string;
 }
 
 export interface BenchmarkPlan {

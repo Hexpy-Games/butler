@@ -14,6 +14,12 @@ M1 `run` uses this same planner/workflow/report path and never preflights or
 executes Hermes/OpenCode. The final four-by-three remains reserved for
 `T-M1-V2-FINAL-BENCHMARK`.
 
+The M1 source checkout must be clean at the exact `--source-revision`; unlike
+the historical cross-agent pilot, M1 is not forced to the old comparison SHA.
+Once `manifest.json` exists, the run root accepts only an identical resume.
+Changing seed, source revision, fixtures, or plan identity requires a new run
+root and cannot overwrite the existing manifest, result, or terminal evidence.
+
 The benchmark compares Butler, Hermes Agent, and OpenCode using the pinned
 `origin/main` baseline `549463fbe074fc25042f9302cd330699948dab50`.
 

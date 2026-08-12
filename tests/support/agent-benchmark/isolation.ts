@@ -6,7 +6,10 @@ import { AGENT_BENCHMARK_BASELINE_SHA, AGENT_BENCHMARK_SCHEMA } from "./contract
 
 export function validateBenchmarkPlan(plan: BenchmarkPlan): void {
   if (plan.schema !== AGENT_BENCHMARK_SCHEMA || plan.kind !== "agent_benchmark_plan") throw new Error("Agent benchmark plan schema mismatch");
-  if (plan.baselineSha !== AGENT_BENCHMARK_BASELINE_SHA) throw new Error(`Agent benchmark baseline mismatch: ${plan.baselineSha}`);
+  if (!/^[a-f0-9]{40}$/u.test(plan.baselineSha)) throw new Error(`Agent benchmark source revision is not an exact SHA: ${plan.baselineSha}`);
+  if (plan.campaign === "cross-agent-pilot" && plan.baselineSha !== AGENT_BENCHMARK_BASELINE_SHA) {
+    throw new Error(`Agent benchmark baseline mismatch: ${plan.baselineSha}`);
+  }
   if (!Number.isSafeInteger(plan.seed)) throw new Error("Agent benchmark seed is required");
   const runRoot = resolve(plan.runRoot);
   const sourceRoot = resolve(plan.sourceRoot);
@@ -20,6 +23,7 @@ export function validateBenchmarkPlan(plan: BenchmarkPlan): void {
       if (!inside(runRoot, resolve(path))) throw new Error(`Arm path escapes run root: ${path}`);
     }
     if (resolve(arm.sourceRoot) !== sourceRoot) throw new Error(`Arm source root mismatch: ${arm.key}`);
+    if (arm.sourceRevision !== plan.baselineSha) throw new Error(`Arm source revision mismatch: ${arm.key}`);
   }
 }
 

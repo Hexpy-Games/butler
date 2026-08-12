@@ -258,6 +258,9 @@ test("visual review input is typed, landing-only, and reportable", async () => {
   expect(reviewed.observations[0]!.evaluation.visualQuality).toBe(4);
   expect(generateBenchmarkReport(reviewed)).toContain("reviewer-1");
   expect(generateBenchmarkReport(reviewed)).toContain("landing-rubric-v1");
+  const checkpoint = createFileCheckpointStore(join(root, "visual-result.json"));
+  await checkpoint.save(result);
+  await expect(checkpoint.save(reviewed)).resolves.toBeUndefined();
   writeFileSync(reviewPath, JSON.stringify({ schema: "butler.agent-benchmark.visual-review.v1", reviews: [{ armKey: landingArm.key, score: 6, reviewerLabel: "reviewer-1", rubricVersion: "landing-rubric-v1" }] }), "utf8");
   expect(() => readVisualReviewFile(reviewPath)).toThrow();
   expect(() => applyVisualReviews(result, { schema: "butler.agent-benchmark.visual-review.v1", reviews: [{ armKey: plan.arms[0]!.key, score: 4, reviewerLabel: "reviewer-1", rubricVersion: "landing-rubric-v1" }] })).toThrow();
@@ -367,13 +370,13 @@ test("resume rejects a changed plan/config identity", () => {
   prior.observations.push(emptyObservation(plan.arms[0]!));
   const changed = createBenchmarkPlan({ runId: plan.runId, seed: plan.seed, runRoot: plan.runRoot, sourceRoot: plan.sourceRoot, controlledModel: "anthropic/claude-sonnet-4" });
   expect(benchmarkPlanIdentity(plan)).not.toBe(benchmarkPlanIdentity(changed));
-  expect(resumeOrInitialize(changed, prior).observations).toHaveLength(0);
+  expect(() => resumeOrInitialize(changed, prior)).toThrow("checkpoint identity mismatch");
   const changedPath = {
     ...plan,
     arms: plan.arms.map((arm, index) => index === 0 ? { ...arm, outputRoot: `${arm.outputRoot}-changed` } : arm),
   };
   expect(benchmarkPlanIdentity(plan)).not.toBe(benchmarkPlanIdentity(changedPath));
-  expect(resumeOrInitialize(changedPath, prior).observations).toHaveLength(0);
+  expect(() => resumeOrInitialize(changedPath, prior)).toThrow("checkpoint identity mismatch");
 });
 
 test("pinned repository evidence detects post-materialization mutation", () => {
