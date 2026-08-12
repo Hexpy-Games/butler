@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import {
   createBenchmarkPlan,
   createFileCheckpointStore,
@@ -185,6 +186,39 @@ describe("final paired M1 campaign contract", () => {
     expect(resumed.result.replacements).toHaveLength(1);
     expect(resumed.result.replacements?.[0]?.reason).toBe("pre_provider_infrastructure_replacement");
   });
+
+  test("runs the public paired plan through available fake adapter, evaluator, report, and index", async () => {
+    const beforeRoot = join(root, "available-before"), afterRoot = join(root, "available-after");
+    for (const [path, revision] of [[beforeRoot, FINAL_BEFORE_REVISION], [afterRoot, FINAL_AFTER_REVISION]] as const) {
+      execFileSync("git", ["clone", "--quiet", "--no-checkout", process.cwd(), path]);
+      execFileSync("git", ["-C", path, "checkout", "--quiet", revision]);
+    }
+    const plan = createBenchmarkPlan({ campaign: "m1-v2-paired", runId: "available-public-path", seed: 2,
+      runRoot: join(root, "available-run"), sourceRoot: afterRoot, harnessRoot: authority.harnessRoot,
+      provenanceJsonlPath: authority.jsonlPath, baselineSha: FINAL_AFTER_REVISION,
+      controlledModel: "openai/gpt-5.6-sol", controlledReasoning: "medium", pairedCampaign: pairedContract(),
+      pairedRuntimeSources: { before: beforeRoot, after: afterRoot } });
+    let dispatches = 0;
+    const butler: AgentAdapter = { agent: "butler",
+      async preflight() { return { available: true, executable: "provider-free-fake", version: "1", authenticated: true, configVerified: true, gateCode: "none", diagnostic: null }; },
+      async run({ arm }) { dispatches += 1; const execution = arm.pairedExecution!; return {
+        exitCode: 0, gateCode: "none", timedOut: false, cancelled: false, stdout: "", stderr: "", adapterVersion: "fake-1",
+        provider: "openai", finalText: "provider-free evidence", sessionId: `fake-${arm.key}`,
+        effectiveConfig: arm.effectiveConfig, pairedExecutionEvidence: { provider: execution.provider, model: execution.model,
+          reasoning: execution.reasoning, providerServiceTiers: [execution.serviceTier], requestServiceTiers: [execution.serviceTier],
+          requestModels: [execution.model], requestReasoning: [execution.reasoning], enforcedAuthModes: [execution.authMode], authorizationSchemes: ["bearer"] },
+        usage: {}, tools: {}, timing: {}, operations: {}, changedPaths: [], evidenceRefs: [],
+      }; } };
+    const unavailable = (agent: "hermes" | "opencode"): AgentAdapter => ({ agent,
+      async preflight() { throw new Error("external preflight must not run"); }, async run() { throw new Error("external run must not run"); } });
+    const completed = await runAgentBenchmark({ plan, adapters: { butler, hermes: unavailable("hermes"), opencode: unavailable("opencode") },
+      store: createFileCheckpointStore(join(plan.runRoot, "result.json")), signal: new AbortController().signal,
+      landingValidator: async () => { throw new Error("typed landing-cold uses M1 evidence"); }, mode: "execute" });
+    expect(dispatches).toBe(24);
+    expect(completed.result.observations.every((row) => row.providerDispatchState === "provider_output_observed")).toBe(true);
+    const output = writeBenchmarkReport(completed.result, join(plan.runRoot, "report"));
+    expect(readFileSync(output.comparisonIndexPath, "utf8")).toContain("paired_incomplete_or_rejected");
+  }, 30_000);
 
   test("corroborates ordinary non-fast medium and rejects fast/service-tier drift", () => {
     const preregistered = requireAvailableProviderAuth({
