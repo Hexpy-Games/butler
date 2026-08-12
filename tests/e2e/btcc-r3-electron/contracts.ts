@@ -30,6 +30,11 @@ export interface ElectronProviderFixtureResponse {
   errorCode?: string;
   responseModel?: string;
   text?: string;
+  toolCall?: {
+    name: string;
+    arguments?: Record<string, unknown>;
+    id?: string;
+  };
 }
 
 export interface ElectronProviderFixture {

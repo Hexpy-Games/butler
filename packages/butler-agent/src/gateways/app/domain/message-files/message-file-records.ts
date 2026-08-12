@@ -69,6 +69,42 @@ export function listMessageAttachmentRows(
     .all(messageId);
 }
 
+/**
+ * Read attachment rows for a bounded message page in one query.
+ *
+ * Session views commonly materialize up to 200 messages. Issuing one
+ * prepared statement per message makes a read-only page unnecessarily retain
+ * thousands of SQLite statement/result objects in Bun's native heap while a
+ * polling client refreshes the view. Keep the query bounded by the caller's
+ * page and preserve attachment order within each message.
+ */
+export function listMessageAttachmentRowsForMessages(
+  db: Database,
+  messageIds: readonly string[],
+): Map<string, MessageFileRow[]> {
+  const ids = [...new Set(messageIds.filter((id) => id.length > 0))];
+  const result = new Map<string, MessageFileRow[]>();
+  if (ids.length === 0) return result;
+  const placeholders = ids.map(() => "?").join(", ");
+  const rows = db
+    .query<MessageFileRow, string[]>(
+      `
+      SELECT ${MESSAGE_ATTACHMENT_FILE_COLUMNS}
+      FROM message_attachments a
+      JOIN message_files f ON f.id = a.file_id
+      WHERE a.message_id IN (${placeholders})
+      ORDER BY a.message_id ASC, a.position ASC
+    `,
+    )
+    .all(...ids);
+  for (const row of rows) {
+    const existing = result.get(row.message_id!) ?? [];
+    existing.push(row);
+    result.set(row.message_id!, existing);
+  }
+  return result;
+}
+
 export function listSessionMessageFileRows(
   db: Database,
   sessionId: string,
@@ -83,6 +119,53 @@ export function listSessionMessageFileRows(
     `,
     )
     .all(sessionId);
+}
+
+export function countSessionMessageFileRows(
+  db: Database,
+  sessionId: string,
+): number {
+  return Number(
+    db
+      .query<{ count: number }, [string]>(
+        `
+      SELECT COUNT(*) AS count
+      FROM message_files
+      WHERE owner_session_id = ?
+    `,
+      )
+      .get(sessionId)?.count ?? 0,
+  );
+}
+
+export function artifactRevisionForSession(
+  db: Database,
+  sessionId: string,
+): string {
+  const row = db
+    .query<{
+      count: number;
+      latest_message_cursor: number | null;
+      latest_file_created_at: string | null;
+    }, [string]>(
+      `
+      SELECT
+        COUNT(*) AS count,
+        MAX(m.rowid) AS latest_message_cursor,
+        MAX(f.created_at) AS latest_file_created_at
+      FROM messages AS m
+      JOIN message_attachments AS a ON a.message_id = m.id
+      JOIN message_files AS f ON f.id = a.file_id
+      WHERE m.chat_id = ?
+        AND m.role = 'assistant'
+    `,
+    )
+    .get(sessionId);
+  return [
+    row?.count ?? 0,
+    row?.latest_message_cursor ?? 0,
+    row?.latest_file_created_at ?? "",
+  ].join(":");
 }
 
 function attachmentIdsFromJson(value: string): string[] {

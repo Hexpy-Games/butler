@@ -20,6 +20,7 @@ import type {
   MessageRecord,
   MessageRole,
   MessageStatus,
+  SessionArtifactSummary,
   SessionActionResult,
   SessionSummary,
   TurnRecord,
@@ -27,6 +28,11 @@ import type {
 } from "../../interface/protocol/app-protocol.ts";
 import { visibleMessageSqlPredicate } from "../sessions/visible-message-sql.ts";
 import { AppSessionMessageRecordStore } from "./session-message-record-store.ts";
+import type {
+  SessionMessagePage,
+  SessionMessagePageOptions,
+  TranscriptMessagePage,
+} from "./session-message-page.ts";
 
 export class AppSessionRecordStore {
   private readonly messages: AppSessionMessageRecordStore;
@@ -252,8 +258,33 @@ export class AppSessionRecordStore {
     );
   }
 
-  listMessages(chatId: string, cursor = 0): MessageRecord[] {
-    return this.messages.listMessages(chatId, cursor);
+  listMessages(
+    chatId: string,
+    cursorOrOptions: number | SessionMessagePageOptions = 0,
+  ): MessageRecord[] {
+    return this.messages.listMessages(chatId, cursorOrOptions);
+  }
+
+  listMessagePage(
+    chatId: string,
+    cursorOrOptions: number | SessionMessagePageOptions = 0,
+  ): SessionMessagePage<MessageRecord> {
+    return this.messages.listMessagePage(chatId, cursorOrOptions);
+  }
+
+  latestMessageRevision(chatId: string): string {
+    return this.messages.latestMessageRevision(chatId);
+  }
+
+  listArtifactSummaries(chatId: string): SessionArtifactSummary[] {
+    return this.messages.listArtifactSummaries(chatId);
+  }
+
+  listTranscriptMessagePage(
+    chatId: string,
+    options?: SessionMessagePageOptions,
+  ): TranscriptMessagePage {
+    return this.messages.listTranscriptMessagePage(chatId, options);
   }
 
   getMessageRow(messageId: string): MessageRow | null {

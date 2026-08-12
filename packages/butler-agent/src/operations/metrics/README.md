@@ -23,3 +23,20 @@ Success criteria:
   warning status.
 - Usage summaries must not include raw prompts, raw tool arguments, raw tool
   results, credentials, raw URLs, or private memory text.
+
+## Runtime memory-footprint boundary
+
+Status and context-monitor reads use the shared chunked JSONL scanner. They
+aggregate one record at a time and retain only bounded maps/reservoir samples;
+they never materialize a historical telemetry or transcript log with
+`readFileSync(...).split("\\n")`. Context transcript counters additionally
+persist a metadata-only checkpoint under `metrics/transcript-summary/`, so an
+append-only timer tick reads the appended byte window and a restart can resume
+from the same byte cursor. Rotation, truncation, and malformed tails invalidate
+or replay only the affected checkpoint boundary; canonical transcript text
+stays in its owning store.
+
+Provider SSE consumers drain normal completion and always cancel/release the
+reader on parse failure, provider failure, timeout, abort, or abandoned
+consumption. Abort listeners are removed after the reader settles, and stream
+cleanup never replaces the primary provider error.

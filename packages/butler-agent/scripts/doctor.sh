@@ -405,22 +405,47 @@ check_telegram() {
 
 # ─── Check 6: Embed Server Health ─────────────────────────────────
 check_embed() {
-  local socket_path="$BUTLER_DATA/embed-server.sock"
-  local port=3811
+  local socket_path="${EMBED_SOCKET:-/tmp/butler-embed.sock}"
+  local port="${EMBED_HEALTH_PORT:-9847}"
+  local discovery_path="${socket_path}.health-port"
+
+  embed_health_response_ok() {
+    local response="$1"
+    local http_code="${response##*$'\n'}"
+    local body="${response%$'\n'*}"
+    [[ "$http_code" =~ ^2[0-9][0-9]$ ]] || return 1
+    [[ "$body" =~ \"status\"[[:space:]]*:[[:space:]]*\"(ready|busy)\" ]]
+  }
 
   # Try HTTP health check
   if command -v curl &>/dev/null; then
-    local resp
-    resp="$(curl -s --max-time 5 "http://localhost:${port}/health" 2>/dev/null || true)"
-    if [[ -n "$resp" ]]; then
-      add_result "embed server" "embed" "PASS" "responding on port $port" "port: $port" ""
-      return
+    local -a candidate_ports=()
+    if [[ "$port" =~ ^[0-9]+$ ]] && (( port > 0 )); then
+      candidate_ports+=("$port")
+    fi
+    if [[ -r "$discovery_path" ]]; then
+      local discovered_port
+      discovered_port="$(tr -dc '0-9' < "$discovery_path" 2>/dev/null || true)"
+      if [[ "$discovered_port" =~ ^[0-9]+$ ]] && (( discovered_port > 0 )); then
+        if [[ " ${candidate_ports[*]} " != *" $discovered_port "* ]]; then
+          candidate_ports+=("$discovered_port")
+        fi
+      fi
     fi
 
-    # Try socket
+    local candidate resp
+    for candidate in "${candidate_ports[@]}"; do
+      resp="$(curl -sS --max-time 5 -w $'\n%{http_code}' "http://127.0.0.1:${candidate}/health" 2>/dev/null || true)"
+      if embed_health_response_ok "$resp"; then
+        add_result "embed server" "embed" "PASS" "responding on port $candidate" "port: $candidate" ""
+        return
+      fi
+    done
+
+    # Try Unix socket, including when HTTP used a discovered fallback port.
     if [[ -e "$socket_path" ]]; then
-      resp="$(curl -s --max-time 5 --unix-socket "$socket_path" "http://localhost/health" 2>/dev/null || true)"
-      if [[ -n "$resp" ]]; then
+      resp="$(curl -sS --max-time 5 -w $'\n%{http_code}' --unix-socket "$socket_path" "http://localhost/health" 2>/dev/null || true)"
+      if embed_health_response_ok "$resp"; then
         add_result "embed server" "embed" "PASS" "responding on socket" "socket: $socket_path" ""
         return
       fi

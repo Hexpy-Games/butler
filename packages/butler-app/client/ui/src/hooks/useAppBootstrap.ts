@@ -196,6 +196,9 @@ export function useAppBootstrap() {
               ? { [data.latest_turn.id]: data.latest_turn.progress }
               : {},
             next_cursor: data.message_window.next_cursor,
+            ...(data.message_window.next_cursor_token
+              ? { next_cursor_token: data.message_window.next_cursor_token }
+              : {}),
           };
           setSessionView(data);
           setStatus({ label: "ready", tone: "ok" });

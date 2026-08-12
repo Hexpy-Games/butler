@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { readPromptCacheMetrics } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
+import { visitPromptCacheMetrics } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
 import { readOperationalMetricEvents } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
 import {
   evaluateSandyForwardProgress,
@@ -12,9 +12,9 @@ import {
   measurePackagedProcesses,
   requiredProcessRolesMeasured,
   type DatabaseFileSample,
+  type PackagedCoreProcessRole,
   type PackagedPerformanceSnapshot,
   type PackagedProcessMeasurement,
-  type PackagedProcessRole,
 } from "./packaged-performance-snapshot.ts";
 
 export type LedgerRecordSnapshot = Record<string, string>;
@@ -66,7 +66,7 @@ export interface ElectronForwardProgressBenchmark {
   transport: PackagedTransportCounters;
   measurementCompleteness: {
     complete: boolean;
-    processRoles: Record<PackagedProcessRole, boolean>;
+    processRoles: Record<PackagedCoreProcessRole, boolean>;
     databaseFiles: boolean;
     transportCounters: boolean;
   };
@@ -108,9 +108,15 @@ export function snapshotLedgerRecords(root: string): LedgerRecordSnapshot {
 export function collectElectronForwardProgressBenchmark(
   input: ElectronForwardProgressBenchmarkInput,
 ): ElectronForwardProgressBenchmark {
-  const promptEvents = readPromptCacheMetrics({
+  let promptTokens = 0;
+  let cachedTokens = 0;
+  visitPromptCacheMetrics({
     butlerData: input.butlerData,
     sinceTs: input.sinceTs,
+    onEvent: (event) => {
+      promptTokens += event.promptTokens;
+      cachedTokens += event.cachedTokens;
+    },
   });
   const operationalEvents = readOperationalMetricEvents({
     butlerData: input.butlerData,
@@ -122,8 +128,6 @@ export function collectElectronForwardProgressBenchmark(
   const ledgerAfter = snapshotLedgerRecords(input.ledgerRoot);
   const changedLedgerRecords = changedRecords(input.ledgerBefore, ledgerAfter);
   const createdLedgerRecords = changedLedgerRecords.filter((path) => !(path in input.ledgerBefore));
-  const promptTokens = promptEvents.reduce((total, event) => total + event.promptTokens, 0);
-  const cachedTokens = promptEvents.reduce((total, event) => total + event.cachedTokens, 0);
   const metrics: TurnForwardProgressMetrics = {
     modelRequests: modelRequestEvents.length,
     toolCalls: input.toolCalls.length,

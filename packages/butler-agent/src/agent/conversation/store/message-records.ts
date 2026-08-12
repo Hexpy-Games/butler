@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   isoNow,
   type MessageRow,
@@ -16,6 +15,8 @@ import type {
   ReadMessagesInput,
 } from "../types.ts";
 import type { ConversationStoreDependencies } from "./dependencies.ts";
+import { conversationMessagesSourceHash } from "../source-hash.ts";
+export { conversationMessagesSourceHash } from "../source-hash.ts";
 
 export class ConversationMessageRecords {
   constructor(private readonly dependencies: ConversationStoreDependencies) {}
@@ -285,30 +286,4 @@ export class ConversationMessageRecords {
   private hydrateRows(rows: MessageRow[]): ConversationMessageWithParts[] {
     return rows.map((row) => this.dependencies.internals.hydrateMessage(row));
   }
-}
-
-export function conversationMessagesSourceHash(messages: ConversationMessageWithParts[]): string {
-  const payload = messages.map((message) => ({
-    id: message.id,
-    session_id: message.session_id,
-    turn_id: message.turn_id,
-    seq: message.seq,
-    role: message.role,
-    visibility: message.visibility,
-    provenance: message.provenance,
-    created_at: message.created_at,
-    source_gateway: message.source_gateway,
-    source_ref: message.source_ref,
-    parts: message.parts.map((part) => ({
-      id: part.id,
-      part_index: part.part_index,
-      kind: part.kind,
-      content_json: part.content_json,
-      tool_call_id: part.tool_call_id,
-      parent_tool_call_id: part.parent_tool_call_id,
-      provider_shape: part.provider_shape,
-      status: part.status,
-    })),
-  }));
-  return `sha256:${createHash("sha256").update(JSON.stringify(payload)).digest("hex")}`;
 }

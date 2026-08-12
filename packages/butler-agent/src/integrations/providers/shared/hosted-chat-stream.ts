@@ -1,43 +1,21 @@
-type ToolCallAccumulator = {
-  index: number;
-  id: string;
-  type: "function";
-  name: string;
-  arguments: string;
-};
+import {
+  accumulateProviderEvent,
+  completedResponse,
+  createAccumulator,
+  parseProviderEvent,
+  HostedChatStreamProtocolError,
+} from "./hosted-chat-stream-state.ts";
 
-type HostedChatAccumulator = {
-  id: string;
-  model: string;
-  role: string;
-  content: string;
-  toolCalls: Map<number, ToolCallAccumulator>;
-  finishReason: unknown;
-  usage?: Record<string, unknown>;
-};
+export {
+  HostedChatStreamProtocolError,
+  HostedChatStreamProviderError,
+} from "./hosted-chat-stream-state.ts";
 
-export class HostedChatStreamProtocolError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "HostedChatStreamProtocolError";
-  }
-}
-
-/** A provider can send a structured failure after accepting an SSE stream. */
-export class HostedChatStreamProviderError extends Error {
-  readonly statusCode?: number;
-
-  constructor(readonly providerError: unknown) {
-    super("Hosted Chat Completions returned a structured provider error");
-    this.name = "HostedChatStreamProviderError";
-    const record = isRecord(providerError) ? providerError : {};
-    this.statusCode = typeof record.status === "number"
-      ? record.status
-      : typeof record.code === "number"
-        ? record.code
-        : undefined;
-  }
-}
+// A provider must delimit SSE frames; retaining an unframed response until EOF
+// would otherwise let one malformed body grow the reader's memory without
+// bound. This is deliberately larger than normal tool-call/event payloads but
+// still keeps the provider boundary finite.
+export const MAX_HOSTED_CHAT_SSE_FRAME_BYTES = 8 * 1024 * 1024;
 
 export function isHostedChatSseResponse(response: Response): boolean {
   return response.headers.get("content-type")?.toLowerCase()
@@ -47,6 +25,7 @@ export function isHostedChatSseResponse(response: Response): boolean {
 export async function readHostedChatSseResponse(
   response: Response,
   onValidEvent: () => void,
+  signal?: AbortSignal,
 ): Promise<Record<string, any>> {
   if (!response.body) {
     throw new HostedChatStreamProtocolError(
@@ -64,7 +43,7 @@ export async function readHostedChatSseResponse(
     const event = parseProviderEvent(data);
     onValidEvent();
     accumulateProviderEvent(state, event);
-  });
+  }, signal);
   if (!completed) {
     throw new HostedChatStreamProtocolError(
       "Hosted Chat Completions stream ended before its terminator",
@@ -76,26 +55,75 @@ export async function readHostedChatSseResponse(
 async function consumeSseBody(
   body: ReadableStream<Uint8Array>,
   consumeData: (data: string) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    if (!done && (!value || value.byteLength === 0)) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      continue;
-    }
-    buffer += decoder.decode(value, { stream: !done });
+  let rejectAbort: ((reason?: unknown) => void) | undefined;
+  const abortPromise = signal
+    ? new Promise<never>((_, reject) => {
+        rejectAbort = reject;
+      })
+    : null;
+  const onAbort = (): void => {
+    rejectAbort?.(signal?.reason ?? new DOMException("The operation was aborted", "AbortError"));
+  };
+  if (signal?.aborted) onAbort();
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
     while (true) {
-      const boundary = nextFrameBoundary(buffer);
-      if (!boundary) break;
-      consumeFrame(buffer.slice(0, boundary.index), consumeData);
-      buffer = buffer.slice(boundary.index + boundary.length);
+      const read = abortPromise
+        ? await Promise.race([reader.read(), abortPromise])
+        : await reader.read();
+      const { value, done } = read;
+      if (!done && (!value || value.byteLength === 0)) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        continue;
+      }
+      buffer += decoder.decode(value, { stream: !done });
+      while (true) {
+        const boundary = nextFrameBoundary(buffer);
+        if (!boundary) break;
+        const frame = buffer.slice(0, boundary.index);
+        if (Buffer.byteLength(frame, "utf8") > MAX_HOSTED_CHAT_SSE_FRAME_BYTES) {
+          throw new HostedChatStreamProtocolError(
+            `Hosted Chat Completions SSE frame exceeded ${MAX_HOSTED_CHAT_SSE_FRAME_BYTES} bytes`,
+          );
+        }
+        consumeFrame(frame, consumeData);
+        buffer = buffer.slice(boundary.index + boundary.length);
+      }
+      if (Buffer.byteLength(buffer, "utf8") > MAX_HOSTED_CHAT_SSE_FRAME_BYTES) {
+        throw new HostedChatStreamProtocolError(
+          `Hosted Chat Completions SSE frame exceeded ${MAX_HOSTED_CHAT_SSE_FRAME_BYTES} bytes`,
+        );
+      }
+      if (done) break;
     }
-    if (done) break;
+    if (buffer.trim()) {
+      if (Buffer.byteLength(buffer, "utf8") > MAX_HOSTED_CHAT_SSE_FRAME_BYTES) {
+        throw new HostedChatStreamProtocolError(
+          `Hosted Chat Completions SSE frame exceeded ${MAX_HOSTED_CHAT_SSE_FRAME_BYTES} bytes`,
+        );
+      }
+      consumeFrame(buffer, consumeData);
+    }
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+    // A reader that ended normally is already drained; cancel is harmless and
+    // makes provider implementations release any response-body bookkeeping.
+    try {
+      await reader.cancel();
+    } catch {
+      // Preserve the primary provider/protocol/abort error.
+    }
+    try {
+      reader.releaseLock();
+    } catch {
+      // The stream may have released its lock while closing.
+    }
   }
-  if (buffer.trim()) consumeFrame(buffer, consumeData);
 }
 
 function consumeFrame(frame: string, consumeData: (data: string) => void): void {
@@ -116,98 +144,4 @@ function nextFrameBoundary(buffer: string): { index: number; length: number } | 
   ].filter((candidate) => candidate.index >= 0);
   if (candidates.length === 0) return null;
   return candidates.reduce((best, candidate) => candidate.index < best.index ? candidate : best);
-}
-
-function parseProviderEvent(data: string): Record<string, any> {
-  try {
-    const value = JSON.parse(data);
-    if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error();
-    return value;
-  } catch {
-    throw new HostedChatStreamProtocolError(
-      "Hosted Chat Completions returned a malformed SSE event",
-    );
-  }
-}
-
-function createAccumulator(): HostedChatAccumulator {
-  return {
-    id: "",
-    model: "",
-    role: "assistant",
-    content: "",
-    toolCalls: new Map(),
-    finishReason: null,
-  };
-}
-
-function accumulateProviderEvent(
-  state: HostedChatAccumulator,
-  event: Record<string, any>,
-): void {
-  const providerError = isRecord(event.error)
-    ? event.error
-    : isRecord(event.response?.error)
-      ? event.response.error
-      : event.type === "error"
-        ? event
-        : undefined;
-  if (providerError) throw new HostedChatStreamProviderError(providerError);
-  if (typeof event.id === "string") state.id = event.id;
-  if (typeof event.model === "string") state.model = event.model;
-  if (isRecord(event.usage)) state.usage = event.usage;
-  const choice = Array.isArray(event.choices) ? event.choices[0] : undefined;
-  if (!isRecord(choice)) return;
-  if (choice.finish_reason !== undefined) state.finishReason = choice.finish_reason;
-  const delta = isRecord(choice.delta) ? choice.delta : {};
-  if (typeof delta.role === "string") state.role = delta.role;
-  if (typeof delta.content === "string") state.content += delta.content;
-  if (Array.isArray(delta.tool_calls)) {
-    for (const toolCall of delta.tool_calls) accumulateToolCall(state, toolCall);
-  }
-}
-
-function accumulateToolCall(state: HostedChatAccumulator, delta: unknown): void {
-  if (!isRecord(delta) || !Number.isInteger(delta.index)) return;
-  const index = Number(delta.index);
-  const current = state.toolCalls.get(index) ?? {
-    index,
-    id: "",
-    type: "function" as const,
-    name: "",
-    arguments: "",
-  };
-  if (typeof delta.id === "string") current.id += delta.id;
-  const fn = isRecord(delta.function) ? delta.function : {};
-  if (typeof fn.name === "string") current.name += fn.name;
-  if (typeof fn.arguments === "string") current.arguments += fn.arguments;
-  state.toolCalls.set(index, current);
-}
-
-function completedResponse(state: HostedChatAccumulator): Record<string, any> {
-  const toolCalls = [...state.toolCalls.values()]
-    .sort((left, right) => left.index - right.index)
-    .map(({ id, type, name, arguments: args }) => ({
-      id,
-      type,
-      function: { name, arguments: args },
-    }));
-  return {
-    id: state.id,
-    model: state.model,
-    choices: [{
-      index: 0,
-      finish_reason: state.finishReason,
-      message: {
-        role: state.role,
-        content: state.content || null,
-        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-      },
-    }],
-    ...(state.usage ? { usage: state.usage } : {}),
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, any> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

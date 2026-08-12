@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { readOperationalHealth, renderOperationalHealth } from "../../packages/butler-agent/src/operations/health/operational-health.ts";
+import { rebuildTranscriptActivityAggregate } from
+  "../../packages/butler-agent/src/operations/metrics/transcript-activity-index.ts";
 
 let tempDir = "";
 
@@ -54,6 +56,7 @@ test("operational health summarizes delivery backlog and recoverable tasks", () 
     }),
     "",
   ].join("\n"), "utf8");
+  rebuildTranscriptActivityAggregate({ butlerData: tempDir });
 
   const summary = readOperationalHealth(tempDir);
 
@@ -64,6 +67,10 @@ test("operational health summarizes delivery backlog and recoverable tasks", () 
       delivered: 1,
       sessionFailed: 1,
       lastError: "Telegram Bad Request: message is too long",
+    },
+    sessionActivity: {
+      status: "available",
+      reason: null,
     },
     tasks: {
       running: 1,
@@ -101,6 +108,7 @@ test("operational health surfaces transcript delivery failure when notification 
     }),
     "",
   ].join("\n"), "utf8");
+  rebuildTranscriptActivityAggregate({ butlerData: tempDir });
 
   const summary = readOperationalHealth(tempDir);
 
@@ -111,6 +119,30 @@ test("operational health surfaces transcript delivery failure when notification 
     sessionFailed: 1,
     lastError: "Bad Request: can't parse entities",
   });
+  expect(summary.sessionActivity).toEqual({ status: "available", reason: null });
   expect(renderOperationalHealth(summary)).toContain("session delivery failures: failed=1");
   expect(renderOperationalHealth(summary)).toContain("delivery last error: Bad Request: can't parse entities");
+});
+
+test("operational health marks a rebuilt transcript activity index as degraded", () => {
+  const summary = readOperationalHealth(tempDir);
+  expect(summary.sessionActivity).toEqual({
+    status: "degraded",
+    reason: "transcript_activity_checkpoint_rebuilt",
+  });
+  expect(renderOperationalHealth(summary)).toContain("session activity index: degraded");
+});
+
+test("operational health reports unavailable transcript activity when the aggregate lock has no checkpoint", () => {
+  const lockPath = join(tempDir, "metrics", "transcript-activity", "aggregate.lock");
+  mkdirSync(join(lockPath, ".."), { recursive: true });
+  mkdirSync(lockPath);
+
+  const summary = readOperationalHealth(tempDir);
+
+  expect(summary.sessionActivity).toEqual({
+    status: "unavailable",
+    reason: "transcript_activity_aggregate_lock_contended",
+  });
+  expect(summary.delivery.sessionFailed).toBe(0);
 });

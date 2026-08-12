@@ -1,21 +1,111 @@
-import { execFileSync } from "node:child_process";
-import { readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import {
+  readProcessSample,
+  readSystemMemorySample,
+} from "./packaged-performance-samplers.ts";
+import { aggregateProcessSamples } from "./packaged-performance-aggregation.ts";
+import { databaseFileSamples } from "./packaged-performance-database.ts";
 
 export type PackagedProcessRole =
   | "electron_main"
   | "electron_renderer"
-  | "agent_runtime";
+  | "electron_gpu"
+  | "electron_utility"
+  | "app_gateway"
+  | "agent_runtime"
+  | "embed"
+  | "owned_sidecar";
+
+export type PackagedCoreProcessRole = "electron_main" | "electron_renderer" | "agent_runtime";
+
+export const PACKAGED_CORE_PROCESS_ROLES: PackagedCoreProcessRole[] = [
+  "electron_main",
+  "electron_renderer",
+  "agent_runtime",
+];
+
+export const PACKAGED_PHYSICAL_PROCESS_ROLES: PackagedProcessRole[] = [
+  "electron_main",
+  "electron_renderer",
+  "electron_gpu",
+  "electron_utility",
+  "app_gateway",
+  "agent_runtime",
+  "embed",
+  "owned_sidecar",
+];
+
+export type PackagedMetricName =
+  | "physicalFootprintBytes"
+  | "privateResidentBytes"
+  | "compressedBytes"
+  | "swapBytes"
+  | "rssBytes"
+  | "virtualSizeBytes"
+  | "nativeHeapBytes"
+  | "externalHeapBytes"
+  | "openHandles"
+  | "connections";
 
 export interface PackagedProcessTarget {
   role: PackagedProcessRole;
   pid: number;
+  label?: string;
 }
 
 export interface PackagedProcessSample extends PackagedProcessTarget {
   cpuPercent: number | null;
   cpuTimeMs: number | null;
   rssBytes: number | null;
+  virtualSizeBytes: number | null;
+  physicalFootprintBytes: number | null;
+  privateResidentBytes: number | null;
+  compressedBytes: number | null;
+  swapBytes: number | null;
+  nativeHeapBytes: number | null;
+  externalHeapBytes: number | null;
+  openHandles: number | null;
+  connections: number | null;
+  unsupportedReasons: Partial<Record<PackagedMetricName, string>>;
+}
+
+export interface PackagedAggregateSample {
+  physicalFootprintBytes: number | null;
+  privateResidentBytes: number | null;
+  compressedBytes: number | null;
+  swapBytes: number | null;
+  rssBytes: number | null;
+  virtualSizeBytes: number | null;
+  nativeHeapBytes: number | null;
+  externalHeapBytes: number | null;
+  openHandles: number | null;
+  connections: number | null;
+  gateMemoryBytes: number | null;
+  gateMemorySource: "physical_footprint" | "private_resident" | "rss" | null;
+  processCount: number;
+  metricCoverage: Partial<Record<PackagedMetricName, number>>;
+  unsupportedReasons: Partial<Record<PackagedMetricName, string>>;
+}
+
+export interface PackagedSystemMemorySample {
+  compressedBytes: number | null;
+  swapBytes: number | null;
+  unsupportedReasons: Partial<Record<"compressedBytes" | "swapBytes", string>>;
+}
+
+export interface PackagedPerformanceCycle {
+  index: number;
+  phase: "warmup" | "steady" | "idle";
+  label?: string;
+}
+
+export interface PackagedPerformanceSnapshot {
+  capturedAt: string;
+  platform: NodeJS.Platform;
+  processes: PackagedProcessSample[];
+  aggregate: PackagedAggregateSample;
+  system: PackagedSystemMemorySample;
+  databases: DatabaseFileSample[];
+  cycle?: PackagedPerformanceCycle;
 }
 
 export interface PackagedProcessMeasurement extends PackagedProcessTarget {
@@ -25,6 +115,11 @@ export interface PackagedProcessMeasurement extends PackagedProcessTarget {
   beforeRssBytes: number;
   afterRssBytes: number;
   rssGrowthBytes: number;
+  physicalFootprintGrowthBytes: number | null;
+  privateResidentGrowthBytes: number | null;
+  swapGrowthBytes: number | null;
+  handlesGrowth: number | null;
+  connectionsGrowth: number | null;
 }
 
 export interface DatabaseFileSample {
@@ -32,21 +127,39 @@ export interface DatabaseFileSample {
   sizeBytes: number;
 }
 
-export interface PackagedPerformanceSnapshot {
-  capturedAt: string;
-  processes: PackagedProcessSample[];
-  databases: DatabaseFileSample[];
+export interface PackagedPerformanceSampler {
+  platform?: NodeJS.Platform;
+  run?: (command: string, args: string[]) => string;
+  readFile?: (path: string) => string;
+  listDirectory?: (path: string) => string[];
+  runtimeMemory?: () => { external: number } | null;
 }
 
 export function capturePackagedPerformanceSnapshot(input: {
   butlerData: string;
   processTargets: PackagedProcessTarget[];
   capturedAt?: Date;
+  cycle?: PackagedPerformanceCycle;
+  sampler?: PackagedPerformanceSampler;
 }): PackagedPerformanceSnapshot {
+  const sampler = input.sampler ?? {};
+  const platform = sampler.platform ?? process.platform;
+  const samplesByPid = new Map<number, PackagedProcessSample>();
+  const processes = input.processTargets.map((target) => {
+    const existing = samplesByPid.get(target.pid);
+    if (existing) return { ...existing, ...target };
+    const sample = readProcessSample(target, platform, sampler);
+    samplesByPid.set(target.pid, sample);
+    return sample;
+  });
   return {
     capturedAt: (input.capturedAt ?? new Date()).toISOString(),
-    processes: input.processTargets.map(readProcessSample),
+    platform,
+    processes,
+    aggregate: aggregateProcessSamples(processes),
+    system: readSystemMemorySample(platform, sampler),
     databases: databaseFileSamples(input.butlerData),
+    ...(input.cycle ? { cycle: input.cycle } : {}),
   };
 }
 
@@ -74,94 +187,37 @@ export function measurePackagedProcesses(
     return [{
       role: sample.role,
       pid: sample.pid,
+      ...(sample.label || next.label ? { label: next.label ?? sample.label } : {}),
       beforeCpuTimeMs: sample.cpuTimeMs,
       afterCpuTimeMs: next.cpuTimeMs,
       cpuRatio: cpuTimeMs / elapsedMs,
       beforeRssBytes: sample.rssBytes,
       afterRssBytes: next.rssBytes,
       rssGrowthBytes: next.rssBytes - sample.rssBytes,
+      physicalFootprintGrowthBytes: nullableDelta(sample.physicalFootprintBytes, next.physicalFootprintBytes),
+      privateResidentGrowthBytes: nullableDelta(sample.privateResidentBytes, next.privateResidentBytes),
+      swapGrowthBytes: nullableDelta(sample.swapBytes, next.swapBytes),
+      handlesGrowth: nullableDelta(sample.openHandles, next.openHandles),
+      connectionsGrowth: nullableDelta(sample.connections, next.connections),
     }];
   });
 }
 
 export function requiredProcessRolesMeasured(
   measurements: PackagedProcessMeasurement[],
-): Record<PackagedProcessRole, boolean> {
-  return {
-    electron_main: measurements.some((sample) => sample.role === "electron_main"),
-    electron_renderer: measurements.some((sample) => sample.role === "electron_renderer"),
-    agent_runtime: measurements.some((sample) => sample.role === "agent_runtime"),
-  };
-}
-
-function readProcessSample(target: PackagedProcessTarget): PackagedProcessSample {
-  if (!Number.isSafeInteger(target.pid) || target.pid <= 0) {
-    return { ...target, cpuPercent: null, cpuTimeMs: null, rssBytes: null };
-  }
-  try {
-    const output = execFileSync(
-      "ps",
-      ["-o", "%cpu=", "-o", "rss=", "-o", "time=", "-p", String(target.pid)],
-      { encoding: "utf8" },
-    ).trim();
-    const [cpuText, rssKiBText, cpuTimeText] = output.split(/\s+/u);
-    const cpu = Number(cpuText);
-    const rssKiB = Number(rssKiBText);
-    return {
-      ...target,
-      cpuPercent: finiteOrNull(cpu),
-      cpuTimeMs: parseCpuTimeMs(cpuTimeText),
-      rssBytes: Number.isFinite(rssKiB) ? rssKiB! * 1024 : null,
-    };
-  } catch {
-    return { ...target, cpuPercent: null, cpuTimeMs: null, rssBytes: null };
-  }
-}
-
-function databaseFileSamples(butlerData: string): DatabaseFileSample[] {
-  return listDatabaseFiles(butlerData)
-    .map((path) => ({
-      relativePath: relative(butlerData, path).replaceAll("\\", "/"),
-      sizeBytes: statSync(path).size,
-    }))
-    .sort((left, right) => left.relativePath.localeCompare(right.relativePath));
-}
-
-function listDatabaseFiles(root: string): string[] {
-  try {
-    return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
-      const path = join(root, entry.name);
-      if (entry.isDirectory()) return listDatabaseFiles(path);
-      if (!entry.isFile() || !isDatabaseFile(entry.name)) return [];
-      return [path];
-    });
-  } catch {
-    return [];
-  }
-}
-
-function isDatabaseFile(name: string): boolean {
-  return /\.(?:sqlite3?|db)(?:-(?:wal|shm))?$/u.test(name);
+): Record<PackagedCoreProcessRole, boolean> {
+  return Object.fromEntries(
+    PACKAGED_CORE_PROCESS_ROLES.map((role) => [
+      role,
+      measurements.some((sample) => sample.role === role),
+    ]),
+  ) as Record<PackagedCoreProcessRole, boolean>;
 }
 
 function processIdentity(sample: PackagedProcessTarget): string {
-  return `${sample.role}:${sample.pid}`;
+  return `${sample.role}:${sample.pid}:${sample.label ?? ""}`;
 }
 
-function parseCpuTimeMs(value: string | undefined): number | null {
-  if (!value) return null;
-  const [dayText, clockText] = value.includes("-")
-    ? value.split("-", 2)
-    : ["0", value];
-  const clock = clockText!.split(":").map(Number);
-  const seconds = clock.pop();
-  const minutes = clock.pop() ?? 0;
-  const hours = clock.pop() ?? 0;
-  const days = Number(dayText);
-  if (![days, hours, minutes, seconds].every(Number.isFinite)) return null;
-  return (((days * 24 + hours) * 60 + minutes) * 60 + seconds!) * 1_000;
-}
-
-function finiteOrNull(value: number | undefined): number | null {
-  return Number.isFinite(value) ? value! : null;
+function nullableDelta(before: number | null, after: number | null): number | null {
+  return before === null || after === null ? null : after - before;
 }

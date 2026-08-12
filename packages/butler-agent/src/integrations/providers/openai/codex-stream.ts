@@ -232,6 +232,11 @@ export async function readCodexSseResponse(
     return result;
   } finally {
     if (!assembled) await cancelReader(reader);
+    try {
+      reader.releaseLock();
+    } catch {
+      // The stream may have released its lock while closing.
+    }
   }
 }
 

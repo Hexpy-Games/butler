@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import {
   createAppAgentNativeServiceBridge,
   listNativeServiceProjections,
+  prepareAppManagedEmbedHealthPort,
   prepareAppManagedEmbedSocket,
 } from "../../packages/butler-app/client/electron/app-agent-native-service-bridge.mjs";
 import { APP_MANAGED_RUNTIME_POINTER_SCHEMA } from "../../packages/butler-app/client/electron/app-managed-runtime.mjs";
@@ -54,6 +55,24 @@ test("App-managed embed socket rejects a symlinked owner directory", () => {
   }
 });
 
+test("App-managed embed health port is stable, private, and separate from the gateway", () => {
+  const first = prepareAppManagedEmbedHealthPort({
+    butlerData: "/private/example/butler-data",
+    gatewayPort: 19_123,
+  });
+  expect(first).toBe(prepareAppManagedEmbedHealthPort({
+    butlerData: "/private/example/butler-data",
+    gatewayPort: 19_123,
+  }));
+  expect(first).toBeGreaterThanOrEqual(40_000);
+  expect(first).toBeLessThan(50_000);
+  expect(first).not.toBe(19_123);
+  expect(prepareAppManagedEmbedHealthPort({
+    butlerData: "/private/another/butler-data",
+    gatewayPort: 19_123,
+  })).toBeGreaterThanOrEqual(40_000);
+});
+
 test("App Agent native service bridge installs launchd service with App-managed env", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-launchd-"));
   try {
@@ -91,7 +110,9 @@ test("App Agent native service bridge installs launchd service with App-managed 
     expect(writes[0]?.body).toContain("<key>EMBED_SOCKET</key>");
     expect(writes[0]?.body).toMatch(/\/tmp\/butler-\d+\/embed-[a-f0-9]{20}\.sock/);
     expect(writes[0]?.body).toContain("<key>EMBED_HEALTH_PORT</key>");
-    expect(writes[0]?.body).toContain("<string>0</string>");
+    expect(writes[0]?.body).toContain(
+      `<string>${prepareAppManagedEmbedHealthPort({ butlerData, gatewayPort: 19123 })}</string>`,
+    );
     expect(writes[0]?.body).toContain("<string>19123</string>");
     expect(commands[0]).toContain("launchctl bootout gui/");
     expect(commands[0]).toContain("/com.hexpy.butler");
@@ -646,7 +667,9 @@ test("App Agent native service bridge installs systemd service with escaped env"
     expect(writes[0]?.body).toContain('Environment=BUTLER_APP_SERVER_PORT="19123"');
     expect(writes[0]?.body).toContain('Environment=EMBED_SOCKET="');
     expect(writes[0]?.body).toMatch(/Environment=EMBED_SOCKET="\/tmp\/butler-\d+\/embed-[a-f0-9]{20}\.sock"/);
-    expect(writes[0]?.body).toContain('Environment=EMBED_HEALTH_PORT="0"');
+    expect(writes[0]?.body).toContain(
+      `Environment=EMBED_HEALTH_PORT="${prepareAppManagedEmbedHealthPort({ butlerData, gatewayPort: 19123 })}"`,
+    );
     expect(writes[1]?.body).toContain('Environment=BUTLER_APP_SERVER_PORT="19123"');
     expect(commands).toEqual([
       "systemctl --user daemon-reload",

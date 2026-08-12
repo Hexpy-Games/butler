@@ -6,7 +6,7 @@ import {
   listServices,
   resolveNativeSupervisorPaths,
   startServices,
-  stopServices,
+  stopServicesBounded,
   type NativeServiceProjection,
   type NativeServiceSpec,
 } from "../src/operations/service/native-service-supervisor.ts";
@@ -38,9 +38,9 @@ if (command === "start" && dryRun) {
 } else if (command === "start") {
   services = startServices(paths);
 } else if (command === "stop") {
-  services = stopServices(paths);
+  services = await stopServicesBounded(paths);
 } else if (command === "restart") {
-  stopServices(paths);
+  await stopServicesBounded(paths);
   services = startServices(paths);
 } else if (command === "ps" || command === "status") {
   services = listServices(paths);

@@ -5,7 +5,7 @@ import { join } from "path";
 import { SessionBindingStore } from "../src/test-support/harness/session-store.ts";
 import { readTranscript } from "../src/test-support/harness/transcripts.ts";
 import { getRuntimeControlPlaneSummary } from "../src/integrations/providers/provider.ts";
-import { readPromptCacheMetrics, summarizePromptCacheMetrics } from "../src/integrations/providers/prompt-cache-metrics.ts";
+import { summarizePromptCacheMetricsFromDisk } from "../src/integrations/providers/prompt-cache-metrics.ts";
 import { readOperationalHealth, renderOperationalHealth } from "../src/operations/health/operational-health.ts";
 import { listServices, type NativeServiceId } from "../src/operations/service/native-service-supervisor.ts";
 import { evaluateContextBudget } from "../src/agent/context/budget.ts";
@@ -78,6 +78,7 @@ const SERVICE_DISPLAY_NAMES: Record<NativeServiceId, string> = {
   "butler-watchdog": "watchdog",
   "butler-sync-consumer": "sync-consumer",
   "embed-server": "embed-server",
+  "tunnel-proxy": "tunnel-proxy",
 };
 
 function readConfiguredButlerModel(butlerData: string): string {
@@ -209,7 +210,7 @@ export function renderStatusContext(): string {
   const stats = buildContextStats();
   const services = buildServiceHealth(process.env.BUTLER_HOME ?? BUTLER_HOME_DEFAULT, butlerData);
   const control = getRuntimeControlPlaneSummary({ cacheScope: "status-context" });
-  const cacheMetrics = summarizePromptCacheMetrics(readPromptCacheMetrics());
+  const cacheMetrics = summarizePromptCacheMetricsFromDisk({ butlerData }).summary;
   const operationalHealth = renderOperationalHealth(readOperationalHealth(butlerData));
   const cachePolicy = control.promptCache.configured
     ? [

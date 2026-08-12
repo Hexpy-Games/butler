@@ -244,6 +244,30 @@ test("Z.AI adapter isolates auth, malformed, and oversized responses", async () 
   }
 });
 
+test("Z.AI quota reader cancels an oversized streaming body", async () => {
+  const data = tempButlerData();
+  let cancelled = false;
+  try {
+    registerZai(data);
+    const result = await createZaiQuotaAdapter({
+      butlerData: data,
+      maxOutputBytes: 16,
+      fetchImpl: async () => new Response(new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new Uint8Array(128));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      }), { status: 200 }),
+    }).read();
+    expect(result.reason?.code).toBe("provider_response_malformed");
+    expect(cancelled).toBe(true);
+  } finally {
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
 test("Z.AI auth HTTP failures clear stale quota even with oversized error bodies", async () => {
   const data = tempButlerData();
   let authFailure = false;

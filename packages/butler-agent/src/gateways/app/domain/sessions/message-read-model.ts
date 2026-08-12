@@ -42,6 +42,19 @@ export interface MessageFileReadModelRow {
   created_at: string;
 }
 
+/**
+ * The bounded artifact projection joins the latest message window directly
+ * to attachment rows. It intentionally carries only the fields needed by
+ * the public artifact contract, rather than materializing MessageRecord
+ * objects and their transcript text.
+ */
+export interface SessionArtifactReadModelRow extends MessageFileReadModelRow {
+  message_rowid: number;
+  message_id: string;
+  chat_id: string;
+  turn_id: string | null;
+}
+
 export interface TurnReadModelRow {
   rowid: number;
   id: string;
@@ -184,6 +197,26 @@ function artifactSummariesFromMessage(
     created_at: attachment.created_at,
     open_action: "route",
   }));
+}
+
+export function artifactSummaryFromRow(
+  row: SessionArtifactReadModelRow,
+): SessionArtifactSummary {
+  const attachment = messageFileRefFromRow(row);
+  return {
+    id: `artifact-${attachment.file_id}`,
+    session_id: row.chat_id,
+    message_id: row.message_id,
+    turn_id: row.turn_id ?? undefined,
+    file_id: attachment.file_id,
+    kind: artifactKindFromMessageFile(attachment),
+    title: attachment.safe_name,
+    safe_path_label: attachment.safe_name,
+    url: attachment.url,
+    size_bytes: attachment.size_bytes,
+    created_at: attachment.created_at,
+    open_action: "route",
+  };
 }
 
 function artifactKindFromMessageFile(

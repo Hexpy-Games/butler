@@ -8,6 +8,8 @@ import {
   writeCachedComposerDraft,
   writeLocalComposerDraft,
 } from "../../packages/butler-app/client/ui/src/app/composerDraftCache.ts";
+import { APP_CACHE_BUDGET } from
+  "../../packages/butler-app/client/ui/src/app/cacheBudget.ts";
 
 const previousLocalStorage = globalThis.localStorage;
 const previousWindow = globalThis.window;
@@ -97,4 +99,38 @@ test("composer draft cache restores from Electron when the renderer origin is em
   writeCachedComposerDraft("session-a", "next");
   await Promise.resolve();
   expect(writtenSessionId).toBe("session-a");
+});
+
+test("renderer draft storage bounds sessions and aggregate bytes while protecting current session", () => {
+  const values = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      get length() {
+        return values.size;
+      },
+      key: (index: number) => [...values.keys()][index] ?? null,
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    },
+  });
+  for (let index = 0; index < APP_CACHE_BUDGET.maxComposerDraftEntries + 4; index += 1) {
+    writeCachedComposerDraft(
+      `session-${index}`,
+      "x".repeat(60 * 1024),
+    );
+  }
+  writeCachedComposerDraft("session-0", "active");
+  expect(values.size).toBeLessThanOrEqual(APP_CACHE_BUDGET.maxComposerDraftEntries);
+  const totalBytes = [...values.values()].reduce(
+    (total, raw) => total + new TextEncoder().encode(raw).byteLength,
+    0,
+  );
+  expect(totalBytes).toBeLessThanOrEqual(APP_CACHE_BUDGET.maxComposerDraftAggregateBytes);
+  expect(readLocalComposerDraft("session-0")?.text).toBe("active");
+  expect(writeCachedComposerDraft("oversized", "x".repeat(
+    APP_CACHE_BUDGET.maxComposerDraftBytes + 1,
+  ))).toBeNull();
+  expect(readLocalComposerDraft("oversized")).toBeNull();
 });

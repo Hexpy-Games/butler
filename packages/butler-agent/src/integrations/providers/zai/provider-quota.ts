@@ -124,13 +124,26 @@ async function readQuotaEndpoint(
         if (!value) continue;
         totalBytes += value.byteLength;
         if (totalBytes > options.maxOutputBytes) {
-          await reader.cancel().catch(() => undefined);
           return { kind: "limit" };
         }
         chunks.push(value);
       }
     } catch {
       return { kind: "temporary" };
+    } finally {
+      // Quota reads are diagnostic but can be refreshed frequently. Always
+      // settle and detach the body reader, including normal EOF and a failed
+      // provider stream, so the response cannot retain transport state.
+      try {
+        await reader.cancel();
+      } catch {
+        // Preserve the primary quota result.
+      }
+      try {
+        reader.releaseLock();
+      } catch {
+        // The provider body may already have released its lock.
+      }
     }
     return {
       kind: "ok",
