@@ -14,13 +14,14 @@ import {
 import type { BenchmarkPlan, BenchmarkResultFile } from "./contracts.ts";
 import { sanitizeIdentifier } from "./identifiers.ts";
 import { applyVisualReviews, readVisualReviewFile } from "./visual-review.ts";
-import { assertNoSymlinkComponents } from "./isolation.ts";
+import { assertNoSymlinkComponents, assertPairedRootIsolation } from "./isolation.ts";
 import {
   readPreparedButlerResourceReference,
   preparedResourceIdentity,
   type PreparedButlerResourceReference,
 } from "./prepared-butler-resource.ts";
 import { hashBenchmarkFixture, loadM1V2BenchmarkFixtures } from "./fixtures.ts";
+import { verifyM1V2AuthoritativeProvenance } from "./m1-v2-provenance.ts";
 import {
   createPairedCampaignContract,
   FINAL_AFTER_REVISION,
@@ -76,6 +77,10 @@ export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<str
         execution: pairedExecution!,
         fixtureHashes: Object.fromEntries(loadM1V2BenchmarkFixtures(options.harnessRoot)
           .map((fixture) => [fixture.id, hashBenchmarkFixture(fixture)])) as Record<"direct-cold" | "direct-warm" | "current-web-cold" | "landing-cold", string>,
+        provenance: verifyM1V2AuthoritativeProvenance({
+          repoRoot: options.harnessRoot,
+          jsonlPath: options.provenanceJsonlPath!,
+        }).identity,
       })
     : undefined;
   const proposedPlan = createBenchmarkPlan({
@@ -110,6 +115,7 @@ export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<str
     ...(options.pairedPreparedButlerResources
       ? { pairedPreparedButlerResources: options.pairedPreparedButlerResources }
       : {}),
+    ...(pairedExecution ? { pairedExecution } : {}),
   });
   const controller = new AbortController();
   const completed = await runAgentBenchmark({
@@ -148,9 +154,14 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
   let sourceRoot = resolve(option(argv, "--source-root") ?? process.cwd());
   const harnessRootOption = option(argv, "--harness-root");
   const harnessRoot = resolve(harnessRootOption ?? process.cwd());
-  const runRoot = resolve(option(argv, "--run-root") ?? mkdtempSync(join(tmpdir(), "butler-agent-benchmark-")));
+  const runRootOption = option(argv, "--run-root");
+  if (campaignOption(argv) === "m1-v2-paired" && !runRootOption)
+    throw new Error("The paired campaign requires an explicit durable --run-root");
+  const runRoot = resolve(runRootOption ?? mkdtempSync(join(tmpdir(), "butler-agent-benchmark-")));
   const outputDirectory = resolve(option(argv, "--output") ?? join(runRoot, "report"));
   if (!insideRoot(runRoot, outputDirectory)) throw new Error("--output must remain inside --run-root");
+  if (campaignOption(argv) === "m1-v2-paired" && insideRoot(tmpdir(), runRoot))
+    throw new Error("The paired --run-root must be durable and outside the private temporary root");
   assertNoSymlinkComponents(runRoot);
   assertNoSymlinkComponents(outputDirectory);
   const controlledModel = option(argv, "--controlled-model");
@@ -176,6 +187,10 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
     before: readPreparedButlerResourceReference(resolve(requiredOption(argv, "--before-prepared-butler-resource-pin"))),
     after: readPreparedButlerResourceReference(resolve(requiredOption(argv, "--after-prepared-butler-resource-pin"))),
   } : null;
+  if (pairedSourceRoots && pairedPreparedButlerResources) {
+    assertPairedRootIsolation(runRoot, harnessRoot, pairedSourceRoots.before, pairedSourceRoots.after,
+      pairedPreparedButlerResources.before.resourceDir, pairedPreparedButlerResources.after.resourceDir);
+  }
   const providerAuthPreflightPath = campaign === "m1-v2-paired"
     ? resolve(requiredOption(argv, "--provider-auth-preflight"))
     : null;
@@ -255,18 +270,16 @@ async function persistBenchmarkManifest(
   }
   return { ...plan, createdAt: existing.createdAt };
 }
-
 function option(argv: readonly string[], name: string): string | undefined {
   const index = argv.indexOf(name);
   return index >= 0 ? argv[index + 1] : undefined;
 }
-
 function requiredOption(argv: readonly string[], name: string): string {
   const value = option(argv, name);
   if (!value) throw new Error(`Missing required paired option: ${name}`);
   return value;
 }
-
+const campaignOption = (argv: readonly string[]): string => option(argv, "--campaign") ?? "cross-agent-pilot";
 function insideRoot(root: string, candidate: string): boolean {
   const rel = relative(resolve(root), resolve(candidate));
   return rel !== "" && rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);

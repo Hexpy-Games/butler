@@ -64,6 +64,18 @@ export function validateBenchmarkPlan(plan: BenchmarkPlan): void {
   }
 }
 
+export function assertPairedRootIsolation(...inputRoots: string[]): void {
+  const roots = inputRoots.map((root) => resolve(root));
+  for (let left = 0; left < roots.length; left += 1) {
+    for (let right = left + 1; right < roots.length; right += 1) {
+      const a = roots[left]!, b = roots[right]!;
+      if (a === b || inside(a, b) || inside(b, a)) {
+        throw new Error("Paired run, harness, before source, after source, and prepared resource roots must be distinct and non-overlapping");
+      }
+    }
+  }
+}
+
 export function assertNoSymlinkComponents(path: string): void {
   const resolved = resolve(path);
   const parsed = parse(resolved);

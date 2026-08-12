@@ -78,6 +78,7 @@ export interface BenchmarkArmPlan {
   version?: import("./paired-contract.ts").BenchmarkVersion;
   pairId?: string;
   block?: number;
+  pairedExecution?: import("./paired-contract.ts").PairedExecutionContract;
 }
 
 export interface BenchmarkPlan {
@@ -218,6 +219,9 @@ export interface BenchmarkObservation {
   changedPaths: readonly string[];
   diagnostics: readonly string[];
   evidenceRefs: readonly string[];
+  providerDispatchState?: "not_dispatched" | "adapter_entered" | "provider_dispatched" | "provider_output_observed";
+  infrastructureGateStage?: "pre_adapter" | null;
+  pairedComparableIdentity?: import("./paired-evaluation.ts").PairComparableIdentity | null;
   m1V2?: import("./m1-v2-types.ts").M1V2RepetitionResult | null;
 }
 
@@ -280,6 +284,11 @@ export interface AdapterRunResult {
     model: string;
     reasoning: string;
     providerServiceTiers: readonly (string | null)[];
+    requestServiceTiers: readonly (string | null)[];
+    requestModels: readonly (string | null)[];
+    requestReasoning: readonly (string | null)[];
+    enforcedAuthModes: readonly (string | null)[];
+    authorizationSchemes: readonly (string | null)[];
   };
   usage: Partial<TokenUsage>;
   tools: Partial<ToolMetrics>;

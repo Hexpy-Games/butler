@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { M1V2ArmId } from "./m1-v2-types.ts";
 import type { PreparedButlerResourceIdentity } from "./prepared-butler-resource.ts";
+import type { M1V2ProvenanceIdentity } from "./m1-v2-types.ts";
 
 export const FINAL_BEFORE_REVISION = "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5" as const;
 export const FINAL_AFTER_REVISION = "394c98a97428b741f8ea54273a226cb062455ab0" as const;
@@ -47,6 +48,8 @@ export interface PairedCampaignContract {
   before: PairedSourcePin;
   after: PairedSourcePin;
   execution: PairedExecutionContract;
+  fixtureHashes: Readonly<Record<M1V2ArmId, string>>;
+  provenance: M1V2ProvenanceIdentity;
   steps: readonly PairedStepIdentity[];
   policy: {
     sequential: true;
@@ -102,6 +105,7 @@ export function createPairedCampaignContract(input: {
   after: PairedSourcePin;
   execution: PairedExecutionContract;
   fixtureHashes: Readonly<Record<M1V2ArmId, string>>;
+  provenance: M1V2ProvenanceIdentity;
 }): PairedCampaignContract {
   validatePin(input.before, "before");
   validatePin(input.after, "after");
@@ -109,25 +113,11 @@ export function createPairedCampaignContract(input: {
       input.before.preparedResource.resourceSha256 === input.after.preparedResource.resourceSha256) {
     throw new Error("Paired source and prepared-resource pins must be distinct.");
   }
-  const fixtures: readonly M1V2ArmId[] = ["direct-cold", "direct-warm", "current-web-cold", "landing-cold"];
-  const steps: PairedStepIdentity[] = [];
-  for (let repetition = 1; repetition <= 3; repetition += 1) {
-    for (const fixture of fixtures) {
-      const block = steps.length / 2;
-      const pairId = `${fixture}:rep-${repetition}`;
-      for (const version of ["before", "after"] as const) {
-        const source = version === "before" ? input.before : input.after;
-        steps.push({
-          key: `${pairId}:${version}`, version, fixture, repetition,
-          block, order: steps.length, pairId,
-          fixtureSha256: input.fixtureHashes[fixture], source,
-        });
-      }
-    }
-  }
+  const steps = canonicalSteps(input.before, input.after, input.fixtureHashes);
   const stable = {
     schema: "butler.agent-benchmark.paired-contract.v1" as const,
-    before: input.before, after: input.after, execution: input.execution, steps,
+    before: input.before, after: input.after, execution: input.execution,
+    fixtureHashes: input.fixtureHashes, provenance: input.provenance, steps,
     policy: {
       sequential: true as const, runtimeReorderAllowed: false as const,
       replacementRunsAllowed: "pre_provider_infrastructure_only" as const,
@@ -146,12 +136,38 @@ export function createPairedCampaignContract(input: {
 
 export function validatePairedCampaignContract(contract: PairedCampaignContract): void {
   const { identity, ...stable } = contract;
+  const expected = canonicalSteps(contract.before, contract.after, contract.fixtureHashes);
   if (identity !== digest(stable) || contract.before.revision !== FINAL_BEFORE_REVISION ||
-      contract.after.revision !== FINAL_AFTER_REVISION || contract.steps.length !== 24 ||
-      contract.steps.some((step, order) => step.order !== order || step.block !== Math.floor(order / 2) ||
-        step.version !== (order % 2 === 0 ? "before" : "after"))) {
+      contract.after.revision !== FINAL_AFTER_REVISION ||
+      JSON.stringify(contract.steps) !== JSON.stringify(expected) ||
+      contract.steps.some((step) => JSON.stringify(step.source) !== JSON.stringify(step.version === "before" ? contract.before : contract.after)) ||
+      contract.provenance.schema !== "butler.agent-benchmark.provenance-identity.v1") {
     throw new Error("Paired campaign contract identity mismatch.");
   }
+}
+
+function canonicalSteps(
+  before: PairedSourcePin,
+  after: PairedSourcePin,
+  fixtureHashes: Readonly<Record<M1V2ArmId, string>>,
+): PairedStepIdentity[] {
+  const fixtures: readonly M1V2ArmId[] = ["direct-cold", "direct-warm", "current-web-cold", "landing-cold"];
+  const steps: PairedStepIdentity[] = [];
+  for (let repetition = 1; repetition <= 3; repetition += 1) {
+    for (const fixture of fixtures) {
+      const block = steps.length / 2;
+      const pairId = `${fixture}:rep-${repetition}`;
+      for (const version of ["before", "after"] as const) {
+        const source = version === "before" ? before : after;
+        steps.push({
+          key: `${pairId}:${version}`, version, fixture, repetition,
+          block, order: steps.length, pairId,
+          fixtureSha256: fixtureHashes[fixture], source,
+        });
+      }
+    }
+  }
+  return steps;
 }
 
 export function corroborateExecution(input: {
@@ -159,20 +175,40 @@ export function corroborateExecution(input: {
   observed: { provider: string; model: string; reasoning: string; serviceTier?: string | null; requestServiceTier?: string | null };
 }): void {
   const observed = input.observed;
-  if (observed.provider !== "openai" || observed.model !== FINAL_MODEL ||
-      observed.reasoning !== FINAL_REASONING ||
-      (observed.serviceTier ?? observed.requestServiceTier) !== "default") {
+  if (observed.provider !== input.preregistered.provider ||
+      observed.model !== input.preregistered.model ||
+      observed.reasoning !== input.preregistered.reasoning ||
+      (observed.serviceTier ?? observed.requestServiceTier) !== input.preregistered.serviceTier) {
     throw new Error("non_fast_model_execution_identity_mismatch");
   }
 }
 
+export function corroboratePairedRequestEvidence(preregistered: PairedExecutionContract, evidence: {
+  provider: string; model: string; reasoning: string;
+  providerServiceTiers: readonly (string | null)[]; requestServiceTiers: readonly (string | null)[];
+  requestModels: readonly (string | null)[]; requestReasoning: readonly (string | null)[];
+  enforcedAuthModes: readonly (string | null)[]; authorizationSchemes: readonly (string | null)[];
+} | undefined): void {
+  if (!evidence || evidence.providerServiceTiers.length === 0 ||
+      evidence.providerServiceTiers.some((value) => value !== preregistered.serviceTier) ||
+      evidence.requestServiceTiers.some((value) => value !== preregistered.serviceTier) ||
+      evidence.requestModels.some((value) => value !== preregistered.model) ||
+      evidence.requestReasoning.some((value) => value !== preregistered.reasoning) ||
+      evidence.enforcedAuthModes.some((value) => value !== preregistered.authMode) ||
+      evidence.authorizationSchemes.some((value) => value !== "bearer")) {
+    throw new Error("provider_service_tier_unavailable_or_mismatch");
+  }
+  corroborateExecution({ preregistered, observed: { provider: evidence.provider, model: evidence.model,
+    reasoning: evidence.reasoning, serviceTier: evidence.providerServiceTiers[0] } });
+}
+
 export function replacementEligibility(input: {
-  providerDispatchStarted: boolean;
-  providerOutputObserved: boolean;
+  providerDispatchState: "not_dispatched" | "adapter_entered" | "provider_dispatched" | "provider_output_observed";
+  infrastructureGateStage: "pre_adapter" | null;
 }): { allowed: boolean; reason: string } {
-  return input.providerDispatchStarted || input.providerOutputObserved
-    ? { allowed: false, reason: "post_dispatch_replacement_forbidden" }
-    : { allowed: true, reason: "pre_provider_infrastructure_replacement" };
+  return input.providerDispatchState === "not_dispatched" && input.infrastructureGateStage === "pre_adapter"
+    ? { allowed: true, reason: "pre_provider_infrastructure_replacement" }
+    : { allowed: false, reason: "post_adapter_replacement_forbidden" };
 }
 
 function validatePin(pin: PairedSourcePin, version: BenchmarkVersion): void {

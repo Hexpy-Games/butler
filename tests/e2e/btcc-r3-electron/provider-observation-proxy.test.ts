@@ -145,6 +145,10 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       attemptDigest,
       requestKind: "agent",
       requestedModel: "gpt-test",
+      requestedReasoning: null,
+      requestedServiceTier: null,
+      enforcedAuthMode: null,
+      authorizationScheme: "bearer",
       requestStartedAtMs: 100,
       serializedRequestBytes: requestBody.byteLength,
       firstContentBearingDeltaAtMs: 200,
@@ -165,6 +169,27 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
     await proxy.close();
     await upstream.close();
   }
+});
+
+test("paired proxy forces ordinary tier in the actual request and rejects conflicting tier", async () => {
+  let body: Record<string, unknown> = {};
+  const upstream = await listen((request, response) => { void (async () => {
+    body = JSON.parse((await bodyOf(request)).toString("utf8")) as Record<string, unknown>;
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.end('data: {"type":"response.completed","response":{"status":"completed","service_tier":"default"}}\n\ndata: [DONE]\n\n');
+  })(); });
+  const proxy = await startProviderObservationProxy({ upstreamBaseUrl: upstream.baseUrl,
+    execution: { model: "openai/gpt-5.6-sol", reasoning: "medium", serviceTier: "default", authMode: "oauth" } });
+  try {
+    const valid = await fetch(proxy.endpoint, { method: "POST", headers: { authorization: "Bearer redacted", "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.6-sol", reasoning: { effort: "medium" } }) });
+    await valid.text();
+    expect(body.service_tier).toBe("default");
+    expect(proxy.observations()[0]).toMatchObject({ requestedServiceTier: "default", requestedReasoning: "medium", enforcedAuthMode: "oauth", authorizationScheme: "bearer" });
+    const conflict = await fetch(proxy.endpoint, { method: "POST", headers: { authorization: "Bearer redacted", "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.6-sol", reasoning: { effort: "medium" }, service_tier: "priority" }) });
+    expect(conflict.status).toBeGreaterThanOrEqual(500);
+  } finally { await proxy.close(); await upstream.close(); }
 });
 
 test("deterministic provider fixture fails the primary once and reports the backup model", async () => {

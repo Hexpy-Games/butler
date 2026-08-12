@@ -248,6 +248,8 @@ export function createGatedBenchmarkObservation(
 ): BenchmarkObservation {
   return {
     ...emptyObservation(arm),
+    providerDispatchState: "not_dispatched",
+    infrastructureGateStage: "pre_adapter",
     effectiveConfig: sanitizeEffectiveConfig({
       ...arm.effectiveConfig,
       ...(preflight.effectiveConfig ?? {}),
@@ -299,6 +301,9 @@ function emptyObservation(arm: BenchmarkArmPlan): BenchmarkObservation {
     changedPaths: [],
     diagnostics: [],
     evidenceRefs: [],
+    providerDispatchState: "not_dispatched",
+    infrastructureGateStage: null,
+    pairedComparableIdentity: null,
     m1V2: null,
   };
 }

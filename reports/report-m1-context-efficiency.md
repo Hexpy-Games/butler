@@ -479,3 +479,46 @@ no observed assertion failure but hit its bounded 301-second timeout, so a full
 repository-wide pass is not claimed. Independent ordinary non-fast Sol-high
 review traced both source paths and the preserved evidence, then approved with
 no actionable P0-P3 findings.
+
+## Final paired campaign contract review repair
+
+Task: `T-M1-V2-PAIRED-CAMPAIGN-REVIEW-REPAIR-20260813`
+
+The canonical PR #142 provider-free harness now validates the full regenerated
+24-step `4 arms × 3 repetitions × before/after` array, including source,
+prepared-resource, fixture, provenance, pair, block, and order identities. The
+runtime-only roots remain outside the immutable public manifest and evidence.
+Paired planning requires an explicit durable non-temporary run root and rejects
+overlapping run, harness, source, or prepared-resource roots.
+
+The preregistered `openai/gpt-5.6-sol`, medium reasoning,
+`ordinary_non_fast`, provider, auth mode, and `service_tier=default` contract is
+carried through the actual harness request options and corroborated against
+each target request and response. Missing or conflicting model, reasoning,
+auth, request tier, or response tier is rejected. No credential value is
+retained; only the typed auth mode and authorization scheme are recorded.
+
+Pair eligibility is one typed evaluator decision used by the aggregate and
+report. Cache mismatch is descriptive only; fixture, model, reasoning,
+execution mode, provider, auth, route, retry, or invalid source pairing is
+rejected. Durable dispatch state allows at most one replacement only for a
+typed pre-adapter infrastructure gate. Adapter entry, provider dispatch,
+provider output, consumption, and verification failures cannot be replaced.
+
+The paired report includes exact provider-send bytes, all physical provider
+requests (agent, auxiliary, title, and provider-tool), model rounds, tool calls,
+nullable elapsed and first-useful latency, every nullable usage field, and the
+full segment taxonomy. Per-arm and overall before/after/delta/ratio outputs use
+min, median, max, and range with exact 3-pair-per-arm and 12-pair completeness.
+Acceptance requires completeness, at least 30% provider-send reduction, a
+physical-request reduction, the 18–30% elapsed target, and zero quality
+regression. Empty or incomplete input fails closed and nullable values are not
+coerced to zero.
+
+The same report path writes immutable provider-free JSON and HTML comparison
+indexes. Frozen Hermes, OpenCode, and historical Butler entries remain
+unranked; the paired Butler result becomes ranked only when the complete final
+acceptance verdict passes. This work did not run a provider, Electron,
+prepared-resource build, renderer, campaign, Hermes, or OpenCode, and it did
+not change product M1 code. The final benchmark Task remains todo/blocked and
+the governing Work remains in progress.

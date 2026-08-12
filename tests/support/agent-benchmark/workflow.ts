@@ -153,10 +153,8 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
     const prior = completed.get(arm.key);
     if (prior && prior.arm.fixtureHash === arm.fixtureHash && isTerminal(prior)) {
       const replacement = replacementEligibility({
-        providerDispatchStarted: (prior.m1V2?.agentAttempts.length ?? 0) > 0 ||
-          (prior.usage.modelRequests ?? 0) > 0,
-        providerOutputObserved: prior.timing.firstUsefulOutputAtMs !== null ||
-          prior.answerHash !== null,
+        providerDispatchState: prior.providerDispatchState ?? "adapter_entered",
+        infrastructureGateStage: prior.infrastructureGateStage ?? null,
       });
       const alreadyReplaced = result.replacements?.some((item) => item.armKey === arm.key) ?? false;
       if (input.plan.campaign !== "m1-v2-paired" || !replacement.allowed || alreadyReplaced ||

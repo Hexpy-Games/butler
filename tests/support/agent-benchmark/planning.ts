@@ -121,6 +121,7 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
         cachePairId: step.pairId, timeoutMs: DEFAULT_BENCHMARK_TIMEOUT_MS,
         sourceRevision: step.source.revision, version: step.version,
         pairId: step.pairId, block: step.block,
+        pairedExecution: input.pairedCampaign!.execution,
       });
     }
   } else for (const fixture of campaignFixtures) {
@@ -252,6 +253,7 @@ export function benchmarkPlanIdentity(
       version: arm.version ?? null,
       pairId: arm.pairId ?? null,
       block: arm.block ?? null,
+      pairedExecution: arm.pairedExecution ?? null,
     })),
   };
   return createHash("sha256").update(JSON.stringify(stable)).digest("hex");

@@ -37,6 +37,7 @@ export interface ProductionAgentAdapterOptions {
   preparedButlerResource?: PreparedButlerResourceReference;
   pairedPreparedButlerResources?: Readonly<Record<"before" | "after", PreparedButlerResourceReference>>;
   rendererStartSmoke?: boolean;
+  pairedExecution?: import("./paired-contract.ts").PairedExecutionContract;
 }
 
 export function createProductionAgentAdapters(
@@ -51,6 +52,7 @@ export function createProductionAgentAdapters(
       {
         rendererStartSmoke: options.rendererStartSmoke === true,
         pairedPreparedButlerResources: options.pairedPreparedButlerResources,
+        pairedExecution: options.pairedExecution,
       },
     ),
   });
