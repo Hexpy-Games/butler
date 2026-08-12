@@ -24,6 +24,10 @@ import {
   SqliteGuidedTurnHydration,
   type TurnRow,
 } from "./sqlite-guided-turn-hydration.ts";
+import { parseTurnContinuationBudgetState } from
+  "../../../btcc/turn/index.ts";
+import { SqliteTurnContinuationBudgetStore } from
+  "./sqlite-turn-continuation-budget.ts";
 
 export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
   private readonly transitions: SqliteGuidedTransitionWriter;
@@ -31,6 +35,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
   private readonly stateClaims: SqliteStateExecutionClaims;
   private readonly modelRoute: SqliteModelRouteRepository;
   private readonly hydration: SqliteGuidedTurnHydration;
+  private readonly continuationBudget: SqliteTurnContinuationBudgetStore;
 
   constructor(
     private readonly db: Database,
@@ -41,6 +46,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     this.stateClaims = new SqliteStateExecutionClaims(db, owner);
     this.modelRoute = new SqliteModelRouteRepository(db);
     this.hydration = new SqliteGuidedTurnHydration(db);
+    this.continuationBudget = new SqliteTurnContinuationBudgetStore(db);
   }
 
   async findTurn(turnId: string): Promise<TurnRecord | null> {
@@ -48,6 +54,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
       SELECT turn_id, session_id, inbox_id, trigger_key, original_message_id,
         original_message, model_selection_json, context_json,
         route_state_json,
+        continuation_budget_json,
         progress_destination_json, semantic_state,
         active_checkpoint_id, route, final_payload_json, delivery_outbox_id,
         canonical_assistant_message_id, revision, execution_fence,
@@ -73,6 +80,11 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
       ...(wakeIdentity ? { wakeIdentity } : {}),
       modelSelection: JSON.parse(row.model_selection_json),
       ...(row.route_state_json ? { modelRoute: JSON.parse(row.route_state_json) } : {}),
+      ...(row.continuation_budget_json
+        ? { continuationBudget: parseTurnContinuationBudgetState(
+            JSON.parse(row.continuation_budget_json), row.turn_id,
+          ) }
+        : {}),
       context: JSON.parse(row.context_json),
       ...(row.progress_destination_json
         ? { progressDestination: hydrateProgressDestination(row.progress_destination_json) }
@@ -146,6 +158,12 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     input: Parameters<SqliteModelRouteRepository["recordModelRoundAcceptance"]>[0],
   ): ReturnType<SqliteModelRouteRepository["recordModelRoundAcceptance"]> {
     return this.modelRoute.recordModelRoundAcceptance(input);
+  }
+
+  async transitionContinuationBudget(
+    input: Parameters<SqliteTurnContinuationBudgetStore["transition"]>[0],
+  ) {
+    return this.continuationBudget.transition(input);
   }
 
   async stopTurn(turnId: string): Promise<StopPersistenceOutcome> {

@@ -28,6 +28,7 @@ export function buildOpenAIRequestSegmentManifests(input: {
   officialInput: unknown;
   codexAppendedInput: unknown;
   appendedItemKinds?: readonly (M1RequestSegmentKind | undefined)[];
+  codexAppendedItemKinds?: readonly (M1RequestSegmentKind | undefined)[];
   promptSources?: readonly M1RequestSegmentSource[];
   previousCodexInput?: readonly Record<string, unknown>[];
   previousCodexManifest?: readonly M1ProviderRequestSegmentManifestEntry[];
@@ -43,7 +44,9 @@ export function buildOpenAIRequestSegmentManifests(input: {
   const previous = input.previousCodexInput
     ? olderReplayManifest(input.previousCodexInput, input.previousCodexManifest ?? [])
     : [];
-  const appended = input.previousCodexInput
+  const appended = input.codexAppendedItemKinds
+    ? itemManifest(input.codexAppendedInput, input.codexAppendedItemKinds, 0)
+    : input.previousCodexInput
     ? itemManifest(
         input.codexAppendedInput,
         input.appendedItemKinds ?? [],
@@ -167,6 +170,11 @@ function primaryInputTextPath(input: unknown): readonly (string | number)[] | un
 function stringPayloadPaths(item: unknown): Array<readonly (string | number)[]> {
   if (!item || typeof item !== "object") return [];
   const record = item as Record<string, unknown>;
+  if (record.type === "function_call") {
+    return ["name", "arguments"].flatMap((field) =>
+      typeof record[field] === "string" ? [[field] as const] : [],
+    );
+  }
   if (typeof record.output === "string") return [["output"]];
   if (Array.isArray(record.output)) return record.output.flatMap((part, index) =>
     part && typeof part === "object" && typeof (part as Record<string, unknown>).text === "string"

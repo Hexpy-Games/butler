@@ -17,6 +17,7 @@ type RouteRuntimeHooks = Pick<AgentRunInput,
   | "loadModelRouteAttemptHistory"
   | "loadModelRoundAcceptance"
   | "recordModelRoundAcceptance"
+  | "transitionContinuationBudget"
 >;
 
 const MAX_DURABILITY_ATTEMPTS = 3;
@@ -31,6 +32,20 @@ export function createModelRouteRuntimeHooks(input: {
   const routeDigest = input.turn.modelRoute?.routeDigest ?? "unknown";
 
   return {
+    ...(input.turn.continuationBudget
+      ? { transitionContinuationBudget: async (event) => {
+          const transition = input.turns.transitionContinuationBudget;
+          if (!transition) throw new Error("turn_continuation_dependency_missing");
+          return await transition.call(input.turns, {
+            turnId: input.turn.turnId,
+            expectedRevision: input.turn.revision,
+            executionFence: input.turn.executionFence,
+            claimId: input.claim.claimId,
+            event,
+            nowMs: Date.now(),
+          });
+        } }
+      : {}),
     recordModelRouteEvent: (event) => withDurabilityRetry(
       "attempt_event_write",
       () => input.turns.recordModelRouteEvent?.({

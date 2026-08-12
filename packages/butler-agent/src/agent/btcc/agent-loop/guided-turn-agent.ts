@@ -50,6 +50,7 @@ import {
   createGuidedOperationResultRuntime,
 } from "../operation-result-replay/index.ts";
 import type { ProductionGuidedTurnAgentInput } from "./guided-turn-agent-input.ts";
+import { guidedContinuationBudget } from "./guided-continuation-budget.ts";
 
 export function createProductionGuidedTurnAgent(
   input: ProductionGuidedTurnAgentInput,
@@ -65,9 +66,14 @@ export function createProductionGuidedTurnAgent(
       loadModelRouteAttemptHistory,
       loadModelRoundAcceptance,
       recordModelRoundAcceptance,
+      transitionContinuationBudget,
       onProviderResponseIdentity,
     }): Promise<BtccAgentLoopResult> {
       const phasePolicy = selectGuidedTurnPhasePolicy(turn);
+      const continuationBudget = guidedContinuationBudget(
+        turn,
+        transitionContinuationBudget,
+      );
       if (phasePolicy.exactResultReplay.mode === "available" &&
         (!turn.modelRoute || !loadModelRoundAcceptance || !recordModelRoundAcceptance)) {
         throw new Error("operation_result_route_acceptance_dependency_missing");
@@ -289,6 +295,7 @@ export function createProductionGuidedTurnAgent(
         maxIterations: Math.max(1, input.executionWindowSize ?? 60),
         modelRound,
         operationResultReplay: operationResults.replay,
+        ...(continuationBudget ? { continuationBudget } : {}),
         resolveOperationResultCallId: toolCalls.journalCallIdForProviderCall,
         onExecutionWindowBoundary: createGuidedExecutionWindowObserver({
           durableWork: input.durableWork, workScope, turnId: turn.turnId,

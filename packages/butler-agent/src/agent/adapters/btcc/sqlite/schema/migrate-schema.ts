@@ -14,12 +14,18 @@ export function migrateBtccSchema(db: Database): void {
     ensureGuidedWorkProgressColumns(db);
     ensureTurnProgressDestination(db);
     ensureTurnRouteState(db);
+    ensureTurnContinuationBudget(db);
     ensureModelRoundAcceptanceCheckpoint(db);
     ensureModelRouteFailureDisposition(db);
     ensureGuidedToolResultDeliveryColumns(db);
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
+}
+
+function ensureTurnContinuationBudget(db: Database): void {
+  if (!tableExists(db, "btcc_turns")) return;
+  ensureColumn(db, "btcc_turns", "continuation_budget_json", "TEXT");
 }
 
 function ensureGuidedToolResultDeliveryColumns(db: Database): void {
