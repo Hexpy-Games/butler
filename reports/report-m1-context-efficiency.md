@@ -4,6 +4,81 @@ Date: 2026-08-12
 Task: `T-M1-V2-BENCHMARK-HARNESS-UNIFICATION`
 Governing spec: `SPEC-M1-CONTEXT-EFFICIENCY` revision 2
 
+## Final paired campaign contract repair
+
+Task: `T-M1-V2-PAIRED-CAMPAIGN-CONTRACT-20260813`
+
+This bounded repair adds the final before/after campaign contract to the sole
+PR #142 harness. It does not execute or complete
+`T-M1-V2-FINAL-BENCHMARK`. The exact public-safe source pins are before
+`c46aae1af1b78a6f81ea40c3099edde0ba35ebd5` and after
+`394c98a97428b741f8ea54273a226cb062455ab0`; runtime checkout and resource
+paths remain CLI-only and are redacted before manifest/checkpoint/report
+persistence.
+
+The canonical planner now supports one immutable paired mode with this exact
+order for repetitions 1, 2, and 3:
+
+`direct-cold before -> direct-cold after -> direct-warm before -> direct-warm
+after -> current-web-cold before -> current-web-cold after -> landing-cold
+before -> landing-cold after`.
+
+That produces 12 adjacent blocks and 24 steps. Every step carries typed
+version, fixture, repetition, block/order, pair, source revision,
+source-compatibility, prepared-resource, and fixture identity. The same
+planner, workflow, Butler adapter, evaluator, and report remain authoritative;
+the earlier 12-step `m1-v2` mode is diagnostic only and does not become a
+second final evaluator or report.
+
+Provider authentication is a typed provider-free preflight input containing
+only provider, auth mode, exact model, reasoning, execution mode, and
+available/unavailable booleans. Unavailable auth/model stops before manifest
+creation or dispatch as `measurement_unavailable`. Available execution is
+preregistered as ordinary non-fast `openai/gpt-5.6-sol`, reasoning `medium`,
+with actual request option `service_tier=default`. The provider-observation
+adapter records only the returned service-tier scalar and exact model; missing,
+fast/priority, model, reasoning, or provider drift rejects fail closed.
+
+Before and after prepared resources have separate pins for source revision,
+source compatibility, producer manifest, dependency closure, full resource,
+archive, size, and mutation checks. Cross-version resource reuse and stale or
+mutated sources fail closed. Replacement is permitted only for pre-provider
+infrastructure failure; once provider dispatch or output begins, no replacement
+is eligible.
+
+Pair eligibility requires exact fixture, model, reasoning, ordinary execution
+mode, provider, auth mode, route, and retry-free state with distinct before and
+after sources. Cache mismatch is descriptive only; retry, route, model, source,
+fixture, provider, auth, and execution-mode mismatches are rejected. Nullable
+provider usage stays nullable. The paired aggregate reports per-arm and overall
+absolute/ratio min, median, and max for provider-send bytes, physical requests,
+model rounds, tool calls, elapsed, first useful, and usage; percentage deltas
+are computed per pair rather than additively combined.
+
+The acceptance projection retains the governing Spec revision 2 thresholds:
+at least 30% exact provider-send reduction, 18-30% elapsed reduction target,
+and zero quality regression. Landing quality separately requires durable
+Project/Work and internal Ledger closeout, memory/context grounding,
+tools/workspace authority, provider routing, recovery, build, reload, and
+desktop/mobile checks. Historical Hermes, OpenCode, and rejected/provenance-only
+Butler rows remain nullable and unranked in the pure provider-free comparison
+index; no external agent was rerun.
+
+No provider call, Electron run, prepared-resource build, renderer smoke,
+campaign, Hermes, or OpenCode execution occurred in this repair. Final 4x3
+statistics, quality acceptance, Work completion, default-on, merge, and
+independent high review remain outside this Task.
+
+Provider-free validation completed with the paired contract, immutable resume,
+public workflow/checkpoint/report, pre-provider replacement, prepared-resource,
+identity, and provider-observation suites passing. Typecheck, lint (zero errors;
+20 pre-existing warnings), BTCC shape (`4 domains / 203 files`), module-shape
+audit (only size-review signals), `git diff --check`, and repository-wide
+`bun run check` passed. One broad parallel test invocation transiently exceeded
+its existing five-second per-test timeout; the same test passed alone in 2.9
+seconds and the later repository-wide check passed. No product or provider
+execution was involved.
+
 ## Status
 
 PR #142 and `tests/support/agent-benchmark` are the sole benchmark

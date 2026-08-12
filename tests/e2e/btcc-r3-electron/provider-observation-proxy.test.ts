@@ -158,6 +158,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       streamedTextChars: 5,
       finalTextChars: 0,
       providerReportedModel: null,
+      providerReportedServiceTier: null,
     }]);
   } finally {
     releaseUpstream?.();

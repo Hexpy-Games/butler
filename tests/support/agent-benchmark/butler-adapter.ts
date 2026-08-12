@@ -135,10 +135,15 @@ export function createButlerAdapter(
 
 export function createElectronButlerRunner(
   preparedResource?: PreparedButlerResourceReference,
-  options: { rendererStartSmoke?: boolean } = {},
+  options: {
+    rendererStartSmoke?: boolean;
+    pairedPreparedButlerResources?: Readonly<Record<"before" | "after", PreparedButlerResourceReference>>;
+  } = {},
 ): ButlerBenchmarkRunner {
   return (input): Promise<Record<string, unknown>> => withPreparedButlerResource({
-      reference: preparedResource,
+      reference: input.arm.version
+        ? options.pairedPreparedButlerResources?.[input.arm.version]
+        : preparedResource,
       sourceRoot: input.arm.sourceRoot,
       sourceRevision: input.arm.sourceRevision,
     }, async (preparedResourceOptions) => {
@@ -238,6 +243,7 @@ function parseButlerEvidence(
     ? evidence.providerRequests.filter((request): request is Record<string, unknown> => Boolean(asRecord(request)) && asRecord(request)?.requestKind === "agent")
     : [];
   const effectiveModel = normalizeObservedModel(model ?? usage.model, input.arm.effectiveConfig.model);
+  const runReasoning = typeof run?.reasoningEffort === "string" ? run.reasoningEffort : "";
   return {
     exitCode: evidence.error || evidence.ok === false ? 1 : 0,
     gateCode: "none",
@@ -249,6 +255,15 @@ function parseButlerEvidence(
     provider: effectiveModel?.split("/", 1)[0] ?? null,
     finalText,
     ...(effectiveModel ? { effectiveConfig: { model: effectiveModel } } : {}),
+    ...(input.arm.version && effectiveModel ? { pairedExecutionEvidence: {
+      provider: effectiveModel.split("/", 1)[0] ?? "",
+      model: effectiveModel,
+      reasoning: runReasoning,
+      providerServiceTiers: providerRequests.map((request) =>
+        typeof request.providerReportedServiceTier === "string"
+          ? request.providerReportedServiceTier
+          : null),
+    } } : {}),
     usage: {
       inputTokens: usage.promptTokens,
       cacheReadTokens: usage.cachedPromptTokens,

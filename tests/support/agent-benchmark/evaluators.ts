@@ -23,6 +23,7 @@ import { landingClaimMatches } from "./landing-evaluator.ts";
 import { sanitizeEffectiveConfig } from "./identifiers.ts";
 import { directConversationClaimMatches } from "./direct-evaluator.ts";
 import { evaluateM1V2AdapterEvidence } from "./m1-v2-adapter-evaluation.ts";
+import { corroborateExecution } from "./paired-contract.ts";
 
 export { evaluateWebResearch } from "./web-evaluator.ts";
 
@@ -49,6 +50,29 @@ export function evaluateAdapterResult(
   if (configGate.diagnostic) diagnostics.push(configGate.diagnostic);
   const gateCode = result.gateCode !== "none" ? result.gateCode : context.gateCode ?? configGate.gateCode ?? "none";
   let terminalState = terminalStateFor(result, gateCode, scopeViolation);
+  if (arm.version) {
+    try {
+      const evidence = result.pairedExecutionEvidence;
+      if (!evidence || evidence.providerServiceTiers.length === 0 ||
+          evidence.providerServiceTiers.some((tier) => tier !== "default")) {
+        throw new Error("provider_service_tier_unavailable_or_mismatch");
+      }
+      corroborateExecution({
+        preregistered: {
+          provider: "openai", authMode: "managed", model: "openai/gpt-5.6-sol",
+          reasoning: "medium", executionMode: "ordinary_non_fast",
+          serviceTier: "default", requestOption: { service_tier: "default" },
+        },
+        observed: {
+          provider: evidence.provider, model: evidence.model,
+          reasoning: evidence.reasoning, serviceTier: evidence.providerServiceTiers[0],
+        },
+      });
+    } catch (error) {
+      diagnostics.push(error instanceof Error ? error.message : String(error));
+      terminalState = "rejected";
+    }
+  }
   const m1Evaluation = evaluateM1V2AdapterEvidence({ arm, fixture, result, terminalState });
   const m1V2 = m1Evaluation.summary;
   terminalState = m1Evaluation.terminalState;
