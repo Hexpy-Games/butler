@@ -585,3 +585,16 @@ continuation budget, route/cache-prefix policy, Work-recovery optimization, or
 read batching. Those remain separate bounded tasks. Final provider-token,
 source-quality, cache/retry eligibility, desktop/mobile, and statistical 4x3
 acceptance remain exclusively with `T-M1-V2-FINAL-BENCHMARK`.
+
+### Exact replay delivery
+
+The reviewed implementation is commit `fb1fee36658f5790c02c6e6966b91d2859ee175f`
+on `feature/m1-v2-exact-first-durable-replay`. Draft PR #149 is stacked directly
+on `feature/m1-v2-tool-instruction-surface` / PR #148 and remains unmerged:
+`https://github.com/Hexpy-Games/butler/pull/149`. The first push-triggered
+Windows Package workflow `31591320688` was immediately cancelled and confirmed
+`completed/cancelled` under the release-tag-only policy. Project Ledger Task
+`T-M1-V2-EXACT-ONCE-REPLAY` is `done`, Attempt
+`A-M1-V2-EXACT-ONCE-REPLAY-20260812-01` is `succeeded`, the governing Work and
+Plan remain active, and Final Benchmark remains todo. No next optimization Task
+was started.
