@@ -25,7 +25,6 @@ import { directConversationClaimMatches } from "./direct-evaluator.ts";
 import { evaluateM1V2AdapterEvidence } from "./m1-v2-adapter-evaluation.ts";
 import { corroboratePairedRequestEvidence } from "./paired-contract.ts";
 import { comparableIdentityForArm } from "./paired-evaluation.ts";
-
 export { evaluateWebResearch } from "./web-evaluator.ts";
 
 export interface EvaluationContext {
@@ -33,6 +32,7 @@ export interface EvaluationContext {
   sourceMutation?: boolean;
   repositoryEvidenceRoot?: string;
   diagnostics?: readonly string[];
+  pairedAuthReceipt?: import("./paired-contract.ts").ProviderAuthPreflight;
 }
 
 export function evaluateAdapterResult(
@@ -56,15 +56,18 @@ export function evaluateAdapterResult(
       const evidence = result.pairedExecutionEvidence;
       const preregistered = arm.pairedExecution;
       if (!preregistered) throw new Error("paired_execution_preregistration_missing");
-      corroboratePairedRequestEvidence(preregistered, evidence);
+      const receipt = context.pairedAuthReceipt;
+      if (!receipt) throw new Error("provider_auth_receipt_missing");
+      corroboratePairedRequestEvidence(preregistered, receipt, evidence);
     } catch (error) {
       diagnostics.push(error instanceof Error ? error.message : String(error));
       terminalState = "rejected";
     }
   }
+  const executionRejected = terminalState === "rejected";
   const m1Evaluation = evaluateM1V2AdapterEvidence({ arm, fixture, result, terminalState });
   const m1V2 = m1Evaluation.summary;
-  terminalState = m1Evaluation.terminalState;
+  terminalState = executionRejected ? "rejected" : m1Evaluation.terminalState;
   diagnostics.push(...m1Evaluation.diagnostics);
   const evaluation = evaluateFixture(arm, fixture, result, terminalState, privacy, scopeViolation, context.repositoryEvidenceRoot);
   if (terminalState === "accepted" && evaluation.accepted !== true) terminalState = "rejected";
@@ -292,7 +295,6 @@ function pathEscapes(root: string, paths: readonly string[]): boolean {
 function privacyViolation(privacy: PrivacyMetrics): boolean {
   return privacy.credentialLeak || privacy.rawToolPayloadLeak || privacy.privatePathLeak || privacy.hiddenReasoningLeak;
 }
-
 function numberOrNull(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

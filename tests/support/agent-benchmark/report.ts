@@ -226,9 +226,11 @@ export function generateBenchmarkReport(result: BenchmarkResultFile): string {
     lines.push(
       "## Final paired M1 contract",
       "",
+      "- Authority: `SPEC-M1-CONTEXT-EFFICIENCY` revision 2 quantitative success criteria.",
       `- Contract: \`${summary.pairedCampaign.contractIdentity ?? "unavailable"}\``,
       `- Exact pairs: ${summary.pairedCampaign.aggregate.overall.pairs}/12`,
       `- Provider-send reduction gate: ${summary.pairedCampaign.acceptance.providerSendReductionPassed ? "pass" : "not passed"}`,
+      `- Registered request 45 to 38-40 gate: ${summary.pairedCampaign.acceptance.requestCountReductionPassed ? "pass" : "not passed"}`,
       `- Elapsed 18-30% target: ${summary.pairedCampaign.acceptance.elapsedTargetPassed ? "pass" : "not passed"}`,
       `- Zero quality regression: ${summary.pairedCampaign.acceptance.zeroQualityRegressionPassed ? "pass" : "not passed"}`,
       "- Cache mismatch remains descriptive; retry, route, model, source, fixture, provider, auth, and execution-mode mismatches are rejected.",

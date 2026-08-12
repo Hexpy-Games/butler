@@ -276,8 +276,6 @@ function parseButlerEvidence(
         typeof request.requestedModel === "string" ? normalizeObservedModel(request.requestedModel, input.arm.effectiveConfig.model) : null),
       requestReasoning: providerRequests.map((request) =>
         typeof request.requestedReasoning === "string" ? request.requestedReasoning : null),
-      enforcedAuthModes: providerRequests.map((request) =>
-        typeof request.enforcedAuthMode === "string" ? request.enforcedAuthMode : null),
       authorizationSchemes: providerRequests.map((request) =>
         typeof request.authorizationScheme === "string" ? request.authorizationScheme : null),
     } } : {}),

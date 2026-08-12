@@ -174,6 +174,14 @@ function summarizeAttempt(
     segmentSendBytes,
     retryOrdinal: numberValue(envelope.retryOrdinal) ?? 0,
     eligibility,
+    providerId: stringValue(envelope.providerId),
+    modelRef: stringValue(envelope.modelRef),
+    reasoning: stringValue(envelope.reasoning),
+    routeId: stringValue(envelope.routeId),
+    authMode: stringValue(envelope.authMode),
+    executionMode: stringValue(envelope.executionMode),
+    sourceRevision: stringValue(envelope.sourceRevision),
+    fixtureSha256: stringValue(envelope.fixtureSha256),
     responseUsageStatus: usageStatus,
     promptTokens: nullableMetric(usage?.promptTokens),
     cacheReadTokens: nullableMetric(usage?.cacheReadTokens),
@@ -258,36 +266,29 @@ function applyQualityReasons(
       db.fileMutationToolCalls < 1) reasons.push("landing_product_tool_evidence_missing");
   }
 }
-
 function nullableMetric(value: unknown): number | null {
   return value === null ? null : numberValue(value);
 }
-
 function recordArray(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value)
     ? value.filter((item): item is Record<string, unknown> =>
       Boolean(item) && typeof item === "object" && !Array.isArray(item))
     : [];
 }
-
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined;
 }
-
 function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
-
 function stringValue(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
-
 function sum(values: number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }
-
 function duplicateValues(values: string[]): string[] {
   const seen = new Set<string>();
   const duplicates = new Set<string>();

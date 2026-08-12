@@ -11,12 +11,22 @@ export interface PairComparableIdentity {
 export interface PairDecision { pairId: string; status: PairEligibility; reason: string }
 
 export function comparableIdentityForArm(arm: BenchmarkArmPlan, repetition: M1V2RepetitionResult | null): PairComparableIdentity | null {
-  const execution = arm.pairedExecution;
-  if (!execution) return null;
-  return { fixture: `${arm.scenario}:${arm.fixtureHash}`, sourceRevision: arm.sourceRevision,
-    model: execution.model, reasoning: execution.reasoning, executionMode: execution.executionMode,
-    provider: execution.provider, authMode: execution.authMode, cache: arm.cache, route: execution.provider,
-    retryOrdinal: Math.max(0, ...(repetition?.agentAttempts.map((attempt) => attempt.retryOrdinal) ?? [0])) };
+  const attempts = repetition?.agentAttempts ?? [];
+  if (attempts.length === 0) return null;
+  const observed = (key: keyof (typeof attempts)[number]): string | null => {
+    const values = [...new Set(attempts.map((attempt) => attempt[key]))];
+    return values.length === 1 && typeof values[0] === "string" ? values[0] :
+      values.length > 1 ? `observed_conflict:${String(key)}` : null;
+  };
+  const fixture = observed("fixtureSha256"), source = observed("sourceRevision"), model = observed("modelRef"),
+    reasoning = observed("reasoning"), provider = observed("providerId"), auth = observed("authMode"),
+    mode = observed("executionMode"), route = observed("routeId");
+  if (!fixture || !source || !model || !reasoning || !provider || !auth || !mode || !route) return null;
+  const cache = attempts.some((attempt) => attempt.eligibility === "cache_mismatch") ? "cache_mismatch" :
+    attempts.every((attempt) => attempt.eligibility === "eligible") ? "eligible" : "rejected";
+  return { fixture: `${arm.scenario}:${fixture === arm.fixtureHash ? fixture : "observed_mismatch"}`, sourceRevision: source, model, reasoning,
+    executionMode: mode, provider, authMode: auth,
+    cache, route, retryOrdinal: Math.max(0, ...attempts.map((attempt) => attempt.retryOrdinal)) };
 }
 
 export function pairEligibility(input: { before: PairComparableIdentity; after: PairComparableIdentity }): Omit<PairDecision, "pairId"> {
@@ -25,6 +35,15 @@ export function pairEligibility(input: { before: PairComparableIdentity; after: 
   if (input.before.sourceRevision === input.after.sourceRevision) return { status: "rejected", reason: "source_not_paired" };
   if (input.before.retryOrdinal > 0 || input.after.retryOrdinal > 0) return { status: "rejected", reason: "retry_contaminated" };
   if (input.before.route !== input.after.route) return { status: "rejected", reason: "route_mismatch" };
+  if (input.before.sourceRevision !== "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5" ||
+      input.after.sourceRevision !== "394c98a97428b741f8ea54273a226cb062455ab0")
+    return { status: "rejected", reason: "source_mismatch" };
+  for (const identity of [input.before, input.after]) {
+    if (identity.model !== "openai/gpt-5.6-sol" || identity.reasoning !== "medium" ||
+        identity.executionMode !== "ordinary_non_fast" || identity.provider !== "openai" ||
+        identity.authMode !== "managed" || identity.route !== "openai-responses")
+      return { status: "rejected", reason: "observed_execution_identity_mismatch" };
+  }
   if (input.before.cache !== input.after.cache) return { status: "descriptive", reason: "cache_mismatch" };
   return { status: "eligible", reason: "exact_pair" };
 }
@@ -83,15 +102,16 @@ export function summarizePairedBenchmarkResult(result: BenchmarkResultFile) {
       elapsedMs: repetition.elapsedMs, firstUsefulMs: repetition.firstUsefulMs,
       usage: { promptTokens: usage("promptTokens"), cacheReadTokens: usage("cacheReadTokens"), cacheWriteTokens: usage("cacheWriteTokens"), outputTokens: usage("outputTokens"), reasoningTokens: usage("reasoningTokens"), totalTokens: usage("totalTokens") },
       segments: Object.fromEntries(OBSERVED_M1_REQUEST_SEGMENT_KINDS.map((kind) => [kind, attempt.reduce((sum, item) => sum + (item.segments[kind] ?? 0), 0)])),
-      qualityPassed: repetition.armId === "landing-cold" ? landingQualityPassed(repetition) : repetition.status === "accepted" }];
+      qualityPassed: observation.terminalState === "accepted" && observation.evaluation.accepted === true && repetitionQualityPassed(repetition) }];
   });
   const aggregate = aggregatePairedMetrics(rows);
   const bytes = aggregate.overall.providerSendBytes.total.ratio;
   const elapsed = aggregate.overall.elapsedMs.total.ratio;
-  const requests = aggregate.overall.physicalRequests.total.ratio;
+  const requestBefore = aggregate.overall.physicalRequests.total.before;
+  const requestAfter = aggregate.overall.physicalRequests.total.after;
   const acceptance = { complete: aggregate.complete,
     providerSendReductionPassed: aggregate.complete && bytes !== null && bytes <= -0.30,
-    requestCountReductionPassed: aggregate.complete && requests !== null && requests < 0,
+    requestCountReductionPassed: aggregate.complete && requestBefore === 45 && requestAfter !== null && requestAfter >= 38 && requestAfter <= 40,
     elapsedTargetPassed: aggregate.complete && elapsed !== null && elapsed <= -0.18 && elapsed >= -0.30,
     zeroQualityRegressionPassed: aggregate.complete && aggregate.overall.qualityPassed };
   return { contractIdentity: result.plan.pairedCampaign?.identity ?? null, rows, aggregate, acceptance };
@@ -99,12 +119,27 @@ export function summarizePairedBenchmarkResult(result: BenchmarkResultFile) {
 
 function landingQualityPassed(result: M1V2RepetitionResult): boolean {
   const landing = result.quality.landing;
-  return Boolean(landing && landing.buildPassed && landing.desktopPassed && landing.mobilePassed &&
+  const db = result.db;
+  return Boolean(result.status === "accepted" && landing && landing.buildPassed && landing.desktopPassed && landing.mobilePassed &&
+    landing.desktopScreenshotPresent && landing.mobileScreenshotPresent && landing.indexChanged && landing.stylesChanged &&
+    landing.butlerGrounded && landing.usageScenePresent && landing.ctaPresent && landing.responsiveCssPresent &&
+    landing.genericCopyAbsent && landing.approvedCapabilityClaims.length === 5 &&
+    landing.approvedCapabilityClaims.every((claim) => claim.passed && !claim.negated && !claim.misrepresented) &&
     landing.durableProjectWorkGrounded && landing.memoryContextGrounded && landing.toolsWorkspaceGrounded &&
     landing.providerRoutingGrounded && landing.recoveryGrounded && result.work.observed &&
     result.work.status === "completed" && result.work.planReviewVerdict === "accept" &&
     result.work.resultReviewVerdict === "accept" && result.work.completionValidationVerdict === "accept" &&
-    result.work.projectLedgerCloseoutObserved && result.reloadPassed);
+    result.work.projectLedgerCloseoutObserved && result.work.workspaceAuthorityPassed === true &&
+    result.work.providerRoutingPassed === true && result.work.stallObserved === false &&
+    result.work.duplicateEvidenceCount === 0 && result.work.lostCorrectionEvidenceCount === 0 &&
+    result.work.lostRequiredAnchorCount === 0 && db?.quickCheckPassed === true && db.duplicateAppliedEffects === 0 &&
+    db.unresolvedCorrections === 0 && db.lostRequiredAnchors === 0 && result.reloadPassed);
+}
+
+function repetitionQualityPassed(result: M1V2RepetitionResult): boolean {
+  if (result.status !== "accepted" || !result.db?.quickCheckPassed || result.db.duplicateAppliedEffects !== 0 ||
+      result.db.unresolvedCorrections !== 0 || result.db.lostRequiredAnchors !== 0 || !result.reloadPassed) return false;
+  return result.armId === "landing-cold" ? landingQualityPassed(result) : true;
 }
 
 function paired(rows: readonly PairedMetricRow[]): Array<[PairedMetricRow, PairedMetricRow]> {
