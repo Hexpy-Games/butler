@@ -45,6 +45,8 @@ export interface ModelRoundMessage {
   operationResultReference?: OperationResultReferenceCarrier;
   /** BTCC journal identity; never serialized as provider content. */
   operationResultCallId?: string;
+  /** Turn-local stable identity; never serialized as provider content. */
+  continuationItemId?: string;
 }
 
 export interface OperationResultReferenceCarrier {
@@ -106,6 +108,7 @@ export interface ModelRoundRequest {
     schemaVersion: "butler.turn-context-envelope.v1";
     modelFacingBytes: number;
     requestDigest: string;
+    responseItemId: string;
     /** Required exact serialized-body admission owned by the durable Turn. */
     admitProviderBody(serializedBytes: number): Promise<void>;
   };

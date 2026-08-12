@@ -1,17 +1,5 @@
 import { Buffer } from "node:buffer";
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
-import {
-  chmodSync,
-  closeSync,
-  existsSync,
-  fsyncSync,
-  linkSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { recordOperationalMetric } from "../../../operations/metrics/operational-metrics.ts";
@@ -25,12 +13,15 @@ import type {
   M1ResponseUsageObservation,
   M1SegmentStability,
 } from "../../../agent/btcc/ports/provider-request-attribution.ts";
+import {
+  loadPrivateInstallationKey,
+  privateInstallationDigest,
+} from "./private-installation-identity.ts";
 
 export const M1_PHYSICAL_ATTEMPT_HEADER = "x-butler-m1-physical-attempt";
 
 const FLAG_NAME = "BUTLER_M1_V2_SEGMENT_ATTRIBUTION";
 const TRUE_VALUES = new Set(["1", "true", "on", "yes"]);
-const INSTALLATION_KEY_FILE = ".m1-v2-attribution.key";
 const finalizedObservations = new WeakSet<M1ProviderAttemptObservation>();
 
 export function isM1SegmentAttributionEnabled(
@@ -65,7 +56,7 @@ export function observeM1ProviderAttempt(input: {
 
   try {
     const butlerData = input.butlerData || env.BUTLER_DATA || join(homedir(), ".butler");
-    const key = installationKey(butlerData);
+    const key = loadPrivateInstallationKey(butlerData);
     const partition = serializeM1RequestPartition(
       input.body,
       input.segmentManifest,
@@ -73,9 +64,10 @@ export function observeM1ProviderAttempt(input: {
     if (partition.serialized !== serializedRequest) {
       return { serializedRequest, observation: null };
     }
-    const requestDigest = keyedDigest(key, serializedRequest);
-    const attemptDigest = keyedDigest(
+    const requestDigest = privateInstallationDigest(key, "m1-attribution-v1", serializedRequest);
+    const attemptDigest = privateInstallationDigest(
       key,
+      "m1-attribution-v1",
       [input.providerId, input.modelRef, input.turnId ?? "", input.phase ?? "", input.roundIndex,
         input.routeTransportAttemptOrdinal, input.providerRetryOrdinal,
         randomUUID(), requestDigest].join("\u0000"),
@@ -90,14 +82,16 @@ export function observeM1ProviderAttempt(input: {
         stability,
         providerSendBytes: part.bytes,
         estimatedInputTokens: null,
-        keyedContentDigest: keyedDigest(key, part.serializedFragments.join("")),
+        keyedContentDigest: privateInstallationDigest(
+          key, "m1-attribution-v1", part.serializedFragments.join(""),
+        ),
       };
     });
     const envelope: M1RequestEnvelopeObservation = {
       schemaVersion: "butler.m1-request-envelope.v2",
       attemptDigest,
-      turnDigest: keyedDigest(key, input.turnId ?? "unattributed"),
-      phaseDigest: keyedDigest(key, input.phase ?? "unattributed"),
+      turnDigest: privateInstallationDigest(key, "m1-attribution-v1", input.turnId ?? "unattributed"),
+      phaseDigest: privateInstallationDigest(key, "m1-attribution-v1", input.phase ?? "unattributed"),
       roundIndex: nonNegativeInteger(input.roundIndex),
       retryOrdinal: combinedRetryOrdinal(
         input.routeTransportAttemptOrdinal,
@@ -209,49 +203,6 @@ function recordRequestObservation(
       dimensions: { ...segment },
     }, { butlerData, env });
   }
-}
-
-function installationKey(butlerData: string): Buffer {
-  const directory = join(butlerData, "metrics");
-  const path = join(directory, INSTALLATION_KEY_FILE);
-  mkdirSync(directory, { recursive: true });
-  if (!existsSync(path)) {
-    const temporary = join(directory, `${INSTALLATION_KEY_FILE}.${randomUUID()}.tmp`);
-    try {
-      const descriptor = openSync(temporary, "wx", 0o600);
-      try {
-        writeFileSync(descriptor, randomBytes(32).toString("base64url"), "utf8");
-        fsyncSync(descriptor);
-      } finally {
-        closeSync(descriptor);
-      }
-      validateEncodedInstallationKey(readFileSync(temporary, "utf8"));
-      try {
-        // Hard-link publication is atomic and never replaces an existing winner.
-        linkSync(temporary, path);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      }
-    } finally {
-      try {
-        unlinkSync(temporary);
-      } catch {}
-    }
-  }
-  chmodSync(path, 0o600);
-  return validateEncodedInstallationKey(readFileSync(path, "utf8"));
-}
-
-function validateEncodedInstallationKey(value: string): Buffer {
-  const encoded = value.trim();
-  if (!/^[A-Za-z0-9_-]{43}$/u.test(encoded)) throw new Error("invalid_m1_attribution_key");
-  const decoded = Buffer.from(encoded, "base64url");
-  if (decoded.length !== 32) throw new Error("invalid_m1_attribution_key_entropy");
-  return decoded;
-}
-
-function keyedDigest(key: Buffer, value: string): string {
-  return createHmac("sha256", key).update(value, "utf8").digest("base64url").slice(0, 43);
 }
 
 function responseUsage(response: unknown): {

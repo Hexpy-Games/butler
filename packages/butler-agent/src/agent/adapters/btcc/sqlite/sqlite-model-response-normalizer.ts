@@ -3,6 +3,8 @@ import type {
   ModelRoundResult,
   ModelRoundToolCall,
 } from "../../../btcc/ports/index.ts";
+import { parseBoundedProviderItemKeys } from
+  "../../../btcc/ports/index.ts";
 
 /**
  * Acceptance replay is deliberately limited to the normalized response
@@ -12,7 +14,7 @@ import type {
  */
 export function normalizeAcceptedModelRound(result: ModelRoundResult): ModelRoundResult {
   const boundedContinuation = isRecord(result.continuation) &&
-    Array.isArray(result.continuation.boundedItemKeys);
+    Object.hasOwn(result.continuation, "boundedItemKeys");
   const normalized: ModelRoundResult = {
     toolCalls: result.toolCalls.map(normalizeToolCall),
   };
@@ -31,7 +33,9 @@ export function normalizeAcceptedModelRound(result: ModelRoundResult): ModelRoun
       !boundedContinuation,
     );
   }
-  const continuation = safeJsonClone(result.continuation);
+  const continuation = boundedContinuation
+    ? normalizeBoundedContinuation(result.continuation)
+    : safeJsonClone(result.continuation);
   if (continuation !== undefined) normalized.continuation = continuation;
   if (result.usage === null) {
     normalized.usage = null;
@@ -48,6 +52,23 @@ export function normalizeAcceptedModelRound(result: ModelRoundResult): ModelRoun
     normalized.providerIdentity = normalizeProviderIdentity(result.providerIdentity);
   }
   return normalized;
+}
+
+function normalizeBoundedContinuation(value: unknown): Record<string, unknown> {
+  if (!isRecord(value) || value.provider !== "openai" ||
+      typeof value.responseId !== "string" || value.responseId.length === 0 ||
+      value.responseId.length > 200) {
+    throw new Error("BTCC bounded continuation has invalid provider identity");
+  }
+  const allowed = new Set(["provider", "responseId", "boundedItemKeys"]);
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    throw new Error("BTCC bounded continuation has unknown private fields");
+  }
+  return {
+    provider: "openai",
+    responseId: value.responseId,
+    boundedItemKeys: parseBoundedProviderItemKeys(value.boundedItemKeys),
+  };
 }
 
 export function hydrateAcceptedModelRound(

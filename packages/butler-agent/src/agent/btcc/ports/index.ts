@@ -14,3 +14,8 @@ export type {
   GuidedToolJournalRecord,
   OperationResultDeliveryState,
 } from "./guided-tool-journal.ts";
+export {
+  boundedProviderItemKeys,
+  parseBoundedProviderItemKeys,
+  validateCurrentBoundedProviderItemKeys,
+} from "./bounded-provider-continuation.ts";

@@ -7,11 +7,21 @@ import type {
 export interface OpenAIRequestSegmentContinuation {
   provider: "openai";
   responseId: string;
-  sent: { toolMessages: number; userMessages: number };
+  sent?: { toolMessages: number; userMessages: number };
   /** Stable identities already represented by the official Responses chain. */
   boundedItemKeys?: string[];
   statelessInput?: Array<Record<string, unknown>>;
   statelessManifest?: M1ProviderRequestSegmentManifestEntry[];
+}
+
+export function requiredLegacyOpenAISent(
+  value: OpenAIRequestSegmentContinuation["sent"],
+): NonNullable<OpenAIRequestSegmentContinuation["sent"]> {
+  if (!value || !Number.isSafeInteger(value.toolMessages) ||
+      !Number.isSafeInteger(value.userMessages)) {
+    throw new Error("openai_sent_continuation_missing");
+  }
+  return value;
 }
 
 export function isOpenAIRequestSegmentContinuation(

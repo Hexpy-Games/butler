@@ -31,6 +31,7 @@ import {
   appendOpenAIFunctionCallContinuityManifest,
   buildOpenAIRequestSegmentManifests,
   isOpenAIRequestSegmentContinuation,
+  requiredLegacyOpenAISent,
   type OpenAIRequestSegmentContinuation,
 } from "./request-segment-manifest.ts";
 import {
@@ -43,6 +44,11 @@ import {
   openAIToolMessageItems,
   selectNewBoundedConversationItems,
 } from "./conversation-items.ts";
+import {
+  boundedProviderItemKeys,
+  parseBoundedProviderItemKeys,
+  validateCurrentBoundedProviderItemKeys,
+} from "../../../agent/btcc/ports/bounded-provider-continuation.ts";
 
 export async function runOpenAIModelRound(
   request: ModelRoundRequest,
@@ -65,12 +71,13 @@ export async function runOpenAIModelRound(
   const initialInput = openAIInputWithAttachments(
     firstUser?.content ?? "",
     request.attachments ? [...request.attachments] : undefined,
+    Boolean(request.boundedContinuation),
   );
   const initialStatelessInput = toCodexStatelessInput(initialInput);
   const continuationMessages = previous && !request.boundedContinuation
-    ? newOpenAIContinuationMessages(
+      ? newOpenAIContinuationMessages(
         request.messages,
-        previous.sent,
+        requiredLegacyOpenAISent(previous.sent),
         request.butlerData,
       )
     : null;
@@ -93,9 +100,12 @@ export async function runOpenAIModelRound(
   const boundedOfficialInput = boundedStatelessInput
     ? selectNewBoundedConversationItems(
         boundedStatelessInput,
-        previous?.boundedItemKeys ?? [],
+        previous ? parseBoundedProviderItemKeys(previous.boundedItemKeys) : [],
       )
     : null;
+  if (boundedStatelessInput) {
+    validateCurrentBoundedProviderItemKeys(boundedStatelessInput.itemKeys);
+  }
   const requestItems = boundedOfficialInput?.items ??
     continuationMessages?.items ?? initialInput;
   const statelessRequestInput = boundedStatelessInput?.items ?? (previous
@@ -210,18 +220,21 @@ export async function runOpenAIModelRound(
   const statelessInput = [...statelessRequestInput, ...functionCalls].map(
     retainTextOnlyAfterSuccessfulImageReplay,
   );
-  const bounded = Boolean(request.boundedContinuation);
+  const boundedContinuation = request.boundedContinuation;
+  const bounded = Boolean(boundedContinuation);
   const nextContinuation: OpenAIRequestSegmentContinuation = {
     provider: "openai",
     responseId: response.id,
-    sent: continuationMessages?.sent ?? { toolMessages: 0, userMessages: 1 },
     ...(boundedStatelessInput
-      ? { boundedItemKeys: [
-          ...(previous?.boundedItemKeys ?? []),
-          ...boundedStatelessInput.itemKeys,
-          ...openAIResponseItemKeys({ text, functionCalls }),
-        ].filter((key, index, all) => all.indexOf(key) === index) }
-      : {}),
+      ? { boundedItemKeys: boundedProviderItemKeys(
+          boundedStatelessInput.itemKeys,
+          openAIResponseItemKeys({
+            text,
+            functionCalls,
+            responseItemId: boundedContinuation!.responseItemId,
+          }),
+        ) }
+      : { sent: continuationMessages?.sent ?? { toolMessages: 0, userMessages: 1 } }),
     ...(!bounded
       ? {
           statelessInput,
@@ -282,7 +295,7 @@ function requiredLegacyStatelessInput(
 
 function newOpenAIContinuationMessages(
   messages: readonly ModelRoundMessage[],
-  alreadySent: OpenAIRequestSegmentContinuation["sent"],
+  alreadySent: NonNullable<OpenAIRequestSegmentContinuation["sent"]>,
   butlerData?: string,
 ): {
   items: Array<Record<string, unknown>>;

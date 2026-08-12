@@ -4,7 +4,6 @@ import type { M1RequestSegmentKind } from
   "../../../agent/btcc/ports/provider-request-attribution.ts";
 import { agentLoopImageDataUrl } from
   "../../../agent/tools/tool-result-media.ts";
-import { createHash } from "node:crypto";
 
 export function openAIBoundedConversationItems(
   messages: readonly ModelRoundMessage[],
@@ -29,9 +28,9 @@ export function openAIBoundedConversationItems(
       items.push(...next);
       itemKinds.push(...next.map(() => message.requestSegmentKind ??
         (userIndex === 1 ? "current_user_request" : "other_typed_context")));
-      itemKeys.push(...next.map((item, itemIndex) => userIndex === 1
-        ? `current-user:${itemIndex}:${itemDigest(item)}`
-        : `user:${protocolAnchor}:${itemDigest(item)}`));
+      itemKeys.push(...next.map((_item, itemIndex) => userIndex === 1
+        ? `current-user:${itemIndex}`
+        : `turn-message:${requiredTurnItemId(message)}`));
       continue;
     }
     if (message.role === "tool") {
@@ -48,9 +47,7 @@ export function openAIBoundedConversationItems(
         content: [{ type: "output_text", text: message.content }],
       });
       itemKinds.push("phase_continuity");
-      itemKeys.push(message.toolCalls?.[0]?.id
-        ? `assistant-text-before:${message.toolCalls[0].id}`
-        : `assistant-text:${itemDigest(message.content)}`);
+      itemKeys.push(`turn-message:${requiredTurnItemId(message)}`);
     }
     for (const call of message.toolCalls ?? []) {
       items.push({
@@ -70,12 +67,24 @@ export function openAIBoundedConversationItems(
 export function openAIResponseItemKeys(input: {
   text: string;
   functionCalls: readonly Record<string, unknown>[];
+  responseItemId: string;
 }): string[] {
   return [
-    ...(input.text ? [`assistant-text:${itemDigest(input.text)}`] : []),
+    ...(input.text ? [`turn-message:${requiredIdentity(input.responseItemId)}`] : []),
     ...input.functionCalls.flatMap((call) =>
       typeof call.call_id === "string" ? [`function-call:${call.call_id}`] : []),
   ];
+}
+
+function requiredTurnItemId(message: ModelRoundMessage): string {
+  return requiredIdentity(message.continuationItemId);
+}
+
+function requiredIdentity(value: string | undefined): string {
+  if (!value || !/^[A-Za-z0-9_.:-]{1,160}$/u.test(value)) {
+    throw new Error("bounded_continuation_turn_item_identity_missing");
+  }
+  return value;
 }
 
 export function selectNewBoundedConversationItems(input: {
@@ -120,8 +129,4 @@ export function openAIToolMessageItems(
     output,
   };
   return [{ ...statelessItem, output }, statelessItem];
-}
-
-function itemDigest(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
