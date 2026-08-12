@@ -21,7 +21,7 @@ test("durable SC01 projection survives cleanup and preserves exact nullable atte
 
   const resumed = materializeM1V2EvidenceExport(fixture.input);
   expect(resumed.sha256).toBe(result.sha256);
-  const cleanup = cleanupButlerRuntime(fixture.evidence, fixture.arm, true);
+  const cleanup = cleanupButlerRuntime(fixture.evidence, fixture.arm, "verified");
   expect(cleanup.status).toBe("removed");
   expect(existsSync(fixture.dataRoot)).toBe(false);
   expect(verifyM1V2EvidenceExport({ path: result.absolutePath, expected: fixture.input.identity }).sha256).toBe(result.sha256);
@@ -31,7 +31,7 @@ test("SC01 export fails closed on privacy extras, temp/conflict/mutation, and bl
   const unsafe = exportFixture();
   unsafe.input.metrics[0]!.dimensions!.prompt = "raw";
   expect(() => materializeM1V2EvidenceExport(unsafe.input)).toThrow("allowlist");
-  expect(cleanupButlerRuntime(unsafe.evidence, unsafe.arm, false).status).toBe("failed");
+  expect(cleanupButlerRuntime(unsafe.evidence, unsafe.arm, "missing_or_failed").status).toBe("failed");
   expect(existsSync(unsafe.dataRoot)).toBe(true);
 
   const rawBody = exportFixture();
