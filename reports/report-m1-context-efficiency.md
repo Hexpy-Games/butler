@@ -676,3 +676,7 @@ audit, and `git diff --check` passed. The bounded repository check reached the
 broad unit phase and hit its 300.08-second limit. Its interrupted metrics CLI
 child reported a null status; that exact test passed independently 1/1
 immediately afterward. A full unbounded repository pass is not claimed.
+After the final Task mutation, Project Ledger index and dashboard, handoff, and
+roadmap views were regenerated with `--write`. Final status reported a fresh
+index, no stale views, and issue count 0; final check also passed with 2,856
+records and issue count 0.
