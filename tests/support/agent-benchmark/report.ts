@@ -10,6 +10,8 @@ import { sanitizeIdentifier } from "./identifiers.ts";
 import type { M1V2CampaignResult } from "./m1-v2-types.ts";
 import { m1V2ReportLines, summarizeM1V2Campaign } from "./m1-v2-report.ts";
 import { comparisonIndexForResult, comparisonIndexHtml, summarizePairedBenchmarkResult } from "./paired-evaluation.ts";
+import { verifyM1V2DurableProjection } from "./m1-v2-evidence-export.ts";
+import { getBenchmarkFixture } from "./fixtures.ts";
 
 export interface BenchmarkReportSummary {
   runId: string;
@@ -68,7 +70,8 @@ export interface BenchmarkReportSummary {
 }
 
 export function summarizeBenchmarkResult(result: BenchmarkResultFile): BenchmarkReportSummary {
-  const observations = result.observations;
+  const checkedResult = reportEvidenceCheckedResult(result);
+  const observations = checkedResult.observations;
   const gatedAgents = [...new Set(
     observations.filter((observation) => observation.terminalState === "gated").map((observation) => observation.arm.agent),
   )];
@@ -165,14 +168,40 @@ export function summarizeBenchmarkResult(result: BenchmarkResultFile): Benchmark
     acceptedCount: observations.filter((observation) => observation.terminalState === "accepted").length,
     gatedAgents,
     canRank: complete && [...(result.plan.tracks ?? ["controlled", "recommended-default"])].every((track) => eligibleTrack(track) && visualReviewComplete(track)) && hasAcceptedForEachAgentAndTrack && gatedAgents.length === 0,
-    m1V2Campaign: summarizeM1V2Campaign(result),
-    pairedCampaign: summarizePairedBenchmarkResult(result),
+    m1V2Campaign: summarizeM1V2Campaign(checkedResult),
+    pairedCampaign: summarizePairedBenchmarkResult(checkedResult),
     arms,
     medians,
   };
 }
 
+function reportEvidenceCheckedResult(result: BenchmarkResultFile): BenchmarkResultFile {
+  return { ...result, observations: result.observations.map((observation) => {
+    const durable = observation.m1V2?.durableEvidence;
+    if (!durable) {
+      const postDispatch = observation.providerDispatchState === "provider_dispatched" || observation.providerDispatchState === "provider_output_observed";
+      if (!observation.m1V2 || !postDispatch) return observation;
+      return { ...observation, terminalState: "gated", gateCode: "measurement_unavailable", diagnostics: [...observation.diagnostics, "sc01_durable_evidence_report_missing"],
+        m1V2: { ...observation.m1V2, status: "gated", reasons: [...observation.m1V2.reasons, "sc01_durable_evidence_report_missing"] } };
+    }
+    try {
+      if (!result.run.planIdentity) throw new Error();
+      if (!observation.m1V2?.targetEvidenceIdentity) throw new Error();
+      const fixture = getBenchmarkFixture(observation.arm.scenario, result.plan.harnessRoot);
+      const verified = verifyM1V2DurableProjection({ planIdentity: result.run.planIdentity, runRoot: result.plan.runRoot,
+        arm: observation.arm, fixture, target: observation.m1V2.targetEvidenceIdentity,
+        durable: { handle: durable.handle, sha256: durable.sha256 } });
+      if (!observation.m1V2) throw new Error();
+      return { ...observation, m1V2: { ...observation.m1V2, ...verified.arithmetic } };
+    } catch {
+      return { ...observation, terminalState: "gated", gateCode: "measurement_unavailable", diagnostics: [...observation.diagnostics, "sc01_durable_evidence_report_verification_failed"],
+        m1V2: observation.m1V2 ? { ...observation.m1V2, status: "gated", reasons: [...observation.m1V2.reasons, "sc01_durable_evidence_report_verification_failed"] } : null };
+    }
+  }) };
+}
+
 export function generateBenchmarkReport(result: BenchmarkResultFile): string {
+  result = reportEvidenceCheckedResult(result);
   const summary = summarizeBenchmarkResult(result);
   const lines = [
     "# Butler agent benchmark pilot",
@@ -270,9 +299,10 @@ export function writeBenchmarkReport(
   const jsonPath = join(outputDirectory, "agent-benchmark-summary.json");
   const comparisonIndexPath = join(outputDirectory, "comparison-index.json");
   const comparisonHtmlPath = join(outputDirectory, "comparison-index.html");
-  writeFileSync(markdownPath, generateBenchmarkReport(result), "utf8");
-  writeFileSync(jsonPath, `${JSON.stringify(summarizeBenchmarkResult(result), null, 2)}\n`, "utf8");
-  const index = comparisonIndexForResult(result);
+  const checkedResult = reportEvidenceCheckedResult(result);
+  writeFileSync(markdownPath, generateBenchmarkReport(checkedResult), "utf8");
+  writeFileSync(jsonPath, `${JSON.stringify(summarizeBenchmarkResult(checkedResult), null, 2)}\n`, "utf8");
+  const index = comparisonIndexForResult(checkedResult);
   writeFileSync(comparisonIndexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
   writeFileSync(comparisonHtmlPath, comparisonIndexHtml(index), "utf8");
   return { markdownPath, jsonPath, comparisonIndexPath, comparisonHtmlPath };

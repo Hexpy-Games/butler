@@ -187,6 +187,8 @@ export interface M1V2RepetitionResult {
   quality: M1V2QualitySummary;
   db: M1V2DbEvidence | null;
   work: M1V2WorkEvidence;
+  targetEvidenceIdentity?: { sessionId: string; turnId: string };
+  durableEvidence?: { handle: string; sha256: string; identity: import("./m1-v2-evidence-export.ts").M1V2EvidenceExportIdentity };
 }
 
 export interface M1V2CampaignResult {

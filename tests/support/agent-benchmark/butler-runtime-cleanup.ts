@@ -36,6 +36,7 @@ export function readButlerHarnessEvidence(evidenceRoot: string): Record<string, 
 export function cleanupButlerRuntime(
   evidence: Record<string, unknown>,
   arm: Pick<BenchmarkArmPlan, "evidenceRoot" | "outputRoot" | "cacheRoot" | "dataRoot" | "sourceRoot">,
+  durableEvidenceVerified = true,
 ): ButlerRuntimeCleanupResult {
   const run = asRecord(evidence.run);
   const dataRoot = typeof run?.dataRoot === "string" ? run.dataRoot.trim() : "";
@@ -48,6 +49,7 @@ export function cleanupButlerRuntime(
   } catch {
     return cleanupResult("absent");
   }
+  if (!durableEvidenceVerified) return cleanupResult("failed");
   if (targetStat.isSymbolicLink() || !targetStat.isDirectory() || !strictlyInside(evidenceRoot, target) || hasSymlinkComponent(target)) {
     return cleanupResult("unsafe");
   }

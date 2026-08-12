@@ -79,6 +79,7 @@ test("Electron runner failure is recovered by the Butler adapter and evaluator",
       sourceEvidenceRoot: "",
       runtimeInstructions: "bounded local test",
       signal: new AbortController().signal,
+      benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: arm.evidenceRoot },
     });
     expect(result).toMatchObject({
       exitCode: null,

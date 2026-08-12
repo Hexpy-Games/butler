@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from "node:crypto";
 import {
   createServer,
   request as httpRequest,
@@ -13,6 +14,7 @@ import { pipeline, Transform } from "node:stream";
 import type {
   ElectronProviderFixture,
   ElectronProviderFixtureResponse,
+  ProviderRequestSerializerContract,
 } from "./contracts.ts";
 
 const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
@@ -49,10 +51,14 @@ export interface ProviderRequestObservation {
   requestedModel: string | null;
   requestedReasoning?: string | null;
   requestedServiceTier?: string | null;
+  requestedServiceTierMode: "auto_by_omission" | "explicit" | null;
   authorizationScheme?: string | null;
   routeId?: string | null;
   requestStartedAtMs: number;
   serializedRequestBytes: number;
+  serializedRequestDigest: string | null;
+  serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1" | null;
+  serializerContract: ProviderRequestSerializerContract | null;
   firstContentBearingDeltaAtMs: number | null;
   completedAtMs: number | null;
   terminatedAtMs: number | null;
@@ -65,6 +71,8 @@ export interface ProviderRequestObservation {
   finalTextChars: number;
   providerReportedModel: string | null;
   providerReportedServiceTier?: string | null;
+  effectiveServiceTierAvailability: "reported" | "unavailable";
+  effectiveServiceTierReason: "provider_response_reported" | "provider_response_omitted";
 }
 
 interface MutableProviderRequestObservation extends ProviderRequestObservation {}
@@ -98,8 +106,23 @@ interface ContentObservation {
 function codexResponsesUrl(baseUrl: string | undefined): URL {
   const base = (baseUrl?.trim() || DEFAULT_CODEX_BASE_URL).replace(/\/+$/u, "");
   if (base.endsWith(CODEX_RESPONSES_PATH)) return new URL(base);
+  if (base.endsWith("/v1/responses") || base.endsWith("/responses")) return new URL(base);
   if (base.endsWith("/codex")) return new URL(`${base}/responses`);
   return new URL(`${base}${CODEX_RESPONSES_PATH}`);
+}
+
+function providerRouteIdentity(
+  upstream: URL | null,
+  fixture: boolean,
+): { routeId: "openai-codex-responses" | "openai-responses"; serializerContract: ProviderRequestSerializerContract } {
+  const path = fixture ? CODEX_RESPONSES_PATH : upstream?.pathname.replace(/\/+$/u, "");
+  if (path === CODEX_RESPONSES_PATH || path?.endsWith(CODEX_RESPONSES_PATH)) {
+    return { routeId: "openai-codex-responses", serializerContract: "butler.openai-codex-final-json.v1" };
+  }
+  if (path === "/v1/responses" || path === "/responses") {
+    return { routeId: "openai-responses", serializerContract: "butler.openai-responses-final-json.v1" };
+  }
+  throw new Error("provider_serializer_route_unavailable_or_ambiguous");
 }
 
 function providerRequestKind(body: Buffer): ProviderRequestKind {
@@ -150,10 +173,14 @@ function safeObservation(
     requestedModel: observation.requestedModel,
     requestedReasoning: observation.requestedReasoning,
     requestedServiceTier: observation.requestedServiceTier,
+    requestedServiceTierMode: observation.requestedServiceTierMode,
     authorizationScheme: observation.authorizationScheme,
     routeId: observation.routeId,
     requestStartedAtMs: observation.requestStartedAtMs,
     serializedRequestBytes: observation.serializedRequestBytes,
+    serializedRequestDigest: observation.serializedRequestDigest,
+    serializedRequestDigestAlgorithm: observation.serializedRequestDigestAlgorithm,
+    serializerContract: observation.serializerContract,
     firstContentBearingDeltaAtMs:
       observation.firstContentBearingDeltaAtMs,
     completedAtMs: observation.completedAtMs,
@@ -167,6 +194,8 @@ function safeObservation(
     finalTextChars: observation.finalTextChars,
     providerReportedModel: observation.providerReportedModel,
     providerReportedServiceTier: observation.providerReportedServiceTier,
+    effectiveServiceTierAvailability: observation.effectiveServiceTierAvailability,
+    effectiveServiceTierReason: observation.effectiveServiceTierReason,
   };
 }
 
@@ -446,19 +475,13 @@ class SseObservationTransform extends Transform {
       this.#providerFailed = true;
     }
     const content = contentObservation(event);
-    if (
-      event.type === "response.completed" &&
-      event.response &&
-      typeof event.response === "object" &&
-      typeof (event.response as Record<string, unknown>).model === "string"
-    ) {
-      this.observation.providerReportedModel = String(
-        (event.response as Record<string, unknown>).model,
-      );
-      const serviceTier = (event.response as Record<string, unknown>).service_tier;
-      this.observation.providerReportedServiceTier = typeof serviceTier === "string"
-        ? serviceTier
-        : null;
+    if (event.type === "response.completed" && event.response && typeof event.response === "object") {
+      const response = event.response as Record<string, unknown>;
+      if (typeof response.model === "string") this.observation.providerReportedModel = response.model;
+      const serviceTier = response.service_tier;
+      this.observation.providerReportedServiceTier = typeof serviceTier === "string" ? serviceTier : null;
+      this.observation.effectiveServiceTierAvailability = typeof serviceTier === "string" ? "reported" : "unavailable";
+      this.observation.effectiveServiceTierReason = typeof serviceTier === "string" ? "provider_response_reported" : "provider_response_omitted";
     }
     this.observation.hasTextContent ||= content.text;
     this.observation.hasToolArgumentContent ||= content.toolArguments;
@@ -621,6 +644,7 @@ async function forwardRequest(input: {
   activeUpstreamResponses: Set<IncomingMessage>;
   isClosing: () => boolean;
   execution?: ProviderObservationProxyOptions["execution"];
+  observationDigestKey: Buffer;
 }): Promise<void> {
   const {
     request,
@@ -641,16 +665,21 @@ async function forwardRequest(input: {
     ? attemptDigest
     : null;
   observation.serializedRequestBytes = body.byteLength;
+  observation.serializedRequestDigest = createHmac("sha256", input.observationDigestKey).update(body).digest("hex");
+  observation.serializedRequestDigestAlgorithm = "hmac-sha256-observer-private-v1";
   observation.requestKind = providerRequestKind(body);
   observation.requestedModel = requestedModel(body);
   const requestIdentity = executionRequestIdentity(body);
   observation.requestedReasoning = requestIdentity.reasoning;
   observation.requestedServiceTier = requestIdentity.serviceTier;
+  observation.requestedServiceTierMode = requestIdentity.serviceTier === null ? "auto_by_omission" : "explicit";
   const authorization = request.headers.authorization;
   observation.authorizationScheme = typeof authorization === "string"
     ? authorization.split(/\s+/u, 1)[0]?.toLowerCase() ?? null
     : null;
-  observation.routeId = upstream?.pathname.includes("/codex/") ? "openai-codex-responses" : "openai-responses";
+  const route = providerRouteIdentity(upstream, Boolean(input.fixture));
+  observation.routeId = route.routeId;
+  observation.serializerContract = route.serializerContract;
   if (isClosing() || response.destroyed) {
     terminateObservation(observation, "cancelled", now);
     response.destroy();
@@ -802,6 +831,7 @@ export async function startProviderObservationProxy(
   const upstream = options.fixture ? null : codexResponsesUrl(options.upstreamBaseUrl);
   const now = options.now ?? Date.now;
   const observed: MutableProviderRequestObservation[] = [];
+  const observationDigestKey = randomBytes(32);
   const usedFixtureResponses = new Set<number>();
   const activeInboundRequests = new Set<IncomingMessage>();
   const activeDownstreamResponses = new Set<ServerResponse>();
@@ -835,10 +865,14 @@ export async function startProviderObservationProxy(
       requestedModel: null,
       requestedReasoning: null,
       requestedServiceTier: null,
+      requestedServiceTierMode: null,
       authorizationScheme: null,
       routeId: null,
       requestStartedAtMs: now(),
       serializedRequestBytes: 0,
+      serializedRequestDigest: null,
+      serializedRequestDigestAlgorithm: null,
+      serializerContract: null,
       firstContentBearingDeltaAtMs: null,
       completedAtMs: null,
       terminatedAtMs: null,
@@ -851,6 +885,8 @@ export async function startProviderObservationProxy(
       finalTextChars: 0,
       providerReportedModel: null,
       providerReportedServiceTier: null,
+      effectiveServiceTierAvailability: "unavailable",
+      effectiveServiceTierReason: "provider_response_omitted",
     };
     nextOrdinal += 1;
     observed.push(observation);
@@ -874,6 +910,7 @@ export async function startProviderObservationProxy(
       activeUpstreamResponses,
       isClosing: () => closing,
       execution: options.execution,
+      observationDigestKey,
     }).catch(() => {
       terminateObservation(
         observation,
@@ -965,9 +1002,8 @@ function enforceExecutionRequest(
   const identity = executionRequestIdentity(body);
   if (!modelMatches(execution.model, typeof parsed.model === "string" ? parsed.model : null) ||
       identity.reasoning !== execution.reasoning ||
-      (identity.serviceTier !== null && identity.serviceTier !== execution.serviceTier)) {
+      identity.serviceTier !== null) {
     throw new Error("paired_execution_request_identity_mismatch");
   }
-  parsed.service_tier = execution.serviceTier;
-  return Buffer.from(JSON.stringify(parsed), "utf8");
+  return body;
 }

@@ -44,6 +44,7 @@ test("production composition rejects an invalid prepared resource without packag
       sourceEvidenceRoot: "",
       runtimeInstructions: "unused",
       signal: new AbortController().signal,
+      benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: evidenceRoot },
     });
     expect(result).toMatchObject({
       gateCode: "measurement_unavailable",
@@ -79,6 +80,7 @@ test("renderer launch-smoke evidence bypasses turn-only M1 collection", async ()
       sourceEvidenceRoot: "",
       runtimeInstructions: "unused",
       signal: new AbortController().signal,
+      benchmarkEvidence: { planIdentity: "a".repeat(64), runRoot: root },
     });
     expect(result).toMatchObject({ exitCode: 0, gateCode: "none" });
     expect(result.m1V2Evidence).toBeUndefined();

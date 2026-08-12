@@ -241,6 +241,35 @@ stays `null` and makes token-efficiency comparison ineligible.
 accepted and total tokens are positive. Rejected, failed, timed-out, gated, or
 incompletely measured arms report `null`, not zero.
 
+For Butler M1 v2, runtime cleanup is authorized only by an immutable SC01
+projection under the arm's durable benchmark evidence root. The projection
+joins every arm-tagged canonical request envelope/segment/usage row to exact
+physical provider-request membership across all Steps. Target and other-Step
+Agent attempts remain durable, while evaluator arithmetic consumes only target
+attempts; typed non-Agent overhead stays separate. The existing provider
+observation records an observer-private random-key HMAC-SHA-256 of the exact
+unchanged final Buffer after execution-contract validation; neither body nor
+key is retained. An absent `service_tier` is recorded as typed
+`auto_by_omission`; only a provider-reported effective `default` makes that
+physical attempt ordinary-non-fast eligible. Explicit or effective non-default,
+unknown, and unavailable tiers fail closed without replacement. The serializer contract is bounded to
+`butler.openai-codex-final-json.v1` for `openai-codex-responses` and
+`butler.openai-responses-final-json.v1` for `openai-responses`. Unknown or
+ambiguous routes fail closed.
+
+The export is written to a temporary file, synced and closed, published with a
+create-only atomic operation, reopened, and verified for schema, plan/source/
+fixture/step identity, counts, content hash, exact segment-to-envelope byte sum,
+and provider-request-to-envelope byte equality before `dataRoot` cleanup.
+Failure yields `measurement_unavailable`, preserves `dataRoot`, and cannot
+authorize a post-dispatch replacement. Resume accepts only byte-identical
+evidence; temporary, stale, conflicting, or mutated exports fail closed. The
+benchmark run owns retention, exposes only a run-relative handle, and rejects
+unknown or unsafe fields rather than exporting prompts, transcripts, messages,
+tool payloads, response bodies, credentials, private paths, or hidden reasoning.
+The evaluator reopens this export and recomputes SC01 arithmetic from its rows;
+checkpoint/report summaries are derived values, never a replacement authority.
+
 ## Evaluation
 
 Evaluation is deterministic where possible and explicitly human where needed.
@@ -283,6 +312,12 @@ with its original creation time preserved. A different seed, source revision,
 fixture hash, arm path/config, or corrupt manifest/result fails closed instead
 of creating an empty replacement run. Already terminal evidence cannot be
 removed or replaced during an identity-matched resume.
+
+For SC01, a valid create-only export published before its terminal checkpoint
+is recovered as `measurement_unavailable` with `provider_dispatched` ownership,
+the same durable handle/hash, and no replacement eligibility. Consecutive
+resumes reverify it and never re-enter the adapter. A temporary, stale,
+conflicting, missing, or mutated export fails closed.
 
 - SIGINT or operator cancellation stops launching new arms, terminates the active
   child process, persists a failure-safe checkpoint, and leaves pending arms.

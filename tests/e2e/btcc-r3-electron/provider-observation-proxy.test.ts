@@ -105,6 +105,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
   const proxy = await startProviderObservationProxy({
     upstreamBaseUrl: upstream.baseUrl,
     now: () => clockValues.shift() ?? 999,
+
   });
 
   try {
@@ -147,10 +148,14 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       requestedModel: "gpt-test",
       requestedReasoning: null,
       requestedServiceTier: null,
+      requestedServiceTierMode: "auto_by_omission",
       routeId: "openai-codex-responses",
       authorizationScheme: "bearer",
       requestStartedAtMs: 100,
       serializedRequestBytes: requestBody.byteLength,
+      serializedRequestDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1",
+      serializerContract: "butler.openai-codex-final-json.v1",
       firstContentBearingDeltaAtMs: 200,
       completedAtMs: 300,
       terminatedAtMs: 300,
@@ -163,6 +168,8 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       finalTextChars: 0,
       providerReportedModel: null,
       providerReportedServiceTier: null,
+      effectiveServiceTierAvailability: "unavailable",
+      effectiveServiceTierReason: "provider_response_omitted",
     }]);
   } finally {
     releaseUpstream?.();
@@ -171,10 +178,10 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
   }
 });
 
-test("paired proxy forces ordinary tier in the actual request and rejects conflicting tier", async () => {
-  let body: Record<string, unknown> = {};
+test("paired proxy preserves service-tier omission and rejects an explicit tier", async () => {
+  let body: Record<string, unknown> = {}; let rawBody: Buffer<ArrayBufferLike> = Buffer.alloc(0);
   const upstream = await listen((request, response) => { void (async () => {
-    body = JSON.parse((await bodyOf(request)).toString("utf8")) as Record<string, unknown>;
+    rawBody = await bodyOf(request); body = JSON.parse(rawBody.toString("utf8")) as Record<string, unknown>;
     response.writeHead(200, { "content-type": "text/event-stream" });
     response.end('data: {"type":"response.completed","response":{"status":"completed","service_tier":"default"}}\n\ndata: [DONE]\n\n');
   })(); });
@@ -184,11 +191,36 @@ test("paired proxy forces ordinary tier in the actual request and rejects confli
     const valid = await fetch(proxy.endpoint, { method: "POST", headers: { authorization: "Bearer redacted", "content-type": "application/json" },
       body: JSON.stringify({ model: "gpt-5.6-sol", reasoning: { effort: "medium" } }) });
     await valid.text();
-    expect(body.service_tier).toBe("default");
-    expect(proxy.observations()[0]).toMatchObject({ requestedServiceTier: "default", requestedReasoning: "medium", authorizationScheme: "bearer" });
+    expect(body.service_tier).toBeUndefined();
+    expect(proxy.observations()[0]!.serializedRequestBytes).toBe(rawBody.byteLength);
+    expect(Buffer.byteLength(JSON.stringify({ ...body, service_tier: "default" })) - rawBody.byteLength).toBe(25);
+    expect(proxy.observations()[0]).toMatchObject({ requestedServiceTier: null, requestedServiceTierMode: "auto_by_omission", requestedReasoning: "medium", authorizationScheme: "bearer",
+      serializedRequestDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1",
+      serializerContract: "butler.openai-codex-final-json.v1", providerReportedServiceTier: "default",
+      effectiveServiceTierAvailability: "reported", effectiveServiceTierReason: "provider_response_reported" });
+    const same = await fetch(proxy.endpoint, { method: "POST", headers: { authorization: "Bearer redacted", "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.6-sol", reasoning: { effort: "medium" } }) }); await same.text();
+    expect(proxy.observations()[1]!.serializedRequestDigest).toBe(proxy.observations()[0]!.serializedRequestDigest);
     const conflict = await fetch(proxy.endpoint, { method: "POST", headers: { authorization: "Bearer redacted", "content-type": "application/json" },
       body: JSON.stringify({ model: "gpt-5.6-sol", reasoning: { effort: "medium" }, service_tier: "priority" }) });
     expect(conflict.status).toBeGreaterThanOrEqual(500);
+    expect(proxy.observations()[2]!.serializedRequestDigest).not.toBe(proxy.observations()[0]!.serializedRequestDigest);
+  } finally { await proxy.close(); await upstream.close(); }
+});
+
+test("provider observation binds the direct Responses route to its exact final serializer", async () => {
+  const upstream = await listen((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end("{}");
+  });
+  const proxy = await startProviderObservationProxy({ upstreamBaseUrl: `${upstream.baseUrl}/v1/responses` });
+  try {
+    await (await fetch(proxy.endpoint, { method: "POST", body: JSON.stringify({ model: "gpt-test" }) })).text();
+    expect(proxy.observations()[0]).toMatchObject({
+      routeId: "openai-responses",
+      serializerContract: "butler.openai-responses-final-json.v1",
+    });
   } finally { await proxy.close(); await upstream.close(); }
 });
 
