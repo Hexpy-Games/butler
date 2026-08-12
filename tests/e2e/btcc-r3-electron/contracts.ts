@@ -135,6 +135,12 @@ export interface ElectronHarnessOptions {
   keepLogs?: boolean;
   /** Optional stable provider prompt-cache namespace for paired benchmark arms. */
   promptCacheKeyPrefix?: string;
+  pairedExecution?: {
+    model: string;
+    reasoning: string;
+    serviceTier: "default";
+    authMode: "oauth" | "api_key" | "managed";
+  };
 }
 
 export interface PreparedRun {

@@ -93,6 +93,7 @@ export async function runBtccR3ElectronHarness(
     providerProxy = await startProviderObservationProxy({
       upstreamBaseUrl: process.env.BUTLER_CODEX_BASE_URL,
       fixture: scenario.providerFixture,
+      execution: options.pairedExecution,
     });
     launch = await launchProduct(run, providerProxy.endpoint);
     launches.push({

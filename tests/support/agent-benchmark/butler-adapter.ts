@@ -138,6 +138,7 @@ export function createElectronButlerRunner(
   options: {
     rendererStartSmoke?: boolean;
     pairedPreparedButlerResources?: Readonly<Record<"before" | "after", PreparedButlerResourceReference>>;
+    pairedExecution?: import("./paired-contract.ts").PairedExecutionContract;
   } = {},
 ): ButlerBenchmarkRunner {
   return (input): Promise<Record<string, unknown>> => withPreparedButlerResource({
@@ -187,6 +188,12 @@ export function createElectronButlerRunner(
         smoke: options.rendererStartSmoke === true,
         ...preparedResourceOptions,
         promptCacheKeyPrefix: promptCacheKeyPrefixForPair(input.arm.cachePairId),
+        ...(input.arm.version && options.pairedExecution ? { pairedExecution: {
+          model: options.pairedExecution.model,
+          reasoning: options.pairedExecution.reasoning,
+          serviceTier: options.pairedExecution.serviceTier,
+          authMode: options.pairedExecution.authMode,
+        } } : {}),
       }));
     });
 }
@@ -263,6 +270,16 @@ function parseButlerEvidence(
         typeof request.providerReportedServiceTier === "string"
           ? request.providerReportedServiceTier
           : null),
+      requestServiceTiers: providerRequests.map((request) =>
+        typeof request.requestedServiceTier === "string" ? request.requestedServiceTier : null),
+      requestModels: providerRequests.map((request) =>
+        typeof request.requestedModel === "string" ? normalizeObservedModel(request.requestedModel, input.arm.effectiveConfig.model) : null),
+      requestReasoning: providerRequests.map((request) =>
+        typeof request.requestedReasoning === "string" ? request.requestedReasoning : null),
+      enforcedAuthModes: providerRequests.map((request) =>
+        typeof request.enforcedAuthMode === "string" ? request.enforcedAuthMode : null),
+      authorizationSchemes: providerRequests.map((request) =>
+        typeof request.authorizationScheme === "string" ? request.authorizationScheme : null),
     } } : {}),
     usage: {
       inputTokens: usage.promptTokens,

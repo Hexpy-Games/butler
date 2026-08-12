@@ -9,7 +9,7 @@ import type {
 import { sanitizeIdentifier } from "./identifiers.ts";
 import type { M1V2CampaignResult } from "./m1-v2-types.ts";
 import { m1V2ReportLines, summarizeM1V2Campaign } from "./m1-v2-report.ts";
-import { summarizePairedBenchmarkResult } from "./paired-evaluation.ts";
+import { comparisonIndexForResult, comparisonIndexHtml, summarizePairedBenchmarkResult } from "./paired-evaluation.ts";
 
 export interface BenchmarkReportSummary {
   runId: string;
@@ -262,13 +262,18 @@ function rankingInterpretation(summary: BenchmarkReportSummary): string {
 export function writeBenchmarkReport(
   result: BenchmarkResultFile,
   outputDirectory: string,
-): { markdownPath: string; jsonPath: string } {
+): { markdownPath: string; jsonPath: string; comparisonIndexPath: string; comparisonHtmlPath: string } {
   mkdirSync(outputDirectory, { recursive: true });
   const markdownPath = join(outputDirectory, "agent-benchmark-report.md");
   const jsonPath = join(outputDirectory, "agent-benchmark-summary.json");
+  const comparisonIndexPath = join(outputDirectory, "comparison-index.json");
+  const comparisonHtmlPath = join(outputDirectory, "comparison-index.html");
   writeFileSync(markdownPath, generateBenchmarkReport(result), "utf8");
   writeFileSync(jsonPath, `${JSON.stringify(summarizeBenchmarkResult(result), null, 2)}\n`, "utf8");
-  return { markdownPath, jsonPath };
+  const index = comparisonIndexForResult(result);
+  writeFileSync(comparisonIndexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+  writeFileSync(comparisonHtmlPath, comparisonIndexHtml(index), "utf8");
+  return { markdownPath, jsonPath, comparisonIndexPath, comparisonHtmlPath };
 }
 
 function median(values: readonly (number | null)[]): number | null {

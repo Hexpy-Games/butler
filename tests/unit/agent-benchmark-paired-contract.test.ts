@@ -2,32 +2,37 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import {
-  aggregatePairedMetrics,
-  comparisonIndexHtml,
-  corroborateExecution,
   createBenchmarkPlan,
-  createComparisonIndex,
   createFileCheckpointStore,
-  createPairedCampaignContract,
-  pairEligibility,
-  replacementEligibility,
-  requireAvailableProviderAuth,
   runAgentBenchmark,
   runAgentBenchmarkCli,
   summarizeBenchmarkResult,
+  writeBenchmarkReport,
 } from "../support/agent-benchmark/index.ts";
 import {
+  corroborateExecution,
+  createPairedCampaignContract,
   FINAL_AFTER_REVISION,
   FINAL_BEFORE_REVISION,
+  replacementEligibility,
+  requireAvailableProviderAuth,
+  validatePairedCampaignContract,
 } from "../support/agent-benchmark/paired-contract.ts";
+import {
+  aggregatePairedMetrics,
+  comparisonIndexForResult,
+  comparisonIndexHtml,
+  pairEligibility,
+} from "../support/agent-benchmark/paired-evaluation.ts";
 import { hashBenchmarkFixture, loadM1V2BenchmarkFixtures } from "../support/agent-benchmark/fixtures.ts";
 import type { PreparedButlerResourceReference } from "../support/agent-benchmark/prepared-butler-resource.ts";
 import type { AgentAdapter } from "../support/agent-benchmark/contracts.ts";
 import { createGatedBenchmarkObservation, resumeOrInitialize } from "../support/agent-benchmark/checkpoint.ts";
 import { prepareTestHarnessAuthority } from "./support/m1-v2-provenance-authority.ts";
 
-const root = mkdtempSync(join(tmpdir(), "agent-benchmark-paired-contract-"));
+const root = mkdtempSync(join(process.cwd(), ".agent-benchmark-paired-contract-"));
 const authority = prepareTestHarnessAuthority(root);
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -64,18 +69,26 @@ describe("final paired M1 campaign contract", () => {
     expect(plan.arms).toHaveLength(24);
     expect(plan.arms.map((arm) => arm.key)).toEqual(contract.steps.map((step) => step.key));
     expect(plan.arms.every((arm, index) => arm.sourceRevision === contract.steps[index]!.source.revision)).toBe(true);
+
+    const forged = structuredClone(contract);
+    forged.steps = forged.steps.map((step) => ({
+      ...step, fixture: "direct-cold", fixtureSha256: forged.fixtureHashes["direct-cold"],
+    }));
+    const { identity: _identity, ...stable } = forged;
+    forged.identity = createHash("sha256").update(JSON.stringify(stable)).digest("hex");
+    expect(() => validatePairedCampaignContract(forged)).toThrow("identity mismatch");
   });
 
   test("fails closed for stale or cross-version prepared pins", () => {
     expect(() => createPairedCampaignContract({
       before: sourcePin("before", FINAL_BEFORE_REVISION, "1"),
       after: sourcePin("after", FINAL_AFTER_REVISION, "1"),
-      execution: execution(), fixtureHashes: fixtureHashes(),
+      execution: execution(), fixtureHashes: fixtureHashes(), provenance: verifyProvenance(),
     })).toThrow("distinct");
     expect(() => createPairedCampaignContract({
       before: { ...sourcePin("before", FINAL_BEFORE_REVISION, "1"), preparedResource: pin(FINAL_AFTER_REVISION, "1") },
       after: sourcePin("after", FINAL_AFTER_REVISION, "2"),
-      execution: execution(), fixtureHashes: fixtureHashes(),
+      execution: execution(), fixtureHashes: fixtureHashes(), provenance: verifyProvenance(),
     })).toThrow("before source/prepared-resource pin mismatch");
   });
 
@@ -142,6 +155,9 @@ describe("final paired M1 campaign contract", () => {
     expect(completed.result.observations).toHaveLength(24);
     expect(completed.result.observations.every((row) => row.gateCode === "configuration_unverifiable")).toBe(true);
     expect(summarizeBenchmarkResult(completed.result).pairedCampaign?.acceptance.complete).toBe(false);
+    const report = writeBenchmarkReport(completed.result, join(plan.runRoot, "report"));
+    expect(readFileSync(report.comparisonIndexPath, "utf8")).toContain('"status": "unranked"');
+    expect(readFileSync(report.comparisonHtmlPath, "utf8")).toContain("paired_incomplete_or_rejected");
 
     const replacementPlan = createBenchmarkPlan({
       campaign: "m1-v2-paired", runId: "paired-replacement", seed: 1,
@@ -193,32 +209,26 @@ describe("final paired M1 campaign contract", () => {
       expect(pairEligibility({ before, after: { ...after, [field]: "changed" } })).toEqual({ status: "rejected", reason });
     }
     expect(pairEligibility({ before, after: { ...after, retryOrdinal: 1 } })).toEqual({ status: "rejected", reason: "retry_contaminated" });
-    expect(replacementEligibility({ providerDispatchStarted: false, providerOutputObserved: false }).allowed).toBe(true);
-    expect(replacementEligibility({ providerDispatchStarted: true, providerOutputObserved: false }).allowed).toBe(false);
+    expect(replacementEligibility({ providerDispatchState: "not_dispatched", infrastructureGateStage: "pre_adapter" }).allowed).toBe(true);
+    expect(replacementEligibility({ providerDispatchState: "adapter_entered", infrastructureGateStage: null }).allowed).toBe(false);
+    expect(replacementEligibility({ providerDispatchState: "provider_output_observed", infrastructureGateStage: null }).allowed).toBe(false);
   });
 
   test("reports per-arm/overall paired deltas, nullable usage, and historical unranked index", () => {
-    const rows = (["direct-cold", "direct-warm", "current-web-cold", "landing-cold"] as const).flatMap((fixture, index) => [
-      { pairId: `${fixture}:1`, fixture, version: "before" as const, eligibility: "eligible" as const, providerSendBytes: 100 + index, physicalRequests: 10, semanticRounds: 8, toolCalls: 4, elapsedMs: 1000, firstUsefulMs: 100, usage: null, qualityPassed: true },
-      { pairId: `${fixture}:1`, fixture, version: "after" as const, eligibility: "eligible" as const, providerSendBytes: 60 + index, physicalRequests: 6, semanticRounds: 5, toolCalls: 4, elapsedMs: 750, firstUsefulMs: 80, usage: null, qualityPassed: true },
-    ]);
+    const usage = { promptTokens: null, cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null, reasoningTokens: null, totalTokens: null };
+    const rows = (["direct-cold", "direct-warm", "current-web-cold", "landing-cold"] as const).flatMap((fixture, index) => [1, 2, 3].flatMap((repetition) => [
+      { pairId: `${fixture}:${repetition}`, fixture, version: "before" as const, identity: comparable(FINAL_BEFORE_REVISION), providerSendBytes: 100 + index, physicalRequests: 10, modelRounds: 8, toolCalls: 4, elapsedMs: 1000, firstUsefulMs: 100, usage, segments: {}, qualityPassed: true },
+      { pairId: `${fixture}:${repetition}`, fixture, version: "after" as const, identity: comparable(FINAL_AFTER_REVISION), providerSendBytes: 60 + index, physicalRequests: 6, modelRounds: 5, toolCalls: 4, elapsedMs: 750, firstUsefulMs: 80, usage, segments: {}, qualityPassed: true },
+    ]));
     const aggregate = aggregatePairedMetrics(rows);
     expect(aggregate.byArm["direct-cold"].providerSendBytes.ratio.median).toBe(-0.4);
-    expect(aggregate.overall.pairs).toBe(4);
-    expect(aggregate.overall.totalProviderSendBytes).toMatchObject({ before: 406, after: 246, absolute: -160 });
-    expect(aggregate.overall.usage.ratio.median).toBeNull();
+    expect(aggregate.overall.pairs).toBe(12);
+    expect(aggregate.overall.providerSendBytes.total).toMatchObject({ before: 1218, after: 738, delta: -480 });
+    expect(aggregate.overall.usage.totalTokens.total.ratio).toBeNull();
     expect(aggregate.overall.qualityPassed).toBe(true);
 
-    const index = createComparisonIndex({
-      paired: { providerSendBytes: 60 },
-      historical: [
-        { id: "hermes", reason: "frozen_historical", metrics: { providerSendBytes: null } },
-        { id: "opencode", reason: "rejected_historical", metrics: { providerSendBytes: null } },
-        { id: "historical-butler", reason: "provenance_only", metrics: { providerSendBytes: 100 } },
-      ],
-    });
-    expect(index.slice(0, 3).every((entry) => entry.status === "unranked")).toBe(true);
-    expect(comparisonIndexHtml(index)).toContain("rejected_historical");
+    expect(aggregate.complete).toBe(true);
+    expect(aggregate.byArm["landing-cold"].pairs).toBe(3);
   });
 });
 
@@ -227,7 +237,18 @@ function pairedContract() {
     before: sourcePin("before", FINAL_BEFORE_REVISION, "1"),
     after: sourcePin("after", FINAL_AFTER_REVISION, "2"),
     execution: execution(), fixtureHashes: fixtureHashes(),
+    provenance: verifyProvenance(),
   });
+}
+
+function verifyProvenance() {
+  return JSON.parse(JSON.stringify(createBenchmarkPlan({
+    campaign: "m1-v2", runId: "provenance-only", seed: 1,
+    runRoot: join(root, "provenance-run"), sourceRoot: process.cwd(),
+    harnessRoot: authority.harnessRoot, provenanceJsonlPath: authority.jsonlPath,
+    baselineSha: "a".repeat(40), controlledModel: "openai/gpt-5.6-sol",
+    controlledReasoning: "medium",
+  }).provenance!));
 }
 
 function fixtureHashes() {

@@ -23,7 +23,8 @@ import { landingClaimMatches } from "./landing-evaluator.ts";
 import { sanitizeEffectiveConfig } from "./identifiers.ts";
 import { directConversationClaimMatches } from "./direct-evaluator.ts";
 import { evaluateM1V2AdapterEvidence } from "./m1-v2-adapter-evaluation.ts";
-import { corroborateExecution } from "./paired-contract.ts";
+import { corroboratePairedRequestEvidence } from "./paired-contract.ts";
+import { comparableIdentityForArm } from "./paired-evaluation.ts";
 
 export { evaluateWebResearch } from "./web-evaluator.ts";
 
@@ -53,21 +54,9 @@ export function evaluateAdapterResult(
   if (arm.version) {
     try {
       const evidence = result.pairedExecutionEvidence;
-      if (!evidence || evidence.providerServiceTiers.length === 0 ||
-          evidence.providerServiceTiers.some((tier) => tier !== "default")) {
-        throw new Error("provider_service_tier_unavailable_or_mismatch");
-      }
-      corroborateExecution({
-        preregistered: {
-          provider: "openai", authMode: "managed", model: "openai/gpt-5.6-sol",
-          reasoning: "medium", executionMode: "ordinary_non_fast",
-          serviceTier: "default", requestOption: { service_tier: "default" },
-        },
-        observed: {
-          provider: evidence.provider, model: evidence.model,
-          reasoning: evidence.reasoning, serviceTier: evidence.providerServiceTiers[0],
-        },
-      });
+      const preregistered = arm.pairedExecution;
+      if (!preregistered) throw new Error("paired_execution_preregistration_missing");
+      corroboratePairedRequestEvidence(preregistered, evidence);
     } catch (error) {
       diagnostics.push(error instanceof Error ? error.message : String(error));
       terminalState = "rejected";
@@ -106,6 +95,11 @@ export function evaluateAdapterResult(
     changedPaths: result.changedPaths,
     diagnostics: diagnostics.map((value) => boundedText(value)).slice(-8),
     evidenceRefs: safeEvidenceRefs(result.evidenceRefs),
+    providerDispatchState: result.pairedExecutionEvidence?.providerServiceTiers.length
+      ? (result.finalText ? "provider_output_observed" : "provider_dispatched")
+      : "adapter_entered",
+    infrastructureGateStage: null,
+    pairedComparableIdentity: comparableIdentityForArm(arm, m1V2),
     m1V2,
   };
 }
@@ -207,8 +201,6 @@ function evaluateFixture(
     evidenceRefs: safeEvidenceRefs(result.evidenceRefs),
   };
 }
-
-
 function evaluatePrivacy(
   result: AdapterRunResult,
   arm: BenchmarkArmPlan,
@@ -290,7 +282,6 @@ function normalizeOperations(operations: Partial<OperationMetrics>): OperationMe
     },
   };
 }
-
 function pathEscapes(root: string, paths: readonly string[]): boolean {
   return paths.some((path) => {
     const absolute = isAbsolute(path) ? resolve(path) : resolve(root, path);
@@ -298,7 +289,6 @@ function pathEscapes(root: string, paths: readonly string[]): boolean {
     return rel === ".." || rel.startsWith("../") || isAbsolute(rel);
   });
 }
-
 function privacyViolation(privacy: PrivacyMetrics): boolean {
   return privacy.credentialLeak || privacy.rawToolPayloadLeak || privacy.privatePathLeak || privacy.hiddenReasoningLeak;
 }

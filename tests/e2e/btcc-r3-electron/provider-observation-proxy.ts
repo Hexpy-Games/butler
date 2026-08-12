@@ -47,6 +47,10 @@ export interface ProviderRequestObservation {
   attemptDigest: string | null;
   requestKind: ProviderRequestKind;
   requestedModel: string | null;
+  requestedReasoning?: string | null;
+  requestedServiceTier?: string | null;
+  authorizationScheme?: string | null;
+  enforcedAuthMode?: "oauth" | "api_key" | "managed" | null;
   requestStartedAtMs: number;
   serializedRequestBytes: number;
   firstContentBearingDeltaAtMs: number | null;
@@ -75,6 +79,12 @@ export interface ProviderObservationProxyOptions {
   upstreamBaseUrl?: string;
   now?: () => number;
   fixture?: ElectronProviderFixture;
+  execution?: {
+    model: string;
+    reasoning: string;
+    serviceTier: "default";
+    authMode: "oauth" | "api_key" | "managed";
+  };
 }
 
 interface ContentObservation {
@@ -139,6 +149,10 @@ function safeObservation(
     attemptDigest: observation.attemptDigest,
     requestKind: observation.requestKind,
     requestedModel: observation.requestedModel,
+    requestedReasoning: observation.requestedReasoning,
+    requestedServiceTier: observation.requestedServiceTier,
+    authorizationScheme: observation.authorizationScheme,
+    enforcedAuthMode: observation.enforcedAuthMode,
     requestStartedAtMs: observation.requestStartedAtMs,
     serializedRequestBytes: observation.serializedRequestBytes,
     firstContentBearingDeltaAtMs:
@@ -607,6 +621,7 @@ async function forwardRequest(input: {
   activeUpstreamRequests: Set<ClientRequest>;
   activeUpstreamResponses: Set<IncomingMessage>;
   isClosing: () => boolean;
+  execution?: ProviderObservationProxyOptions["execution"];
 }): Promise<void> {
   const {
     request,
@@ -618,7 +633,8 @@ async function forwardRequest(input: {
     activeUpstreamResponses,
     isClosing,
   } = input;
-  const body = await readRequestBody(request);
+  const originalBody = await readRequestBody(request);
+  const body = enforceExecutionRequest(originalBody, input.execution);
   const attemptHeader = request.headers[M1_PHYSICAL_ATTEMPT_HEADER];
   const attemptDigest = Array.isArray(attemptHeader) ? attemptHeader[0] : attemptHeader;
   observation.attemptDigest = typeof attemptDigest === "string" &&
@@ -628,6 +644,14 @@ async function forwardRequest(input: {
   observation.serializedRequestBytes = body.byteLength;
   observation.requestKind = providerRequestKind(body);
   observation.requestedModel = requestedModel(body);
+  const requestIdentity = executionRequestIdentity(body);
+  observation.requestedReasoning = requestIdentity.reasoning;
+  observation.requestedServiceTier = requestIdentity.serviceTier;
+  const authorization = request.headers.authorization;
+  observation.authorizationScheme = typeof authorization === "string"
+    ? authorization.split(/\s+/u, 1)[0]?.toLowerCase() ?? null
+    : null;
+  observation.enforcedAuthMode = input.execution?.authMode ?? null;
   if (isClosing() || response.destroyed) {
     terminateObservation(observation, "cancelled", now);
     response.destroy();
@@ -810,6 +834,10 @@ export async function startProviderObservationProxy(
       attemptDigest: null,
       requestKind: "auxiliary",
       requestedModel: null,
+      requestedReasoning: null,
+      requestedServiceTier: null,
+      authorizationScheme: null,
+      enforcedAuthMode: null,
       requestStartedAtMs: now(),
       serializedRequestBytes: 0,
       firstContentBearingDeltaAtMs: null,
@@ -846,6 +874,7 @@ export async function startProviderObservationProxy(
       activeUpstreamRequests,
       activeUpstreamResponses,
       isClosing: () => closing,
+      execution: options.execution,
     }).catch(() => {
       terminateObservation(
         observation,
@@ -906,4 +935,40 @@ export async function startProviderObservationProxy(
       return observed.map(safeObservation);
     },
   };
+}
+
+function executionRequestIdentity(body: Buffer): { reasoning: string | null; serviceTier: string | null } {
+  try {
+    const parsed = JSON.parse(body.toString("utf8")) as Record<string, unknown>;
+    const reasoning = parsed.reasoning && typeof parsed.reasoning === "object"
+      ? (parsed.reasoning as Record<string, unknown>).effort
+      : null;
+    return {
+      reasoning: typeof reasoning === "string" ? reasoning : null,
+      serviceTier: typeof parsed.service_tier === "string" ? parsed.service_tier : null,
+    };
+  } catch {
+    return { reasoning: null, serviceTier: null };
+  }
+}
+
+function enforceExecutionRequest(
+  body: Buffer,
+  execution: ProviderObservationProxyOptions["execution"],
+): Buffer {
+  if (!execution) return body;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(body.toString("utf8")) as Record<string, unknown>;
+  } catch {
+    throw new Error("paired_execution_request_invalid");
+  }
+  const identity = executionRequestIdentity(body);
+  if (!modelMatches(execution.model, typeof parsed.model === "string" ? parsed.model : null) ||
+      identity.reasoning !== execution.reasoning ||
+      (identity.serviceTier !== null && identity.serviceTier !== execution.serviceTier)) {
+    throw new Error("paired_execution_request_identity_mismatch");
+  }
+  parsed.service_tier = execution.serviceTier;
+  return Buffer.from(JSON.stringify(parsed), "utf8");
 }
