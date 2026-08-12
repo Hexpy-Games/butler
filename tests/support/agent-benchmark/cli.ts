@@ -56,10 +56,12 @@ export async function runAgentBenchmarkCli(argv: readonly string[], composition:
   createAdapters?: typeof createProductionAgentAdapters;
   landingValidator?: typeof validateLandingWorkspace;
   preflightExecutor?: CommandExecutor;
+  preflightEnvironment?: NodeJS.ProcessEnv;
 } = {}): Promise<string> {
   const options = parseOptions(argv);
   const authReceipt = options.campaign === "m1-v2-paired"
-    ? await observeProviderAuthPreflight(composition.preflightExecutor ?? createProcessExecutor(), options.sourceRoot) : null;
+    ? await observeProviderAuthPreflight(composition.preflightExecutor ?? createProcessExecutor(), options.sourceRoot,
+        composition.preflightEnvironment ?? process.env) : null;
   const pairedExecution = options.campaign === "m1-v2-paired"
     ? requireAvailableProviderAuth(authReceipt!)
     : null;

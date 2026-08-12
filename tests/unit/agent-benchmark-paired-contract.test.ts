@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -126,13 +126,43 @@ describe("final paired M1 campaign contract", () => {
     expect(readFileSync(join(runRoot, "manifest.json"), "utf8")).toBe(manifest);
     expect(manifest).not.toContain("secret-token");
     expect(manifest).not.toContain("/private/path");
+    expect(executor.requests).toHaveLength(4);
+    expect(executor.requests.every((request) => request.executable.startsWith("/") &&
+      request.env.PATH === process.env.PATH && request.env.HOME === process.env.HOME &&
+      !("SECRET_TOKEN" in request.env))).toBe(true);
     await expect(runAgentBenchmarkCli(cliArgs(join(root, "missing-command-run"), files), {
       preflightExecutor: { async execute() { throw new Error("ENOENT /private/path secret-token"); } },
     })).rejects.toThrow("measurement_unavailable");
     expect(existsSync(join(root, "missing-command-run", "manifest.json"))).toBe(false);
     expect(() => validateProviderAuthPreflight({ ...authReceipt(), secret: "secret-token" } as never))
       .toThrow("non-allowlisted");
+    expect(() => validateProviderAuthPreflight({ ...authReceipt(), observedProductAuthMode: "codex_subscription",
+      observedProductAuthSource: "CODEX_AUTH_JSON" } as never)).toThrow("invalid");
+    await expect(runAgentBenchmarkCli(cliArgs(join(root, "api-key-run"), files), {
+      preflightExecutor: authExecutor(true, "api_key"),
+    })).rejects.toThrow("measurement_unavailable");
+    expect(existsSync(join(root, "api-key-run", "manifest.json"))).toBe(false);
   });
+
+  test("runs the real provider-free Butler auth/model CLI through the public paired CLI", async () => {
+    const butlerData = join(root, "actual-cli-data"), beforeRoot = join(root, "actual-cli-before"),
+      afterRoot = join(root, "actual-cli-after"), runRoot = join(root, "actual-cli-run");
+    mkdirSync(join(butlerData, "auth"), { recursive: true });
+    mkdirSync(beforeRoot, { recursive: true });
+    mkdirSync(afterRoot, { recursive: true });
+    writeFileSync(join(butlerData, "auth", "openai-codex.json"), "{}\n");
+    const files = writeCliInputs("actual-cli");
+    const args = cliArgs(runRoot, files).map((value) => value === join(root, "private-before-source") ? beforeRoot :
+      value === join(root, "private-after-source") ? afterRoot : value);
+    const output = JSON.parse(await runAgentBenchmarkCli(args, { preflightEnvironment: {
+      PATH: process.env.PATH, HOME: process.env.HOME, BUTLER_DATA: butlerData, SECRET_TOKEN: "must-not-propagate",
+    } })) as { arms: number };
+    expect(output.arms).toBe(24);
+    const manifest = readFileSync(join(runRoot, "manifest.json"), "utf8");
+    expect(manifest).toContain('"observedProductAuthMode": "codex_subscription"');
+    expect(manifest).toContain('"observedProductAuthSource": "BUTLER_CODEX_AUTH_PROFILE"');
+    expect(manifest).not.toContain("must-not-propagate");
+  }, 15_000);
 
   test("uses the public workflow checkpoint and report path without dispatch when source is unavailable", async () => {
     const contract = pairedContract();
@@ -226,6 +256,13 @@ describe("final paired M1 campaign contract", () => {
       Object.keys(attempt).includes("modelRef") && Object.keys(attempt).includes("cacheBoundaryRevision") &&
       Object.keys(attempt).includes("retryOrdinal") && Object.keys(attempt).includes("eligibility") &&
       !("reasoning" in attempt) && !("route" in attempt) && !("authMode" in attempt) && !("fixture" in attempt))).toBe(true);
+    expect(frozenAttempts.every((attempt) => attempt.providerId === "openai-codex" &&
+      attempt.eligibility === "usage_unavailable" && attempt.responseUsageStatus === "unavailable")).toBe(true);
+    expect(duplicated.observations.every((row) => row.terminalState === "accepted" &&
+      row.pairedComparableIdentity?.provider === "openai" &&
+      row.pairedComparableIdentity.providerTransport === "openai-codex" &&
+      row.pairedComparableIdentity.route === "openai-codex-responses" &&
+      row.pairedComparableIdentity.usageAvailability === "unavailable")).toBe(true);
     duplicated.observations.push(structuredClone(duplicated.observations[0]!));
     expect(summarizeBenchmarkResult(duplicated).pairedCampaign?.acceptance.complete).toBe(false);
     expect(comparisonIndexForResult(duplicated).find((entry) => entry.id === "paired-butler")?.status).toBe("unranked");
@@ -243,7 +280,7 @@ describe("final paired M1 campaign contract", () => {
   test("corroborates ordinary non-fast medium and rejects fast/service-tier drift", () => {
     const preregistered = requireAvailableProviderAuth({
       schema: "butler.provider-auth-preflight-receipt.v1", authority: "butler_auth_status_and_model_catalog",
-      provider: "openai", authMode: "managed", observedProductAuthMode: "codex_oauth", model: "openai/gpt-5.6-sol",
+      provider: "openai", authMode: "managed", observedProductAuthMode: "codex_oauth", observedProductAuthSource: "CODEX_AUTH_JSON", model: "openai/gpt-5.6-sol",
       reasoning: "medium", executionMode: "ordinary_non_fast",
       modelCallability: "available", configured: true,
     });
@@ -275,11 +312,16 @@ describe("final paired M1 campaign contract", () => {
       provenanceJsonlPath: authority.jsonlPath, baselineSha: FINAL_AFTER_REVISION, controlledModel: "openai/gpt-5.6-sol",
       controlledReasoning: "medium", pairedCampaign: pairedContract(), pairedRuntimeSources: {
         before: join(root, "identity-before"), after: join(root, "identity-after") } }).arms[0]!;
-    const runtime = { reasoning: "medium", route: "openai-responses", provider: "openai", model: "openai/gpt-5.6-sol", authMode: "managed", executionMode: "ordinary_non_fast" };
+    const runtime = { reasoning: "medium", route: "openai-codex-responses", provider: "openai", model: "openai/gpt-5.6-sol", authMode: "managed", executionMode: "ordinary_non_fast" };
     const observed = comparableIdentityForArm(arm, { agentAttempts: [{ eligibility: "cache_mismatch", retryOrdinal: 0,
-      sourceRevision: arm.sourceRevision, modelRef: "openai/gpt-5.6-sol", providerId: "openai", cacheBoundaryRevision: "cache-v1" }] } as never, runtime);
+      sourceRevision: arm.sourceRevision, modelRef: "openai/gpt-5.6-sol", providerId: "openai-codex", cacheBoundaryRevision: "cache-v1",
+      responseUsageStatus: "unavailable" }] } as never, runtime);
     expect(observed?.cache).toBe("cache_mismatch:cache-v1");
-    expect(comparableIdentityForArm(arm, { agentAttempts: [{ ...observedAttempt(arm), providerId: "drift" }, observedAttempt(arm)] } as never, runtime)?.provider).toBe("observed_conflict:providerId");
+    expect(comparableIdentityForArm(arm, { agentAttempts: [{ ...observedAttempt(arm), providerId: "drift" }, observedAttempt(arm)] } as never, runtime)?.providerTransport).toBe("observed_conflict:providerId");
+    expect(comparableIdentityForArm(arm, { agentAttempts: [
+      { ...observedAttempt(arm), eligibility: "cache_mismatch" },
+      { ...observedAttempt(arm), eligibility: "route_ineligible" },
+    ] } as never, runtime)?.cache).toBe("rejected:cache-v1");
   });
 
   test("rejects forged provenance and non-prefix or duplicate checkpoint observations", () => {
@@ -364,7 +406,8 @@ function execution() {
 
 function authReceipt() { return { schema: "butler.provider-auth-preflight-receipt.v1" as const,
   authority: "butler_auth_status_and_model_catalog" as const, provider: "openai" as const, authMode: "managed" as const,
-  observedProductAuthMode: "codex_oauth" as const, model: "openai/gpt-5.6-sol" as const, reasoning: "medium" as const,
+  observedProductAuthMode: "codex_oauth" as const, observedProductAuthSource: "CODEX_AUTH_JSON" as const,
+  model: "openai/gpt-5.6-sol" as const, reasoning: "medium" as const,
   executionMode: "ordinary_non_fast" as const, modelCallability: "available" as const, configured: true }; }
 
 function sourcePin(version: "before" | "after", revision: string, fill: string) {
@@ -391,21 +434,29 @@ function cliArgs(runRoot: string, files: { before: string; after: string }): str
   return ["plan", "--campaign", "m1-v2-paired", "--seed", "20260813", "--run-id", "paired-cli", "--run-root", runRoot, "--output", join(runRoot, "report"), "--harness-root", authority.harnessRoot, "--provenance-jsonl", authority.jsonlPath, "--controlled-model", "openai/gpt-5.6-sol", "--controlled-reasoning", "medium", "--source-revision", FINAL_AFTER_REVISION, "--repetitions", "3", "--before-source-root", join(root, "private-before-source"), "--after-source-root", join(root, "private-after-source"), "--before-prepared-butler-resource-pin", files.before, "--after-prepared-butler-resource-pin", files.after];
 }
 
-function authExecutor(configured: boolean): CommandExecutor { return { async execute(request) {
+function authExecutor(configured: boolean, mode: "codex_oauth" | "codex_subscription" | "api_key" = "codex_oauth"):
+CommandExecutor & { requests: import("../support/agent-benchmark/command.ts").CommandRequest[] } {
+  const requests: import("../support/agent-benchmark/command.ts").CommandRequest[] = [];
+  return { requests, async execute(request) { requests.push(request);
   const auth = request.args[0] === "auth";
-  const data = auth ? { configured, mode: configured ? "codex_oauth" : "missing", source: configured ? "CODEX_AUTH_JSON" : null,
+  const source = mode === "codex_oauth" ? "CODEX_AUTH_JSON" : mode === "codex_subscription" ? "BUTLER_CODEX_AUTH_PROFILE" : "OPENAI_API_KEY";
+  const data = auth ? { configured, mode: configured ? mode : "missing", source: configured ? source : null,
     redacted: true, ignoredSecret: "secret-token", ignoredPath: "/private/path" } : { source: "bundled-catalog", models: ["openai/gpt-5.6-sol"] };
   return { exitCode: 0, stdout: JSON.stringify({ ok: true, command: auth ? "butler auth status" : "butler model list", data }),
     stderr: "", startedAtMs: 1, endedAtMs: 2, firstOutputAtMs: 1, outputComplete: true, timedOut: false, cancelled: false } satisfies CommandResult;
-} }; }
+  } };
+}
 
 function comparable(sourceRevision: string) {
-  return { fixture: "direct-cold", sourceRevision, model: "openai/gpt-5.6-sol", reasoning: "medium", executionMode: "ordinary_non_fast", provider: "openai", authMode: "managed", cache: "eligible", route: "openai-responses", retryOrdinal: 0 };
+  return { fixture: "direct-cold", sourceRevision, model: "openai/gpt-5.6-sol", reasoning: "medium", executionMode: "ordinary_non_fast",
+    provider: "openai", providerTransport: "openai-codex", authMode: "managed", cache: "eligible",
+    route: "openai-codex-responses", retryOrdinal: 0, usageAvailability: "unavailable" as const };
 }
 
 function observedAttempt(arm: import("../support/agent-benchmark/contracts.ts").BenchmarkArmPlan) { return {
   eligibility: "eligible", retryOrdinal: 0, sourceRevision: arm.sourceRevision,
-  modelRef: "openai/gpt-5.6-sol", providerId: "openai", cacheBoundaryRevision: "cache-v1",
+  modelRef: "openai/gpt-5.6-sol", providerId: "openai-codex", cacheBoundaryRevision: "cache-v1",
+  responseUsageStatus: "unavailable" as const,
 }; }
 
 function unavailableGate() { return { available: false, executable: null, version: null, authenticated: true,
@@ -438,8 +489,8 @@ function completeFakeResult(input: AdapterRunInput): AdapterRunResult {
     ts: now + 50, category: "context" as const, name, status: "ok" as const, dimensions, rawTextStored: false as const });
   const metrics = attempts.flatMap((item, index) => [
     metric("m1_v2_request_envelope", { attemptDigest: item.attemptDigest, armId: arm.scenario, sourceRevision: arm.sourceRevision,
-      cacheBoundaryRevision: "cache-v1", providerId: "openai", modelRef: "openai/gpt-5.6-sol", providerSendBytes: before ? 100 : 60,
-      eligibility: "eligible", retryOrdinal: 0, roundIndex: index }),
+      cacheBoundaryRevision: "cache-v1", providerId: "openai-codex", modelRef: "openai/gpt-5.6-sol", providerSendBytes: before ? 100 : 60,
+      eligibility: "usage_unavailable", retryOrdinal: 0, roundIndex: index }),
     metric("m1_v2_request_segment", { attemptDigest: item.attemptDigest, segmentId: `segment-${index}`, kind: arm.scenario === "current-web-cold" ? "source_reference" : "provider_carrier_overhead",
       stability: "dynamic", providerSendBytes: before ? 100 : 60, keyedContentDigest: "B".repeat(43) }),
     metric("m1_v2_response_usage", { attemptDigest: item.attemptDigest, status: "unavailable", promptTokens: null,
@@ -456,7 +507,7 @@ function completeFakeResult(input: AdapterRunInput): AdapterRunResult {
     provider: "openai", finalText, sessionId, effectiveConfig: arm.effectiveConfig,
     pairedExecutionEvidence: { provider: execution.provider, model: execution.model, reasoning: execution.reasoning,
       providerServiceTiers: ["default"], requestServiceTiers: ["default"], requestModels: [execution.model],
-      requestReasoning: ["medium"], authorizationSchemes: ["bearer"], routeIds: ["openai-responses"] }, usage: {}, tools: {}, timing: {}, operations: {},
+      requestReasoning: ["medium"], authorizationSchemes: ["bearer"], routeIds: ["openai-codex-responses"] }, usage: {}, tools: {}, timing: {}, operations: {},
     changedPaths: [], evidenceRefs: [], m1V2Evidence: { evidence, metrics, db: { quickCheckDatabases: 1, quickCheckPassed: true,
       toolCalls: arm.scenario === "landing-cold" ? 3 : 0, webToolCalls: arm.scenario === "current-web-cold" ? 1 : 0,
       pagePreviewToolCalls: arm.scenario === "landing-cold" ? 1 : 0, buildCommandToolCalls: arm.scenario === "landing-cold" ? 1 : 0,

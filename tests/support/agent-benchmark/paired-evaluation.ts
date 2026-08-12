@@ -6,8 +6,8 @@ import { OBSERVED_M1_REQUEST_SEGMENT_KINDS, type M1RequestSegmentKind, type M1V2
 export type PairEligibility = "eligible" | "descriptive" | "rejected";
 export interface PairComparableIdentity {
   fixture: string; sourceRevision: string; model: string; reasoning: string;
-  executionMode: string; provider: string; authMode: string; cache: string;
-  route: string; retryOrdinal: number;
+  executionMode: string; provider: string; providerTransport: string; authMode: string; cache: string;
+  route: string; retryOrdinal: number; usageAvailability: "usage_bearing" | "unavailable" | "mixed";
 }
 export interface PairDecision { pairId: string; status: PairEligibility; reason: string }
 
@@ -20,18 +20,23 @@ export function comparableIdentityForArm(arm: BenchmarkArmPlan, repetition: M1V2
     return values.length === 1 && typeof values[0] === "string" ? values[0] :
       values.length > 1 ? `observed_conflict:${String(key)}` : null;
   };
-  const source = observedField("sourceRevision"), model = observedField("modelRef"), provider = observedField("providerId"),
+  const source = observedField("sourceRevision"), model = observedField("modelRef"), providerTransport = observedField("providerId"),
     cacheBoundary = observedField("cacheBoundaryRevision");
-  if (!source || !model || !provider || !cacheBoundary || !runtime) return null;
-  const cache = attempts.some((attempt) => attempt.eligibility === "cache_mismatch") ? "cache_mismatch" :
-    attempts.every((attempt) => attempt.eligibility === "eligible") ? "eligible" : "rejected";
+  if (!source || !model || !providerTransport || !cacheBoundary || !runtime) return null;
+  const otherIneligible = attempts.some((attempt) => !["eligible", "usage_unavailable", "cache_mismatch"].includes(attempt.eligibility));
+  const cache = otherIneligible ? "rejected" :
+    attempts.some((attempt) => attempt.eligibility === "cache_mismatch") ? "cache_mismatch" : "eligible";
+  const usageStatuses = new Set(attempts.map((attempt) => attempt.responseUsageStatus));
+  const usageAvailability = usageStatuses.size === 1 && usageStatuses.has("usage_bearing") ? "usage_bearing" :
+    usageStatuses.size === 1 && usageStatuses.has("unavailable") ? "unavailable" : "mixed";
   return { fixture: `${arm.scenario}:${arm.fixtureHash}`, sourceRevision: source, model, reasoning: runtime.reasoning,
-    executionMode: runtime.executionMode, provider, authMode: runtime.authMode,
-    cache: `${cache}:${cacheBoundary}`, route: runtime.route, retryOrdinal: Math.max(0, ...attempts.map((attempt) => attempt.retryOrdinal)) };
+    executionMode: runtime.executionMode, provider: runtime.provider, providerTransport, authMode: runtime.authMode,
+    cache: `${cache}:${cacheBoundary}`, route: runtime.route,
+    retryOrdinal: Math.max(0, ...attempts.map((attempt) => attempt.retryOrdinal)), usageAvailability };
 }
 
 export function pairEligibility(input: { before: PairComparableIdentity; after: PairComparableIdentity }): Omit<PairDecision, "pairId"> {
-  const exact = ["fixture", "model", "reasoning", "executionMode", "provider", "authMode"] as const;
+  const exact = ["fixture", "model", "reasoning", "executionMode", "provider", "providerTransport", "authMode"] as const;
   for (const key of exact) if (input.before[key] !== input.after[key]) return { status: "rejected", reason: `${key}_mismatch` };
   if (input.before.sourceRevision === input.after.sourceRevision) return { status: "rejected", reason: "source_not_paired" };
   if (input.before.retryOrdinal > 0 || input.after.retryOrdinal > 0) return { status: "rejected", reason: "retry_contaminated" };
@@ -42,7 +47,8 @@ export function pairEligibility(input: { before: PairComparableIdentity; after: 
   for (const identity of [input.before, input.after]) {
     if (identity.model !== "openai/gpt-5.6-sol" || identity.reasoning !== "medium" ||
         identity.executionMode !== "ordinary_non_fast" || identity.provider !== "openai" ||
-        identity.authMode !== "managed" || identity.route.length === 0)
+        identity.providerTransport !== "openai-codex" || identity.authMode !== "managed" ||
+        identity.route !== "openai-codex-responses")
       return { status: "rejected", reason: "observed_execution_identity_mismatch" };
   }
   if (input.before.cache.startsWith("rejected:") || input.after.cache.startsWith("rejected:"))

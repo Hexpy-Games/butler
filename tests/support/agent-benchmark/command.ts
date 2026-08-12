@@ -248,7 +248,7 @@ export function safeEnvironment(
 export function boundedText(value: string): string {
   const redacted = value
     .replace(/((?:api[_-]?key|token|password|secret))\s*[:=]\s*[^\s,;]+/giu, "$1=[REDACTED]")
-    .replace(/(?:\/Users\/|\/home\/|[A-Z]:\\)[^\s)]+/gu, "[PRIVATE_PATH]")
+    .replace(/(?:\/Users\/|\/home\/|[A-Z]:\\)[^\s)"',]+/gu, "[PRIVATE_PATH]")
     .replace(/\$1/gu, "[REDACTED]");
   return redacted.length > MAX_CAPTURE_BYTES
     ? redacted.slice(redacted.length - MAX_CAPTURE_BYTES)

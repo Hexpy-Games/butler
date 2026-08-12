@@ -159,7 +159,7 @@ function summarizeAttempt(
   const exactByteSum = segmentSendBytes === providerSendBytes;
   if (!exactByteSum) reasons.push("exact_byte_sum_failed");
   const eligibility = stringValue(envelope.eligibility) ?? "missing";
-  if (eligibility !== "eligible") {
+  if (eligibility !== "eligible" && eligibility !== "usage_unavailable") {
     reasons.push(eligibility === "retry_contaminated"
       ? "retry_contaminated"
       : `ineligible_${eligibility}`);
