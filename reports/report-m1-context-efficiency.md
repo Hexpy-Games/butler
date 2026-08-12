@@ -728,3 +728,44 @@ Implementation validation completed without an external provider or E2E run:
 Independent gpt-5.6-sol high whole-goal review remains the Task completion gate;
 the Task is not marked done here, and neither its governing Work nor Plan is
 closed.
+
+### Independent review correction phase
+
+The first independent gpt-5.6-sol high review returned `CHANGES_REQUIRED` and
+identified final-carrier defects that the initial internal suite did not expose.
+The correction remains inside the same Turn-owned state and provider translation:
+
+- official Responses no longer uses cumulative message counts against an
+  evicted/reindexed bounded array. Minimal stable item identities determine the
+  exact delta already represented by the `previous_response_id` chain, so each
+  newly required tool output is delivered exactly once;
+- an OpenAI route fallback that clears provider continuation now serializes the
+  same full admitted bounded carrier rather than reverting to initial user input.
+  A bounded fallback to another provider fails closed before its adapter because
+  no non-OpenAI exact final-body admission integration is authorized in this Task;
+- the existing Turn budget writer now admits the exact UTF-8 request serialized
+  by the actual official Responses or Codex fetch boundary. Attachments and all
+  provider carrier overhead are therefore included; oversized attachment input
+  persists terminal exhaustion before fetch;
+- normalized assistant output accounting excludes provider raw payload and
+  `providerData`, while retaining visible assistant text and function-call
+  protocol. Enabled continuations and accepted SQLite responses retain only the
+  provider response id, finite sent/item identities, manifests, and normalized
+  visible protocol—no cumulative stateless prompt/tool clone or provider data;
+- bounded first-user attribution reapplies the composed prompt spans on every
+  cumulative Codex rebuild, preserving current request, Work authority, memory,
+  and source-reference kinds;
+- `route_state_json` is the only persisted mutable route authority. Admission
+  removes the duplicate embedded `modelSelection.modelRoute`, with production
+  hydration/restart evidence reading the separate route state.
+
+Failing-first behavioral tests captured the real defects: the third official
+Responses body omitted `NEW-RESULT`, route fallback omitted latest protocol and
+reference context, and a 10,000-byte limit admitted a tiny message projection
+before a roughly 200 KiB attachment carrier could reach fetch. After correction,
+the final body contains the newly required output exactly once, fallback retains
+the admitted carrier without resurrecting old input, and the oversized carrier
+records `model_facing_bytes` exhaustion with zero fetches. The correction broad
+affected suite passes 171/171 tests with 4,295 assertions; focused typecheck also
+passes. Final lint, shape, module, and diff gates are recorded with the correction
+commit. Independent Sol-high rereview remains required before Task completion.

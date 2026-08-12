@@ -106,6 +106,8 @@ export interface ModelRoundRequest {
     schemaVersion: "butler.turn-context-envelope.v1";
     modelFacingBytes: number;
     requestDigest: string;
+    /** Required exact serialized-body admission owned by the durable Turn. */
+    admitProviderBody(serializedBytes: number): Promise<void>;
   };
   onProviderStreamEvent?: ProviderStreamProjectionHandler;
   onProviderResponseIdentity?: (identity: {

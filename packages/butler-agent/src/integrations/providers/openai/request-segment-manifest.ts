@@ -8,8 +8,10 @@ export interface OpenAIRequestSegmentContinuation {
   provider: "openai";
   responseId: string;
   sent: { toolMessages: number; userMessages: number };
-  statelessInput: Array<Record<string, unknown>>;
-  statelessManifest: M1ProviderRequestSegmentManifestEntry[];
+  /** Stable identities already represented by the official Responses chain. */
+  boundedItemKeys?: string[];
+  statelessInput?: Array<Record<string, unknown>>;
+  statelessManifest?: M1ProviderRequestSegmentManifestEntry[];
 }
 
 export function isOpenAIRequestSegmentContinuation(
@@ -39,13 +41,18 @@ export function buildOpenAIRequestSegmentManifests(input: {
 } {
   const instruction = instructionManifest(input.instructions, input.instructionSources);
   const officialInput = input.appendedItemKinds
-    ? itemManifest(input.officialInput, input.appendedItemKinds, 0)
+    ? itemManifest(input.officialInput, input.appendedItemKinds, 0, input.promptSources)
     : initialInputManifest(input.officialInput, input.promptSources);
   const previous = input.previousCodexInput
     ? olderReplayManifest(input.previousCodexInput, input.previousCodexManifest ?? [])
     : [];
   const appended = input.codexAppendedItemKinds
-    ? itemManifest(input.codexAppendedInput, input.codexAppendedItemKinds, 0)
+    ? itemManifest(
+        input.codexAppendedInput,
+        input.codexAppendedItemKinds,
+        0,
+        input.promptSources,
+      )
     : input.previousCodexInput
     ? itemManifest(
         input.codexAppendedInput,
@@ -112,14 +119,19 @@ function itemManifest(
   input: unknown,
   kinds: readonly (M1RequestSegmentKind | undefined)[],
   indexOffset: number,
+  promptSources?: readonly M1RequestSegmentSource[],
 ): M1ProviderRequestSegmentManifestEntry[] {
   if (!Array.isArray(input)) return [];
   return input.flatMap((item, localIndex) => {
     const index = indexOffset + localIndex;
     const kind = kinds[localIndex] ?? "other_typed_context";
-    return stringPayloadPaths(item).map((suffix) => ({
-      path: ["input", index, ...suffix], kind, stability: "dynamic" as const,
-    }));
+    return stringPayloadPaths(item).flatMap((suffix) => {
+      const path = ["input", index, ...suffix];
+      const value = valueAtPath({ input }, path);
+      return kind === "current_user_request" && typeof value === "string"
+        ? textManifest(path, value, promptSources, kind)
+        : [{ path, kind, stability: "dynamic" as const }];
+    });
   });
 }
 

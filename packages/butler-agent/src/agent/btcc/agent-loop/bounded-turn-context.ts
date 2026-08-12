@@ -31,6 +31,7 @@ export async function prepareBoundedModelContext(input: {
     schemaVersion: "butler.turn-context-envelope.v1";
     modelFacingBytes: number;
     requestDigest: string;
+    admitProviderBody(serializedBytes: number): Promise<void>;
   };
 }> {
   if (!input.budget) return { messages: input.messages };
@@ -51,26 +52,28 @@ export async function prepareBoundedModelContext(input: {
     toolChoice: input.toolChoice,
     messages: bounded.messages,
   });
-  await input.budget.admitRequest({
-    roundId: input.roundId,
-    requestDigest,
-    modelFacingBytes,
-  });
   return {
     messages: bounded.messages,
     envelope: {
       schemaVersion: "butler.turn-context-envelope.v1",
       modelFacingBytes,
       requestDigest,
+      admitProviderBody: async (serializedBytes) => {
+        await input.budget!.admitRequest({
+          roundId: input.roundId,
+          requestDigest,
+          modelFacingBytes: serializedBytes,
+        });
+      },
     },
   };
 }
 
 export function modelRoundOutputBytes(response: ModelRoundResult): number {
-  return serializedBytes(response.assistantMessage ?? {
+  return serializedBytes({
     role: "assistant",
-    content: response.text ?? "",
-    toolCalls: response.toolCalls,
+    content: response.assistantMessage?.content ?? response.text ?? "",
+    toolCalls: response.assistantMessage?.toolCalls ?? response.toolCalls,
   });
 }
 
