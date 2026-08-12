@@ -31,7 +31,7 @@ import {
 import { PlannedTaskStore } from "../../packages/butler-agent/src/agent/work/planned-task.ts";
 import { buildTaskOriginContext } from "../../packages/butler-agent/src/agent/work/task-origin.ts";
 import { TaskStore } from "../../packages/butler-agent/src/agent/work/task-store.ts";
-import { selectInitialToolsFromSurfaceController } from "../../packages/butler-agent/src/agent/tools/tool-surface-selection.ts";
+import { selectButlerToolsForTurn } from "../../packages/butler-agent/src/agent/tools/profiles.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { WorkOrchestrationStore } from "../../packages/butler-agent/src/agent/work/work-orchestration.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
@@ -2220,9 +2220,9 @@ test("ordinary app project turns derive Ledger tracking before tool selection", 
     projectId: "butler",
     sessionKind: "project",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "코드 수정 방향만 검토해줘.",
+    text: "코드 수정 방향만 검토해줘.",
     sessionMetadata: {
       projectId: "butler",
       runtimePolicy,
@@ -2230,21 +2230,20 @@ test("ordinary app project turns derive Ledger tracking before tool selection", 
     turnMetadata: {
       runtimePolicy,
     },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     tracking_mode: "ledger",
     closeout_strategy: "ledger",
   });
-  expect(selection.toolNames).toContain("run_command");
-  expect(selection.toolNames).toContain("project_ledger_status");
-  expect(selection.toolNames).toContain("project_ledger_task_complete");
-  expect(selection.toolNames).toContain("project_ledger_work_complete");
-  expect(selection.toolNames).toContain("project_ledger_attempt_succeed");
-  expect(selection.toolNames).toContain("inspect_project_status");
-  expect(selection.toolNames).toContain("query_project_work");
-  expect(selection.toolNames).toContain("render_project_dashboard");
+  expect(toolNames).toContain("run_command");
+  expect(toolNames).toContain("project_ledger_status");
+  expect(toolNames).toContain("project_ledger_task_complete");
+  expect(toolNames).toContain("project_ledger_work_complete");
+  expect(toolNames).toContain("project_ledger_attempt_succeed");
+  expect(toolNames).toContain("inspect_project_status");
+  expect(toolNames).toContain("query_project_work");
+  expect(toolNames).toContain("render_project_dashboard");
 });
 
 test("legacy app project local tracking is upgraded to Ledger before tool selection", () => {
@@ -2260,9 +2259,9 @@ test("legacy app project local tracking is upgraded to Ledger before tool select
     projectId: "project-sandy-bot-35a0e102",
     sessionKind: "project",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "59부터 닫고 남은거 살펴봐줘",
+    text: "59부터 닫고 남은거 살펴봐줘",
     sessionMetadata: {
       projectId: "project-sandy-bot-35a0e102",
       runtimePolicy,
@@ -2270,8 +2269,7 @@ test("legacy app project local tracking is upgraded to Ledger before tool select
     turnMetadata: {
       runtimePolicy,
     },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     trackingMode: "ledger",
@@ -2282,11 +2280,11 @@ test("legacy app project local tracking is upgraded to Ledger before tool select
     closeout_strategy: "ledger",
     requiredNativeToolProfiles: ["workspace", "project", "project-lifecycle"],
   });
-  expect(selection.toolNames).toContain("project_ledger_status");
-  expect(selection.toolNames).toContain("project_ledger_task_complete");
-  expect(selection.toolNames).toContain("project_ledger_work_complete");
-  expect(selection.toolNames).toContain("project_ledger_attempt_succeed");
-  expect(selection.toolNames).toContain("query_project_work");
+  expect(toolNames).toContain("project_ledger_status");
+  expect(toolNames).toContain("project_ledger_task_complete");
+  expect(toolNames).toContain("project_ledger_work_complete");
+  expect(toolNames).toContain("project_ledger_attempt_succeed");
+  expect(toolNames).toContain("query_project_work");
 });
 
 test("explicit local app tracking keeps Ledger tools out of the surface", () => {
@@ -2296,9 +2294,9 @@ test("explicit local app tracking keeps Ledger tools out of the surface", () => 
     projectId: "butler",
     sessionKind: "project",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "Project Ledger 상태 확인하고 dashboard 렌더해줘.",
+    text: "Project Ledger 상태 확인하고 dashboard 렌더해줘.",
     sessionMetadata: {
       projectId: "butler",
       runtimePolicy,
@@ -2306,8 +2304,7 @@ test("explicit local app tracking keeps Ledger tools out of the surface", () => 
     turnMetadata: {
       runtimePolicy,
     },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     tracking_mode: "local",
@@ -2315,13 +2312,13 @@ test("explicit local app tracking keeps Ledger tools out of the surface", () => 
     closeout_strategy: "local_workstream",
     requiredNativeToolProfiles: ["workspace"],
   });
-  expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
-  expect(selection.toolNames).not.toContain("inspect_project_status");
-  expect(selection.toolNames).not.toContain("query_project_work");
-  expect(selection.toolNames).not.toContain("render_project_dashboard");
-  expect(selection.toolNames).not.toContain("project_ledger_task_complete");
-  expect(selection.toolNames).not.toContain("project_ledger_work_complete");
-  expect(selection.toolNames).not.toContain("project_ledger_attempt_succeed");
+  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(toolNames).not.toContain("inspect_project_status");
+  expect(toolNames).not.toContain("query_project_work");
+  expect(toolNames).not.toContain("render_project_dashboard");
+  expect(toolNames).not.toContain("project_ledger_task_complete");
+  expect(toolNames).not.toContain("project_ledger_work_complete");
+  expect(toolNames).not.toContain("project_ledger_attempt_succeed");
 });
 
 test("read-only app project tracking keeps Ledger mutation markers out of the surface", () => {
@@ -2331,9 +2328,9 @@ test("read-only app project tracking keeps Ledger mutation markers out of the su
     projectId: "butler",
     sessionKind: "project",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "Project Ledger 상태만 읽어줘.",
+    text: "Project Ledger 상태만 읽어줘.",
     sessionMetadata: {
       projectId: "butler",
       runtimePolicy,
@@ -2341,21 +2338,20 @@ test("read-only app project tracking keeps Ledger mutation markers out of the su
     turnMetadata: {
       runtimePolicy,
     },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     accessMode: "read_only",
     tracking_mode: "ledger",
     requiredNativeToolProfiles: ["project"],
   });
-  expect(selection.toolNames).toContain("project_ledger_status");
-  expect(selection.toolNames).toContain("project_ledger_check");
-  expect(selection.toolNames).toContain("inspect_project_status");
-  expect(selection.toolNames).toContain("query_project_work");
-  expect(selection.toolNames).not.toContain("project_ledger_task_complete");
-  expect(selection.toolNames).not.toContain("project_ledger_work_complete");
-  expect(selection.toolNames).not.toContain("project_ledger_attempt_succeed");
+  expect(toolNames).toContain("project_ledger_status");
+  expect(toolNames).toContain("project_ledger_check");
+  expect(toolNames).toContain("inspect_project_status");
+  expect(toolNames).toContain("query_project_work");
+  expect(toolNames).not.toContain("project_ledger_task_complete");
+  expect(toolNames).not.toContain("project_ledger_work_complete");
+  expect(toolNames).not.toContain("project_ledger_attempt_succeed");
 });
 
 test("app tracking policy treats snake case tracking mode as authoritative", () => {
@@ -2372,9 +2368,9 @@ test("app tracking policy treats snake case tracking mode as authoritative", () 
     projectId: "butler",
     sessionKind: "project",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "Project Ledger task T-1 complete 처리해줘.",
+    text: "Project Ledger task T-1 complete 처리해줘.",
     sessionMetadata: {
       projectId: "butler",
       runtimePolicy,
@@ -2382,8 +2378,7 @@ test("app tracking policy treats snake case tracking mode as authoritative", () 
     turnMetadata: {
       runtimePolicy,
     },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     trackingMode: "local",
@@ -2394,10 +2389,10 @@ test("app tracking policy treats snake case tracking mode as authoritative", () 
     closeout_strategy: "local_workstream",
     requiredNativeToolProfiles: ["workspace"],
   });
-  expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
-  expect(selection.toolNames).not.toContain("query_project_work");
-  expect(selection.toolNames).not.toContain("inspect_project_status");
-  expect(selection.toolNames).not.toContain("render_project_dashboard");
+  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(toolNames).not.toContain("query_project_work");
+  expect(toolNames).not.toContain("inspect_project_status");
+  expect(toolNames).not.toContain("render_project_dashboard");
 });
 
 test("ordinary app chat turns derive session Work tracking before tool selection", () => {
@@ -2406,22 +2401,21 @@ test("ordinary app chat turns derive session Work tracking before tool selection
     accessMode: "full_access",
     sessionKind: "chat",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "오늘 할 일 세 가지로 정리해줘.",
+    text: "오늘 할 일 세 가지로 정리해줘.",
     sessionMetadata: { runtimePolicy },
     turnMetadata: { runtimePolicy },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     tracking_mode: "local",
     closeout_strategy: "local_workstream",
   });
-  expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
-  expect(selection.toolNames).not.toContain("inspect_project_status");
-  expect(selection.toolNames).not.toContain("query_project_work");
-  expect(selection.toolNames).not.toContain("render_project_dashboard");
+  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(toolNames).not.toContain("inspect_project_status");
+  expect(toolNames).not.toContain("query_project_work");
+  expect(toolNames).not.toContain("render_project_dashboard");
 });
 
 test("project session hints are normalized before becoming local ids", async () => {

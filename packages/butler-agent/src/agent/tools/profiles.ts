@@ -164,6 +164,20 @@ const WORKER_FORBIDDEN_TOOL_NAMES = new Set([
 const ALL_TOOL_NAMES = new Set(BUTLER_TOOLS.map((tool) => tool.name));
 const ALL_PROFILE_NAMES = new Set(Object.keys(PROFILE_TOOL_NAMES) as ButlerToolProfile[]);
 
+export function selectButlerToolsForProfiles(
+  profiles: readonly string[],
+  tools: readonly FunctionToolDefinition[] = BUTLER_TOOLS,
+): FunctionToolDefinition[] {
+  const names = new Set<string>();
+  for (const profile of profiles) {
+    if (!ALL_PROFILE_NAMES.has(profile as ButlerToolProfile)) continue;
+    for (const name of PROFILE_TOOL_NAMES[profile as ButlerToolProfile]) {
+      names.add(name);
+    }
+  }
+  return tools.filter((tool) => names.has(tool.name));
+}
+
 export interface ButlerToolPolicyDiagnostics {
   unknownRequiredNativeToolProfiles: string[];
 }
@@ -279,13 +293,6 @@ function projectLedgerTrackingEnabled(input: {
   return trackingPolicyString(input, "trackingMode", "tracking_mode") === "ledger";
 }
 
-function fixedToolSurfaceEnabled(input: {
-  sessionMetadata?: Record<string, unknown>;
-  turnMetadata?: Record<string, unknown>;
-}): boolean {
-  return trackingPolicyString(input, "toolSurfaceMode", "tool_surface_mode") === "fixed";
-}
-
 function projectLedgerInspectionSuppressed(input: {
   sessionMetadata?: Record<string, unknown>;
   turnMetadata?: Record<string, unknown>;
@@ -378,26 +385,6 @@ export function selectButlerToolsForTurn(input: {
     if (input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(name)) continue;
     allowedNames.add(name);
   }
-  if (fixedToolSurfaceEnabled(input)) {
-    const turnProfiles = requiredToolProfiles(input.turnMetadata);
-    const fixedProfiles = turnProfiles.length > 0
-      ? turnProfiles
-      : requiredToolProfiles(input.sessionMetadata);
-    const fixedNames = new Set(requiredToolNamesForTurn(input));
-    for (const profile of fixedProfiles) {
-      for (const name of PROFILE_TOOL_NAMES[profile]) fixedNames.add(name);
-    }
-    if (!projectLedgerLifecycleAllowed(input)) {
-      for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) fixedNames.delete(name);
-    }
-    if (projectLedgerInspectionSuppressed(input)) {
-      for (const name of PROJECT_LEDGER_INSPECTION_TOOL_NAMES) fixedNames.delete(name);
-    }
-    return tools.filter((tool) =>
-      fixedNames.has(tool.name) &&
-      !(input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(tool.name)),
-    ).map(fixedWorkspaceToolDefinition);
-  }
   if (!projectLedgerLifecycleAllowed(input)) {
     for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) allowedNames.delete(name);
   }
@@ -409,35 +396,4 @@ export function selectButlerToolsForTurn(input: {
     allowedNames.has(tool.name) &&
     !(input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(tool.name)),
   );
-}
-
-function fixedWorkspaceToolDefinition(tool: FunctionToolDefinition): FunctionToolDefinition {
-  if (
-    tool.name !== "grep_files" &&
-    tool.name !== "list_files" &&
-    tool.name !== "read_file" &&
-    tool.name !== "write_file" &&
-    tool.name !== "edit_file"
-  ) return tool;
-  const parameters = recordValue(tool.parameters);
-  const properties = recordValue(parameters.properties);
-  const modelProperties = { ...properties };
-  delete modelProperties.workspace_root;
-  if (tool.name === "write_file" || tool.name === "edit_file") {
-    delete modelProperties.expected_sha256;
-  }
-  if (Object.keys(modelProperties).length === Object.keys(properties).length) {
-    return tool;
-  }
-  return {
-    ...tool,
-    parameters: {
-      ...parameters,
-      properties: modelProperties,
-    },
-  };
-}
-
-export function toolContractJsonChars(tools: readonly FunctionToolDefinition[]): number {
-  return tools.reduce((sum, tool) => sum + JSON.stringify(tool).length, 0);
 }

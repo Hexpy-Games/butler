@@ -185,3 +185,286 @@ A fresh independent ordinary non-fast Sol-high review of the final #142 and
 - PR #147: stacked audit record; unchanged by this cleanup.
 - Next optimization Tasks: depend on PR #142 preregistered affected-arm pairs
   and must not run the full 4x3 before the Final Benchmark Task.
+
+## T-M1-V2 tool/instruction targeted-pair preregistration
+
+`A-M1-V2-TOOL-INSTRUCTION-SURFACE-20260812-02` is a deterministic Task 3
+measurement Attempt, not the statistical Final Benchmark. It requires exactly
+one eligible before and one eligible after observation for each affected arm,
+in this order: `current-web-cold`, `landing-cold`, `direct-warm`, then
+`direct-cold`. Statistical repetitions and the final 4x3 remain exclusively
+owned by `T-M1-V2-FINAL-BENCHMARK`. Same-policy/revision serialization identity
+is proven separately through the real product selection and final provider
+serialization tests; no reduction or zero-regression criterion is relaxed.
+
+The harness authority is PR #142 exact
+`50e9bb9ab2b08ffac3f6772d4a3fda01f7bd8edf`. Before uses the separate clean
+product checkout at
+`c46aae1af1b78a6f81ea40c3099edde0ba35ebd5`; after will use a separate clean
+checkout at the final product commit. Model, reasoning, auth, fixtures, rubric,
+cache contract, provider route, retry eligibility, evaluator, and exact SC01
+final-body segment contract remain identical across each pair. Current partial
+product changes are excluded from before measurement.
+
+One isolated replacement root per arm is allowed only for a typed
+pre-render/pre-provider infrastructure failure with zero provider dispatches
+and no Session, provider-request, or observation evidence. The failed root and
+exclusion reason remain recorded. Replacement is forbidden after any provider
+dispatch or model output, and for provider/retry, cache/route, identity,
+quality, source, or product failures. Repetition of the same pre-provider
+infrastructure failure stops this Attempt as a separate driver-diagnosis
+blocker.
+
+The earlier failed Attempt, plan identity
+`f5ca86afd3d0268e69b61a0563e63bd48e617e9b7d7b6c4c4286b57a0f2cbb52`,
+and its seven observations remain immutable incomplete-campaign diagnostic
+provenance. They are not promoted, pooled, or used as before/acceptance
+evidence.
+
+## T-M1-V2 tool/instruction targeted-pair preregistration revision 3
+
+`A-M1-V2-TOOL-INSTRUCTION-SURFACE-20260812-03` supersedes only the active
+measurement contract because canonical PR #142 is now exact
+`bfa82b07590d3116ab10074977d168831255d784`. Attempt `-02`, its primary and
+replacement roots, and replacement plan identity
+`412b6fdad56329700c1d50956dde5d0686e35c914a58c7fcebe2165dd55edb96`
+remain immutable failed ENOSPC diagnostic provenance. They are not changed,
+renamed, revived, pooled, or promoted to acceptance.
+
+This remains deterministic Task 3 evidence, not a statistical benchmark. It
+requires exactly one eligible before and one eligible after observation for
+each arm, ordered `current-web-cold`, `landing-cold`, `direct-warm`, then
+`direct-cold`. Each accepted observation with no diagnostic gates the next.
+The final 4x3 and statistical repetition remain solely owned by
+`T-M1-V2-FINAL-BENCHMARK`; repeated same-policy/revision byte identity remains
+separate real product selection and final serialization test evidence. All
+existing reduction, final-body SC01, eligibility, cache, retry, route, source,
+quality, safety, authority, native-executor, Work/Ledger/memory, build/reload,
+desktop/mobile, and privacy criteria remain unchanged.
+
+Before is the separate clean exact product checkout
+`c46aae1af1b78a6f81ea40c3099edde0ba35ebd5`; after must be a separate clean
+checkout at the fixed final product commit. Harness, fixtures, rubric, adapter,
+evaluator, model `openai/gpt-5.6-sol`, reasoning `medium`, auth, and route are
+pinned across each pair. The current partial product diff and test SHA-256
+`b51a4460e60e5ba8c17550f37bfe5d0879dfe9949e92636bb21a7c37e6ef982c`
+remain excluded from before and preserved until all four before arms pass.
+
+One isolated replacement per arm remains allowed only for a typed
+pre-render/pre-provider infrastructure failure with provider dispatch zero and
+Session/providerRequests/observations all zero. The failed root and reason are
+preserved. Provider error/retry, cache/route mismatch, identity, quality,
+source, any model output, or any provider dispatch forbids replacement. The
+same eligible infrastructure failure on the single replacement stops the
+Attempt immediately as a separate driver blocker.
+
+Every arm must pass the canonical disk, port, and bundled-resource preflight
+before launch, with privacy-safe available/required byte evidence. No evidence
+root, benchmark output, user file, or temporary file is deleted. Packaging is
+forbidden at the currently observed approximately 9.23 GiB available because
+the canonical packaged path requires 8.5 GiB. Only the existing canonical
+prepared-resource option may be used, which requires 4.5 GiB and must reuse one
+immutable resource for the entire before/after set after exact source
+revision, size, archive digest, and launch validation are verified.
+
+The renderer-ready repair smoke resource is present at its preserved smoke
+root. It was produced from exact clean product `c46aae1a`, occupies 477,436 KiB,
+contains a 213,866,608-byte archive whose SHA-256
+`ce92403fe6897f511de41dec9f08da69c3797c826bcbc014972f145057d26b4f`
+matches its release manifest, and its evidence records two clean
+renderer/preload/App Gateway/native-runtime launches and zero provider
+requests. Execution remains gated until the canonical benchmark consumer can
+pass that prepared resource through its existing Electron-harness option; no
+second driver, cache authority, test seam, or harness modification is allowed.
+
+## T-M1-V2 tool/instruction targeted-pair preregistration revision 4
+
+Attempt `A-M1-V2-TOOL-INSTRUCTION-SURFACE-20260812-03` is superseded before
+measurement: no benchmark arm, provider dispatch, Session, or product
+observation started under its `bfa82b07` contract. Its record is immutable and
+is not reused. Attempt `A-M1-V2-TOOL-INSTRUCTION-SURFACE-20260812-04` pins the
+new canonical PR #142 revision
+`c3de3c9bd9bea673230c48b811b12dbc63aefb87`.
+
+Revision 4 retains exactly one eligible before and after for each arm, in the
+strict order `current-web-cold`, `landing-cold`, `direct-warm`, `direct-cold`.
+Each accepted/no-diagnostics arm gates the next. The bounded zero-dispatch
+infrastructure replacement policy and every reduction, identity, eligibility,
+cache, retry, route, source, quality, safety, authority, native-executor,
+Work/Ledger/memory, build/reload, desktop/mobile, and privacy condition remain
+unchanged. Statistical repetition and final 4x3 remain exclusively Final
+Benchmark authority.
+
+Before remains clean exact `c46aae1af1b78a6f81ea40c3099edde0ba35ebd5`.
+The prepared-resource public identity is pinned as source compatibility
+`5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162`,
+manifest `a67130bb07fdf85102e2f0ceb422e6dd4fd6d1f9797207caa594cc63dedd1b0b`,
+dependency closure
+`77710d83e4e6216381e9fa08c958cb562abb7ad64037479ca1bd3d1e6b082102`,
+resource 274,983,193 bytes with identity
+`34e8a634cc086813ccc33ab71d5f1c9fa6ceff550211ca03f3b0e337f1adc165`,
+and archive 213,866,608 bytes with identity
+`ce92403fe6897f511de41dec9f08da69c3797c826bcbc014972f145057d26b4f`.
+Its runtime path is private local input only and is not persisted in this
+report, the redacted plan, or public evidence. The canonical CLI pin option and
+the existing production adapter composition are the only consumption route;
+there is no packaging fallback.
+
+## Attempt 4 unsuccessful before campaign
+
+Attempt `A-M1-V2-TOOL-INSTRUCTION-SURFACE-20260812-04` stopped at the second
+before arm under the preregistered sequential gate. `current-web-cold` was
+accepted with no diagnostics at plan identity
+`b9c224ccd9a4a565e10732d03074ed6ca2831c56600f079cec349c7467b23dad`:
+5 Agent attempts, 271,016 provider-send bytes, 42,455 tool-schema bytes, 440
+stable safety/role bytes, 48,495 stable BTCC protocol bytes, 5 semantic rounds,
+7 scenario tool calls, 51,189 ms elapsed, no retries, one 1,620-byte auxiliary
+attempt, one 684-byte title attempt, and accepted fixed-date, recommendation,
+source-reference, source-grounding, workspace-authority, provider-route, DB
+quick-check, and no-stall evidence. Usage was prompt 58,196, cache read 19,456,
+output 1,292, and total 59,488 tokens; cache write remained unavailable.
+
+`landing-cold` then rejected at plan identity
+`2b968ceb009312125ecafa3502d2ee1f5aefbf4a5998ae28d01454b1557aa7d2`
+with `physical_attempt_identity_join_failed` and
+`landing_quality_or_visual_gate_failed`. It had 18 Agent attempts, 1,836,927
+provider-send bytes, 175,554 tool-schema bytes, 1,584 stable safety/role bytes,
+184,842 stable BTCC protocol bytes, 18 semantic rounds, 22 scenario tool calls,
+321,213 ms elapsed, no retry-contaminated attempt, and one 844-byte title
+attempt. Usage was prompt 338,770, cache read 172,544, output 11,593, and total
+350,363 tokens; cache write remained unavailable. Build, desktop, mobile,
+screenshots, responsive structure, Butler grounding, memory/context grounding,
+workspace authority, provider routing, DB quick-check, Work reviews, and no
+stall passed. The rendered landing evidence failed durable Project/Work,
+tools/workspace authority, provider-routing, and recovery capability grounding;
+the Project Ledger closeout was also not observed. These are descriptive
+failed-before diagnostics, not a baseline or product regression comparison.
+
+Because provider dispatch and model output occurred, replacement is forbidden.
+No landing replacement, direct-warm, direct-cold, product implementation
+continuation, after arm, Sol-high review, commit, push, PR, Windows workflow,
+merge, default-on change, final 4x3, Hermes, OpenCode, or next Task was run.
+The prepared resource identity stayed unchanged and its private runtime path was
+not persisted. All earlier and current roots remain preserved diagnostic
+provenance.
+
+## T-M1-V2 tool/instruction product implementation closeout
+
+The latest user authority moved the original provider/Electron before/after
+campaign and all final quantitative/quality acceptance to
+`T-M1-V2-FINAL-BENCHMARK`. Attempt
+`A-M1-V2-TOOL-INSTRUCTION-SURFACE-20260812-05` therefore owns only the complete
+product path and provider-free static/product integration evidence below. The
+Attempt-04 observations above remain immutable diagnostic provenance; they are
+not a baseline, paired evidence, or acceptance input.
+
+### One real ingress-to-provider path
+
+The production path is now:
+
+`appRuntimePolicy -> snapshotTurnContext/prepare-turn ->
+createProductionGuidedTurnAgent -> selectGuidedTurnPhasePolicy -> BTCC agent
+loop -> ModelRoundRequest.tools -> modelFacingFunctionTools -> OpenAI response
+request body`.
+
+`selectGuidedTurnPhasePolicy` is the single BTCC-owned selection point. It
+reads the admitted typed access/profile/tool authority once, projects the
+existing `BUTLER_TOOLS` registry, produces one revisioned stable instruction
+prefix (`butler.btcc-tool-instruction-policy.v1`), and supplies the actual
+provider tool definitions. The flag
+`BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE` remains default-off. Disabled selection
+returns the prior canonical `visibleToolDefinitions` and `guidedInstructions`
+bytes without running or merging a second path.
+
+Enabled selection keeps registry identities for authorization and execution,
+clones only the provider-facing schema projection, and removes runtime-owned
+JSON Schema defaults from that projection. Direct turns contain no
+Project/workspace/Work execution schemas; read-only project turns contain no
+write/effect schemas. Structured exact required tools must survive the final
+provider projection or dispatch fails closed. Required profiles are validated
+against the authoritative profile/registry definitions: unknown or partially
+eligible effectful profiles fail closed, while admitted non-effect MCP and
+automation reads remain available. Writable App project and non-project
+workspace authority is classified as execution without prompt keywords.
+
+Project Ledger lifecycle capability remains in the authorized native catalog
+and is progressively reached through `tool_search -> tool_describe ->
+tool_call`; it still dispatches the canonical guided effect/native executor.
+The flag-on source-to-result regression creates/reviews a Plan, discovers and
+describes the lifecycle tools, creates and completes an actual Ledger Work,
+records checkpoint/result/completion reviews, and verifies the Ledger Work and
+durable Work completion result. That regression found and fixed one existing
+bridge defect: `tool_describe` had redacted JSON Schema `const` values, causing
+valid progressive calls to fail schema validation. `const` is now preserved,
+while sensitive annotations and private paths remain redacted.
+
+### Removed duplicate surface
+
+The enabled stable prefix consolidates repeated role, tool-use, memory,
+phase-safety, Work/Plan/Review/validation, and Ledger closeout guidance. The
+dynamic response-language and persona/profile sections remain after the stable
+prefix and retain their SC01 attribution. The legacy public
+`tool-surface-controller`, selection, types, validation modules, their test,
+the fixed-surface branch, and unused public character metric were deleted.
+There is no second registry, keyword router, production test seam, hidden
+retry/fallback, shell substitute, or permanent wrapper alias.
+
+### Actual serializer byte arithmetic
+
+The following provider-free arithmetic uses UTF-8 bytes of the real
+`JSON.stringify(modelFacingFunctionTools(providerTools))` output plus the exact
+selected stable prefix. Execution uses the actual App-shaped writable project
+policy from `appRuntimePolicy` and `snapshotTurnContext`, not a synthetic empty
+profile fixture.
+
+| Phase | Tool schemas before -> after | Stable prefix before -> after | Combined reduction |
+|---|---:|---:|---:|
+| direct | 8,644 -> 5,386 | 9,454 -> 829 | 11,883 bytes (65.66%) |
+| read-only project | 13,804 -> 8,499 | 10,020 -> 849 | 14,476 bytes (60.76%) |
+| App-shaped execution | 19,743 -> 16,210 | 10,022 -> 1,279 | 12,276 bytes (41.24%) |
+
+The same policy/revision test serializes byte-identical final schemas and
+stable prefix across distinct Turn ids. These numbers are deterministic static
+product evidence, not provider-send SC01 measurements and not the deferred
+final E2E decision. They were rerun on the final reviewed diff through
+`tests/unit/m1-v2-tool-instruction-surface.test.ts`; the execution fixture is
+the real `appRuntimePolicy -> snapshotTurnContext` writable App project shape.
+
+### Product validation and review
+
+- broad focused policy, production agent-loop, App policy, native workspace,
+  registry, and prompt suite: 396/396 passed with 3,551 assertions before the
+  final review repairs; all affected tests were rerun after those repairs;
+- final focused M1/production/progressive rerun: 90/90 passed with 491
+  assertions;
+- full typecheck passed;
+- full lint passed with zero errors; changed-file ESLint passed with zero
+  errors and zero warnings;
+- BTCC source shape passed (`4 domains / 206 files`);
+- architecture audit scanned 380 source files and reported 42 pre-existing
+  size/index/generic-bucket review triggers; the new phase policy was not a
+  trigger and no new module-direction violation was found;
+- `git diff --check` passed and deleted public-surface references are absent;
+- bounded repository-wide `bun run check` reached the 300-second limit and was
+  terminated without a captured assertion failure, so it is not claimed as a
+  pass;
+- independent ordinary non-fast gpt-5.6-sol high whole-ingress review repaired
+  the required-profile, real App phase, progressive lifecycle, and instruction
+  source-to-result gaps, then returned `APPROVED` with no remaining P0-P3
+  finding after independently rerunning the focused product path and final
+  serializer arithmetic.
+
+No provider request, Electron launch, prepared-resource run, benchmark arm,
+final 4x3, Hermes, or OpenCode execution was performed after the latest user
+authority prohibited them.
+
+### Deferred final E2E acceptance
+
+`T-M1-V2-FINAL-BENCHMARK` remains `todo` and exclusively owns the final
+integrated provider/Electron campaign: exact final-body SC01 `tool_schema` and
+stable-instruction reduction for all registered arms, provider-send bytes and
+usage, cache/retry/route eligibility, request/tool/elapsed measurements, source
+quality, Work/Ledger/memory overhead, restart/build/reload correctness, and zero
+capability, authority, safety, native-executor, source, desktop, or mobile
+quality regression. The feature remains default-off and this Task does not
+merge or enable it.

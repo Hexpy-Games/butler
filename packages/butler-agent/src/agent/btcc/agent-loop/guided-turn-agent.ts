@@ -16,15 +16,13 @@ import {
   renderGuidedTurnRequestAttribution,
 } from "./guided-turn-prompt.ts";
 import {
-  authorizedToolDefinitions,
   GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES,
   guidedNativeToolDefinitions,
-  guidedPolicy,
   hiddenNativeToolNamesForGuidedTurn,
   routeForUsedTools,
   selectedModelRef,
-  visibleToolDefinitions,
 } from "./guided-turn-policy.ts";
+import { selectGuidedTurnPhasePolicy } from "./guided-phase-policy.ts";
 import { createGuidedToolExecutionBoundary } from
   "./guided-tool-execution-boundary.ts";
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
@@ -80,7 +78,8 @@ export function createProductionGuidedTurnAgent(input: {
       recordModelRoundAcceptance,
       onProviderResponseIdentity,
     }): Promise<BtccAgentLoopResult> {
-      const policy = guidedPolicy(turn);
+      const phasePolicy = selectGuidedTurnPhasePolicy(turn);
+      const policy = phasePolicy.executionPolicy;
       const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
       const workScope = workScopeForTurn(turn, policy.trackingMode);
       let initialWork = policy.trackingMode === "none"
@@ -100,9 +99,9 @@ export function createProductionGuidedTurnAgent(input: {
         }
       }
       const presentedWorkId = initialWork?.work.workId;
-      const authorizedTools = authorizedToolDefinitions(turn);
+      const authorizedTools = phasePolicy.authorizedTools;
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
-      const visibleTools = visibleToolDefinitions(authorizedTools, policy);
+      const visibleTools = phasePolicy.providerTools;
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
       const describedToolIds = new Set<string>();
       const effectService = createGuidedEffectService(input.effectJournal);
@@ -246,7 +245,7 @@ export function createProductionGuidedTurnAgent(input: {
       const responseLanguage = renderGuidedResponseLanguage(turn, input.contextDocuments);
       const requestAttribution = renderGuidedTurnRequestAttribution(
         turn,
-        policy,
+        phasePolicy.stableInstructionPrefix,
         responseLanguage,
         {
           ...input,

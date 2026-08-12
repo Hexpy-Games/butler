@@ -172,6 +172,149 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
   }
 });
 
+test("production Guided Turn sends the admitted M1 v2 direct surface and stable prefix", async () => {
+  const fixture = createFixture("guided-m1-v2-direct-surface");
+  const previousFlag = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  try {
+    let captured: ModelRoundRequest | undefined;
+    const agent = fixture.agent({
+      async runRound(request) {
+        captured = request;
+        return { text: "direct answer", toolCalls: [] };
+      },
+    });
+    const result = await agent.run({
+      turn: turnRecord(fixture.root, {
+        turnId: "guided-m1-v2-direct-surface",
+        accessMode: "read_only",
+        trackingMode: "none",
+      }),
+      signal: new AbortController().signal,
+    });
+
+    expect(result.content).toBe("direct answer");
+    expect(captured?.tools.map((tool) => tool.name)).toContain("web_search");
+    expect(captured?.tools.map((tool) => tool.name)).toContain("recall_memory");
+    expect(captured?.tools.map((tool) => tool.name)).not.toContain("read_file");
+    expect(captured?.tools.map((tool) => tool.name)).not.toContain("replace_work_plan");
+    expect(captured?.instructions).toContain("This is a direct non-project phase");
+    expect(captured?.instructions).not.toContain("The Work stage is process guidance");
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    } else {
+      process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousFlag;
+    }
+    fixture.close();
+  }
+});
+
+test("production M1 v2 read-only surface executes an admitted native registry tool", async () => {
+  const fixture = createFixture("guided-m1-v2-read-only-native");
+  const previousFlag = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  writeFileSync(join(fixture.root, "evidence.txt"), "native evidence\n");
+  bindAppProject(fixture.dbPath, {
+    id: "guided-agent-session",
+    workspacePath: fixture.root,
+    ledgerProjectId: "guided-m1-v2-read-only",
+  });
+  try {
+    const requests: ModelRoundRequest[] = [];
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        requests.push(request);
+        return toolResponse([toolCall("read-evidence", "read_file", {
+          path: "evidence.txt",
+        })]);
+      },
+      (request) => {
+        requests.push(request);
+        expect(JSON.stringify(messagesWithToolResults(request)))
+          .toContain("native evidence");
+        return { text: "read-only evidence accepted", toolCalls: [] };
+      },
+    ]));
+    const result = await agent.run({
+      turn: turnRecord(fixture.root, {
+        turnId: "guided-m1-v2-read-only-native",
+        accessMode: "read_only",
+        trackingMode: "none",
+        projectId: "guided-m1-v2-read-only",
+      }),
+      signal: new AbortController().signal,
+    });
+
+    expect(result.content).toBe("read-only evidence accepted");
+    expect(requests[0]?.tools.map((tool) => tool.name)).toContain("read_file");
+    expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("write_file");
+    expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("run_command");
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    } else {
+      process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousFlag;
+    }
+    fixture.close();
+  }
+});
+
+test("production M1 v2 execution instructions preserve the reviewed Work lifecycle", async () => {
+  const fixture = createFixture("guided-m1-v2-execution-instructions");
+  const previousFlag = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  bindAppProject(fixture.dbPath, {
+    id: "guided-agent-session",
+    workspacePath: fixture.root,
+    ledgerProjectId: "guided-m1-v2-execution",
+  });
+  try {
+    let captured: ModelRoundRequest | undefined;
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        captured = request;
+        return toolResponse([toolCall("lifecycle-search", "tool_search", {
+          query: "project_ledger_work_complete",
+          include_disabled: true,
+        })]);
+      },
+      { text: "execution instructions accepted", toolCalls: [] },
+    ]));
+    await agent.run({
+      turn: turnRecord(fixture.root, {
+        turnId: "guided-m1-v2-execution-instructions",
+        accessMode: "full_access",
+        trackingMode: "ledger",
+        projectId: "guided-m1-v2-execution",
+      }),
+      signal: new AbortController().signal,
+    });
+
+    expect(captured?.instructions).toContain("create or reuse one Work");
+    expect(captured?.instructions).toContain("accepted Plan Review");
+    expect(captured?.instructions).toContain("execute the effect");
+    expect(captured?.instructions).toContain("review its actual result");
+    expect(captured?.instructions).toContain("validate completion");
+    expect(captured?.instructions).toContain("close out the Work");
+    expect(captured?.instructions).toContain("admitted native tools");
+    expect(captured?.tools.map((tool) => tool.name)).toContain("replace_work_plan");
+    expect(captured?.tools.map((tool) => tool.name)).toContain("run_command");
+    expect(captured?.tools.map((tool) => tool.name))
+      .not.toContain("project_ledger_work_complete");
+    expect(JSON.stringify(fixture.stores.guidedToolJournal.list(
+      "guided-m1-v2-execution-instructions",
+    ))).toContain("native:project_ledger_work_complete");
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    } else {
+      process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousFlag;
+    }
+    fixture.close();
+  }
+});
+
 test("production Guided Turn rereads Work across execution windows in one agent run", async () => {
   const fixture = createFixture("guided-production-window-continuation");
   try {
@@ -679,6 +822,8 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
 
 test("Guided project Work initializes and closes Project Ledger through reviewed effects", async () => {
   const fixture = createFixture("guided-project-ledger-lifecycle");
+  const previousFlag = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
   const ledgerRoot = join(
     fixture.root,
     "project-ledger",
@@ -695,9 +840,8 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
     ledgerProjectId: "guided-ledger-project",
   });
   try {
-    const results: unknown[] = [];
     const turnId = "turn-guided-project-ledger-lifecycle";
-    const calls = [
+    const planCalls = [
       toolCall("plan-1", "replace_work_plan", {
         objective: "Complete one tracked project change",
         actions: [{
@@ -723,20 +867,44 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
         verdict: "accept",
         summary: "The plan is concise and matches the project request.",
       }),
-      toolCall("create-1", "project_ledger_create", {
+    ];
+    const searchCalls = [
+      toolCall("search-create", "tool_search", {
+        query: "project_ledger_create",
+        include_disabled: true,
+      }),
+      toolCall("search-complete", "tool_search", {
+        query: "project_ledger_work_complete",
+        include_disabled: true,
+      }),
+    ];
+    const describeCalls = [toolCall("describe-effects", "tool_describe", {
+      ids: [
+        "native:project_ledger_create",
+        "native:project_ledger_work_complete",
+      ],
+    })];
+    const createCalls = [toolCall("create-1", "tool_call", {
+      id: "native:project_ledger_create",
+      arguments: {
         kind: "work",
         id: "W-GUIDED-LIFECYCLE",
         title: "Guided project lifecycle",
         status: "proposed",
         spec: "SPEC-GUIDED-LIFECYCLE",
         acceptance: "The tracked project result is validated and reported",
-      }),
-      toolCall("complete-1", "project_ledger_work_complete", {
+      },
+    })];
+    const completeCalls = [toolCall("complete-1", "tool_call", {
+      id: "native:project_ledger_work_complete",
+      arguments: {
         id: "W-GUIDED-LIFECYCLE",
         validation: "Lifecycle integration test passed",
         review: "The requested tracked outcome is complete",
         report: "The Guided result contains the completed outcome",
-      }),
+      },
+    })];
+    const reviewCalls = [
       toolCall("checkpoint-1", "record_work_checkpoint", {
         action_updates: [{ action_key: "create-ledger-work", status: "done" }, {
           action_key: "complete-ledger-work",
@@ -758,10 +926,13 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
       }),
     ];
     const agent = fixture.agent(scriptedModelRound([
-      toolResponse(calls),
+      toolResponse(planCalls),
+      toolResponse(searchCalls),
+      toolResponse(describeCalls),
+      toolResponse(createCalls),
+      toolResponse(completeCalls),
+      toolResponse(reviewCalls),
       (request) => {
-        results.push(...fixture.stores.guidedToolJournal.list(turnId)
-          .map((entry) => entry.result));
         expect(existsSync(ledgerRoot)).toBe(true);
         expect(request.messages.some((message) => message.role === "tool")).toBe(true);
         return { text: "프로젝트 작업과 기록을 완료했습니다.", toolCalls: [] };
@@ -774,14 +945,25 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
       committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
       agent,
     });
-    expect(await runtime.runTurn(projectRunCommand(fixture.root, turnId)))
+    const delivered = await runtime.runTurn(projectRunCommand(fixture.root, turnId));
+    expect(delivered)
       .toMatchObject({
       kind: "delivered",
       content: "프로젝트 작업과 기록을 완료했습니다.",
     });
-    for (const result of results) {
-      expect(result).toMatchObject({ ok: true });
-    }
+    const journal = fixture.stores.guidedToolJournal.list(turnId);
+    expect(journal.find((entry) => entry.toolName === "tool_search" &&
+      JSON.stringify(entry.arguments).includes("project_ledger_create"))?.result)
+      .toMatchObject({ results: [expect.objectContaining({
+        id: "native:project_ledger_create",
+        enabled: true,
+      })] });
+    expect(journal.find((entry) => entry.toolName === "tool_describe")?.result)
+      .toMatchObject({ ok: true, missing: [] });
+    expect(journal.find((entry) => entry.toolName === "project_ledger_create")?.result)
+      .toMatchObject({ ok: true });
+    expect(journal.find((entry) => entry.toolName === "project_ledger_work_complete")?.result)
+      .toMatchObject({ ok: true });
     expect(existsSync(join(ledgerRoot, "project.json"))).toBe(true);
     expect(existsSync(join(ledgerRoot, "work", "W-GUIDED-LIFECYCLE", "work.md")))
       .toBe(true);
@@ -795,6 +977,11 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
       .toHaveLength(2);
     expect((await fixture.stores.turns.findTurn(turnId))?.route).toBe("managed");
   } finally {
+    if (previousFlag === undefined) {
+      delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    } else {
+      process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousFlag;
+    }
     fixture.close();
   }
 });
