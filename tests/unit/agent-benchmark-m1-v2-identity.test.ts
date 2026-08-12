@@ -352,11 +352,61 @@ describe("M1 v2 product-owned evidence identity", () => {
         turnId,
         providerRequestIdentities: [
           ownership(1, sessionId, turnId, "agent", attemptA),
+          ownership(2, sessionId, turnId, "title", titleAttempt),
         ],
       },
     );
 
     expect(summary.unmatchedEnvelopeDigests).toContain(titleAttempt);
+  });
+
+  test("accepts landing Agent envelopes when an exact terminal title identity has no SC01 envelope", () => {
+    const sessionId =
+      "chat-btcc-r3-e2e-agent-benchmark-landing-cold-controlled-butler-cold-1";
+    const turnId = "turn-d31a25bd-e432-413a-b0c4-6939fa2a0c33";
+    const agents = Array.from({ length: 18 }, (_, index) => {
+      const ordinal = index + 1;
+      return request(
+        ordinal,
+        `${ordinal.toString().padStart(2, "0")}${"A".repeat(41)}`,
+        "agent",
+        1_000 + ordinal,
+        130 + ordinal,
+      );
+    });
+    const title = request(19, titleAttempt, "title", 844, 160);
+    const requests = [...agents, title];
+    const evaluated = evaluateProductEvidence({
+      fixtureId: "landing-cold",
+      requests,
+      identities: providerRequestTurnIdentities({
+        requests,
+        ordinalsBeforeSubmission: new Set(),
+        sessionId,
+        turnId,
+      }),
+      metrics: agents.flatMap((agent, index) => attemptMetrics(
+        agent.attemptDigest!,
+        agent.serializedRequestBytes,
+        index,
+        "eligible",
+        "landing-cold",
+      )),
+      sessionId,
+      turnId,
+    });
+
+    expect(evaluated.m1V2?.agentAttempts).toHaveLength(18);
+    expect(evaluated.m1V2?.unarmedPhysicalOverhead.title).toEqual({
+      attempts: 1,
+      providerSendBytes: 844,
+    });
+    expect(evaluated.m1V2?.reasons).not.toContain(
+      "physical_attempt_identity_join_failed",
+    );
+    expect(evaluated.m1V2?.reasons).toContain(
+      "landing_quality_or_visual_gate_failed",
+    );
   });
 
   test.each([
@@ -473,7 +523,9 @@ describe("M1 v2 product-owned evidence identity", () => {
   });
 });
 
-function identityFixture(fixtureId: "direct-cold" | "direct-warm" = "direct-cold") {
+function identityFixture(
+  fixtureId: "direct-cold" | "direct-warm" | "landing-cold" = "direct-cold",
+) {
   const plan = createBenchmarkPlan({
     campaign: "m1-v2", runId: "identity", seed: 1,
     runRoot: join(authorityRoot, "run"), sourceRoot: process.cwd(),
@@ -565,7 +617,7 @@ function envelope(
   providerSendBytes: number,
   ts: number,
   retryOrdinal: number,
-  armId: "direct-cold" | "direct-warm" | null = "direct-cold",
+  armId: "direct-cold" | "direct-warm" | "landing-cold" | null = "direct-cold",
 ): OperationalMetricEvent {
   return {
     schema: "butler.operational-metric.v1",
@@ -588,7 +640,7 @@ function attemptMetrics(
   bytes: number,
   retryOrdinal: number,
   eligibility: string,
-  armId: "direct-cold" | "direct-warm" | null = "direct-cold",
+  armId: "direct-cold" | "direct-warm" | "landing-cold" | null = "direct-cold",
 ): OperationalMetricEvent[] {
   return [
     envelope(attemptDigest, bytes, 150 + retryOrdinal, retryOrdinal, armId),
@@ -631,7 +683,7 @@ function metric(
 }
 
 function evaluateProductEvidence(input: {
-  fixtureId?: "direct-cold" | "direct-warm";
+  fixtureId?: "direct-cold" | "direct-warm" | "landing-cold";
   requests: ReturnType<typeof request>[];
   identities: ReturnType<typeof providerRequestTurnIdentities>;
   metrics: OperationalMetricEvent[];
