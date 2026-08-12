@@ -6,6 +6,8 @@ export {
   getBenchmarkFixture,
   hashBenchmarkFixture,
   materializeFixturePrompt,
+  loadM1V2BenchmarkFixtures,
+  verifyM1V2AuthoritativeProvenance,
 } from "./fixtures.ts";
 export { generateBenchmarkReport, summarizeBenchmarkResult, writeBenchmarkReport } from "./report.ts";
 export { runAgentBenchmark, createFileCheckpointStore } from "./workflow.ts";
@@ -14,6 +16,7 @@ export { applyVisualReviews, readVisualReviewFile } from "./visual-review.ts";
 export type {
   AgentAdapter,
   BenchmarkAgent,
+  BenchmarkCampaign,
   BenchmarkArmPlan,
   BenchmarkCacheState,
   BenchmarkFixture,

@@ -203,5 +203,6 @@ function emptyObservation(arm: BenchmarkArmPlan): BenchmarkObservation {
     changedPaths: [],
     diagnostics: [],
     evidenceRefs: [],
+    m1V2: null,
   };
 }

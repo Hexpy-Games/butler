@@ -7,6 +7,8 @@ import type {
   BenchmarkScenario,
 } from "./contracts.ts";
 import { sanitizeIdentifier } from "./identifiers.ts";
+import type { M1V2CampaignResult } from "./m1-v2-types.ts";
+import { m1V2ReportLines, summarizeM1V2Campaign } from "./m1-v2-report.ts";
 
 export interface BenchmarkReportSummary {
   runId: string;
@@ -16,6 +18,7 @@ export interface BenchmarkReportSummary {
   acceptedCount: number;
   gatedAgents: BenchmarkAgent[];
   canRank: boolean;
+  m1V2Campaign: M1V2CampaignResult | null;
   medians: Array<{
     agent: BenchmarkAgent;
     scenario: BenchmarkScenario;
@@ -160,6 +163,7 @@ export function summarizeBenchmarkResult(result: BenchmarkResultFile): Benchmark
     acceptedCount: observations.filter((observation) => observation.terminalState === "accepted").length,
     gatedAgents,
     canRank: complete && [...(result.plan.tracks ?? ["controlled", "recommended-default"])].every((track) => eligibleTrack(track) && visualReviewComplete(track)) && hasAcceptedForEachAgentAndTrack && gatedAgents.length === 0,
+    m1V2Campaign: summarizeM1V2Campaign(result),
     arms,
     medians,
   };
@@ -214,6 +218,7 @@ export function generateBenchmarkReport(result: BenchmarkResultFile): string {
     "See `PILOT_PROTOCOL.md` for the operator protocol and official installation links.",
     "",
   );
+  lines.push(...m1V2ReportLines(summary.m1V2Campaign));
   return lines.join("\n");
 }
 

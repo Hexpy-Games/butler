@@ -50,14 +50,14 @@ export async function runBenchmarkArm(input: RunBenchmarkArmInput): Promise<Benc
     });
   }
   if (!preflight.available || preflight.gateCode !== "none") return createGatedBenchmarkObservation(arm, preflight);
-  const fixture = getBenchmarkFixture(arm.scenario);
+  const fixture = getBenchmarkFixture(arm.scenario, arm.sourceRoot);
   try {
     prepareArmRoots(arm);
   } catch (error) {
     return createFailureObservation(arm, errorMessage(error));
   }
   const sourceBefore = sourceIntegrity(arm.sourceRoot);
-  if (sourceBefore.commit !== AGENT_BENCHMARK_BASELINE_SHA || sourceBefore.status !== "") {
+  if (sourceBefore.commit !== (arm.sourceRevision ?? AGENT_BENCHMARK_BASELINE_SHA) || sourceBefore.status !== "") {
     return createGatedBenchmarkObservation(arm, {
       available: false,
       executable: preflight.executable,
@@ -203,8 +203,7 @@ function sourceIntegrityChanged(
   after: { commit: string | null; status: string | null } | null,
 ): boolean {
   if (!before || !after || before.commit === null || after.commit === null || before.status === null || after.status === null) return true;
-  return before.commit !== AGENT_BENCHMARK_BASELINE_SHA ||
-    before.status !== "" || after.commit !== before.commit || after.status !== before.status;
+  return before.status !== "" || after.commit !== before.commit || after.status !== before.status;
 }
 
 function errorMessage(error: unknown): string {

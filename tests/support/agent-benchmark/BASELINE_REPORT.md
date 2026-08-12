@@ -8,7 +8,7 @@ This report is generated from the persisted benchmark observations. It does not 
 - Seed: `20260809`
 - Observations: 12
 - Accepted: 0
-- Ranking: withheld (no observation met acceptance criteria)
+- Ranking: withheld (all 12 historical observations are rejected and unranked)
 
 ## Track configurations
 
@@ -55,6 +55,8 @@ No adapter gates were recorded.
 
 ## Interpretation
 
-No observation met the acceptance criteria. No agent ranking or accepted-result-per-token comparison is reported.
+All 12 observations remain rejected, unranked historical evidence. No later
+rubric or M1 eligibility rule retroactively accepts or re-ranks them, and no
+agent ranking or accepted-result-per-token comparison is reported.
 
 See `PILOT_PROTOCOL.md` for the operator protocol and official installation links.

@@ -320,7 +320,13 @@ function bindPreparedSession(run: PreparedRun): void {
       modelProviderId: run.model.split("/", 1)[0] || "openai",
       modelRef: run.model as `${string}/${string}`,
       transportBindings: [],
-      metadata: { source: "btcc-r3-electron-e2e-fixture" },
+      metadata: {
+        source: "btcc-r3-electron-e2e-fixture",
+        ...(run.attributionArmId ? { m1AttributionArmId: run.attributionArmId } : {}),
+        ...(run.cacheBoundaryEvidence
+          ? { m1CacheBoundaryEvidence: run.cacheBoundaryEvidence }
+          : {}),
+      },
     });
   } finally {
     bindingStore.close();
@@ -429,6 +435,10 @@ export async function prepareElectronRun(
   const sessionId = `chat-btcc-r3-e2e-${sessionSuffix}`;
   const run: PreparedRun = {
     accessMode,
+    ...(scenario.attributionArmId ? { attributionArmId: scenario.attributionArmId } : {}),
+    ...(scenario.cacheBoundaryEvidence
+      ? { cacheBoundaryEvidence: scenario.cacheBoundaryEvidence }
+      : {}),
     agentOwnership,
     bundledAgentResourceDir: agentOwnership === "electron"
       ? providedBundledAgentResourceDir
