@@ -169,7 +169,7 @@ export function summarizePhysicalRequests(
     unmatchedRequestOrdinals: [
       ...new Set([...invalidAgentOrdinals, ...missingAgentOrdinals]),
       ...targetCandidates.flatMap(({ identity, used }) =>
-        used || identity.attemptDigest === null ? [] : [identity.ordinal]),
+        used || identity.requestKind !== "agent" ? [] : [identity.ordinal]),
     ],
     invalidRequestIdentityCount,
     targetAgentRequests,

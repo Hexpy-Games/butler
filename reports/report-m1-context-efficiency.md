@@ -343,3 +343,64 @@ Acceptance evidence:
 No provider token, campaign, final 4x3, Hermes/OpenCode run, product policy
 change, retry, fallback, second adapter/runner, merge, or default-on change was
 used. Existing diagnostic roots and prepared resources remain preserved.
+
+## Canonical landing evidence acceptance diagnosis
+
+Task: `T-M1-V2-BENCHMARK-LANDING-EVIDENCE-ACCEPTANCE-20260812`
+
+The preserved Attempt -04 `landing-cold` observation was inspected without a
+replacement or provider rerun. Its target membership contained 18 exact Agent
+requests and one exact title request under one product-owned Session and Turn.
+Every request matched its typed ordinal, role, attempt digest, serialized byte
+count, and terminal observation. The 18 Agent request bytes also matched the 18
+arm-tagged SC01 envelopes exactly. The remaining 844-byte title request was an
+unarmed physical-overhead request, but the evaluator incorrectly required every
+unused typed target identity, including non-Agent identities, to own an SC01
+envelope. That caused `physical_attempt_identity_join_failed` even though Agent
+membership and attribution were complete.
+
+The physical join now requires SC01 envelope consumption only for target Agent
+identities. Complete typed title, auxiliary, and provider-tool identities remain
+observable overhead without becoming semantic Agent attempts. Missing,
+duplicate, conflicting, wrong-Session/Turn/role/digest/byte/time/arm Agent
+identity, duplicate envelope, retry ambiguity, and an arm-tagged non-Agent
+envelope still fail closed. A failing-first public evaluator regression using
+the observed 18-Agent-plus-title shape failed on the old code and passes after
+the one-condition repair while retaining the landing quality rejection.
+
+A separate observation-fidelity defect was also proven. The canonical adapter
+copied generated files only for the legacy `butler_landing_page` fixture id, so
+the typed M1 `landing-cold` workspace was semantically validated but its actual
+HTML, CSS, and package file were not copied to the arm output before runtime
+cleanup. The public result consequently reported zero changed paths despite
+successful file mutation and rendering. The existing copy path now admits only
+the legacy landing fixture or the typed M1 `landing-cold` arm. Existing
+containment checks and exclusions for repository input, dependencies, build
+outputs, caches, and coverage remain unchanged; non-landing fixtures still do
+not copy artifacts.
+
+The quality rejection is genuine, not an extractor miss. The preserved rendered
+page visibly explains memory/context, planning, tool use, and result execution,
+but it does not explain durable Project/Work, workspace authority, provider
+routing, or failure/restart recovery. Those four capability claims are absent
+from the actual result, while memory/context is present and passed. Revision 2
+explicitly requires a landing page to explain these Butler-specific
+capabilities, so no fixture, regex, threshold, or quality rubric was weakened.
+Project Ledger closeout is tracked separately as internal Work evidence; its
+absence did not create the landing quality reason and was not converted into a
+required page claim.
+
+No generated product artifact, clean product source, fixture, quality rubric,
+provider result, or preserved root was modified or promoted. No replacement,
+campaign, final 4x3, Hermes/OpenCode run, hidden retry, product optimization,
+merge, or default-on change occurred. The landing observation remains
+quality-ineligible after the harness repairs, so the paused product Task is not
+resume-authorized by this diagnosis.
+
+Validation passed 89 focused and public-path tests, typecheck, lint with zero
+errors and 20 pre-existing warnings, BTCC shape, module-boundary review, and
+`git diff --check`. The repository-wide check reached the broad unit phase with
+no observed assertion failure but hit its bounded 301-second timeout, so a full
+repository-wide pass is not claimed. Independent ordinary non-fast Sol-high
+review traced both source paths and the preserved evidence, then approved with
+no actionable P0-P3 findings.

@@ -1,13 +1,13 @@
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import type { AdapterRunResult, BenchmarkArmPlan } from "./contracts.ts";
+import type { AdapterRunResult, BenchmarkArmPlan, BenchmarkFixture } from "./contracts.ts";
 import { inventoryOutputFiles } from "./repository-evidence.ts";
 
 export function copyGeneratedArtifacts(
   evidence: Record<string, unknown>,
-  input: { arm: BenchmarkArmPlan; fixture: { id: string; expectedFiles?: readonly string[] } },
+  input: { arm: BenchmarkArmPlan; fixture: Pick<BenchmarkFixture, "id" | "expectedFiles" | "m1V2"> },
 ): void {
-  if (input.fixture.id !== "butler_landing_page") return;
+  if (!isArtifactProducingLandingFixture(input.fixture)) return;
   const run = asRecord(evidence.run);
   const workspaceRoot = typeof run?.workspaceRoot === "string" ? run.workspaceRoot : null;
   if (!workspaceRoot) return;
@@ -21,6 +21,12 @@ export function copyGeneratedArtifacts(
     mkdirSync(resolve(destination, ".."), { recursive: true });
     copyFileSync(source, destination);
   }
+}
+
+function isArtifactProducingLandingFixture(
+  fixture: Pick<BenchmarkFixture, "id" | "m1V2">,
+): boolean {
+  return fixture.id === "butler_landing_page" || fixture.m1V2?.armId === "landing-cold";
 }
 
 function isExcludedWorkspacePath(path: string): boolean {
