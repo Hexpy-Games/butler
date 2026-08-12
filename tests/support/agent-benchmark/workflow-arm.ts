@@ -29,6 +29,7 @@ export interface RunBenchmarkArmInput {
   preflight: PreflightResult;
   signal: AbortSignal;
   planRunRoot: string;
+  harnessRoot: string;
   landingValidator: LandingValidator;
   evidenceSnapshot: RepositoryEvidenceSnapshot | null;
   sourceDiagnostic: string | null;
@@ -49,7 +50,7 @@ export async function runBenchmarkArm(input: RunBenchmarkArmInput): Promise<Benc
     });
   }
   if (!preflight.available || preflight.gateCode !== "none") return createGatedBenchmarkObservation(arm, preflight);
-  const fixture = getBenchmarkFixture(arm.scenario, arm.sourceRoot);
+  const fixture = getBenchmarkFixture(arm.scenario, input.harnessRoot);
   try {
     prepareArmRoots(arm);
   } catch (error) {

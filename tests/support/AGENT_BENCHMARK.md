@@ -20,6 +20,14 @@ landing rubric. It schedules Butler-only repetitions sequentially. Hermes and
 OpenCode remain contract-covered comparison adapters and are not preflighted or
 executed in M1 mode.
 
+M1 composition has two explicit checkout roles. `--harness-root` is the PR
+#142 authority that owns fixtures and provenance; `--source-root` is only the
+clean product revision under evaluation and need not contain benchmark support.
+The planner verifies `--provenance-jsonl` against the harness authority and
+freezes its metadata, JSONL, and recovered-evidence digests into the plan and
+manifest. The shared workflow repeats that verification before every fresh or
+resumed execution and fails closed if the authority changed.
+
 The historical compact 12-observation report remains immutable rejected,
 unranked evidence. It is not reinterpreted as accepted and is not eligible for
 M1 statistical acceptance. Capability-envelope differences remain mandatory

@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  benchmarkPlanIdentity,
   createBenchmarkPlan,
   createFileCheckpointStore,
   runAgentBenchmark,
@@ -21,25 +22,42 @@ import type {
   BenchmarkResultFile,
   PreflightResult,
 } from "../support/agent-benchmark/contracts.ts";
+import {
+  prepareTestHarnessAuthority,
+  type TestHarnessAuthority,
+} from "./support/m1-v2-provenance-authority.ts";
 
 const CURRENT_MAIN_SHA = "65494154f6e9ddbfb20458bc67250c7d15b5d13d";
 const CURRENT_ATTRIBUTION_SHA = "269a0fc72c7f2c77b8df9ccb37e86761ab478435";
 
 test("M1 preflight accepts its exact plan source and gates a checkout mismatch", async () => {
   const root = mkdtempSync(join(tmpdir(), "agent-benchmark-m1-source-"));
+  const authority = prepareTestHarnessAuthority(root);
   const sourceRoot = join(root, "source");
-  execFileSync("git", ["clone", "--quiet", "--local", process.cwd(), sourceRoot]);
+  execFileSync("git", ["clone", "--quiet", "--no-checkout", "--local", process.cwd(), sourceRoot]);
+  execFileSync("git", ["-C", sourceRoot, "checkout", "--quiet", CURRENT_ATTRIBUTION_SHA]);
   const sourceRevision = execFileSync(
     "git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8" },
   ).trim();
+  expect(() => readFileSync(join(
+    sourceRoot, "tests/support/agent-benchmark/fixtures/m1-v2/direct-cold.json",
+  ))).toThrow();
 
   for (const revision of [CURRENT_MAIN_SHA, CURRENT_ATTRIBUTION_SHA]) {
-    const plan = m1Plan(root, sourceRoot, `known-${revision.slice(0, 8)}`, revision);
+    const plan = m1Plan(root, sourceRoot, authority, `known-${revision.slice(0, 8)}`, revision);
     expect(() => validateBenchmarkPlan(plan)).not.toThrow();
   }
 
   const adapters = fakeAdapters();
-  const exact = m1Plan(root, sourceRoot, "exact", sourceRevision);
+  const exact = m1Plan(root, sourceRoot, authority, "exact", sourceRevision);
+  expect(exact.provenance).toMatchObject({
+    schema: "butler.agent-benchmark.provenance-identity.v1",
+    authorityJsonlBasename: "authority.jsonl",
+  });
+  expect(benchmarkPlanIdentity({
+    ...exact,
+    provenance: { ...exact.provenance!, metadataSha256: "0".repeat(64) },
+  })).not.toBe(benchmarkPlanIdentity(exact));
   const exactRun = await runAgentBenchmark({
     plan: exact,
     adapters,
@@ -52,7 +70,21 @@ test("M1 preflight accepts its exact plan source and gates a checkout mismatch",
   expect(exactRun.result.observations.every((item) =>
     !item.diagnostics.some((value) => value.includes("Pinned source checkout")))).toBe(true);
 
-  const mismatch = m1Plan(root, sourceRoot, "mismatch", "a".repeat(40));
+  const executePlan = m1Plan(root, sourceRoot, authority, "exact-execute", sourceRevision);
+  const executeRun = await runAgentBenchmark({
+    plan: executePlan,
+    adapters,
+    store: createFileCheckpointStore(join(executePlan.runRoot, "result.json")),
+    signal: new AbortController().signal,
+    landingValidator: async () => validLanding(),
+    mode: "execute",
+  });
+  expect(executeRun.result.observations).toHaveLength(1);
+  expect(executeRun.result.observations.every((item) =>
+    item.gateCode === "measurement_unavailable" &&
+      !item.diagnostics.some((value) => value.includes("ENOENT")))).toBe(true);
+
+  const mismatch = m1Plan(root, sourceRoot, authority, "mismatch", "a".repeat(40));
   const mismatchRun = await runAgentBenchmark({
     plan: mismatch,
     adapters,
@@ -77,13 +109,14 @@ test("M1 preflight accepts its exact plan source and gates a checkout mismatch",
 
 test("CLI preserves one manifest identity, rejects replacement, and resumes identically", async () => {
   const root = mkdtempSync(join(tmpdir(), "agent-benchmark-manifest-"));
+  const authority = prepareTestHarnessAuthority(root);
   const sourceRoot = join(root, "source");
   execFileSync("git", ["clone", "--quiet", "--local", process.cwd(), sourceRoot]);
   const sourceRevision = execFileSync(
     "git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8" },
   ).trim();
   const runRoot = join(root, "run");
-  const args = cliArgs(runRoot, sourceRoot, sourceRevision, 1);
+  const args = cliArgs(runRoot, sourceRoot, authority, sourceRevision, 1);
 
   const manifestPath = join(runRoot, "manifest.json");
   const resultPath = join(runRoot, "result.json");
@@ -105,10 +138,10 @@ test("CLI preserves one manifest identity, rejects replacement, and resumes iden
     .run.planIdentity).toBe(resultBefore.run.planIdentity);
 
   await expect(runAgentBenchmarkCli(cliArgs(
-    runRoot, sourceRoot, sourceRevision, 2,
+    runRoot, sourceRoot, authority, sourceRevision, 2,
   ))).rejects.toThrow("manifest identity mismatch");
   await expect(runAgentBenchmarkCli(cliArgs(
-    runRoot, sourceRoot, "f".repeat(40), 1,
+    runRoot, sourceRoot, authority, "f".repeat(40), 1,
   ))).rejects.toThrow("manifest identity mismatch");
 
   const tampered = JSON.parse(manifestBefore) as { fixtures: Array<{ sha256: string }> };
@@ -117,11 +150,46 @@ test("CLI preserves one manifest identity, rejects replacement, and resumes iden
   await expect(runAgentBenchmarkCli(args)).rejects.toThrow("manifest identity mismatch");
 });
 
+test("M1 resume reverifies immutable provenance authority", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-benchmark-provenance-"));
+  const authority = prepareTestHarnessAuthority(root);
+  const sourceRoot = join(root, "source");
+  execFileSync("git", ["clone", "--quiet", "--local", process.cwd(), sourceRoot]);
+  const sourceRevision = execFileSync(
+    "git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8" },
+  ).trim();
+  const runRoot = join(root, "run");
+  const args = cliArgs(runRoot, sourceRoot, authority, sourceRevision, 1);
+  const plan = m1Plan(root, sourceRoot, authority, "provenance-resume", sourceRevision);
+  await runAgentBenchmarkCli(["plan", ...args.slice(1)]);
+  const manifestBefore = readFileSync(join(runRoot, "manifest.json"), "utf8");
+  const provenancePath = join(
+    authority.harnessRoot, "tests/support/agent-benchmark/fixtures/m1-v2/provenance.json",
+  );
+  const provenance = JSON.parse(readFileSync(provenancePath, "utf8")) as {
+    authority: { jsonlBasename: string };
+  };
+  provenance.authority.jsonlBasename = `changed-${provenance.authority.jsonlBasename}`;
+  writeFileSync(provenancePath, `${JSON.stringify(provenance, null, 2)}\n`, "utf8");
+
+  await expect(runAgentBenchmark({
+    plan,
+    adapters: fakeAdapters(),
+    store: createFileCheckpointStore(join(plan.runRoot, "result.json")),
+    signal: new AbortController().signal,
+    landingValidator: async () => validLanding(),
+    mode: "preflight-only",
+  })).rejects.toThrow("provenance identity mismatch");
+  await expect(runAgentBenchmarkCli(args)).rejects.toThrow("provenance");
+  expect(readFileSync(join(runRoot, "manifest.json"), "utf8")).toBe(manifestBefore);
+});
+
 test("checkpoint persistence rejects a different plan instead of replacing evidence", async () => {
   const root = mkdtempSync(join(tmpdir(), "agent-benchmark-result-identity-"));
   const sourceRoot = process.cwd();
-  const firstPlan = m1Plan(root, sourceRoot, "result", "a".repeat(40), 1);
-  const secondPlan = m1Plan(root, sourceRoot, "result", "a".repeat(40), 2);
+  const authority = prepareTestHarnessAuthority(root);
+  const firstPlan = m1Plan(root, sourceRoot, authority, "result", "a".repeat(40), 1);
+  const secondPlan = m1Plan(root, sourceRoot, authority, "result", "a".repeat(40), 2);
   const first = resumeOrInitialize(firstPlan, null);
   expect(() => resumeOrInitialize(secondPlan, first)).toThrow("checkpoint identity mismatch");
 
@@ -142,6 +210,7 @@ test("checkpoint persistence rejects a different plan instead of replacing evide
 function m1Plan(
   root: string,
   sourceRoot: string,
+  authority: TestHarnessAuthority,
   runId: string,
   baselineSha: string,
   seed = 1,
@@ -152,6 +221,8 @@ function m1Plan(
     seed,
     runRoot: join(root, `run-${runId}`),
     sourceRoot,
+    harnessRoot: authority.harnessRoot,
+    provenanceJsonlPath: authority.jsonlPath,
     baselineSha,
     controlledModel: "openai/gpt-5.6-sol",
     controlledReasoning: "medium",
@@ -161,6 +232,7 @@ function m1Plan(
 function cliArgs(
   runRoot: string,
   sourceRoot: string,
+  authority: TestHarnessAuthority,
   sourceRevision: string,
   seed: number,
 ): string[] {
@@ -168,11 +240,14 @@ function cliArgs(
     "pilot", "--campaign", "m1-v2", "--seed", String(seed),
     "--run-id", "manifest-resume", "--run-root", runRoot,
     "--source-root", sourceRoot, "--output", join(runRoot, "report"),
+    "--harness-root", authority.harnessRoot,
+    "--provenance-jsonl", authority.jsonlPath,
     "--controlled-model", "openai/gpt-5.6-sol",
     "--controlled-reasoning", "medium", "--source-revision", sourceRevision,
     "--repetitions", "3",
   ];
 }
+
 
 function fakeAdapters(): Readonly<Record<"butler" | "hermes" | "opencode", AgentAdapter>> {
   return {
@@ -192,7 +267,12 @@ function fakeAdapter(agent: AgentAdapter["agent"]): AgentAdapter {
       };
     },
     async run(_input: AdapterRunInput): Promise<AdapterRunResult> {
-      throw new Error("preflight-only test must not execute an adapter");
+      return {
+        exitCode: null, gateCode: "measurement_unavailable", timedOut: false,
+        cancelled: false, stdout: "", stderr: "", adapterVersion: "fixture",
+        provider: null, finalText: "", sessionId: null, usage: {}, tools: {},
+        timing: {}, operations: {}, changedPaths: [], evidenceRefs: [],
+      };
     },
   };
 }

@@ -5,7 +5,9 @@ without product/provider execution as follows:
 
 ```sh
 bun run benchmark:agents -- plan --campaign m1-v2 --seed 20260812 \
-  --run-id m1-v2-plan --source-root "$PWD" --run-root /fresh/run-root \
+  --run-id m1-v2-plan --harness-root /checkout/of/pr-142 \
+  --provenance-jsonl /private/authoritative-session.jsonl \
+  --source-root /clean/product-checkout --run-root /fresh/run-root \
   --controlled-model openai/gpt-5.6-sol --controlled-reasoning medium \
   --source-revision <exact-40-character-source-sha> --repetitions 3
 ```
@@ -16,9 +18,14 @@ executes Hermes/OpenCode. The final four-by-three remains reserved for
 
 The M1 source checkout must be clean at the exact `--source-revision`; unlike
 the historical cross-agent pilot, M1 is not forced to the old comparison SHA.
+The harness checkout is a separate required authority for fixture and
+provenance reads. Product-under-test checkouts, including PR #146, do not need
+or receive a fixture copy. Planning freezes the verified provenance identity;
+fresh and resumed workflow entry reverify it before product preflight.
 Once `manifest.json` exists, the run root accepts only an identical resume.
-Changing seed, source revision, fixtures, or plan identity requires a new run
-root and cannot overwrite the existing manifest, result, or terminal evidence.
+Changing seed, source revision, fixture/provenance authority, or plan identity
+requires a new run root and cannot overwrite the existing manifest, result, or
+terminal evidence.
 
 The benchmark compares Butler, Hermes Agent, and OpenCode using the pinned
 `origin/main` baseline `549463fbe074fc25042f9302cd330699948dab50`.

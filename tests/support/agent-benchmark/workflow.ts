@@ -13,6 +13,7 @@ import {
 import { benchmarkPlatformGate, sourceIntegrity, validateBenchmarkPlan } from "./isolation.ts";
 import { materializeRepositoryEvidence, type RepositoryEvidenceSnapshot } from "./repository-evidence.ts";
 import { runBenchmarkArm, type LandingValidator } from "./workflow-arm.ts";
+import { verifyM1V2AuthoritativeProvenance } from "./m1-v2-provenance.ts";
 
 export { runtimeInstructions } from "./workflow-arm.ts";
 export type { LandingValidator } from "./workflow-arm.ts";
@@ -37,6 +38,22 @@ export interface WorkflowRunResult {
 
 export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<WorkflowRunResult> {
   validateBenchmarkPlan(input.plan);
+  if (input.plan.campaign === "m1-v2") {
+    let current: NonNullable<BenchmarkPlan["provenance"]>;
+    try {
+      current = verifyM1V2AuthoritativeProvenance({
+        repoRoot: input.plan.harnessRoot,
+        jsonlPath: input.plan.provenanceJsonlPath!,
+      }).identity;
+    } catch (error) {
+      throw new Error(`M1 v2 provenance identity mismatch: ${errorMessage(error)}`, {
+        cause: error,
+      });
+    }
+    if (JSON.stringify(current) !== JSON.stringify(input.plan.provenance)) {
+      throw new Error("M1 v2 provenance identity mismatch: authority changed after planning.");
+    }
+  }
   assertAdapterAuthority(input.adapters);
   const checkpoint = await input.store.load();
   const result = resumeOrInitialize(input.plan, checkpoint);
@@ -120,6 +137,7 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
       preflight: preflight[arm.agent],
       signal: input.signal,
       planRunRoot: input.plan.runRoot,
+      harnessRoot: input.plan.harnessRoot,
       landingValidator: input.landingValidator,
       evidenceSnapshot,
       sourceDiagnostic,

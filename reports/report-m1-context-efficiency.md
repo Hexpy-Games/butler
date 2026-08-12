@@ -32,6 +32,15 @@ fixture, or plan-identity mismatch fails before execution. Checkpoint persistenc
 rejects corrupt/different plans and preserves already-terminal evidence rather
 than initializing or overwriting a replacement result.
 
+A second Sol-high review then exposed two remaining authority gaps. The planner
+and arm workflow now read fixtures only from the explicit PR #142 harness root;
+the clean product source root is used solely for evaluated repository and SHA
+evidence, so an exact PR #146 checkout does not need benchmark files. Planning
+also invokes the canonical JSONL verifier and freezes metadata, JSONL, and
+verified-evidence digests in the plan/manifest identity. The same workflow
+reverifies that authority before fresh or resumed execution, and provenance
+mutation fails before preflight or checkpoint replacement.
+
 ## Integrated ownership
 
 - `fixtures.ts` is the public fixture authority; `fixtures/m1-v2` stores the
@@ -92,6 +101,12 @@ affected-arm pairs without running the full matrix.
 - Actual M1 workflow/preflight accepts a clean checkout at its exact plan SHA
   and gates a checkout mismatch; current main and PR #146 exact SHAs are valid
   M1 planning authorities.
+- Actual workflow arm fixture loading succeeds with PR #142 as harness authority
+  and a clean independent PR #146 product checkout that has no benchmark fixture
+  tree; the product checkout is never used as fixture authority.
+- The plan/manifest identity includes canonical verified provenance digests.
+  Mutating the authority after manifest creation makes both same-plan workflow
+  resume and CLI re-entry fail closed before product execution.
 - CLI preflight result output reports the exact M1 source revision.
 - Identical CLI resume preserves byte-identical `manifest.json`, its original
   creation identity, the result plan identity, and terminal evidence.
@@ -99,11 +114,9 @@ affected-arm pairs without running the full matrix.
   checkpoint plan, and terminal evidence replacement all fail closed.
 - No product/provider execution, Hermes/OpenCode execution, or final 4x3 was
   performed for these tests.
-- Targeted harness/adapter/driver tests: 88 passed, 0 failed, 462 assertions.
+- Targeted harness/adapter/driver tests: 89 passed, 0 failed, 470 assertions.
 - Typecheck passed; lint passed with zero errors and 20 unrelated existing
   warnings; BTCC shape passed (`4 domains / 203 files`); agent-benchmark module
   audit passed (`44 files / 0 findings`); `git diff --check` passed.
-- Repository-wide `bun run check` is not claimed as pass: the bounded wrapper
-  timed out at 300.26 seconds and sent SIGTERM while the new authority test was
-  cloning its local fixture checkout. That interrupted clone reported
-  `status: null`; no independent benchmark assertion failure was observed.
+- Repository-wide `bun run check` is not claimed as pass: the bounded 300-second
+  run exited `124` after SIGTERM without emitting a specific assertion failure.

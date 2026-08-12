@@ -19,6 +19,7 @@ import {
 } from "./fixtures.ts";
 import { sanitizeIdentifier } from "./identifiers.ts";
 import { effectiveAgentConfig } from "./track-config.ts";
+import { verifyM1V2AuthoritativeProvenance } from "./m1-v2-provenance.ts";
 
 export const BENCHMARK_AGENTS: readonly BenchmarkAgent[] = [
   "butler",
@@ -49,6 +50,8 @@ export interface CreateBenchmarkPlanInput {
   seed: number;
   runRoot: string;
   sourceRoot: string;
+  harnessRoot?: string;
+  provenanceJsonlPath?: string;
   baselineSha?: string;
   controlledModel: string;
   controlledReasoning?: string;
@@ -74,11 +77,24 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
   }
   const runRoot = resolve(input.runRoot);
   const sourceRoot = resolve(input.sourceRoot);
+  const harnessRoot = resolve(input.harnessRoot ?? input.sourceRoot);
   if (campaign === "m1-v2" && (repetitionsPerCache < 3 || repetitionsPerCache > 10)) {
     throw new Error("M1 v2 repetitions must be an integer between 3 and 10");
   }
+  if (campaign === "m1-v2" && !input.harnessRoot) {
+    throw new Error("M1 v2 requires an explicit harness authority root.");
+  }
+  if (campaign === "m1-v2" && !input.provenanceJsonlPath) {
+    throw new Error("M1 v2 requires the authoritative provenance JSONL path.");
+  }
+  const verifiedProvenance = campaign === "m1-v2"
+    ? verifyM1V2AuthoritativeProvenance({
+        repoRoot: harnessRoot,
+        jsonlPath: resolve(input.provenanceJsonlPath!),
+      })
+    : null;
   const campaignFixtures = campaign === "m1-v2"
-    ? loadM1V2BenchmarkFixtures(sourceRoot)
+    ? loadM1V2BenchmarkFixtures(harnessRoot)
     : AGENT_BENCHMARK_FIXTURES;
   const fixtures = campaignFixtures.map(summarizeBenchmarkFixture);
   const arms: BenchmarkArmPlan[] = [];
@@ -151,6 +167,11 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
     baselineSha,
     runRoot,
     sourceRoot,
+    harnessRoot,
+    ...(campaign === "m1-v2" ? {
+      provenanceJsonlPath: resolve(input.provenanceJsonlPath!),
+      provenance: verifiedProvenance!.identity,
+    } : {}),
     tracks: BENCHMARK_TRACKS,
     fixtures,
     ...(campaign === "m1-v2" ? { policy: {
@@ -168,7 +189,7 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
 
 /** Stable identity for checkpoint resume; excludes only volatile createdAt. */
 export function benchmarkPlanIdentity(
-  plan: Pick<BenchmarkPlan, "campaign" | "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "tracks" | "fixtures" | "arms" | "policy">,
+  plan: Pick<BenchmarkPlan, "campaign" | "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "harnessRoot" | "provenanceJsonlPath" | "provenance" | "tracks" | "fixtures" | "arms" | "policy">,
 ): string {
   const stable = {
     runId: plan.runId,
@@ -177,6 +198,9 @@ export function benchmarkPlanIdentity(
     baselineSha: plan.baselineSha,
     runRoot: plan.runRoot,
     sourceRoot: plan.sourceRoot,
+    harnessRoot: plan.harnessRoot,
+    provenanceJsonlPath: plan.provenanceJsonlPath ?? null,
+    provenance: plan.provenance ?? null,
     tracks: plan.tracks,
     fixtures: plan.fixtures,
     policy: plan.policy ?? null,

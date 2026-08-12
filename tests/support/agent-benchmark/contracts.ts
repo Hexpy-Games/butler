@@ -4,6 +4,7 @@
  * kept in separate modules so that the report cannot become a second source of
  * truth for run state.
  */
+import type { M1V2ProvenanceIdentity } from "./m1-v2-types.ts";
 
 export const AGENT_BENCHMARK_SCHEMA = "butler.agent-benchmark.v1" as const;
 export const AGENT_BENCHMARK_BASELINE_SHA =
@@ -87,6 +88,9 @@ export interface BenchmarkPlan {
   baselineSha: string;
   runRoot: string;
   sourceRoot: string;
+  harnessRoot: string;
+  provenanceJsonlPath?: string;
+  provenance?: M1V2ProvenanceIdentity;
   tracks: readonly BenchmarkTrack[];
   fixtures: readonly BenchmarkFixtureSummary[];
   repositoryEvidence?: { relativeRoot: string; files: readonly string[]; sha256: string };

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { loadCanonicalM1V2Fixtures } from "./m1-v2-fixtures.ts";
+import type { M1V2ProvenanceIdentity } from "./m1-v2-types.ts";
 
 interface ProvenanceRow {
   armId: string;
@@ -10,14 +11,20 @@ interface ProvenanceRow {
   payloadInputBytes: number;
   payloadInputSha256: string;
 }
+
+export interface VerifiedM1V2Provenance extends Record<string, unknown> {
+  identity: M1V2ProvenanceIdentity;
+}
+
 export function verifyM1V2AuthoritativeProvenance(input: {
   jsonlPath: string;
   repoRoot: string;
-}): Record<string, unknown> {
-  const provenance = JSON.parse(readFileSync(join(
+}): VerifiedM1V2Provenance {
+  const provenanceText = readFileSync(join(
     input.repoRoot,
     "tests/support/agent-benchmark/fixtures/m1-v2/provenance.json",
-  ), "utf8")) as {
+  ), "utf8");
+  const provenance = JSON.parse(provenanceText) as {
     authority: { jsonlBasename: string };
     toolCalls: ProvenanceRow[];
   };
@@ -26,7 +33,8 @@ export function verifyM1V2AuthoritativeProvenance(input: {
   }
   const expectedByTimestamp = new Map(provenance.toolCalls.map((row) => [row.timestamp, row]));
   const recovered = new Map<string, Record<string, unknown>>();
-  for (const line of readFileSync(input.jsonlPath, "utf8").split("\n")) {
+  const jsonlText = readFileSync(input.jsonlPath, "utf8");
+  for (const line of jsonlText.split("\n")) {
     if (!line) continue;
     const event = JSON.parse(line) as Record<string, unknown>;
     const timestamp = typeof event.timestamp === "string" ? event.timestamp : "";
@@ -67,7 +75,7 @@ export function verifyM1V2AuthoritativeProvenance(input: {
       }
     }
   }
-  return {
+  const verified = {
     ok: true,
     authority: provenance.authority.jsonlBasename,
     recovered: provenance.toolCalls.map((row) => ({
@@ -81,6 +89,16 @@ export function verifyM1V2AuthoritativeProvenance(input: {
     originalReasoningEffort: "low",
     canonicalReasoningEffort: "medium",
     promptAndLandingFixtureBytesChanged: false,
+  };
+  return {
+    ...verified,
+    identity: {
+      schema: "butler.agent-benchmark.provenance-identity.v1",
+      authorityJsonlBasename: provenance.authority.jsonlBasename,
+      metadataSha256: digest(provenanceText),
+      jsonlSha256: digest(jsonlText),
+      verifiedSha256: digest(JSON.stringify(verified)),
+    },
   };
 }
 
