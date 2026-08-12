@@ -51,8 +51,6 @@
     "e2e:btcc-r3:electron": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/e2e/btcc-r3-electron-driver.ts",
     "app:client:performance:report": "${BUTLER_BUN:-bun} run tests/support/packaged-performance-report.ts",
     "benchmark:btcc-revisions": "${BUTLER_BUN:-bun} run tests/support/btcc-revision-benchmark/cli.ts",
-    "benchmark:m1-v2-segment-attribution": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/support/m1-v2-baseline/cli.ts",
-    "benchmark:m1-v2-provenance": "${BUTLER_BUN:-bun} run tests/support/m1-v2-baseline/verify-provenance.ts",
     "e2e:gncc-cognition:live-llm": "BUTLER_GNCC_COGNITION_E2E_MODEL=openai/gpt-5.5 BUTLER_GNCC_COGNITION_E2E_REASONING=low ${BUTLER_BUN:-bun} run tests/e2e/gateway-neutral-cognition-sources-live-e2e.ts",
     "e2e:gncc-recovery:live-llm": "BUTLER_GNCC_RECOVERY_E2E_MODEL=openai/gpt-5.5 BUTLER_GNCC_RECOVERY_E2E_REASONING=low ${BUTLER_BUN:-bun} run tests/e2e/gateway-neutral-historical-recovery-live-e2e.ts",
     "e2e:memory-quality-ab": "${BUTLER_BUN:-bun} run tests/e2e/butler-memory-quality-ab.ts",
