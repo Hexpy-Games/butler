@@ -133,6 +133,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
     const snapshotSha = digest(snapshotJson);
     const snapshotRef = digest(`btcc-admission-snapshot.v1\0${snapshotSha}`);
     const checkpointId = digest(`btcc-checkpoint.v1\0${command.turnId}\0${0}\0admitted`);
+    const { modelRoute: _routeState, ...admittedModelSelection } = command.modelSelection;
     const stoppedBeforeAdmission = this.db.query<{ status: string }, [string]>(`
       SELECT status FROM btcc_stop_requests WHERE turn_id = ?
     `).get(command.turnId)?.status === "cancelled_before_admission";
@@ -145,7 +146,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       source.messageId,
       source.content,
       snapshotRef,
-      stableJson(command.modelSelection),
+      stableJson(admittedModelSelection),
       command.modelSelection.modelRoute
         ? stableJson(command.modelSelection.modelRoute)
         : null,

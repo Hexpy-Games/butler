@@ -11,6 +11,8 @@ import type {
  * message data needed to resume the admitted round are retained explicitly.
  */
 export function normalizeAcceptedModelRound(result: ModelRoundResult): ModelRoundResult {
+  const boundedContinuation = isRecord(result.continuation) &&
+    Array.isArray(result.continuation.boundedItemKeys);
   const normalized: ModelRoundResult = {
     toolCalls: result.toolCalls.map(normalizeToolCall),
   };
@@ -24,7 +26,10 @@ export function normalizeAcceptedModelRound(result: ModelRoundResult): ModelRoun
     });
   }
   if (result.assistantMessage) {
-    normalized.assistantMessage = normalizeAssistantMessage(result.assistantMessage);
+    normalized.assistantMessage = normalizeAssistantMessage(
+      result.assistantMessage,
+      !boundedContinuation,
+    );
   }
   const continuation = safeJsonClone(result.continuation);
   if (continuation !== undefined) normalized.continuation = continuation;
@@ -88,7 +93,10 @@ function normalizeToolCall(call: ModelRoundToolCall): ModelRoundToolCall {
   };
 }
 
-function normalizeAssistantMessage(message: ModelRoundMessage): ModelRoundMessage {
+function normalizeAssistantMessage(
+  message: ModelRoundMessage,
+  retainProviderData: boolean,
+): ModelRoundMessage {
   if (!isRecord(message) ||
       (message.role !== "system" && message.role !== "user" &&
         message.role !== "assistant" && message.role !== "tool") ||
@@ -102,8 +110,10 @@ function normalizeAssistantMessage(message: ModelRoundMessage): ModelRoundMessag
     ...(typeof message.name === "string" ? { name: message.name } : {}),
     ...(message.toolCalls ? { toolCalls: message.toolCalls.map(normalizeToolCall) } : {}),
   };
-  const providerData = safeJsonClone(message.providerData);
-  if (providerData !== undefined) normalized.providerData = providerData;
+  if (retainProviderData) {
+    const providerData = safeJsonClone(message.providerData);
+    if (providerData !== undefined) normalized.providerData = providerData;
+  }
   const imageAttachments = safeJsonClone(message.imageAttachments);
   if (Array.isArray(imageAttachments)) {
     normalized.imageAttachments = imageAttachments as ModelRoundMessage["imageAttachments"];

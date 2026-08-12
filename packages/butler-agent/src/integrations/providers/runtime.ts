@@ -42,6 +42,9 @@ export async function runModelRound(
   throwIfAborted(request.signal);
   const model = resolveEffectiveModelRef(request.model);
   const adapter = resolveProviderAdapterDefinition(model);
+  if (request.boundedContinuation && adapter.providerId !== "openai") {
+    throw new Error(`bounded_provider_serializer_unsupported:${adapter.providerId}`);
+  }
   return await adapter.runRound({ ...request, model });
 }
 

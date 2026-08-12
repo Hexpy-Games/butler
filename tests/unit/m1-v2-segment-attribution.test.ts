@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -447,6 +448,69 @@ describe("M1 v2 provider-send segment attribution", () => {
       globalThis.fetch = originalFetch;
       if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION;
       else process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION = previousFlag;
+    }
+  });
+
+  test("bounded Codex continuation preserves composed first-prompt segmentation", async () => {
+    const butlerData = mkdtempSync(join(tmpdir(), "butler-m1-v2-bounded-segments-"));
+    const originalFetch = globalThis.fetch;
+    const previousFlag = process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION;
+    process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION = "on";
+    let call = 0;
+    globalThis.fetch = (async () => {
+      call += 1;
+      const completed = {
+        type: "response.completed",
+        response: { id: `bounded-${call}`, model: "gpt-5.6-sol", output: [] },
+      };
+      return new Response(`data: ${JSON.stringify(completed)}\n\ndata: [DONE]\n\n`, {
+        status: 200, headers: { "Content-Type": "text/event-stream" },
+      });
+    }) as unknown as typeof fetch;
+    const prompt = "request\n\nwork\n\nmemory\n\nsource";
+    const sources = [
+      { kind: "current_user_request" as const, stability: "dynamic" as const, text: "request" },
+      { kind: "project_ledger_and_work_authority" as const, stability: "dynamic" as const, text: "\n\nwork" },
+      { kind: "memory_recall_context" as const, stability: "dynamic" as const, text: "\n\nmemory" },
+      { kind: "source_reference" as const, stability: "dynamic" as const, text: "\n\nsource" },
+    ];
+    const authorization = `Bearer e30.${Buffer.from(JSON.stringify({
+      "https://api.openai.com/auth": { chatgpt_account_id: "account" },
+    })).toString("base64url")}.signature`;
+    const auth = { mode: "codex_oauth" as const, authorization };
+    const envelope = {
+      schemaVersion: "butler.turn-context-envelope.v1" as const,
+      modelFacingBytes: 1_000, requestDigest: "d".repeat(64),
+      admitProviderBody: async () => {},
+    };
+    try {
+      const first = await runOpenAIModelRound({
+        roundId: "first", model: "openai/gpt-5.6-sol", instructions: "stable",
+        messages: [{ role: "user", content: prompt }], tools: [], butlerData,
+        requestSegmentSources: { input: sources }, boundedContinuation: envelope,
+      }, auth);
+      await runOpenAIModelRound({
+        roundId: "second", model: "openai/gpt-5.6-sol", instructions: "stable",
+        messages: [{ role: "user", content: prompt }], tools: [], butlerData,
+        requestSegmentSources: { input: sources }, boundedContinuation: envelope,
+        continuation: first.continuation,
+      }, auth);
+      const events = readFileSync(join(butlerData, "metrics", "operational-events.jsonl"), "utf8")
+        .trim().split("\n").map((line) => JSON.parse(line));
+      const attempt = events.filter((event) => event.name === "m1_v2_request_envelope")
+        .at(-1)?.dimensions.attemptDigest;
+      const kinds = new Set(events.filter((event) =>
+        event.name === "m1_v2_request_segment" && event.dimensions.attemptDigest === attempt)
+        .map((event) => event.dimensions.kind));
+      for (const kind of ["current_user_request", "project_ledger_and_work_authority",
+        "memory_recall_context", "source_reference"]) {
+        expect(kinds.has(kind)).toBe(true);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION;
+      else process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION = previousFlag;
+      rmSync(butlerData, { recursive: true, force: true });
     }
   });
 

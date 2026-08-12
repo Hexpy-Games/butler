@@ -202,10 +202,32 @@ export function transitionTurnContinuationBudget(
   if (event.kind === "admit_request") {
     const existing = state.admittedRequests.find((item) => item.roundId === event.roundId);
     if (existing) {
-      if (existing.requestDigest !== event.requestDigest || existing.modelFacingBytes !== event.modelFacingBytes) {
+      if (existing.requestDigest !== event.requestDigest) {
         return exhaust(state, "admission_changed", now);
       }
-      return state;
+      const observedBytes = integer(event.modelFacingBytes);
+      if (observedBytes <= existing.modelFacingBytes) return state;
+      if (observedBytes > state.limits.maxModelFacingBytes) {
+        return exhaust(state, "model_facing_bytes", now);
+      }
+      const consumedModelFacingBytes = safeAdd(
+        state.consumedModelFacingBytes,
+        observedBytes - existing.modelFacingBytes,
+      );
+      if (consumedModelFacingBytes > state.limits.maxCumulativeModelFacingBytes) {
+        return exhaust(
+          { ...state, consumedModelFacingBytes },
+          "max_cumulative_model_facing_bytes",
+          now,
+        );
+      }
+      return {
+        ...state,
+        admittedRequests: state.admittedRequests.map((item) =>
+          item.roundId === event.roundId ? { ...item, modelFacingBytes: observedBytes } : item),
+        consumedModelFacingBytes,
+        lastProgressAtMs: now,
+      };
     }
     if (event.modelFacingBytes > state.limits.maxModelFacingBytes) return exhaust(state, "model_facing_bytes", now);
     if (state.admittedRequests.length >= state.limits.maxModelRequests) return exhaust(state, "max_model_requests", now);

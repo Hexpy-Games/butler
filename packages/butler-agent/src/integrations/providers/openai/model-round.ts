@@ -39,7 +39,9 @@ import {
 } from "../shared/runtime-support.ts";
 import {
   openAIBoundedConversationItems,
+  openAIResponseItemKeys,
   openAIToolMessageItems,
+  selectNewBoundedConversationItems,
 } from "./conversation-items.ts";
 
 export async function runOpenAIModelRound(
@@ -65,16 +67,18 @@ export async function runOpenAIModelRound(
     request.attachments ? [...request.attachments] : undefined,
   );
   const initialStatelessInput = toCodexStatelessInput(initialInput);
-  const continuationMessages = previous
+  const continuationMessages = previous && !request.boundedContinuation
     ? newOpenAIContinuationMessages(
         request.messages,
         previous.sent,
         request.butlerData,
       )
     : null;
-  const requestItems = continuationMessages?.items ?? initialInput;
-  const projectedPreviousStatelessInput = previous
-    ? projectAcknowledgedToolOutputs(previous.statelessInput, request.messages)
+  const projectedPreviousStatelessInput = previous && !request.boundedContinuation
+    ? projectAcknowledgedToolOutputs(
+        requiredLegacyStatelessInput(previous.statelessInput),
+        request.messages,
+      )
     : undefined;
   const boundedStatelessInput = request.boundedContinuation
     ? openAIBoundedConversationItems(
@@ -83,6 +87,17 @@ export async function runOpenAIModelRound(
         initialStatelessInput,
       )
     : null;
+  if (boundedStatelessInput && previous && !previous.boundedItemKeys) {
+    throw new Error("bounded_continuation_item_identity_missing");
+  }
+  const boundedOfficialInput = boundedStatelessInput
+    ? selectNewBoundedConversationItems(
+        boundedStatelessInput,
+        previous?.boundedItemKeys ?? [],
+      )
+    : null;
+  const requestItems = boundedOfficialInput?.items ??
+    continuationMessages?.items ?? initialInput;
   const statelessRequestInput = boundedStatelessInput?.items ?? (previous
     ? [...projectedPreviousStatelessInput!, ...continuationMessages!.statelessItems]
     : initialStatelessInput);
@@ -94,15 +109,17 @@ export async function runOpenAIModelRound(
     codexAppendedInput: boundedStatelessInput?.items ?? (previous
       ? continuationMessages!.statelessItems
       : initialStatelessInput),
-    appendedItemKinds: continuationMessages?.itemKinds,
+    appendedItemKinds: boundedOfficialInput?.itemKinds ?? continuationMessages?.itemKinds,
     codexAppendedItemKinds: boundedStatelessInput?.itemKinds,
-    promptSources: previous ? [] : request.requestSegmentSources?.input,
+    promptSources: previous && !request.boundedContinuation
+      ? []
+      : request.requestSegmentSources?.input,
     previousCodexInput: request.boundedContinuation
       ? undefined
       : projectedPreviousStatelessInput,
     previousCodexManifest: request.boundedContinuation
       ? undefined
-      : previous?.statelessManifest,
+      : previous?.statelessManifest ?? [],
   });
   beforeAttributedModelRequest({
     attribution: request.usageAttribution,
@@ -130,7 +147,7 @@ export async function runOpenAIModelRound(
           }
         : {
             input: requestItems,
-            __butler_codex_stateless_input: initialStatelessInput,
+            __butler_codex_stateless_input: statelessRequestInput,
           }),
     },
     request.signal,
@@ -144,6 +161,7 @@ export async function runOpenAIModelRound(
       attributionArmId: request.attributionArmId,
       segmentManifests,
       cacheBoundaryEvidence: request.cacheBoundaryEvidence,
+      admitBoundedProviderBody: request.boundedContinuation?.admitProviderBody,
     },
     undefined,
     request.providerRetryAttempts,
@@ -192,16 +210,28 @@ export async function runOpenAIModelRound(
   const statelessInput = [...statelessRequestInput, ...functionCalls].map(
     retainTextOnlyAfterSuccessfulImageReplay,
   );
+  const bounded = Boolean(request.boundedContinuation);
   const nextContinuation: OpenAIRequestSegmentContinuation = {
     provider: "openai",
     responseId: response.id,
     sent: continuationMessages?.sent ?? { toolMessages: 0, userMessages: 1 },
-    statelessInput,
-    statelessManifest: appendOpenAIFunctionCallContinuityManifest(
-      segmentManifests.continuation,
-      functionCalls,
-      statelessRequestInput.length,
-    ),
+    ...(boundedStatelessInput
+      ? { boundedItemKeys: [
+          ...(previous?.boundedItemKeys ?? []),
+          ...boundedStatelessInput.itemKeys,
+          ...openAIResponseItemKeys({ text, functionCalls }),
+        ].filter((key, index, all) => all.indexOf(key) === index) }
+      : {}),
+    ...(!bounded
+      ? {
+          statelessInput,
+          statelessManifest: appendOpenAIFunctionCallContinuityManifest(
+            segmentManifests.continuation,
+            functionCalls,
+            statelessRequestInput.length,
+          ),
+        }
+      : {}),
   };
   if (continuationMessages) {
     nextContinuation.sent = continuationMessages.sent;
@@ -241,6 +271,13 @@ function projectAcknowledgedToolOutputs(
     const output = references.get(item.call_id);
     return output === undefined ? item : { ...item, output };
   });
+}
+
+function requiredLegacyStatelessInput(
+  value: OpenAIRequestSegmentContinuation["statelessInput"],
+): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) throw new Error("openai_stateless_continuation_missing");
+  return value;
 }
 
 function newOpenAIContinuationMessages(

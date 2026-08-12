@@ -339,6 +339,9 @@ export async function createCodexResponse(
     deferRecord: true,
     cacheBoundaryRevision: budgetContext?.cacheBoundaryEvidence?.observedRevision,
   });
+  await budgetContext?.admitBoundedProviderBody?.(
+    Buffer.byteLength(observedRequest.serializedRequest, "utf8"),
+  );
   let response: Response;
   try {
     onProviderRoundStarted?.();

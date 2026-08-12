@@ -33,6 +33,7 @@ export interface OpenAIProviderBudgetContext {
     codex: readonly M1ProviderRequestSegmentManifestEntry[];
   };
   cacheBoundaryEvidence?: M1CacheBoundaryEvidence;
+  admitBoundedProviderBody?: (serializedBytes: number) => Promise<void>;
 }
 
 
@@ -157,6 +158,9 @@ export async function createOpenAIResponseOnce(
     deferRecord: true,
     cacheBoundaryRevision: budgetContext?.cacheBoundaryEvidence?.observedRevision,
   });
+  await budgetContext?.admitBoundedProviderBody?.(
+    Buffer.byteLength(observedRequest.serializedRequest, "utf8"),
+  );
 
   let response: Response;
   try {
