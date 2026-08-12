@@ -21,6 +21,12 @@ import { StableProviderPrefixInvariantError } from
   "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 import { classifyModelRouteFailure } from
   "../../packages/butler-agent/src/agent/btcc/model-route/failure-policy.ts";
+import { selectTurnContinuationBudget } from
+  "../../packages/butler-agent/src/agent/btcc/turn/continuation-budget.ts";
+import { buildBoundedTurnContext } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/bounded-turn-context.ts";
+import type { ModelRoundMessage } from
+  "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 
 const stablePrefix = {
   schemaVersion: "butler.stable-provider-cache-prefix.v1" as const,
@@ -395,6 +401,188 @@ test("direct read-only and execution policy fixtures preserve final serializer p
   }
 });
 
+test("all-off versus cumulative all-on measures complete final bodies through both serializers", async () => {
+  const originalFetch = globalThis.fetch;
+  const prior = {
+    official: process.env.OPENAI_BASE_URL,
+    codex: process.env.BUTLER_CODEX_RESPONSES_URL,
+  };
+  process.env.OPENAI_BASE_URL = "https://example.test/v1";
+  process.env.BUTLER_CODEX_RESPONSES_URL = "https://example.test/codex";
+  const history = integratedHistory(65, false);
+  const projected = integratedHistory(65, true);
+  const bounded = buildBoundedTurnContext(projected, 4_000);
+  const measurements: Array<Record<string, string | number>> = [];
+  try {
+    for (const transport of ["official", "codex"] as const) {
+      for (const fixture of [
+        { phase: "direct", accessMode: "read_only", trackingMode: "none" },
+        { phase: "read_only", accessMode: "read_only", trackingMode: "ledger" },
+        { phase: "execution", accessMode: "full_access", trackingMode: "ledger" },
+      ] as const) {
+        const turn = phaseTurn(fixture.accessMode, fixture.trackingMode);
+        const allOff = selectGuidedTurnPhasePolicy(turn, {});
+        const allOn = selectGuidedTurnPhasePolicy(turn, {
+          BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE: "on",
+          BUTLER_M1_V2_EXACT_ONCE_REPLAY: "on",
+          BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT: "on",
+        });
+        expect(allOff.stableProviderCachePrefix).toBeUndefined();
+        expect(allOff.exactResultReplay.mode).toBe("disabled");
+        expect(allOn.stableProviderCachePrefix).toBeDefined();
+        expect(allOn.exactResultReplay.mode).toBe("available");
+        const bodies: string[] = [];
+        globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+          bodies.push(String(init?.body));
+          const response = { id: `integrated-${bodies.length}`, model: "gpt-5.6-sol", output: [] };
+          return transport === "official"
+            ? Response.json(response)
+            : new Response(
+                `data: ${JSON.stringify({ type: "response.completed", response })}\n\n`,
+                { headers: { "content-type": "text/event-stream" } },
+              );
+        }) as typeof fetch;
+        const auth = transport === "official"
+          ? { mode: "api_key" as const, authorization: "Bearer test" }
+          : { mode: "codex_subscription" as const, authorization: `Bearer ${fakeJwt()}` };
+        await runOpenAIModelRound({
+          ...request("ALL-OFF"),
+          instructions: allOff.stableInstructionPrefix,
+          messages: history,
+          tools: allOff.providerTools,
+          boundedContinuation: undefined,
+          stableProviderCachePrefix: undefined,
+          continuation: {
+            provider: "openai",
+            responseId: "legacy-previous-response",
+            sent: { toolMessages: 0, userMessages: 1 },
+            statelessInput: integratedProviderItems(history),
+          },
+        }, auth);
+        await runOpenAIModelRound({
+          ...request("ALL-ON"),
+          instructions: allOn.stableInstructionPrefix,
+          messages: bounded.messages,
+          tools: allOn.providerTools,
+          stableProviderCachePrefix: allOn.stableProviderCachePrefix,
+          boundedContinuation: {
+            schemaVersion: "butler.turn-context-envelope.v1",
+            modelFacingBytes: bounded.modelFacingBytes,
+            requestDigest: "c".repeat(64),
+            responseItemId: "turn-item-400",
+            admitProviderBody: async () => {},
+          },
+        }, auth);
+        const allOffBytes = Buffer.byteLength(bodies[0]!, "utf8");
+        const allOnBytes = Buffer.byteLength(bodies[1]!, "utf8");
+        const prefixBytes = Buffer.byteLength(commonPrefix(bodies[0]!, bodies[1]!), "utf8");
+        const stableBytes = ((JSON.parse(bodies[1]!) as Record<string, unknown>)
+          .instructions as string).startsWith(allOn.stableInstructionPrefix)
+          ? Buffer.byteLength(allOn.stableInstructionPrefix, "utf8")
+          : 0;
+        expect(allOnBytes).toBeLessThan(allOffBytes);
+        expect(bounded.modelFacingBytes).toBeLessThanOrEqual(4_000);
+        expect(stableBytes).toBeGreaterThan(0);
+        expect(bodies[1]).toContain("CURRENT REQUEST");
+        expect(bodies[1]).toContain("read_operation_results");
+        expect(bodies[1]).not.toContain("RAW-PRIVATE-0");
+        expect(bodies[1]).not.toContain("/private/workspace");
+        measurements.push({
+          transport,
+          phase: fixture.phase,
+          allOffBytes,
+          allOnBytes,
+          stableInstructionBytes: stableBytes,
+          boundedCarrierBytes: bounded.modelFacingBytes,
+          crossVariantCommonPrefixBytes: prefixBytes,
+        });
+      }
+    }
+    expect(measurements).toEqual([
+      { transport: "official", phase: "direct", allOffBytes: 48591, allOnBytes: 10763, stableInstructionBytes: 829, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+      { transport: "official", phase: "read_only", allOffBytes: 54320, allOnBytes: 13896, stableInstructionBytes: 849, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+      { transport: "official", phase: "execution", allOffBytes: 60261, allOnBytes: 22039, stableInstructionBytes: 1279, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+      { transport: "codex", phase: "direct", allOffBytes: 84899, allOnBytes: 10777, stableInstructionBytes: 829, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+      { transport: "codex", phase: "read_only", allOffBytes: 90628, allOnBytes: 13910, stableInstructionBytes: 849, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+      { transport: "codex", phase: "execution", allOffBytes: 96569, allOnBytes: 22053, stableInstructionBytes: 1279, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore("OPENAI_BASE_URL", prior.official);
+    restore("BUTLER_CODEX_RESPONSES_URL", prior.codex);
+  }
+}, 60_000);
+
+test("flag matrix selects canonical rollback, each single feature, and the cumulative stack", async () => {
+  const originalFetch = globalThis.fetch;
+  const prior = process.env.OPENAI_BASE_URL;
+  process.env.OPENAI_BASE_URL = "https://example.test/v1";
+  const bodies: string[] = [];
+  globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    bodies.push(String(init?.body));
+    return Response.json({ id: `matrix-${bodies.length}`, model: "gpt-5.6-sol", output: [] });
+  }) as typeof fetch;
+  const cases = [
+    { name: "all_off", env: {} },
+    { name: "tool_surface_only", env: { BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE: "on" } },
+    { name: "exact_replay_only", env: { BUTLER_M1_V2_EXACT_ONCE_REPLAY: "on" } },
+    { name: "bounded_only", env: { BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT: "on" } },
+    {
+      name: "cumulative",
+      env: {
+        BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE: "on",
+        BUTLER_M1_V2_EXACT_ONCE_REPLAY: "on",
+        BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT: "on",
+      },
+    },
+  ] as const;
+  try {
+    for (const entry of cases) {
+      const selection = selectGuidedTurnPhasePolicy(
+        phaseTurn("read_only", "none"),
+        entry.env,
+      );
+      const bounded = selectTurnContinuationBudget(entry.env);
+      await runOpenAIModelRound({
+        ...request(entry.name),
+        instructions: selection.stableInstructionPrefix,
+        tools: selection.providerTools,
+        stableProviderCachePrefix: selection.stableProviderCachePrefix,
+        boundedContinuation: bounded
+          ? {
+              schemaVersion: "butler.turn-context-envelope.v1",
+              modelFacingBytes: 100,
+              requestDigest: "d".repeat(64),
+              responseItemId: "turn-item-1",
+              admitProviderBody: async () => {},
+            }
+          : undefined,
+      }, { mode: "api_key", authorization: "Bearer test" });
+      expect(selection.mode === "phase_minimal").toBe(
+        entry.name === "tool_surface_only" || entry.name === "cumulative",
+      );
+      expect(selection.exactResultReplay.mode === "available").toBe(
+        entry.name === "exact_replay_only" || entry.name === "cumulative",
+      );
+      expect(Boolean(bounded)).toBe(
+        entry.name === "bounded_only" || entry.name === "cumulative",
+      );
+      expect(Boolean(selection.stableProviderCachePrefix)).toBe(
+        entry.name === "tool_surface_only" || entry.name === "cumulative",
+      );
+    }
+    expect(bodies).toHaveLength(cases.length);
+    expect(bodies[0]).not.toContain("read_operation_results");
+    expect(bodies[1]).not.toContain("read_operation_results");
+    expect(bodies[2]).toContain("read_operation_results");
+    expect(bodies[3]).not.toContain("read_operation_results");
+    expect(bodies[4]).toContain("read_operation_results");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore("OPENAI_BASE_URL", prior);
+  }
+});
+
 function phaseTurn(
   accessMode: "read_only" | "full_access",
   trackingMode: "none" | "ledger",
@@ -420,6 +608,77 @@ function phaseTurn(
       },
     },
   };
+}
+
+function integratedHistory(rounds: number, projectOlderResults: boolean): ModelRoundMessage[] {
+  let ordinal = 0;
+  const nextId = () => `turn-item-${ordinal++}`;
+  const messages: ModelRoundMessage[] = [{
+    role: "user",
+    content: "CURRENT REQUEST preserve active Work and exact source references",
+    continuationItemId: nextId(),
+  }];
+  const reference = JSON.stringify({
+    version: "butler.operation-result-reference.v1",
+    kind: "operation_result",
+    identity: { kind: "direct", result_ref: "result", tool_name: "read_file" },
+    integrity: { sha256: "a".repeat(64), revision: null },
+    outcome: { status: "completed", success: true, verification: "stored_exact_available" },
+    availability: {
+      status: "exact_read_available",
+      capability: "read_operation_results",
+      scope: "same_turn",
+    },
+  });
+  for (let index = 0; index < rounds; index += 1) {
+    const callId = `call-${index}`;
+    messages.push({
+      role: "assistant",
+      content: `assistant-${index}`,
+      toolCalls: [{
+        id: callId,
+        name: "read_file",
+        arguments: { index },
+        rawArguments: JSON.stringify({ index }),
+      }],
+      continuationItemId: nextId(),
+    });
+    messages.push({
+      role: "tool",
+      toolCallId: callId,
+      name: "read_file",
+      content: projectOlderResults && index < rounds - 1
+        ? reference
+        : JSON.stringify({ result: `RAW-PRIVATE-${index}-${"R".repeat(300)}` }),
+      continuationItemId: nextId(),
+    });
+    messages.push({
+      role: "user",
+      content: `review-${index}`,
+      continuationItemId: nextId(),
+    });
+  }
+  return messages;
+}
+
+function integratedProviderItems(
+  messages: readonly ModelRoundMessage[],
+): Array<Record<string, unknown>> {
+  return messages.flatMap((message): Array<Record<string, unknown>> => {
+    if (message.role === "user") {
+      return [{ role: "user", content: [{ type: "input_text", text: message.content }] }];
+    }
+    if (message.role === "tool") {
+      return [{ type: "function_call_output", call_id: message.toolCallId, output: message.content }];
+    }
+    if (message.role !== "assistant") return [];
+    return (message.toolCalls ?? []).map((call) => ({
+      type: "function_call",
+      call_id: call.id,
+      name: call.name,
+      arguments: call.rawArguments,
+    }));
+  });
 }
 
 function restore(key: string, value: string | undefined): void {

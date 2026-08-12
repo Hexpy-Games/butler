@@ -938,3 +938,130 @@ Task, while the final integrated provider/Electron campaign, final 4x3,
 provider-token/cache eligibility, and product quality decision remain owned by
 `T-M1-V2-FINAL-BENCHMARK`. No provider campaign, E2E run, push, PR, merge, or
 default-on decision is claimed by this closeout.
+
+## Four-feature stack integration closure — 2026-08-13
+
+`T-M1-V2-STACK-INTEGRATION-CLOSURE-20260812` audits the completed Tool
+Instruction Surface, Exact-first Durable Replay, Turn-owned Bounded
+Continuation, and Stable Provider Cache Prefix/Route Reset as one production
+stack. It introduces no new optimization and leaves every runtime flag
+default-off.
+
+### Intent lock and one real call path
+
+The accepted intent remains to reduce repeated provider-visible schemas,
+instructions, raw durable results, and unbounded continuation while preserving
+answer quality, current user intent, Work/Ledger/workspace authority, source
+evidence, exact recovery, retries, and fallback behavior. The audited path is:
+
+`App/Session Turn -> createProductionBtccComposition ->
+createProductionGuidedTurnAgent -> selectGuidedTurnPhasePolicy ->
+createGuidedOperationResultRuntime -> guidedContinuationBudget ->
+runBtccAgentLoop -> createModelRoutePort -> ModelRoundRequest ->
+runOpenAIModelRound -> stableProviderOrderedBody -> official Responses or Codex
+final serializer -> fetch -> accepted route/result-delivery journal -> durable
+Turn, Work, review, and result recovery`.
+
+The production composition now has executable integration coverage for both
+official API-key Responses and Codex-subscription serializers with every feature
+enabled. A large native `read_file` result is delivered raw once, then disappears
+from later bodies; Codex carries the durable typed reference while official
+Responses continues through its accepted response chain. Every final body keeps
+the stable instruction prefix, the current request and admitted tool protocol,
+stays under the bounded ceiling, and has an exact sum of mutually exclusive SC01
+segment bytes equal to the final serialized UTF-8 body bytes.
+
+### Authority and rollback matrix
+
+- `selectGuidedTurnPhasePolicy` remains the sole phase/tool-profile and stable
+  instruction selection authority.
+- The guided tool journal plus operation-result reader/runtime remain the sole
+  durable result identity, delivery, reference, and exact-read authority.
+- `TurnContinuationBudgetState` remains the sole monotonic Turn budget and typed
+  terminal-exhaustion authority.
+- `ModelRouteState` and `createModelRoutePort` remain the sole route cursor,
+  retry/fallback, continuation-reset, and cache-identity authority.
+- Stable Provider Cache Prefix is an accepted extension of the Tool Instruction
+  Surface flag, not a fourth independent flag or registry.
+
+The executable matrix covers all-off canonical legacy serialization, each of
+the three independent flags on alone, and the cumulative stack. Exact read,
+route acceptance, bounded continuation, and route/cache identity dependencies
+fail closed when required but missing. Existing restart fixtures cover every
+durable replay state, terminal budget persistence, the finite
+`deliveredThroughOrdinal` watermark, same-cursor identical admission, cursor
+advance/fallback reset of provider-private continuation only, and typed terminal
+exhaustion exactly once.
+
+### Closed repository failures
+
+The known five repository failures were reproduced rather than waived. Four
+were one integration contract omission around `read_operation_results`: the
+registry expectation, grouped tool entrypoint, effect-boundary list, and
+compatibility entrypoint shape. The tool now follows the canonical
+`definition.ts`/`executor.ts`/explicit `index.ts` module contract, and shared
+execution contracts moved out of the 297-line compatibility composition file.
+The fifth failure was external Ledger documentation drift: the CLI reference
+contained one retired Sandy correction command absent from the 101-entry
+`commands.json` authority. Project Ledger CLI removed only that obsolete line;
+the product command was not revived. No direct-provider bypass, duplicate
+result store, cache router, legacy full-replay resurrection, or consumerless
+public export was found or added.
+
+### Combined static serializer measurements
+
+The static fixture serializes a 65-round history through the real phase
+selection and both final OpenAI serializers. These are full final-body UTF-8
+bytes, not additive percentages, provider tokens, cache hits, latency, E2E, or
+campaign evidence.
+
+| Serializer / phase | All off | All four features on | End-to-end delta |
+|---|---:|---:|---:|
+| Official / direct | 48,591 | 10,763 | -37,828 (-77.85%) |
+| Official / read-only | 54,320 | 13,896 | -40,424 (-74.42%) |
+| Official / execution | 60,261 | 22,039 | -38,222 (-63.43%) |
+| Codex / direct | 84,899 | 10,777 | -74,122 (-87.31%) |
+| Codex / read-only | 90,628 | 13,910 | -76,718 (-84.65%) |
+| Codex / execution | 96,569 | 22,053 | -74,516 (-77.16%) |
+
+The bounded dynamic carrier reaches but does not exceed its 4,000-byte fixture
+ceiling. Separate same-policy final-body tests place the stable serialized prefix
+boundary at 6,321 bytes for direct, 9,454 for read-only, and 17,597 for
+execution in both serializers. The maximum enabled 65-round final body is
+22,053 bytes, while the independent 100-round deterministic carrier and restart
+fixtures remain bounded.
+
+### Validation and deferred boundary
+
+The integration-focused and broad affected suite passed 303 tests with 2,640
+assertions. Typecheck, full lint with zero errors and 19 pre-existing warnings,
+BTCC shape (`4 domains / 222 files`), changed-module architecture review, and
+`git diff --check` passed. The first wrapper-managed `bun run check` reached its
+301-second wrapper timeout without a reported assertion failure and is recorded
+as a timeout, not a pass. Its identical inner `bun run check:run` command then
+completed successfully with 2,614 tests across 299 files, 34,181 assertions,
+and zero failures in 263.16 seconds. The independent Sol-high whole-goal verdict
+is recorded in the final closeout below.
+
+No Electron, E2E, real-provider smoke, prepared-resource run, affected-arm
+campaign, final 4x3, Hermes, or OpenCode execution occurred. Those product
+quality, provider-token, cache-eligibility, and statistical decisions remain
+exclusively owned by `T-M1-V2-FINAL-BENCHMARK`; merge and default-on remain
+forbidden here.
+
+### Independent completion review
+
+The separate ordinary non-fast gpt-5.6-sol high whole-goal review first found
+one P1 delivery-authority defect outside the product runtime: the Plan and CLI
+reference each contained duplicated YAML frontmatter after an earlier CLI body
+update. Project Ledger CLI reapplied only each canonical Markdown body and
+updated the current Plan metadata; no raw Ledger file was edited. The CLI docs
+contract then passed 3 tests with 124 assertions, and Ledger index, all three
+rendered views, status, and check were refreshed with zero issues and no stale
+views.
+
+The same reviewer re-inspected that correction and the complete product path,
+reported no remaining P0-P3 finding, and returned final `APPROVE`. This closes
+only `T-M1-V2-STACK-INTEGRATION-CLOSURE-20260812`. The parent Work and Plan stay
+active, and `T-M1-V2-FINAL-BENCHMARK` still owns the one authorized final E2E,
+provider/campaign evidence, quality decision, and quantitative Work acceptance.

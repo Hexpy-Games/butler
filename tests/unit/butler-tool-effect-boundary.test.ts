@@ -19,6 +19,7 @@ const expectedNamesByBoundary = {
     "inspect_project_status",
     "query_project_work",
     "get_context_monitor",
+    "read_operation_results",
     "read_tool_evidence_artifact",
     "read_tool_output_artifact",
     "get_usage_monitor",
