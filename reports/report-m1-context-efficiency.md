@@ -784,21 +784,52 @@ Bounded continuation identity is now a Turn-local structural event identity,
 assigned when BTCC appends each user or assistant observation and reused for the
 corresponding provider response. It is neither transcript content nor an
 unkeyed content digest, so repeated identical observations remain distinct.
-The durable provider-private continuation is strictly limited to provider,
-response id, and at most 256 validated bounded structural/protocol identities;
-unknown private fields, raw transcript clones, malformed identities, and excess
-cardinality fail closed. Current input is limited to 192 identities before
-dispatch, reserving 64 response identities so a successful provider fetch cannot
-create a post-fetch overflow. Function-call ids remain the protocol identity.
+The provider translation initially retained a finite set of structural
+identities. A later review demonstrated that finite tombstone eviction could
+forget already-delivered ancestry and that a response with 65 identities could
+overflow only after fetch. Attempt 04 replaces that intermediate representation
+with the monotonic watermark described below.
 
 Behavioral regression evidence uses the actual API-key Responses serializer and
 Codex serializer. It proves text plus function-call output is not duplicated,
 new tool output is sent exactly once, repeated identical text events are not
-deduplicated, an attachment prompt is not duplicated, and 193 current bounded
-identities fail before fetch. A 100-round fixture keeps the private continuation
-at no more than five identities and under 1,000 serialized bytes, with no prompt
-content or 64-character unkeyed digest. The 11-file broad affected suite passes
-182/182 tests with 1,318 assertions. These corrections do not change the
+deduplicated and an attachment prompt is not duplicated. These corrections do not change the
 representative direct/read-only/execution byte arithmetic above: those fixtures
 contain no attachments and Turn-local identity metadata is never serialized
 into the provider body.
+
+### Monotonic delivered-through watermark correction
+
+Every BTCC-appended current, assistant, tool-result, validation, and recovery
+observation receives a deterministic `turn-item-N` occurrence ordinal. One
+preallocated response ordinal covers the assistant text and every function call
+from that physical response; later tool outputs receive their own append
+ordinals. The OpenAI translation validates that the current carrier is
+nondecreasing and strictly older than the preallocated response before dispatch.
+
+The bounded provider-private continuation now persists only `provider`,
+`responseId`, and the finite integer `deliveredThroughOrdinal`. Official
+Responses sends only carrier items whose ordinal is newer than that watermark.
+Consequently an old A unit that leaves the bounded window and later reenters is
+still recognized as provider-owned without accumulating content tombstones.
+The strict SQLite normalization boundary rejects all extra fields, the retired
+key-array shape, malformed watermarks, raw transcript carriers, and provider
+private payloads. Restart rehydrates the same scalar watermark; retry uses the
+same preallocated response ordinal and admission decision.
+
+A response containing text or any number of function-call protocol items does
+not consume additional identity slots: all belong to its one durable response
+occurrence. The actual API-key serializer regression accepts 65 function calls,
+then sends all 65 new tool results on the next request without a post-fetch
+identity exception or repeated fetch. A separate four-round official Responses
+regression delivers A, evicts it, reintroduces it after SQLite normalization and
+restart, and proves the final body omits A while sending the newly required C
+result exactly once. The 100-round normalize/hydrate fixture stores a constant
+scalar carrier under 1,000 bytes with no transcript content or content digest.
+Attempt 04 validation passed 43/43 focused tests with 555 assertions and 185/185
+broad affected tests with 1,332 assertions. Typecheck, full lint (zero errors and
+19 pre-existing warnings), BTCC shape (`4 domains / 222 files`), architecture
+audit, static serializer regression, and `git diff --check` also passed. The
+static direct/read-only/execution byte arithmetic remains exactly unchanged
+because the ordinal and watermark are provider-private metadata, not serialized
+model content. Independent Sol-high rereview remains the Task completion gate.
