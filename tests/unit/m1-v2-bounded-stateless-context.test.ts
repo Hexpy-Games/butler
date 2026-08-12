@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildBoundedTurnContext } from
@@ -33,6 +33,8 @@ import { modelRoundOutputBytes } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/bounded-turn-context.ts";
 import { createProviderModelRoundPort } from
   "../../packages/butler-agent/src/integrations/providers/runtime.ts";
+import { hydrateAcceptedModelRound, normalizeAcceptedModelRound } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/sqlite-model-response-normalizer.ts";
 
 const limits = {
   maxModelRequests: 120,
@@ -386,6 +388,7 @@ test("model route retry and fallback cannot replace the admitted bounded carrier
     boundedContinuation: {
       schemaVersion: "butler.turn-context-envelope.v1",
       modelFacingBytes: 100, requestDigest: "e".repeat(64),
+      responseItemId: "response-item-route",
       admitProviderBody: async () => {},
     },
   });
@@ -418,6 +421,7 @@ test("official Responses sends a newly admitted tool result after older units ar
   const envelope = {
     schemaVersion: "butler.turn-context-envelope.v1" as const,
     modelFacingBytes: 1_000, requestDigest: "a".repeat(64),
+    responseItemId: "response-item-eviction",
     admitProviderBody: async () => {},
   };
   try {
@@ -453,6 +457,115 @@ test("official Responses sends a newly admitted tool result after older units ar
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv("OPENAI_BASE_URL", priorBase);
+  }
+});
+
+test("official Responses does not resend provider assistant text paired with a function call", async () => {
+  const priorBase = process.env.OPENAI_BASE_URL;
+  const originalFetch = globalThis.fetch;
+  process.env.OPENAI_BASE_URL = "https://example.test/v1";
+  const bodies: Array<Record<string, unknown>> = [];
+  let call = 0;
+  globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    call += 1;
+    return Response.json(call === 1 ? {
+      id: "response-text-call", model: "gpt-5.6-sol", output: [{
+        type: "message", role: "assistant",
+        content: [{ type: "output_text", text: "PROVIDER-TEXT" }],
+      }, {
+        type: "function_call", call_id: "text-call", name: "read_file", arguments: "{}",
+      }],
+    } : { id: "response-final", model: "gpt-5.6-sol", output: [] });
+  }) as unknown as typeof fetch;
+  const envelope = {
+    schemaVersion: "butler.turn-context-envelope.v1" as const,
+    modelFacingBytes: 1_000, requestDigest: "f".repeat(64),
+    responseItemId: "response-item-text-call",
+    admitProviderBody: async () => {},
+  };
+  try {
+    const first = await runOpenAIModelRound({
+      roundId: "first", model: "openai/gpt-5.6-sol",
+      messages: [{ role: "user", content: "CURRENT" }], tools: [],
+      boundedContinuation: envelope,
+    }, { authorization: "Bearer test", mode: "api_key" });
+    await runOpenAIModelRound({
+      roundId: "second", model: "openai/gpt-5.6-sol", continuation: first.continuation,
+      messages: [
+        { role: "user", content: "CURRENT" },
+        { role: "assistant", content: "PROVIDER-TEXT",
+          continuationItemId: "response-item-text-call", toolCalls: [{
+          id: "text-call", name: "read_file", arguments: {}, rawArguments: "{}",
+        }] },
+        { role: "tool", name: "read_file", toolCallId: "text-call", content: "NEW-TOOL" },
+      ], tools: [], boundedContinuation: envelope,
+    }, { authorization: "Bearer test", mode: "api_key" });
+    expect(JSON.stringify(bodies[1]).match(/NEW-TOOL/g)).toHaveLength(1);
+    expect(JSON.stringify(bodies[1])).not.toContain("PROVIDER-TEXT");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv("OPENAI_BASE_URL", priorBase);
+  }
+});
+
+test("text-only assistant and correction identities remain distinct across eviction", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-bounded-text-identities-"));
+  const priorBase = process.env.OPENAI_BASE_URL;
+  const originalFetch = globalThis.fetch;
+  process.env.OPENAI_BASE_URL = "https://example.test/v1";
+  const bodies: Array<Record<string, unknown>> = [];
+  let call = 0;
+  globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    call += 1;
+    return Response.json({
+      id: `text-response-${call}`, model: "gpt-5.6-sol", output: [{
+        type: "message", role: "assistant",
+        content: [{ type: "output_text", text: "SAME-ASSISTANT" }],
+      }],
+    });
+  }) as unknown as typeof fetch;
+  const envelope = {
+    schemaVersion: "butler.turn-context-envelope.v1" as const,
+    modelFacingBytes: 1_000, requestDigest: "8".repeat(64),
+    responseItemId: "response-text-1",
+    admitProviderBody: async () => {},
+  };
+  try {
+    const first = await runOpenAIModelRound({
+      roundId: "r1", model: "openai/gpt-5.6-sol", butlerData: root,
+      messages: [{ role: "user", content: "CURRENT" }], tools: [],
+      boundedContinuation: envelope,
+    }, { authorization: "Bearer test", mode: "api_key" });
+    const second = await runOpenAIModelRound({
+      roundId: "r2", model: "openai/gpt-5.6-sol", butlerData: root,
+      continuation: first.continuation, tools: [],
+      messages: [
+        { role: "user", content: "CURRENT" },
+        { role: "assistant", content: "SAME-ASSISTANT", continuationItemId: "response-text-1" },
+        { role: "user", content: "SAME-CORRECTION", continuationItemId: "correction-one" },
+      ],
+      boundedContinuation: { ...envelope, responseItemId: "response-text-2" },
+    }, { authorization: "Bearer test", mode: "api_key" });
+    await runOpenAIModelRound({
+      roundId: "r3", model: "openai/gpt-5.6-sol", butlerData: root,
+      continuation: second.continuation, tools: [],
+      messages: [
+        { role: "user", content: "CURRENT" },
+        { role: "assistant", content: "SAME-ASSISTANT", continuationItemId: "response-text-2" },
+        { role: "user", content: "SAME-CORRECTION", continuationItemId: "correction-two" },
+      ],
+      boundedContinuation: { ...envelope, responseItemId: "response-text-3" },
+    }, { authorization: "Bearer test", mode: "api_key" });
+    expect(JSON.stringify(bodies[1]).match(/SAME-CORRECTION/g)).toHaveLength(1);
+    expect(JSON.stringify(bodies[1])).not.toContain("SAME-ASSISTANT");
+    expect(JSON.stringify(bodies[2]).match(/SAME-CORRECTION/g)).toHaveLength(1);
+    expect(JSON.stringify(bodies[2])).not.toContain("SAME-ASSISTANT");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv("OPENAI_BASE_URL", priorBase);
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -497,7 +610,8 @@ test("route fallback official body preserves the admitted bounded carrier", asyn
       },
       messages: [
         { role: "user", content: "CURRENT-REQUEST" },
-        { role: "assistant", content: "LATEST-PROTOCOL", toolCalls: [{
+        { role: "assistant", content: "LATEST-PROTOCOL",
+          continuationItemId: "fallback-assistant", toolCalls: [{
           id: "latest-call", name: "read_file", arguments: {}, rawArguments: "{}",
         }] },
         { role: "tool", name: "read_file", toolCallId: "latest-call", content: "LATEST-REF" },
@@ -505,6 +619,7 @@ test("route fallback official body preserves the admitted bounded carrier", asyn
       tools: [], boundedContinuation: {
         schemaVersion: "butler.turn-context-envelope.v1",
         modelFacingBytes: 1_000, requestDigest: "b".repeat(64),
+        responseItemId: "response-item-fallback",
         admitProviderBody: async () => {},
       },
     });
@@ -604,6 +719,7 @@ test("provider-neutral bounded route fails closed before an unsupported serializ
     boundedContinuation: {
       schemaVersion: "butler.turn-context-envelope.v1",
       modelFacingBytes: 100, requestDigest: "c".repeat(64),
+      responseItemId: "response-item-unsupported",
       admitProviderBody: async () => {
         throw new Error("unsupported provider must not attempt admission");
       },
@@ -611,11 +727,166 @@ test("provider-neutral bounded route fails closed before an unsupported serializ
   })).rejects.toThrow("bounded_provider_serializer_unsupported:google");
 });
 
+test("bounded identity overflow fails before official provider dispatch", async () => {
+  const priorBase = process.env.OPENAI_BASE_URL;
+  const originalFetch = globalThis.fetch;
+  process.env.OPENAI_BASE_URL = "https://example.test/v1";
+  let fetches = 0;
+  globalThis.fetch = (async () => {
+    fetches += 1;
+    return Response.json({ id: "unexpected", model: "gpt-5.6-sol", output: [] });
+  }) as unknown as typeof fetch;
+  try {
+    await expect(runOpenAIModelRound({
+      roundId: "overflow", model: "openai/gpt-5.6-sol", tools: [],
+      messages: [
+        { role: "user", content: "CURRENT" },
+        ...Array.from({ length: 193 }, (_, index) => ({
+          role: "user" as const,
+          content: `bounded-${index}`,
+          continuationItemId: `turn-item-${index}`,
+        })),
+      ],
+      boundedContinuation: {
+        schemaVersion: "butler.turn-context-envelope.v1",
+        modelFacingBytes: 10_000,
+        requestDigest: "d".repeat(64),
+        responseItemId: "response-item-overflow",
+        admitProviderBody: async () => {},
+      },
+    }, { authorization: "Bearer test", mode: "api_key" }))
+      .rejects.toThrow("bounded_continuation_item_identity_invalid");
+    expect(fetches).toBe(0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv("OPENAI_BASE_URL", priorBase);
+  }
+});
+
+test("bounded continuation identities stay finite structural and privacy safe for 100 rounds", async () => {
+  const priorBase = process.env.OPENAI_BASE_URL;
+  const originalFetch = globalThis.fetch;
+  process.env.OPENAI_BASE_URL = "https://example.test/v1";
+  let responseIndex = 0;
+  globalThis.fetch = (async () => Response.json({
+    id: `response-${responseIndex}`,
+    model: "gpt-5.6-sol",
+    output: [{
+      type: "function_call", call_id: `call-${responseIndex}`,
+      name: "read_file", arguments: "{}",
+    }],
+  })) as unknown as typeof fetch;
+  const envelope = {
+    schemaVersion: "butler.turn-context-envelope.v1" as const,
+    modelFacingBytes: 2_000, requestDigest: "9".repeat(64),
+    responseItemId: "response-item-long",
+    admitProviderBody: async () => {},
+  };
+  let continuation: unknown;
+  try {
+    for (responseIndex = 0; responseIndex < 100; responseIndex += 1) {
+      const prior = Math.max(0, responseIndex - 1);
+      const secret = `PRIVATE-CONTENT-${responseIndex}-${"S".repeat(80)}`;
+      const result = await runOpenAIModelRound({
+        roundId: `round-${responseIndex}`, model: "openai/gpt-5.6-sol",
+        continuation,
+        messages: responseIndex === 0
+          ? [{ role: "user", content: "CURRENT-SECRET" }]
+          : [
+              { role: "user", content: "CURRENT-SECRET" },
+              { role: "assistant", content: secret,
+                continuationItemId: `response-item-${prior}`, toolCalls: [{
+                id: `call-${prior}`, name: "read_file", arguments: {}, rawArguments: "{}",
+              }] },
+              { role: "tool", name: "read_file", toolCallId: `call-${prior}`, content: secret },
+            ],
+        tools: [], boundedContinuation: {
+          ...envelope, responseItemId: `response-item-${responseIndex}`,
+        },
+      }, { authorization: "Bearer test", mode: "api_key" });
+      const accepted = normalizeAcceptedModelRound(result);
+      continuation = hydrateAcceptedModelRound(JSON.stringify(accepted), null).continuation;
+      const serialized = JSON.stringify(continuation);
+      const keys = (continuation as { boundedItemKeys: string[] }).boundedItemKeys;
+      expect(keys.length).toBeLessThanOrEqual(5);
+      expect(serialized).not.toContain("PRIVATE-CONTENT");
+      expect(serialized).not.toMatch(/[a-f0-9]{64}/);
+      expect(serialized.length).toBeLessThan(1_000);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv("OPENAI_BASE_URL", priorBase);
+  }
+});
+
+test("SQLite acceptance allowlists bounded continuation and rejects private injection", () => {
+  const normalized = normalizeAcceptedModelRound({
+    text: "visible", toolCalls: [], assistantMessage: {
+      role: "assistant", content: "visible", providerData: { secret: "SECRET-PROVIDER" },
+    },
+    continuation: {
+      provider: "openai", responseId: "response", boundedItemKeys: ["current-user:0"],
+    }, raw: { secret: "SECRET-RAW-RESPONSE" },
+  });
+  expect(normalized.continuation).toEqual({
+    provider: "openai", responseId: "response", boundedItemKeys: ["current-user:0"],
+  });
+  expect(JSON.stringify(normalized)).not.toContain("SECRET");
+  expect(hydrateAcceptedModelRound(JSON.stringify(normalized), null).continuation)
+    .toEqual(normalized.continuation);
+  expect(() => normalizeAcceptedModelRound({
+    toolCalls: [], continuation: {
+      provider: "openai", responseId: "response", boundedItemKeys: ["current-user:0"],
+      statelessInput: [{ secret: "SECRET-TRANSCRIPT" }],
+      statelessManifest: [{ secret: "SECRET-MANIFEST" }],
+      providerPrivate: { raw: "SECRET-RAW" }, sent: { toolMessages: 999, userMessages: 999 },
+    },
+  })).toThrow("BTCC bounded continuation has unknown private fields");
+  expect(() => normalizeAcceptedModelRound({
+    toolCalls: [], continuation: {
+      provider: "openai", responseId: "response",
+      boundedItemKeys: Array.from({ length: 257 }, (_, index) => `current-user:${index}`),
+    },
+  })).toThrow("bounded_continuation_item_identity_invalid");
+});
+
 test("flag-off actual OpenAI serializer body is byte-identical to the legacy contract", async () => {
   const absent = await captureFlagOffSerializer(undefined);
   const explicitOff = await captureFlagOffSerializer("off");
   expect(Buffer.from(JSON.stringify(explicitOff))).toEqual(Buffer.from(JSON.stringify(absent)));
   expect(explicitOff).not.toHaveProperty("boundedContinuation");
+});
+
+test("flag-off does not create private identity state and control does not import telemetry", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-bounded-flag-off-key-"));
+  const priorBase = process.env.OPENAI_BASE_URL;
+  const originalFetch = globalThis.fetch;
+  process.env.OPENAI_BASE_URL = "https://example.test/v1";
+  globalThis.fetch = (async () => Response.json({
+    id: "response", model: "gpt-5.6-sol", output: [],
+  })) as unknown as typeof fetch;
+  try {
+    await runOpenAIModelRound({
+      roundId: "round", model: "openai/gpt-5.6-sol", butlerData: root,
+      messages: [{ role: "user", content: "flag off" }], tools: [],
+    }, { authorization: "Bearer test", mode: "api_key" });
+    expect(existsSync(join(root, "metrics", ".m1-v2-attribution.key"))).toBe(false);
+    const source = readFileSync(join(
+      process.cwd(),
+      "packages/butler-agent/src/integrations/providers/openai/conversation-items.ts",
+    ), "utf8");
+    expect(source).not.toContain("private-installation-identity.ts");
+    expect(source).not.toContain("m1-segment-attribution.ts");
+    const attributionSource = readFileSync(join(
+      process.cwd(),
+      "packages/butler-agent/src/integrations/providers/shared/m1-segment-attribution.ts",
+    ), "utf8");
+    expect(attributionSource).toContain("private-installation-identity.ts");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv("OPENAI_BASE_URL", priorBase);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 function sqliteOwner(db: Database, ownerId: string): SqliteRuntimeOwnerRegistry {

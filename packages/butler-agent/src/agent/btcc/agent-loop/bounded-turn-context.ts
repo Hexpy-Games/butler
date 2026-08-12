@@ -25,12 +25,14 @@ export async function prepareBoundedModelContext(input: {
     }): Promise<void>;
   };
   roundId: string;
+  responseItemId: string;
 }): Promise<{
   messages: readonly ModelRoundMessage[];
   envelope?: {
     schemaVersion: "butler.turn-context-envelope.v1";
     modelFacingBytes: number;
     requestDigest: string;
+    responseItemId: string;
     admitProviderBody(serializedBytes: number): Promise<void>;
   };
 }> {
@@ -58,6 +60,7 @@ export async function prepareBoundedModelContext(input: {
       schemaVersion: "butler.turn-context-envelope.v1",
       modelFacingBytes,
       requestDigest,
+      responseItemId: input.responseItemId,
       admitProviderBody: async (serializedBytes) => {
         await input.budget!.admitRequest({
           roundId: input.roundId,

@@ -457,7 +457,14 @@ describe("M1 v2 provider-send segment attribution", () => {
     const previousFlag = process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION;
     process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION = "on";
     let call = 0;
-    globalThis.fetch = (async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const imagePath = join(butlerData, "attachment.png");
+    writeFileSync(imagePath, "image-bytes");
+    globalThis.fetch = (async (
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      bodies.push(JSON.parse(String(init?.body)));
       call += 1;
       const completed = {
         type: "response.completed",
@@ -467,12 +474,13 @@ describe("M1 v2 provider-send segment attribution", () => {
         status: 200, headers: { "Content-Type": "text/event-stream" },
       });
     }) as unknown as typeof fetch;
-    const prompt = "request\n\nwork\n\nmemory\n\nsource";
+    const prompt = "request\n\nwork\n\nmemory\n\nsource\n\nUser attachments:\n- attachment.png";
     const sources = [
       { kind: "current_user_request" as const, stability: "dynamic" as const, text: "request" },
       { kind: "project_ledger_and_work_authority" as const, stability: "dynamic" as const, text: "\n\nwork" },
       { kind: "memory_recall_context" as const, stability: "dynamic" as const, text: "\n\nmemory" },
-      { kind: "source_reference" as const, stability: "dynamic" as const, text: "\n\nsource" },
+      { kind: "source_reference" as const, stability: "dynamic" as const,
+        text: "\n\nsource\n\nUser attachments:\n- attachment.png" },
     ];
     const authorization = `Bearer e30.${Buffer.from(JSON.stringify({
       "https://api.openai.com/auth": { chatgpt_account_id: "account" },
@@ -481,19 +489,24 @@ describe("M1 v2 provider-send segment attribution", () => {
     const envelope = {
       schemaVersion: "butler.turn-context-envelope.v1" as const,
       modelFacingBytes: 1_000, requestDigest: "d".repeat(64),
+      responseItemId: "response-item-segments",
       admitProviderBody: async () => {},
     };
+    const attachments = [{
+      id: "image", kind: "image" as const, mimeType: "image/png",
+      fileName: "attachment.png", localPath: imagePath,
+    }];
     try {
       const first = await runOpenAIModelRound({
         roundId: "first", model: "openai/gpt-5.6-sol", instructions: "stable",
         messages: [{ role: "user", content: prompt }], tools: [], butlerData,
-        requestSegmentSources: { input: sources }, boundedContinuation: envelope,
+        requestSegmentSources: { input: sources }, boundedContinuation: envelope, attachments,
       }, auth);
       await runOpenAIModelRound({
         roundId: "second", model: "openai/gpt-5.6-sol", instructions: "stable",
         messages: [{ role: "user", content: prompt }], tools: [], butlerData,
         requestSegmentSources: { input: sources }, boundedContinuation: envelope,
-        continuation: first.continuation,
+        continuation: first.continuation, attachments,
       }, auth);
       const events = readFileSync(join(butlerData, "metrics", "operational-events.jsonl"), "utf8")
         .trim().split("\n").map((line) => JSON.parse(line));
@@ -506,6 +519,9 @@ describe("M1 v2 provider-send segment attribution", () => {
         "memory_recall_context", "source_reference"]) {
         expect(kinds.has(kind)).toBe(true);
       }
+      expect(JSON.stringify(bodies.at(-1)).match(/request\\n\\nwork\\n\\nmemory\\n\\nsource/g))
+        .toHaveLength(1);
+      expect(JSON.stringify(bodies.at(-1)).match(/User attachments:/g)).toHaveLength(1);
     } finally {
       globalThis.fetch = originalFetch;
       if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION;

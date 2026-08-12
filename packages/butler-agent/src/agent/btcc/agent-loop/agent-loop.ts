@@ -3,7 +3,6 @@ import { emptyResponseRecoveryObservation } from "./empty-response-recovery.ts";
 import type {
   BtccAgentLoopInput,
   BtccAgentLoopEvent,
-  BtccAgentLoopMessage,
   BtccAgentLoopOutput,
   BtccAgentLoopToolCall,
   BtccAgentLoopToolResult,
@@ -20,15 +19,14 @@ import {
   resolveExecutionWindowSize,
   throwIfExecutionWindowAborted,
 } from "./execution-window.ts";
-import {
-  modelRoundOutputBytes,
-  prepareBoundedModelContext,
-} from "./bounded-turn-context.ts";
+import { modelRoundOutputBytes, prepareBoundedModelContext } from "./bounded-turn-context.ts";
 import { appendAssistantResponse } from "./assistant-response.ts";
+import { createTurnContinuationItems } from "./continuation-item-identity.ts";
 export async function runBtccAgentLoop(
   input: BtccAgentLoopInput,
 ): Promise<BtccAgentLoopOutput> {
-  const messages: BtccAgentLoopMessage[] = [{ role: "user", content: input.prompt }];
+  const continuationItems = createTurnContinuationItems(input.prompt);
+  const { messages } = continuationItems;
   const events: BtccAgentLoopEvent[] = [];
   const maxIterations = resolveExecutionWindowSize(input);
   const toolResults: BtccAgentLoopToolResult[] = [];
@@ -48,6 +46,7 @@ export async function runBtccAgentLoop(
     const roundIndex = (input.usageAttribution?.roundIndex ?? 0) + modelRoundIndex;
     modelRoundIndex += 1;
     const requestId = `btcc-model-round-${roundIndex}`;
+    const responseItemId = continuationItems.nextId();
     const resolveModelRef = () => input.resolveModelRef?.() ?? input.model ?? "";
     const publishWaiting = async (
       status: "started" | "completed" | "failed" | "cancelled",
@@ -72,6 +71,7 @@ export async function runBtccAgentLoop(
       toolChoice: request.toolChoice,
       budget: input.continuationBudget,
       roundId: requestId,
+      responseItemId,
     });
     const roundMessages = bounded.messages;
     try {
@@ -110,7 +110,7 @@ export async function runBtccAgentLoop(
       }
       continuation = response.continuation;
       await publishWaiting("completed");
-      return response;
+      return continuationItems.identifyResponse(response, responseItemId);
     } catch (error) {
       input.operationResultReplay?.failed(requestId);
       await publishWaiting(input.signal?.aborted ? "cancelled" : "failed");
@@ -134,7 +134,7 @@ export async function runBtccAgentLoop(
     evaluateStop?: boolean;
   }): Promise<string | null> => {
     toolResults.push(record.result);
-    messages.push(toolResultToMessage({
+    continuationItems.push(toolResultToMessage({
       result: record.result,
       modelPreviewContext,
       operationResultCallId: input.resolveOperationResultCallId?.(record.call.id),
@@ -192,7 +192,7 @@ export async function runBtccAgentLoop(
       }
       const observation = disposition.observation.trim();
       if (!observation) throw new Error("btcc_text_tool_call_observation_missing");
-      messages.push({ role: "user", content: observation });
+      continuationItems.push({ role: "user", content: observation });
       continue;
     }
 
@@ -224,7 +224,7 @@ export async function runBtccAgentLoop(
           });
       if (recoveryObservation) {
         emptyResponseRecoveryUsed = true;
-        messages.push({ role: "user", content: recoveryObservation });
+        continuationItems.push({ role: "user", content: recoveryObservation });
         continue;
       }
       if (!text && input.onExecutionWindowBoundary) {
@@ -239,7 +239,7 @@ export async function runBtccAgentLoop(
         if (review.status === "continue") {
           const observation = review.observation.trim();
           if (!observation) throw new Error("btcc_agent_loop_final_candidate_observation_missing");
-          messages.push({ role: "user", content: observation });
+          continuationItems.push({ role: "user", content: observation });
           continue;
         }
         return {
@@ -288,7 +288,7 @@ export async function runBtccAgentLoop(
         if (finalText === null && candidate) finalText = candidate;
       }
       if (finalText) {
-        messages.push({ role: "assistant", content: finalText });
+        continuationItems.push({ role: "assistant", content: finalText });
         return { finalText, messages, events, stoppedByLimit: false };
       }
       continue;
@@ -307,7 +307,7 @@ export async function runBtccAgentLoop(
         iteration: currentIteration,
       });
       if (finalText) {
-        messages.push({ role: "assistant", content: finalText });
+        continuationItems.push({ role: "assistant", content: finalText });
         return { finalText, messages, events, stoppedByLimit: false };
       }
     }
@@ -323,7 +323,7 @@ export async function runBtccAgentLoop(
       toolResults,
     });
     if (boundaryObservation !== undefined) {
-      messages.push({ role: "user", content: boundaryObservation });
+      continuationItems.push({ role: "user", content: boundaryObservation });
       windowIndex += 1;
       continue;
     }
@@ -335,7 +335,7 @@ export async function runBtccAgentLoop(
     maxIterations,
   }))?.trim();
   if (synthesizedText) {
-    messages.push({ role: "assistant", content: synthesizedText });
+    continuationItems.push({ role: "assistant", content: synthesizedText });
     return { finalText: synthesizedText, messages, events, stoppedByLimit: true };
   }
   const finalSynthesisText = toolResults.length > 0
@@ -345,6 +345,6 @@ export async function runBtccAgentLoop(
     return { finalText: finalSynthesisText, messages, events, stoppedByLimit: true };
   }
   const finalText = renderPartialLimitResponse(toolResults);
-  messages.push({ role: "assistant", content: finalText });
+  continuationItems.push({ role: "assistant", content: finalText });
   return { finalText, messages, events, stoppedByLimit: true };
 }

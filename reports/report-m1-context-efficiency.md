@@ -769,3 +769,36 @@ records `model_facing_bytes` exhaustion with zero fetches. The correction broad
 affected suite passes 171/171 tests with 4,295 assertions; focused typecheck also
 passes. Final lint, shape, module, and diff gates are recorded with the correction
 commit. Independent Sol-high rereview remains required before Task completion.
+
+### Bounded identity and attachment correction
+
+The next independent review found that attachment text could be composed twice
+on the enabled path and that provider-continuation identities still depended on
+content-derived hashes. The correction keeps one canonical attachment carrier:
+the Guided prompt owns the typed attachment context while the OpenAI adapter
+adds only image parts when that already-composed bounded prompt is present.
+Multi-round Codex serialization now preserves the exhaustive Work, memory,
+source-reference, and attachment segment spans without a duplicate text carrier.
+
+Bounded continuation identity is now a Turn-local structural event identity,
+assigned when BTCC appends each user or assistant observation and reused for the
+corresponding provider response. It is neither transcript content nor an
+unkeyed content digest, so repeated identical observations remain distinct.
+The durable provider-private continuation is strictly limited to provider,
+response id, and at most 256 validated bounded structural/protocol identities;
+unknown private fields, raw transcript clones, malformed identities, and excess
+cardinality fail closed. Current input is limited to 192 identities before
+dispatch, reserving 64 response identities so a successful provider fetch cannot
+create a post-fetch overflow. Function-call ids remain the protocol identity.
+
+Behavioral regression evidence uses the actual API-key Responses serializer and
+Codex serializer. It proves text plus function-call output is not duplicated,
+new tool output is sent exactly once, repeated identical text events are not
+deduplicated, an attachment prompt is not duplicated, and 193 current bounded
+identities fail before fetch. A 100-round fixture keeps the private continuation
+at no more than five identities and under 1,000 serialized bytes, with no prompt
+content or 64-character unkeyed digest. The 11-file broad affected suite passes
+182/182 tests with 1,318 assertions. These corrections do not change the
+representative direct/read-only/execution byte arithmetic above: those fixtures
+contain no attachments and Turn-local identity metadata is never serialized
+into the provider body.
