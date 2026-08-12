@@ -11,6 +11,19 @@ export {
 } from "./fixtures.ts";
 export { generateBenchmarkReport, summarizeBenchmarkResult, writeBenchmarkReport } from "./report.ts";
 export { runAgentBenchmark, createFileCheckpointStore } from "./workflow.ts";
+export {
+  corroborateExecution, createPairedCampaignContract,
+  readProviderAuthPreflight, replacementEligibility, requireAvailableProviderAuth,
+  validatePairedCampaignContract,
+} from "./paired-contract.ts";
+export type {
+  BenchmarkVersion, PairedCampaignContract, PairedSourcePin, ProviderAuthPreflight,
+} from "./paired-contract.ts";
+export {
+  aggregatePairedMetrics, comparisonIndexHtml, createComparisonIndex,
+  landingQualityPassed, pairEligibility, summarizePairedBenchmarkResult,
+} from "./paired-evaluation.ts";
+export type { ComparisonIndexEntry, PairedMetricRow } from "./paired-evaluation.ts";
 export { deriveAcceptedResultPerToken, evaluateAdapterResult, evaluateWebResearch } from "./evaluators.ts";
 export { applyVisualReviews, readVisualReviewFile } from "./visual-review.ts";
 export type {

@@ -10,7 +10,7 @@ export const AGENT_BENCHMARK_BASELINE_SHA =
   "549463fbe074fc25042f9302cd330699948dab50" as const;
 export const VISUAL_REVIEW_SCHEMA = "butler.agent-benchmark.visual-review.v1" as const;
 
-export type BenchmarkCampaign = "cross-agent-pilot" | "m1-v2";
+export type BenchmarkCampaign = "cross-agent-pilot" | "m1-v2" | "m1-v2-paired";
 
 export type BenchmarkAgent = "butler" | "hermes" | "opencode";
 export type BenchmarkTrack = "controlled" | "recommended-default";
@@ -75,6 +75,9 @@ export interface BenchmarkArmPlan {
   cachePairId: string;
   timeoutMs: number;
   sourceRevision: string;
+  version?: import("./paired-contract.ts").BenchmarkVersion;
+  pairId?: string;
+  block?: number;
 }
 
 export interface BenchmarkPlan {
@@ -91,6 +94,7 @@ export interface BenchmarkPlan {
   provenanceJsonlPath?: string;
   provenance?: M1V2ProvenanceIdentity;
   preparedButlerResource?: import("./prepared-butler-resource.ts").PreparedButlerResourceIdentity;
+  pairedCampaign?: import("./paired-contract.ts").PairedCampaignContract;
   tracks: readonly BenchmarkTrack[];
   fixtures: readonly BenchmarkFixtureSummary[];
   repositoryEvidence?: { relativeRoot: string; files: readonly string[]; sha256: string };
@@ -227,6 +231,11 @@ export interface BenchmarkResultFile {
   };
   plan: BenchmarkPlan;
   observations: BenchmarkObservation[];
+  replacements?: Array<{
+    armKey: string;
+    reason: "pre_provider_infrastructure_replacement";
+    observation: BenchmarkObservation;
+  }>;
 }
 
 export interface BenchmarkFixture {
@@ -266,6 +275,12 @@ export interface AdapterRunResult {
   finalText: string | null;
   sessionId: string | null;
   effectiveConfig?: Partial<EffectiveAgentConfig>;
+  pairedExecutionEvidence?: {
+    provider: string;
+    model: string;
+    reasoning: string;
+    providerServiceTiers: readonly (string | null)[];
+  };
   usage: Partial<TokenUsage>;
   tools: Partial<ToolMetrics>;
   timing: Partial<TimingMetrics>;

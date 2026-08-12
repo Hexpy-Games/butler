@@ -35,6 +35,7 @@ export function createAgentAdapters(input: DefaultAdapterInput): AgentAdapterSet
 
 export interface ProductionAgentAdapterOptions {
   preparedButlerResource?: PreparedButlerResourceReference;
+  pairedPreparedButlerResources?: Readonly<Record<"before" | "after", PreparedButlerResourceReference>>;
   rendererStartSmoke?: boolean;
 }
 
@@ -47,7 +48,10 @@ export function createProductionAgentAdapters(
     commandExecutor: createProcessExecutor(),
     butlerRunner: createElectronButlerRunner(
       options.preparedButlerResource,
-      { rendererStartSmoke: options.rendererStartSmoke === true },
+      {
+        rendererStartSmoke: options.rendererStartSmoke === true,
+        pairedPreparedButlerResources: options.pairedPreparedButlerResources,
+      },
     ),
   });
 }

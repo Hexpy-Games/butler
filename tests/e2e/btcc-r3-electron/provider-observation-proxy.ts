@@ -60,6 +60,7 @@ export interface ProviderRequestObservation {
   streamedTextChars: number;
   finalTextChars: number;
   providerReportedModel: string | null;
+  providerReportedServiceTier?: string | null;
 }
 
 interface MutableProviderRequestObservation extends ProviderRequestObservation {}
@@ -152,6 +153,7 @@ function safeObservation(
     streamedTextChars: observation.streamedTextChars,
     finalTextChars: observation.finalTextChars,
     providerReportedModel: observation.providerReportedModel,
+    providerReportedServiceTier: observation.providerReportedServiceTier,
   };
 }
 
@@ -440,6 +442,10 @@ class SseObservationTransform extends Transform {
       this.observation.providerReportedModel = String(
         (event.response as Record<string, unknown>).model,
       );
+      const serviceTier = (event.response as Record<string, unknown>).service_tier;
+      this.observation.providerReportedServiceTier = typeof serviceTier === "string"
+        ? serviceTier
+        : null;
     }
     this.observation.hasTextContent ||= content.text;
     this.observation.hasToolArgumentContent ||= content.toolArguments;
@@ -567,6 +573,7 @@ async function serveFixtureResponse(input: {
     return;
   }
   input.observation.providerReportedModel = responseModel;
+  input.observation.providerReportedServiceTier = "default";
   const text = input.fixtureResponse.text ?? "fixture response";
   const output = {
     type: "message",
@@ -816,6 +823,7 @@ export async function startProviderObservationProxy(
       streamedTextChars: 0,
       finalTextChars: 0,
       providerReportedModel: null,
+      providerReportedServiceTier: null,
     };
     nextOrdinal += 1;
     observed.push(observation);

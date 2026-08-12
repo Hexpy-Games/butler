@@ -9,6 +9,7 @@ import type {
 import { sanitizeIdentifier } from "./identifiers.ts";
 import type { M1V2CampaignResult } from "./m1-v2-types.ts";
 import { m1V2ReportLines, summarizeM1V2Campaign } from "./m1-v2-report.ts";
+import { summarizePairedBenchmarkResult } from "./paired-evaluation.ts";
 
 export interface BenchmarkReportSummary {
   runId: string;
@@ -19,6 +20,7 @@ export interface BenchmarkReportSummary {
   gatedAgents: BenchmarkAgent[];
   canRank: boolean;
   m1V2Campaign: M1V2CampaignResult | null;
+  pairedCampaign: ReturnType<typeof summarizePairedBenchmarkResult>;
   medians: Array<{
     agent: BenchmarkAgent;
     scenario: BenchmarkScenario;
@@ -164,6 +166,7 @@ export function summarizeBenchmarkResult(result: BenchmarkResultFile): Benchmark
     gatedAgents,
     canRank: complete && [...(result.plan.tracks ?? ["controlled", "recommended-default"])].every((track) => eligibleTrack(track) && visualReviewComplete(track)) && hasAcceptedForEachAgentAndTrack && gatedAgents.length === 0,
     m1V2Campaign: summarizeM1V2Campaign(result),
+    pairedCampaign: summarizePairedBenchmarkResult(result),
     arms,
     medians,
   };
@@ -219,6 +222,20 @@ export function generateBenchmarkReport(result: BenchmarkResultFile): string {
     "",
   );
   lines.push(...m1V2ReportLines(summary.m1V2Campaign));
+  if (summary.pairedCampaign) {
+    lines.push(
+      "## Final paired M1 contract",
+      "",
+      `- Contract: \`${summary.pairedCampaign.contractIdentity ?? "unavailable"}\``,
+      `- Exact pairs: ${summary.pairedCampaign.aggregate.overall.pairs}/12`,
+      `- Provider-send reduction gate: ${summary.pairedCampaign.acceptance.providerSendReductionPassed ? "pass" : "not passed"}`,
+      `- Elapsed 18-30% target: ${summary.pairedCampaign.acceptance.elapsedTargetPassed ? "pass" : "not passed"}`,
+      `- Zero quality regression: ${summary.pairedCampaign.acceptance.zeroQualityRegressionPassed ? "pass" : "not passed"}`,
+      "- Cache mismatch remains descriptive; retry, route, model, source, fixture, provider, auth, and execution-mode mismatches are rejected.",
+      "- Provider usage is nullable and unavailable historical comparisons remain unranked.",
+      "",
+    );
+  }
   return lines.join("\n");
 }
 

@@ -92,6 +92,7 @@ export function resumeOrInitialize(
     run: { runId: plan.runId, seed: plan.seed, baselineSha: plan.baselineSha, runRoot: plan.runRoot, state: "planned", planIdentity },
     plan,
     observations: [],
+    replacements: [],
   };
 }
 
@@ -100,9 +101,13 @@ function assertTerminalEvidencePreserved(
   incoming: BenchmarkResultFile,
 ): void {
   const incomingByKey = new Map(incoming.observations.map((item) => [item.arm.key, item]));
+  const retainedReplacements = incoming.replacements ?? [];
   for (const observation of existing.observations.filter(isTerminal)) {
     const next = incomingByKey.get(observation.arm.key);
-    if (!next || !sameTerminalEvidence(observation, next)) {
+    const retained = retainedReplacements.some((replacement) =>
+      replacement.armKey === observation.arm.key &&
+      sameTerminalEvidence(observation, replacement.observation));
+    if ((!next || !sameTerminalEvidence(observation, next)) && !retained) {
       throw new Error(`Benchmark checkpoint terminal evidence mismatch: ${observation.arm.key}`);
     }
   }
@@ -183,6 +188,14 @@ export function redactBenchmarkResult(result: BenchmarkResultFile): BenchmarkRes
         rubricVersion: sanitizeText(observation.visualReview.rubricVersion),
       },
     })),
+    replacements: result.replacements?.map((replacement) => ({
+      ...replacement,
+      observation: redactBenchmarkResult({
+        ...result,
+        observations: [replacement.observation],
+        replacements: [],
+      }).observations[0]!,
+    })),
   };
 }
 
@@ -215,7 +228,7 @@ function redactBenchmarkArm(arm: BenchmarkArmPlan, runRoot: string): BenchmarkAr
   return {
     ...arm,
     effectiveConfig: sanitizeEffectiveConfig(arm.effectiveConfig) as BenchmarkArmPlan["effectiveConfig"],
-    sourceRoot: "<source-root>",
+    sourceRoot: `<${arm.version ?? "source"}-source-root>`,
     outputRoot: relativePath(arm.outputRoot),
     dataRoot: relativePath(arm.dataRoot),
     evidenceRoot: relativePath(arm.evidenceRoot),
