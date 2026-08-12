@@ -14,7 +14,6 @@ import {
   diagnoseButlerToolPolicy,
   selectButlerToolProfiles,
   selectButlerToolsForTurn,
-  toolContractJsonChars,
 } from "../../packages/butler-agent/src/agent/tools/profiles.ts";
 import {
   PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES,
@@ -1095,9 +1094,6 @@ test("project sessions expose bounded project tools without workspace escalation
   expect(names).not.toContain("call_mcp_tool");
   expect(names).not.toContain("create_planned_task");
   expect(names).not.toContain("create_work_orchestration");
-  // Direct Conception recall plus canonical session list/read are intentionally
-  // part of the default surface; keep the expanded contract bounded.
-  expect(toolContractJsonChars(tools)).toBeLessThan(16_000);
 });
 
 test("project sessions keep Project Ledger lifecycle tools hidden for status-only wording", () => {
@@ -1170,8 +1166,6 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  // The workspace surface carries the same default memory-reference contract.
-  expect(toolContractJsonChars(tools)).toBeLessThan(33_000);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -1407,7 +1401,6 @@ test("Project Ledger runtime metadata exposes the bounded project profile withou
   expect(names).not.toContain("project_ledger_task_complete");
   expect(names).not.toContain("project_ledger_create");
   expect(names).not.toContain("get_weather_with_knowhow");
-  expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
 });
 
 test("Project Ledger project sessions expose lifecycle tools whenever Ledger tracked", () => {

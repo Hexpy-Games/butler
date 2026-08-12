@@ -5,8 +5,7 @@ import { parseToolCatalogId } from "../../tools/progressive-catalog.ts";
 import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
 import { PROJECT_LEDGER_MUTATION_TOOL_NAME_SET } from
   "../../tools/project-ledger/mutation-tools.ts";
-import { selectInitialToolsFromSurfaceController } from
-  "../../tools/tool-surface-selection.ts";
+import { selectButlerToolsForTurn } from "../../tools/profiles.ts";
 import { WORK_TRACKING_TOOL_NAMES } from "../../tools/work-tracking/shared.ts";
 import type { FunctionToolDefinition } from
   "../../../integrations/providers/runtime-contracts.ts";
@@ -96,15 +95,15 @@ export function authorizedToolDefinitions(
     requiredNativeTools: policy.requiredNativeTools,
     ...(policy.projectId ? { projectId: policy.projectId } : {}),
   };
-  const selected = selectInitialToolsFromSurfaceController({
+  const selected = selectButlerToolsForTurn({
     role: policy.role,
-    message: turn.originalMessage,
+    text: turn.originalMessage,
     sessionMetadata: {
       ...(policy.projectId ? { projectId: policy.projectId } : {}),
       runtimePolicy,
     },
     tools: BUTLER_TOOLS,
-  }).tools;
+  });
   const names = new Set(selected.map((tool) => tool.name));
   for (const name of [
     "tool_search",

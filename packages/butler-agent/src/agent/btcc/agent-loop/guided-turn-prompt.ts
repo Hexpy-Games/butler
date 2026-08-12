@@ -24,13 +24,13 @@ export interface GuidedTurnRequestAttribution {
 
 export function renderGuidedTurnRequestAttribution(
   turn: TurnRecord,
-  policy: Pick<ButlerExecutionPolicy, "accessMode" | "trackingMode">,
+  stableInstructionPrefix: string,
   responseLanguage: string,
   input: Parameters<typeof renderGuidedPromptAttribution>[1],
 ): GuidedTurnRequestAttribution {
   const prompt = renderGuidedPromptAttribution(turn, input);
   const instructions = guidedInstructionsAttribution(
-    policy,
+    stableInstructionPrefix,
     renderGuidedPersonaInstructions(turn, input.contextDocuments),
     responseLanguage,
   );
@@ -164,44 +164,48 @@ export function guidedInstructions(
 }
 
 export function guidedInstructionsAttribution(
-  policy: Pick<ButlerExecutionPolicy, "accessMode" | "trackingMode">,
+  stableInstructionPrefix: string,
   personaAndProfile = "",
   responseLanguage = "",
 ): GuidedTextAttribution {
-  const text = guidedInstructions(policy, personaAndProfile, responseLanguage);
+  const prefix = stableInstructionPrefix;
   const persona = personaAndProfile.trim();
-  const roleEnd = Math.max(0, text.indexOf("\n") + 1);
   const responseDirective = responseLanguage.trim()
     ? `Use ${responseLanguage.trim()} for every user-facing message in this Turn.`
     : "";
-  const responseStart = responseDirective ? text.indexOf(responseDirective, roleEnd) : -1;
-  const responseEnd = responseStart >= 0 ? responseStart + responseDirective.length : -1;
-  const personaStart = persona ? text.lastIndexOf(persona) : -1;
-  const boundaries = [responseStart, responseEnd, personaStart]
-    .filter((value) => value >= roleEnd)
-    .sort((left, right) => left - right);
+  const roleEnd = Math.max(0, prefix.indexOf("\n") + 1);
   const sources: M1RequestSegmentSource[] = [{
-    kind: "stable_safety_and_role_instructions", stability: "stable", text: text.slice(0, roleEnd),
+    kind: "stable_safety_and_role_instructions", stability: "stable", text: prefix.slice(0, roleEnd),
   }];
-  let cursor = roleEnd;
-  for (const boundary of boundaries) {
-    if (boundary <= cursor) continue;
-    const isResponse = cursor === responseStart;
+  if (roleEnd < prefix.length) {
     sources.push({
-      kind: isResponse ? "accepted_corrections_and_unresolved_obligations" : "stable_btcc_protocol",
-      stability: isResponse ? "dynamic" : "stable",
-      text: text.slice(cursor, boundary),
-    });
-    cursor = boundary;
-  }
-  if (cursor < text.length) {
-    sources.push({
-      kind: cursor === personaStart ? "memory_recall_context" : "stable_btcc_protocol",
-      stability: cursor === personaStart ? "dynamic" : "stable",
-      text: text.slice(cursor),
+      kind: "stable_btcc_protocol",
+      stability: "stable",
+      text: prefix.slice(roleEnd),
     });
   }
-  return { text, sources: sources.filter((source) => source.text.length > 0) };
+  if (responseDirective) {
+    sources.push({
+      kind: "accepted_corrections_and_unresolved_obligations",
+      stability: "dynamic",
+      text: `\n${responseDirective}`,
+    });
+  }
+  if (persona) {
+    sources.push({
+      kind: "memory_recall_context",
+      stability: "dynamic",
+      text: [
+        "",
+        "Apply the following current Butler persona and user personalization to every user-facing message in this Turn, including progress, review, failure, and final reporting. Preserve it across every tool round. These instructions are provider-neutral and must not be weakened by report formatting.",
+        persona,
+      ].join("\n"),
+    });
+  }
+  return {
+    text: sources.map((source) => source.text).join(""),
+    sources: sources.filter((source) => source.text.length > 0),
+  };
 }
 
 export function renderGuidedPersonaInstructions(
