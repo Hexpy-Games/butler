@@ -10,9 +10,19 @@ import {
 import {
   freezeConversationActivity as freezeMessageWorkBlocks,
 } from "./conversation-progress";
+import {
+  APP_CACHE_BUDGET,
+  cacheSnapshotBytes,
+  trimCacheSnapshot,
+} from "./cacheBudget.ts";
 
 const MESSAGE_CACHE_SCHEMA = "butler.message-cache.v1";
 const MESSAGE_CACHE_PREFIX = "butler:message-cache:v1:";
+type CacheRecord = {
+  snapshot: MessageCacheSnapshot;
+  bytes: number;
+};
+
 const localMessageCache = hydrateLocalMessageCache();
 
 interface MessageCacheSnapshot extends MessageListView {
@@ -74,6 +84,9 @@ export function mergeMessageListViews(
     messages,
     turn_progress: turnProgress,
     next_cursor: nextCursor,
+    ...(incoming.next_cursor_token ?? cached.next_cursor_token
+      ? { next_cursor_token: incoming.next_cursor_token ?? cached.next_cursor_token }
+      : {}),
   };
 }
 
@@ -137,23 +150,40 @@ export function snapshotForCache(
         turnIds.has(turnId) && isCacheableProgress(snapshot),
     ),
   );
-  return {
+  const snapshot: MessageCacheSnapshot = {
     schema: MESSAGE_CACHE_SCHEMA,
     chat_id: chatId,
     messages,
     turn_progress: turnProgress,
     next_cursor: messageListCursor({ messages, next_cursor: view.next_cursor }),
+    ...(view.next_cursor_token
+      ? { next_cursor_token: view.next_cursor_token }
+      : {}),
     cached_at: new Date().toISOString(),
   };
+  return trimCacheSnapshot<MessageCacheSnapshot>(snapshot);
 }
 
 function cacheableMessages(messages: MessageRecord[]): MessageRecord[] {
-  return messages.filter((message) => message.status !== "pending");
+  // Streaming/retrying/pending rows are live working state. Persisting them
+  // creates stale durable snapshots after a crash; the active session store
+  // remains the owner until the turn reaches a terminal status.
+  return messages.filter(
+    (message) =>
+      message.status !== "pending" &&
+      message.status !== "thinking" &&
+      message.status !== "streaming" &&
+      message.status !== "retrying",
+  );
 }
 
 function isCacheableProgress(snapshot: TurnProgressSnapshot): boolean {
   return (snapshot.safe_progress_rows ?? []).every(
-    (row) => row.state !== "thinking" && row.state !== "running",
+    (row) =>
+      row.state !== "thinking" &&
+      row.state !== "running" &&
+      row.state !== "streaming" &&
+      row.state !== "retrying",
   );
 }
 
@@ -165,6 +195,7 @@ function normalizeSnapshot(
   const snapshot = value as Partial<MessageCacheSnapshot>;
   if (snapshot.schema !== MESSAGE_CACHE_SCHEMA) return null;
   if (snapshot.chat_id !== chatId) return null;
+  if (typeof snapshot.cached_at !== "string") return null;
   if (!Array.isArray(snapshot.messages)) return null;
   const turnProgress = normalizeTurnProgress(snapshot.turn_progress);
   return {
@@ -175,6 +206,9 @@ function normalizeSnapshot(
     ),
     turn_progress: turnProgress,
     next_cursor: Number(snapshot.next_cursor ?? 0),
+    ...(typeof snapshot.next_cursor_token === "string"
+      ? { next_cursor_token: snapshot.next_cursor_token }
+      : {}),
   };
 }
 
@@ -192,26 +226,41 @@ function bridgeCache(): MessageCacheBridge | undefined {
 }
 
 function readLocalSnapshot(chatId: string): unknown {
-  return localMessageCache.get(chatId) ?? null;
+  const record = localMessageCache.get(chatId);
+  if (!record) return null;
+  // Map insertion order is the deterministic LRU order.
+  localMessageCache.delete(chatId);
+  localMessageCache.set(chatId, record);
+  return record.snapshot;
 }
 
 function writeLocalSnapshot(
   chatId: string,
   snapshot: MessageCacheSnapshot,
 ): void {
-  localMessageCache.set(chatId, snapshot);
+  const bytes = cacheSnapshotBytes<MessageCacheSnapshot>({
+    ...snapshot,
+    turn_progress: snapshot.turn_progress ?? {},
+  });
+  if (!Number.isFinite(bytes) || bytes > APP_CACHE_BUDGET.maxSnapshotBytes) return;
+  const existing = localMessageCache.get(chatId);
+  if (existing) localMessageCache.delete(chatId);
+  localMessageCache.set(chatId, { snapshot, bytes });
+  evictLocalMessageCache(chatId);
   try {
-    globalThis.localStorage?.setItem(
-      cacheKey(chatId),
-      JSON.stringify(snapshot),
-    );
+    if (localMessageCache.has(chatId)) {
+      globalThis.localStorage?.setItem(cacheKey(chatId), JSON.stringify(snapshot));
+    } else {
+      globalThis.localStorage?.removeItem(cacheKey(chatId));
+    }
   } catch {
     // Cache writes are opportunistic and must never block message rendering.
   }
 }
 
-function hydrateLocalMessageCache(): Map<string, unknown> {
-  const cache = new Map<string, unknown>();
+function hydrateLocalMessageCache(): Map<string, CacheRecord> {
+  const cache = new Map<string, CacheRecord>();
+  const candidates: Array<{ chatId: string; snapshot: MessageCacheSnapshot; bytes: number }> = [];
   try {
     const storage = globalThis.localStorage;
     if (!storage) return cache;
@@ -224,12 +273,64 @@ function hydrateLocalMessageCache(): Map<string, unknown> {
       if (snapshot?.schema !== MESSAGE_CACHE_SCHEMA || !snapshot.chat_id) {
         continue;
       }
-      cache.set(snapshot.chat_id, snapshot);
+      const normalized = normalizeSnapshot(snapshot, snapshot.chat_id);
+      if (!normalized) continue;
+      const cacheSnapshot: MessageCacheSnapshot = {
+        schema: MESSAGE_CACHE_SCHEMA,
+        chat_id: snapshot.chat_id,
+        cached_at: snapshot.cached_at!,
+        messages: normalized.messages,
+        turn_progress: normalized.turn_progress ?? {},
+        next_cursor: normalized.next_cursor,
+        ...(normalized.next_cursor_token
+          ? { next_cursor_token: normalized.next_cursor_token }
+          : {}),
+      };
+      const bytes = cacheSnapshotBytes<MessageCacheSnapshot>(cacheSnapshot);
+      if (!Number.isFinite(bytes) || bytes > APP_CACHE_BUDGET.maxSnapshotBytes) {
+        storage.removeItem(key);
+        continue;
+      }
+      candidates.push({ chatId: snapshot.chat_id, snapshot: cacheSnapshot, bytes });
     }
+    candidates
+      .sort((left, right) => {
+        const timestamp = Date.parse(left.snapshot.cached_at) - Date.parse(right.snapshot.cached_at);
+        return timestamp || left.chatId.localeCompare(right.chatId);
+      })
+      .forEach(({ chatId, snapshot, bytes }) => cache.set(chatId, { snapshot, bytes }));
+    evictCacheMap(cache);
   } catch {
     // Local browser cache hydration is opportunistic.
   }
   return cache;
+}
+
+function evictLocalMessageCache(protectedChatId: string): void {
+  evictCacheMap(localMessageCache, protectedChatId);
+}
+
+function evictCacheMap(
+  cache: Map<string, CacheRecord>,
+  protectedChatId?: string,
+): void {
+  const remove = (chatId: string) => {
+    cache.delete(chatId);
+    try {
+      globalThis.localStorage?.removeItem(cacheKey(chatId));
+    } catch {
+      // Storage cleanup is best effort.
+    }
+  };
+  let totalBytes = [...cache.values()].reduce((total, record) => total + record.bytes, 0);
+  while (cache.size > APP_CACHE_BUDGET.maxEntries || totalBytes > APP_CACHE_BUDGET.maxBytes) {
+    const candidate = [...cache.keys()].find((chatId) => chatId !== protectedChatId);
+    if (!candidate) break;
+    const record = cache.get(candidate);
+    if (!record) break;
+    totalBytes -= record.bytes;
+    remove(candidate);
+  }
 }
 
 function cacheKey(chatId: string): string {

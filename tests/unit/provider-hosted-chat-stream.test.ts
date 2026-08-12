@@ -1,6 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHostedChatCompletion } from
   "../../packages/butler-agent/src/integrations/providers/shared/hosted-chat-client.ts";
+import {
+  MAX_HOSTED_CHAT_SSE_FRAME_BYTES,
+  readHostedChatSseResponse,
+} from
+  "../../packages/butler-agent/src/integrations/providers/shared/hosted-chat-stream.ts";
 import type { HostedRuntimeConfig } from
   "../../packages/butler-agent/src/integrations/providers/shared/model-routing.ts";
 
@@ -19,6 +24,7 @@ afterEach(() => {
 
 test("SSE events preserve forward progress and structured output", async () => {
   let requestBody: Record<string, unknown> | undefined;
+  let drained = false;
   globalThis.fetch = hostedChatFetchFromSchedule([
     { afterMs: 10, data: {
       id: "chat-stream",
@@ -32,6 +38,8 @@ test("SSE events preserve forward progress and structured output", async () => {
     { afterMs: 10, data: "[DONE]" },
   ], (body) => {
     requestBody = body;
+  }, undefined, () => {
+    drained = true;
   });
 
   const response = await createHostedChatCompletion(
@@ -44,6 +52,7 @@ test("SSE events preserve forward progress and structured output", async () => {
   );
 
   expect(requestBody?.stream).toBe(true);
+  expect(drained).toBe(true);
   expect(response).toMatchObject({
     id: "chat-stream",
     model: "glm-5.2",
@@ -112,6 +121,106 @@ test("a partial stream cannot become a provider product", async () => {
   )).rejects.toMatchObject({ code: "provider_protocol_error" });
 });
 
+test("hosted SSE cancels after a structured provider error", async () => {
+  globalThis.fetch = hostedChatFetchFromSchedule([{
+    afterMs: 1,
+    data: {
+      error: { message: "provider rejected the stream", code: "bad_stream" },
+    },
+  }]);
+
+  await expect(createHostedChatCompletion(
+    config,
+    { messages: [{ role: "user", content: "test" }], stream: true },
+    undefined,
+    { roundIndex: 0 },
+    1,
+    { totalTimeoutMs: 100, idleTimeoutMs: 20 },
+  )).rejects.toMatchObject({ code: "provider_api_error" });
+});
+
+test("hosted reader cancels an open body after a structured provider error", async () => {
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(
+        `data: ${JSON.stringify({ error: { message: "provider failed" } })}\n\n`,
+      ));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  await expect(readHostedChatSseResponse(
+    new Response(stream, { headers: { "content-type": "text/event-stream" } }),
+    () => {},
+  )).rejects.toThrow("structured provider error");
+  expect(cancelled).toBe(true);
+});
+
+test("hosted SSE cancels and releases its reader after a parse failure", async () => {
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("data: {not-json}\n\n"));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  await expect(readHostedChatSseResponse(
+    new Response(stream, { headers: { "content-type": "text/event-stream" } }),
+    () => {},
+  )).rejects.toThrow("malformed SSE event");
+  expect(cancelled).toBe(true);
+});
+
+test("hosted SSE rejects an unframed body at the bounded reader boundary", async () => {
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(
+        `data: ${"x".repeat(MAX_HOSTED_CHAT_SSE_FRAME_BYTES)}\n`,
+      ));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  await expect(readHostedChatSseResponse(
+    new Response(stream, { headers: { "content-type": "text/event-stream" } }),
+    () => {},
+  )).rejects.toThrow("SSE frame exceeded");
+  expect(cancelled).toBe(true);
+});
+
+test("hosted SSE abort settles a body that does not emit another chunk", async () => {
+  let cancelled = false;
+  globalThis.fetch = (async () => new Response(
+    new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    }),
+    { status: 200, headers: { "content-type": "text/event-stream" } },
+  )) as unknown as typeof fetch;
+  const controller = new AbortController();
+  const pending = createHostedChatCompletion(
+    config,
+    { messages: [{ role: "user", content: "test" }], stream: true },
+    controller.signal,
+    { roundIndex: 0 },
+    1,
+    { totalTimeoutMs: 500, idleTimeoutMs: 500 },
+  );
+  setTimeout(() => controller.abort(new Error("consumer abandoned")), 5);
+  await expect(pending).rejects.toThrow();
+  expect(cancelled).toBe(true);
+});
+
 test("hosted 429 preserves provider-declared readiness", async () => {
   const retryAt = "Wed, 21 Oct 2099 07:28:00 GMT";
   globalThis.fetch = (async () => new Response(
@@ -145,6 +254,8 @@ test("hosted 429 preserves provider-declared readiness", async () => {
 function hostedChatFetchFromSchedule(
   schedule: Array<{ afterMs: number; data: Record<string, unknown> | "[DONE]" }>,
   onRequest?: (body: Record<string, unknown>) => void,
+  onCancel?: () => void,
+  onClose?: () => void,
 ): typeof fetch {
   return (async (_input, init) => {
     onRequest?.(JSON.parse(String(init?.body)));
@@ -156,6 +267,7 @@ function hostedChatFetchFromSchedule(
         const emitNext = () => {
           const item = schedule[index++];
           if (!item) {
+            onClose?.();
             controller.close();
             return;
           }
@@ -172,6 +284,9 @@ function hostedChatFetchFromSchedule(
           if (timer) clearTimeout(timer);
           controller.error(init.signal?.reason);
         }, { once: true });
+      },
+      cancel() {
+        onCancel?.();
       },
     });
     return new Response(stream, {

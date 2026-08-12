@@ -6,16 +6,22 @@ import type {
   PromptMaterialInput,
 } from "../types.ts";
 import type { ConversationStoreDependencies } from "./dependencies.ts";
-import {
-  conversationMessagesSourceHash,
-  type ConversationMessageRecords,
-} from "./message-records.ts";
+import type { ConversationMessageRecords } from "./message-records.ts";
+import type { ConversationContextStatsRecords } from "./context-stats.ts";
 import type { ConversationSessionTurnRecords } from "./session-turn-records.ts";
+
+export interface ConversationSummaryStats {
+  /** Number of summaries whose source hash is still verifiable. */
+  summaries: number;
+  /** Character count used for a bounded prompt-token estimate. */
+  summaryTextChars: number;
+}
 
 export class ConversationSummaryPromptRecords {
   constructor(
     private readonly dependencies: ConversationStoreDependencies,
     private readonly messages: ConversationMessageRecords,
+    private readonly contextStats: ConversationContextStatsRecords,
     private readonly sessionsAndTurns: ConversationSessionTurnRecords,
   ) {}
 
@@ -76,6 +82,47 @@ export class ConversationSummaryPromptRecords {
     `).all(sessionId);
   }
 
+  /**
+   * Stream summary metadata for the context monitor.
+   *
+   * Summary rows are intentionally not materialized as an array here. Each
+   * source hash is verified against the canonical message store before its
+   * metadata contributes to the result, so stale/unverifiable summaries are
+   * fail-closed rather than reported as authoritative context.
+   */
+  readSummaryStats(sessionId: string): ConversationSummaryStats {
+    let summaries = 0;
+    let summaryTextChars = 0;
+    const rows = this.dependencies.db.query<{
+      id: string;
+      session_id: string;
+      covers_from_seq: number;
+      covers_to_seq: number;
+      source_hash: string;
+      summary_text_chars: number;
+    }, [string]>(`
+      SELECT id, session_id, covers_from_seq, covers_to_seq, source_hash,
+        length(summary_text) AS summary_text_chars
+      FROM conversation_summaries
+      WHERE session_id = ? AND invalidated_at IS NULL
+      ORDER BY covers_from_seq ASC, covers_to_seq ASC
+    `).iterate(sessionId);
+    for (const summary of rows) {
+      const sourceHash = this.contextStats.sourceHashForSeqRange(
+        summary.session_id,
+        summary.covers_from_seq,
+        summary.covers_to_seq,
+      );
+      if (sourceHash !== summary.source_hash) {
+        this.invalidateSummary(summary.id, summary.session_id);
+        continue;
+      }
+      summaries += 1;
+      summaryTextChars += Math.max(0, Number(summary.summary_text_chars ?? 0));
+    }
+    return { summaries, summaryTextChars };
+  }
+
   readPromptMaterial(input: PromptMaterialInput): PromptMaterial {
     const summaries = this.readSummaries(input.sessionId);
     const semanticTail = input.tailLimit === undefined
@@ -116,12 +163,12 @@ export class ConversationSummaryPromptRecords {
       ORDER BY covers_from_seq ASC, covers_to_seq ASC
     `).all(sessionId);
     const stale = summaries.filter((summary) => {
-      const messages = this.messages.readMessagesInSeqRange(
+      const sourceHash = this.contextStats.sourceHashForSeqRange(
         summary.session_id,
         summary.covers_from_seq,
         summary.covers_to_seq,
       );
-      return conversationMessagesSourceHash(messages) !== summary.source_hash;
+      return sourceHash !== summary.source_hash;
     });
     if (stale.length === 0) return;
     const now = isoNow();
@@ -136,6 +183,21 @@ export class ConversationSummaryPromptRecords {
           WHERE session_id = ? AND compacted_by_summary_id = ?
         `).run(summary.session_id, summary.id);
       }
+    });
+    tx();
+  }
+
+  private invalidateSummary(summaryId: string, sessionId: string): void {
+    const now = isoNow();
+    const tx = this.dependencies.db.transaction(() => {
+      this.dependencies.db
+        .query("UPDATE conversation_summaries SET invalidated_at = ? WHERE id = ? AND invalidated_at IS NULL")
+        .run(now, summaryId);
+      this.dependencies.db.query(`
+        UPDATE conversation_messages
+        SET status = 'complete', compacted_by_summary_id = NULL
+        WHERE session_id = ? AND compacted_by_summary_id = ?
+      `).run(sessionId, summaryId);
     });
     tx();
   }

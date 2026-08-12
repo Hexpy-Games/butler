@@ -13,15 +13,22 @@ import {
 import type {
   MessageRecord,
   ProgressSummaryRow,
+  SessionArtifactSummary,
   SessionControlState,
   SessionSummaryView,
   SessionView,
   SessionViewTurn,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
+import type {
+  SessionMessagePage,
+  SessionMessagePageOptions,
+  TranscriptMessagePage,
+} from "../../domain/sessions/session-message-page.ts";
 import type { TerminalTurnProjection } from "../../infrastructure/retention/terminal-turn-retention.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
 import type { TurnControlResolution } from "../../../core/turn-execution-controls.ts";
+import { buildContextDetailsRevision } from "./context-details-revision.ts";
 
 export interface AppStoreKernelSessionContextHost {
   localModelMetadata(): ProviderModelMetadata[];
@@ -45,7 +52,20 @@ export interface AppStoreKernelSessionContextHost {
     turn: TurnRecord,
     options?: { suppressProgressRows?: boolean },
   ): SessionViewTurn;
-  sessionViewMessages(sessionId: string): MessageRecord[];
+  sessionViewMessages(
+    sessionId: string,
+    options?: SessionMessagePageOptions,
+  ): MessageRecord[];
+  sessionViewMessagePage(
+    sessionId: string,
+    options?: SessionMessagePageOptions,
+  ): SessionMessagePage<MessageRecord>;
+  listArtifactSummaries(sessionId: string): SessionArtifactSummary[];
+  contextDetailsRevision(sessionId: string): string;
+  transcriptMessagePage(
+    sessionId: string,
+    options?: SessionMessagePageOptions,
+  ): TranscriptMessagePage;
   latestTurn(sessionId: string): TurnRecord | null;
   countTurns(sessionId: string): number;
   deliveryMetadataForTurnRecord(turn: TurnRecord): DeliveryLimitationMetadata;
@@ -106,8 +126,20 @@ export function createSessionContextHost(
     sessionViewTurn(turn, options = {}) {
       return kernel.turnProgressView.sessionViewTurn(turn, options);
     },
-    sessionViewMessages(sessionId) {
-      return kernel.sessionMessageProjection.sessionViewMessages(sessionId);
+    sessionViewMessages(sessionId, options) {
+      return kernel.sessionMessageProjection.sessionViewMessages(sessionId, options);
+    },
+    sessionViewMessagePage(sessionId, options) {
+      return kernel.sessionMessageProjection.sessionViewMessagePage(sessionId, options);
+    },
+    listArtifactSummaries(sessionId) {
+      return kernel.sessionRecords.listArtifactSummaries(sessionId);
+    },
+    contextDetailsRevision(sessionId) {
+      return buildContextDetailsRevision(kernel, sessionId);
+    },
+    transcriptMessagePage(sessionId, options) {
+      return kernel.sessionRecords.listTranscriptMessagePage(sessionId, options);
     },
     latestTurn(sessionId) {
       return kernel.sessionRecords.latestTurn(sessionId);

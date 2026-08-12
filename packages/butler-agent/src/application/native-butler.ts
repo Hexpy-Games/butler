@@ -52,6 +52,7 @@ import {
   clearAppForegroundExecutorReadiness,
   publishAppForegroundExecutorReadiness,
 } from "../operations/service/app-foreground-readiness.ts";
+import { ensureTranscriptActivityAggregate } from "../operations/metrics/transcript-activity-index.ts";
 
 export interface NativeButlerMainOptions {
   butlerHome?: string;
@@ -84,6 +85,14 @@ export async function runNativeButlerMain(
 ): Promise<NativeButlerMainResult> {
   const butlerHome = resolveButlerHome(input.butlerHome);
   const butlerData = resolveButlerData(input.butlerData);
+  // Reconstruct the bounded transcript activity aggregate before serving
+  // status requests. This is a cold/startup path; request handlers only read
+  // the resulting single checkpoint and never enumerate transcript history.
+  try {
+    ensureTranscriptActivityAggregate({ butlerData });
+  } catch {
+    // A diagnostic aggregate must not prevent the primary Agent from starting.
+  }
   const config = readButlerConfig(butlerData);
   const telegramGateway = resolveTelegramGatewayRuntimeConfig({
     butlerData,

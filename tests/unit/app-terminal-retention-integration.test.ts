@@ -66,6 +66,64 @@ test("a late terminal event re-enqueues retention through the App event store", 
   }
 });
 
+test("kernel startup sweep recovers terminal rows persisted before restart", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-retention-startup-"));
+  roots.push(root);
+  const kernel = new AppStoreKernel({
+    butlerData: join(root, "data"),
+    butlerHome: root,
+    dbPath: join(root, "app.sqlite"),
+  });
+  const now = new Date().toISOString();
+  try {
+    kernel.db.query(`
+      INSERT INTO chats (id, title, kind, created_at, updated_at)
+      VALUES ('chat-startup', 'Startup', 'chat', ?, ?)
+    `).run(now, now);
+    kernel.db.query(`
+      INSERT INTO turns (
+        id, chat_id, state, safe_status_label, retryable, cancellable,
+        attempt, created_at, updated_at
+      ) VALUES ('turn-startup', 'chat-startup', 'running', 'Working', 0, 1, 1, ?, ?)
+    `).run(now, now);
+    kernel.appendEvent("progress.summary", {
+      session_id: "chat-startup",
+      turn_id: "turn-startup",
+      row: {
+        id: "startup-row",
+        kind: "tool",
+        state: "delivered",
+        safe_label: "Recovered",
+        created_at: now,
+      },
+    });
+    kernel.db.query(`
+      UPDATE turns SET state = 'delivered', cancellable = 0
+      WHERE id = 'turn-startup'
+    `).run();
+    kernel.close();
+    const restarted = new AppStoreKernel({
+      butlerData: join(root, "data"),
+      butlerHome: root,
+      dbPath: join(root, "app.sqlite"),
+    });
+    try {
+      appendReplayTail(restarted, 2_000);
+      expect(restarted.db.query("SELECT id, state FROM turns WHERE id = 'turn-startup'").all())
+        .toHaveLength(1);
+      await waitUntil(() => reconstructibleEventCountForTurn(restarted, "turn-startup") === 0);
+      expect(restarted.terminalTurnRetention.read("turn-startup")?.progressRows)
+        .toContainEqual(expect.objectContaining({ id: "startup-row" }));
+    } finally {
+      restarted.close();
+    }
+  } finally {
+    // The restart branch owns its lifecycle; close is idempotent for the
+    // setup kernel in case an assertion fails before the branch.
+    kernel.close();
+  }
+});
+
 test("a completed transport cycle wakes a BTCC-settled dormant App turn", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-retention-settlement-"));
   roots.push(root);
@@ -147,6 +205,14 @@ function reconstructibleEventCount(kernel: AppStoreKernel): number {
     WHERE turn_id = 'turn-late'
       AND type IN ('progress.summary', 'agent.turn_event.progress')
   `).get()?.count ?? 0;
+}
+
+function reconstructibleEventCountForTurn(kernel: AppStoreKernel, turnId: string): number {
+  return kernel.db.query<{ count: number }, [string]>(`
+    SELECT COUNT(*) AS count FROM events
+    WHERE turn_id = ?
+      AND type IN ('progress.summary', 'agent.turn_event.progress')
+  `).get(turnId)?.count ?? 0;
 }
 
 function retainedHighWater(kernel: AppStoreKernel): number {

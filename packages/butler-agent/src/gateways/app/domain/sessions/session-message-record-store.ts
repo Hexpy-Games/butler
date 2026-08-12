@@ -2,7 +2,11 @@ import { Database } from "bun:sqlite";
 import { readCompactionSnapshots } from "../../../../agent/context/compaction.ts";
 import type { MessageRow } from "../../infrastructure/core/records.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
-import { messageFromRow } from "./message-read-model.ts";
+import {
+  artifactSummaryFromRow,
+  messageFromRow,
+  type SessionArtifactReadModelRow,
+} from "./message-read-model.ts";
 import type {
   AppMessageFileStore,
   MessageFileRow,
@@ -11,9 +15,16 @@ import type {
   MessageRecord,
   MessageRole,
   MessageStatus,
+  SessionArtifactSummary,
 } from "../../interface/protocol/app-protocol.ts";
 import { sessionHintForRow } from "./session-read-model.ts";
 import { visibleMessageSqlPredicate } from "./visible-message-sql.ts";
+import {
+  normalizeSessionMessagePageOptions,
+  type SessionMessagePage,
+  type SessionMessagePageOptions,
+  type TranscriptMessagePage,
+} from "./session-message-page.ts";
 
 export class AppSessionMessageRecordStore {
   constructor(
@@ -23,31 +34,200 @@ export class AppSessionMessageRecordStore {
     private readonly ensureChat: (chatId: string) => void,
   ) {}
 
-  listMessages(chatId: string, cursor = 0): MessageRecord[] {
+  listMessages(
+    chatId: string,
+    cursorOrOptions: number | SessionMessagePageOptions = 0,
+  ): MessageRecord[] {
+    return this.listMessagePage(chatId, cursorOrOptions).items;
+  }
+
+  listMessagePage(
+    chatId: string,
+    cursorOrOptions: number | SessionMessagePageOptions = 0,
+  ): SessionMessagePage<MessageRecord> {
     this.ensureChat(chatId);
-    const rows = this.db
-      .query<MessageRow, [string, number]>(
-        `
+    const options = normalizeSessionMessagePageOptions(
+      typeof cursorOrOptions === "number"
+        ? { afterCursor: cursorOrOptions }
+        : cursorOrOptions,
+    );
+    const beforeCursor = options.beforeCursor;
+    const afterCursor = options.fromBeginning ? 0 : options.afterCursor;
+    const queryLimit = options.limit + 1;
+    const query = beforeCursor !== undefined
+      ? `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
         conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
       FROM messages
-      WHERE chat_id = ? AND rowid > ? AND ${visibleMessageSqlPredicate()}
+      WHERE chat_id = ?
+        AND rowid < ?
+        AND ${visibleMessageSqlPredicate()}
+      ORDER BY rowid DESC
+      LIMIT ${queryLimit}
+    `
+      : afterCursor !== undefined
+        ? `
+      SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
+        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+      FROM messages
+      WHERE chat_id = ?
+        AND rowid > ?
+        AND ${visibleMessageSqlPredicate()}
       ORDER BY rowid ASC
-      LIMIT 200
-    `,
-      )
-      .all(chatId, cursor);
-    const messages = rows.map((row) =>
-      messageFromRow(row, this.messageFiles.refsForMessage(row.id)),
+      LIMIT ${queryLimit}
+    `
+        : `
+      SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
+        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+      FROM messages
+      WHERE chat_id = ?
+        AND ${visibleMessageSqlPredicate()}
+      ORDER BY rowid DESC
+      LIMIT ${queryLimit}
+    `;
+    const statement = this.db.query<MessageRow, any>(query);
+    const rows =
+      beforeCursor === undefined && afterCursor === undefined
+        ? statement.all(chatId)
+        : statement.all(chatId, beforeCursor ?? afterCursor!);
+    const hasMoreRows = rows.length > options.limit;
+    const pageRows =
+      beforeCursor !== undefined || afterCursor === undefined
+        ? rows.slice(0, options.limit).reverse()
+        : rows.slice(0, options.limit);
+    const attachmentsByMessage = this.messageFiles.refsForMessages(
+      pageRows.map((row) => row.id),
+    );
+    const messages = pageRows.map((row) =>
+      messageFromRow(row, attachmentsByMessage.get(row.id) ?? []),
     );
     const compactionMessages =
-      cursor === 0 ? this.compactionMarkerMessages(chatId, cursor) : [];
-    return [...messages, ...compactionMessages]
-      .filter((message) => Number(message.cursor ?? 0) > cursor)
+      beforeCursor === undefined && afterCursor === undefined
+        ? this.compactionMarkerMessages(chatId, 0)
+        : [];
+    const ordered = [...messages, ...compactionMessages]
+      .filter((message) =>
+        beforeCursor === undefined
+          ? afterCursor === undefined || Number(message.cursor ?? 0) > afterCursor
+          : Number(message.cursor ?? 0) < beforeCursor,
+      )
       .sort(
         (left, right) => Number(left.cursor ?? 0) - Number(right.cursor ?? 0),
-      )
-      .slice(0, 200);
+      );
+    // The initial page is a latest window. Compaction markers are a bounded
+    // presentation aid and must never displace the newest canonical messages
+    // or move the delta cursor backwards. When the canonical page is full,
+    // markers wait for a later page instead of evicting a real row.
+    const page = beforeCursor === undefined && afterCursor === undefined
+      ? messages.length >= options.limit
+        ? messages
+        : [
+          ...messages,
+          ...compactionMessages
+            .slice(-(options.limit - messages.length)),
+        ].sort(
+          (left, right) => Number(left.cursor ?? 0) - Number(right.cursor ?? 0),
+        )
+      : ordered.slice(0, options.limit);
+    const firstCursor = Number(page[0]?.cursor ?? 0);
+    const lastCursor = Number(page.at(-1)?.cursor ?? 0);
+    return {
+      items: page,
+      nextCursor: lastCursor || afterCursor || 0,
+      previousCursor: firstCursor > 0 ? firstCursor : null,
+      hasMore: hasMoreRows,
+    };
+  }
+
+  latestMessageRevision(chatId: string): string {
+    this.ensureChat(chatId);
+    const row = this.db
+      .query<{ recent_revision: string | null }, [string]>(`
+        SELECT GROUP_CONCAT(rowid || ':' || updated_at, '|') AS recent_revision
+        FROM (
+          SELECT rowid, updated_at
+          FROM messages
+          WHERE chat_id = ?
+            AND ${visibleMessageSqlPredicate()}
+          ORDER BY rowid DESC
+          LIMIT 16
+        )
+      `)
+      .get(chatId);
+    return row?.recent_revision ?? "";
+  }
+
+  /**
+   * Read the public artifact projection from the latest bounded message
+   * window without constructing message text, progress, or attachment maps.
+   * The order/limit mirrors `listMessages(...).flatMap(...).slice(-20)`:
+   * newest message/attachment rows are selected first, then reversed into
+   * the canonical chronological artifact order.
+   */
+  listArtifactSummaries(chatId: string): SessionArtifactSummary[] {
+    this.ensureChat(chatId);
+    const rows = this.db
+      .query<SessionArtifactReadModelRow, [string]>(`
+        WITH latest_messages AS (
+          SELECT rowid, id, chat_id, turn_id, role, safe_error_code
+          FROM messages AS m
+          WHERE m.chat_id = ?
+            AND ${visibleMessageSqlPredicate("m")}
+          ORDER BY rowid DESC
+          LIMIT 200
+        )
+        SELECT
+          m.rowid AS message_rowid,
+          m.id AS message_id,
+          m.chat_id,
+          m.turn_id,
+          f.id,
+          f.owner_session_id,
+          f.kind,
+          f.mime_type,
+          f.safe_name,
+          f.size_bytes,
+          f.sha256,
+          f.storage_name,
+          f.created_at
+        FROM latest_messages AS m
+        JOIN message_attachments AS a ON a.message_id = m.id
+        JOIN message_files AS f ON f.id = a.file_id
+        WHERE m.role = 'assistant'
+        ORDER BY m.rowid DESC, a.position DESC
+        LIMIT 20
+      `)
+      .all(chatId);
+    return rows.reverse().map(artifactSummaryFromRow);
+  }
+
+  listTranscriptMessagePage(
+    chatId: string,
+    options: SessionMessagePageOptions = {},
+  ): TranscriptMessagePage {
+    this.ensureChat(chatId);
+    const normalized = normalizeSessionMessagePageOptions(options);
+    const afterCursor = normalized.fromBeginning ? 0 : normalized.afterCursor ?? 0;
+    const rows = this.db.query<{
+      cursor: number;
+      role: string;
+      text: string;
+    }, [string, number]>(`
+      SELECT rowid AS cursor, role, text
+      FROM messages
+      WHERE chat_id = ?
+        AND rowid > ?
+        AND ${visibleMessageSqlPredicate()}
+      ORDER BY rowid ASC
+      LIMIT ${normalized.limit + 1}
+    `).all(chatId, afterCursor);
+    const hasMore = rows.length > normalized.limit;
+    const items = rows.slice(0, normalized.limit);
+    return {
+      items,
+      nextCursor: Number(items.at(-1)?.cursor ?? afterCursor),
+      hasMore,
+    };
   }
 
   getMessageRow(messageId: string): MessageRow | null {
@@ -211,7 +391,11 @@ export class AppSessionMessageRecordStore {
     const snapshots = readCompactionSnapshots({
       butlerData: this.butlerData,
       sessionId: sessionHintForRow(chatId),
-    }).filter((snapshot) => snapshot.status === "ok");
+    })
+      .filter((snapshot) => snapshot.status === "ok")
+      // Markers are a bounded presentation aid, not a second transcript. The
+      // canonical compaction records remain on disk for recovery/export.
+      .slice(-32);
     if (snapshots.length === 0) return [];
     const messageTimeline = this.db
       .query<{ rowid: number; created_at: string }, [string]>(

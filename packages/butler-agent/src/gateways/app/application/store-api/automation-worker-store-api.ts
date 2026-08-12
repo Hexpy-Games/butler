@@ -46,6 +46,9 @@ export interface AppStoreAutomationWorkerApi {
   listWorkerActivity(options?: {
     sessionId?: string;
     includeHistory?: boolean;
+    limit?: number;
+    offset?: number;
+    cursor?: string;
   }): WorkerActivityListView;
   getWorkerActivity(workerId: string): WorkerActivitySummary;
   controlWorkerActivity(

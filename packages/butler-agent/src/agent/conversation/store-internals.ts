@@ -36,11 +36,32 @@ export function normalizeLimit(value: number | undefined, fallback: number, max:
 }
 
 export function estimatePromptTokens(messages: ConversationMessageWithParts[], summaries: ConversationSummary[]): number {
-  const text = [
-    ...summaries.map((summary) => summary.summary_text),
-    ...messages.flatMap((message) => message.parts.map((part) => JSON.stringify(part.content_json))),
-  ].join("\n");
-  return Math.ceil(text.length / 4);
+  return estimatePromptTokensFromSummaryStats(messages, {
+    count: summaries.length,
+    textChars: summaries.reduce((total, summary) => total + summary.summary_text.length, 0),
+  });
+}
+
+/**
+ * Estimate prompt tokens without retaining summary text. This mirrors
+ * `estimatePromptTokens`' newline-joined item semantics while allowing a
+ * streamed summary metadata path to provide only count and character total.
+ */
+export function estimatePromptTokensFromSummaryStats(
+  messages: ConversationMessageWithParts[],
+  summaries: { count: number; textChars: number },
+): number {
+  const messagePartChars = messages.reduce(
+    (total, message) => total + message.parts.reduce(
+      (messageTotal, part) => messageTotal + (JSON.stringify(part.content_json)?.length ?? 0),
+      0,
+    ),
+    0,
+  );
+  const messagePartCount = messages.reduce((total, message) => total + message.parts.length, 0);
+  const itemCount = Math.max(0, summaries.count) + messagePartCount;
+  const separatorChars = Math.max(0, itemCount - 1);
+  return Math.ceil((Math.max(0, summaries.textChars) + messagePartChars + separatorChars) / 4);
 }
 
 export class ConversationStoreInternals {

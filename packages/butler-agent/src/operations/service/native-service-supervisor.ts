@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { createServer } from "net";
 import {
   closeSync,
@@ -22,6 +22,11 @@ import {
   resolveAppGatewayRuntimeConfig,
 } from "../gateway/registry.ts";
 import { windowsEmbedPipe } from "./windows-service-endpoints.ts";
+import {
+  readTunnelProxyServiceConfig,
+  tunnelProxyEnvironmentFromServiceConfig,
+  TUNNEL_PROXY_SERVICE_ID,
+} from "../tunnel/tunnel-service-config.ts";
 
 export const NATIVE_SUPERVISOR_ID = "native-supervisor";
 
@@ -31,7 +36,8 @@ export type NativeServiceId =
   | "butler-scheduler"
   | "butler-watchdog"
   | "butler-main"
-  | "app-gateway";
+  | "app-gateway"
+  | typeof TUNNEL_PROXY_SERVICE_ID;
 
 export interface NativeServiceSpec {
   id: NativeServiceId;
@@ -67,6 +73,9 @@ export interface NativeServiceState {
   stdoutFile: string;
   stderrFile: string;
   restartPolicy: NativeServiceSpec["restartPolicy"];
+  /** Non-secret listener identity used to recover orphaned services. */
+  serviceHost?: string;
+  servicePort?: number;
   runtime?: NativeServiceRuntimeMetadata;
 }
 
@@ -98,6 +107,7 @@ interface NativeServiceSpecOptions {
   platform?: NodeJS.Platform;
   embedSocket?: string;
   embedHealthPort?: string;
+  embedIdleRecycleMs?: string;
 }
 
 interface AppManagedNativeServiceSpecOptions extends NativeServiceSpecOptions {
@@ -139,6 +149,8 @@ interface BoundedStopServiceOptions extends StopServiceOptions {
   waitIntervalMs?: number;
   terminateTimeoutMs?: number;
   killTimeoutMs?: number;
+  /** Discover a listener when its supervisor state file was lost. */
+  findProcessIdsForPort?: (port: number, host: string) => number[];
 }
 
 function defaultButlerHome(): string {
@@ -350,6 +362,9 @@ function nativeServiceSpecsForRuntime(
     ...(safeString(options.embedHealthPort)
       ? { EMBED_HEALTH_PORT: safeString(options.embedHealthPort)! }
       : {}),
+    ...(safeString(options.embedIdleRecycleMs)
+      ? { EMBED_IDLE_RECYCLE_MS: safeString(options.embedIdleRecycleMs)! }
+      : {}),
     ...(appManaged.runtimePointerPath
       ? { BUTLER_APP_MANAGED_RUNTIME_POINTER: appManaged.runtimePointerPath }
       : {}),
@@ -474,6 +489,27 @@ function nativeServiceSpecsForRuntime(
     });
   }
 
+  const tunnelConfig = readTunnelProxyServiceConfig(paths.butlerData);
+  if (tunnelConfig?.enabled) {
+    specs.push({
+      id: TUNNEL_PROXY_SERVICE_ID,
+      command: serviceBun,
+      args: [
+        "run",
+        butlerAgentSourcePath(paths.butlerHome, "operations", "tunnel", "tunnel-proxy-cli.ts"),
+      ],
+      cwd: paths.butlerHome,
+      env: {
+        ...commonEnv,
+        ...tunnelProxyEnvironmentFromServiceConfig(tunnelConfig),
+      },
+      stdoutFile: logPath(paths.butlerData, "tunnel-proxy-out.log"),
+      stderrFile: logPath(paths.butlerData, "tunnel-proxy-err.log"),
+      restartPolicy: "watchdog",
+      ...(runtimeMetadata ? { runtime: runtimeMetadata } : {}),
+    });
+  }
+
   return specs;
 }
 
@@ -535,6 +571,7 @@ export function startService(
     stdoutFile: spec.stdoutFile,
     stderrFile: spec.stderrFile,
     restartPolicy: spec.restartPolicy,
+    ...(serviceEndpointFromSpec(spec) ?? {}),
     ...(spec.runtime ? { runtime: spec.runtime } : {}),
   };
   atomicWriteJson(serviceStatePath(butlerData, spec.id), state);
@@ -629,6 +666,24 @@ export async function stopServiceBounded(
     }
   }
 
+  const endpoint = serviceEndpointFromSpec(spec) ??
+    (state?.servicePort
+      ? {
+          serviceHost: state.serviceHost ?? "127.0.0.1",
+          servicePort: state.servicePort,
+        }
+      : undefined);
+  if (spec.id === TUNNEL_PROXY_SERVICE_ID && endpoint?.servicePort) {
+    const discover = options.findProcessIdsForPort ?? defaultProcessIdsForPort;
+    for (const pid of discover(endpoint.servicePort, endpoint.serviceHost)) {
+      if (!Number.isInteger(pid) || pid <= 0) continue;
+      if (pids.has(pid)) continue;
+      pids.add(pid);
+      processGroups.add(pid);
+      signalServiceProcess(kill, pid, "SIGTERM");
+    }
+  }
+
   const terminated = await waitForProcessGroupsToExit(
     [...processGroups],
     groupAlive,
@@ -656,23 +711,32 @@ export async function stopServiceBounded(
     }
   }
 
-  if (spec.id === "app-gateway") {
-    const gatewayPort = options.gatewayPort ?? Number(spec.env?.BUTLER_APP_SERVER_PORT);
-    if (Number.isInteger(gatewayPort) && gatewayPort > 0) {
+  if (spec.id === "app-gateway" || spec.id === TUNNEL_PROXY_SERVICE_ID) {
+    const servicePort = spec.id === "app-gateway"
+      ? options.gatewayPort ?? Number(spec.env?.BUTLER_APP_SERVER_PORT)
+      : endpoint?.servicePort ?? Number(spec.env?.BUTLER_TUNNEL_PROXY_PORT);
+    if (Number.isInteger(servicePort) && servicePort > 0) {
       const portAvailable = options.isPortAvailable ?? ((port) =>
-        defaultIsPortAvailable(port, spec.env?.BUTLER_APP_SERVER_HOST ?? "127.0.0.1"));
+        defaultIsPortAvailable(
+          port,
+          endpoint?.serviceHost ?? spec.env?.[
+            spec.id === TUNNEL_PROXY_SERVICE_ID
+              ? "BUTLER_TUNNEL_PROXY_HOST"
+              : "BUTLER_APP_SERVER_HOST"
+          ] ?? "127.0.0.1",
+        ));
       const released = await waitForPortRelease(
-        gatewayPort,
+        servicePort,
         portAvailable,
         sleep,
         waitIntervalMs,
         terminateTimeoutMs + killTimeoutMs,
       );
       if (!released) {
-        throw new Error(`failed to stop ${spec.id}: app gateway port still in use`);
+        throw new Error(`failed to stop ${spec.id}: service port still in use`);
       }
     }
-    clearAppGatewayPid(butlerData);
+    if (spec.id === "app-gateway") clearAppGatewayPid(butlerData);
   }
   removeServiceState(butlerData, spec.id);
   return projectService(spec, state, "offline");
@@ -686,6 +750,54 @@ export function stopServices(
   return [...defaultNativeServiceSpecs(resolved)]
     .reverse()
     .map((spec) => stopService(resolved.butlerData, spec, options));
+}
+
+/** Stop every configured service and wait for process groups/listeners to settle. */
+export async function stopServicesBounded(
+  paths: Partial<NativeSupervisorPaths> = {},
+  options: BoundedStopServiceOptions = {},
+): Promise<NativeServiceProjection[]> {
+  const resolved = resolveNativeSupervisorPaths(paths);
+  const services: NativeServiceProjection[] = [];
+  for (const spec of [...boundedStopServiceSpecs(resolved)].reverse()) {
+    services.push(await stopServiceBounded(resolved.butlerData, spec, options));
+  }
+  return services;
+}
+
+function boundedStopServiceSpecs(
+  paths: NativeSupervisorPaths,
+): NativeServiceSpec[] {
+  const specs = defaultNativeServiceSpecs(paths);
+  // A deleted/disabled config must not make a previously launched tunnel
+  // unreachable from stop/restart. Reconstruct only the non-secret listener
+  // identity from the supervisor state; command/cwd/log paths remain the
+  // recorded values so stale state can still be terminated safely.
+  const state = readServiceState(paths.butlerData, TUNNEL_PROXY_SERVICE_ID);
+  if (
+    state &&
+    !specs.some((spec) => spec.id === TUNNEL_PROXY_SERVICE_ID)
+  ) {
+    specs.push({
+      id: TUNNEL_PROXY_SERVICE_ID,
+      command: state.command,
+      args: state.args,
+      cwd: state.cwd,
+      ...(state.servicePort
+        ? {
+            env: {
+              BUTLER_TUNNEL_PROXY_HOST: state.serviceHost ?? "127.0.0.1",
+              BUTLER_TUNNEL_PROXY_PORT: String(state.servicePort),
+            },
+          }
+        : {}),
+      stdoutFile: state.stdoutFile,
+      stderrFile: state.stderrFile,
+      restartPolicy: state.restartPolicy,
+      ...(state.runtime ? { runtime: state.runtime } : {}),
+    });
+  }
+  return specs;
 }
 
 export function listServices(
@@ -726,6 +838,46 @@ function signalServiceProcess(
     try {
       kill(pid, signal);
     } catch {}
+  }
+}
+
+function serviceEndpointFromSpec(
+  spec: NativeServiceSpec,
+): { serviceHost: string; servicePort: number } | undefined {
+  const hostKey = spec.id === TUNNEL_PROXY_SERVICE_ID
+    ? "BUTLER_TUNNEL_PROXY_HOST"
+    : spec.id === "app-gateway"
+      ? "BUTLER_APP_SERVER_HOST"
+      : undefined;
+  const portKey = spec.id === TUNNEL_PROXY_SERVICE_ID
+    ? "BUTLER_TUNNEL_PROXY_PORT"
+    : spec.id === "app-gateway"
+      ? "BUTLER_APP_SERVER_PORT"
+      : undefined;
+  if (!hostKey || !portKey) return undefined;
+  const servicePort = Number(spec.env?.[portKey]);
+  if (!Number.isInteger(servicePort) || servicePort <= 0) return undefined;
+  return {
+    serviceHost: spec.env?.[hostKey] ?? "127.0.0.1",
+    servicePort,
+  };
+}
+
+function defaultProcessIdsForPort(port: number, host: string): number[] {
+  if (process.platform === "win32") return [];
+  try {
+    const result = spawnSync(
+      "lsof",
+      ["-nP", `-iTCP@${host}:${port}`, "-sTCP:LISTEN", "-t"],
+      { encoding: "utf8", timeout: 1_000 },
+    );
+    if (result.status !== 0 || typeof result.stdout !== "string") return [];
+    return result.stdout
+      .split(/\s+/u)
+      .map((value) => Number(value))
+      .filter((pid) => Number.isInteger(pid) && pid > 0);
+  } catch {
+    return [];
   }
 }
 

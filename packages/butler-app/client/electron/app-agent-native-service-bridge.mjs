@@ -8,11 +8,17 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { prepareAppManagedEmbedSocket } from "./app-managed-embed-endpoint.mjs";
+import {
+  prepareAppManagedEmbedHealthPort,
+  prepareAppManagedEmbedSocket,
+} from "./app-managed-embed-endpoint.mjs";
 import { appManagedAgentPointerPath } from "./app-managed-runtime.mjs";
 import { prepareAppLocalAuth } from "./app-agent-supervisor.mjs";
 
-export { prepareAppManagedEmbedSocket } from "./app-managed-embed-endpoint.mjs";
+export {
+  prepareAppManagedEmbedHealthPort,
+  prepareAppManagedEmbedSocket,
+} from "./app-managed-embed-endpoint.mjs";
 
 const APP_AGENT_SERVICE_IDS = [
   "embed-server",
@@ -263,6 +269,11 @@ function resolveAppManagedServiceRuntime({ butlerData, platform, getPort, getApp
     throw new Error("invalid App-managed gateway port");
   }
   const embedSocket = prepareAppManagedEmbedSocket({ butlerData, platform });
+  const embedHealthPort = prepareAppManagedEmbedHealthPort({
+    butlerData,
+    gatewayPort: port,
+  });
+  const embedIdleRecycleMs = safeString(process.env.EMBED_IDLE_RECYCLE_MS);
   const appVersion = safeString(getAppVersion());
   return {
     butlerData,
@@ -283,7 +294,8 @@ function resolveAppManagedServiceRuntime({ butlerData, platform, getPort, getApp
       BUTLER_APP_SERVER_PORT: String(port),
       ...(appVersion ? { BUTLER_APP_VERSION: appVersion } : {}),
       EMBED_SOCKET: embedSocket,
-      EMBED_HEALTH_PORT: "0",
+      EMBED_HEALTH_PORT: String(embedHealthPort),
+      ...(embedIdleRecycleMs ? { EMBED_IDLE_RECYCLE_MS: embedIdleRecycleMs } : {}),
     },
   };
 }

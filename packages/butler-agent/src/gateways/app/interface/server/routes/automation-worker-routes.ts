@@ -134,6 +134,9 @@ export async function handleAutomationWorkerRoutes(
       apiEnvelope<WorkerActivityListView>(
         input.store.listWorkerActivity({
           includeHistory: url.searchParams.get("include_history") === "true",
+          limit: boundedPageParam(url.searchParams.get("limit"), 200),
+          offset: boundedPageParam(url.searchParams.get("offset"), 0, 0),
+          cursor: url.searchParams.get("cursor") ?? undefined,
         }),
       ),
     );
@@ -169,4 +172,16 @@ export async function handleAutomationWorkerRoutes(
     );
   }
   return null;
+}
+
+function boundedPageParam(
+  value: string | null,
+  fallback: number,
+  minimum = 1,
+): number {
+  if (!value) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed)
+    ? Math.max(minimum, Math.min(200, Math.floor(parsed)))
+    : fallback;
 }

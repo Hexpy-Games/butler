@@ -1,9 +1,16 @@
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { createBundledAgentSupervisor } from "../../packages/butler-app/client/electron/app-agent-supervisor.mjs";
 import { createFirstRunSetupBridge } from "../../packages/butler-app/client/electron/setup-bridge.mjs";
+import {
+  DISABLED_CACHE_BUDGET,
+  cacheBudgetAdditionalArgument,
+  cacheBudgetFromArguments,
+  normalizeCacheBudget,
+} from "../../packages/butler-app/client/electron/cache-budget-runtime.mjs";
 import {
   api,
   subscribeLiveEvents,
@@ -974,6 +981,156 @@ test("Electron bridge live events subscribe through preload instead of renderer 
       payload: {},
     },
   ]);
+});
+
+test("preload live-event teardown releases the reader lock on EOF, error, and abort", () => {
+  const preload = readRepoFile("packages/butler-app/client/electron/preload.cjs");
+  expect(preload).toContain("const activeReader = reader;");
+  expect(preload).toContain("activeReader?.releaseLock();");
+  expect(preload).toContain("if (!closed) {");
+  expect(preload).toContain("Live event stream ended before it was cancelled.");
+  expect(preload).toContain('error?.name !== "AbortError"');
+  expect(preload).toContain("abortController.abort();");
+});
+
+test("Electron preload CJS loads with the shared cache-budget artifact", () => {
+  const result = spawnSync(process.execPath, ["-e", `
+    const Module = require("node:module");
+    const load = Module._load;
+    Module._load = (request, parent, isMain) => request === "electron"
+      ? {
+          contextBridge: { exposeInMainWorld(name) {
+            if (name !== "butlerApp") process.exitCode = 2;
+          } },
+          ipcRenderer: {
+            invoke: async () => null,
+            on() {},
+            removeListener() {},
+          },
+        }
+      : load(request, parent, isMain);
+    require("./packages/butler-app/client/electron/preload.cjs");
+  `], { encoding: "utf8" });
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe("");
+});
+
+test("sandbox cache budget uses main-process arguments and fails closed when invalid", () => {
+  const main = readRepoFile("packages/butler-app/client/electron/main.mjs");
+  const preload = readRepoFile("packages/butler-app/client/electron/preload.cjs");
+  const budget = normalizeCacheBudget({
+    schema: "butler.app.cache-budget.v1",
+    maxEntries: 8,
+    maxBytes: 4 * 1024 * 1024,
+    maxSnapshotBytes: 512 * 1024,
+    maxMessages: 200,
+    maxComposerDraftBytes: 64 * 1024,
+    maxComposerDraftEntries: 8,
+    maxComposerDraftAggregateBytes: 512 * 1024,
+  });
+  const argument = cacheBudgetAdditionalArgument(budget);
+
+  expect(cacheBudgetFromArguments(["preload", argument])).toEqual(budget);
+  expect(cacheBudgetFromArguments(["preload", "--butler-cache-budget=broken"])).toEqual(
+    DISABLED_CACHE_BUDGET,
+  );
+  expect(normalizeCacheBudget({ schema: "butler.app.cache-budget.v1", maxEntries: 999_999 }))
+    .toEqual(DISABLED_CACHE_BUDGET);
+  expect(main).toContain('resolve(__dirname, "../shared/cache-budget.json")');
+  expect(main).toContain("cacheBudgetAdditionalArgument");
+  expect(main).toContain("additionalArguments: [appCacheBudgetArgument]");
+  expect(preload).toContain("cacheBudgetFromArguments(process.argv)");
+  expect(preload).not.toContain('require("../shared/cache-budget.json")');
+});
+
+test("getSessionView preload bridge returns a serializable resync envelope", () => {
+  const preloadPath = resolve(import.meta.dir, "../../packages/butler-app/client/electron/preload.cjs");
+  const result = spawnSync("node", ["-e", `
+    const Module = require("node:module");
+    const load = Module._load;
+    let bridge;
+    Module._load = (request, parent, isMain) => request === "electron"
+      ? {
+          contextBridge: { exposeInMainWorld(name, value) {
+            if (name === "butlerApp") bridge = value;
+          } },
+          ipcRenderer: {
+            invoke: async (channel) => {
+              if (channel === "butler:get-server-url") return null;
+              if (channel === "butler:get-local-auth-headers") return {};
+              return null;
+            },
+            on() {},
+            removeListener() {},
+          },
+        }
+      : load(request, parent, isMain);
+    global.fetch = async () => ({
+      ok: false,
+      status: 409,
+      json: async () => ({
+        protocol_version: "butler.app.v1",
+        error: {
+          code: "session_cursor_resync_required",
+          message: "Session view cursor is invalid or expired; reload the session.",
+        },
+      }),
+    });
+    require(${JSON.stringify(preloadPath)});
+    (async () => {
+      const value = await bridge.getSessionView({ sessionId: "session-a", cursorToken: "expired" });
+      process.stdout.write(JSON.stringify(value));
+    })();
+  `], { cwd: process.cwd(), encoding: "utf8" });
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe("");
+  expect(JSON.parse(result.stdout)).toEqual({
+    ok: false,
+    error: {
+      schema: "butler.app.bridge-error.v1",
+      code: "session_cursor_resync_required",
+      status: 409,
+      resync: {
+        required: true,
+        resource: "session-view",
+        reason: "cursor-expired",
+      },
+    },
+  });
+});
+
+test("renderer API unwraps the typed session-view bridge result without message parsing", async () => {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      location: { origin: "http://butler.local" },
+      butlerApp: {
+        getSessionView: async () => ({
+          ok: false,
+          error: {
+            schema: "butler.app.bridge-error.v1",
+            code: "session_cursor_resync_required",
+            status: 409,
+            resync: {
+              required: true,
+              resource: "session-view",
+              reason: "cursor-expired",
+            },
+          },
+        }),
+      },
+    },
+    writable: true,
+  });
+  await expect(api("/session-view?session_id=session-a&cursor_token=expired"))
+    .rejects.toMatchObject({
+      code: "session_cursor_resync_required",
+      status: 409,
+      resync: {
+        required: true,
+        resource: "session-view",
+      },
+    });
 });
 
 test("App session summaries delegate bounded Git inspection outside React", () => {

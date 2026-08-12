@@ -1,0 +1,5 @@
+{
+  "name": "butler-archive-stream-electron-parent-fixture",
+  "private": true,
+  "main": "../archive-stream-electron-parent-fixture.mjs"
+}

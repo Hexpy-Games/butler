@@ -8,6 +8,7 @@ import { AppSessionQueueStore } from "./session-queue-store.ts";
 import { AppSessionViewStore } from "./session-view-store.ts";
 import { AppSystemResponderTurnStore } from "./system-responder-turn-store.ts";
 import { AppTurnActionStore } from "./turn-action-store.ts";
+import type { SessionMessagePageOptions } from "./session-message-page.ts";
 
 export interface AppSessionInteractionModuleGraph {
   generatedSessionTitles: AppGeneratedSessionTitleStore;
@@ -80,22 +81,28 @@ export function createAppSessionInteractionModuleGraph(input: {
     butlerData,
     messageFiles,
     (sessionId) => host.ensureChat(sessionId),
+    (sessionId) => host.contextDetailsRevision(sessionId),
     (sessionId) => host.getSessionControls(sessionId),
     () => host.registeredModelMetadata(),
     () => host.getSettings(),
     () => host.getPersonalization(),
-    (sessionId) => host.sessionViewMessages(sessionId),
+    (sessionId, options?: SessionMessagePageOptions) =>
+      host.sessionViewMessages(sessionId, options),
     (sessionId) => host.latestTurn(sessionId),
     (sessionId) => host.countTurns(sessionId),
     (sessionId) => host.getProjectForSession(sessionId),
     (sessionId) => host.getChatRow(sessionId)?.kind ?? "chat",
-    (sessionId) => host.listArtifacts(sessionId),
+    (sessionId) => host.listArtifactSummaries(sessionId),
   );
   const sessionViews = new AppSessionViewStore(
     (sessionId) => host.getSession(sessionId),
     (sessionId) => host.latestTurn(sessionId),
     (sessionId) => host.listMessages(sessionId),
-    (sessionId) => host.sessionViewMessages(sessionId),
+    (sessionId) => host.listArtifactSummaries(sessionId),
+    (sessionId, options?: SessionMessagePageOptions) =>
+      host.sessionViewMessagePage(sessionId, options),
+    (sessionId, options?: SessionMessagePageOptions) =>
+      host.transcriptMessagePage(sessionId, options),
     (turn, options) => host.sessionViewTurn(turn, options),
     (sessionId) => host.branchInfoForSession(sessionId),
     (sessionId, turnId) => host.loadedSkillNamesForSession(sessionId, turnId),
@@ -105,7 +112,6 @@ export function createAppSessionInteractionModuleGraph(input: {
     (sessionId, runtimeSessionId, currentTurnId) =>
       host.listActiveWorkStreams(sessionId, runtimeSessionId, currentTurnId),
     () => host.latestEventCursor(),
-    (sessionId) => host.ensureChat(sessionId),
   );
   const sessionQueue = new AppSessionQueueStore(
     db,
