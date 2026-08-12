@@ -14,6 +14,7 @@ import { AGENT_BENCHMARK_SCHEMA } from "./contracts.ts";
 import { benchmarkPlanIdentity } from "./planning.ts";
 import { boundedText } from "./command.ts";
 import { sanitizeEffectiveConfig } from "./identifiers.ts";
+import { pairedObservationIdentityMatches } from "./paired-observation-identity.ts";
 
 export interface BenchmarkCheckpointStore {
   load(): Promise<BenchmarkResultFile | null>;
@@ -74,6 +75,12 @@ export function resumeOrInitialize(
     checkpoint.plan.baselineSha === plan.baselineSha &&
     checkpoint.run.planIdentity === planIdentity
   ) {
+    const expectedKeys = plan.arms.map((arm) => arm.key);
+    const observedKeys = checkpoint.observations.map((row) => row.arm.key);
+    if (new Set(observedKeys).size !== observedKeys.length ||
+        observedKeys.some((key, index) => key !== expectedKeys[index] ||
+          !pairedObservationIdentityMatches(plan.arms[index]!, checkpoint.observations[index]!.arm)))
+      throw new Error("Benchmark checkpoint observation identity/order mismatch");
     const armsByKey = new Map(plan.arms.map((arm) => [arm.key, arm]));
     const resumedPlan = { ...plan, createdAt: checkpoint.plan.createdAt };
     return {

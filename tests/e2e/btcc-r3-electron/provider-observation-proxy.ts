@@ -50,6 +50,7 @@ export interface ProviderRequestObservation {
   requestedReasoning?: string | null;
   requestedServiceTier?: string | null;
   authorizationScheme?: string | null;
+  routeId?: string | null;
   requestStartedAtMs: number;
   serializedRequestBytes: number;
   firstContentBearingDeltaAtMs: number | null;
@@ -150,6 +151,7 @@ function safeObservation(
     requestedReasoning: observation.requestedReasoning,
     requestedServiceTier: observation.requestedServiceTier,
     authorizationScheme: observation.authorizationScheme,
+    routeId: observation.routeId,
     requestStartedAtMs: observation.requestStartedAtMs,
     serializedRequestBytes: observation.serializedRequestBytes,
     firstContentBearingDeltaAtMs:
@@ -648,6 +650,7 @@ async function forwardRequest(input: {
   observation.authorizationScheme = typeof authorization === "string"
     ? authorization.split(/\s+/u, 1)[0]?.toLowerCase() ?? null
     : null;
+  observation.routeId = upstream?.pathname.includes("/codex/") ? "openai-codex-responses" : "openai-responses";
   if (isClosing() || response.destroyed) {
     terminateObservation(observation, "cancelled", now);
     response.destroy();
@@ -833,6 +836,7 @@ export async function startProviderObservationProxy(
       requestedReasoning: null,
       requestedServiceTier: null,
       authorizationScheme: null,
+      routeId: null,
       requestStartedAtMs: now(),
       serializedRequestBytes: 0,
       firstContentBearingDeltaAtMs: null,

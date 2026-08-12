@@ -185,7 +185,7 @@ describe("unified agent benchmark M1 v2 campaign", () => {
     const executionRejected = evaluateAdapterResult(pairedArm, fixture, { ...adapterResult,
       pairedExecutionEvidence: { provider: "openai", model: "openai/gpt-5.6-sol", reasoning: "medium",
         providerServiceTiers: ["priority"], requestServiceTiers: ["default"], requestModels: ["openai/gpt-5.6-sol"],
-        requestReasoning: ["medium"], authorizationSchemes: ["bearer"] } }, {
+        requestReasoning: ["medium"], authorizationSchemes: ["bearer"], routeIds: ["openai-responses"] } }, {
       pairedAuthReceipt: { schema: "butler.provider-auth-preflight-receipt.v1", authority: "butler_auth_status_and_model_catalog",
         provider: "openai", authMode: "managed", observedProductAuthMode: "codex_oauth", model: "openai/gpt-5.6-sol",
         reasoning: "medium", executionMode: "ordinary_non_fast", modelCallability: "available", configured: true },

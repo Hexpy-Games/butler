@@ -1,5 +1,6 @@
 import type { BenchmarkArmPlan, BenchmarkResultFile } from "./contracts.ts";
 import type { BenchmarkVersion } from "./paired-contract.ts";
+import { pairedObservationIdentityMatches } from "./paired-observation-identity.ts";
 import { OBSERVED_M1_REQUEST_SEGMENT_KINDS, type M1RequestSegmentKind, type M1V2ArmId, type M1V2RepetitionResult } from "./m1-v2-types.ts";
 
 export type PairEligibility = "eligible" | "descriptive" | "rejected";
@@ -10,23 +11,23 @@ export interface PairComparableIdentity {
 }
 export interface PairDecision { pairId: string; status: PairEligibility; reason: string }
 
-export function comparableIdentityForArm(arm: BenchmarkArmPlan, repetition: M1V2RepetitionResult | null): PairComparableIdentity | null {
+export function comparableIdentityForArm(arm: BenchmarkArmPlan, repetition: M1V2RepetitionResult | null,
+  runtime: { reasoning: string; route: string; provider: string; model: string; authMode: string; executionMode: string } | null = null): PairComparableIdentity | null {
   const attempts = repetition?.agentAttempts ?? [];
   if (attempts.length === 0) return null;
-  const observed = (key: keyof (typeof attempts)[number]): string | null => {
+  const observedField = (key: keyof (typeof attempts)[number]): string | null => {
     const values = [...new Set(attempts.map((attempt) => attempt[key]))];
     return values.length === 1 && typeof values[0] === "string" ? values[0] :
       values.length > 1 ? `observed_conflict:${String(key)}` : null;
   };
-  const fixture = observed("fixtureSha256"), source = observed("sourceRevision"), model = observed("modelRef"),
-    reasoning = observed("reasoning"), provider = observed("providerId"), auth = observed("authMode"),
-    mode = observed("executionMode"), route = observed("routeId");
-  if (!fixture || !source || !model || !reasoning || !provider || !auth || !mode || !route) return null;
+  const source = observedField("sourceRevision"), model = observedField("modelRef"), provider = observedField("providerId"),
+    cacheBoundary = observedField("cacheBoundaryRevision");
+  if (!source || !model || !provider || !cacheBoundary || !runtime) return null;
   const cache = attempts.some((attempt) => attempt.eligibility === "cache_mismatch") ? "cache_mismatch" :
     attempts.every((attempt) => attempt.eligibility === "eligible") ? "eligible" : "rejected";
-  return { fixture: `${arm.scenario}:${fixture === arm.fixtureHash ? fixture : "observed_mismatch"}`, sourceRevision: source, model, reasoning,
-    executionMode: mode, provider, authMode: auth,
-    cache, route, retryOrdinal: Math.max(0, ...attempts.map((attempt) => attempt.retryOrdinal)) };
+  return { fixture: `${arm.scenario}:${arm.fixtureHash}`, sourceRevision: source, model, reasoning: runtime.reasoning,
+    executionMode: runtime.executionMode, provider, authMode: runtime.authMode,
+    cache: `${cache}:${cacheBoundary}`, route: runtime.route, retryOrdinal: Math.max(0, ...attempts.map((attempt) => attempt.retryOrdinal)) };
 }
 
 export function pairEligibility(input: { before: PairComparableIdentity; after: PairComparableIdentity }): Omit<PairDecision, "pairId"> {
@@ -41,10 +42,13 @@ export function pairEligibility(input: { before: PairComparableIdentity; after: 
   for (const identity of [input.before, input.after]) {
     if (identity.model !== "openai/gpt-5.6-sol" || identity.reasoning !== "medium" ||
         identity.executionMode !== "ordinary_non_fast" || identity.provider !== "openai" ||
-        identity.authMode !== "managed" || identity.route !== "openai-responses")
+        identity.authMode !== "managed" || identity.route.length === 0)
       return { status: "rejected", reason: "observed_execution_identity_mismatch" };
   }
-  if (input.before.cache !== input.after.cache) return { status: "descriptive", reason: "cache_mismatch" };
+  if (input.before.cache.startsWith("rejected:") || input.after.cache.startsWith("rejected:"))
+    return { status: "rejected", reason: "ineligible_observation" };
+  if (input.before.cache.startsWith("cache_mismatch:") || input.after.cache.startsWith("cache_mismatch:") ||
+      input.before.cache !== input.after.cache) return { status: "descriptive", reason: "cache_mismatch" };
   return { status: "eligible", reason: "exact_pair" };
 }
 
@@ -82,6 +86,7 @@ export function aggregatePairedMetrics(rows: readonly PairedMetricRow[]) {
 
 export function summarizePairedBenchmarkResult(result: BenchmarkResultFile) {
   if (result.plan.campaign !== "m1-v2-paired") return null;
+  const cardinality = observationCardinality(result);
   const rows = result.observations.flatMap((observation): PairedMetricRow[] => {
     const repetition = observation.m1V2;
     const version = observation.arm.version;
@@ -109,12 +114,22 @@ export function summarizePairedBenchmarkResult(result: BenchmarkResultFile) {
   const elapsed = aggregate.overall.elapsedMs.total.ratio;
   const requestBefore = aggregate.overall.physicalRequests.total.before;
   const requestAfter = aggregate.overall.physicalRequests.total.after;
-  const acceptance = { complete: aggregate.complete,
-    providerSendReductionPassed: aggregate.complete && bytes !== null && bytes <= -0.30,
-    requestCountReductionPassed: aggregate.complete && requestBefore === 45 && requestAfter !== null && requestAfter >= 38 && requestAfter <= 40,
-    elapsedTargetPassed: aggregate.complete && elapsed !== null && elapsed <= -0.18 && elapsed >= -0.30,
-    zeroQualityRegressionPassed: aggregate.complete && aggregate.overall.qualityPassed };
-  return { contractIdentity: result.plan.pairedCampaign?.identity ?? null, rows, aggregate, acceptance };
+  const complete = aggregate.complete && cardinality.valid;
+  const acceptance = { complete,
+    providerSendReductionPassed: complete && bytes !== null && bytes <= -0.30,
+    requestCountReductionPassed: complete && requestBefore === 45 && requestAfter !== null && requestAfter >= 38 && requestAfter <= 40,
+    elapsedTargetPassed: complete && elapsed !== null && elapsed <= -0.18 && elapsed >= -0.30,
+    zeroQualityRegressionPassed: complete && aggregate.overall.qualityPassed };
+  return { contractIdentity: result.plan.pairedCampaign?.identity ?? null, rows, aggregate, cardinality, acceptance };
+}
+
+export function observationCardinality(result: BenchmarkResultFile): { valid: boolean; reason: string } {
+  const expected = result.plan.arms, actual = result.observations;
+  const actualKeys = actual.map((row) => row.arm.key);
+  return expected.length === 24 && actual.length === 24 && expected.every((arm, index) =>
+    actual[index]?.arm.key === arm.key && pairedObservationIdentityMatches(arm, actual[index]!.arm)) &&
+    new Set(actualKeys).size === 24 ? { valid: true, reason: "exact_24_plan_order" } :
+    { valid: false, reason: "observation_identity_or_cardinality_mismatch" };
 }
 
 function landingQualityPassed(result: M1V2RepetitionResult): boolean {

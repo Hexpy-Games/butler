@@ -564,3 +564,59 @@ acceptance verdict passes. This work did not run a provider, Electron,
 prepared-resource build, renderer, campaign, Hermes, or OpenCode, and it did
 not change product M1 code. The final benchmark Task remains todo/blocked and
 the governing Work remains in progress.
+
+## Third paired contract review repair
+
+Task: `T-M1-V2-PAIRED-CAMPAIGN-REVIEW-REPAIR-3-20260813`
+
+The third Sol-high review found that the repair-2 closeout was still premature.
+The paired workflow no longer accepts a caller-authored receipt file or
+benchmark-only envelope fields. Before manifest creation it now invokes the
+existing privacy-safe `butler auth status --json` and `butler model list --json`
+surfaces through one injectable command executor. Only a strict allowlist is
+projected into the receipt; missing commands, invalid output, unavailable
+managed OAuth, or an unavailable exact model stop as
+`measurement_unavailable` before preregistration or dispatch. Unknown secret
+or private-path fields from CLI output cannot enter the manifest, result,
+Markdown report, JSON index, or HTML index.
+
+Frozen request-envelope authority is limited to the actual fields shared by
+the before and after revisions: provider id, model ref, source revision, cache
+boundary revision, retry ordinal, and eligibility. Reasoning and request/response
+tier come from the provider observation proxy, auth mode from the Butler CLI
+preflight, route from the actual upstream request route, and fixture membership
+from the immutable Step. Fake-only envelope reasoning, route, auth, execution,
+and fixture fields were removed. Either-side cache mismatch is descriptive;
+any other ineligible observation, retry, route, auth, provider, model, source,
+or execution drift is rejected.
+
+The freshly verified top-level provenance identity must deep-equal the paired
+contract provenance before planning. Rehashed caller provenance is rejected.
+Before aggregation and ranking, results must contain exactly the 24 Plan arms
+once, in exact order, with matching public arm identity. Resume permits only a
+unique exact prefix and rejects skipped, duplicated, reordered, or mutated arm
+identity. A 25-row duplicate remains incomplete and unranked.
+
+Provider-free public CLI integration covers both exact frozen source revisions,
+the actual envelope shape, available and unavailable auth/model command output,
+all 24 accepted observations, service-tier rejection, privacy redaction,
+report/index ranking, duplicate unranking, and checkpoint resume rejection.
+No provider, Electron, prepared-resource build, renderer, campaign, Hermes, or
+OpenCode execution was performed. The final benchmark remains todo/blocked and
+the governing Work remains in progress.
+
+The governing Plan's older release-tag-only Windows rule remains in conflict
+with the latest explicit user instruction. The later operational instruction
+governs: the unavoidable exact-SHA PR run is cancelled immediately and verified
+`completed/cancelled`; release-tag-only behavior is not claimed and the workflow
+is not modified.
+
+Validation passed 32 focused tests, the broad provider-free benchmark and
+prepared-resource set (137 tests before the route expectation update), and the
+updated provider observation proxy set (15 tests). Typecheck, full lint with
+zero errors and pre-existing warnings, BTCC shape, module audit, and
+`git diff --check` passed. The bounded repository check reached the broad unit
+phase without a product assertion failure attributable to this change, then hit
+its 303-second limit; its interrupted auth-status subprocess reported a null
+status. That exact auth-status test passed independently immediately afterward.
+A full unbounded repository pass is therefore not claimed.
