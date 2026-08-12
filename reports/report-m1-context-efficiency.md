@@ -23,6 +23,15 @@ hashes, one source revision, sequential isolated roots, and one policy object.
 The same workflow persists `manifest.json` and `result.json`. Each Butler arm
 uses the existing Electron/App/Session Actor/BTCC/provider execution primitive.
 
+The Sol-high review found and the implementation closed two source/persistence
+authority defects. M1 validation and preflight now use the exact plan SHA while
+the historical cross-agent pilot remains pinned to its comparison baseline.
+The CLI reports that plan SHA rather than the historical constant. A run-root
+manifest is create-only and permits only an identical resume; seed, source,
+fixture, or plan-identity mismatch fails before execution. Checkpoint persistence
+rejects corrupt/different plans and preserves already-terminal evidence rather
+than initializing or overwriting a replacement result.
+
 ## Integrated ownership
 
 - `fixtures.ts` is the public fixture authority; `fixtures/m1-v2` stores the
@@ -77,3 +86,24 @@ This Task does not mark `T-M1-V2-FINAL-BENCHMARK` done. That later Task alone
 may run the final controlled four-by-three and decide the quantitative M1
 criteria. The next optimization Task must use this harness for preregistered
 affected-arm pairs without running the full matrix.
+
+## P1 repair validation
+
+- Actual M1 workflow/preflight accepts a clean checkout at its exact plan SHA
+  and gates a checkout mismatch; current main and PR #146 exact SHAs are valid
+  M1 planning authorities.
+- CLI preflight result output reports the exact M1 source revision.
+- Identical CLI resume preserves byte-identical `manifest.json`, its original
+  creation identity, the result plan identity, and terminal evidence.
+- Seed, source revision, fixture content, arm source revision, corrupt manifest,
+  checkpoint plan, and terminal evidence replacement all fail closed.
+- No product/provider execution, Hermes/OpenCode execution, or final 4x3 was
+  performed for these tests.
+- Targeted harness/adapter/driver tests: 88 passed, 0 failed, 462 assertions.
+- Typecheck passed; lint passed with zero errors and 20 unrelated existing
+  warnings; BTCC shape passed (`4 domains / 203 files`); agent-benchmark module
+  audit passed (`44 files / 0 findings`); `git diff --check` passed.
+- Repository-wide `bun run check` is not claimed as pass: the bounded wrapper
+  timed out at 300.26 seconds and sent SIGTERM while the new authority test was
+  cloning its local fixture checkout. That interrupted clone reported
+  `status: null`; no independent benchmark assertion failure was observed.

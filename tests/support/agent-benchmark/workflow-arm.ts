@@ -6,7 +6,6 @@ import type {
   LandingValidation,
   PreflightResult,
 } from "./contracts.ts";
-import { AGENT_BENCHMARK_BASELINE_SHA } from "./contracts.ts";
 import { getBenchmarkFixture, materializeFixturePrompt } from "./fixtures.ts";
 import { evaluateAdapterResult } from "./evaluators.ts";
 import {
@@ -57,7 +56,7 @@ export async function runBenchmarkArm(input: RunBenchmarkArmInput): Promise<Benc
     return createFailureObservation(arm, errorMessage(error));
   }
   const sourceBefore = sourceIntegrity(arm.sourceRoot);
-  if (sourceBefore.commit !== (arm.sourceRevision ?? AGENT_BENCHMARK_BASELINE_SHA) || sourceBefore.status !== "") {
+  if (sourceBefore.commit !== arm.sourceRevision || sourceBefore.status !== "") {
     return createGatedBenchmarkObservation(arm, {
       available: false,
       executable: preflight.executable,

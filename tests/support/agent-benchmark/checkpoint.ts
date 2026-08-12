@@ -27,13 +27,27 @@ export function createFileCheckpointStore(path: string): BenchmarkCheckpointStor
       try {
         return JSON.parse(readFileSync(path, "utf8")) as BenchmarkResultFile;
       } catch {
-        return null;
+        throw new Error("Benchmark checkpoint identity mismatch: existing result is unreadable.");
       }
     },
     async save(result: BenchmarkResultFile): Promise<void> {
+      const identity = assertResultIdentity(result);
+      const persisted = redactBenchmarkResult(result);
       mkdirSync(resolve(path, ".."), { recursive: true });
+      if (existsSync(path)) {
+        let existing: BenchmarkResultFile;
+        try {
+          existing = JSON.parse(readFileSync(path, "utf8")) as BenchmarkResultFile;
+        } catch {
+          throw new Error("Benchmark checkpoint identity mismatch: existing result is unreadable.");
+        }
+        if (existing.run.planIdentity !== identity) {
+          throw new Error("Benchmark checkpoint identity mismatch: replacement runs are not allowed.");
+        }
+        assertTerminalEvidencePreserved(existing, persisted);
+      }
       const temporaryPath = `${path}.tmp-${process.pid}`;
-      writeFileSync(temporaryPath, `${JSON.stringify(redactBenchmarkResult(result), null, 2)}\n`, "utf8");
+      writeFileSync(temporaryPath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
       renameSync(temporaryPath, path);
     },
   };
@@ -44,16 +58,27 @@ export function resumeOrInitialize(
   checkpoint: BenchmarkResultFile | null,
 ): BenchmarkResultFile {
   const planIdentity = benchmarkPlanIdentity(plan);
+  if (checkpoint) {
+    if (checkpoint.schema !== AGENT_BENCHMARK_SCHEMA ||
+      checkpoint.kind !== "agent_benchmark_result" ||
+      typeof checkpoint.plan.createdAt !== "string" ||
+      checkpoint.plan.runId !== plan.runId || checkpoint.plan.seed !== plan.seed ||
+      checkpoint.plan.baselineSha !== plan.baselineSha ||
+      checkpoint.run.planIdentity !== planIdentity) {
+      throw new Error("Benchmark checkpoint identity mismatch: replacement runs are not allowed.");
+    }
+  }
   if (
-    checkpoint && checkpoint.schema === AGENT_BENCHMARK_SCHEMA &&
+    checkpoint &&
     checkpoint.plan.runId === plan.runId && checkpoint.plan.seed === plan.seed &&
     checkpoint.plan.baselineSha === plan.baselineSha &&
     checkpoint.run.planIdentity === planIdentity
   ) {
     const armsByKey = new Map(plan.arms.map((arm) => [arm.key, arm]));
+    const resumedPlan = { ...plan, createdAt: checkpoint.plan.createdAt };
     return {
       ...checkpoint,
-      plan,
+      plan: resumedPlan,
       run: { ...checkpoint.run, runRoot: plan.runRoot, planIdentity },
       observations: checkpoint.observations.map((observation) => ({
         ...observation,
@@ -70,11 +95,54 @@ export function resumeOrInitialize(
   };
 }
 
+function assertTerminalEvidencePreserved(
+  existing: BenchmarkResultFile,
+  incoming: BenchmarkResultFile,
+): void {
+  const incomingByKey = new Map(incoming.observations.map((item) => [item.arm.key, item]));
+  for (const observation of existing.observations.filter(isTerminal)) {
+    const next = incomingByKey.get(observation.arm.key);
+    if (!next || !sameTerminalEvidence(observation, next)) {
+      throw new Error(`Benchmark checkpoint terminal evidence mismatch: ${observation.arm.key}`);
+    }
+  }
+}
+
+function sameTerminalEvidence(
+  existing: BenchmarkObservation,
+  incoming: BenchmarkObservation,
+): boolean {
+  if (JSON.stringify(incoming) === JSON.stringify(existing)) return true;
+  const review = incoming.visualReview;
+  if (!review || existing.arm.scenario !== "butler_landing_page" ||
+    (existing.visualReview !== null &&
+      JSON.stringify(existing.visualReview) !== JSON.stringify(review)) ||
+    incoming.evaluation.visualQuality !== review.score ||
+    !incoming.evaluation.evaluatorNotes.includes(`visual-review:${review.rubricVersion}`)) {
+    return false;
+  }
+  const normalizedIncoming = {
+    ...incoming,
+    visualReview: existing.visualReview,
+    evaluation: {
+      ...incoming.evaluation,
+      visualQuality: existing.evaluation.visualQuality,
+      evaluatorNotes: incoming.evaluation.evaluatorNotes.filter((note) =>
+        !note.startsWith("visual-review:")),
+    },
+  };
+  return JSON.stringify(normalizedIncoming) === JSON.stringify(existing);
+}
+
 export function redactBenchmarkResult(result: BenchmarkResultFile): BenchmarkResultFile {
   const plan = redactBenchmarkPlan(result.plan);
   return {
     ...result,
-    run: { ...result.run, runRoot: "<run-root>", planIdentity: result.run.planIdentity },
+    run: {
+      ...result.run,
+      runRoot: "<run-root>",
+      planIdentity: result.run.planIdentity ?? benchmarkPlanIdentity(result.plan),
+    },
     plan,
     observations: result.observations.map((observation) => ({
       ...observation,
@@ -116,6 +184,19 @@ export function redactBenchmarkResult(result: BenchmarkResultFile): BenchmarkRes
       },
     })),
   };
+}
+
+function assertResultIdentity(result: BenchmarkResultFile): string {
+  const identity = benchmarkPlanIdentity(result.plan);
+  if (
+    result.run.runId !== result.plan.runId ||
+    result.run.seed !== result.plan.seed ||
+    result.run.baselineSha !== result.plan.baselineSha ||
+    (result.run.planIdentity !== undefined && result.run.planIdentity !== identity)
+  ) {
+    throw new Error("Benchmark checkpoint identity mismatch: result does not match its plan.");
+  }
+  return identity;
 }
 
 export function redactBenchmarkPlan(plan: BenchmarkPlan): BenchmarkPlan {
