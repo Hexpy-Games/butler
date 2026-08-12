@@ -70,8 +70,11 @@ export async function runOpenAIModelRound(
       )
     : null;
   const requestItems = continuationMessages?.items ?? initialInput;
+  const projectedPreviousStatelessInput = previous
+    ? projectAcknowledgedToolOutputs(previous.statelessInput, request.messages)
+    : undefined;
   const statelessRequestInput = previous
-    ? [...previous.statelessInput, ...continuationMessages!.statelessItems]
+    ? [...projectedPreviousStatelessInput!, ...continuationMessages!.statelessItems]
     : initialStatelessInput;
   const roundIndex = request.usageAttribution?.roundIndex ?? 0;
   const segmentManifests = buildOpenAIRequestSegmentManifests({
@@ -83,7 +86,7 @@ export async function runOpenAIModelRound(
       : initialStatelessInput,
     appendedItemKinds: continuationMessages?.itemKinds,
     promptSources: previous ? [] : request.requestSegmentSources?.input,
-    previousCodexInput: previous?.statelessInput,
+    previousCodexInput: projectedPreviousStatelessInput,
     previousCodexManifest: previous?.statelessManifest,
   });
   beforeAttributedModelRequest({
@@ -204,6 +207,25 @@ export async function runOpenAIModelRound(
     ...(providerIdentity ? { providerIdentity } : {}),
     raw: response,
   };
+}
+
+function projectAcknowledgedToolOutputs(
+  previous: readonly Record<string, unknown>[],
+  messages: readonly ModelRoundMessage[],
+): Array<Record<string, unknown>> {
+  const references = new Map(messages.flatMap((message) =>
+    message.role === "tool" && message.toolCallId && message.operationResultReference
+      ? [[message.toolCallId, message.content] as const]
+      : [],
+  ));
+  if (references.size === 0) return [...previous];
+  return previous.map((item) => {
+    if (item.type !== "function_call_output" || typeof item.call_id !== "string") {
+      return item;
+    }
+    const output = references.get(item.call_id);
+    return output === undefined ? item : { ...item, output };
+  });
 }
 
 function newOpenAIContinuationMessages(

@@ -59,6 +59,8 @@ import { ModelProviderRequestError } from
   "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { buildModelRoute } from
   "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
+import { runOpenAIModelRound } from
+  "../../packages/butler-agent/src/integrations/providers/openai/model-round.ts";
 
 type ScriptedModelRoundStep =
   | ModelRoundResult
@@ -151,6 +153,8 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
         cacheBoundaryEvidence: { expectedRevision: "expected", observedRevision: "observed" },
       }),
       signal: new AbortController().signal,
+      recordModelRoundAcceptance: async () => {},
+      loadModelRoundAcceptance: async () => undefined,
     });
 
     expect(result.content).toBe("BTCC final answer");
@@ -209,6 +213,291 @@ test("production Guided Turn sends the admitted M1 v2 direct surface and stable 
     fixture.close();
   }
 });
+
+test("production Guided Turn exposes and executes exact result reads only through selected phase capability", async () => {
+  const fixture = createFixture("guided-m1-v2-exact-read");
+  const previousFlag = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  const turnId = "guided-m1-v2-exact-read";
+  try {
+    fixture.stores.guidedToolJournal.start({
+      turnId, callId: "durable-result", toolName: "read_file",
+      rawArguments: "{}", arguments: {},
+    });
+    fixture.stores.guidedToolJournal.finish({
+      callId: "durable-result", status: "completed",
+      result: { ok: true, content: "exact durable content" },
+    });
+    const stored = fixture.stores.guidedToolJournal.findForTurn(turnId, "durable-result")!;
+    const requests: ModelRoundRequest[] = [];
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        requests.push(request);
+        expect(request.tools.map((tool) => tool.name)).toContain("read_operation_results");
+        return toolResponse([toolCall("exact-read", "read_operation_results", {
+          result_ref: "durable-result", sha256: stored.resultSha256, revision: null,
+          work_id: null, offset: 0, length: 32,
+        })]);
+      },
+      (request) => {
+        requests.push(request);
+        expect(JSON.stringify(messagesWithToolResults(request))).toContain("base64");
+        return { text: "exact result verified", toolCalls: [] };
+      },
+    ]));
+    const turn = turnRecord(fixture.root, {
+        turnId, accessMode: "read_only", trackingMode: "none",
+      });
+    turn.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol", backupModelRefs: [],
+      reasoningEffort: "low", catalogGeneration: "test",
+    });
+    const result = await agent.run({
+      turn,
+      signal: new AbortController().signal,
+      recordModelRoundAcceptance: async () => {},
+      loadModelRoundAcceptance: async () => undefined,
+    });
+    expect(result.content).toBe("exact result verified");
+    expect(requests).toHaveLength(2);
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previousFlag;
+    fixture.close();
+  }
+});
+
+test("enabled exact replay fails before provider dispatch without durable route acceptance ports", async () => {
+  const fixture = createFixture("guided-exact-replay-preflight");
+  const previousFlag = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  let calls = 0;
+  try {
+    const agent = fixture.agent({ async runRound() {
+      calls += 1;
+      return { text: "must not dispatch", toolCalls: [] };
+    } });
+    await expect(agent.run({
+      turn: turnRecord(fixture.root), signal: new AbortController().signal,
+    })).rejects.toThrow("operation_result_route_acceptance_dependency_missing");
+    expect(calls).toBe(0);
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previousFlag;
+    fixture.close();
+  }
+});
+
+test("production Turn resolves a Work created after replay runtime construction", async () => {
+  const fixture = createFixture("guided-dynamic-work-exact-read");
+  const previousReplay = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  const previousSurface = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  writeFileSync(join(fixture.root, "large.txt"), "W".repeat(12_000));
+  writeFileSync(join(fixture.root, "small.txt"), "small");
+  try {
+    let reference: Record<string, unknown> | undefined;
+    let rounds = 0;
+    const agent = fixture.agent(scriptedModelRound([
+      () => { rounds += 1; return toolResponse([toolCall("plan", "replace_work_plan", {
+        objective: "Read one durable large result",
+        actions: [{ action_key: "read", description: "Read the large file" }],
+        checks: ["The exact range is available"],
+      })]); },
+      () => { rounds += 1; return toolResponse([toolCall("large", "read_file", { path: "large.txt" })]); },
+      () => { rounds += 1; return toolResponse([toolCall("small", "read_file", { path: "small.txt" })]); },
+      (request) => {
+        rounds += 1;
+        const referenceMessage = messagesWithToolResults(request)
+          .find((message) => message.content.includes("butler.operation-result-reference.v1"));
+        expect(referenceMessage).toBeDefined();
+        reference = JSON.parse(referenceMessage!.content) as Record<string, unknown>;
+        const identity = reference.identity as Record<string, unknown>;
+        const integrity = reference.integrity as Record<string, unknown>;
+        expect(identity.kind).toBe("work");
+        expect(identity.work_id).toBeString();
+        return toolResponse([toolCall("exact", "read_operation_results", {
+          result_ref: identity.result_ref, sha256: integrity.sha256,
+          revision: integrity.revision, work_id: identity.work_id,
+          offset: 0, length: 64,
+        })]);
+      },
+      (request) => {
+        rounds += 1;
+        const exact = messagesWithToolResults(request).find((message) => message.name === "read_operation_results");
+        expect(JSON.parse(exact!.content)).toMatchObject({
+          ok: true, output: { encoding: "base64", offset: 0, length: 64 },
+        });
+        return { text: "dynamic Work exact range verified", toolCalls: [] };
+      },
+    ]));
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    const command = localRunCommand(fixture.root, "dynamic-work-turn");
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol", backupModelRefs: [],
+      reasoningEffort: "low", catalogGeneration: "test",
+    });
+    const result = await runtime.runTurn(command);
+    expect(rounds).toBe(5);
+    expect(reference).toBeDefined();
+    expect(result).toMatchObject({
+      kind: "delivered", content: "dynamic Work exact range verified",
+    });
+  } finally {
+    if (previousReplay === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previousReplay;
+    if (previousSurface === undefined) delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    else process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousSurface;
+    fixture.close();
+  }
+});
+
+test("production Guided Turn projects acknowledged large results through the actual Codex serializer", async () => {
+  const fixture = createFixture("guided-m1-v2-codex-exact-replay");
+  const previousFlag = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  const previousBase = process.env.BUTLER_CODEX_BASE_URL;
+  const originalFetch = globalThis.fetch;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  process.env.BUTLER_CODEX_BASE_URL = "https://example.test/backend-api";
+  writeFileSync(join(fixture.root, "large.txt"), "L".repeat(9_000));
+  writeFileSync(join(fixture.root, "small.txt"), "small evidence");
+  bindAppProject(fixture.dbPath, {
+    id: "guided-agent-session", workspacePath: fixture.root,
+    ledgerProjectId: "guided-m1-v2-codex-exact-replay",
+  });
+  const requestBodies: Record<string, unknown>[] = [];
+  let responseIndex = 0;
+  globalThis.fetch = (async (_input, init) => {
+    requestBodies.push(JSON.parse(String(init?.body ?? "{}")));
+    responseIndex += 1;
+    const items = responseIndex === 1
+      ? [{ type: "function_call", call_id: "large-read", name: "read_file", arguments: JSON.stringify({ path: "large.txt" }) }]
+      : responseIndex === 2
+        ? [{ type: "function_call", call_id: "small-read", name: "read_file", arguments: JSON.stringify({ path: "small.txt" }) }]
+        : [{ type: "message", content: [{ type: "output_text", text: "serializer verified" }] }];
+    const output = items.map((item) =>
+      `data: ${JSON.stringify({ type: "response.output_item.done", item })}\n\n`,
+    ).join("");
+    const completed = { type: "response.completed", response: {
+      id: `response-${responseIndex}`, status: "completed", output: [],
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2,
+        input_tokens_details: { cached_tokens: 0 } },
+    } };
+    return new Response(`${output}data: ${JSON.stringify(completed)}\n\ndata: [DONE]\n\n`);
+  }) as typeof fetch;
+  try {
+    const authorization = `Bearer e30.${Buffer.from(JSON.stringify({
+      "https://api.openai.com/auth": { chatgpt_account_id: "account" },
+    })).toString("base64url")}.signature`;
+    const agent = fixture.agent({
+      async runRound(request) {
+        const result = await runOpenAIModelRound(
+          request, { authorization, mode: "codex_oauth" }, "openai/gpt-5.6-sol",
+        );
+        return result;
+      },
+    });
+    const turn = turnRecord(fixture.root, {
+        turnId: "guided-m1-v2-codex-exact-replay",
+        accessMode: "read_only", trackingMode: "none",
+        projectId: "guided-m1-v2-codex-exact-replay",
+      });
+    turn.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol", backupModelRefs: [],
+      reasoningEffort: "low", catalogGeneration: "test",
+    });
+    const result = await agent.run({
+      turn,
+      signal: AbortSignal.timeout(20_000),
+      recordModelRoundAcceptance: async () => {},
+      loadModelRoundAcceptance: async () => undefined,
+    });
+    expect(result.content).toBe("serializer verified");
+    expect(requestBodies).toHaveLength(3);
+    const second = JSON.stringify(requestBodies[1]);
+    const third = JSON.stringify(requestBodies[2]);
+    expect(second).toContain("L".repeat(1024));
+    expect(third).not.toContain("L".repeat(1024));
+    expect(third).toContain("butler.operation-result-reference.v1");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previousFlag;
+    if (previousBase === undefined) delete process.env.BUTLER_CODEX_BASE_URL;
+    else process.env.BUTLER_CODEX_BASE_URL = previousBase;
+    fixture.close();
+  }
+}, 30_000);
+
+test("production Guided Turn preserves official Responses continuation while projecting references", async () => {
+  const fixture = createFixture("guided-m1-v2-official-exact-replay");
+  const previousFlag = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  const previousBase = process.env.OPENAI_BASE_URL;
+  const originalFetch = globalThis.fetch;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  process.env.OPENAI_BASE_URL = "https://example.test/v1";
+  writeFileSync(join(fixture.root, "official-large.txt"), "O".repeat(9_000));
+  writeFileSync(join(fixture.root, "official-small.txt"), "small");
+  const bodies: Record<string, unknown>[] = [];
+  const responses = [
+    { id: "official-1", model: "gpt-5.6-sol", output: [{
+      type: "function_call", call_id: "official-large", name: "read_file",
+      arguments: JSON.stringify({ path: "official-large.txt" }),
+    }] },
+    { id: "official-2", model: "gpt-5.6-sol", output: [{
+      type: "function_call", call_id: "official-small", name: "read_file",
+      arguments: JSON.stringify({ path: "official-small.txt" }),
+    }] },
+    { id: "official-3", model: "gpt-5.6-sol", output: [{
+      type: "message", role: "assistant",
+      content: [{ type: "output_text", text: "official serializer verified" }],
+    }] },
+  ];
+  let responseIndex = 0;
+  globalThis.fetch = (async (_input, init) => {
+    bodies.push(JSON.parse(String(init?.body ?? "{}")));
+    return Response.json(responses[responseIndex++]!);
+  }) as typeof fetch;
+  try {
+    const agent = fixture.agent({ runRound: (request) => runOpenAIModelRound(
+      request, { authorization: "Bearer test-key", mode: "api_key" },
+      "openai/gpt-5.6-sol",
+    ) });
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-official-exact", accessMode: "read_only", trackingMode: "none",
+    });
+    turn.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol", backupModelRefs: [],
+      reasoningEffort: "low", catalogGeneration: "test",
+    });
+    const result = await agent.run({
+      turn, signal: new AbortController().signal,
+      loadModelRoundAcceptance: async () => undefined,
+      recordModelRoundAcceptance: async () => {},
+    });
+    expect(result.content).toBe("official serializer verified");
+    expect(bodies).toHaveLength(3);
+    expect(JSON.stringify(bodies[1])).toContain("O".repeat(1024));
+    expect(bodies[1]?.previous_response_id).toBe("official-1");
+    expect(JSON.stringify(bodies[2])).not.toContain("O".repeat(1024));
+    expect(JSON.stringify(bodies[2])).not.toContain("butler.operation-result-reference.v1");
+    expect(bodies[2]?.previous_response_id).toBe("official-2");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previousFlag;
+    if (previousBase === undefined) delete process.env.OPENAI_BASE_URL;
+    else process.env.OPENAI_BASE_URL = previousBase;
+    fixture.close();
+  }
+}, 30_000);
 
 test("production M1 v2 read-only surface executes an admitted native registry tool", async () => {
   const fixture = createFixture("guided-m1-v2-read-only-native");
@@ -1440,6 +1729,164 @@ test("Guided discovery exposes registry read tools without enabling unsupported 
       },
     });
   } finally {
+    fixture.close();
+  }
+});
+
+test("flag-off Guided discovery and capability lists preserve the prior surface", async () => {
+  const fixture = createFixture("guided-exact-replay-off-discovery");
+  const previous = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  const previousSurface = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  try {
+    const turn = turnRecord(fixture.root, { trackingMode: "none" });
+    turn.context.executionPolicy!.requiredNativeTools = ["list_tool_capabilities"];
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        expect(request.tools.map((tool) => tool.name))
+          .not.toContain("read_operation_results");
+        expect(request.tools.map((tool) => tool.name))
+          .toContain("list_tool_capabilities");
+        return toolResponse([
+        toolCall("search-exact", "tool_search", {
+          query: "read_operation_results", include_disabled: true,
+        }),
+        toolCall("describe-exact", "tool_describe", {
+          ids: ["native:read_operation_results"],
+        }),
+        toolCall("capabilities", "list_tool_capabilities", {
+          include_disabled: true,
+        }),
+        ]);
+      },
+      (request) => {
+        const messages = messagesWithToolResults(request);
+        const result = toolMessageOutput(messages
+          .find((message) => message.toolCallId === "search-exact")) as {
+            results?: Array<{ name: string }>;
+          };
+        expect(result.results?.map((entry) => entry.name) ?? [])
+          .not.toContain("read_operation_results");
+        expect(toolMessageOutput(messages.find((message) =>
+          message.toolCallId === "describe-exact"))).toMatchObject({
+            ok: false,
+            descriptions: [],
+            missing: [{
+              id: "native:read_operation_results",
+              error: "unknown_tool_catalog_id",
+            }],
+          });
+        const capabilityResult = toolMessageOutput(messages.find((message) =>
+          message.toolCallId === "capabilities")) as {
+            ok?: boolean;
+            current_turn_surface_known?: boolean;
+            capabilities?: Array<{ name: string }>;
+          };
+        expect(capabilityResult).toMatchObject({
+          ok: true,
+          current_turn_surface_known: true,
+        });
+        expect(capabilityResult.capabilities?.map((entry) => entry.name) ?? [])
+          .not.toContain("read_operation_results");
+        expect(JSON.stringify(capabilityResult))
+          .not.toContain("read_operation_results");
+        return { text: "exact replay remains disabled", toolCalls: [] };
+      },
+    ]));
+    const output = await agent.run({
+      turn,
+      signal: new AbortController().signal,
+    });
+    expect(output.content).toBe("exact replay remains disabled");
+  } finally {
+    if (previous === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previous;
+    if (previousSurface === undefined) delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    else process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousSurface;
+    fixture.close();
+  }
+});
+
+test("flag-on Guided capability list exposes the canonical exact reader as callable", async () => {
+  const fixture = createFixture("guided-exact-replay-on-capabilities");
+  const previous = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  const previousSurface = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  try {
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        expect(request.tools.map((tool) => tool.name))
+          .toContain("read_operation_results");
+        expect(request.tools.map((tool) => tool.name))
+          .toContain("list_tool_capabilities");
+        return toolResponse([toolCall("capabilities", "list_tool_capabilities", {
+          include_disabled: true,
+        })]);
+      },
+      (request) => {
+        const result = toolMessageOutput(messagesWithToolResults(request)
+          .find((message) => message.toolCallId === "capabilities")) as {
+            capabilities?: Array<{
+              name: string;
+              enabled: boolean;
+              current_turn_selected: boolean;
+              current_turn_callable: boolean;
+            }>;
+          };
+        const exact = result.capabilities?.filter((entry) =>
+          entry.name === "read_operation_results");
+        expect(exact).toEqual([expect.objectContaining({
+          enabled: true,
+          current_turn_selected: true,
+          current_turn_callable: true,
+        })]);
+        return { text: "canonical exact reader is callable", toolCalls: [] };
+      },
+    ]));
+    const turn = turnRecord(fixture.root, {
+      accessMode: "full_access", trackingMode: "local",
+    });
+    turn.context.executionPolicy!.requiredNativeTools = ["list_tool_capabilities"];
+    turn.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol", backupModelRefs: [],
+      reasoningEffort: "low", catalogGeneration: "test",
+    });
+    const output = await agent.run({
+      turn,
+      signal: new AbortController().signal,
+      recordModelRoundAcceptance: async () => {},
+      loadModelRoundAcceptance: async () => undefined,
+    });
+    expect(output.content).toBe("canonical exact reader is callable");
+  } finally {
+    if (previous === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previous;
+    if (previousSurface === undefined) delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    else process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousSurface;
+    fixture.close();
+  }
+});
+
+test("flag-off required exact capability fails before Guided provider dispatch", async () => {
+  const fixture = createFixture("guided-exact-replay-off-required");
+  const previous = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  let calls = 0;
+  try {
+    const agent = fixture.agent({ async runRound() {
+      calls += 1;
+      return { text: "must not dispatch", toolCalls: [] };
+    } });
+    const turn = turnRecord(fixture.root, { accessMode: "full_access" });
+    turn.context.executionPolicy!.requiredNativeTools = ["read_operation_results"];
+    await expect(agent.run({ turn, signal: new AbortController().signal }))
+      .rejects.toThrow("required tool is unavailable while exact replay is disabled");
+    expect(calls).toBe(0);
+  } finally {
+    if (previous === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previous;
     fixture.close();
   }
 });
@@ -3453,6 +3900,7 @@ function createFixture(label: string) {
         appMessageDbPath: dbPath,
         contextDocuments: stores.contextDocuments,
         toolJournal: stores.guidedToolJournal,
+        operationResultReader: stores.guidedOperationResultReader,
         effectJournal: stores.guidedEffectJournal,
         durableWork: stores.durableWork,
         modelRound,

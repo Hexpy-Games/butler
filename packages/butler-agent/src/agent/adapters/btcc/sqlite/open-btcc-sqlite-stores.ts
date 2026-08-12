@@ -22,6 +22,7 @@ import {
 import { openOwnedSqliteConnection } from
   "../../../../foundation/sqlite/owned-sqlite-connection.ts";
 import { SqliteGuidedToolJournal } from "./guided-tool-journal.ts";
+import { SqliteGuidedOperationResultReader } from "./guided-operation-result-reader.ts";
 import { SqliteGuidedEffectJournal } from "./guided-effect-store.ts";
 import { SqliteGuidedWorkStore } from "./guided-work-store.ts";
 import {
@@ -76,6 +77,7 @@ export function openBtccSqliteStores(input: {
     messages: new SqliteCanonicalMessageStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
     guidedToolJournal: new SqliteGuidedToolJournal(db),
+    guidedOperationResultReader: new SqliteGuidedOperationResultReader(db),
     guidedEffectJournal: new SqliteGuidedEffectJournal(db),
     durableWork,
     legacyCutover,

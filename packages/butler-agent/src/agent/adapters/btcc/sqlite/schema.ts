@@ -228,9 +228,22 @@ CREATE TABLE IF NOT EXISTS btcc_guided_tool_calls (
   result_json TEXT,
   result_sha256 TEXT,
   error_code TEXT,
+  delivery_state TEXT CHECK (
+    delivery_state IS NULL OR delivery_state IN (
+      'pending_delivery', 'in_flight', 'acknowledged', 'reference_only'
+    )
+  ),
+  delivery_round_id TEXT,
+  delivery_response_sha256 TEXT,
   started_at TEXT NOT NULL,
   finished_at TEXT,
-  UNIQUE(turn_id, call_id)
+  UNIQUE(turn_id, call_id),
+  CHECK (
+    (delivery_state IS NULL AND delivery_round_id IS NULL AND delivery_response_sha256 IS NULL) OR
+    (delivery_state = 'pending_delivery' AND delivery_round_id IS NULL AND delivery_response_sha256 IS NULL) OR
+    (delivery_state = 'in_flight' AND delivery_round_id IS NOT NULL AND delivery_response_sha256 IS NULL) OR
+    (delivery_state IN ('acknowledged', 'reference_only') AND delivery_round_id IS NOT NULL AND delivery_response_sha256 IS NOT NULL)
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_btcc_guided_tool_calls_turn

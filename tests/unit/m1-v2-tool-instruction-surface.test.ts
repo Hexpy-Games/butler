@@ -17,8 +17,44 @@ import type { StoredSessionBinding } from
   "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { modelFacingFunctionTools } from
   "../../packages/butler-agent/src/integrations/providers/shared/tools.ts";
+import { codexRequestBody } from
+  "../../packages/butler-agent/src/integrations/providers/openai/responses-client.ts";
+import { guidedNativeToolDefinitions } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
 
 const ENABLED = { BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE: "on" };
+
+test("exact result tool is absent from every Guided selection while replay is off", () => {
+  const turn = turnRecord({ accessMode: "full_access", trackingMode: "local" });
+  const selected = selectGuidedTurnPhasePolicy(turn, ENABLED);
+  expect(selected.authorizedTools.map((tool) => tool.name))
+    .not.toContain("read_operation_results");
+  expect(selected.providerTools.map((tool) => tool.name))
+    .not.toContain("read_operation_results");
+  expect(guidedNativeToolDefinitions().map((tool) => tool.name))
+    .not.toContain("read_operation_results");
+});
+
+test("flag-off required exact result authority fails during phase selection", () => {
+  const turn = turnRecord({ accessMode: "full_access", trackingMode: "local" });
+  turn.context.executionPolicy!.requiredNativeTools = ["read_operation_results"];
+  expect(() => selectGuidedTurnPhasePolicy(turn, ENABLED))
+    .toThrow("required tool is unavailable while exact replay is disabled");
+});
+
+test("flag-on Guided selection uses the one canonical exact result registry identity", () => {
+  const selected = selectGuidedTurnPhasePolicy(
+    turnRecord({ accessMode: "full_access", trackingMode: "local" }),
+    { ...ENABLED, BUTLER_M1_V2_EXACT_ONCE_REPLAY: "on" },
+  );
+  const canonical = BUTLER_TOOLS.find((tool) => tool.name === "read_operation_results");
+  expect(canonical).toBeDefined();
+  expect(selected.authorizedTools.find((tool) => tool.name === canonical!.name))
+    .toEqual(canonical);
+  expect(guidedNativeToolDefinitions(true).filter((tool) =>
+    tool.name === "read_operation_results",
+  )).toHaveLength(1);
+});
 
 test("M1 v2 direct phase omits project, workspace, Work, and execution schemas", () => {
   const selection = selectGuidedTurnPhasePolicy(turnRecord({ trackingMode: "none" }), ENABLED);
@@ -242,8 +278,10 @@ test("M1 v2 treats real full-access App chat workspace authority as execution", 
   expect(names).toContain("read_file");
   expect(names).toContain("run_command");
   expect(names).not.toContain("project_ledger_status");
-  expect(byteLength(JSON.stringify(modelFacingFunctionTools(enabled.providerTools))))
-    .toBeLessThan(byteLength(JSON.stringify(modelFacingFunctionTools(legacy.providerTools))));
+  expect(byteLength(enabled.stableInstructionPrefix) +
+    byteLength(JSON.stringify(modelFacingFunctionTools(enabled.providerTools))))
+    .toBeLessThan(byteLength(legacy.stableInstructionPrefix) +
+      byteLength(JSON.stringify(modelFacingFunctionTools(legacy.providerTools))));
 });
 
 test("M1 v2 policy serializes byte-identical schemas and stable prefix for the same revision", () => {
@@ -344,6 +382,45 @@ test("M1 v2 serializer bytes decrease for direct, read-only, and execution phase
     expect(afterStableBytes).toBeLessThan(beforeStableBytes);
     expect((beforeSchemaBytes + beforeStableBytes) -
       (afterSchemaBytes + afterStableBytes)).toBeGreaterThan(0);
+  }
+});
+
+test("exact replay reduces actual Codex serializer bytes in every typed phase", () => {
+  const turns = [
+    turnRecord({ trackingMode: "none" }),
+    turnRecord({ accessMode: "read_only", trackingMode: "ledger", projectRef: "butler" }),
+    turnRecord({ accessMode: "full_access", trackingMode: "ledger", projectRef: "butler" }),
+  ];
+  const raw = JSON.stringify({ ok: true, output: { content: "R".repeat(9_000) } });
+  const reference = JSON.stringify({
+    version: "butler.operation-result-reference.v1", kind: "operation_result",
+    identity: { kind: "direct", result_ref: "result", tool_name: "read_file" },
+    integrity: { sha256: "a".repeat(64), revision: null },
+    outcome: { status: "completed", success: true, verification: "stored_exact_available" },
+    availability: { status: "exact_read_available", capability: "read_operation_results", scope: "same_turn" },
+  });
+  const expectedBytes = [[33_656, 17_237], [36_789, 20_370], [44_932, 28_513]];
+  for (const [index, turn] of turns.entries()) {
+    const before = selectGuidedTurnPhasePolicy(turn, ENABLED);
+    const after = selectGuidedTurnPhasePolicy(turn, {
+      ...ENABLED, BUTLER_M1_V2_EXACT_ONCE_REPLAY: "on",
+    });
+    const body = (selection: typeof before, output: string) => codexRequestBody({
+      model: "gpt-5.6-sol",
+      instructions: selection.stableInstructionPrefix,
+      tools: modelFacingFunctionTools(selection.providerTools),
+      input: [
+        { type: "function_call_output", call_id: "call-1", output },
+        { type: "function_call_output", call_id: "call-2", output },
+        { type: "function_call_output", call_id: "call-3", output },
+      ],
+    });
+    const beforeBytes = byteLength(JSON.stringify(body(before, raw)));
+    const afterBody = body(after, reference);
+    (afterBody.input as Array<{ output: string }>)[0]!.output = raw;
+    const afterBytes = byteLength(JSON.stringify(afterBody));
+    expect(afterBytes).toBeLessThan(beforeBytes);
+    expect([beforeBytes, afterBytes]).toEqual(expectedBytes[index]);
   }
 });
 

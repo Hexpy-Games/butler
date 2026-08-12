@@ -1,8 +1,7 @@
 import { renderAttachmentContext } from "../../context/attachment-context.ts";
 import type { ButlerExecutionPolicy } from "../contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
-import type { SqliteGuidedToolJournal } from
-  "../../adapters/index.ts";
+import type { GuidedToolJournal } from "../ports/index.ts";
 import { guidedPolicy } from "./guided-turn-policy.ts";
 import { projectGuidedToolContext } from
   "./guided-tool-context-projection.ts";
@@ -49,7 +48,7 @@ export function renderGuidedPrompt(
   input: {
     butlerData: string;
     contextDocuments: { resolve(contextRef: string): string };
-    toolJournal: SqliteGuidedToolJournal;
+    toolJournal: GuidedToolJournal;
     workContext?: string | null;
     effectContext?: string | null;
   },
@@ -62,7 +61,7 @@ export function renderGuidedPromptAttribution(
   input: {
     butlerData: string;
     contextDocuments: { resolve(contextRef: string): string };
-    toolJournal: SqliteGuidedToolJournal;
+    toolJournal: GuidedToolJournal;
     workContext?: string | null;
     effectContext?: string | null;
   },
@@ -279,7 +278,7 @@ function renderContextRefs(
 }
 
 function renderPriorToolFacts(
-  records: ReturnType<SqliteGuidedToolJournal["list"]>,
+  records: ReturnType<GuidedToolJournal["list"]>,
 ): string {
   const recent = projectGuidedToolContext(records);
   if (recent.length === 0) return "";

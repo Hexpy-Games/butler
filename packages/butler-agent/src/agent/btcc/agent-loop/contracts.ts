@@ -19,6 +19,7 @@ import type {
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
 import type { M1RequestSegmentSource } from
   "../ports/provider-request-attribution.ts";
+import type { OperationResultReplay } from "../operation-result-replay/index.ts";
 
 export type BtccAgentLoopMessage = ModelRoundMessage;
 export type BtccAgentLoopToolDefinition = ModelRoundTool;
@@ -136,6 +137,8 @@ export interface BtccAgentLoopInput {
   resolveTools?: () => readonly BtccAgentLoopToolDefinition[];
   resolveToolChoice?: () => "auto" | "required" | undefined;
   modelRound: ModelRoundPort;
+  operationResultReplay?: OperationResultReplay;
+  resolveOperationResultCallId?: (providerCallId: string) => string | undefined;
   /**
    * The execution window is an internal scheduling boundary, not a semantic
    * model/tool budget. A guided caller supplies this callback to reread

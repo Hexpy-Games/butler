@@ -24,6 +24,7 @@ const WORK_RECOVERY_TOOLS = new Set([
 export function toolResultToMessage(input: {
   result: BtccAgentLoopToolResult;
   modelPreviewContext: ToolResultModelPreviewContext;
+  operationResultCallId?: string;
 }): BtccAgentLoopMessage {
   const imageAttachments = extractAgentLoopImageAttachments(
     input.result.output,
@@ -46,6 +47,9 @@ export function toolResultToMessage(input: {
       context: input.modelPreviewContext,
     }),
     requestSegmentKind: toolResultSegmentKind(input.result),
+    ...(input.operationResultCallId
+      ? { operationResultCallId: input.operationResultCallId }
+      : {}),
     ...(imageAttachments.length > 0 ? { imageAttachments } : {}),
   };
 }

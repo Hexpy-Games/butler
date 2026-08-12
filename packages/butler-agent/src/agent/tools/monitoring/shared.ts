@@ -60,6 +60,7 @@ export function createMonitoringToolHandlers(input: {
   sessionId?: string;
   webSearchProvider?: WebSearchProvider;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  nativeToolDefinitions?: readonly ButlerToolDefinition[];
   hiddenNativeToolNames?: readonly string[];
   nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
 }) {
@@ -141,6 +142,7 @@ export function createMonitoringToolHandlers(input: {
           category: category.category,
           includeDisabled: call.args.include_disabled !== false,
           currentToolNames,
+          nativeToolDefinitions: input.nativeToolDefinitions,
           hiddenNativeToolNames: new Set(input.hiddenNativeToolNames ?? []),
           nativeToolAvailabilityOverrides:
             input.nativeToolAvailabilityOverrides,
@@ -212,12 +214,13 @@ function listToolCapabilities(input: {
   category?: ToolCapabilityCategory;
   includeDisabled?: boolean;
   currentToolNames?: Set<string> | null;
+  nativeToolDefinitions?: readonly ButlerToolDefinition[];
   hiddenNativeToolNames?: ReadonlySet<string>;
   nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
 }): ToolCapabilityView[] {
   const includeDisabled = input.includeDisabled !== false;
   const currentToolNames = input.currentToolNames ?? null;
-  return BUTLER_TOOLS
+  return (input.nativeToolDefinitions ?? BUTLER_TOOLS)
     .filter((tool) => !input.hiddenNativeToolNames?.has(tool.name))
     .map((tool) => {
       const metadata = TOOL_CAPABILITY_METADATA[tool.name] ?? DEFAULT_TOOL_CAPABILITY;

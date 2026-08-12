@@ -1,16 +1,10 @@
 import type { Database } from "bun:sqlite";
 import { digest, stableJson } from "./identity.ts";
-
-export type GuidedToolJournalRecord = {
-  callId: string;
-  toolName: string;
-  rawArguments: string;
-  arguments: Record<string, unknown>;
-  status: "started" | "completed" | "failed" | "cancelled";
-  result?: unknown;
-  resultSha256?: string;
-  errorCode?: string;
-};
+import type {
+  GuidedToolJournal,
+  GuidedToolJournalRecord,
+  OperationResultDeliveryState,
+} from "../../../btcc/index.ts";
 
 type GuidedToolCallRow = {
   call_id: string;
@@ -21,9 +15,12 @@ type GuidedToolCallRow = {
   result_json: string | null;
   result_sha256: string | null;
   error_code: string | null;
+  delivery_state: OperationResultDeliveryState | null;
+  delivery_round_id: string | null;
+  delivery_response_sha256: string | null;
 };
 
-export class SqliteGuidedToolJournal {
+export class SqliteGuidedToolJournal implements GuidedToolJournal {
   constructor(private readonly db: Database) {}
 
   start(input: {
@@ -103,22 +100,151 @@ export class SqliteGuidedToolJournal {
   find(callId: string): GuidedToolJournalRecord | null {
     const row = this.db.query<GuidedToolCallRow, [string]>(`
       SELECT call_id, tool_name, raw_arguments, arguments_json, status,
-        result_json, result_sha256, error_code
+        result_json, result_sha256, error_code, delivery_state,
+        delivery_round_id, delivery_response_sha256
       FROM btcc_guided_tool_calls WHERE call_id = ?
     `).get(callId);
+    return row ? hydrate(row) : null;
+  }
+
+  findForTurn(turnId: string, callId: string): GuidedToolJournalRecord | null {
+    const row = this.db.query<GuidedToolCallRow, [string, string]>(`
+      SELECT call_id, tool_name, raw_arguments, arguments_json, status,
+        result_json, result_sha256, error_code, delivery_state,
+        delivery_round_id, delivery_response_sha256
+      FROM btcc_guided_tool_calls WHERE turn_id = ? AND call_id = ?
+    `).get(turnId, callId);
     return row ? hydrate(row) : null;
   }
 
   list(turnId: string): GuidedToolJournalRecord[] {
     return this.db.query<GuidedToolCallRow, [string]>(`
       SELECT call_id, tool_name, raw_arguments, arguments_json, status,
-        result_json, result_sha256, error_code
+        result_json, result_sha256, error_code, delivery_state,
+        delivery_round_id, delivery_response_sha256
       FROM btcc_guided_tool_calls WHERE turn_id = ? ORDER BY started_at, call_id
     `).all(turnId).map(hydrate);
   }
+
+  admitResultDelivery(input: { turnId: string; callId: string }): void {
+    validateJournalId(input.turnId, "operation_result_turn_id_invalid");
+    validateJournalId(input.callId, "operation_result_call_id_invalid");
+    const updated = this.db.query(`
+      UPDATE btcc_guided_tool_calls SET delivery_state = 'pending_delivery'
+      WHERE turn_id = ? AND call_id = ? AND status = 'completed'
+        AND result_json IS NOT NULL AND result_sha256 IS NOT NULL
+        AND delivery_state IS NULL
+    `).run(input.turnId, input.callId);
+    if (updated.changes === 1) return;
+    const current = this.findForTurn(input.turnId, input.callId);
+    if (!current?.deliveryState) throw new Error("operation_result_delivery_admission_failed");
+  }
+
+  beginResultDelivery(input: { turnId: string; callId: string; roundId: string }): void {
+    validateJournalId(input.turnId, "operation_result_turn_id_invalid");
+    validateJournalId(input.callId, "operation_result_call_id_invalid");
+    validateJournalId(input.roundId, "operation_result_round_id_invalid");
+    const updated = this.db.query(`
+      UPDATE btcc_guided_tool_calls
+      SET delivery_state = 'in_flight', delivery_round_id = ?
+      WHERE turn_id = ? AND call_id = ? AND delivery_state = 'pending_delivery'
+    `).run(input.roundId, input.turnId, input.callId);
+    if (updated.changes === 1) return;
+    const current = this.findForTurn(input.turnId, input.callId);
+    if (current?.deliveryState !== "in_flight" || current.deliveryRoundId !== input.roundId) {
+      throw new Error("operation_result_delivery_begin_conflict");
+    }
+  }
+
+  releaseResultDeliveries(input: { turnId: string; roundId: string }): void {
+    validateJournalId(input.turnId, "operation_result_turn_id_invalid");
+    validateJournalId(input.roundId, "operation_result_round_id_invalid");
+    const rows = this.deliveryRows(input);
+    if (rows.length === 0 && this.hasInFlightDelivery(input.turnId)) {
+      throw new Error("operation_result_delivery_release_conflict");
+    }
+    if (rows.some((row) => row.delivery_state !== "in_flight")) {
+      throw new Error("operation_result_delivery_release_conflict");
+    }
+    const updated = this.db.query(`
+      UPDATE btcc_guided_tool_calls
+      SET delivery_state = 'pending_delivery', delivery_round_id = NULL
+      WHERE turn_id = ? AND delivery_state = 'in_flight' AND delivery_round_id = ?
+    `).run(input.turnId, input.roundId);
+    if (updated.changes !== rows.length) {
+      throw new Error("operation_result_delivery_release_conflict");
+    }
+  }
+
+  acknowledgeResultDeliveries(input: {
+    turnId: string;
+    roundId: string;
+    responseSha256: string;
+  }): void {
+    validateJournalId(input.turnId, "operation_result_turn_id_invalid");
+    validateJournalId(input.roundId, "operation_result_round_id_invalid");
+    validateDigest(input.responseSha256, "operation_result_response_hash_invalid");
+    const rows = this.deliveryRows(input);
+    if (rows.length === 0 && this.hasInFlightDelivery(input.turnId)) {
+      throw new Error("operation_result_delivery_acknowledgement_conflict");
+    }
+    if (rows.length > 0 && rows.every((row) =>
+      row.delivery_state === "acknowledged" &&
+      row.delivery_response_sha256 === input.responseSha256,
+    )) return;
+    if (rows.some((row) => row.delivery_state !== "in_flight")) {
+      throw new Error("operation_result_delivery_acknowledgement_conflict");
+    }
+    const updated = this.db.query(`
+      UPDATE btcc_guided_tool_calls
+      SET delivery_state = 'acknowledged', delivery_response_sha256 = ?
+      WHERE turn_id = ? AND delivery_state = 'in_flight' AND delivery_round_id = ?
+    `).run(input.responseSha256, input.turnId, input.roundId);
+    if (updated.changes !== rows.length) {
+      throw new Error("operation_result_delivery_acknowledgement_conflict");
+    }
+  }
+
+  private deliveryRows(input: { turnId: string; roundId: string }): Array<{
+    delivery_state: OperationResultDeliveryState;
+    delivery_response_sha256: string | null;
+  }> {
+    return this.db.query<{
+      delivery_state: OperationResultDeliveryState;
+      delivery_response_sha256: string | null;
+    }, [string, string]>(`
+      SELECT delivery_state, delivery_response_sha256
+      FROM btcc_guided_tool_calls
+      WHERE turn_id = ? AND delivery_round_id = ?
+    `).all(input.turnId, input.roundId);
+  }
+
+  private hasInFlightDelivery(turnId: string): boolean {
+    return Boolean(this.db.query<{ present: number }, [string]>(`
+      SELECT 1 AS present FROM btcc_guided_tool_calls
+      WHERE turn_id = ? AND delivery_state = 'in_flight' LIMIT 1
+    `).get(turnId));
+  }
+
+  promoteAcknowledgedResult(input: { turnId: string; callId: string }): void {
+    const updated = this.db.query(`
+      UPDATE btcc_guided_tool_calls SET delivery_state = 'reference_only'
+      WHERE turn_id = ? AND call_id = ? AND delivery_state = 'acknowledged'
+    `).run(input.turnId, input.callId);
+    if (updated.changes === 1) return;
+    const current = this.findForTurn(input.turnId, input.callId);
+    if (current?.deliveryState !== "reference_only") {
+      throw new Error("operation_result_delivery_promotion_conflict");
+    }
+  }
+
 }
 
 function hydrate(row: GuidedToolCallRow): GuidedToolJournalRecord {
+  if (row.result_json !== null &&
+    (!row.result_sha256 || digest(row.result_json) !== row.result_sha256)) {
+    throw new Error("operation_result_body_hash_mismatch");
+  }
   return {
     callId: row.call_id,
     toolName: row.tool_name,
@@ -128,6 +254,11 @@ function hydrate(row: GuidedToolCallRow): GuidedToolJournalRecord {
     ...(row.result_json !== null ? { result: JSON.parse(row.result_json) as unknown } : {}),
     ...(row.result_sha256 ? { resultSha256: row.result_sha256 } : {}),
     ...(row.error_code ? { errorCode: row.error_code } : {}),
+    ...(row.delivery_state ? { deliveryState: row.delivery_state } : {}),
+    ...(row.delivery_round_id ? { deliveryRoundId: row.delivery_round_id } : {}),
+    ...(row.delivery_response_sha256
+      ? { deliveryResponseSha256: row.delivery_response_sha256 }
+      : {}),
   };
 }
 
@@ -135,4 +266,12 @@ function json(value: unknown): string {
   const encoded = JSON.stringify(value);
   if (encoded === undefined) throw new Error("Guided tool journal requires JSON values");
   return encoded;
+}
+
+function validateJournalId(value: string, code: string): void {
+  if (!value.trim() || Buffer.byteLength(value, "utf8") > 256) throw new Error(code);
+}
+
+function validateDigest(value: string, code: string): void {
+  if (!/^[a-f0-9]{64}$/u.test(value)) throw new Error(code);
 }

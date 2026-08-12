@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { GuidedToolJournalRecord } from
-  "../../packages/butler-agent/src/agent/adapters/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/ports/index.ts";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import { digest } from
@@ -9,8 +9,8 @@ import { projectGuidedToolContext } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-context-projection.ts";
 import { renderGuidedPrompt } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-prompt.ts";
-import type { SqliteGuidedToolJournal } from
-  "../../packages/butler-agent/src/agent/adapters/index.ts";
+import type { GuidedToolJournal } from
+  "../../packages/butler-agent/src/agent/btcc/ports/index.ts";
 
 test("guided tool context keeps normalized continuation facts without raw arguments", () => {
   const longContent = "durable file body\n".repeat(80);
@@ -243,8 +243,8 @@ test("guided prompt renders only the bounded model projection of prior tools", (
 
 function toolJournal(
   records: GuidedToolJournalRecord[],
-): SqliteGuidedToolJournal {
-  return { list: () => records } as unknown as SqliteGuidedToolJournal;
+): GuidedToolJournal {
+  return { list: () => records } as unknown as GuidedToolJournal;
 }
 
 function turnRecord(): TurnRecord {

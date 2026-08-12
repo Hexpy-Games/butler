@@ -4,9 +4,7 @@ import type {
   WorkTurnScope,
 } from "../work/index.ts";
 import type { TurnRecord } from "../turn/index.ts";
-import type {
-  SqliteGuidedToolJournal,
-} from "../../adapters/index.ts";
+import type { GuidedToolJournal } from "../ports/index.ts";
 import type {
   ButlerToolExecutor,
   ContextualButlerToolExecutor,
@@ -25,6 +23,7 @@ import {
   bindPresentedWorkForToolDispatch,
   publishWorkProgress,
   safeAttachToolResult,
+  safeBindOpenWork,
 } from "./guided-work-runtime.ts";
 import {
   publishOperation,
@@ -61,7 +60,7 @@ export type GuidedToolCallExecutionInput = {
   visibleNames: ReadonlySet<string>;
   describedToolIds: Set<string>;
   durableWork: DurableWorkService;
-  toolJournal: SqliteGuidedToolJournal;
+  toolJournal: GuidedToolJournal;
   executeButlerTool: ContextualButlerToolExecutor;
 };
 
@@ -70,9 +69,11 @@ export function createGuidedToolCallExecutor(
 ): {
   executeTool: ButlerToolExecutor;
   usedTools: string[];
+  journalCallIdForProviderCall(providerCallId: string): string | undefined;
 } {
   let callIndex = 0;
   const usedTools: string[] = [];
+  const journalCallIds = new Map<string, string>();
   const activityProjection = input.activity ?? createGuidedActivityProjection({
     turnId: input.turn.turnId,
     progress: input.progress,
@@ -120,6 +121,7 @@ export function createGuidedToolCallExecutor(
       ) ?? computedCallId;
     }
     usedTools.push(effectiveToolName);
+    if (call.providerCallId) journalCallIds.set(call.providerCallId, callId);
     const invalidSummary = invalidRunCommandSummary({
       callName: call.name,
       callArgs: call.args,
@@ -270,6 +272,7 @@ export function createGuidedToolCallExecutor(
       rememberDescribedTools(call.name, result, input.describedToolIds);
       input.toolJournal.finish({ callId, status: "completed", result });
       if (call.name === "replace_work_plan" && toolResultSucceeded(result)) {
+        await safeBindOpenWork(input.durableWork, input.workScope);
         await backfillTurnToolResults(input, input.workScope);
       } else if (!isDurableWorkTool(call.name)) {
         await safeAttachToolResult(input, input.workScope, callId);
@@ -307,7 +310,11 @@ export function createGuidedToolCallExecutor(
       );
     }
   };
-  return { executeTool, usedTools };
+  return {
+    executeTool,
+    usedTools,
+    journalCallIdForProviderCall: (providerCallId) => journalCallIds.get(providerCallId),
+  };
 }
 
 async function executeFreshTool(

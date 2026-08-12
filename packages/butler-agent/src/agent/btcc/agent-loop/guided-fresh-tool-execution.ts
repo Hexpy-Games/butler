@@ -2,7 +2,7 @@ import type {
   ButlerToolExecutor,
   ContextualButlerToolExecutor,
 } from "../../tools/butler-tools.ts";
-import type { SqliteGuidedToolJournal } from "../../adapters/index.ts";
+import type { GuidedToolJournal } from "../ports/index.ts";
 import type {
   DurableWorkService,
   WorkTurnScope,
@@ -18,7 +18,7 @@ type GuidedToolCall = Parameters<ButlerToolExecutor>[0];
 
 export async function executeGuidedFreshTool(input: {
   durableWork: DurableWorkService;
-  toolJournal: SqliteGuidedToolJournal;
+  toolJournal: GuidedToolJournal;
   workScope: WorkTurnScope;
   call: GuidedToolCall;
   callId: string;
