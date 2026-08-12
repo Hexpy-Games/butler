@@ -4,7 +4,6 @@ import type {
   BenchmarkResultFile,
   PreflightResult,
 } from "./contracts.ts";
-import { AGENT_BENCHMARK_BASELINE_SHA } from "./contracts.ts";
 import {
   createGatedBenchmarkObservation,
   isTerminal,
@@ -46,7 +45,7 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
   const sourceState = sourceIntegrity(input.plan.sourceRoot);
   const platformDiagnostic = benchmarkPlatformGate();
   const sourceValid = platformDiagnostic === null &&
-    sourceState.commit === AGENT_BENCHMARK_BASELINE_SHA && sourceState.status === "";
+    sourceState.commit === input.plan.baselineSha && sourceState.status === "";
   let evidenceSnapshot: RepositoryEvidenceSnapshot | null = null;
   let evidenceDiagnostic: string | null = null;
   const sourceDiagnostic = sourceValid ? null : platformDiagnostic ?? (
@@ -70,10 +69,15 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
       evidenceDiagnostic = errorMessage(error);
     }
   }
+  const notScheduled: PreflightResult = {
+    available: false, executable: null, version: null, authenticated: null,
+    configVerified: false, gateCode: "measurement_unavailable",
+    diagnostic: "External adapter is contract-only for the M1 v2 Butler campaign.",
+  };
   const preflight = {
     butler: await input.adapters.butler.preflight(),
-    hermes: await input.adapters.hermes.preflight(),
-    opencode: await input.adapters.opencode.preflight(),
+    hermes: input.plan.campaign === "m1-v2" ? notScheduled : await input.adapters.hermes.preflight(),
+    opencode: input.plan.campaign === "m1-v2" ? notScheduled : await input.adapters.opencode.preflight(),
   } satisfies Record<"butler" | "hermes" | "opencode", PreflightResult>;
   if (input.mode === "preflight-only") {
     result.observations = input.plan.arms.map((arm) => {
@@ -126,6 +130,7 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
     else result.observations.push(observation);
     completed.set(arm.key, observation);
     await input.store.save(result);
+    if (input.plan.campaign === "m1-v2" && observation.terminalState === "gated") break;
   }
   result.run.state = result.observations.length === input.plan.arms.length ? "reported" : "running";
   await input.store.save(result);

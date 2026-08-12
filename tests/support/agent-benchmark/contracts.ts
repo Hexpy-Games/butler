@@ -10,6 +10,8 @@ export const AGENT_BENCHMARK_BASELINE_SHA =
   "549463fbe074fc25042f9302cd330699948dab50" as const;
 export const VISUAL_REVIEW_SCHEMA = "butler.agent-benchmark.visual-review.v1" as const;
 
+export type BenchmarkCampaign = "cross-agent-pilot" | "m1-v2";
+
 export type BenchmarkAgent = "butler" | "hermes" | "opencode";
 export type BenchmarkTrack = "controlled" | "recommended-default";
 export type BenchmarkCacheState = "cold" | "warm";
@@ -28,7 +30,11 @@ export type BenchmarkGateCode =
 export type BenchmarkScenario =
   | "direct_conversation"
   | "current_web_research"
-  | "butler_landing_page";
+  | "butler_landing_page"
+  | "direct-cold"
+  | "direct-warm"
+  | "current-web-cold"
+  | "landing-cold";
 
 export interface EffectiveAgentConfig {
   model: string | null;
@@ -68,11 +74,13 @@ export interface BenchmarkArmPlan {
   cacheRoot: string;
   cachePairId: string;
   timeoutMs: number;
+  sourceRevision?: string;
 }
 
 export interface BenchmarkPlan {
   schema: typeof AGENT_BENCHMARK_SCHEMA;
   kind: "agent_benchmark_plan";
+  campaign: BenchmarkCampaign;
   runId: string;
   createdAt: string;
   seed: number;
@@ -82,6 +90,15 @@ export interface BenchmarkPlan {
   tracks: readonly BenchmarkTrack[];
   fixtures: readonly BenchmarkFixtureSummary[];
   repositoryEvidence?: { relativeRoot: string; files: readonly string[]; sha256: string };
+  policy?: {
+    sequential: true;
+    observerOnly: true;
+    retryContaminatedAccepted: false;
+    replacementRunsAllowed: false;
+    directWarmSameSession: true;
+    expectedObservedCacheBoundaryMustMatch: true;
+    rubricVersion: string;
+  };
   arms: readonly BenchmarkArmPlan[];
 }
 
@@ -193,6 +210,7 @@ export interface BenchmarkObservation {
   changedPaths: readonly string[];
   diagnostics: readonly string[];
   evidenceRefs: readonly string[];
+  m1V2?: import("./m1-v2-types.ts").M1V2RepetitionResult | null;
 }
 
 export interface BenchmarkResultFile {
@@ -219,6 +237,7 @@ export interface BenchmarkFixture {
   requiredBuildCommand?: readonly string[];
   requiredTestCommand?: readonly string[];
   viewportSizes?: readonly { width: number; height: number }[];
+  m1V2?: import("./m1-v2-types.ts").CanonicalM1V2Fixture;
 }
 
 export interface AdapterRunInput {
@@ -250,6 +269,14 @@ export interface AdapterRunResult {
   landingValidation?: LandingValidation;
   changedPaths: readonly string[];
   evidenceRefs: readonly string[];
+  m1V2Evidence?: {
+    evidence: Record<string, unknown>;
+    metrics: import("../../../packages/butler-agent/src/operations/metrics/operational-metrics.ts").OperationalMetricEvent[];
+    db: import("./m1-v2-types.ts").M1V2DbEvidence | null;
+    landingValidation: import("./m1-v2-types.ts").M1V2LandingValidation | null;
+    sourceRevision: string;
+    attemptStartedAtMs: number;
+  };
 }
 
 export interface LandingValidation {

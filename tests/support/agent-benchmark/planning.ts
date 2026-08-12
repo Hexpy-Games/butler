@@ -4,6 +4,7 @@ import {
   AGENT_BENCHMARK_BASELINE_SHA,
   AGENT_BENCHMARK_SCHEMA,
   type BenchmarkAgent,
+  type BenchmarkCampaign,
   type BenchmarkArmPlan,
   type BenchmarkCacheState,
   type BenchmarkPlan,
@@ -13,6 +14,7 @@ import {
 import {
   AGENT_BENCHMARK_FIXTURES,
   hashBenchmarkFixture,
+  loadM1V2BenchmarkFixtures,
   summarizeBenchmarkFixture,
 } from "./fixtures.ts";
 import { sanitizeIdentifier } from "./identifiers.ts";
@@ -42,6 +44,7 @@ export const BENCHMARK_CACHE_STATES: readonly BenchmarkCacheState[] = [
 export const DEFAULT_BENCHMARK_TIMEOUT_MS = 15 * 60 * 1_000;
 
 export interface CreateBenchmarkPlanInput {
+  campaign?: BenchmarkCampaign;
   runId: string;
   seed: number;
   runRoot: string;
@@ -57,29 +60,39 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
   assertSeed(input.seed);
   const runId = sanitizeIdentifier(input.runId);
   if (!runId) throw new Error("runId must be a safe benchmark identifier");
+  const campaign = input.campaign ?? "cross-agent-pilot";
   const baselineSha = input.baselineSha ?? AGENT_BENCHMARK_BASELINE_SHA;
-  if (baselineSha !== AGENT_BENCHMARK_BASELINE_SHA) {
+  if (campaign === "cross-agent-pilot" && baselineSha !== AGENT_BENCHMARK_BASELINE_SHA) {
     throw new Error(
       `Benchmark baseline must be origin/main ${AGENT_BENCHMARK_BASELINE_SHA}; received ${baselineSha}`,
     );
   }
-  const repetitionsPerCache = input.repetitionsPerCache ?? 1;
-  if (repetitionsPerCache !== 1) {
+  if (!/^[a-f0-9]{40}$/u.test(baselineSha)) throw new Error("Benchmark source revision must be an exact Git SHA");
+  const repetitionsPerCache = input.repetitionsPerCache ?? (campaign === "m1-v2" ? 3 : 1);
+  if (campaign === "cross-agent-pilot" && repetitionsPerCache !== 1) {
     throw new Error("The canonical pilot uses exactly one repetition per scenario");
   }
   const runRoot = resolve(input.runRoot);
   const sourceRoot = resolve(input.sourceRoot);
-  const fixtures = AGENT_BENCHMARK_FIXTURES.map(summarizeBenchmarkFixture);
+  if (campaign === "m1-v2" && (repetitionsPerCache < 3 || repetitionsPerCache > 10)) {
+    throw new Error("M1 v2 repetitions must be an integer between 3 and 10");
+  }
+  const campaignFixtures = campaign === "m1-v2"
+    ? loadM1V2BenchmarkFixtures(sourceRoot)
+    : AGENT_BENCHMARK_FIXTURES;
+  const fixtures = campaignFixtures.map(summarizeBenchmarkFixture);
   const arms: BenchmarkArmPlan[] = [];
   let order = 0;
   const track: BenchmarkTrack = "controlled";
-  const repetition = 1;
-  for (const fixture of AGENT_BENCHMARK_FIXTURES) {
+  for (const fixture of campaignFixtures) {
+    for (let repetition = 1; repetition <= repetitionsPerCache; repetition += 1) {
     const randomizedAgents = seededShuffle(
-      BENCHMARK_AGENTS,
+      campaign === "m1-v2" ? (["butler"] as const) : BENCHMARK_AGENTS,
       deriveArmSeed(input.seed, fixture.id, track, "cold", repetition),
     );
-    const cacheStates: readonly BenchmarkCacheState[] = fixture.id === "direct_conversation"
+    const cacheStates: readonly BenchmarkCacheState[] = campaign === "m1-v2"
+      ? [fixture.id === "direct-warm" ? "warm" : "cold"]
+      : fixture.id === "direct_conversation"
       ? ["cold", "warm"]
       : ["cold"];
     for (const agent of randomizedAgents) {
@@ -121,14 +134,17 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
           cacheRoot,
           cachePairId,
           timeoutMs: DEFAULT_BENCHMARK_TIMEOUT_MS,
+          sourceRevision: baselineSha,
         });
         order += 1;
       }
+    }
     }
   }
   return {
     schema: AGENT_BENCHMARK_SCHEMA,
     kind: "agent_benchmark_plan",
+    campaign,
     runId,
     createdAt: input.createdAt ?? new Date().toISOString(),
     seed: input.seed,
@@ -137,22 +153,33 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
     sourceRoot,
     tracks: BENCHMARK_TRACKS,
     fixtures,
+    ...(campaign === "m1-v2" ? { policy: {
+      sequential: true as const,
+      observerOnly: true as const,
+      retryContaminatedAccepted: false as const,
+      replacementRunsAllowed: false as const,
+      directWarmSameSession: true as const,
+      expectedObservedCacheBoundaryMustMatch: true as const,
+      rubricVersion: "spec-m1-context-efficiency-r2-v1",
+    } } : {}),
     arms,
   };
 }
 
 /** Stable identity for checkpoint resume; excludes only volatile createdAt. */
 export function benchmarkPlanIdentity(
-  plan: Pick<BenchmarkPlan, "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "tracks" | "fixtures" | "arms">,
+  plan: Pick<BenchmarkPlan, "campaign" | "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "tracks" | "fixtures" | "arms" | "policy">,
 ): string {
   const stable = {
     runId: plan.runId,
+    campaign: plan.campaign,
     seed: plan.seed,
     baselineSha: plan.baselineSha,
     runRoot: plan.runRoot,
     sourceRoot: plan.sourceRoot,
     tracks: plan.tracks,
     fixtures: plan.fixtures,
+    policy: plan.policy ?? null,
     arms: plan.arms.map((arm) => ({
       key: arm.key,
       scenario: arm.scenario,
@@ -170,6 +197,7 @@ export function benchmarkPlanIdentity(
       cacheRoot: arm.cacheRoot,
       cachePairId: arm.cachePairId,
       timeoutMs: arm.timeoutMs,
+      sourceRevision: arm.sourceRevision,
     })),
   };
   return createHash("sha256").update(JSON.stringify(stable)).digest("hex");
@@ -212,6 +240,10 @@ export function summarizePlan(plan: BenchmarkPlan): {
     direct_conversation: 0,
     current_web_research: 0,
     butler_landing_page: 0,
+    "direct-cold": 0,
+    "direct-warm": 0,
+    "current-web-cold": 0,
+    "landing-cold": 0,
   } satisfies Record<BenchmarkScenario, number>;
   const byAgent = { butler: 0, hermes: 0, opencode: 0 } satisfies Record<BenchmarkAgent, number>;
   for (const arm of plan.arms) {

@@ -22,6 +22,7 @@ import { evaluateWebResearch } from "./web-evaluator.ts";
 import { landingClaimMatches } from "./landing-evaluator.ts";
 import { sanitizeEffectiveConfig } from "./identifiers.ts";
 import { directConversationClaimMatches } from "./direct-evaluator.ts";
+import { evaluateM1V2AdapterEvidence } from "./m1-v2-adapter-evaluation.ts";
 
 export { evaluateWebResearch } from "./web-evaluator.ts";
 
@@ -48,6 +49,10 @@ export function evaluateAdapterResult(
   if (configGate.diagnostic) diagnostics.push(configGate.diagnostic);
   const gateCode = result.gateCode !== "none" ? result.gateCode : context.gateCode ?? configGate.gateCode ?? "none";
   let terminalState = terminalStateFor(result, gateCode, scopeViolation);
+  const m1Evaluation = evaluateM1V2AdapterEvidence({ arm, fixture, result, terminalState });
+  const m1V2 = m1Evaluation.summary;
+  terminalState = m1Evaluation.terminalState;
+  diagnostics.push(...m1Evaluation.diagnostics);
   const evaluation = evaluateFixture(arm, fixture, result, terminalState, privacy, scopeViolation, context.repositoryEvidenceRoot);
   if (terminalState === "accepted" && evaluation.accepted !== true) terminalState = "rejected";
   const usage = normalizeUsage(result.usage);
@@ -77,6 +82,7 @@ export function evaluateAdapterResult(
     changedPaths: result.changedPaths,
     diagnostics: diagnostics.map((value) => boundedText(value)).slice(-8),
     evidenceRefs: safeEvidenceRefs(result.evidenceRefs),
+    m1V2,
   };
 }
 

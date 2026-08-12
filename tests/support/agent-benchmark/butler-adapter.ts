@@ -1,16 +1,8 @@
 import { existsSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { join, relative } from "node:path";
-import {
-  runBtccR3ElectronHarness,
-  type ElectronScenario,
-} from "../../e2e/btcc-r3-electron-harness.ts";
-import type {
-  AdapterRunInput,
-  AdapterRunResult,
-  AgentAdapter,
-  PreflightResult,
-} from "./contracts.ts";
+import { runBtccR3ElectronHarness, type ElectronScenario } from "../../e2e/btcc-r3-electron-harness.ts";
+import type { AdapterRunInput, AdapterRunResult, AgentAdapter, PreflightResult } from "./contracts.ts";
 import type { BenchmarkTarget } from "../btcc-revision-benchmark/contracts.ts";
 import { firstMeaningfulEventTime, readProductUsage, readTurnEvents, summarizeTools } from "../btcc-revision-benchmark/product-telemetry.ts";
 import { readRepositoryEvidenceFiles, verifyEvidenceWorkspace } from "./repository-evidence.ts";
@@ -25,10 +17,13 @@ import {
 } from "./butler-output.ts";
 import { sanitizeIdentifier } from "./identifiers.ts";
 import { cleanupButlerRuntime, readButlerHarnessEvidence } from "./butler-runtime-cleanup.ts";
+import {
+  butlerM1V2InfrastructureGate,
+  collectButlerM1V2Evidence,
+  withButlerM1V2Environment,
+} from "./butler-m1-observation.ts";
 
-export type ButlerBenchmarkRunner = (
-  input: AdapterRunInput,
-) => Promise<Record<string, unknown>>;
+export type ButlerBenchmarkRunner = (input: AdapterRunInput) => Promise<Record<string, unknown>>;
 
 export function createButlerAdapter(
   runner: ButlerBenchmarkRunner,
@@ -72,11 +67,18 @@ export function createButlerAdapter(
         evidence = await runner(input);
       } catch (error) {
         const recoveredEvidence = readButlerHarnessEvidence(input.arm.evidenceRoot);
+        if (!recoveredEvidence && input.fixture.m1V2) {
+          return gatedAdapterResult("measurement_unavailable", "Butler M1 product-path evidence was unavailable after harness failure.", adapterVersion);
+        }
         if (!recoveredEvidence) throw error;
         evidence = recoveredEvidence;
       }
       let adapterResult: AdapterRunResult | null = null;
       try {
+        const infrastructureGate = input.fixture.m1V2 ? butlerM1V2InfrastructureGate(evidence) : null;
+        if (infrastructureGate) {
+          adapterResult = gatedAdapterResult(infrastructureGate.code, infrastructureGate.diagnostic, adapterVersion);
+        }
         if (input.fixture.id === "butler_landing_page") {
           const run = asRecord(evidence.run);
           const workspaceRoot = typeof run?.workspaceRoot === "string" ? run.workspaceRoot : null;
@@ -97,6 +99,11 @@ export function createButlerAdapter(
         if (!adapterResult) {
           copyGeneratedArtifacts(evidence, input);
           adapterResult = { ...parseButlerEvidence(evidence, startedAtMs, Date.now(), input), adapterVersion };
+          if (input.fixture.m1V2) {
+            adapterResult.m1V2Evidence = await collectButlerM1V2Evidence({
+              benchmark: input, evidence, attemptStartedAtMs: startedAtMs,
+            });
+          }
         }
       } finally {
         const cleanup = cleanupButlerRuntime(evidence, input.arm);
@@ -115,7 +122,9 @@ export function createButlerAdapter(
 
 export function createElectronButlerRunner(): ButlerBenchmarkRunner {
   return async (input): Promise<Record<string, unknown>> => {
-    const scenario: ElectronScenario = {
+    const scenario: ElectronScenario = input.fixture.m1V2
+      ? structuredClone(input.fixture.m1V2.scenario)
+      : {
       schema: "butler.btcc-r3-electron-scenario.v1",
       id: `agent-benchmark-${input.arm.cachePairId}`,
       model: input.arm.effectiveConfig.model ?? undefined,
@@ -138,7 +147,9 @@ export function createElectronButlerRunner(): ButlerBenchmarkRunner {
         expect: { terminalState: "delivered" },
       })),
     };
-    return runBtccR3ElectronHarness(scenario, {
+    scenario.id = `agent-benchmark-${input.arm.key.replaceAll(":", "-")}`;
+    if (scenario.session) scenario.session.id = scenario.id;
+    return withButlerM1V2Environment(input, () => runBtccR3ElectronHarness(scenario, {
       repoRoot: input.arm.sourceRoot,
       runRoot: input.arm.evidenceRoot,
       model: input.arm.effectiveConfig.model ?? undefined,
@@ -146,7 +157,7 @@ export function createElectronButlerRunner(): ButlerBenchmarkRunner {
       accessMode: "full_access",
       keepLogs: true,
       promptCacheKeyPrefix: promptCacheKeyPrefixForPair(input.arm.cachePairId),
-    });
+    }));
   };
 }
 

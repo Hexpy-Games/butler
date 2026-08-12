@@ -28,6 +28,9 @@ export interface AgentBenchmarkCliOptions {
   controlledModel: string;
   controlledReasoning: string;
   visualReviewPath: string | null;
+  campaign: "cross-agent-pilot" | "m1-v2";
+  repetitions: number;
+  sourceRevision: string;
 }
 
 const CANONICAL_PILOT_MODEL = "openai/gpt-5.6-sol";
@@ -36,18 +39,21 @@ const CANONICAL_PILOT_REASONING = "medium";
 export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<string> {
   const options = parseOptions(argv);
   const plan = createBenchmarkPlan({
+    campaign: options.campaign,
     runId: options.runId,
     seed: options.seed,
     runRoot: options.runRoot,
     sourceRoot: options.sourceRoot,
     controlledModel: options.controlledModel,
     controlledReasoning: options.controlledReasoning,
+    repetitionsPerCache: options.repetitions,
+    baselineSha: options.sourceRevision,
   });
-  const planPath = join(options.runRoot, "plan.json");
+  const planPath = join(options.runRoot, "manifest.json");
   const resultPath = join(options.runRoot, "result.json");
   const store = createFileCheckpointStore(resultPath);
+  await writeJson(store, planPath, redactBenchmarkPlan(plan));
   if (options.command === "plan") {
-    await writeJson(store, planPath, redactBenchmarkPlan(plan));
     return JSON.stringify({ planPath: relative(plan.runRoot, planPath), runId: plan.runId, seed: plan.seed, arms: plan.arms.length });
   }
   const adapters = createProductionAgentAdapters(options.sourceRoot);
@@ -94,6 +100,10 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
   const controlledModel = option(argv, "--controlled-model");
   if (!controlledModel) throw new Error("Missing required option: --controlled-model");
   const controlledReasoning = option(argv, "--controlled-reasoning") ?? CANONICAL_PILOT_REASONING;
+  const campaign = option(argv, "--campaign") ?? "cross-agent-pilot";
+  if (campaign !== "cross-agent-pilot" && campaign !== "m1-v2") throw new Error("--campaign must be cross-agent-pilot or m1-v2");
+  const repetitions = Number(option(argv, "--repetitions") ?? (campaign === "m1-v2" ? "3" : "1"));
+  const sourceRevision = option(argv, "--source-revision") ?? AGENT_BENCHMARK_BASELINE_SHA;
   if (command === "pilot" && (controlledModel.trim() !== CANONICAL_PILOT_MODEL || controlledReasoning.trim() !== CANONICAL_PILOT_REASONING)) {
     throw new Error(`The canonical pilot requires ${CANONICAL_PILOT_MODEL} with ${CANONICAL_PILOT_REASONING} reasoning`);
   }
@@ -108,11 +118,14 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
     controlledModel,
     controlledReasoning,
     visualReviewPath: option(argv, "--visual-review") ?? null,
+    campaign,
+    repetitions,
+    sourceRevision,
   };
 }
 
 function validateFlags(argv: readonly string[]): void {
-  const valueFlags = new Set(["--seed", "--run-id", "--source-root", "--run-root", "--output", "--controlled-model", "--controlled-reasoning", "--visual-review"]);
+  const valueFlags = new Set(["--seed", "--run-id", "--source-root", "--run-root", "--output", "--controlled-model", "--controlled-reasoning", "--visual-review", "--campaign", "--repetitions", "--source-revision"]);
   const booleanFlags = new Set(["--execute-available"]);
   for (let index = 1; index < argv.length; index += 1) {
     const flag = argv[index]!;

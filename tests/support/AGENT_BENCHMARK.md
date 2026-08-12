@@ -1,7 +1,29 @@
 # Butler, Hermes Agent, and OpenCode benchmark
 
-Status: governing specification, revision 3
-Baseline: `origin/main` at `549463fbe074fc25042f9302cd330699948dab50`
+Status: governing specification, revision 4
+Comparison baseline: `origin/main` at `549463fbe074fc25042f9302cd330699948dab50`
+
+## Canonical authority
+
+`tests/support/agent-benchmark` is the sole benchmark orchestration and
+evaluation domain. Both the frozen cross-agent comparison and M1 v2 Butler
+campaign enter through `createBenchmarkPlan`, `runAgentBenchmark`,
+`evaluateAdapterResult`, and the one report schema. The Butler adapter composes
+the existing `tests/e2e/btcc-r3-electron-driver.ts` harness primitive; it does
+not define an alternate product path.
+
+The M1 v2 campaign mode owns the exact `direct-cold`, `direct-warm`,
+`current-web-cold`, and `landing-cold` public fixtures, authoritative JSONL
+provenance checks, frozen hashes, same-Session warm boundary, SC01 eligibility,
+nullable provider usage, Butler Work/Ledger/memory cost, and code-grounded
+landing rubric. It schedules Butler-only repetitions sequentially. Hermes and
+OpenCode remain contract-covered comparison adapters and are not preflighted or
+executed in M1 mode.
+
+The historical compact 12-observation report remains immutable rejected,
+unranked evidence. It is not reinterpreted as accepted and is not eligible for
+M1 statistical acceptance. Capability-envelope differences remain mandatory
+when later comparing Butler with Hermes or OpenCode.
 
 ## Intent lock
 

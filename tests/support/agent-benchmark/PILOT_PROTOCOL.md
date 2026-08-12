@@ -1,5 +1,19 @@
 # Agent benchmark pilot protocol
 
+The same CLI is the sole M1 v2 campaign entry. Generate a bounded dry plan
+without product/provider execution as follows:
+
+```sh
+bun run benchmark:agents -- plan --campaign m1-v2 --seed 20260812 \
+  --run-id m1-v2-plan --source-root "$PWD" --run-root /fresh/run-root \
+  --controlled-model openai/gpt-5.6-sol --controlled-reasoning medium \
+  --source-revision <exact-40-character-source-sha> --repetitions 3
+```
+
+M1 `run` uses this same planner/workflow/report path and never preflights or
+executes Hermes/OpenCode. The final four-by-three remains reserved for
+`T-M1-V2-FINAL-BENCHMARK`.
+
 The benchmark compares Butler, Hermes Agent, and OpenCode using the pinned
 `origin/main` baseline `549463fbe074fc25042f9302cd330699948dab50`.
 

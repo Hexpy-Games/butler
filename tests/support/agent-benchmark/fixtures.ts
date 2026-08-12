@@ -4,6 +4,8 @@ import type {
   BenchmarkFixtureSummary,
   BenchmarkScenario,
 } from "./contracts.ts";
+import { loadCanonicalM1V2Fixtures } from "./m1-v2-fixtures.ts";
+export { verifyM1V2AuthoritativeProvenance } from "./m1-v2-provenance.ts";
 
 const FIXTURE_VERSION = "2026-08-09.2";
 
@@ -64,8 +66,24 @@ export const AGENT_BENCHMARK_FIXTURES: readonly BenchmarkFixture[] = [
   },
 ] as const;
 
-export function getBenchmarkFixture(id: BenchmarkScenario): BenchmarkFixture {
-  const fixture = AGENT_BENCHMARK_FIXTURES.find((candidate) => candidate.id === id);
+export function loadM1V2BenchmarkFixtures(repoRoot: string): readonly BenchmarkFixture[] {
+  return loadCanonicalM1V2Fixtures(repoRoot).map((fixture) => ({
+    id: fixture.armId,
+    version: "spec-m1-context-efficiency-r2-v1",
+    frozenEvaluationDate: fixture.armId === "current-web-cold" ? "2026-08-10" : undefined,
+    prompts: fixture.scenario.steps.map((step) => step.prompt),
+    expectedFiles: fixture.armId === "landing-cold" ? ["index.html", "styles.css", "package.json"] : undefined,
+    viewportSizes: fixture.armId === "landing-cold" ? [{ width: 1440, height: 900 }, { width: 390, height: 844 }] : undefined,
+    m1V2: fixture,
+  }));
+}
+
+export function getBenchmarkFixture(
+  id: BenchmarkScenario,
+  repoRoot = process.cwd(),
+): BenchmarkFixture {
+  const fixture = AGENT_BENCHMARK_FIXTURES.find((candidate) => candidate.id === id) ??
+    loadM1V2BenchmarkFixtures(repoRoot).find((candidate) => candidate.id === id);
   if (!fixture) throw new Error(`Unknown agent benchmark fixture: ${id}`);
   return fixture;
 }
@@ -103,5 +121,12 @@ function canonicalFixture(fixture: BenchmarkFixture): string {
     requiredBuildCommand: fixture.requiredBuildCommand ?? [],
     requiredTestCommand: fixture.requiredTestCommand ?? [],
     viewportSizes: fixture.viewportSizes ?? [],
+    m1V2: fixture.m1V2 ? {
+      armId: fixture.m1V2.armId,
+      targetStepId: fixture.m1V2.targetStepId,
+      promptSha256: fixture.m1V2.promptSha256,
+      fixtureSha256: fixture.m1V2.fixtureSha256,
+      cacheBoundaryEvidence: fixture.m1V2.scenario.cacheBoundaryEvidence ?? null,
+    } : null,
   });
 }
