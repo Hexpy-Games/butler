@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildBoundedTurnContext } from
@@ -391,6 +391,147 @@ test("production composition reaches the official serializer with bounded multi-
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+for (const transport of ["official", "codex"] as const) {
+  test(`all four features traverse production composition and the ${transport} serializer together`, async () => {
+    const root = mkdtempSync(join(tmpdir(), `butler-m1-stack-${transport}-`));
+    const previous = {
+      bounded: process.env.BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT,
+      maxBytes: process.env.BUTLER_M1_V2_CONTINUATION_MAX_MODEL_FACING_BYTES,
+      surface: process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE,
+      replay: process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY,
+      attribution: process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION,
+      base: process.env.OPENAI_BASE_URL,
+      codex: process.env.BUTLER_CODEX_RESPONSES_URL,
+    };
+    const originalFetch = globalThis.fetch;
+    process.env.BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT = "on";
+    process.env.BUTLER_M1_V2_CONTINUATION_MAX_MODEL_FACING_BYTES = "50000";
+    process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+    process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+    process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION = "on";
+    process.env.OPENAI_BASE_URL = "https://example.test/v1";
+    process.env.BUTLER_CODEX_RESPONSES_URL = "https://example.test/codex";
+    writeFileSync(join(root, "large.txt"), `SOURCE-EVIDENCE-${"R".repeat(10_000)}`);
+    const bodies: string[] = [];
+    let responseIndex = 0;
+    globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      const index = responseIndex++;
+      const item = index === 0
+        ? {
+            type: "function_call", call_id: "large-read", name: "read_file",
+            arguments: JSON.stringify({ path: "large.txt" }),
+          }
+        : index === 1
+        ? {
+            type: "function_call", call_id: "follow-up-read", name: "list_files",
+            arguments: JSON.stringify({ root: "." }),
+          }
+        : {
+            type: "message", role: "assistant",
+            content: [{ type: "output_text", text: "integrated final" }],
+          };
+      const response = { id: `stack-${index}`, model: "gpt-5.6-sol", output: [item] };
+      if (transport === "official") return Response.json(response);
+      return new Response([
+        `data: ${JSON.stringify({ type: "response.output_item.done", item })}`,
+        `data: ${JSON.stringify({ type: "response.completed", response })}`,
+        "data: [DONE]",
+        "",
+      ].join("\n\n"), { headers: { "content-type": "text/event-stream" } });
+    }) as typeof fetch;
+    const bindings = new SessionBindingStore(join(root, "sessions.sqlite"), "ephemeral");
+    bindings.upsert({
+      sessionId: "session", role: "butler", workspacePath: root,
+      runtimeAdapterId: "native", modelProviderId: "openai",
+      modelRef: "openai/gpt-5.6-sol", transportBindings: [],
+      metadata: {
+        accessMode: "read_only",
+        runtimePolicy: {
+          role: "butler",
+          accessMode: "read_only",
+          trackingMode: "none",
+          requiredNativeToolProfiles: [],
+          requiredNativeTools: ["read_file", "list_files"],
+          workspacePath: root,
+        },
+      },
+    });
+    const auth = transport === "official"
+      ? { authorization: "Bearer test", mode: "api_key" as const }
+      : {
+          authorization: `Bearer x.${Buffer.from(JSON.stringify({
+            "https://api.openai.com/auth": { chatgpt_account_id: "test-account" },
+          })).toString("base64url")}.x`,
+          mode: "codex_subscription" as const,
+        };
+    const composition = createProductionBtccComposition({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: join(root, "app.sqlite"),
+      ownerId: `stack-${transport}`,
+      sessionBindings: bindings,
+      modelRound: { runRound: (request) => runOpenAIModelRound(request, auth) },
+    });
+    try {
+      const result = await composition.btcc.runTurn({
+        turnId: "turn", sessionId: "session", eventId: "event",
+        transport: "app", accountId: "local", peer: { kind: "dm", id: "session" },
+        sender: { id: "user" },
+        message: {
+          id: "message", content: "Read the current source evidence and answer.",
+          timestamp: new Date(1_000).toISOString(),
+        },
+        trigger: { kind: "user_message" },
+        route: { role: "butler", workspacePath: root },
+      });
+      expect(result).toMatchObject({ kind: "delivered", content: "integrated final" });
+      expect(bodies).toHaveLength(3);
+      expect(bodies.every((body) => body.includes("read_operation_results"))).toBe(true);
+      expect(bodies[1]).toContain("SOURCE-EVIDENCE");
+      expect(bodies[2]).not.toContain("SOURCE-EVIDENCE");
+      if (transport === "codex") {
+        expect(bodies[2]).toContain("butler.operation-result-reference.v1");
+      } else {
+        expect(bodies[2]).toContain('"previous_response_id":"stack-1"');
+      }
+      expect(Math.max(...bodies.map((body) => Buffer.byteLength(body, "utf8"))))
+        .toBeLessThan(60_000);
+      const instructions = bodies.map((body) =>
+        (JSON.parse(body) as { instructions: string }).instructions,
+      );
+      expect(instructions.every((value) => value === instructions[0])).toBe(true);
+      const metricRows = readFileSync(
+        join(root, "metrics", "operational-events.jsonl"),
+        "utf8",
+      ).trim().split("\n").map((line) => JSON.parse(line));
+      const envelopes = metricRows.filter((row) => row.name === "m1_v2_request_envelope");
+      expect(envelopes).toHaveLength(bodies.length);
+      for (const [index, envelope] of envelopes.entries()) {
+        const attemptDigest = envelope.dimensions.attemptDigest;
+        const segmentBytes = metricRows
+          .filter((row) => row.name === "m1_v2_request_segment" &&
+            row.dimensions.attemptDigest === attemptDigest)
+          .reduce((sum, row) => sum + row.dimensions.providerSendBytes, 0);
+        expect(segmentBytes).toBe(Buffer.byteLength(bodies[index]!, "utf8"));
+        expect(segmentBytes).toBe(envelope.dimensions.providerSendBytes);
+      }
+    } finally {
+      await composition.host.close();
+      bindings.close();
+      globalThis.fetch = originalFetch;
+      restoreEnv("BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT", previous.bounded);
+      restoreEnv("BUTLER_M1_V2_CONTINUATION_MAX_MODEL_FACING_BYTES", previous.maxBytes);
+      restoreEnv("BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE", previous.surface);
+      restoreEnv("BUTLER_M1_V2_EXACT_ONCE_REPLAY", previous.replay);
+      restoreEnv("BUTLER_M1_V2_SEGMENT_ATTRIBUTION", previous.attribution);
+      restoreEnv("OPENAI_BASE_URL", previous.base);
+      restoreEnv("BUTLER_CODEX_RESPONSES_URL", previous.codex);
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+}
 
 test("model route retry and fallback cannot replace the admitted bounded carrier", async () => {
   const seen: Array<{ digest: string | undefined; bytes: number | undefined; continuation: unknown }> = [];

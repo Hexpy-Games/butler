@@ -31,7 +31,7 @@ import { createMcpToolHandlers } from "./mcp/index.ts";
 import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
 import { createReadOperationResultsHandler } from
-  "./monitoring/read_operation_results/index.ts";
+  "./monitoring/read_operation_results/executor.ts";
 import { createToolBridgeToolHandlers } from "./tool-bridge/index.ts";
 import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
 import { createSkillToolHandlers } from "./skills/index.ts";
@@ -47,6 +47,13 @@ import type {
   ButlerToolDefinition,
   NativeToolAvailabilityOverrides,
 } from "./types.ts";
+import type {
+  ButlerToolExecutionBoundary,
+  ButlerToolExecutorRegistry,
+  ButlerToolHandler,
+  ButlerToolRuntimeContext,
+  ContextualButlerToolExecutor,
+} from "./tool-execution-contracts.ts";
 export { BUTLER_TOOLS, CORE_BUTLER_TOOLS } from "./registry.ts";
 export type {
   ButlerToolCall,
@@ -55,29 +62,14 @@ export type {
   ToolCapabilityCategory,
   ToolCapabilityMetadata,
 } from "./types.ts";
-
-export type ButlerToolExecutor = (call: ButlerToolCall) => Promise<unknown>;
-export type ButlerToolRuntimeContext = {
-  effectOccurrenceId?: string;
-};
-export type ContextualButlerToolExecutor = (
-  call: ButlerToolCall,
-  context?: ButlerToolRuntimeContext,
-) => Promise<unknown>;
-export type ButlerToolHandler = (
-  call: ButlerToolCall,
-  context?: ButlerToolRuntimeContext,
-) => Promise<unknown> | unknown;
-export type ButlerToolExecutorRegistry = Record<string, ButlerToolHandler>;
-export type ButlerToolExecutionBoundary = (input: {
-  call: ButlerToolCall;
-  context: ButlerToolRuntimeContext;
-  definition: ButlerToolDefinition;
-  execute(prepared?: {
-    args: ButlerToolCall["args"];
-    rawArguments?: ButlerToolCall["rawArguments"];
-  }): Promise<unknown>;
-}) => Promise<unknown>;
+export type {
+  ButlerToolExecutionBoundary,
+  ButlerToolExecutor,
+  ButlerToolExecutorRegistry,
+  ButlerToolHandler,
+  ButlerToolRuntimeContext,
+  ContextualButlerToolExecutor,
+} from "./tool-execution-contracts.ts";
 
 const BUTLER_TOOL_DEFINITIONS_BY_NAME = new Map(
   BUTLER_TOOLS.map((definition) => [definition.name, definition] as const),
