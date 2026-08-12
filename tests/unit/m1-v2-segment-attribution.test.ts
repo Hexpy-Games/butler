@@ -489,7 +489,7 @@ describe("M1 v2 provider-send segment attribution", () => {
     const envelope = {
       schemaVersion: "butler.turn-context-envelope.v1" as const,
       modelFacingBytes: 1_000, requestDigest: "d".repeat(64),
-      responseItemId: "response-item-segments",
+      responseItemId: "turn-item-1",
       admitProviderBody: async () => {},
     };
     const attachments = [{
@@ -505,7 +505,8 @@ describe("M1 v2 provider-send segment attribution", () => {
       await runOpenAIModelRound({
         roundId: "second", model: "openai/gpt-5.6-sol", instructions: "stable",
         messages: [{ role: "user", content: prompt }], tools: [], butlerData,
-        requestSegmentSources: { input: sources }, boundedContinuation: envelope,
+        requestSegmentSources: { input: sources },
+        boundedContinuation: { ...envelope, responseItemId: "turn-item-2" },
         continuation: first.continuation, attachments,
       }, auth);
       const events = readFileSync(join(butlerData, "metrics", "operational-events.jsonl"), "utf8")

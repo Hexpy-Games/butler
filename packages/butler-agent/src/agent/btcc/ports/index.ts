@@ -15,7 +15,7 @@ export type {
   OperationResultDeliveryState,
 } from "./guided-tool-journal.ts";
 export {
-  boundedProviderItemKeys,
-  parseBoundedProviderItemKeys,
-  validateCurrentBoundedProviderItemKeys,
+  parseDeliveredThroughOrdinal,
+  turnItemOrdinal,
+  validateBoundedProviderOrdinals,
 } from "./bounded-provider-continuation.ts";

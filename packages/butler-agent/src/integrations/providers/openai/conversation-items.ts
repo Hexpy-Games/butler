@@ -4,6 +4,8 @@ import type { M1RequestSegmentKind } from
   "../../../agent/btcc/ports/provider-request-attribution.ts";
 import { agentLoopImageDataUrl } from
   "../../../agent/tools/tool-result-media.ts";
+import { turnItemOrdinal } from
+  "../../../agent/btcc/ports/bounded-provider-continuation.ts";
 
 export function openAIBoundedConversationItems(
   messages: readonly ModelRoundMessage[],
@@ -12,13 +14,12 @@ export function openAIBoundedConversationItems(
 ): {
   items: Array<Record<string, unknown>>;
   itemKinds: Array<M1RequestSegmentKind | undefined>;
-  itemKeys: string[];
+  itemOrdinals: number[];
 } {
   let userIndex = 0;
-  let protocolAnchor = "context";
   const items: Array<Record<string, unknown>> = [];
   const itemKinds: Array<M1RequestSegmentKind | undefined> = [];
-  const itemKeys: string[] = [];
+  const itemOrdinals: number[] = [];
   for (const message of messages) {
     if (message.role === "user") {
       userIndex += 1;
@@ -28,16 +29,16 @@ export function openAIBoundedConversationItems(
       items.push(...next);
       itemKinds.push(...next.map(() => message.requestSegmentKind ??
         (userIndex === 1 ? "current_user_request" : "other_typed_context")));
-      itemKeys.push(...next.map((_item, itemIndex) => userIndex === 1
-        ? `current-user:${itemIndex}`
-        : `turn-message:${requiredTurnItemId(message)}`));
+      const ordinal = userIndex === 1 && message.continuationItemId === undefined
+        ? 0
+        : turnItemOrdinal(message.continuationItemId);
+      itemOrdinals.push(...next.map(() => ordinal));
       continue;
     }
     if (message.role === "tool") {
       items.push(openAIToolMessageItems(message, butlerData)[1]);
       itemKinds.push(message.requestSegmentKind ?? "latest_tool_result_delivery");
-      itemKeys.push(`tool-output:${message.toolCallId}`);
-      protocolAnchor = message.toolCallId ?? protocolAnchor;
+      itemOrdinals.push(turnItemOrdinal(message.continuationItemId));
       continue;
     }
     if (message.role !== "assistant") continue;
@@ -47,7 +48,7 @@ export function openAIBoundedConversationItems(
         content: [{ type: "output_text", text: message.content }],
       });
       itemKinds.push("phase_continuity");
-      itemKeys.push(`turn-message:${requiredTurnItemId(message)}`);
+      itemOrdinals.push(turnItemOrdinal(message.continuationItemId));
     }
     for (const call of message.toolCalls ?? []) {
       items.push({
@@ -57,53 +58,28 @@ export function openAIBoundedConversationItems(
         arguments: call.rawArguments ?? JSON.stringify(call.arguments),
       });
       itemKinds.push("phase_continuity");
-      itemKeys.push(`function-call:${call.id}`);
-      protocolAnchor = call.id;
+      itemOrdinals.push(turnItemOrdinal(message.continuationItemId));
     }
   }
-  return { items, itemKinds, itemKeys };
-}
-
-export function openAIResponseItemKeys(input: {
-  text: string;
-  functionCalls: readonly Record<string, unknown>[];
-  responseItemId: string;
-}): string[] {
-  return [
-    ...(input.text ? [`turn-message:${requiredIdentity(input.responseItemId)}`] : []),
-    ...input.functionCalls.flatMap((call) =>
-      typeof call.call_id === "string" ? [`function-call:${call.call_id}`] : []),
-  ];
-}
-
-function requiredTurnItemId(message: ModelRoundMessage): string {
-  return requiredIdentity(message.continuationItemId);
-}
-
-function requiredIdentity(value: string | undefined): string {
-  if (!value || !/^[A-Za-z0-9_.:-]{1,160}$/u.test(value)) {
-    throw new Error("bounded_continuation_turn_item_identity_missing");
-  }
-  return value;
+  return { items, itemKinds, itemOrdinals };
 }
 
 export function selectNewBoundedConversationItems(input: {
   items: readonly Record<string, unknown>[];
   itemKinds: readonly (M1RequestSegmentKind | undefined)[];
-  itemKeys: readonly string[];
-}, priorKeys: readonly string[]): {
+  itemOrdinals: readonly number[];
+}, deliveredThroughOrdinal: number): {
   items: Array<Record<string, unknown>>;
   itemKinds: Array<M1RequestSegmentKind | undefined>;
 } {
   if (input.items.length !== input.itemKinds.length ||
-      input.items.length !== input.itemKeys.length) {
+      input.items.length !== input.itemOrdinals.length) {
     throw new Error("bounded_conversation_item_identity_mismatch");
   }
-  const prior = new Set(priorKeys);
   const items: Array<Record<string, unknown>> = [];
   const itemKinds: Array<M1RequestSegmentKind | undefined> = [];
-  input.itemKeys.forEach((key, index) => {
-    if (prior.has(key)) return;
+  input.itemOrdinals.forEach((ordinal, index) => {
+    if (ordinal <= deliveredThroughOrdinal) return;
     items.push(input.items[index]!);
     itemKinds.push(input.itemKinds[index]);
   });

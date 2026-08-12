@@ -3,7 +3,7 @@ import type {
   ModelRoundResult,
   ModelRoundToolCall,
 } from "../../../btcc/ports/index.ts";
-import { parseBoundedProviderItemKeys } from
+import { parseDeliveredThroughOrdinal } from
   "../../../btcc/ports/index.ts";
 
 /**
@@ -14,7 +14,8 @@ import { parseBoundedProviderItemKeys } from
  */
 export function normalizeAcceptedModelRound(result: ModelRoundResult): ModelRoundResult {
   const boundedContinuation = isRecord(result.continuation) &&
-    Object.hasOwn(result.continuation, "boundedItemKeys");
+    (Object.hasOwn(result.continuation, "deliveredThroughOrdinal") ||
+      Object.hasOwn(result.continuation, "boundedItemKeys"));
   const normalized: ModelRoundResult = {
     toolCalls: result.toolCalls.map(normalizeToolCall),
   };
@@ -60,14 +61,14 @@ function normalizeBoundedContinuation(value: unknown): Record<string, unknown> {
       value.responseId.length > 200) {
     throw new Error("BTCC bounded continuation has invalid provider identity");
   }
-  const allowed = new Set(["provider", "responseId", "boundedItemKeys"]);
+  const allowed = new Set(["provider", "responseId", "deliveredThroughOrdinal"]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
     throw new Error("BTCC bounded continuation has unknown private fields");
   }
   return {
     provider: "openai",
     responseId: value.responseId,
-    boundedItemKeys: parseBoundedProviderItemKeys(value.boundedItemKeys),
+    deliveredThroughOrdinal: parseDeliveredThroughOrdinal(value.deliveredThroughOrdinal),
   };
 }
 

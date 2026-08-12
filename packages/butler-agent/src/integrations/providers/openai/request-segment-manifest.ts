@@ -8,8 +8,8 @@ export interface OpenAIRequestSegmentContinuation {
   provider: "openai";
   responseId: string;
   sent?: { toolMessages: number; userMessages: number };
-  /** Stable identities already represented by the official Responses chain. */
-  boundedItemKeys?: string[];
+  /** Highest Turn-local occurrence already represented by the Responses chain. */
+  deliveredThroughOrdinal?: number;
   statelessInput?: Array<Record<string, unknown>>;
   statelessManifest?: M1ProviderRequestSegmentManifestEntry[];
 }

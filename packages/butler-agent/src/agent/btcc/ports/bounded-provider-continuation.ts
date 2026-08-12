@@ -1,37 +1,36 @@
-const MAX_KEYS = 256;
-const MAX_CURRENT_KEYS = 192;
-const MAX_RESPONSE_KEYS = MAX_KEYS - MAX_CURRENT_KEYS;
-const MAX_KEY_LENGTH = 220;
-const SAFE_KEY = /^(?:current-user:\d+|turn-message:[A-Za-z0-9_.:-]{1,160}|function-call:[A-Za-z0-9_.:-]{1,160}|tool-output:[A-Za-z0-9_.:-]{1,160})$/u;
+const MAX_TURN_ITEM_ORDINAL = 1_000_000;
 
-export function boundedProviderItemKeys(
-  currentKeys: readonly string[],
-  responseKeys: readonly string[],
-): string[] {
-  validateKeys(currentKeys, MAX_CURRENT_KEYS);
-  validateKeys(responseKeys, MAX_RESPONSE_KEYS);
-  const keys = [...currentKeys, ...responseKeys]
-    .filter((key, index, all) => all.indexOf(key) === index);
-  validateKeys(keys, MAX_KEYS);
-  return keys;
+export function turnItemOrdinal(value: string | undefined): number {
+  const match = /^turn-item-(0|[1-9]\d{0,6})$/u.exec(value ?? "");
+  const ordinal = match ? Number(match[1]) : -1;
+  if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal > MAX_TURN_ITEM_ORDINAL) {
+    throw new Error("bounded_continuation_turn_item_identity_missing");
+  }
+  return ordinal;
 }
 
-export function validateCurrentBoundedProviderItemKeys(
-  value: readonly string[],
-): string[] {
-  validateKeys(value, MAX_CURRENT_KEYS);
-  return [...value];
-}
-
-function validateKeys(keys: readonly string[], max: number): void {
-  if (keys.length > max || keys.some((key) =>
-    typeof key !== "string" || key.length === 0 ||
-    key.length > MAX_KEY_LENGTH || !SAFE_KEY.test(key))) {
+export function validateBoundedProviderOrdinals(
+  currentOrdinals: readonly number[],
+  responseOrdinal: number,
+  deliveredThroughOrdinal: number,
+): number {
+  if (!Number.isSafeInteger(responseOrdinal) || responseOrdinal < 0 ||
+      responseOrdinal > MAX_TURN_ITEM_ORDINAL ||
+      !Number.isSafeInteger(deliveredThroughOrdinal) || deliveredThroughOrdinal < -1 ||
+      responseOrdinal <= deliveredThroughOrdinal ||
+      currentOrdinals.some((ordinal) => !Number.isSafeInteger(ordinal) ||
+        ordinal < 0 || ordinal >= responseOrdinal || ordinal > MAX_TURN_ITEM_ORDINAL) ||
+      currentOrdinals.some((ordinal, index) => index > 0 &&
+        ordinal < currentOrdinals[index - 1]!)) {
     throw new Error("bounded_continuation_item_identity_invalid");
   }
+  return responseOrdinal;
 }
 
-export function parseBoundedProviderItemKeys(value: unknown): string[] {
-  if (!Array.isArray(value)) throw new Error("bounded_continuation_item_identity_missing");
-  return boundedProviderItemKeys(value, []);
+export function parseDeliveredThroughOrdinal(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0 ||
+      (value as number) > MAX_TURN_ITEM_ORDINAL) {
+    throw new Error("bounded_continuation_watermark_invalid");
+  }
+  return value as number;
 }

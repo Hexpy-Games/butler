@@ -40,14 +40,13 @@ import {
 } from "../shared/runtime-support.ts";
 import {
   openAIBoundedConversationItems,
-  openAIResponseItemKeys,
   openAIToolMessageItems,
   selectNewBoundedConversationItems,
 } from "./conversation-items.ts";
 import {
-  boundedProviderItemKeys,
-  parseBoundedProviderItemKeys,
-  validateCurrentBoundedProviderItemKeys,
+  parseDeliveredThroughOrdinal,
+  turnItemOrdinal,
+  validateBoundedProviderOrdinals,
 } from "../../../agent/btcc/ports/bounded-provider-continuation.ts";
 
 export async function runOpenAIModelRound(
@@ -94,18 +93,26 @@ export async function runOpenAIModelRound(
         initialStatelessInput,
       )
     : null;
-  if (boundedStatelessInput && previous && !previous.boundedItemKeys) {
-    throw new Error("bounded_continuation_item_identity_missing");
+  if (boundedStatelessInput && previous && previous.deliveredThroughOrdinal === undefined) {
+    throw new Error("bounded_continuation_watermark_missing");
   }
+  const deliveredThroughOrdinal = boundedStatelessInput && previous
+    ? parseDeliveredThroughOrdinal(previous.deliveredThroughOrdinal)
+    : -1;
   const boundedOfficialInput = boundedStatelessInput
     ? selectNewBoundedConversationItems(
         boundedStatelessInput,
-        previous ? parseBoundedProviderItemKeys(previous.boundedItemKeys) : [],
+        deliveredThroughOrdinal,
       )
     : null;
-  if (boundedStatelessInput) {
-    validateCurrentBoundedProviderItemKeys(boundedStatelessInput.itemKeys);
-  }
+  const responseOrdinal = request.boundedContinuation
+    ? turnItemOrdinal(request.boundedContinuation.responseItemId)
+    : -1;
+  if (boundedStatelessInput) validateBoundedProviderOrdinals(
+    boundedStatelessInput.itemOrdinals,
+    responseOrdinal,
+    deliveredThroughOrdinal,
+  );
   const requestItems = boundedOfficialInput?.items ??
     continuationMessages?.items ?? initialInput;
   const statelessRequestInput = boundedStatelessInput?.items ?? (previous
@@ -226,14 +233,7 @@ export async function runOpenAIModelRound(
     provider: "openai",
     responseId: response.id,
     ...(boundedStatelessInput
-      ? { boundedItemKeys: boundedProviderItemKeys(
-          boundedStatelessInput.itemKeys,
-          openAIResponseItemKeys({
-            text,
-            functionCalls,
-            responseItemId: boundedContinuation!.responseItemId,
-          }),
-        ) }
+      ? { deliveredThroughOrdinal: responseOrdinal }
       : { sent: continuationMessages?.sent ?? { toolMessages: 0, userMessages: 1 } }),
     ...(!bounded
       ? {
