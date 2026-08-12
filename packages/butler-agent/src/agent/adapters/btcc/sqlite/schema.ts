@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS btcc_turns (
   admission_snapshot_ref TEXT NOT NULL,
   model_selection_json TEXT NOT NULL,
   route_state_json TEXT,
+  continuation_budget_json TEXT,
   context_json TEXT NOT NULL,
   progress_destination_json TEXT,
   semantic_state TEXT NOT NULL CHECK (

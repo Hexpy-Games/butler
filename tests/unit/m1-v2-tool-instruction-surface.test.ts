@@ -21,6 +21,10 @@ import { codexRequestBody } from
   "../../packages/butler-agent/src/integrations/providers/openai/responses-client.ts";
 import { guidedNativeToolDefinitions } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
+import { buildBoundedTurnContext } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/bounded-turn-context.ts";
+import type { ModelRoundMessage } from
+  "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 
 const ENABLED = { BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE: "on" };
 
@@ -424,6 +428,37 @@ test("exact replay reduces actual Codex serializer bytes in every typed phase", 
   }
 });
 
+test("bounded continuation reduces actual Codex serializer bytes in every typed phase", () => {
+  const turns = [
+    turnRecord({ trackingMode: "none" }),
+    turnRecord({ accessMode: "read_only", trackingMode: "ledger", projectRef: "butler" }),
+    turnRecord({ accessMode: "full_access", trackingMode: "ledger", projectRef: "butler" }),
+  ];
+  const history = continuationHistory(100);
+  const bounded = buildBoundedTurnContext(history, 4_000);
+  const actual: Array<[number, number]> = [];
+  for (const turn of turns) {
+    const selection = selectGuidedTurnPhasePolicy(turn, {
+      ...ENABLED, BUTLER_M1_V2_EXACT_ONCE_REPLAY: "on",
+    });
+    const body = (messages: readonly ModelRoundMessage[]) => codexRequestBody({
+      model: "gpt-5.6-sol",
+      instructions: selection.stableInstructionPrefix,
+      tools: modelFacingFunctionTools(selection.providerTools),
+      input: continuationItems(messages),
+    });
+    const beforeBytes = byteLength(JSON.stringify(body(history)));
+    const afterBytes = byteLength(JSON.stringify(body(bounded.messages)));
+    expect(afterBytes).toBeLessThan(beforeBytes);
+    actual.push([beforeBytes, afterBytes]);
+  }
+  expect(actual).toEqual([
+    [61_030, 11_629],
+    [64_163, 14_762],
+    [72_306, 22_905],
+  ]);
+});
+
 test("M1 v2 admitted tools retain the existing native registry authority", () => {
   const selection = selectGuidedTurnPhasePolicy(turnRecord({
     accessMode: "read_only",
@@ -485,6 +520,37 @@ function turnRecord(options: {
 
 function byteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
+}
+
+function continuationHistory(rounds: number): ModelRoundMessage[] {
+  const messages: ModelRoundMessage[] = [{ role: "user", content: "current request active Work required refs" }];
+  for (let index = 0; index < rounds; index += 1) {
+    messages.push({
+      role: "assistant", content: `assistant-${index}-${"A".repeat(80)}`,
+      toolCalls: [{ id: `call-${index}`, name: "read_file", arguments: { index }, rawArguments: JSON.stringify({ index }) }],
+    });
+    messages.push({
+      role: "tool", toolCallId: `call-${index}`, name: "read_file",
+      content: JSON.stringify({ validation: index, result: "R".repeat(120) }),
+    });
+    messages.push({ role: "user", content: `review-${index}` });
+  }
+  return messages;
+}
+
+function continuationItems(messages: readonly ModelRoundMessage[]): Array<Record<string, unknown>> {
+  return messages.flatMap((message): Array<Record<string, unknown>> => {
+    if (message.role === "user") return [{ role: "user", content: [{ type: "input_text", text: message.content }] }];
+    if (message.role === "tool") return [{ type: "function_call_output", call_id: message.toolCallId, output: message.content }];
+    if (message.role !== "assistant") return [];
+    return [
+      ...(message.content ? [{ role: "assistant", content: [{ type: "output_text", text: message.content }] }] : []),
+      ...(message.toolCalls ?? []).map((call) => ({
+        type: "function_call", call_id: call.id, name: call.name,
+        arguments: call.rawArguments ?? JSON.stringify(call.arguments),
+      })),
+    ];
+  });
 }
 
 function appProjectBinding(runtimePolicy: Record<string, unknown>): StoredSessionBinding {

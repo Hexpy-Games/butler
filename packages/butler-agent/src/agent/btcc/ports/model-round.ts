@@ -101,6 +101,12 @@ export interface ModelRoundRequest {
   routeTransportAttemptOrdinal?: number;
   /** Opaque provider continuation returned by the preceding round. */
   continuation?: unknown;
+  /** Turn-owned bounded carrier selection; provider adapters may only translate it. */
+  boundedContinuation?: {
+    schemaVersion: "butler.turn-context-envelope.v1";
+    modelFacingBytes: number;
+    requestDigest: string;
+  };
   onProviderStreamEvent?: ProviderStreamProjectionHandler;
   onProviderResponseIdentity?: (identity: {
     provider: string;

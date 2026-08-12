@@ -3,7 +3,6 @@ import type {
   ModelRoundRequest,
   ModelRoundResult,
 } from "../../../agent/btcc/ports/model-round.ts";
-import { agentLoopImageDataUrl } from "../../../agent/tools/tool-result-media.ts";
 import {
   afterAttributedModelResponse,
   beforeAttributedModelRequest,
@@ -38,6 +37,10 @@ import {
   extractPromptCacheStats,
   usageReportFromStats,
 } from "../shared/runtime-support.ts";
+import {
+  openAIBoundedConversationItems,
+  openAIToolMessageItems,
+} from "./conversation-items.ts";
 
 export async function runOpenAIModelRound(
   request: ModelRoundRequest,
@@ -73,21 +76,33 @@ export async function runOpenAIModelRound(
   const projectedPreviousStatelessInput = previous
     ? projectAcknowledgedToolOutputs(previous.statelessInput, request.messages)
     : undefined;
-  const statelessRequestInput = previous
+  const boundedStatelessInput = request.boundedContinuation
+    ? openAIBoundedConversationItems(
+        request.messages,
+        request.butlerData,
+        initialStatelessInput,
+      )
+    : null;
+  const statelessRequestInput = boundedStatelessInput?.items ?? (previous
     ? [...projectedPreviousStatelessInput!, ...continuationMessages!.statelessItems]
-    : initialStatelessInput;
+    : initialStatelessInput);
   const roundIndex = request.usageAttribution?.roundIndex ?? 0;
   const segmentManifests = buildOpenAIRequestSegmentManifests({
     instructions: request.instructions,
     instructionSources: request.requestSegmentSources?.instructions,
     officialInput: requestItems,
-    codexAppendedInput: previous
+    codexAppendedInput: boundedStatelessInput?.items ?? (previous
       ? continuationMessages!.statelessItems
-      : initialStatelessInput,
+      : initialStatelessInput),
     appendedItemKinds: continuationMessages?.itemKinds,
+    codexAppendedItemKinds: boundedStatelessInput?.itemKinds,
     promptSources: previous ? [] : request.requestSegmentSources?.input,
-    previousCodexInput: projectedPreviousStatelessInput,
-    previousCodexManifest: previous?.statelessManifest,
+    previousCodexInput: request.boundedContinuation
+      ? undefined
+      : projectedPreviousStatelessInput,
+    previousCodexManifest: request.boundedContinuation
+      ? undefined
+      : previous?.statelessManifest,
   });
   beforeAttributedModelRequest({
     attribution: request.usageAttribution,
@@ -265,34 +280,6 @@ function newOpenAIContinuationMessages(
     itemKinds.push(message.requestSegmentKind ?? "other_typed_context");
   }
   return { items, statelessItems, itemKinds, sent: { toolMessages, userMessages } };
-}
-
-function openAIToolMessageItems(
-  message: ModelRoundMessage,
-  butlerData?: string,
-): [Record<string, unknown>, Record<string, unknown>] {
-  const images = (message.imageAttachments ?? []).flatMap((attachment) => {
-    const imageUrl = agentLoopImageDataUrl(attachment, butlerData);
-    return imageUrl
-      ? [{ type: "input_image", image_url: imageUrl, detail: "high" }]
-      : [];
-  });
-  const output =
-    images.length > 0
-      ? [{ type: "input_text", text: message.content }, ...images]
-      : message.content;
-  const statelessItem = {
-    type: "function_call_output",
-    call_id: message.toolCallId,
-    output,
-  };
-  return [
-    {
-      ...statelessItem,
-      output,
-    },
-    statelessItem,
-  ];
 }
 
 function retainTextOnlyAfterSuccessfulImageReplay(

@@ -10,6 +10,10 @@ import type {
   ModelRouteState,
 } from "../model-route/index.ts";
 import type { ContentRef } from "../identity/index.ts";
+import type {
+  TurnContinuationBudgetEvent,
+  TurnContinuationBudgetState,
+} from "./continuation-budget.ts";
 
 export type TurnSemanticState =
   | "admitted"
@@ -47,6 +51,7 @@ export type TurnRecord = {
   };
   modelSelection: AdmittedModelSelection;
   modelRoute?: ModelRouteState;
+  continuationBudget?: TurnContinuationBudgetState;
   context: ButlerContextInput;
   progressDestination?: BtccProgressDestination;
   semanticState: TurnSemanticState;
@@ -187,6 +192,14 @@ export interface TurnStateRepository {
     modelRef: string;
     result: import("../ports/model-round.ts").ModelRoundResult;
   }): Promise<void>;
+  transitionContinuationBudget?(input: {
+    turnId: string;
+    expectedRevision: number;
+    executionFence: number;
+    claimId: string;
+    event: TurnContinuationBudgetEvent;
+    nowMs: number;
+  }): Promise<TurnContinuationBudgetState>;
   stopTurn(turnId: string): Promise<StopPersistenceOutcome>;
 }
 

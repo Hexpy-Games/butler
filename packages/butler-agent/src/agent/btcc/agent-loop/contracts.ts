@@ -20,6 +20,7 @@ import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
 import type { M1RequestSegmentSource } from
   "../ports/provider-request-attribution.ts";
 import type { OperationResultReplay } from "../operation-result-replay/index.ts";
+import type { TurnContinuationBudgetState } from "../turn/index.ts";
 
 export type BtccAgentLoopMessage = ModelRoundMessage;
 export type BtccAgentLoopToolDefinition = ModelRoundTool;
@@ -67,6 +68,9 @@ export interface BtccAgentLoop {
       modelRef: string;
       result: import("../ports/model-round.ts").ModelRoundResult;
     }) => Promise<void>;
+    transitionContinuationBudget?: (
+      event: import("../turn/index.ts").TurnContinuationBudgetEvent,
+    ) => Promise<import("../turn/index.ts").TurnContinuationBudgetState>;
   }): Promise<BtccAgentLoopResult>;
 }
 
@@ -138,6 +142,14 @@ export interface BtccAgentLoopInput {
   resolveToolChoice?: () => "auto" | "required" | undefined;
   modelRound: ModelRoundPort;
   operationResultReplay?: OperationResultReplay;
+  continuationBudget?: {
+    state: TurnContinuationBudgetState;
+    admitRequest(input: {
+      roundId: string; requestDigest: string; modelFacingBytes: number;
+    }): Promise<void>;
+    recordOutput(input: { roundId: string; outputBytes: number }): Promise<void>;
+    recordToolRound(input: { roundId: string }): Promise<void>;
+  };
   resolveOperationResultCallId?: (providerCallId: string) => string | undefined;
   /**
    * The execution window is an internal scheduling boundary, not a semantic

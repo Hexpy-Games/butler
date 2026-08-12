@@ -2,13 +2,13 @@ import { createToolResultModelPreviewContext } from "../../tools/tool-result-ser
 import { emptyResponseRecoveryObservation } from "./empty-response-recovery.ts";
 import type {
   BtccAgentLoopInput,
+  BtccAgentLoopEvent,
   BtccAgentLoopMessage,
   BtccAgentLoopOutput,
   BtccAgentLoopToolCall,
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
 import { emitAgentLoopEvent as emit } from "./agent-loop-events.ts";
-import type { BtccAgentLoopEvent } from "./contracts.ts";
 import type { ModelRoundResult } from "../ports/model-round.ts";
 import { executePreparedBtccToolCall, prepareBtccToolCall } from "./tool-execution.ts";
 import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
@@ -20,7 +20,11 @@ import {
   resolveExecutionWindowSize,
   throwIfExecutionWindowAborted,
 } from "./execution-window.ts";
-
+import {
+  modelRoundOutputBytes,
+  prepareBoundedModelContext,
+} from "./bounded-turn-context.ts";
+import { appendAssistantResponse } from "./assistant-response.ts";
 export async function runBtccAgentLoop(
   input: BtccAgentLoopInput,
 ): Promise<BtccAgentLoopOutput> {
@@ -58,9 +62,18 @@ export async function runBtccAgentLoop(
       });
     };
     await publishWaiting("started");
-    const roundMessages = input.operationResultReplay
+    const replayMessages = input.operationResultReplay
       ? input.operationResultReplay.prepareMessages(messages, requestId)
       : [...messages];
+    const bounded = await prepareBoundedModelContext({
+      messages: replayMessages,
+      instructions: request.instructions,
+      tools: request.tools,
+      toolChoice: request.toolChoice,
+      budget: input.continuationBudget,
+      roundId: requestId,
+    });
+    const roundMessages = bounded.messages;
     try {
       const response = await input.modelRound.runRound({
         roundId: requestId,
@@ -82,10 +95,19 @@ export async function runBtccAgentLoop(
         cacheBoundaryEvidence: input.cacheBoundaryEvidence,
         providerRetryAttempts: input.providerRetryAttempts,
         continuation,
+        ...(bounded.envelope
+          ? { boundedContinuation: bounded.envelope }
+          : {}),
         onProviderStreamEvent: input.onProviderStreamEvent,
         onProviderResponseIdentity: input.onProviderResponseIdentity,
       });
       input.operationResultReplay?.accepted(requestId, response);
+      if (input.continuationBudget) {
+        await input.continuationBudget.recordOutput({
+          roundId: requestId,
+          outputBytes: modelRoundOutputBytes(response),
+        });
+      }
       continuation = response.continuation;
       await publishWaiting("completed");
       return response;
@@ -96,29 +118,12 @@ export async function runBtccAgentLoop(
     }
   };
 
-  const appendAssistantResponse = (response: ModelRoundResult): {
-    text: string;
-    calls: BtccAgentLoopToolCall[];
-  } => {
-    const text = response.text?.trim() ?? "";
-    const calls = response.toolCalls ?? [];
-    if (text || calls.length > 0) {
-      messages.push(response.assistantMessage ?? {
-        role: "assistant",
-        content: text,
-        toolCalls: calls,
-        providerData: response.raw,
-      });
-    }
-    return { text, calls };
-  };
-
   const synthesizeFinalResponseForLoop = (iterationBase: number) => synthesizeFinalResponse({
     synthesis: input.finalSynthesis,
     messages,
     maxIterations: iterationBase,
     runModelRound,
-    appendAssistantResponse,
+    appendAssistantResponse: (response) => appendAssistantResponse(messages, response),
     emit: (event) => emit(events, input.onEvent, event),
   });
 
@@ -166,7 +171,7 @@ export async function runBtccAgentLoop(
       text: response.text,
     });
 
-    const { text, calls } = appendAssistantResponse(response);
+    const { text, calls } = appendAssistantResponse(messages, response);
     if (calls.length === 0 && response.textToolCallNames?.length) {
       const lastMessage = messages.at(-1);
       if (lastMessage?.role === "assistant") messages.pop();
@@ -245,6 +250,10 @@ export async function runBtccAgentLoop(
         };
       }
       return { finalText: text, messages, events, stoppedByLimit: false };
+    }
+
+    if (input.continuationBudget) {
+      await input.continuationBudget.recordToolRound({ roundId: `btcc-tool-round-${currentIteration}` });
     }
 
     const preparedCalls = calls.map((call) => prepareBtccToolCall({ tools }, call));

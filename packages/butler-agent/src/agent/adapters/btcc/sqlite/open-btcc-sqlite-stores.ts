@@ -36,6 +36,7 @@ import { SqliteBtccProgressEventRepository } from
   "./sqlite-btcc-progress-event-repository.ts";
 import { SqliteBtccWakeAuthorizationRepository } from
   "./sqlite-btcc-wake-authorization-repository.ts";
+import { selectTurnContinuationBudget } from "../../../btcc/turn/index.ts";
 
 export function openBtccSqliteStores(input: {
   dbPath: string;
@@ -70,6 +71,7 @@ export function openBtccSqliteStores(input: {
       db,
       turns,
       owner,
+      selectTurnContinuationBudget(),
     ),
     turns,
     progressEvents: new SqliteBtccProgressEventRepository(db),

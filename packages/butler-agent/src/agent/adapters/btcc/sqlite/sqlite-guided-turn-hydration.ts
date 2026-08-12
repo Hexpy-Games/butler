@@ -18,6 +18,7 @@ export type TurnRow = {
   original_message: string;
   model_selection_json: string;
   route_state_json: string | null;
+  continuation_budget_json: string | null;
   context_json: string;
   progress_destination_json: string | null;
   semantic_state: string;

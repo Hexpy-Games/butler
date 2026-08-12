@@ -598,3 +598,133 @@ Windows Package workflow `31591320688` was immediately cancelled and confirmed
 `A-M1-V2-EXACT-ONCE-REPLAY-20260812-01` is `succeeded`, the governing Work and
 Plan remain active, and Final Benchmark remains todo. No next optimization Task
 was started.
+
+## T-M1-V2 Turn-owned bounded conversational continuation implementation
+
+### Intent lock and bounded scope
+
+The latest user authority narrows this Task to one product improvement atop the
+accepted Tool Instruction Surface and Exact-first Durable Replay: bound the
+model-facing user, assistant, and tool history and the Codex stateless carrier.
+Electron/provider smoke, prepared resources, affected-arm campaigns, the final
+4x3, Hermes, OpenCode, and route/cache-prefix reset policy remain forbidden in
+this Task and unchanged for Final Benchmark or a later route-policy Task.
+
+The one implemented ingress-to-serialization path is:
+
+`Session binding and Turn preparation -> SQLite Turn admission/hydration ->
+createProductionGuidedTurnAgent -> BTCC agent loop messages -> exact-result
+projection -> bounded atomic model context -> ModelRoundRequest -> durable
+model route retry/fallback -> runOpenAIModelRound -> official Responses or
+Codex serializer -> final JSON body`.
+
+Before this slice, the BTCC loop's in-memory `messages` array accumulated
+user/assistant/tool history and OpenAI `runOpenAIModelRound` separately owned a
+cumulative `previous.statelessInput + new items` Codex builder. The enabled
+path now reconstructs Codex input solely from the Turn-admitted bounded model
+context. Official Responses retains its bounded incremental
+`previous_response_id` protocol. Route/cache-prefix reset policy is not changed.
+
+### One durable Turn budget owner
+
+`TurnContinuationBudgetState` schema
+`butler.turn-continuation-budget.v2` is stored only in
+`btcc_turns.continuation_budget_json`, admitted once with a fresh Turn, hydrated
+by `SqliteGuidedTurnStateRepository`, and mutated by one fenced SQLite store.
+Each compare-and-swap mutation requires the active Turn claim, revision, and
+execution fence. Restart, provider retry, and route fallback cannot reset it.
+
+The state contains only bounded counters, round ids, request digests, bytes,
+finite policy, timestamps, and a terminal receipt. It stores no prompt,
+transcript, tool body, hidden reasoning, credential, or private path.
+`PromptUsageBudgetState` remains telemetry-only and was not made a controller.
+
+The finite default-off selection validates every configured limit against a
+hard ceiling. It owns cumulative distinct model requests, cumulative tool
+rounds, per-request and cumulative model-facing prompt bytes, normalized
+assistant text/function-call protocol output bytes, elapsed time, idle time,
+and terminal exhaustion. Retry of an identical round is idempotent; a changed
+digest for the same round fails closed. Output and tool accounting are likewise
+round-idempotent.
+
+Mandatory overflow and every exhausted safety ceiling atomically persist one
+typed `turn_continuation_budget_exhausted` terminal receipt before the error is
+surfaced. A hydrated terminal state rejects later dispatch admission without
+another provider call. The flag
+`BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT` is default-off; absent and explicit-off
+production serializer bodies are byte-identical in the behavioral regression.
+Flag-on Turn state without its transition dependency fails before dispatch.
+
+### Atomic bounded carrier policy
+
+The current request, stable safety/BTCC instructions, active phase tool surface,
+current Work/authority material inside the request, incomplete tool protocols,
+the newest tool/validation unit, and the newest active unit are mandatory.
+Older eligible units are admitted newest-first and evicted oldest-first as
+whole typed units. An assistant function-call item and all immediately
+following tool results are never sliced or separated. Content is not
+character-sliced or summarized, and there is no keyword router, model summary,
+raw transcript clone, hidden retry, duplicate context store, or legacy fallback
+on the enabled path. Exact-first durable result references remain unchanged and
+are compacted before this carrier admission.
+
+The OpenAI/Codex translation preserves first-user attachment input, assistant
+text, function-call protocol, tool outputs, and request segment kinds. The
+bounded carrier manifest replaces rather than appends the former cumulative
+Codex manifest, so SC01 attribution still covers the final serialized body.
+
+### Deterministic official serializer arithmetic
+
+The static regression holds the accepted phase-minimal Tool Instruction Surface
+and Exact-first Durable Replay enabled and changes only the 100-round
+continuation carrier. It calls the actual `codexRequestBody` serializer and
+measures exact `JSON.stringify` UTF-8 bytes.
+
+| Typed phase | Unbounded history -> bounded continuation | Reduction |
+|---|---:|---:|
+| direct | 61,030 -> 11,629 | 49,401 bytes (80.95%) |
+| read-only project | 64,163 -> 14,762 | 49,401 bytes (76.99%) |
+| execution project | 72,306 -> 22,905 | 49,401 bytes (68.32%) |
+
+These are deterministic static serializer bytes, not provider-send campaign
+measurements, provider tokens, cache evidence, latency evidence, or E2E results.
+
+### Product-path evidence and remaining boundary
+
+The production integration uses `createProductionBtccComposition`, real Turn
+admission/hydration, the production Guided agent loop, `runOpenAIModelRound`,
+the Codex SSE adapter, and captures the final serialized fetch body across nine
+model rounds. With an 18,000-byte provider-neutral admission ceiling, it retains
+the exact current request and newest tool protocol, evicts the oldest eligible
+call, and keeps every captured Codex body below 24,000 actual serialized bytes.
+Separate tests prove 100-round deterministic bounded growth, atomic tool pairs,
+mandatory overflow, cumulative prompt exhaustion, normalized output accounting,
+SQLite nonterminal and terminal restart recovery, retry idempotency, route
+fallback without full resurrection, attachment preservation, privacy, exact
+replay compatibility, and flag-off rollback.
+
+No Electron launch, provider request to a real service, prepared-resource run,
+benchmark arm, final 4x3, Hermes, OpenCode, merge, push, or default-on change was
+performed. Final provider-token, quality, cache/retry eligibility, desktop/mobile,
+and quantitative M1 acceptance remain with `T-M1-V2-FINAL-BENCHMARK`. Route and
+cache-prefix reset policy remains a separate Task. The governing Work and Plan
+remain active.
+
+Implementation validation completed without an external provider or E2E run:
+
+- the broad affected suite passed 177/177 tests with 4,295 assertions across
+  eleven BTCC, SQLite, route, serializer, image, attribution, and module-boundary
+  files;
+- after the final serializer-module and tool-integrity corrections, the bounded
+  production-path regression passed 13/13 tests with 37 assertions, and full
+  typecheck passed;
+- full lint passed with zero errors and 19 pre-existing warnings, BTCC source
+  shape passed (`4 domains / 220 files`), the architecture audit reported only
+  the repository's existing review triggers, and `git diff --check` passed;
+- the required bounded repository `bun run check` was allowed 300 seconds and
+  ended at the explicit limit with exit 124 and no reported failure before the
+  timeout. This is recorded as a timeout, not as a passing gate.
+
+Independent gpt-5.6-sol high whole-goal review remains the Task completion gate;
+the Task is not marked done here, and neither its governing Work nor Plan is
+closed.
