@@ -116,7 +116,7 @@ describe("unified agent benchmark M1 v2 campaign", () => {
     });
   });
 
-  test("ingests nullable SC01 usage and fails closed on source identity mismatch", () => {
+  test("accepts product-owned identity, preserves exact SC01 bytes and nullable usage, then fails closed on mismatches", () => {
     const plan = createBenchmarkPlan({
       campaign: "m1-v2", runId: "m1-v2-identity", seed: 1,
       runRoot: "/tmp/m1-v2-identity", sourceRoot: process.cwd(),
@@ -132,13 +132,21 @@ describe("unified agent benchmark M1 v2 campaign", () => {
       generatedAt: "2026-08-12T00:00:00.000Z",
       run: { runRoot: arm.evidenceRoot, workspaceRoot: `${arm.evidenceRoot}/workspace`, model: "openai/gpt-5.6-sol", reasoningEffort: "medium" },
       isolation: { bindingWorkspace: `${arm.evidenceRoot}/workspace`, workspaceInsideRunRoot: true, sourceDataIsRunData: false },
-      session: { id: `agent-benchmark-${arm.key.replaceAll(":", "-")}` },
+      session: { id: `chat-btcc-r3-e2e-agent-benchmark-${arm.key.replaceAll(":", "-")}` },
       observations: [{
-        stepId: "direct-cold", turnId: "turn-direct", terminalState: "delivered",
+        stepId: "direct-cold", sessionId: `chat-btcc-r3-e2e-agent-benchmark-${arm.key.replaceAll(":", "-")}`,
+        turnId: "turn-direct", terminalState: "delivered",
         promptSha256: fixture.m1V2!.promptSha256["direct-cold"], finalText: "안녕하세요.",
         providerReportedModel: "gpt-5.6-sol", providerAgentModels: ["gpt-5.6-sol"],
         timing: { submittedAtMs: 100, terminalAtMs: 200, elapsedMs: 100 },
         reload: { tested: true, finalMatched: true },
+        providerRequestIdentities: [{
+          ordinal: 1,
+          sessionId: `chat-btcc-r3-e2e-agent-benchmark-${arm.key.replaceAll(":", "-")}`,
+          turnId: "turn-direct",
+          requestKind: "agent",
+          attemptDigest,
+        }],
       }],
       providerRequests: [{ attemptDigest, requestKind: "agent", requestStartedAtMs: 120, completedAtMs: 150, terminatedAtMs: 150, serializedRequestBytes: 100, ordinal: 1, firstContentBearingDeltaAtMs: 5 }],
     };
@@ -154,7 +162,7 @@ describe("unified agent benchmark M1 v2 campaign", () => {
       m1V2Evidence: {
         evidence,
         metrics: [
-          metric("m1_v2_request_envelope", { attemptDigest, armId: "direct-cold", sourceRevision: "b".repeat(40), providerSendBytes: 100, eligibility: "eligible", retryOrdinal: 0, roundIndex: 0 }),
+          metric("m1_v2_request_envelope", { attemptDigest, armId: "direct-cold", sourceRevision: "a".repeat(40), providerSendBytes: 100, eligibility: "eligible", retryOrdinal: 0, roundIndex: 0 }),
           metric("m1_v2_request_segment", { attemptDigest, segmentId: "segment-1", kind: "provider_carrier_overhead", stability: "dynamic", providerSendBytes: 100, keyedContentDigest: "B".repeat(43) }),
           metric("m1_v2_response_usage", { attemptDigest, status: "unavailable", promptTokens: null, cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null, reasoningTokens: null, totalTokens: null }),
         ],
@@ -164,12 +172,37 @@ describe("unified agent benchmark M1 v2 campaign", () => {
         attemptStartedAtMs: Date.parse("2026-08-12T00:00:00.000Z"),
       },
     };
-    const observation = evaluateAdapterResult(arm, fixture, adapterResult);
-    expect(observation.terminalState).toBe("rejected");
-    expect(observation.m1V2?.reasons).toContain("source_revision_identity_mismatch");
-    expect(observation.m1V2?.agentAttempts[0]).toMatchObject({
+    const accepted = evaluateAdapterResult(arm, fixture, adapterResult);
+    expect(accepted.terminalState).toBe("accepted");
+    expect(accepted.m1V2?.agentAttempts[0]).toMatchObject({
+      exactByteSum: true,
       responseUsageStatus: "unavailable", promptTokens: null, totalTokens: null,
     });
+
+    const sourceMismatch = evaluateAdapterResult(arm, fixture, {
+      ...adapterResult,
+      m1V2Evidence: {
+        ...adapterResult.m1V2Evidence!,
+        metrics: adapterResult.m1V2Evidence!.metrics.map((event) =>
+          event.name === "m1_v2_request_envelope"
+            ? { ...event, dimensions: { ...event.dimensions, sourceRevision: "b".repeat(40) } }
+            : event),
+      },
+    });
+    expect(sourceMismatch.terminalState).toBe("rejected");
+    expect(sourceMismatch.m1V2?.reasons).toContain("source_revision_identity_mismatch");
+
+    const byteMismatch = evaluateAdapterResult(arm, fixture, {
+      ...adapterResult,
+      m1V2Evidence: {
+        ...adapterResult.m1V2Evidence!,
+        metrics: adapterResult.m1V2Evidence!.metrics.map((event) =>
+          event.name === "m1_v2_request_segment"
+            ? { ...event, dimensions: { ...event.dimensions, providerSendBytes: 99 } }
+            : event),
+      },
+    });
+    expect(byteMismatch.m1V2?.reasons).toContain("exact_byte_sum_failed");
 
     const hashMismatchEvidence = structuredClone(evidence);
     hashMismatchEvidence.observations[0]!.promptSha256 = "0".repeat(64);
@@ -192,7 +225,7 @@ describe("unified agent benchmark M1 v2 campaign", () => {
       kind: "agent_benchmark_result",
       run: { runId: plan.runId, seed: plan.seed, baselineSha: plan.baselineSha, runRoot: plan.runRoot, state: "reported" },
       plan,
-      observations: [observation],
+      observations: [sourceMismatch],
     });
     expect(summary.m1V2Campaign).toMatchObject({
       schema: "butler.agent-benchmark.m1-v2.v1",

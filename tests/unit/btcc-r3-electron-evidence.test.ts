@@ -5,7 +5,9 @@ function observation() {
   return {
     stepId: "step-1",
     promptSha256: "prompt-hash",
+    sessionId: "chat-1",
     turnId: "turn-1",
+    providerRequestIdentities: [],
     terminalState: "delivered",
     finalText: "done",
     rendererFinalText: "done",

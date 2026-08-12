@@ -71,7 +71,12 @@ export function assessM1V2Repetition(
   });
   const allEnvelopes = intervalMetrics.filter((event) =>
     event.name === "m1_v2_request_envelope");
-  const physical = summarizePhysicalRequests(providerRequests, allEnvelopes, input.armId);
+  const physical = summarizePhysicalRequests(
+    providerRequests,
+    allEnvelopes,
+    input.armId,
+    target ?? {},
+  );
   if (physical.unmatchedEnvelopeDigests.length > 0 ||
     physical.unmatchedRequestOrdinals.length > 0 ||
     physical.invalidRequestIdentityCount > 0 ||
@@ -84,7 +89,11 @@ export function assessM1V2Repetition(
   const finalText = stringValue(target?.finalText) ?? "";
   const quality = qualitySummary(input, finalText, attempts);
   applyQualityReasons(input.armId, quality, db, reasons);
-  const firstUseful = firstUsefulMs(providerRequests, target, submittedAtMs);
+  const firstUseful = firstUsefulMs(
+    physical.targetAgentRequests,
+    target,
+    submittedAtMs,
+  );
   const work = summarizeWorkEvidence(target, terminalState, firstUseful, {
     db,
     evidence: input.evidence,
@@ -99,12 +108,9 @@ export function assessM1V2Repetition(
     reasons: [...new Set(reasons)],
     targetTerminalState: terminalState,
     agentAttempts: attempts,
-    auxiliaryPhysicalAttempts: providerRequests.filter((request) =>
-      request.requestKind === "auxiliary").length,
-    titlePhysicalAttempts: providerRequests.filter((request) =>
-      request.requestKind === "title").length,
-    providerToolPhysicalAttempts: providerRequests.filter((request) =>
-      request.requestKind === "tool_provider").length,
+    auxiliaryPhysicalAttempts: physical.auxiliary.attempts,
+    titlePhysicalAttempts: physical.title.attempts,
+    providerToolPhysicalAttempts: physical.toolProvider.attempts,
     unarmedPhysicalOverhead: {
       auxiliary: physical.auxiliary,
       title: physical.title,

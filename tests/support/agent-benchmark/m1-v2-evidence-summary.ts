@@ -4,6 +4,8 @@ import type {
 } from "./m1-v2-types.ts";
 import type { OperationalMetricEvent } from
   "../../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
+import type { ProviderRequestTurnIdentity } from
+  "../../e2e/btcc-r3-electron/contracts.ts";
 
 const TERMINAL_JOIN_TOLERANCE_MS = 5_000;
 
@@ -11,6 +13,7 @@ export function summarizePhysicalRequests(
   requests: Record<string, unknown>[],
   envelopes: OperationalMetricEvent[],
   armId: string,
+  target: Record<string, unknown>,
 ): {
   auxiliary: M1V2PhysicalOverheadSummary;
   title: M1V2PhysicalOverheadSummary;
@@ -19,19 +22,65 @@ export function summarizePhysicalRequests(
   unmatchedRequestOrdinals: number[];
   invalidRequestIdentityCount: number;
   duplicateEnvelopeDigests: string[];
+  targetAgentRequests: Record<string, unknown>[];
 } {
-  const availableRequests = requests.map((request) => ({ request, used: false }));
+  const targetSessionId = stringValue(target.sessionId) ?? "";
+  const targetTurnId = stringValue(target.turnId) ?? "";
+  const targetRequests = recordArray(target.providerRequestIdentities).map((identity) => ({
+    ordinal: numberValue(identity.ordinal) ?? -1,
+    sessionId: stringValue(identity.sessionId) ?? "",
+    turnId: stringValue(identity.turnId) ?? "",
+    requestKind: stringValue(identity.requestKind) as
+      ProviderRequestTurnIdentity["requestKind"],
+    attemptDigest: stringValue(identity.attemptDigest),
+  }));
+  const ownershipByOrdinal = new Map<number, ProviderRequestTurnIdentity>();
+  let invalidRequestIdentityCount = 0;
+  for (const identity of targetRequests) {
+    if (identity.requestKind !== "agent") continue;
+    if (ownershipByOrdinal.has(identity.ordinal) ||
+      identity.sessionId !== targetSessionId || identity.turnId !== targetTurnId) {
+      invalidRequestIdentityCount += 1;
+      continue;
+    }
+    ownershipByOrdinal.set(identity.ordinal, identity);
+  }
+  const availableRequests = requests.map((request) => {
+    const ordinal = numberValue(request.ordinal);
+    const identity = ordinal === null ? undefined : ownershipByOrdinal.get(ordinal);
+    const requestKind = request.requestKind;
+    const requestDigest = stringValue(request.attemptDigest);
+    const validKind = requestKind === "agent" || requestKind === "auxiliary" ||
+      requestKind === "title" || requestKind === "tool_provider";
+    const typedNonAgent = validKind && requestKind !== "agent";
+    const identityValid = typedNonAgent || Boolean(identity) &&
+      identity?.requestKind === "agent" &&
+      identity.attemptDigest === requestDigest && requestDigest !== null;
+    if (!identityValid || terminalTimestamp(request) === null ||
+      numberValue(request.serializedRequestBytes) === null) {
+      invalidRequestIdentityCount += 1;
+    }
+    return { request, identity, identityValid, used: false };
+  });
+  const observedOrdinals = new Set(availableRequests.flatMap(({ request }) => {
+    const ordinal = numberValue(request.ordinal);
+    return ordinal === null ? [] : [ordinal];
+  }));
+  invalidRequestIdentityCount += [...ownershipByOrdinal.keys()]
+    .filter((ordinal) => !observedOrdinals.has(ordinal)).length;
   const joined: Array<{
     digest: string;
     request: Record<string, unknown> | null;
     armed: boolean;
+    excludedNonAgent: boolean;
+    requestKind: ProviderRequestTurnIdentity["requestKind"] | null;
   }> = [];
   for (const envelope of envelopes) {
     const digest = stringValue(envelope.dimensions?.attemptDigest);
     const bytes = numberValue(envelope.dimensions?.providerSendBytes);
     if (!digest || bytes === null) continue;
     const candidates = availableRequests
-      .filter(({ request, used }) => !used &&
+      .filter(({ request, identityValid, used }) => !used && identityValid &&
         stringValue(request.attemptDigest) === digest &&
         numberValue(request.ordinal) !== null &&
         numberValue(request.serializedRequestBytes) === bytes &&
@@ -46,32 +95,47 @@ export function summarizePhysicalRequests(
       });
     const match = candidates[0];
     if (!match) {
-      joined.push({ digest, request: null, armed: false });
+      joined.push({
+        digest,
+        request: null,
+        armed: false,
+        excludedNonAgent: false,
+        requestKind: null,
+      });
       continue;
     }
     match.used = true;
     joined.push({
       digest,
       request: match.request,
-      armed: envelope.dimensions?.armId === armId,
+      armed: match.request.requestKind === "agent" &&
+        envelope.dimensions?.armId === armId,
+      excludedNonAgent: match.request.requestKind !== "agent" &&
+        envelope.dimensions?.armId === null,
+      requestKind: match.request.requestKind as
+        ProviderRequestTurnIdentity["requestKind"],
     });
   }
-  const unarmed = joined.flatMap((item) =>
-    item.request && !item.armed ? [item.request] : []);
+  const excluded = availableRequests.flatMap(({ request, identityValid }) =>
+    identityValid && request.requestKind !== "agent" ? [request] : []);
+  const targetAgentRequests = availableRequests.flatMap(
+    ({ request, identity, identityValid }) =>
+      identityValid && identity?.requestKind === "agent" ? [request] : [],
+  );
   return {
-    auxiliary: physicalOverhead(unarmed, "auxiliary"),
-    title: physicalOverhead(unarmed, "title"),
-    toolProvider: physicalOverhead(unarmed, "tool_provider"),
+    auxiliary: physicalOverhead(excluded, "auxiliary"),
+    title: physicalOverhead(excluded, "title"),
+    toolProvider: physicalOverhead(excluded, "tool_provider"),
     unmatchedEnvelopeDigests: joined.flatMap((item) =>
-      item.request ? [] : [item.digest]),
+      item.request && (item.armed || item.excludedNonAgent)
+        ? []
+        : [item.digest]),
     unmatchedRequestOrdinals: availableRequests.flatMap(({ request, used }) => {
       const ordinal = numberValue(request.ordinal);
-      return used || ordinal === null ? [] : [ordinal];
+      return used || ordinal === null || request.requestKind !== "agent" ? [] : [ordinal];
     }),
-    invalidRequestIdentityCount: requests.filter((request) =>
-      !stringValue(request.attemptDigest) || numberValue(request.ordinal) === null ||
-      terminalTimestamp(request) === null ||
-      numberValue(request.serializedRequestBytes) === null).length,
+    invalidRequestIdentityCount,
+    targetAgentRequests,
     duplicateEnvelopeDigests: duplicateValues(envelopes.flatMap((envelope) => {
       const digest = stringValue(envelope.dimensions?.attemptDigest);
       return digest ? [digest] : [];
@@ -192,6 +256,13 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined;
+}
+
+function recordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
 }
 
 function numberValue(value: unknown): number | null {

@@ -217,7 +217,9 @@ export interface GuidedWorkObservation {
 export interface StepObservation {
   stepId: string;
   promptSha256: string;
+  sessionId: string;
   turnId: string;
+  providerRequestIdentities: ProviderRequestTurnIdentity[];
   terminalState: string;
   finalText: string;
   rendererFinalText: string;
@@ -247,4 +249,12 @@ export interface StepObservation {
     providerAgentModels?: string[];
   };
   screenshots: string[];
+}
+
+export interface ProviderRequestTurnIdentity {
+  ordinal: number;
+  sessionId: string;
+  turnId: string;
+  requestKind: ProviderFixtureRequestKind;
+  attemptDigest: string | null;
 }

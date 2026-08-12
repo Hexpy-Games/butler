@@ -24,9 +24,14 @@ export function m1V2EvidenceIdentityReasons(input: {
   if (run?.model !== "openai/gpt-5.6-sol" || run?.reasoningEffort !== "medium") {
     reasons.push("evidence_model_identity_mismatch");
   }
-  const expectedSessionId = `agent-benchmark-${input.arm.key.replaceAll(":", "-")}`;
-  if (typeof session?.id !== "string" || session.id !== expectedSessionId) {
+  if (typeof session?.id !== "string" || !session.id) {
     reasons.push("evidence_session_identity_mismatch");
+  }
+  if (typeof target?.sessionId !== "string" || target.sessionId !== session?.id) {
+    reasons.push("evidence_target_session_identity_mismatch");
+  }
+  if (typeof target?.turnId !== "string" || !target.turnId) {
+    reasons.push("evidence_target_turn_identity_mismatch");
   }
   if (target?.promptSha256 !==
     input.fixture.m1V2.promptSha256[input.fixture.m1V2.targetStepId]) {

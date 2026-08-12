@@ -120,3 +120,56 @@ affected-arm pairs without running the full matrix.
   audit passed (`44 files / 0 findings`); `git diff --check` passed.
 - Repository-wide `bun run check` is not claimed as pass: the bounded 300-second
   run exited `124` after SIGTERM without emitting a specific assertion failure.
+
+## Benchmark harness identity and physical join repair
+
+Task: `T-M1-V2-BENCHMARK-HARNESS-IDENTITY-REPAIR-20260812`
+
+The canonical PR #142 harness now carries the actual Electron product-owned
+Session, Turn, request ordinal, request role, and physical attempt digest from
+the existing driver into the single M1 evaluator. The evaluator no longer
+reconstructs an expected Session id from the benchmark arm key. It requires the
+target observation Session to equal the evidence Session and retains the
+existing exact run-root, source revision, prompt hash, and stale-evidence gates.
+
+Physical request joining is role-aware and fail closed. Only target-owned Agent
+requests can join an arm-tagged request envelope, using exact ordinal, attempt
+digest, serialized bytes, terminal-time tolerance, and arm identity. Typed
+title, auxiliary, and provider-tool requests remain visible as separate
+physical overhead and are excluded only when their envelope is unarmed. A
+non-Agent envelope carrying the target arm, or an Agent request with missing or
+wrong Session, Turn, ordinal, digest, byte, time, or arm identity, rejects the
+repetition. Real physical retries remain separate exact joins.
+
+This repair preserves the one fixture, planner, driver, evaluator, and report
+authority; exact segment byte sums; nullable provider usage; retry/cache/route
+eligibility; privacy-safe metrics; and sequential isolated execution. It adds
+no product feature path, fallback, retry, raw content storage, runtime policy,
+or default-on behavior.
+
+Validation evidence:
+
+- The observed clean Electron identity shape
+  `chat-btcc-r3-e2e-agent-benchmark-*` is accepted through the real driver
+  identity operation and evaluator entrypoint.
+- Stale evidence and wrong Session, Turn, or attempt identity remain rejected.
+- Late typed title/auxiliary/provider-tool requests do not contaminate the Agent
+  join, while an arm-tagged non-Agent envelope rejects fail closed.
+- Multi-attempt retry joining, exact byte sums, SC01 typed segments, and
+  unavailable usage as `null` are regression-covered.
+- Targeted driver/proxy/evaluator/authority suites passed 101 tests with 498
+  assertions; typecheck passed; lint passed with zero errors and 20 unrelated
+  existing warnings; BTCC shape and repository-wide `bun run check` passed;
+  module-shape review found no new responsibility or direction defect; and
+  `git diff --check` passed.
+- Independent ordinary non-fast Sol-high review initially requested two
+  changes: reject arm-tagged non-Agent envelopes and connect identity cases
+  through the real driver operation to the evaluator. Both were repaired; the
+  same reviewer then approved with no remaining P0-P3 findings.
+
+No external provider smoke, benchmark campaign, final 4x3, Hermes/OpenCode run,
+product optimization, merge, or default-on change was performed. The earlier
+diagnostic repetitions remain rejected provenance and are not promoted to an
+accepted baseline. A later approved bounded product smoke may verify real
+provider late-arrival timing, but no external campaign is required or claimed
+by this repair Task.
