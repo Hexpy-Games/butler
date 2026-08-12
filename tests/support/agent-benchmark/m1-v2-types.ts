@@ -2,6 +2,13 @@ import type { ElectronScenario } from
   "../../e2e/btcc-r3-electron-harness.ts";
 import type { OperationalMetricEvent } from
   "../../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
+export interface M1V2ProvenanceIdentity {
+  schema: "butler.agent-benchmark.provenance-identity.v1";
+  authorityJsonlBasename: string;
+  metadataSha256: string;
+  jsonlSha256: string;
+  verifiedSha256: string;
+}
 export const OBSERVED_M1_REQUEST_SEGMENT_KINDS = [
   "stable_safety_and_role_instructions", "stable_btcc_protocol",
   "current_user_request", "accepted_corrections_and_unresolved_obligations",

@@ -13,9 +13,18 @@ export function validateBenchmarkPlan(plan: BenchmarkPlan): void {
   if (!Number.isSafeInteger(plan.seed)) throw new Error("Agent benchmark seed is required");
   const runRoot = resolve(plan.runRoot);
   const sourceRoot = resolve(plan.sourceRoot);
+  const harnessRoot = resolve(plan.harnessRoot);
   assertNoSymlinkComponents(runRoot);
   assertNoSymlinkComponents(sourceRoot);
+  assertNoSymlinkComponents(harnessRoot);
   if (runRoot === sourceRoot || inside(sourceRoot, runRoot) || inside(runRoot, sourceRoot)) throw new Error("Benchmark run root and source root must be isolated");
+  if (runRoot === harnessRoot || inside(harnessRoot, runRoot) || inside(runRoot, harnessRoot)) throw new Error("Benchmark run root and harness authority root must be isolated");
+  if (plan.campaign === "m1-v2" && (!plan.provenanceJsonlPath ||
+    plan.provenance?.schema !== "butler.agent-benchmark.provenance-identity.v1" ||
+    ![plan.provenance.metadataSha256, plan.provenance.jsonlSha256, plan.provenance.verifiedSha256]
+      .every((value) => typeof value === "string" && /^[a-f0-9]{64}$/u.test(value)))) {
+    throw new Error("M1 v2 provenance identity is missing or invalid");
+  }
   const fixtureHashes = new Map(plan.fixtures.map((fixture) => [fixture.id, fixture.sha256]));
   for (const arm of plan.arms) {
     if (arm.fixtureHash !== fixtureHashes.get(arm.scenario)) throw new Error(`Fixture hash mismatch for arm ${arm.key}`);

@@ -348,8 +348,8 @@ test("landing evidence failure gates only landing arms, not direct or web arms",
   const preflight: PreflightResult = { available: true, executable: "fixture", version: "fixture", authenticated: true, configVerified: true, gateCode: "none", diagnostic: null };
   const direct = plan.arms.find((arm) => arm.agent === "butler" && arm.scenario === "direct_conversation" && arm.cache === "cold" && arm.track === "controlled")!;
   const landing = plan.arms.find((arm) => arm.agent === "butler" && arm.scenario === "butler_landing_page" && arm.cache === "cold" && arm.track === "controlled")!;
-  const directObservation = await runBenchmarkArm({ arm: direct, adapter, preflight, signal: new AbortController().signal, planRunRoot: plan.runRoot, landingValidator: async () => validLanding(), evidenceSnapshot: null, sourceDiagnostic: null, evidenceDiagnostic: "evidence materialization failed" });
-  const landingObservation = await runBenchmarkArm({ arm: landing, adapter, preflight, signal: new AbortController().signal, planRunRoot: plan.runRoot, landingValidator: async () => validLanding(), evidenceSnapshot: null, sourceDiagnostic: null, evidenceDiagnostic: "evidence materialization failed" });
+  const directObservation = await runBenchmarkArm({ arm: direct, adapter, preflight, signal: new AbortController().signal, planRunRoot: plan.runRoot, harnessRoot: plan.harnessRoot, landingValidator: async () => validLanding(), evidenceSnapshot: null, sourceDiagnostic: null, evidenceDiagnostic: "evidence materialization failed" });
+  const landingObservation = await runBenchmarkArm({ arm: landing, adapter, preflight, signal: new AbortController().signal, planRunRoot: plan.runRoot, harnessRoot: plan.harnessRoot, landingValidator: async () => validLanding(), evidenceSnapshot: null, sourceDiagnostic: null, evidenceDiagnostic: "evidence materialization failed" });
   expect(directObservation.gateCode).not.toBe("configuration_unverifiable");
   expect(landingObservation.gateCode).toBe("configuration_unverifiable");
   rmSync(root, { recursive: true, force: true });

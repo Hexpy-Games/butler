@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AdapterRunResult } from "../support/agent-benchmark/contracts.ts";
 import { createButlerAdapter } from "../support/agent-benchmark/butler-adapter.ts";
@@ -10,6 +11,11 @@ import {
   loadM1V2BenchmarkFixtures,
   summarizeBenchmarkResult,
 } from "../support/agent-benchmark/index.ts";
+import { prepareTestHarnessAuthority } from "./support/m1-v2-provenance-authority.ts";
+
+const authorityRoot = mkdtempSync(join(tmpdir(), "agent-benchmark-m1-authority-"));
+const authority = prepareTestHarnessAuthority(authorityRoot);
+afterAll(() => rmSync(authorityRoot, { force: true, recursive: true }));
 
 describe("unified agent benchmark M1 v2 campaign", () => {
   test("uses the sole planner and fixture authority for the fixed four by three Butler campaign", () => {
@@ -19,6 +25,8 @@ describe("unified agent benchmark M1 v2 campaign", () => {
       seed: 20260812,
       runRoot: "/tmp/m1-v2-contract",
       sourceRoot: process.cwd(),
+      harnessRoot: authority.harnessRoot,
+      provenanceJsonlPath: authority.jsonlPath,
       baselineSha: "a".repeat(40),
       controlledModel: "openai/gpt-5.6-sol",
       controlledReasoning: "medium",
@@ -87,6 +95,7 @@ describe("unified agent benchmark M1 v2 campaign", () => {
     const plan = createBenchmarkPlan({
       campaign: "m1-v2", runId: "m1-v2-gate", seed: 2,
       runRoot: "/tmp/m1-v2-gate", sourceRoot: process.cwd(),
+      harnessRoot: authority.harnessRoot, provenanceJsonlPath: authority.jsonlPath,
       baselineSha: "a".repeat(40), controlledModel: "openai/gpt-5.6-sol",
       controlledReasoning: "medium",
     });
@@ -111,6 +120,7 @@ describe("unified agent benchmark M1 v2 campaign", () => {
     const plan = createBenchmarkPlan({
       campaign: "m1-v2", runId: "m1-v2-identity", seed: 1,
       runRoot: "/tmp/m1-v2-identity", sourceRoot: process.cwd(),
+      harnessRoot: authority.harnessRoot, provenanceJsonlPath: authority.jsonlPath,
       baselineSha: "a".repeat(40), controlledModel: "openai/gpt-5.6-sol",
       controlledReasoning: "medium",
     });

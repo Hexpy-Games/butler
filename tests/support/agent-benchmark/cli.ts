@@ -20,6 +20,8 @@ export interface AgentBenchmarkCliOptions {
   command: "plan" | "pilot" | "run";
   runRoot: string;
   sourceRoot: string;
+  harnessRoot: string;
+  provenanceJsonlPath: string | null;
   outputDirectory: string;
   seed: number;
   runId: string;
@@ -43,6 +45,8 @@ export async function runAgentBenchmarkCli(argv: readonly string[]): Promise<str
     seed: options.seed,
     runRoot: options.runRoot,
     sourceRoot: options.sourceRoot,
+    harnessRoot: options.harnessRoot,
+    provenanceJsonlPath: options.provenanceJsonlPath ?? undefined,
     controlledModel: options.controlledModel,
     controlledReasoning: options.controlledReasoning,
     repetitionsPerCache: options.repetitions,
@@ -91,6 +95,8 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
   const runId = sanitizeIdentifier(option(argv, "--run-id") ?? `agent-benchmark-${seed}`);
   if (!runId) throw new Error("--run-id must be a safe benchmark identifier");
   const sourceRoot = resolve(option(argv, "--source-root") ?? process.cwd());
+  const harnessRootOption = option(argv, "--harness-root");
+  const harnessRoot = resolve(harnessRootOption ?? process.cwd());
   const runRoot = resolve(option(argv, "--run-root") ?? mkdtempSync(join(tmpdir(), "butler-agent-benchmark-")));
   const outputDirectory = resolve(option(argv, "--output") ?? join(runRoot, "report"));
   if (!insideRoot(runRoot, outputDirectory)) throw new Error("--output must remain inside --run-root");
@@ -101,6 +107,9 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
   const controlledReasoning = option(argv, "--controlled-reasoning") ?? CANONICAL_PILOT_REASONING;
   const campaign = option(argv, "--campaign") ?? "cross-agent-pilot";
   if (campaign !== "cross-agent-pilot" && campaign !== "m1-v2") throw new Error("--campaign must be cross-agent-pilot or m1-v2");
+  if (campaign === "m1-v2" && !harnessRootOption) {
+    throw new Error("Missing required M1 v2 option: --harness-root");
+  }
   const repetitions = Number(option(argv, "--repetitions") ?? (campaign === "m1-v2" ? "3" : "1"));
   const sourceRevision = option(argv, "--source-revision") ?? AGENT_BENCHMARK_BASELINE_SHA;
   if (command === "pilot" && (controlledModel.trim() !== CANONICAL_PILOT_MODEL || controlledReasoning.trim() !== CANONICAL_PILOT_REASONING)) {
@@ -110,6 +119,10 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
     command,
     runRoot,
     sourceRoot,
+    harnessRoot,
+    provenanceJsonlPath: option(argv, "--provenance-jsonl")
+      ? resolve(option(argv, "--provenance-jsonl")!)
+      : null,
     outputDirectory,
     seed,
     runId,
@@ -124,7 +137,7 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
 }
 
 function validateFlags(argv: readonly string[]): void {
-  const valueFlags = new Set(["--seed", "--run-id", "--source-root", "--run-root", "--output", "--controlled-model", "--controlled-reasoning", "--visual-review", "--campaign", "--repetitions", "--source-revision"]);
+  const valueFlags = new Set(["--seed", "--run-id", "--source-root", "--harness-root", "--provenance-jsonl", "--run-root", "--output", "--controlled-model", "--controlled-reasoning", "--visual-review", "--campaign", "--repetitions", "--source-revision"]);
   const booleanFlags = new Set(["--execute-available"]);
   for (let index = 1; index < argv.length; index += 1) {
     const flag = argv[index]!;

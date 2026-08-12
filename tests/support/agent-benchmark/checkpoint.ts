@@ -204,6 +204,8 @@ export function redactBenchmarkPlan(plan: BenchmarkPlan): BenchmarkPlan {
     ...plan,
     runRoot: "<run-root>",
     sourceRoot: "<source-root>",
+    harnessRoot: "<harness-root>",
+    ...(plan.provenanceJsonlPath ? { provenanceJsonlPath: "<provenance-jsonl>" } : {}),
     arms: plan.arms.map((arm) => redactBenchmarkArm(arm, plan.runRoot)),
   };
 }
