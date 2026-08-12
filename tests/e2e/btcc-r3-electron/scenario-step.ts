@@ -23,6 +23,8 @@ import {
 import { checkScenarioExpectations } from "./scenario-expectations.ts";
 import { readGuidedWorkObservation } from "./work-evidence.ts";
 import type { ProviderObservationProxy } from "./provider-observation-proxy.ts";
+import { providerRequestTurnIdentities } from
+  "./provider-request-turn-identity.ts";
 
 const DEFAULT_STEP_TIMEOUT_MS = 10 * 60_000;
 const TERMINAL_STATES = new Set(["cancelled", "delivered", "failed"]);
@@ -182,6 +184,9 @@ export async function runScenarioStep(
   const previousTurnId = before.latest_turn?.id ?? null;
   const prompt = materializePrompt(step.prompt, run);
   await launch.page.fill('[data-test-class="composer-card"] textarea', prompt);
+  const providerRequestOrdinalsBefore = new Set(
+    (providerProxy?.observations() ?? []).map((request) => request.ordinal),
+  );
   const submittedAtMs = Date.now();
   await launch.page.clickSelector('[data-test-class="composer-send-button"]');
   const terminal = await waitForTurn(
@@ -206,6 +211,12 @@ export async function runScenarioStep(
   );
   const work = readGuidedWorkObservation(run, terminal.turnId);
   const providerRequests = providerProxy?.observations() ?? [];
+  const providerRequestIdentities = providerRequestTurnIdentities({
+    requests: providerRequests,
+    ordinalsBeforeSubmission: providerRequestOrdinalsBefore,
+    sessionId: run.sessionId,
+    turnId: terminal.turnId,
+  });
   const providerAgentModels = providerRequests
     .filter((request) => request.requestKind === "agent")
     .map((request) => request.requestedModel)
@@ -223,7 +234,9 @@ export async function runScenarioStep(
   const observation: StepObservation = {
     stepId: step.id,
     promptSha256: hashText(prompt),
+    sessionId: run.sessionId,
     turnId: terminal.turnId,
+    providerRequestIdentities,
     terminalState,
     finalText,
     rendererFinalText: renderedFinal,
