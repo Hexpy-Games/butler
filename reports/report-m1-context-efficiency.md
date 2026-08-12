@@ -11,7 +11,7 @@ tests, and the smallest authenticated Electron smoke wiring. The accepted
 implementation source before benchmark-domain cleanup is
 `049b24d0edd988cf058c81fd49661d44963e2e20`.
 
-PR #142 at `b2fa611be89a2f5b2c9c39c364995d7d8a6c51e8` and
+PR #142 at `63571888c3b8dba0c26b1661294fd095741b718a` and
 `tests/support/agent-benchmark` are the sole fixture, provenance, campaign
 planning, orchestration, eligibility, evaluation, and report authority. This
 branch no longer contains an executable M1 baseline runner, fixture authority,
