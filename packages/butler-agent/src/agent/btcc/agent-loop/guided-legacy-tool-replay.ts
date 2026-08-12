@@ -1,8 +1,8 @@
 import type { ButlerToolExecutor } from "../../tools/butler-tools.ts";
 import type {
   GuidedToolJournalRecord,
-  SqliteGuidedToolJournal,
-} from "../../adapters/index.ts";
+  GuidedToolJournal,
+} from "../ports/index.ts";
 import { parseToolCatalogId } from "../../tools/progressive-catalog.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import {
@@ -40,7 +40,7 @@ type LegacyToolReplayResult = {
 };
 
 export function findLegacyToolRecord(
-  journal: Pick<SqliteGuidedToolJournal, "find">,
+  journal: Pick<GuidedToolJournal, "find">,
   callIds: readonly string[] | undefined,
 ): GuidedToolJournalRecord | undefined {
   for (const callId of callIds ?? []) {

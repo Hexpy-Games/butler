@@ -481,3 +481,107 @@ the release-tag-only policy. The Project Ledger Task is `done`, product Attempt
 `-05` is `succeeded`, the parent Work stays `in_progress`, the Plan stays
 active, and the Final Benchmark Task stays `todo`. No next M1 optimization Task
 was started.
+
+## T-M1-V2 exact-first durable replay product implementation
+
+The latest user authority moved Electron/provider smoke, prepared-resource and
+affected-arm execution, the final 4x3, Hermes, and OpenCode acceptance to
+`T-M1-V2-FINAL-BENCHMARK` without deleting any quantitative or quality target.
+This Task therefore records product code, real production composition and
+serializer integration, deterministic byte arithmetic, and non-E2E gates only.
+
+### Ingress, authority, and final serialization
+
+The one production path is:
+
+`guided tool execution -> btcc_guided_tool_calls / btcc_guided_work_results ->
+GuidedToolJournal delivery state -> BTCC agent-loop prepareMessages ->
+ModelRoundRequest.messages -> provider-neutral serialization -> OpenAI/Codex
+final request JSON`.
+
+The existing guided tool journal remains the exact result-body and delivery
+authority. Existing Work `result_ref`, `work_id`, result sequence, Session or
+Project scope, and origin tool row remain the durable Work identity. The new
+required `GuidedOperationResultReader` port is implemented by a SQLite reader
+over those same rows; it is not a store, cache, reference registry, or effect
+authority. Production composition injects the journal and reader explicitly.
+If replay is enabled without either required capability, composition fails
+closed instead of falling back to full legacy replay.
+
+For a durable completed result whose stable JSON body is at least 8 KiB, the
+journal advances `pending_delivery -> in_flight -> acknowledged ->
+reference_only`. Raw content remains visible until the routed model round has
+an accepted response. Retry/fallback attempts therefore retain the raw result;
+only later model rounds receive the reference. SQLite close/reopen tests cover
+all four states, same-round recovery, stale-round rejection, and accepted-route
+checkpoint replay without provider redispatch or duplicate tool execution.
+
+The model-facing carrier is `butler.operation-result-reference.v1` and contains
+only bounded typed version/kind, direct-or-Work identity, tool name, SHA-256,
+nullable direct or sequence revision, terminal success/availability semantics,
+and the authorized exact-read capability. It contains no prompt, transcript,
+raw tool payload, hidden reasoning, private path, or result body. Exact reads
+are available only through the selected `read_operation_results` phase tool and
+typed handler map. The SQLite reader verifies reference kind, Session/Project/
+Work scope, revision, expected hash, and a fresh hash of the stored JSON; any
+missing, stale, cross-scope, cross-kind, or tampered result fails closed. The
+read contract returns an exact base64-encoded stored-JSON byte range with
+offset, length, total bytes, next offset, completion, and hash metadata. A call
+is capped at 4 KiB and invalid or out-of-range requests fail closed, so exact
+rehydration is explicit and bounded rather than automatic whole-body loading.
+
+Small completed results, failed or cancelled terminal results, and results with
+no durable journal authority remain on the prior raw model-visible path so
+their final meaning and recoverable error state are not discarded. No keyword
+router, hidden string lookup, automatic hydration, duplicate effect/result
+store, or new telemetry authority was added. The former repeated-raw area is
+the acknowledged older tool-result projection, including Codex cumulative
+`function_call_output` items; it is replaced in place by the same typed
+reference. The prior default-off path remains byte-compatible when
+`BUTLER_M1_V2_EXACT_ONCE_REPLAY` is absent.
+
+### Exact serializer byte arithmetic
+
+These static UTF-8 measurements call the actual Codex request serializer with
+the already accepted M1 Tool Instruction Surface held constant. Each fixture
+contains three cumulative outputs. Replay-off serializes the same 9 KiB raw
+result three times; replay-on serializes it once and the deterministic reference
+twice.
+
+| Typed phase | Replay off -> replay on | Reduction |
+|---|---:|---:|
+| direct | 33,656 -> 17,237 | 16,419 bytes (48.78%) |
+| read-only | 36,789 -> 20,370 | 16,419 bytes (44.63%) |
+| execution | 44,932 -> 28,513 | 16,419 bytes (36.54%) |
+
+These are serializer bytes, not provider-token usage, SC01 campaign results, or
+E2E evidence. The same product integration also drives a production Guided
+Turn through the real OpenAI model round and Codex serializer: the second
+request contains the accepted large raw result and the third contains the
+typed reference without that body.
+
+### Validation and remaining boundary
+
+- final targeted and production serializer integration: 107/107 passed with
+  600 assertions;
+- latest focused correction suite: 86/86 passed with 506 assertions;
+- broad affected BTCC unit suite: 398/398 passed with 5,669 assertions;
+- BTCC module-boundary suite: 6/6 passed; the combined BTCC/provider
+  architecture rerun passed 9/9 with 3,540 assertions;
+- full typecheck and `git diff --check` passed;
+- full lint passed with zero errors and 19 pre-existing warnings;
+- BTCC source shape passed (`4 domains / 215 files`);
+- architecture shape audit found no new boundary violation; existing large-file
+  and index review triggers remain outside this Task.
+- independent ordinary non-fast gpt-5.6-sol high whole-goal review first found
+  and drove closure of dynamic-Work, bounded-read, durable-acceptance,
+  canonical-registry, official-serializer, and default-off discovery gaps; the
+  final fresh review found no remaining issue and returned `APPROVE` after 92
+  focused tests, typecheck, BTCC shape, module/provider boundaries, and diff
+  verification.
+
+This Task does not implement the whole user/assistant history cap, Turn
+continuation budget, route/cache-prefix policy, Work-recovery optimization, or
+read batching. Those remain separate bounded tasks. Final provider-token,
+source-quality, cache/retry eligibility, desktop/mobile, and statistical 4x3
+acceptance remain exclusively with `T-M1-V2-FINAL-BENCHMARK`.

@@ -30,6 +30,8 @@ import { createDataTableToolHandlers } from "./data-table/index.ts";
 import { createMcpToolHandlers } from "./mcp/index.ts";
 import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
+import { createReadOperationResultsHandler } from
+  "./monitoring/read_operation_results/index.ts";
 import { createToolBridgeToolHandlers } from "./tool-bridge/index.ts";
 import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
 import { createSkillToolHandlers } from "./skills/index.ts";
@@ -164,6 +166,7 @@ export function createButlerToolExecutor(input: {
   executionBoundary?: ButlerToolExecutionBoundary;
   workspaceReference?: WorkspaceReference;
   sessionBindingStore?: SessionWorkspaceBindingStore;
+  operationResultExactReader?: (args: Record<string, unknown>) => unknown;
 }): ContextualButlerToolExecutor {
   const workspaceReference = input.workspaceReference ?? (input.sessionId && input.sessionBindingStore
     ? createUnavailableWorkspaceReference()
@@ -209,6 +212,9 @@ export function createButlerToolExecutor(input: {
   };
   const dispatchTool: ButlerToolHandler = executeActualTool;
   const toolExecutors = createButlerToolExecutorRegistry({
+    ...(input.operationResultExactReader
+      ? createReadOperationResultsHandler(input.operationResultExactReader)
+      : {}),
     ...createProjectLedgerToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
@@ -222,6 +228,7 @@ export function createButlerToolExecutor(input: {
       sessionId: input.sessionId,
       webSearchProvider: input.webSearchProvider,
       currentToolNames: input.currentToolNames,
+      nativeToolDefinitions: input.nativeToolDefinitions,
       hiddenNativeToolNames: input.hiddenNativeToolNames,
       nativeToolAvailabilityOverrides,
     }),

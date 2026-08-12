@@ -28,6 +28,8 @@ import {
   applyGuidedWorkspaceAuthorization,
   guidedWorkspaceVisibleToolNames,
 } from "./guided-session-workspace-policy.ts";
+import { readOperationResultsToolDefinition } from
+  "../../tools/monitoring/read_operation_results/index.ts";
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
   disabledReason:
@@ -79,6 +81,7 @@ export function guidedPolicy(turn: TurnRecord): ButlerExecutionPolicy {
 export function authorizedToolDefinitions(
   turn: TurnRecord,
   env: NodeJS.ProcessEnv = process.env,
+  exactResultReplayEnabled = false,
 ): FunctionToolDefinition[] {
   const policy = guidedPolicy(turn);
   const requiredProfiles = new Set([
@@ -102,7 +105,7 @@ export function authorizedToolDefinitions(
       ...(policy.projectId ? { projectId: policy.projectId } : {}),
       runtimePolicy,
     },
-    tools: BUTLER_TOOLS,
+    tools: guidedNativeToolDefinitions(exactResultReplayEnabled),
   });
   const names = new Set(selected.map((tool) => tool.name));
   for (const name of [
@@ -135,7 +138,8 @@ export function authorizedToolDefinitions(
   for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
   for (const name of guidedLedgerEffects) names.add(name);
   return [
-    ...BUTLER_TOOLS.filter((tool) => names.has(tool.name)),
+    ...guidedNativeToolDefinitions(exactResultReplayEnabled)
+      .filter((tool) => names.has(tool.name)),
     ...(policy.trackingMode === "none" ? [] : DURABLE_WORK_TOOL_DEFINITIONS),
   ];
 }
@@ -190,8 +194,13 @@ export function visibleToolDefinitions(
   return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
 }
 
-export function guidedNativeToolDefinitions(): ButlerToolDefinition[] {
-  return BUTLER_TOOLS.map(guidedToolDefinition);
+export function guidedNativeToolDefinitions(
+  exactResultReplayEnabled = false,
+): ButlerToolDefinition[] {
+  return BUTLER_TOOLS
+    .filter((tool) => exactResultReplayEnabled ||
+      tool.name !== readOperationResultsToolDefinition.name)
+    .map(guidedToolDefinition);
 }
 
 export function selectedModelRef(turn: TurnRecord): string {

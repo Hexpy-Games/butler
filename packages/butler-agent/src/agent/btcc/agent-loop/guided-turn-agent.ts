@@ -1,11 +1,6 @@
-import type { DurableWorkService } from "../work/index.ts";
-import type { BtccAgentLoopInput } from "./contracts.ts";
-import type { ModelRoundPort } from "../ports/model-round.ts";
 import { createGuidedEffectService } from "../effects/index.ts";
-import type { BtccAgentLoop, BtccAgentLoopResult } from "./contracts.ts";
+import type { BtccAgentLoop, BtccAgentLoopInput, BtccAgentLoopResult } from "./contracts.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
-import type { SqliteGuidedEffectJournal, SqliteGuidedToolJournal } from
-  "../../adapters/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { createProviderModelRoundPort } from
@@ -49,22 +44,16 @@ import {
   currentModelRouteCandidate,
   type ModelRouteEvent,
 } from "../model-route/index.ts";
-import { renderExecutionWindowObservation } from "./execution-window-observation.ts";
-import { createGuidedSessionWorkspaceRuntime, type GuidedSessionWorkspaceBindingStore } from "./guided-session-workspace-recovery.ts";
+import { createGuidedExecutionWindowObserver } from "./execution-window-observation.ts";
+import { createGuidedSessionWorkspaceRuntime } from "./guided-session-workspace-recovery.ts";
+import {
+  createGuidedOperationResultRuntime,
+} from "../operation-result-replay/index.ts";
+import type { ProductionGuidedTurnAgentInput } from "./guided-turn-agent-input.ts";
 
-export function createProductionGuidedTurnAgent(input: {
-  butlerHome: string;
-  butlerData: string;
-  appMessageDbPath: string;
-  contextDocuments: { resolve(contextRef: string): string };
-  toolJournal: SqliteGuidedToolJournal;
-  effectJournal: SqliteGuidedEffectJournal;
-  durableWork: DurableWorkService;
-  modelRound?: ModelRoundPort;
-  sessionBindingStore?: GuidedSessionWorkspaceBindingStore;
-  /** Test seam for exercising more than one internal execution window. */
-  executionWindowSize?: number;
-}): BtccAgentLoop {
+export function createProductionGuidedTurnAgent(
+  input: ProductionGuidedTurnAgentInput,
+): BtccAgentLoop {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   const sessionWorkspace = createGuidedSessionWorkspaceRuntime({ butlerData: input.butlerData, bindingStore: input.sessionBindingStore });
   return {
@@ -79,6 +68,10 @@ export function createProductionGuidedTurnAgent(input: {
       onProviderResponseIdentity,
     }): Promise<BtccAgentLoopResult> {
       const phasePolicy = selectGuidedTurnPhasePolicy(turn);
+      if (phasePolicy.exactResultReplay.mode === "available" &&
+        (!turn.modelRoute || !loadModelRoundAcceptance || !recordModelRoundAcceptance)) {
+        throw new Error("operation_result_route_acceptance_dependency_missing");
+      }
       const policy = phasePolicy.executionPolicy;
       const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
       const workScope = workScopeForTurn(turn, policy.trackingMode);
@@ -89,6 +82,15 @@ export function createProductionGuidedTurnAgent(input: {
         await safeImportOpenLegacyWork(input.durableWork, workScope);
         initialWork = await safeLoadWorkContext(input.durableWork, workScope);
       }
+      const operationResults = createGuidedOperationResultRuntime({
+        ...phasePolicy.exactResultReplay,
+        turnId: turn.turnId,
+        turnRevision: turn.revision,
+        journal: input.toolJournal,
+        exactReader: input.operationResultReader,
+        sessionId: turn.sessionId,
+        projectRef: policy.projectId ?? turn.context.projectRef,
+      });
       let initialWorkBound = false;
       if (initialWork) {
         const boundWork = await safeBoundWork(input.durableWork, turn.turnId);
@@ -115,6 +117,7 @@ export function createProductionGuidedTurnAgent(input: {
         projectId: policy.projectId ?? turn.context.projectRef,
         workspaceReference,
         sessionBindingStore: sessionWorkspace.bindingStore,
+        operationResultExactReader: operationResults.read,
         turnId: turn.turnId,
         turnContext: turn.originalMessage,
         searchPlanner: async () => ({
@@ -124,7 +127,9 @@ export function createProductionGuidedTurnAgent(input: {
           fallbackReason: "guided model owns search planning",
         }),
         currentToolNames: () => [...authorizedNames],
-        nativeToolDefinitions: guidedNativeToolDefinitions(),
+        nativeToolDefinitions: guidedNativeToolDefinitions(
+          phasePolicy.exactResultReplay.exactReadCapability,
+        ),
         hiddenNativeToolNames: hiddenNativeToolNamesForGuidedTurn(
           policy.accessMode === "full_access" &&
             policy.trackingMode === "ledger" &&
@@ -283,20 +288,12 @@ export function createProductionGuidedTurnAgent(input: {
         // active across windows until the model reaches a final answer.
         maxIterations: Math.max(1, input.executionWindowSize ?? 60),
         modelRound,
-        onExecutionWindowBoundary: async ({ windowIndex }) => {
-          if (signal.aborted) throwGuidedAbort(signal);
-          const refreshedContext = policy.trackingMode === "none"
-            ? null
-            : await safeLoadWorkContext(input.durableWork, workScope);
-          const refreshedBoundWork = policy.trackingMode === "none"
-            ? null
-            : await safeBoundWork(input.durableWork, turn.turnId);
-          return renderExecutionWindowObservation({
-            windowIndex,
-            context: refreshedContext,
-            boundWork: refreshedBoundWork,
-          });
-        },
+        operationResultReplay: operationResults.replay,
+        resolveOperationResultCallId: toolCalls.journalCallIdForProviderCall,
+        onExecutionWindowBoundary: createGuidedExecutionWindowObserver({
+          durableWork: input.durableWork, workScope, turnId: turn.turnId,
+          trackingMode: policy.trackingMode, signal,
+        }),
         onAssistantTextBeforeTools: ({ text, toolCalls: calls }) => activity.observeToolBatch({
           text,
           toolCalls: calls.map((call) => ({
@@ -341,9 +338,4 @@ export function createProductionGuidedTurnAgent(input: {
       };
     },
   };
-}
-
-function throwGuidedAbort(signal: AbortSignal): never {
-  if (signal.reason instanceof Error) throw signal.reason;
-  throw new Error("Guided Turn was aborted");
 }

@@ -1,20 +1,16 @@
-import { createToolResultModelPreviewContext } from
-  "../../tools/tool-result-serialization.ts";
-import { emptyResponseRecoveryObservation } from
-  "./empty-response-recovery.ts";
+import { createToolResultModelPreviewContext } from "../../tools/tool-result-serialization.ts";
+import { emptyResponseRecoveryObservation } from "./empty-response-recovery.ts";
 import type {
-  BtccAgentLoopEvent,
   BtccAgentLoopInput,
   BtccAgentLoopMessage,
   BtccAgentLoopOutput,
   BtccAgentLoopToolCall,
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
+import { emitAgentLoopEvent as emit } from "./agent-loop-events.ts";
+import type { BtccAgentLoopEvent } from "./contracts.ts";
 import type { ModelRoundResult } from "../ports/model-round.ts";
-import {
-  executePreparedBtccToolCall,
-  prepareBtccToolCall,
-} from "./tool-execution.ts";
+import { executePreparedBtccToolCall, prepareBtccToolCall } from "./tool-execution.ts";
 import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
 import { publishModelRoundWaiting } from "./guided-tool-progress.ts";
 import { renderPartialLimitResponse } from "./partial-limit-response.ts";
@@ -24,15 +20,6 @@ import {
   resolveExecutionWindowSize,
   throwIfExecutionWindowAborted,
 } from "./execution-window.ts";
-
-function emit(
-  events: BtccAgentLoopEvent[],
-  onEvent: BtccAgentLoopInput["onEvent"],
-  event: BtccAgentLoopEvent,
-): void {
-  events.push(event);
-  onEvent?.(event);
-}
 
 export async function runBtccAgentLoop(
   input: BtccAgentLoopInput,
@@ -71,11 +58,14 @@ export async function runBtccAgentLoop(
       });
     };
     await publishWaiting("started");
+    const roundMessages = input.operationResultReplay
+      ? input.operationResultReplay.prepareMessages(messages, requestId)
+      : [...messages];
     try {
       const response = await input.modelRound.runRound({
         roundId: requestId,
         model: resolveModelRef(),
-        messages: [...messages],
+        messages: roundMessages,
         instructions: request.instructions,
         tools: request.tools,
         toolChoice: request.toolChoice,
@@ -95,10 +85,12 @@ export async function runBtccAgentLoop(
         onProviderStreamEvent: input.onProviderStreamEvent,
         onProviderResponseIdentity: input.onProviderResponseIdentity,
       });
+      input.operationResultReplay?.accepted(requestId, response);
       continuation = response.continuation;
       await publishWaiting("completed");
       return response;
     } catch (error) {
+      input.operationResultReplay?.failed(requestId);
       await publishWaiting(input.signal?.aborted ? "cancelled" : "failed");
       throw error;
     }
@@ -140,6 +132,7 @@ export async function runBtccAgentLoop(
     messages.push(toolResultToMessage({
       result: record.result,
       modelPreviewContext,
+      operationResultCallId: input.resolveOperationResultCallId?.(record.call.id),
     }));
     emit(events, input.onEvent, {
       type: "tool_result",

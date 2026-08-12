@@ -10,14 +10,14 @@ import type {
   WorkTurnScope,
 } from "../work/index.ts";
 import type { TurnRecord } from "../turn/index.ts";
-import type { SqliteGuidedToolJournal } from "../../adapters/index.ts";
+import type { GuidedToolJournal } from "../ports/index.ts";
 import { sanitizePublicText } from "../../events/turn-events.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import { publicWorkActionDisplay } from "../projection/index.ts";
 
 type GuidedWorkRuntimeInput = {
   durableWork: DurableWorkService;
-  toolJournal: SqliteGuidedToolJournal;
+  toolJournal: GuidedToolJournal;
 };
 
 export function workScopeForTurn(

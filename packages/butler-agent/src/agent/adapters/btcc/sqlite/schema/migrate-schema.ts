@@ -16,9 +16,17 @@ export function migrateBtccSchema(db: Database): void {
     ensureTurnRouteState(db);
     ensureModelRoundAcceptanceCheckpoint(db);
     ensureModelRouteFailureDisposition(db);
+    ensureGuidedToolResultDeliveryColumns(db);
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
+}
+
+function ensureGuidedToolResultDeliveryColumns(db: Database): void {
+  if (!tableExists(db, "btcc_guided_tool_calls")) return;
+  ensureColumn(db, "btcc_guided_tool_calls", "delivery_state", "TEXT");
+  ensureColumn(db, "btcc_guided_tool_calls", "delivery_round_id", "TEXT");
+  ensureColumn(db, "btcc_guided_tool_calls", "delivery_response_sha256", "TEXT");
 }
 
 function ensureGuidedEffectRecoveryPayloadTable(db: Database): void {
