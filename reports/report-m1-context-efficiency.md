@@ -941,3 +941,45 @@ removed raw screenshot references, strengthened the landing artifact privacy
 filter, required the full canonical exact-read schema, preserved and validated
 the actual twelve-field route/cache identity, and added run-root and ancestor
 symlink checks. Final re-review approved with no P0-P3 findings.
+
+### Corrected final campaign Attempt -06
+
+Fresh provider-free preflight used separate before and after product worktrees
+and new prepared resources. Both retained receipts carry plan identity
+`376e25b4ed02e41d42cba0b0acfa6db0054d844e43d6bfb12142316232b2f062`,
+the exact source revision, distinct prepared-resource identity, two completed
+launches, the renderer/preload/gateway/native product path, zero provider
+requests, zero Turn observations, and explicit before/off versus after/on
+activation identity. No campaign manifest or result existed before this
+preflight succeeded, and no matching launch process remained at campaign
+creation time.
+
+Attempt `A-M1-V2-FINAL-BENCHMARK-20260813-06` then created the one immutable
+24-step adjacent B/A manifest. Its SHA-256 is
+`19b1e46651538473a67d1d474775215e070fb21691f5975412d57f4433a25f6d`.
+The single campaign command stopped before the first adapter or provider call:
+one synthetic observation, zero replacements, `configuration_unverifiable`,
+`not_dispatched`, and `pre_adapter`. The exact source-level cause is that the
+fresh product source worktrees contained three untracked dependency symlinks
+(`node_modules` at the root and UI/Electron package roots) used to build the
+fresh prepared resources. The canonical source-cleanliness gate correctly
+rejected those checkout mutations. No arm root, SC01 export, runtime activation
+receipt, Provider token row, segment arithmetic, elapsed result, or quality
+observation exists for this Attempt.
+
+Consequently Attempt -06 cannot rank and supplies no M1 before/after performance
+result. Tool Instruction Surface, Exact-once Replay, Bounded Stateless Context,
+and Stable Provider Prefix remain proven only by the repaired static/public
+activation contract, not by a Provider-dispatched campaign. The 65/100-round
+static reductions cannot be compared with 1/5/20-round E2E here because no E2E
+round was dispatched; likewise no round-count effect, Hermes/OpenCode ranking,
+or quality/landing conclusion is eligible. Attempt -05 remains an unranked
+invalid activation experiment and is not used as replacement data.
+
+The minimum unblock for a later fresh Attempt is operational, not a product or
+acceptance change: build both new resources from dependency-complete checkouts
+whose dependency directories are already ignored/clean, or build in a separate
+producer workspace while keeping the exact product source worktrees pristine;
+then rerun the public preflight and create a new manifest. Attempt -06 must not
+be resumed, replaced, reconstructed, cleaned, or promoted. No merge or
+default-on action is justified.
