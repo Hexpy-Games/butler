@@ -61,6 +61,11 @@ export type TurnRecord = {
     ref: ContentRef;
     content: string;
     contentSha256: string;
+    modelIdentity?: {
+      requestedModelRef: string;
+      effectiveModelRef: string;
+      providerReportedModelRef?: string;
+    };
   };
   deliveryOutbox?: DeliveryOutbox;
   canonicalAssistantMessageId?: string;

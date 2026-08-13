@@ -180,6 +180,7 @@ export function createProductionGuidedTurnAgent(
         managedInitially: initialWorkBound,
       });
       let activeModelRef = selectedModelRef(turn);
+      let acceptedModelIdentity: BtccAgentLoopResult["modelIdentity"];
       const toolCalls = createGuidedToolCallExecutor({
         turn,
         signal,
@@ -250,7 +251,23 @@ export function createProductionGuidedTurnAgent(
             onRouteEvent,
             loadAttemptHistory: loadModelRouteAttemptHistory,
             loadAcceptedResponse: loadModelRoundAcceptance,
-            recordAcceptedResponse: recordModelRoundAcceptance,
+            recordAcceptedResponse: recordModelRoundAcceptance
+              ? async (accepted) => {
+                  await recordModelRoundAcceptance(accepted);
+                  acceptedModelIdentity = {
+                    requestedModelRef: `${turn.modelSelection.provider}/${turn.modelSelection.model}`,
+                    effectiveModelRef: accepted.modelRef,
+                    ...(accepted.result.providerIdentity
+                      ? {
+                          providerReportedModelRef:
+                            accepted.result.providerIdentity.reportedModel.includes("/")
+                              ? accepted.result.providerIdentity.reportedModel
+                              : `${accepted.result.providerIdentity.provider}/${accepted.result.providerIdentity.reportedModel}`,
+                        }
+                      : {}),
+                  };
+                }
+              : undefined,
           })
         : baseModelRound;
       const responseLanguage = renderGuidedResponseLanguage(turn, input.contextDocuments);
@@ -338,6 +355,7 @@ export function createProductionGuidedTurnAgent(
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
       return {
         content: text,
+        ...(acceptedModelIdentity ? { modelIdentity: acceptedModelIdentity } : {}),
         route: routeForUsedTools(
           toolCalls.usedTools,
           Boolean(finalWork) ||

@@ -1,10 +1,19 @@
 import type { InboundEnvelope } from "./contracts.ts";
-import { createAppInboundEnvelope, type AppInboundInput } from "./app-transport.ts";
+import {
+  createAppCancellationEnvelope,
+  createAppInboundEnvelope,
+  type AppCancellationInput,
+  type AppInboundInput,
+} from "./app-transport.ts";
 import { NativeInboundQueue, type QueuedInboundEvent } from "./inbound-queue.ts";
 
 export interface ButlerServiceClient {
   enqueueAppTurn(
     input: AppInboundInput,
+    metadata?: Record<string, unknown>,
+  ): QueuedInboundEvent;
+  enqueueAppCancellation?(
+    input: AppCancellationInput,
     metadata?: Record<string, unknown>,
   ): QueuedInboundEvent;
 }
@@ -25,6 +34,13 @@ export class FileQueueButlerServiceClient implements ButlerServiceClient {
     metadata: Record<string, unknown> = {},
   ): QueuedInboundEvent {
     return this.queue.enqueue(createAppInboundEnvelope(input), metadata);
+  }
+
+  enqueueAppCancellation(
+    input: AppCancellationInput,
+    metadata: Record<string, unknown> = {},
+  ): QueuedInboundEvent {
+    return this.queue.enqueue(createAppCancellationEnvelope(input), metadata);
   }
 }
 

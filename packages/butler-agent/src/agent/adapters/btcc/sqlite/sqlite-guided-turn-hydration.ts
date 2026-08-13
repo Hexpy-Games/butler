@@ -158,6 +158,7 @@ export function hydrateFinalPayload(
     ref?: { id?: unknown; sha256?: unknown };
     content?: unknown;
     contentSha256?: unknown;
+    modelIdentity?: unknown;
   };
   if (
     typeof payload.ref?.id !== "string" ||
@@ -167,7 +168,41 @@ export function hydrateFinalPayload(
   ) {
     throw new Error("BTCC R3 final payload is invalid");
   }
-  return payload as TurnRecord["finalPayload"];
+  return {
+    ...payload,
+    ...(payload.modelIdentity !== undefined
+      ? { modelIdentity: hydrateFinalModelIdentity(payload.modelIdentity) }
+      : {}),
+  } as TurnRecord["finalPayload"];
+}
+
+function hydrateFinalModelIdentity(
+  value: unknown,
+): NonNullable<TurnRecord["finalPayload"]>["modelIdentity"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("BTCC R3 final payload model identity is invalid");
+  }
+  const identity = value as Record<string, unknown>;
+  if (
+    !isModelRef(identity.requestedModelRef) ||
+    !isModelRef(identity.effectiveModelRef) ||
+    (identity.providerReportedModelRef !== undefined &&
+      !isModelRef(identity.providerReportedModelRef))
+  ) {
+    throw new Error("BTCC R3 final payload model identity is invalid");
+  }
+  return {
+    requestedModelRef: identity.requestedModelRef,
+    effectiveModelRef: identity.effectiveModelRef,
+    ...(identity.providerReportedModelRef
+      ? { providerReportedModelRef: identity.providerReportedModelRef }
+      : {}),
+  };
+}
+
+function isModelRef(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 256 &&
+    /^[^/\s]+\/[^/\s]+$/u.test(value);
 }
 
 export function hydrateRoute(value: string | null): TurnRecord["route"] | undefined {
