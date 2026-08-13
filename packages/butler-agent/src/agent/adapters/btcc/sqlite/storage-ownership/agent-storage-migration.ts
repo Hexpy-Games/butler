@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -19,6 +20,7 @@ import type {
 } from "./contracts.ts";
 import {
   AGENT_BTCC_MIGRATION_MANIFEST_ID,
+  AGENT_BTCC_STATEFUL_TABLES,
 } from "./manifest.ts";
 import {
   copyAndValidateStatefulTables,
@@ -26,6 +28,7 @@ import {
   validateAgentBtccDatabase,
   validateCanonicalManifest,
   validateReceiptSnapshot,
+  snapshotStatefulTables,
 } from "./migration-table-copy.ts";
 
 const STORAGE_METADATA_SCHEMA = `
@@ -83,9 +86,11 @@ export async function prepareAgentBtccStorage(input: {
     target.exec(STORAGE_METADATA_SCHEMA);
     validateCanonicalManifest(target);
     if (source) rejectUnknownSourceTables(source);
-    const tables = target.transaction(() =>
+    target.transaction(() =>
       copyAndValidateStatefulTables(source, target!),
     ).immediate();
+    const claimDisposition = parkLegacyClaims(target);
+    const tables = snapshotStatefulTables(target);
     input.faultHook?.("after_copy");
     validateAgentBtccDatabase(target);
     const receipt: AgentBtccMigrationReceipt = {
@@ -94,7 +99,12 @@ export async function prepareAgentBtccStorage(input: {
       sourceKind: source ? "legacy_app_db" : "fresh_install",
       sourceSchemaVersion: source ? pragmaUserVersion(source) : 0,
       sourceSizeBytes,
-      fence,
+      fence: {
+        ...fence,
+        reconciledClaims: claimDisposition.reconciledClaims,
+        parkedClaims: claimDisposition.parkedClaims,
+        claimDispositionSha256: claimDisposition.sha256,
+      },
       tables,
       completedAt: (input.now?.() ?? new Date()).toISOString(),
     };
@@ -131,6 +141,43 @@ export async function prepareAgentBtccStorage(input: {
   }
 }
 
+function parkLegacyClaims(db: Database): {
+  reconciledClaims: number;
+  parkedClaims: number;
+  sha256: string;
+} {
+  const claims = [
+    ...db.query<{ claim_id: string; owner_id: string; status: string }, []>(`
+      SELECT claim_id, owner_id, status FROM btcc_admission_claims ORDER BY claim_id
+    `).all().map((row) => ({ kind: "admission", ...row })),
+    ...db.query<{ claim_id: string; owner_id: string; status: string }, []>(`
+      SELECT claim_id, owner_id, status FROM btcc_state_claims ORDER BY claim_id
+    `).all().map((row) => ({ kind: "state", ...row })),
+  ];
+  const active = claims.filter((claim) => claim.status === "active");
+  db.transaction(() => {
+    db.query("UPDATE btcc_admission_claims SET status = 'relinquished' WHERE status = 'active'").run();
+    db.query("UPDATE btcc_state_claims SET status = 'relinquished' WHERE status = 'active'").run();
+    db.query(`
+      UPDATE btcc_checkpoints SET active_claim_id = NULL
+      WHERE active_claim_id IN (
+        SELECT claim_id FROM btcc_state_claims WHERE status = 'relinquished'
+      )
+    `).run();
+  }).immediate();
+  const disposition = claims.map((claim) => ({
+    kind: claim.kind,
+    claimId: claim.claim_id,
+    ownerId: claim.owner_id,
+    status: claim.status === "active" ? "relinquished" : claim.status,
+  }));
+  return {
+    reconciledClaims: claims.length,
+    parkedClaims: active.length,
+    sha256: createHash("sha256").update(JSON.stringify(disposition)).digest("hex"),
+  };
+}
+
 export function readValidatedReceipt(dbPath: string): AgentBtccMigrationReceipt {
   const db = new Database(dbPath, { readonly: true, strict: true });
   try {
@@ -147,20 +194,95 @@ export function readValidatedReceipt(dbPath: string): AgentBtccMigrationReceipt 
     if (row.manifest_id !== AGENT_BTCC_MIGRATION_MANIFEST_ID) {
       throw new Error("agent_btcc_storage_manifest_mismatch");
     }
-    const receipt = JSON.parse(row.receipt_json) as AgentBtccMigrationReceipt;
-    if (receipt.schema !== "butler.agent-btcc-storage-migration.v1" ||
-      receipt.manifestId !== AGENT_BTCC_MIGRATION_MANIFEST_ID) {
-      throw new Error("agent_btcc_storage_receipt_invalid");
-    }
+    const receipt = decodeMigrationReceipt(row.receipt_json);
     validateCanonicalManifest(db);
     validateAgentBtccDatabase(db);
     if (!activationMarkerExists(db)) {
       validateReceiptSnapshot(db, receipt);
+      if (receipt.fence.claimDispositionSha256) {
+        const classified = classifyParkedClaims(db);
+        if (classified.sha256 !== receipt.fence.claimDispositionSha256 ||
+          classified.reconciledClaims !== receipt.fence.reconciledClaims ||
+          classified.activeClaims !== 0) {
+          throw new Error("agent_btcc_storage_claim_disposition_mismatch");
+        }
+      }
     }
     return receipt;
   } finally {
     db.close();
   }
+}
+
+function decodeMigrationReceipt(value: string): AgentBtccMigrationReceipt {
+  let receipt: unknown;
+  try {
+    receipt = JSON.parse(value);
+  } catch {
+    throw new Error("agent_btcc_storage_receipt_invalid");
+  }
+  if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) {
+    throw new Error("agent_btcc_storage_receipt_invalid");
+  }
+  const candidate = receipt as Partial<AgentBtccMigrationReceipt>;
+  const fence = candidate.fence;
+  const tableNames = candidate.tables?.map((table) => table?.name);
+  if (
+    candidate.schema !== "butler.agent-btcc-storage-migration.v1" ||
+    candidate.manifestId !== AGENT_BTCC_MIGRATION_MANIFEST_ID ||
+    (candidate.sourceKind !== "legacy_app_db" &&
+      candidate.sourceKind !== "fresh_install") ||
+    !nonNegativeInteger(candidate.sourceSchemaVersion) ||
+    !nonNegativeInteger(candidate.sourceSizeBytes) ||
+    !fence || typeof fence.fenceId !== "string" || !fence.fenceId.trim() ||
+    !nonNegativeInteger(fence.reconciledClaims) ||
+    !nonNegativeInteger(fence.parkedClaims) ||
+    fence.parkedClaims > fence.reconciledClaims ||
+    !sha256Digest(fence.claimDispositionSha256) ||
+    !Array.isArray(candidate.tables) ||
+    JSON.stringify(tableNames) !== JSON.stringify(AGENT_BTCC_STATEFUL_TABLES) ||
+    candidate.tables.some((table) =>
+      !table || !nonNegativeInteger(table.rowCount) ||
+      !sha256Digest(table.contentSha256)
+    ) ||
+    typeof candidate.completedAt !== "string" ||
+    !Number.isFinite(Date.parse(candidate.completedAt))
+  ) {
+    throw new Error("agent_btcc_storage_receipt_invalid");
+  }
+  return candidate as AgentBtccMigrationReceipt;
+}
+
+function nonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function sha256Digest(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/u.test(value);
+}
+
+function classifyParkedClaims(db: Database): {
+  reconciledClaims: number;
+  activeClaims: number;
+  sha256: string;
+} {
+  const claims = [
+    ...db.query<{ claim_id: string; owner_id: string; status: string }, []>(`
+      SELECT claim_id, owner_id, status FROM btcc_admission_claims ORDER BY claim_id
+    `).all().map((row) => ({ kind: "admission", ...row })),
+    ...db.query<{ claim_id: string; owner_id: string; status: string }, []>(`
+      SELECT claim_id, owner_id, status FROM btcc_state_claims ORDER BY claim_id
+    `).all().map((row) => ({ kind: "state", ...row })),
+  ];
+  const disposition = claims.map((claim) => ({
+    kind: claim.kind, claimId: claim.claim_id, ownerId: claim.owner_id,
+    status: claim.status,
+  }));
+  return {
+    reconciledClaims: claims.length,
+    activeClaims: claims.filter((claim) => claim.status === "active").length,
+    sha256: createHash("sha256").update(JSON.stringify(disposition)).digest("hex"),
+  };
 }
 
 function activationMarkerExists(db: Database): boolean {

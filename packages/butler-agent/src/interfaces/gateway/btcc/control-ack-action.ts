@@ -21,11 +21,11 @@ export function controlAckActions(input: {
     },
     message: { replyToMessageId: input.item.envelope.message.id },
     metadata: {
+      ...input.controlAck,
       source: "gateway/btcc/btcc-inbound-dispatcher.ts",
       kind: "turn_cancellation_ack",
       queueId: input.item.queueId,
       dispatchClaimId: input.item.processing.claimId,
-      ...input.controlAck,
     },
   }));
 }

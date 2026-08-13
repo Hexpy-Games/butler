@@ -57,7 +57,10 @@ import {
   FIRST_VISIBLE_PROGRESS_EVENT_KIND,
   type RuntimeTurnEventInput,
 } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
-import type { ButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
+import {
+  FileQueueButlerServiceClient,
+  type ButlerServiceClient,
+} from "../../packages/butler-agent/src/gateways/core/client.ts";
 import type {
   ModelProviderAdapter,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
@@ -7532,6 +7535,9 @@ test("app transport preserves selected reasoning effort in App-owned turn contex
 
 test("app transport send fails the turn instead of leaving thinking when queue handoff fails", async () => {
   const serviceClient: ButlerServiceClient = {
+    enqueueAppCancellation() {
+      throw new Error("unexpected cancellation");
+    },
     enqueueAppTurn() {
       throw new Error("simulated queue write failure");
     },
@@ -13749,6 +13755,51 @@ test("turn cancel endpoint returns safe conflict for completed turns", async () 
       `).get()?.count,
     ).toBe(0);
     db.close();
+  } finally {
+    server.stop();
+  }
+});
+
+test("pending cancellation outbox dispatches after App restart", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  const queue = new FileQueueButlerServiceClient({ butlerData: tempDir });
+  const failingClient: ButlerServiceClient = {
+    enqueueAppTurn: (input, metadata) => queue.enqueueAppTurn(input, metadata),
+    enqueueAppCancellation(input, metadata) {
+      queue.enqueueAppCancellation(input, metadata);
+      throw new Error("simulated crash after cancellation queue write");
+    },
+  };
+  let server = createAppServer({
+    dbPath, butlerData: tempDir, port: 0, serviceClient: failingClient,
+  });
+  const sent = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "cancel after restart",
+  });
+  const turnId = sent.data.turn.id as string;
+  const response = await fetch(
+    `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+  );
+  expect(response.status).toBe(500);
+  server.stop();
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const db = new Database(dbPath, { readonly: true });
+    const outbox = db.query<{ queue_id: string | null }, [string]>(`
+      SELECT queue_id FROM app_turn_cancel_outbox WHERE turn_id = ?
+    `).get(turnId);
+    db.close();
+    expect(outbox?.queue_id).toBeString();
+    const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+    const controls = readdirSync(pendingDir).map((name) =>
+      JSON.parse(readFileSync(join(pendingDir, name), "utf8"))
+        .envelope?.control?.kind,
+    );
+    expect(controls).toContain("cancel_turn");
+    expect(controls.filter((kind) => kind === "cancel_turn")).toHaveLength(1);
   } finally {
     server.stop();
   }

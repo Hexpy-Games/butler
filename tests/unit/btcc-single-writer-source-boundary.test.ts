@@ -27,6 +27,13 @@ test("production App and Agent composition expose no opposite-store opener", () 
   expect(agentSources).not.toContain("appTurnStateDbPath");
   expect(agentSources).not.toContain("AppBtccStopConsumer");
   expect(agentSources).not.toContain("resolveAppGatewayRuntimeConfig");
+
+  const profiling = source("personalization/profiling.ts");
+  expect(profiling).not.toContain("butler-client.sqlite");
+  expect(profiling).not.toContain("FROM app_settings");
+
+  const gatewayClient = source("gateways/core/client.ts");
+  expect(gatewayClient).not.toContain("enqueueAppCancellation?(");
 });
 
 test("Native Butler runtime identity exposes no App database resolver", () => {
@@ -35,6 +42,13 @@ test("Native Butler runtime identity exposes no App database resolver", () => {
   expect(identity).not.toContain("butler-client.sqlite");
   expect(identity).not.toContain("resolveAppGatewayRuntimeConfig");
   expect(exports).not.toContain("appTurnStateDbPath");
+});
+
+test("Native Butler fences the legacy App writer before migration", () => {
+  const nativeButler = source("application/native-butler.ts");
+  expect(nativeButler).toContain(
+    "if (appGateway) await stopServiceBounded(butlerData, appGateway);",
+  );
 });
 
 test("Native Steward is queue-only and cannot compose or deliver BTCC directly", () => {
