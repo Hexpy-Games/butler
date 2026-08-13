@@ -6,6 +6,18 @@ export type {
   GuidedToolJournalRecord,
 } from "./btcc/sqlite/index.ts";
 export {
+  activateAgentBtccStorage,
+  agentBtccStoragePaths,
+  prepareAgentBtccStorage,
+  validateAgentBtccStorageForReadiness,
+} from "./btcc/sqlite/index.ts";
+export type {
+  AgentBtccActivationMarker,
+  AgentBtccMigrationReceipt,
+  LegacyWriterFenceReceipt,
+  PrepareAgentBtccStorageResult,
+} from "./btcc/sqlite/index.ts";
+export {
   createLegacyProjectWorkReader,
   createProjectLedgerLegacyWorkSource,
   decodeProjectLedgerBinding,
