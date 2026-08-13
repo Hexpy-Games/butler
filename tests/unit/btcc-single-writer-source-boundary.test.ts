@@ -44,11 +44,13 @@ test("Native Butler runtime identity exposes no App database resolver", () => {
   expect(exports).not.toContain("appTurnStateDbPath");
 });
 
-test("Native Butler fences the legacy App writer before migration", () => {
+test("service lifecycle owns legacy writer fencing before Native Butler readiness", () => {
   const nativeButler = source("application/native-butler.ts");
-  expect(nativeButler).toContain(
-    "if (appGateway) await stopServiceBounded(butlerData, appGateway);",
-  );
+  const daemon = source("operations/service/native-service-daemon.ts");
+  expect(nativeButler).not.toContain("stopServiceBounded");
+  expect(nativeButler).not.toContain("prepareAgentBtccStorage");
+  expect(daemon).toContain("prepareAgentStorageForNativeServiceLaunch");
+  expect(daemon).toContain("await daemon.prepareStorageAndStartAll()");
 });
 
 test("Native Steward is queue-only and cannot compose or deliver BTCC directly", () => {

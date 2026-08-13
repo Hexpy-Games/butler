@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/application/native-butler.ts";
+import { prepareAgentStorageForNativeServiceLaunch } from
+  "../../packages/butler-agent/src/operations/service/native-service-storage-preparation.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 const roots: string[] = [];
@@ -25,10 +27,15 @@ const provider: ModelProviderAdapter = {
   },
 };
 
-test("production native bootstrap migrates before readiness and opens BTCC stores only in Agent storage", async () => {
+test("service lifecycle migration precedes Native Butler readiness and opens only Agent storage", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-bootstrap-ledger-"));
   roots.push(butlerData);
   mkdirSync(join(butlerData, "app-server"), { recursive: true });
+  await prepareAgentStorageForNativeServiceLaunch({
+    butlerData,
+    runtimeVersion: "test-split-v1",
+    quiesceLegacyWriter: async () => {},
+  });
   const result = await runNativeButlerMain({
     butlerHome: process.cwd(),
     butlerData,
