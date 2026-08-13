@@ -8,6 +8,7 @@ import type { FixedWindowRateLimiter } from "./rate-limiter.ts";
 import type { LocalAuthConfig } from "./local-auth.ts";
 import type { SessionBindingStore } from
   "../../../../test-support/harness/session-store.ts";
+import type { ProviderQuotaMonitor } from "../../../../operations/metrics/provider-quota.ts";
 
 export interface CreateAppServerOptions {
   dbPath?: string;
@@ -26,6 +27,7 @@ export interface CreateAppServerOptions {
   serviceClient?: ButlerServiceClient;
   conversationProjectionReader?: ConversationProjectionReader;
   sessionBindingStore?: SessionBindingStore;
+  providerQuotaMonitor?: ProviderQuotaMonitor;
   messageRateLimit?: MessageRateLimitOptions;
   automationSchedulerIntervalMs?: number | false;
   localAuth?: {

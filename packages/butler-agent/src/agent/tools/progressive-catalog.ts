@@ -176,7 +176,7 @@ function riskLevelForNativeTool(
   metadata: ToolCapabilityMetadata,
 ): ToolCatalogRiskLevel {
   if (!tool.concurrencySafe || metadata.category === "command") return "high";
-  if (metadata.category === "file" && tool.name !== "read_file" && tool.name !== "grep_files") return "high";
+  if (metadata.category === "file" && tool.name !== "read_file" && tool.name !== "grep_files" && tool.name !== "list_files") return "high";
   return defaultRiskLevelForCategory(metadata.category);
 }
 

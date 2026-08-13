@@ -46,6 +46,15 @@ CREATE TABLE IF NOT EXISTS btcc_guided_effect_recovery_hints (
   after_sha256 TEXT NOT NULL
 );
 
+-- Batch edit recovery is additive so legacy single-edit rows retain their
+-- original fixed columns and hydration semantics. The payload is bounded and
+-- validated by the journal adapter before it becomes runtime authority.
+CREATE TABLE IF NOT EXISTS btcc_guided_effect_recovery_payloads (
+  effect_id TEXT PRIMARY KEY,
+  capability TEXT NOT NULL CHECK (capability = 'edit_file'),
+  payload_json TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS btcc_guided_work_effect_blockers (
   blocker_id TEXT PRIMARY KEY,
   source_turn_id TEXT NOT NULL,
@@ -79,5 +88,13 @@ ON btcc_guided_work_effect_blockers(work_id, status, target);
 CREATE INDEX IF NOT EXISTS idx_btcc_guided_work_effect_blockers_source
 ON btcc_guided_work_effect_blockers(
   session_id, source_program_id, source_turn_id, status
+);
+`;
+
+export const BTCC_GUIDED_EFFECT_RECOVERY_PAYLOAD_TABLE_SCHEMA = `
+CREATE TABLE IF NOT EXISTS btcc_guided_effect_recovery_payloads (
+  effect_id TEXT PRIMARY KEY,
+  capability TEXT NOT NULL CHECK (capability = 'edit_file'),
+  payload_json TEXT NOT NULL
 );
 `;

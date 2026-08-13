@@ -1,5 +1,11 @@
 import { TodoListStore } from "../work/todo-list.ts";
 import { WorkStreamStore } from "../work/work-stream.ts";
+import {
+  createUnavailableWorkspaceReference,
+  createWorkspaceReference,
+  type SessionWorkspaceBindingStore,
+  type WorkspaceReference,
+} from "../session-workspaces/index.ts";
 import type { WebSearchProvider } from "../../integrations/search/provider.ts";
 import {
   type SmartSearchPlanningInput,
@@ -27,16 +33,12 @@ import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
 import { createToolBridgeToolHandlers } from "./tool-bridge/index.ts";
 import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
-import { createRunCommandToolHandlers } from "./run-command/index.ts";
-import { createFileToolHandlers } from "./file-tools/index.ts";
 import { createSkillToolHandlers } from "./skills/index.ts";
 import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
-import {
-  createWorkspacePagePreviewToolHandlers,
-  workspacePagePreviewAvailabilityOverride,
-} from "./workspace-page-preview/index.ts";
+import { workspacePagePreviewAvailabilityOverride } from "./workspace-page-preview/index.ts";
+import { createWorkspaceToolHandlers } from "./workspace-tool-handlers.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
 import type { ExternalToolCatalogInput } from "./progressive-catalog.ts";
 import type {
@@ -168,7 +170,15 @@ export function createButlerToolExecutor(input: {
   pluginToolDescriber?: (input: { id: string; namespace: string; name: string }) => Promise<ExternalToolCatalogInput | null | undefined>;
   activeWorkStreamBinding?: () => { contractId: string; workStreamId: string } | null;
   executionBoundary?: ButlerToolExecutionBoundary;
+  workspaceReference?: WorkspaceReference;
+  sessionBindingStore?: SessionWorkspaceBindingStore;
 }): ContextualButlerToolExecutor {
+  const workspaceReference = input.workspaceReference ?? (input.sessionId && input.sessionBindingStore
+    ? createUnavailableWorkspaceReference()
+    : createWorkspaceReference(input.workspacePath ?? input.butlerHome));
+  const projectLedgerWorkspaceReference = input.workspaceReference || input.sessionId
+    ? workspaceReference
+    : undefined;
   const todoListStore = new TodoListStore(input.butlerData);
   const workStreamStore = new WorkStreamStore(input.butlerData);
   const automationStore = new AutomationStore(input.butlerData);
@@ -212,6 +222,7 @@ export function createButlerToolExecutor(input: {
       butlerData: input.butlerData,
       appMessageDbPath: input.appMessageDbPath,
       workspacePath: input.workspacePath,
+      workspaceReference: projectLedgerWorkspaceReference,
       sessionId: input.sessionId, projectId: input.projectId,
     }),
     ...createMonitoringToolHandlers({
@@ -282,16 +293,14 @@ export function createButlerToolExecutor(input: {
     ...createDataTableToolHandlers({
       butlerData: input.butlerData,
     }),
-    ...createRunCommandToolHandlers({
+    ...createWorkspaceToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
-      workspacePath: input.workspacePath ?? input.butlerHome,
+      workspacePath: input.workspacePath,
+      workspaceReference,
+      sessionId: input.sessionId,
+      sessionBindingStore: input.sessionBindingStore,
     }),
-    ...createWorkspacePagePreviewToolHandlers({
-      butlerData: input.butlerData,
-      workspacePath: input.workspacePath ?? input.butlerHome,
-    }),
-    ...createFileToolHandlers({ butlerData: input.butlerData, workspacePath: input.workspacePath ?? input.butlerHome }),
   });
   toolExecutorRef.current = toolExecutors;
   return executeActualTool;

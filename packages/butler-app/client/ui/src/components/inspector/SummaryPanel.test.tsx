@@ -75,6 +75,70 @@ test("summary gives explicit values for no-project and unavailable workspaces", 
   ).toContain("Unavailable");
 });
 
+test("summary exposes session worktree identity and dirty state without paths", () => {
+  const clean = renderSummary({
+    branch_info: {
+      available: true,
+      workspace_mode: "git",
+      branch_name: "feature/demo",
+      safe_status: "Git branch feature/demo",
+      workspace_binding: "session_worktree",
+      workspace_label: "session-worktree/feature/demo",
+      workspace_status: "available",
+      dirty: false,
+    },
+  });
+  expect(clean).toContain("Linked worktree");
+  expect(clean).toContain("session-worktree/feature/demo");
+  expect(clean).toContain("Clean");
+  expect(clean).not.toContain("/tmp/");
+
+  const dirty = renderSummary({
+    branch_info: {
+      available: true,
+      workspace_mode: "git",
+      branch_name: "feature/demo",
+      safe_status: "Git branch feature/demo",
+      workspace_binding: "session_worktree",
+      workspace_label: "session-worktree/feature/demo",
+      workspace_status: "available",
+      dirty: true,
+    },
+  });
+  expect(dirty).toContain("Dirty");
+
+  const unavailable = renderSummary({
+    branch_info: {
+      available: false,
+      workspace_mode: "unknown",
+      safe_status: "Session worktree unavailable",
+      safe_error_code: "session_workspace_unavailable",
+      workspace_binding: "session_worktree",
+      workspace_label: "Session worktree",
+      workspace_status: "unavailable",
+    },
+  });
+  expect(unavailable).toContain("Session worktree unavailable");
+  expect(unavailable).toContain("Unavailable");
+});
+
+test("summary keeps project Git dependency status distinct from worktree failure", () => {
+  const html = renderSummary({
+    branch_info: {
+      available: false,
+      workspace_mode: "unknown",
+      safe_status: "Git is not installed",
+      safe_error_code: "git_not_installed",
+      workspace_binding: "project",
+      workspace_label: "Project workspace",
+      workspace_status: "unavailable",
+    },
+  });
+  expect(html).toContain("Project · Project workspace");
+  expect(html).not.toContain("Session worktree unavailable");
+  expect(html).toContain("Git is not installed");
+});
+
 test("summary maps canonical progress state families to distinguishable DS tones", () => {
   const familyMarkup = new Map<string, string>();
   const families: Record<string, string[]> = {

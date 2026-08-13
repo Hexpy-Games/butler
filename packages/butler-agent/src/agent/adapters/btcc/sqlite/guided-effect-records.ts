@@ -5,6 +5,7 @@ import type {
   GuidedEffectJournalStatus,
   GuidedEffectReceipt,
 } from "../../../btcc/effects/index.ts";
+import { normalizeGuidedEffectRecoveryEntries } from "../../../btcc/effects/index.ts";
 
 export type GuidedEffectRow = {
   effect_id: string;
@@ -29,6 +30,7 @@ export type GuidedEffectRow = {
   recovery_start_line: number | null;
   recovery_before_sha256: string | null;
   recovery_after_sha256: string | null;
+  recovery_payload_json: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -61,20 +63,45 @@ export function hydrateGuidedEffect(
     ...(row.error_json !== null
       ? { error: JSON.parse(row.error_json) as GuidedEffectError }
       : {}),
-    ...(row.recovery_capability !== null &&
-      row.recovery_start_line !== null &&
-      row.recovery_before_sha256 !== null &&
-      row.recovery_after_sha256 !== null
+    ...(row.recovery_payload_json !== null
       ? {
-          recoveryHint: {
-            capability: row.recovery_capability,
-            startLine: row.recovery_start_line,
-            beforeSha256: row.recovery_before_sha256,
-            afterSha256: row.recovery_after_sha256,
-          } satisfies GuidedEffectRecoveryHint,
+          recoveryHint: hydrateBatchRecoveryHint(
+            row.recovery_payload_json,
+            row.effect_id,
+          ),
         }
-      : {}),
+      : row.recovery_capability !== null &&
+          row.recovery_start_line !== null &&
+          row.recovery_before_sha256 !== null &&
+          row.recovery_after_sha256 !== null
+        ? {
+            recoveryHint: {
+              capability: row.recovery_capability,
+              startLine: row.recovery_start_line,
+              beforeSha256: row.recovery_before_sha256,
+              afterSha256: row.recovery_after_sha256,
+            } satisfies GuidedEffectRecoveryHint,
+          }
+        : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function hydrateBatchRecoveryHint(
+  payloadJson: string,
+  effectId: string,
+): GuidedEffectRecoveryHint {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(payloadJson);
+  } catch {
+    throw new Error(
+      `Guided edit batch recovery payload is invalid: ${effectId}`,
+    );
+  }
+  return {
+    capability: "edit_file",
+    entries: normalizeGuidedEffectRecoveryEntries(payload),
   };
 }

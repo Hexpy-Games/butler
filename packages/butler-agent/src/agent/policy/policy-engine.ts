@@ -19,6 +19,7 @@ const BLOCKED_DIRECT_TOOL_NAMES = new Set([
   "glob_files",
   "grep",
   "grep_files",
+  "list_files",
   "multiedit",
   "multi_edit",
   "notebookedit",

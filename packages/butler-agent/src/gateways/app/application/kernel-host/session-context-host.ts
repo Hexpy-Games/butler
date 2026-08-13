@@ -6,6 +6,10 @@ import {
   resolveGitWorkspaceSummary,
   sessionHintForRow,
 } from "../../domain/sessions/index.ts";
+import {
+  resolveSessionWorkspaceAuthority,
+  safeWorkspaceBasename,
+} from "../../../../agent/session-workspaces/index.ts";
 import type {
   MessageRecord,
   ProgressSummaryRow,
@@ -175,14 +179,88 @@ export function createSessionContextHost(
     },
     branchInfoForSession(sessionId) {
       const project = kernel.getProjectForSession(sessionId);
-      if (!project) {
+      const binding = kernel.sessionBindingStore.getBySessionId(
+        sessionHintForRow(sessionId),
+      );
+      const authority = resolveSessionWorkspaceAuthority({
+        binding,
+        projectWorkspacePath: project?.workspace_path,
+      });
+      if (authority.kind === "unavailable") {
+        return {
+          available: false,
+          workspace_mode: "unknown",
+          safe_status: "Session worktree unavailable",
+          safe_error_code: authority.safeErrorCode,
+          workspace_binding: "session_worktree",
+          workspace_label: authority.workspaceLabel,
+          workspace_status: "unavailable",
+        };
+      }
+      if (authority.kind === "session_worktree") {
+        if (!authority.workspacePath) {
+          return {
+            available: false,
+            workspace_mode: "unknown",
+            safe_status: "Session worktree unavailable",
+            safe_error_code: "session_workspace_unavailable",
+            workspace_binding: "session_worktree",
+            workspace_label: authority.workspaceLabel,
+            workspace_status: "unavailable",
+          };
+        }
+        const summary = resolveGitWorkspaceSummary(
+          authority.workspacePath,
+          undefined,
+          {
+            includeDirty: true,
+            expectedBranch: authority.branch,
+            expectedRepositoryAnchorPath: authority.marker.repositoryAnchorPath,
+          },
+        );
+        const summaryErrorCode = "safe_error_code" in summary
+          ? summary.safe_error_code
+          : undefined;
+        return {
+          ...summary,
+          ...(summary.available
+            ? {}
+            : {
+                safe_status:
+                  summaryErrorCode === "git_not_installed"
+                    ? summary.safe_status
+                    : "Session worktree unavailable",
+                safe_error_code:
+                  summaryErrorCode === "git_not_installed"
+                    ? summaryErrorCode
+                    : "session_workspace_unavailable",
+              }),
+          workspace_binding: "session_worktree",
+          workspace_label: authority.workspaceLabel,
+          workspace_status: summary.available ? "available" : "unavailable",
+        };
+      }
+      if (!project && authority.kind === "project") {
         return {
           available: false,
           workspace_mode: "none",
           safe_status: "No project workspace",
         };
       }
-      return resolveGitWorkspaceSummary(project.workspace_path);
+      const summary = resolveGitWorkspaceSummary(
+        authority.workspacePath ?? project?.workspace_path ?? "",
+        undefined,
+        { includeDirty: true },
+      );
+      return {
+        ...summary,
+        workspace_binding: "project",
+        workspace_label: safeWorkspaceBasename(
+          authority.workspacePath ?? project?.workspace_path,
+        ),
+        workspace_status:
+          summary.workspace_mode === "unknown" ? "unavailable" : "available",
+      };
     },
   };
 }

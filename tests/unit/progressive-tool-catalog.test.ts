@@ -80,6 +80,11 @@ test("native progressive catalog assigns conservative risk levels from real tool
     tags: expect.arrayContaining(["file", "grep", "native", "search"]),
   }));
   expect(byName.get("read_file")?.riskLevel).toBe("medium");
+  expect(byName.get("list_files")).toEqual(expect.objectContaining({
+    category: "file",
+    riskLevel: "medium",
+    tags: expect.arrayContaining(["file", "list", "discovery", "native"]),
+  }));
   expect(byName.get("list_tool_capabilities")?.riskLevel).toBe("low");
 });
 
