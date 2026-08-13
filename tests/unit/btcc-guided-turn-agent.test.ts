@@ -309,7 +309,8 @@ test("production Turn resolves a Work created after replay runtime construction"
       (request) => {
         rounds += 1;
         const referenceMessage = messagesWithToolResults(request)
-          .find((message) => message.content.includes("butler.operation-result-reference.v1"));
+          .find((message) => message.name === "read_file" &&
+            message.content.includes("butler.operation-result-reference.v1"));
         expect(referenceMessage).toBeDefined();
         reference = JSON.parse(referenceMessage!.content) as Record<string, unknown>;
         const identity = reference.identity as Record<string, unknown>;
@@ -358,14 +359,14 @@ test("production Turn resolves a Work created after replay runtime construction"
   }
 });
 
-test("production Guided Turn projects acknowledged large results through the actual Codex serializer", async () => {
+test("production Guided Turn projects economical results through the actual Codex serializer", async () => {
   const fixture = createFixture("guided-m1-v2-codex-exact-replay");
   const previousFlag = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
   const previousBase = process.env.BUTLER_CODEX_BASE_URL;
   const originalFetch = globalThis.fetch;
   process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
   process.env.BUTLER_CODEX_BASE_URL = "https://example.test/backend-api";
-  writeFileSync(join(fixture.root, "large.txt"), "L".repeat(9_000));
+  writeFileSync(join(fixture.root, "large.txt"), "L".repeat(2_700));
   writeFileSync(join(fixture.root, "small.txt"), "small evidence");
   bindAppProject(fixture.dbPath, {
     id: "guided-agent-session", workspacePath: fixture.root,
@@ -435,14 +436,14 @@ test("production Guided Turn projects acknowledged large results through the act
   }
 }, 30_000);
 
-test("production Guided Turn preserves official Responses continuation while projecting references", async () => {
+test("production Guided Turn preserves official Responses continuation for economical replay", async () => {
   const fixture = createFixture("guided-m1-v2-official-exact-replay");
   const previousFlag = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
   const previousBase = process.env.OPENAI_BASE_URL;
   const originalFetch = globalThis.fetch;
   process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
   process.env.OPENAI_BASE_URL = "https://example.test/v1";
-  writeFileSync(join(fixture.root, "official-large.txt"), "O".repeat(9_000));
+  writeFileSync(join(fixture.root, "official-large.txt"), "O".repeat(2_700));
   writeFileSync(join(fixture.root, "official-small.txt"), "small");
   const bodies: Record<string, unknown>[] = [];
   const responses = [
