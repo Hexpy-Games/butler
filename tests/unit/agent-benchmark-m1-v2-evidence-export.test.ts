@@ -8,6 +8,7 @@ import { createButlerAdapter } from "../support/agent-benchmark/butler-adapter.t
 import { replacementEligibility } from "../support/agent-benchmark/paired-contract.ts";
 import { redactBenchmarkPlan } from "../support/agent-benchmark/checkpoint.ts";
 import { benchmarkPlanIdentity } from "../support/agent-benchmark/planning.ts";
+import { evaluateM1V2AdapterEvidence } from "../support/agent-benchmark/m1-v2-adapter-evaluation.ts";
 import failedAttemptManifest from "../support/agent-benchmark/fixtures/m1-v2/failed-attempt-03-redacted-manifest.json";
 import failedAttemptIdentities from "../support/agent-benchmark/fixtures/m1-v2/failed-attempt-03-identities.json";
 import { durableM1V2Arithmetic, exportedM1V2Metrics, materializeM1V2EvidenceExport, verifyM1V2EvidenceExport } from "../support/agent-benchmark/m1-v2-evidence-export.ts";
@@ -208,6 +209,74 @@ test("role-aware SC01 preserves exact 591-byte title and auxiliary telemetry out
   expect(exported.overhead[0]!.observation!.segments.reduce((sum, row) => sum + Number(row.providerSendBytes), 0)).toBe(591);
 });
 
+test("public title projection preserves absent canonical provider usage as typed unavailable", () => {
+  const fixture = exportFixture();
+  fixture.input.providerRequests[0]!.serializedRequestBytes = 37_673;
+  fixture.input.metrics[0]!.dimensions!.providerSendBytes = 37_673;
+  fixture.input.metrics.splice(1, 2, ...Array.from({ length: 8 }, (_, index) => ({
+    ...fixture.input.metrics[1]!, dimensions: { ...fixture.input.metrics[1]!.dimensions!, segmentId: `agent-${index}`,
+      providerSendBytes: index === 7 ? 4_717 : 4_708 },
+  })));
+  const agentUsage = fixture.input.metrics.find((row) => row.name === "m1_v2_response_usage")!;
+  Object.assign(agentUsage.dimensions!, { status: "usage_bearing", promptTokens: 7_216, cacheReadTokens: 0,
+    cacheWriteTokens: 0, outputTokens: null, reasoningTokens: null, totalTokens: 7_241 });
+  fixture.input.providerRequests[1]!.serializedRequestBytes = 591;
+  const overheadRows = (attemptDigest: string, bytes: number, segments: number) => [
+    { ...fixture.input.metrics[0]!, dimensions: { ...fixture.input.metrics[0]!.dimensions!, attemptDigest, armId: null, providerSendBytes: bytes } },
+    ...Array.from({ length: segments }, (_, index) => ({ ...fixture.input.metrics[1]!, dimensions: {
+      ...fixture.input.metrics[1]!.dimensions!, attemptDigest, segmentId: `${attemptDigest[0]}-${index}`,
+      providerSendBytes: index === segments - 1 ? bytes - Math.floor(bytes / segments) * (segments - 1) : Math.floor(bytes / segments),
+    } })),
+  ];
+  fixture.input.metrics.push(...overheadRows("B".repeat(43), 591, 3));
+  const auxiliaryDigest = "C".repeat(43);
+  fixture.input.providerRequests.push({ ...fixture.input.providerRequests[1]!, ordinal: 3, requestKind: "auxiliary",
+    attemptDigest: auxiliaryDigest, serializedRequestBytes: 981, requestStartedAtMs: 210, completedAtMs: 230, terminatedAtMs: 230 });
+  (fixture.input.target.providerRequestIdentities as Record<string, unknown>[]).push({ ordinal: 3,
+    sessionId: fixture.input.identity.sessionId, turnId: fixture.input.identity.turnId,
+    requestKind: "auxiliary", physicalAttemptDigest: auxiliaryDigest });
+  fixture.input.metrics.push(...overheadRows(auxiliaryDigest, 981, 1));
+
+  const output = materializeM1V2EvidenceExport(fixture.input);
+  const verified = verifyM1V2EvidenceExport({ path: output.absolutePath, expected: output.evidence.identity });
+  expect(verified.evidence.overhead[0]!.observation!.usage).toEqual({
+    schemaVersion: "butler.m1-response-usage.v2", attemptDigest: "B".repeat(43), status: "unavailable",
+    promptTokens: null, cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null,
+    reasoningTokens: null, totalTokens: null, availabilityReason: "provider_usage_row_absent",
+  });
+  expect(durableM1V2Arithmetic(verified.evidence)).toMatchObject({
+    agentAttempts: [{ providerSendBytes: 37_673, responseUsageStatus: "usage_bearing", promptTokens: 7_216,
+      cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: null, reasoningTokens: null, totalTokens: 7_241 }],
+    unarmedPhysicalOverhead: { title: { attempts: 1, providerSendBytes: 591 }, auxiliary: { attempts: 1, providerSendBytes: 981 } },
+    allPhysical: { attempts: 3, providerSendBytes: 39_245, observedUsageRows: 3, usageBearingRows: 1, unavailableUsageRows: 2 },
+  });
+  expect(verified.evidence.attempts[0]!.segments).toHaveLength(8);
+  expect(verified.evidence.overhead[0]!.observation!.segments).toHaveLength(3);
+
+  const arm = { key: fixture.input.identity.armKey, scenario: "direct-cold" as const, repetition: 1, order: 0,
+    agent: "butler" as const, track: "controlled" as const, cache: "cold" as const, fixtureHash: fixture.input.identity.fixtureHash,
+    effectiveConfig: { model: "openai/gpt-5.6-sol", reasoning: "medium", permissions: "full_access", tools: [], memoryEnabled: true, skillsEnabled: true, pluginsEnabled: true, mcpEnabled: true, provider: "openai", variant: null },
+    sourceRoot: fixture.arm.sourceRoot, outputRoot: fixture.arm.outputRoot, dataRoot: fixture.arm.dataRoot,
+    evidenceRoot: fixture.input.evidenceRoot, cacheRoot: fixture.arm.cacheRoot, cachePairId: "pair", timeoutMs: 1_000,
+    sourceRevision: fixture.input.identity.sourceRevision, version: "before" as const, pairId: "pair-1", block: 1 };
+  const benchmarkFixture = { id: "direct-cold" as const, version: "v1", prompts: ["safe"], m1V2: { armId: "direct-cold" as const,
+    scenario: { schema: "butler.btcc-r3-electron-scenario.v1" as const, id: "safe", attributionArmId: "direct-cold" as const,
+      model: "openai/gpt-5.6-sol", reasoningEffort: "medium" as const, accessMode: "full_access" as const,
+      session: { id: fixture.input.identity.sessionId, kind: "chat" as const, title: "safe" }, fixtures: [], steps: [], publicBenchmarkFixture: true },
+    targetStepId: fixture.input.identity.stepId, publicBenchmarkFixture: true as const,
+    promptSha256: { [fixture.input.identity.stepId]: "a".repeat(64) }, fixtureSha256: { [fixture.input.identity.stepId]: fixture.input.identity.fixtureHash } } };
+  const evaluated = evaluateM1V2AdapterEvidence({ arm, fixture: benchmarkFixture, terminalState: "accepted", result: {
+    exitCode: 0, gateCode: "none", timedOut: false, cancelled: false, stdout: "", stderr: "", adapterVersion: "test", provider: "openai",
+    finalText: "safe", sessionId: fixture.input.identity.sessionId, usage: {}, tools: {}, timing: {}, operations: {}, changedPaths: [], evidenceRefs: [],
+    m1V2Evidence: { evidence: { observations: [fixture.input.target] }, metrics: [], db: null, landingValidation: null,
+      sourceRevision: fixture.input.identity.sourceRevision, attemptStartedAtMs: 0, exportPath: output.absolutePath, exportHandle: output.handle,
+      exportRunRoot: fixture.input.runRoot, exportPlanIdentity: fixture.input.identity.planIdentity, exportSha256: output.sha256, exportIdentity: output.evidence.identity },
+  } });
+  expect(evaluated.diagnostics).not.toContain("sc01_durable_evidence_export_verification_failed");
+  expect(evaluated.summary?.allPhysical).toBeDefined();
+  expect(evaluated.summary?.allPhysical?.providerSendBytes).toBe(39_245);
+});
+
 test("role-aware non-Agent SC01 rejects arm tags, byte sums, and digest-role conflicts", () => {
   const armTagged = exportFixture();
   armTagged.input.metrics.push({ ...armTagged.input.metrics[0]!, dimensions: { ...armTagged.input.metrics[0]!.dimensions!, attemptDigest: "B".repeat(43) } });
@@ -254,6 +323,7 @@ test("durable reopen rejects fully rehashed invalid overhead typed values", () =
     (value: any) => { value.overhead[0].observation.segments[0].providerSendBytes = -1; value.overhead[0].observation.segments[0].byteLength = -1; },
     (value: any) => { value.overhead[0].observation.usage.availabilityReason = "wrong"; },
     (value: any) => { value.overhead[0].observation.usage.promptTokens = "7"; },
+    (value: any) => { value.overhead[0].observation.usage.availabilityReason = "provider_usage_row_absent"; value.overhead[0].observation.usage.promptTokens = 7; },
   ];
   for (const mutate of mutations) {
     const copy = exportFixture();

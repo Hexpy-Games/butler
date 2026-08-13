@@ -283,7 +283,6 @@ function buildExport(input: Parameters<typeof materializeM1V2EvidenceExport>[0])
       .map((row, index) => projectSegment(row, index));
     if (segments.reduce((sum, row) => sum + Number(row.providerSendBytes), 0) !== bytes) throw new Error("sc01_export_segment_sum_mismatch");
     const usageRows = input.metrics.filter((row) => row.name === "m1_v2_response_usage" && row.dimensions?.attemptDigest === attemptDigest);
-    if (usageRows.length > 1) throw new Error("sc01_export_usage_cardinality_invalid");
     return {
       ordinal: physical.ordinal, role: "agent" as const, ownership: physical.ownership,
       stepId: physical.stepId!, sessionId: physical.sessionId!, turnId: physical.turnId!, attemptDigest,
@@ -296,7 +295,7 @@ function buildExport(input: Parameters<typeof materializeM1V2EvidenceExport>[0])
       effectiveServiceTierReason: physical.effectiveServiceTierReason,
       serializerContract: physical.serializerContract, serializedRequestBytes: bytes,
       serializedRequestDigest: physical.serializedRequestDigest, serializedRequestDigestAlgorithm: physical.serializedRequestDigestAlgorithm, envelope: projectEnvelope(event), segments,
-      usage: usageRows.length === 1 ? projectUsage(usageRows[0]!) : absentUsage(attemptDigest),
+      usage: projectPhysicalUsage({ role: "agent", attemptDigest, rows: usageRows }),
     };
   });
   if (!attempts.some((attempt) => attempt.ownership === "target_step") || attempts.length !== envelopes.length || attempts.length !== agentMemberships.length ||
@@ -334,7 +333,7 @@ function buildExport(input: Parameters<typeof materializeM1V2EvidenceExport>[0])
     if (segments.length === 0 || segments.reduce((sum, segment) => sum + Number(segment.providerSendBytes), 0) !== physical.providerSendBytes) {
       throw new Error("sc01_export_non_agent_segment_sum_mismatch");
     }
-    const usage = usageRows.length === 1 ? projectUsage(usageRows[0]!) : absentUsage(attemptDigest);
+    const usage = projectPhysicalUsage({ role, attemptDigest, rows: usageRows });
     return { ...physical, role: role as "auxiliary" | "title" | "tool_provider", armed: false as const, armId: null,
       observation: { envelope, segments, usage } };
   });
@@ -440,9 +439,16 @@ function projectEnvelope(row: OperationalMetricEvent): Record<string, string | n
 function projectSegment(row: OperationalMetricEvent, order: number) { assertMetric(row, "segment"); assertExactKeys(row.dimensions!, SEGMENT); const d = row.dimensions!;
   const kind = bounded(d.kind); if (!OBSERVED_M1_REQUEST_SEGMENT_KINDS.some((value) => value === kind)) throw new Error("sc01_export_segment_kind_invalid");
   return { ...d, order, byteLength: positiveInteger(d.providerSendBytes), providerSendBytes: positiveInteger(d.providerSendBytes) }; }
+type UsageProjectionRole = "agent" | "auxiliary" | "title" | "tool_provider";
+type UsageAvailabilityReason = "provider_usage_unavailable" | "provider_usage_reported" | "provider_usage_row_absent";
+function projectPhysicalUsage(input: { role: UsageProjectionRole; attemptDigest: string; rows: OperationalMetricEvent[] }) {
+  if (input.rows.length > 1) throw new Error(input.role === "agent" ? "sc01_export_usage_cardinality_invalid" : "sc01_export_non_agent_telemetry_cardinality_invalid");
+  const usage = input.rows.length === 1 ? projectUsage(input.rows[0]!) : absentUsage(input.attemptDigest);
+  assertUsageValues(usage, input.attemptDigest, input.role);
+  return usage;
+}
 function projectUsage(row: OperationalMetricEvent) { assertMetric(row, "usage"); assertExactKeys(row.dimensions!, USAGE); const d = row.dimensions!;
   const usage = { ...d, availabilityReason: d.status === "unavailable" ? "provider_usage_unavailable" : "provider_usage_reported" };
-  assertUsageValues(usage, requiredDigest(d.attemptDigest));
   return usage; }
 function absentUsage(attemptDigest: string) { return { schemaVersion: "butler.m1-response-usage.v2", attemptDigest, status: "unavailable", promptTokens: null,
   cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null, reasoningTokens: null, totalTokens: null, availabilityReason: "provider_usage_row_absent" }; }
@@ -492,7 +498,7 @@ function assertAttempt(attempt: M1V2EvidenceExport["attempts"][number], identity
     segmentIds.add(String(segment.segmentId));
   });
   if (attempt.segments.reduce((sum, row) => sum + Number(row.providerSendBytes), 0) !== attempt.serializedRequestBytes) throw new Error("sc01_export_byte_invariant_failed");
-  assertUsageValues(attempt.usage, attempt.attemptDigest, true);
+  assertUsageValues(attempt.usage, attempt.attemptDigest, "agent");
 }
 function assertOverhead(row: M1V2EvidenceExport["overhead"][number], identity: M1V2EvidenceExportIdentity): void {
   assertExactKeys(row, OVERHEAD);
@@ -516,7 +522,7 @@ function assertOverhead(row: M1V2EvidenceExport["overhead"][number], identity: M
     ids.add(String(segment.segmentId));
   });
   if (row.observation.segments.reduce((sum, segment) => sum + Number(segment.providerSendBytes), 0) !== row.providerSendBytes) throw new Error("sc01_export_overhead_byte_invariant_failed");
-  try { assertUsageValues(row.observation.usage, row.attemptDigest); } catch { throw new Error("sc01_export_overhead_usage_invalid"); }
+  try { assertUsageValues(row.observation.usage, row.attemptDigest, row.role); } catch { throw new Error("sc01_export_overhead_usage_invalid"); }
 }
 
 const USAGE_TOKEN_KEYS = ["promptTokens", "cacheReadTokens", "cacheWriteTokens", "outputTokens", "reasoningTokens", "totalTokens"] as const;
@@ -530,12 +536,14 @@ function assertEnvelopeValues(envelope: Record<string, unknown>, attemptDigest: 
     throw new Error(armId === null ? "sc01_export_overhead_envelope_invalid" : "sc01_export_envelope_value_invalid");
   }
 }
-function assertUsageValues(usage: Record<string, unknown>, attemptDigest: string, allowAbsent = false): void {
-  const reasons = allowAbsent ? ["provider_usage_unavailable", "provider_usage_reported", "provider_usage_row_absent"] : ["provider_usage_unavailable", "provider_usage_reported"];
+function assertUsageValues(usage: Record<string, unknown>, attemptDigest: string, role: UsageProjectionRole): void {
+  const reason = usage.availabilityReason as UsageAvailabilityReason;
   if (usage.schemaVersion !== "butler.m1-response-usage.v2" || usage.attemptDigest !== attemptDigest ||
-      (usage.status !== "usage_bearing" && usage.status !== "unavailable") || !reasons.includes(String(usage.availabilityReason)) ||
-      (usage.status === "usage_bearing" && usage.availabilityReason !== "provider_usage_reported") ||
-      (usage.status === "unavailable" && usage.availabilityReason === "provider_usage_reported") ||
+      !isPhysicalRequestRole(role) || (usage.status !== "usage_bearing" && usage.status !== "unavailable") ||
+      !["provider_usage_unavailable", "provider_usage_reported", "provider_usage_row_absent"].includes(reason) ||
+      (usage.status === "usage_bearing" && reason !== "provider_usage_reported") ||
+      (usage.status === "unavailable" && reason === "provider_usage_reported") ||
+      (reason === "provider_usage_row_absent" && usage.status !== "unavailable") ||
       !USAGE_TOKEN_KEYS.every((key) => nullableNonnegativeInteger(usage[key])) ||
       (usage.status === "unavailable" && !USAGE_TOKEN_KEYS.every((key) => usage[key] === null))) throw new Error("sc01_export_usage_value_invalid");
 }
