@@ -95,6 +95,11 @@ export interface InboundEnvelope {
       reasoningEffort: string;
     };
   };
+  nativeStewardContext?: {
+    version: 1;
+    projectName: string;
+    workspacePath: string;
+  };
   control?: {
     kind: "cancel_turn";
     requestId: string;

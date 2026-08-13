@@ -12,12 +12,12 @@ import type { AppStoreKernel } from "./app-store-kernel.ts";
 export function initializeTerminalTurnRetention(
   kernel: AppStoreKernel,
 ): (event: { turnId: string; eventId: number }) => void {
-  const btccRetention = {
-    isSettled: (turnId: string) => btccTurnSettled(kernel.db, turnId),
+  const transcriptRetention = {
+    isSettled: (_turnId: string) => true,
   };
   kernel.terminalTurnRetention = new TerminalTurnRetention(
     kernel.db,
-    btccRetention,
+    transcriptRetention,
   );
   kernel.terminalTurnRetentionQueue = new TerminalTurnRetentionQueue({
     terminalTurnPage: (afterRowId, limit) =>
@@ -105,18 +105,6 @@ function hasTerminalSweepIndex(db: Database): boolean {
     SELECT name FROM sqlite_master
     WHERE type = 'index' AND name = 'turns_state_rowid_idx'
   `).get());
-}
-
-function btccTurnSettled(db: Database, turnId: string): boolean {
-  const hasTurns = db.query<{ name: string }, []>(`
-    SELECT name FROM sqlite_master
-    WHERE type = 'table' AND name = 'btcc_turns'
-  `).get();
-  if (!hasTurns) return true;
-  const row = db.query<{ semantic_state: string }, [string]>(`
-    SELECT semantic_state FROM btcc_turns WHERE turn_id = ?
-  `).get(turnId);
-  return !row || row.semantic_state === "delivered" || row.semantic_state === "cancelled";
 }
 
 function recordRetentionFailure(kernel: AppStoreKernel, error: unknown): void {

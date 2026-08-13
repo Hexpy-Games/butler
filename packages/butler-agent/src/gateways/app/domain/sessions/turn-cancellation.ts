@@ -7,12 +7,14 @@ import type {
   TurnActionResult,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
+import type { ButlerServiceClient } from "../../../core/client.ts";
+import { sessionHintForRow } from "./session-read-model.ts";
 
 export type TurnCancellationInput = {
   db: Database;
   getTurn: (turnId: string) => TurnRecord;
   getTurnRow: (turnId: string) => TurnRow | null;
-  cancelResponder: (turnId: string) => boolean;
+  serviceClient: ButlerServiceClient;
   finalizeCancelledTurn: (chatId: string, turnId: string) => TurnRecord;
   cleanupTurnEventSequences: (chatId: string, turnId: string) => void;
   ensureCancelledTurnActivityMessage: (
@@ -32,15 +34,16 @@ export class AppTurnCancellation {
     }
 
     this.recordDecision(row);
-    if (!this.input.cancelResponder(turnId)) {
-      this.input.ensureCancelledTurnActivityMessage(row.chat_id, turnId);
-      return emptyResult(this.input.getTurn(turnId));
-    }
-
-    this.completeDirectResponder(turnId);
-    const cancelled = this.input.finalizeCancelledTurn(row.chat_id, turnId);
-    this.input.cleanupTurnEventSequences(row.chat_id, turnId);
-    return emptyResult(cancelled);
+    const enqueueCancellation = this.input.serviceClient.enqueueAppCancellation;
+    if (!enqueueCancellation) throw new Error("app_cancellation_queue_unavailable");
+    enqueueCancellation.call(this.input.serviceClient, {
+      chatId: row.chat_id,
+      sessionId: sessionHintForRow(row.chat_id),
+      turnId,
+      requestId: `cancel:${turnId}`,
+      requestedAt: new Date().toISOString(),
+    }, { source: "app-turn-cancellation" });
+    return emptyResult(this.input.getTurn(turnId));
   }
 
   reconcile(sessionId?: string): void {
@@ -108,14 +111,6 @@ export class AppTurnCancellation {
     })();
   }
 
-  private completeDirectResponder(turnId: string): void {
-    const now = new Date().toISOString();
-    this.input.db.query(`
-      UPDATE app_turn_cancel_outbox
-      SET state = 'completed', accepted_at = ?, completed_at = ?
-      WHERE turn_id = ? AND state = 'pending'
-    `).run(now, now, turnId);
-  }
 }
 
 function emptyResult(turn: TurnRecord): TurnActionResult {

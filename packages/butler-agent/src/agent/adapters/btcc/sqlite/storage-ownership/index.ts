@@ -5,6 +5,7 @@ export {
 } from "./agent-storage-migration.ts";
 export {
   activateAgentBtccStorage,
+  agentBtccStorageIsActivated,
   validateAgentBtccStorageForReadiness,
 } from "./activation-marker.ts";
 export {

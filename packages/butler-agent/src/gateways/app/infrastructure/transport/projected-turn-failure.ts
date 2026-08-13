@@ -4,7 +4,6 @@ import {
 } from "./turn-failure-projection.ts";
 import { timestampBefore } from "./app-transport-metadata.ts";
 import type { AppTransportProjectionStoreOptions } from "./transport-projection-contract.ts";
-import { btccRetainsTurnAuthority } from "./btcc-turn-projection-authority.ts";
 import { runtimeFaultFailureMessage } from "./runtime-fault-failure.ts";
 
 export function projectAppTurnFailure(input: {
@@ -19,7 +18,6 @@ export function projectAppTurnFailure(input: {
   const turn = options.getTurnRow(turnId);
   if (!turn) return false;
   const runtimeFault = options.runtimeFaultRecordForTurn(turnId);
-  if (!runtimeFault && btccRetainsTurnAuthority(options.db, turnId)) return false;
   if (turn.state === "delivered" || turn.state === "cancelled") return false;
   if (
     turn.state === "retrying" &&

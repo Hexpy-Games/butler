@@ -69,7 +69,6 @@ import { createGuidedSessionWorkspaceRuntime, type GuidedSessionWorkspaceBinding
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
   butlerData: string;
-  appMessageDbPath: string;
   contextDocuments: { resolve(contextRef: string): string };
   toolJournal: SqliteGuidedToolJournal;
   effectJournal: SqliteGuidedEffectJournal;
@@ -122,7 +121,6 @@ export function createProductionGuidedTurnAgent(input: {
       const execute = createButlerToolExecutor({
         butlerHome: input.butlerHome,
         butlerData: input.butlerData,
-        appMessageDbPath: input.appMessageDbPath,
         workspacePath: policy.workspacePath,
         sessionId: turn.sessionId,
         originChatId: turn.sessionId,
@@ -167,7 +165,6 @@ export function createProductionGuidedTurnAgent(input: {
           resolvePersistentEffect: createGuidedPersistentEffectResolver({
             butlerHome: input.butlerHome,
             butlerData: input.butlerData,
-            appMessageDbPath: input.appMessageDbPath,
             workspacePath: policy.workspacePath,
             workspaceReference,
             sessionId: turn.sessionId,

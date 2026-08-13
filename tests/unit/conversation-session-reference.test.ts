@@ -27,7 +27,7 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-test("session discovery defaults to the active project and enriches canonical sessions with App titles", () => {
+test("session discovery uses Agent conversation facts without reading App titles", () => {
   const store = new AgentConversationStore({ butlerData: root });
   try {
     seedSession(store, {
@@ -65,7 +65,6 @@ test("session discovery defaults to the active project and enriches canonical se
 
   const result = listConversationSessions({
     butlerData: root,
-    appMessageDbPath: appDbPath,
     currentSessionId: "cs_current",
     limit: 10,
   });
@@ -75,8 +74,8 @@ test("session discovery defaults to the active project and enriches canonical se
   expect(result.sessions.map((session) => session.conversation_session_id))
     .toEqual(["cs_sandy", "cs_current"]);
   expect(result.sessions[0]).toMatchObject({
-    title: "샌디봇 세션",
-    catalog_source: "app-catalog-compat",
+    title: null,
+    catalog_source: null,
     external_session_id: "chat-sandy",
     project_id: "project-butler",
     message_count: 2,
@@ -212,7 +211,6 @@ test("native session-reference tools expose bounded schemas and execute the cano
   const execute = createButlerToolExecutor({
     butlerHome: root,
     butlerData: root,
-    appMessageDbPath: appDbPath,
     sessionId: "cs_current",
     projectId: "project-butler",
   });
