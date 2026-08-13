@@ -15,6 +15,7 @@ import {
   readServiceState,
   removeServiceState,
   resolveNativeSupervisorPaths,
+  stopServiceBounded,
   writeServiceState,
   type NativeServiceId,
   type NativeServiceSpec,
@@ -25,6 +26,8 @@ import {
   readAppGatewayPid,
 } from "../gateway/registry.ts";
 import { nativeServiceChildLifecycle } from "./native-service-child-lifecycle.ts";
+import { prepareAgentStorageForNativeServiceLaunch } from
+  "./native-service-storage-preparation.ts";
 
 export interface DaemonChildHandle {
   pid?: number;
@@ -134,6 +137,20 @@ export class ManagedServiceDaemon {
   private stopping = false;
 
   constructor(private readonly options: ManagedServiceDaemonOptions) {}
+
+  async prepareStorageAndStartAll(): Promise<void> {
+    const appGateway = this.options.specs.find((spec) => spec.id === "app-gateway");
+    await prepareAgentStorageForNativeServiceLaunch({
+      butlerData: this.options.butlerData,
+      runtimeVersion: "native-service-split-v1",
+      quiesceLegacyWriter: async () => {
+        if (appGateway) {
+          await stopServiceBounded(this.options.butlerData, appGateway);
+        }
+      },
+    });
+    this.startAll();
+  }
 
   startAll(): void {
     try {
@@ -295,12 +312,13 @@ export class ManagedServiceDaemon {
 
 export async function runForegroundServiceDaemon(input: Partial<NativeSupervisorPaths> = {}): Promise<void> {
   const paths = resolveNativeSupervisorPaths(input);
+  const specs = defaultDaemonServiceSpecs(paths);
   const daemon = new ManagedServiceDaemon({
     butlerData: paths.butlerData,
-    specs: defaultDaemonServiceSpecs(paths),
+    specs,
     log: (line) => process.stdout.write(`[service-daemon] ${line}\n`),
   });
-  daemon.startAll();
+  await daemon.prepareStorageAndStartAll();
 
   await new Promise<void>((resolve) => {
     let shuttingDown = false;
