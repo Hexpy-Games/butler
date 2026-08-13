@@ -14,6 +14,26 @@ export function createBtccGatewayHandlers(
 ): GatewayRoleHandlers {
   const handle = async (route: GatewayRoute, envelope: InboundEnvelope) => {
     const turnId = envelope.routingHints?.turnId?.trim() || envelope.eventId;
+    if (envelope.control?.kind === "cancel_turn") {
+      if (envelope.control.turnId !== turnId) {
+        throw new Error("BTCC cancellation identity mismatch");
+      }
+      const outcome = await options.btcc.stopTurn({ turnId });
+      return {
+        ok: true,
+        handledBy: "btcc/turn-stop",
+        metadata: {
+          text: "",
+          turnId,
+          controlAck: {
+            kind: "cancel_turn",
+            requestId: envelope.control.requestId,
+            turnId,
+            outcome: outcome.kind,
+          },
+        },
+      };
+    }
     const request = toBtccRequest(route, envelope, turnId);
     const outcome = await options.btcc.runTurn(request);
     const result = projectTurnOutcome(outcome);
@@ -28,6 +48,9 @@ export function createBtccGatewayHandlers(
         artifacts: result.artifacts,
         generatedSessionTitle,
         loadedSkillNames: [],
+        ...("modelIdentity" in outcome && outcome.modelIdentity
+          ? { executionModel: outcome.modelIdentity }
+          : {}),
         durableFinalRecorded: true,
         ...(outcome.kind === "delivered" || outcome.kind === "already_delivered"
           ? { canonicalMessageId: outcome.messageId, turnId: outcome.turnId }
@@ -90,6 +113,8 @@ function toBtccRequest(
     },
     ...(envelope.executionControls
       ? { executionControls: envelope.executionControls } : {}),
+    ...(envelope.appTurnContext
+      ? { appTurnContext: envelope.appTurnContext } : {}),
     ...(envelope.signal ? { signal: envelope.signal } : {}),
   };
 }

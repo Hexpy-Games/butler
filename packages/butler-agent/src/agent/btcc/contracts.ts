@@ -4,6 +4,7 @@ import type { ModelRouteState } from "./model-route/index.ts";
 import type { BtccTurnProgressObserver } from
   "./projection/progress-observer-contract.ts";
 import type { VisualAttachmentManifest } from "../../gateways/core/contracts.ts";
+import type { InboundEnvelope } from "../../gateways/core/contracts.ts";
 import type { VisualImageAdmissionResult } from "../image-attachment/contracts.ts";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -127,6 +128,11 @@ export type BtccTurnOutcome = (
       messageId: string;
       content: string;
       artifacts?: BtccFinalArtifact[];
+      modelIdentity?: {
+        requestedModelRef: string;
+        effectiveModelRef: string;
+        providerReportedModelRef?: string;
+      };
     }
   | { kind: "cancelled"; turnId: string }
   | { kind: "already_cancelled"; turnId: string }
@@ -233,6 +239,7 @@ export type BtccTurnRequest = {
   };
   progressDestination?: BtccProgressDestination;
   executionControls?: BtccTurnExecutionControls;
+  appTurnContext?: InboundEnvelope["appTurnContext"];
   signal?: AbortSignal;
 };
 

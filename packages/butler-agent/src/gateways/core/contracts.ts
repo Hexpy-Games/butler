@@ -76,6 +76,31 @@ export interface InboundEnvelope {
     turnAttempt?: number;
   };
   executionControls?: TurnExecutionControlsV1;
+  appTurnContext?: {
+    version: 1;
+    session: { id: string; kind: "chat" | "project" };
+    conversation: {
+      chatId: string;
+      userMessageId: string;
+      turnId: string;
+      turnAttempt: number;
+    };
+    project?: {
+      id: string;
+      workspacePath: string;
+      ledgerProjectId?: string;
+    };
+    model: {
+      requestedModelRef: ModelRef;
+      reasoningEffort: string;
+    };
+  };
+  control?: {
+    kind: "cancel_turn";
+    requestId: string;
+    turnId: string;
+    requestedAt: string;
+  };
   raw?: unknown;
 }
 

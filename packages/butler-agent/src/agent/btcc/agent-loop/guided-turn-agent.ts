@@ -189,6 +189,7 @@ export function createProductionGuidedTurnAgent(input: {
         nextSourceRevision,
       });
       let activeModelRef = selectedModelRef(turn);
+      let acceptedModelIdentity: BtccAgentLoopResult["modelIdentity"];
       const toolCalls = createGuidedToolCallExecutor({
         turn,
         signal,
@@ -227,7 +228,23 @@ export function createProductionGuidedTurnAgent(input: {
             onRouteEvent,
             loadAttemptHistory: loadModelRouteAttemptHistory,
             loadAcceptedResponse: loadModelRoundAcceptance,
-            recordAcceptedResponse: recordModelRoundAcceptance,
+            recordAcceptedResponse: recordModelRoundAcceptance
+              ? async (accepted) => {
+                  await recordModelRoundAcceptance(accepted);
+                  acceptedModelIdentity = {
+                    requestedModelRef: `${turn.modelSelection.provider}/${turn.modelSelection.model}`,
+                    effectiveModelRef: accepted.modelRef,
+                    ...(accepted.result.providerIdentity
+                      ? {
+                          providerReportedModelRef:
+                            accepted.result.providerIdentity.reportedModel.includes("/")
+                              ? accepted.result.providerIdentity.reportedModel
+                              : `${accepted.result.providerIdentity.provider}/${accepted.result.providerIdentity.reportedModel}`,
+                        }
+                      : {}),
+                  };
+                }
+              : undefined,
             onRecoveryChanged: createGuidedRouteRecoveryHandler({
               turnId: turn.turnId,
               semanticState: turn.semanticState,
@@ -348,6 +365,7 @@ export function createProductionGuidedTurnAgent(input: {
       );
       return {
         content,
+        ...(acceptedModelIdentity ? { modelIdentity: acceptedModelIdentity } : {}),
         ...(artifacts.length > 0 ? { artifacts } : {}),
         route: routeForUsedTools(
           toolCalls.usedTools,

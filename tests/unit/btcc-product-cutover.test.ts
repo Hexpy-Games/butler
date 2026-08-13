@@ -10,6 +10,10 @@ import { BtccInboundDispatcher } from
   "../../packages/butler-agent/src/interfaces/gateway/btcc/index.ts";
 import { SessionBindingStore } from
   "../../packages/butler-agent/src/test-support/harness/session-store.ts";
+import { createAppTransportAdapter } from
+  "../../packages/butler-agent/src/interfaces/transport/app/adapter.ts";
+import { readTranscript } from
+  "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
 
 test("product App ingress is handled once by the BTCC dispatcher", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-cutover-"));
@@ -104,6 +108,104 @@ test("product App ingress is handled once by the BTCC dispatcher", async () => {
     expect(readFileSync(processed, "utf8")).toContain(
       '"source": "gateway/btcc/btcc-inbound-dispatcher.ts"',
     );
+  } finally {
+    store.close();
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("final transcript append survives a crash before inbound queue completion", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-final-before-queue-complete-"));
+  const queue = new NativeInboundQueue(butlerData);
+  const store = new SessionBindingStore(
+    join(butlerData, "runtime", "sessions.sqlite"),
+    "ephemeral",
+  );
+  const sessionId = "butler/app-final-crash";
+  try {
+    store.upsert({
+      sessionId,
+      role: "butler",
+      workspacePath: butlerData,
+      runtimeAdapterId: "btcc-turn-runtime",
+      modelProviderId: "openai",
+      modelRef: "openai/gpt-5.6-sol",
+      transportBindings: [{ transport: "app", accountId: "local", peerId: "final-crash" }],
+    });
+    queue.enqueue({
+      eventId: "app:final-crash",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "final-crash" },
+      sender: { id: "app-user" },
+      message: { id: "message-final-crash", text: "finish", timestamp: "2026-08-13T00:00:00.000Z" },
+      routingHints: { sessionId, turnId: "turn-final-crash" },
+    });
+    const server = {
+      async handleInbound() {
+        return {
+          status: "handled" as const,
+          route: {
+            sessionId,
+            role: "butler" as const,
+            reason: "session-hint" as const,
+            workspacePath: butlerData,
+          },
+          handlerResult: {
+            ok: true,
+            metadata: {
+              text: "durable final",
+              turnId: "turn-final-crash",
+              canonicalMessageId: "canonical-final-crash",
+            },
+          },
+        };
+      },
+    };
+    const originalComplete = queue.complete.bind(queue);
+    let crashBoundary = true;
+    queue.complete = ((...args: Parameters<NativeInboundQueue["complete"]>) => {
+      if (crashBoundary) {
+        crashBoundary = false;
+        return false;
+      }
+      return originalComplete(...args);
+    }) as NativeInboundQueue["complete"];
+    const first = new BtccInboundDispatcher();
+    first.poll({
+      queue,
+      store,
+      server,
+      processingLeaseMs: 1,
+      now: () => new Date("2026-08-13T00:00:00.000Z"),
+      deliveryGuard: new DeliveryGuard({
+        adapters: [createAppTransportAdapter()],
+        butlerData,
+      }),
+    });
+    await first.waitForIdle();
+    expect(readTranscript(sessionId, butlerData).filter((event) =>
+      event.kind === "outbound",
+    )).toHaveLength(1);
+
+    const replay = new BtccInboundDispatcher();
+    replay.poll({
+      queue,
+      store,
+      server,
+      processingLeaseMs: 1,
+      now: () => new Date("2026-08-13T00:00:01.000Z"),
+      deliveryGuard: new DeliveryGuard({
+        adapters: [createAppTransportAdapter()],
+        butlerData,
+      }),
+    });
+    await replay.waitForIdle();
+    const actions = readTranscript(sessionId, butlerData)
+      .filter((event) => event.kind === "outbound")
+      .map((event) => event.payload.actionId);
+    expect(actions).toEqual([actions[0], actions[0]]);
+    expect(queue.claim(1)).toEqual([]);
   } finally {
     store.close();
     rmSync(butlerData, { recursive: true, force: true });

@@ -23,6 +23,7 @@ export interface ProjectRow {
   workspace_path: string;
   workspace_label: string;
   safe_path_label: string;
+  ledger_project_id?: string | null;
   pinned: number;
   archived: number;
   error_summary: string | null;

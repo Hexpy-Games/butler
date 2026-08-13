@@ -33,6 +33,11 @@ export type BtccAgentLoopResult = {
   content: string;
   route: "direct" | "assisted" | "managed";
   artifacts?: BtccFinalArtifact[];
+  modelIdentity?: {
+    requestedModelRef: string;
+    effectiveModelRef: string;
+    providerReportedModelRef?: string;
+  };
 };
 
 export interface BtccAgentLoop {

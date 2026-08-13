@@ -119,6 +119,25 @@ export function migrateAppStoreSchema(
       safe_error_code TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS app_operation_output_chunks (
+      turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+      request_id TEXT NOT NULL,
+      result_id TEXT NOT NULL,
+      result_sha256 TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      chunk_count INTEGER NOT NULL,
+      byte_start INTEGER NOT NULL,
+      byte_end INTEGER NOT NULL,
+      byte_length INTEGER NOT NULL,
+      content_base64 TEXT NOT NULL,
+      content_sha256 TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (turn_id, request_id, result_id, chunk_index)
+    );
+
+    CREATE INDEX IF NOT EXISTS app_operation_output_result_idx
+    ON app_operation_output_chunks(turn_id, result_id, chunk_index);
+
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
