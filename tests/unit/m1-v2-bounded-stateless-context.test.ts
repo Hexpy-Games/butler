@@ -19,6 +19,8 @@ import { SqliteGuidedTurnStateRepository } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/sqlite-guided-turn-state-repository.ts";
 import { SqliteRuntimeOwnerRegistry } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/runtime-owner/index.ts";
+import { agentBtccStoragePaths } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/storage-ownership/index.ts";
 import { createProductionBtccComposition } from
   "../../packages/butler-agent/src/agent/composition/create-btcc-composition.ts";
 import { SessionBindingStore } from
@@ -336,7 +338,7 @@ test("production composition reaches the official serializer with bounded multi-
     metadata: { accessMode: "read_only", runtimePolicy: { trackingMode: "none" } },
   });
   const composition = createProductionBtccComposition({
-    butlerHome: root, butlerData: root, appMessageDbPath: join(root, "app.sqlite"),
+    butlerHome: root, butlerData: root,
     ownerId: "bounded-production", sessionBindings: bindings,
     modelRound: {
       runRound: (request) => runOpenAIModelRound(request, {
@@ -362,7 +364,10 @@ test("production composition reaches the official serializer with bounded multi-
     expect(JSON.stringify(bodies.at(-1))).toContain("현재 요청");
     expect(JSON.stringify(bodies.at(-1))).not.toContain("call-0");
     expect(JSON.stringify(bodies.at(-1))).toContain("call-7");
-    const evidence = new Database(join(root, "app.sqlite"), { readonly: true });
+    const evidence = new Database(
+      agentBtccStoragePaths(root).agentBtccDbPath,
+      { readonly: true },
+    );
     const turnRow = evidence.query<{
       model_selection_json: string; route_state_json: string;
     }, [string]>(`
@@ -469,7 +474,6 @@ for (const transport of ["official", "codex"] as const) {
     const composition = createProductionBtccComposition({
       butlerHome: root,
       butlerData: root,
-      appMessageDbPath: join(root, "app.sqlite"),
       ownerId: `stack-${transport}`,
       sessionBindings: bindings,
       modelRound: { runRound: (request) => runOpenAIModelRound(request, auth) },
@@ -943,7 +947,7 @@ test("route fallback official body preserves the admitted bounded carrier", asyn
 
 test("exact official attachment bytes terminalize durably before fetch", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-bounded-attachment-"));
-  const dbPath = join(root, "app.sqlite");
+  const dbPath = agentBtccStoragePaths(root).agentBtccDbPath;
   const imagePath = join(root, "large.png");
   await Bun.write(imagePath, Buffer.alloc(160_000, 7));
   const prior = {
@@ -968,7 +972,7 @@ test("exact official attachment bytes terminalize durably before fetch", async (
     metadata: { accessMode: "read_only", runtimePolicy: { trackingMode: "none" } },
   });
   const composition = createProductionBtccComposition({
-    butlerHome: root, butlerData: root, appMessageDbPath: dbPath,
+    butlerHome: root, butlerData: root,
     ownerId: "attachment-cap", sessionBindings: bindings,
     modelRound: { runRound: (request) => runOpenAIModelRound(request, {
       authorization: "Bearer test", mode: "api_key",

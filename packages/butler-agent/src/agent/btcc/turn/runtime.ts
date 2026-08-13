@@ -51,7 +51,6 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
   private readonly activeTurns = new Map<string, Promise<BtccTurnOutcome>>();
 
   constructor(private readonly dependencies: TurnRuntimeDependencies) {}
-
   runTurn(
     command: BtccRunCommand,
     progress?: BtccTurnProgressObserver,
@@ -246,6 +245,7 @@ function guidedFinalTransition(turn: TurnRecord, result: BtccAgentLoopResult) {
     route: result.route,
     disposition: "completed" as const,
     content,
+    ...(result.modelIdentity ? { modelIdentity: result.modelIdentity } : {}),
   };
   const finalPayload = {
     ref: contentRef("payload", finalPayloadBody),

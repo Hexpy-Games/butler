@@ -1,6 +1,5 @@
 import { Database } from "bun:sqlite";
 import type { ButlerServiceClient } from "../../../core/client.ts";
-import type { SessionBindingStore } from "../../../../test-support/harness/session-store.ts";
 import type { AppAutomationStore } from "../../domain/automations/automation-store.ts";
 import type { AppEventStore } from "../../infrastructure/events/event-store.ts";
 import type { AppTurnProgressEventStore } from "../../infrastructure/events/turn-progress-event-store.ts";
@@ -49,8 +48,6 @@ export interface AppStoreKernelState {
   serverUrl: string;
   bridgeMode: SettingsView["bridge_mode"];
   serviceClient: ButlerServiceClient;
-  sessionBindingStore: SessionBindingStore;
-  ownsSessionBindingStore: boolean;
   runtimeInfo: AppRuntimeInfoStore;
   systemMonitor: AppSystemMonitorStore;
   developerLogs: DeveloperLogStore;

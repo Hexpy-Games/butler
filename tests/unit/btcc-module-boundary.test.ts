@@ -142,16 +142,17 @@ test("BTCC child domains use each other through public indexes", () => {
   }
 });
 
-test("native product entrypoints own BTCC composition and Gateway has no product path", () => {
-  const applicationEntrypoints = [
-    "application/native-butler.ts",
-    "application/native-steward.ts",
-  ];
-  for (const entrypoint of applicationEntrypoints) {
-    expect(existsSync(join(sourceRoot, entrypoint)), entrypoint).toBe(true);
-    expect(readFileSync(join(sourceRoot, entrypoint), "utf8"), entrypoint)
-      .toContain("createProductionBtccComposition");
-  }
+test("Native Butler alone owns BTCC composition while Steward remains queue-only", () => {
+  const nativeButler = "application/native-butler.ts";
+  const nativeSteward = "application/native-steward.ts";
+  expect(existsSync(join(sourceRoot, nativeButler)), nativeButler).toBe(true);
+  expect(readFileSync(join(sourceRoot, nativeButler), "utf8"), nativeButler)
+    .toContain("createProductionBtccComposition");
+  expect(existsSync(join(sourceRoot, nativeSteward)), nativeSteward).toBe(true);
+  const stewardSource = readFileSync(join(sourceRoot, nativeSteward), "utf8");
+  expect(stewardSource).toContain("NativeInboundQueue");
+  expect(stewardSource).toContain("waitForTranscriptCompletion");
+  expect(stewardSource).not.toContain("createProductionBtccComposition");
 
   for (const removedPath of [
     "interfaces/gateway/native-butler-bootstrap.ts",

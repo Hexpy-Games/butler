@@ -47,7 +47,6 @@ export async function runWindowsAppBtccProductHarness(
     butlerHome: process.cwd(),
     port: 0,
     automationSchedulerIntervalMs: false,
-    sessionBindingStore: bindings,
   });
   let modelCalls = 0;
   const modelRound: ModelRoundPort = {
@@ -62,7 +61,6 @@ export async function runWindowsAppBtccProductHarness(
   const composition = createProductionBtccComposition({
     butlerHome: process.cwd(),
     butlerData: root,
-    appMessageDbPath: dbPath,
     ownerId: `windows-product-harness:${process.pid}`,
     modelRound,
     sessionBindings: bindings,

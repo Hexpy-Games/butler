@@ -36,7 +36,6 @@ import { createAppTransportModuleGraph } from "../../infrastructure/transport/tr
 import { AppWorkerActivityStore } from "../../domain/workers/worker-activity-store.ts";
 import { AppWorkerControlStore } from "../../domain/workers/worker-control-store.ts";
 import { FileQueueButlerServiceClient } from "../../../core/client.ts";
-import { SessionBindingStore } from "../../../../test-support/harness/session-store.ts";
 import type { AppStoreKernel } from "./app-store-kernel.ts";
 import { SqliteOperationOutputReader } from "../../infrastructure/operation-output/sqlite-operation-output-reader.ts";
 import { initializeTerminalTurnRetention } from
@@ -77,9 +76,6 @@ export function initializeAppStoreKernel(
   kernel.serviceClient =
     options.serviceClient ??
     new FileQueueButlerServiceClient({ butlerData: kernel.butlerData });
-  kernel.sessionBindingStore = options.sessionBindingStore ??
-    new SessionBindingStore(join(kernel.butlerData, "runtime", "session-store.sqlite"));
-  kernel.ownsSessionBindingStore = !options.sessionBindingStore;
   kernel.runtimeInfo = new AppRuntimeInfoStore(
     kernel.butlerHome,
     kernel.butlerData,
@@ -214,6 +210,7 @@ export function initializeAppStoreKernel(
     butlerHome: kernel.butlerHome,
     defaultChatId: DEFAULT_CHAT_ID,
     defaultChatTitle: DEFAULT_CHAT_TITLE,
+    serviceClient: kernel.serviceClient,
     host: kernel,
   });
   kernel.messageFiles = sessionModules.messageFiles;
@@ -249,7 +246,6 @@ export function initializeAppStoreKernel(
     butlerData: kernel.butlerData,
     butlerHome: kernel.butlerHome,
     serviceClient: kernel.serviceClient,
-    sessionBindingStore: kernel.sessionBindingStore,
     messageFiles: kernel.messageFiles,
     host: kernel,
   });
@@ -308,7 +304,6 @@ export function initializeAppStoreKernel(
   wakeTerminalRetention = initializeTerminalTurnRetention(kernel);
   kernel.conversationProjection = new AppConversationProjectionStore({
     db: kernel.db,
-    conversationReader: options.conversationProjectionReader,
   });
   kernel.projectWorkspaceRoot =
     kernel.settingsPersistence.readStoredProjectWorkspaceRoot() ??

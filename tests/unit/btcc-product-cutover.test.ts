@@ -10,6 +10,16 @@ import { BtccInboundDispatcher } from
   "../../packages/butler-agent/src/interfaces/gateway/btcc/index.ts";
 import { SessionBindingStore } from
   "../../packages/butler-agent/src/test-support/harness/session-store.ts";
+import { createAppTransportAdapter } from
+  "../../packages/butler-agent/src/interfaces/transport/app/adapter.ts";
+import { readTranscript } from
+  "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
+import {
+  cleanupTranscriptProjectionHarnesses,
+  createTranscriptProjectionHarness,
+} from "./support/transcript-projection-harness.ts";
+import { sessionHintForRow } from
+  "../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
 
 test("product App ingress is handled once by the BTCC dispatcher", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-cutover-"));
@@ -104,6 +114,212 @@ test("product App ingress is handled once by the BTCC dispatcher", async () => {
     expect(readFileSync(processed, "utf8")).toContain(
       '"source": "gateway/btcc/btcc-inbound-dispatcher.ts"',
     );
+  } finally {
+    store.close();
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("cancellation ack keeps its transcript discriminator through App projection", async () => {
+  const harness = createTranscriptProjectionHarness();
+  const queue = new NativeInboundQueue(harness.root);
+  const store = new SessionBindingStore(
+    join(harness.root, "runtime", "sessions.sqlite"),
+    "ephemeral",
+  );
+  const turnId = "turn-cancel-ack-cutover";
+  const sessionId = sessionHintForRow(harness.chatId);
+  const now = new Date().toISOString();
+  try {
+    store.upsert({
+      sessionId,
+      role: "butler",
+      workspacePath: harness.root,
+      runtimeAdapterId: "btcc-turn-runtime",
+      modelProviderId: "openai",
+      modelRef: "openai/gpt-5.6-sol",
+      transportBindings: [{
+        transport: "app",
+        accountId: "local",
+        peerId: harness.chatId,
+      }],
+    });
+    harness.db.query(`
+      INSERT INTO turns (
+        id, chat_id, user_message_id, state, safe_status_label, retryable,
+        cancellable, attempt, created_at, updated_at
+      ) VALUES (?, ?, 'user-message', 'cancelling', 'Cancelling', 0, 0, 1, ?, ?)
+    `).run(turnId, harness.chatId, now, now);
+    harness.db.query(`
+      INSERT INTO app_turn_cancel_outbox (turn_id, state, created_at)
+      VALUES (?, 'pending', ?)
+    `).run(turnId, now);
+    queue.enqueue({
+      eventId: "app:cancel-ack-cutover",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: harness.chatId },
+      sender: { id: "app-user" },
+      message: { id: "cancel-message", text: "", timestamp: now },
+      routingHints: { sessionId, turnId },
+      control: {
+        kind: "cancel_turn",
+        requestId: "cancel-request",
+        turnId,
+        requestedAt: now,
+      },
+    });
+    const dispatcher = new BtccInboundDispatcher();
+    dispatcher.poll({
+      queue,
+      store,
+      deliveryGuard: new DeliveryGuard({
+        adapters: [createAppTransportAdapter()],
+        butlerData: harness.root,
+      }),
+      server: {
+        async handleInbound() {
+          return {
+            status: "handled",
+            route: {
+              sessionId,
+              role: "butler",
+              reason: "session-hint",
+              workspacePath: harness.root,
+            },
+            handlerResult: {
+              ok: true,
+              handledBy: "btcc/turn-stop",
+              metadata: {
+                controlAck: {
+                  kind: "cancel_turn",
+                  requestId: "cancel-request",
+                  turnId,
+                  outcome: "already_finalizing",
+                },
+              },
+            },
+          };
+        },
+      },
+    });
+    await dispatcher.waitForIdle();
+
+    const outbound = readTranscript(sessionId, harness.root).find(
+      (event) => event.kind === "outbound",
+    );
+    expect(outbound?.payload.metadata).toMatchObject({
+      kind: "turn_cancellation_ack",
+      requestId: "cancel-request",
+      turnId,
+      outcome: "already_finalizing",
+    });
+    const projection = harness.createProjectionStore();
+    while (projection.syncNextBatch()) {
+      // Drain the bounded transcript projector through outbound and delivery.
+    }
+    expect(harness.db.query<{ state: string }, [string]>(`
+      SELECT state FROM app_turn_cancel_outbox WHERE turn_id = ?
+    `).get(turnId)?.state).toBe("accepted");
+  } finally {
+    store.close();
+    harness.close();
+    cleanupTranscriptProjectionHarnesses();
+  }
+});
+
+test("final transcript append survives a crash before inbound queue completion", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-final-before-queue-complete-"));
+  const queue = new NativeInboundQueue(butlerData);
+  const store = new SessionBindingStore(
+    join(butlerData, "runtime", "sessions.sqlite"),
+    "ephemeral",
+  );
+  const sessionId = "butler/app-final-crash";
+  try {
+    store.upsert({
+      sessionId,
+      role: "butler",
+      workspacePath: butlerData,
+      runtimeAdapterId: "btcc-turn-runtime",
+      modelProviderId: "openai",
+      modelRef: "openai/gpt-5.6-sol",
+      transportBindings: [{ transport: "app", accountId: "local", peerId: "final-crash" }],
+    });
+    queue.enqueue({
+      eventId: "app:final-crash",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "final-crash" },
+      sender: { id: "app-user" },
+      message: { id: "message-final-crash", text: "finish", timestamp: "2026-08-13T00:00:00.000Z" },
+      routingHints: { sessionId, turnId: "turn-final-crash" },
+    });
+    const server = {
+      async handleInbound() {
+        return {
+          status: "handled" as const,
+          route: {
+            sessionId,
+            role: "butler" as const,
+            reason: "session-hint" as const,
+            workspacePath: butlerData,
+          },
+          handlerResult: {
+            ok: true,
+            metadata: {
+              text: "durable final",
+              turnId: "turn-final-crash",
+              canonicalMessageId: "canonical-final-crash",
+            },
+          },
+        };
+      },
+    };
+    const originalComplete = queue.complete.bind(queue);
+    let crashBoundary = true;
+    queue.complete = ((...args: Parameters<NativeInboundQueue["complete"]>) => {
+      if (crashBoundary) {
+        crashBoundary = false;
+        return false;
+      }
+      return originalComplete(...args);
+    }) as NativeInboundQueue["complete"];
+    const first = new BtccInboundDispatcher();
+    first.poll({
+      queue,
+      store,
+      server,
+      processingLeaseMs: 1,
+      now: () => new Date("2026-08-13T00:00:00.000Z"),
+      deliveryGuard: new DeliveryGuard({
+        adapters: [createAppTransportAdapter()],
+        butlerData,
+      }),
+    });
+    await first.waitForIdle();
+    expect(readTranscript(sessionId, butlerData).filter((event) =>
+      event.kind === "outbound",
+    )).toHaveLength(1);
+
+    const replay = new BtccInboundDispatcher();
+    replay.poll({
+      queue,
+      store,
+      server,
+      processingLeaseMs: 1,
+      now: () => new Date("2026-08-13T00:00:01.000Z"),
+      deliveryGuard: new DeliveryGuard({
+        adapters: [createAppTransportAdapter()],
+        butlerData,
+      }),
+    });
+    await replay.waitForIdle();
+    const actions = readTranscript(sessionId, butlerData)
+      .filter((event) => event.kind === "outbound")
+      .map((event) => event.payload.actionId);
+    expect(actions).toEqual([actions[0], actions[0]]);
+    expect(queue.claim(1)).toEqual([]);
   } finally {
     store.close();
     rmSync(butlerData, { recursive: true, force: true });

@@ -357,6 +357,35 @@ test("foreground daemon restarts watchdog-policy child exits", () => {
   }
 });
 
+test("migration fence suppresses App Gateway watchdog restart", () => {
+  const butlerData = tempRoot();
+  const spawned: number[] = [];
+  try {
+    const spec = {
+      id: "app-gateway" as const,
+      command: "bun", args: ["app-gateway"], cwd: "/opt/butler",
+      stdoutFile: join(butlerData, "out.log"),
+      stderrFile: join(butlerData, "err.log"),
+      restartPolicy: "watchdog" as const,
+    };
+    const daemon = new ManagedServiceDaemon({
+      butlerData, specs: [spec], parentPid: 6200,
+      spawnChild: () => {
+        const pid = 6201 + spawned.length;
+        spawned.push(pid);
+        return { pid };
+      },
+    });
+    daemon.startAll();
+    mkdirSync(join(butlerData, "locks"), { recursive: true });
+    writeFileSync(join(butlerData, "locks", "app-gateway-migration-fence"), "test\n");
+    daemon.handleChildExit("app-gateway", 0, null);
+    expect(spawned).toEqual([6201]);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("foreground daemon refuses to duplicate an already running detached service", () => {
   const butlerHome = "/opt/butler";
   const butlerData = tempRoot();

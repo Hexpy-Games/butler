@@ -41,7 +41,6 @@ export type LegacyProjectWorkReader = {
 
 export function createProjectLedgerLegacyWorkSource(input: {
   butlerData: string;
-  appMessageDbPath: string;
   resolver?: ActiveProjectLedgerResolver;
   reader?: LegacyProjectWorkReader;
 }): LegacyProjectWorkSource {
@@ -56,7 +55,6 @@ export function createProjectLedgerLegacyWorkSource(input: {
       const projectRoot = resolveInitializedRoot(
         resolver,
         input.butlerData,
-        input.appMessageDbPath,
         request.projectRef,
       );
       if (!projectRoot) return null;
@@ -120,7 +118,6 @@ export function loadLegacyProjectProgram(
 function resolveInitializedRoot(
   resolver: ActiveProjectLedgerResolver,
   butlerData: string,
-  appMessageDbPath: string,
   projectRef: string,
 ): string | null {
   const binding = decodeProjectLedgerBinding(projectRef);
@@ -129,7 +126,6 @@ function resolveInitializedRoot(
     ...(binding.kind === "canonical_ledger_id"
       ? { explicitRef: binding.ledgerProjectId }
       : {
-          appMessageDbPath,
           appProjectId: binding.appProjectId,
         }),
   });

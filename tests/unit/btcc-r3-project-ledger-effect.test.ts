@@ -387,7 +387,6 @@ describe("R3 guided Project Ledger effect", () => {
     const resolveEffect = createGuidedPersistentEffectResolver({
       butlerHome: fixture.root,
       butlerData: fixture.butlerData,
-      appMessageDbPath: join(fixture.root, "app.sqlite"),
       workspacePath: fixture.root,
       projectId: "fixture",
       trackingMode: "ledger",
@@ -458,16 +457,12 @@ describe("R3 guided Project Ledger effect", () => {
     expect(existsSync(projectRoot)).toBe(false);
   });
 
-  test("fails closed before mutation without the exact active App project row", async () => {
+  test("fails closed before mutation without the exact bounded project context", async () => {
     const fixture = await projectLedgerFixture();
     const before = fixture.core.observeProjectLedgerSourceHead(
       fixture.projectRoot,
     );
     const invalidBindings: Array<Partial<ActiveProjectLedgerReference>> = [{
-      source: "workspace_metadata",
-    }, {
-      degradation_code: "app_project_db_missing",
-    }, {
       app_project_id: "other-app-project",
     }, {
       ledger_root: join(fixture.root, "other-ledger-root"),
@@ -495,13 +490,13 @@ describe("R3 guided Project Ledger effect", () => {
         dispatchAttempts: 0,
       })).toMatchObject({
         status: "uncertain",
-        error: { code: "project_ledger_active_app_binding_required" },
+        error: { code: "project_ledger_active_context_required" },
       });
       expect(await effect.adapter.dispatch(
         effectDispatch(`binding-dispatch-${index}`),
       )).toMatchObject({
         status: "not_applied",
-        error: { code: "project_ledger_active_app_binding_required" },
+        error: { code: "project_ledger_active_context_required" },
       });
     }
 
@@ -782,7 +777,7 @@ function exactAppBinding(
     workspace_path: projectRoot,
     ledger_project_id: "legacy-fixture-alias",
     ledger_root: projectRoot,
-    source: "app_project_db",
+    source: "workspace_metadata",
     resolved_at: "2026-07-31T00:00:00.000Z",
     initialized: existsSync(join(projectRoot, "project.json")),
     initialization_generation: "test",

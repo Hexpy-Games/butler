@@ -1,5 +1,4 @@
 import type { Database } from "bun:sqlite";
-import type { ConversationProjectionReader } from "../../../../agent/conversation/types.ts";
 import type { MessageRow } from "../../infrastructure/core/records.ts";
 import type {
   MessageFileRef,
@@ -19,7 +18,6 @@ export class AppConversationProjectionReadModel {
   constructor(
     private readonly input: {
       db: Database;
-      conversationReader?: ConversationProjectionReader;
       gateway: () => string;
       status: () => AppConversationProjectionStatus;
     },
@@ -51,18 +49,7 @@ export class AppConversationProjectionReadModel {
         conversation_session_id: fromChat.conversation_session_id,
       };
     }
-    const binding = this.input.conversationReader
-      ?.getGatewayBindingForConversation(conversationSessionId, this.input.gateway());
-    if (!binding) return null;
-    const appChatId = appChatIdForConversationExternalSession(
-      this.input.db,
-      binding.external_session_id,
-    );
-    return {
-      gateway: binding.gateway,
-      external_session_id: appChatId,
-      conversation_session_id: binding.conversation_session_id,
-    };
+    return null;
   }
 
   listMessageProjection(

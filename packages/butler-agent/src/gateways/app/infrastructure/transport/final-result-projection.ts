@@ -46,10 +46,7 @@ export function projectAppFinalResult(input: {
     return false;
   }
 
-  // The provider observation proxy is test corroboration only. The durable
-  // App execution identity comes from the accepted BTCC response on the
-  // product database path.
-  projectExecutionModelFromAcceptedResponse(options.db, turnId);
+  projectExecutionModelFromTranscript(options.db, turnId, metadata.executionModel);
 
   const text = sanitizeAppTransportFinalText(message.text);
   const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
@@ -159,72 +156,30 @@ export function projectAppFinalResult(input: {
   return true;
 }
 
-function projectExecutionModelFromAcceptedResponse(
+function projectExecutionModelFromTranscript(
   db: AppTransportProjectionStoreOptions["db"],
   turnId: string,
+  value: unknown,
 ): void {
   if (!tableHasColumn(db, "turns", "execution_model_json")) return;
-  if (!tableExists(db, "btcc_model_round_acceptances")) return;
-  const row = db.query<{
-    execution_controls_json: string | null;
-    model_ref: string | null;
-    provider_identity_json: string | null;
-    acceptance_rowid: number;
-  }, [string]>(`
-    SELECT turns.execution_controls_json, accepted.model_ref,
-      accepted.provider_identity_json, accepted.rowid AS acceptance_rowid
-    FROM turns
-    LEFT JOIN btcc_model_round_acceptances AS accepted
-      ON accepted.turn_id = turns.id
-    WHERE turns.id = ?
-    ORDER BY accepted.created_at DESC,
-      accepted.rowid DESC,
-      accepted.round_id DESC,
-      accepted.candidate_index DESC,
-      accepted.transport_attempt DESC
-    LIMIT 1
-  `).get(turnId);
-  if (!row?.model_ref || !row.execution_controls_json) return;
-  let controls: { model_ref?: unknown };
-  let identity: {
-    provider?: unknown;
-    reportedModel?: unknown;
-  };
-  try {
-    controls = JSON.parse(row.execution_controls_json) as { model_ref?: unknown };
-  } catch {
-    return;
-  }
-  if (typeof controls.model_ref !== "string") return;
-
-  let providerReportedModel: string | undefined;
-  if (row.provider_identity_json) {
-    try {
-      identity = JSON.parse(row.provider_identity_json) as {
-        provider?: unknown;
-        reportedModel?: unknown;
-      };
-    } catch {
-      return;
-    }
-    if (
-      typeof identity.provider !== "string" ||
-      typeof identity.reportedModel !== "string"
-    ) return;
-    providerReportedModel = identity.reportedModel.includes("/")
-      ? identity.reportedModel
-      : `${identity.provider}/${identity.reportedModel}`;
-  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const identity = value as Record<string, unknown>;
+  if (
+    !isModelRef(identity.requestedModelRef) ||
+    !isModelRef(identity.effectiveModelRef) ||
+    (identity.providerReportedModelRef !== undefined &&
+      !isModelRef(identity.providerReportedModelRef))
+  ) return;
   db.query(`
     UPDATE turns
     SET execution_model_json = ?, updated_at = ?
     WHERE id = ?
   `).run(
     JSON.stringify({
-      requested_model_ref: controls.model_ref,
-      adapter_effective_model_ref: row.model_ref,
-      ...(providerReportedModel
-        ? { provider_reported_model_ref: providerReportedModel }
+      requested_model_ref: identity.requestedModelRef,
+      adapter_effective_model_ref: identity.effectiveModelRef,
+      ...(identity.providerReportedModelRef
+        ? { provider_reported_model_ref: identity.providerReportedModelRef }
         : {}),
     }),
     new Date().toISOString(),
@@ -232,13 +187,9 @@ function projectExecutionModelFromAcceptedResponse(
   );
 }
 
-function tableExists(
-  db: AppTransportProjectionStoreOptions["db"],
-  table: string,
-): boolean {
-  return Boolean(db.query<{ name: string }, [string]>(`
-    SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?
-  `).get(table));
+function isModelRef(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 256 &&
+    /^[^/\s]+\/[^/\s]+$/u.test(value);
 }
 
 function tableHasColumn(

@@ -1,18 +1,11 @@
-import type { SessionBindingStore } from "../../../../test-support/harness/session-store.ts";
 import type { ButlerServiceClient } from "../../../core/client.ts";
 import type { AppMessageFileStore } from "../../domain/message-files/message-file-store.ts";
 import { AppTransportProjectionStore } from "./transport-projection-store.ts";
 import { AppTransportProjectionOwner } from "./transport-projection-owner.ts";
-import { AppTransportHistoricalReconciliationOwner } from
-  "./historical-reconciliation-owner.ts";
 import { AppTransportQueueStore } from "./transport-queue-store.ts";
 import { Database } from "bun:sqlite";
 import { recordOperationalMetric } from
   "../../../../operations/metrics/operational-metrics.ts";
-import { TerminalSettlementWakeStore } from
-  "../retention/terminal-settlement-wake-store.ts";
-import { TerminalSettlementWakeOwner } from
-  "../retention/terminal-settlement-wake-owner.ts";
 
 export interface AppTransportModuleGraph {
   appTransportQueue: AppTransportQueueStore;
@@ -25,7 +18,6 @@ export function createAppTransportModuleGraph(input: {
   butlerData: string;
   butlerHome: string;
   serviceClient: ButlerServiceClient;
-  sessionBindingStore: SessionBindingStore;
   messageFiles: AppMessageFileStore;
   host: any;
 }): AppTransportModuleGraph {
@@ -34,19 +26,15 @@ export function createAppTransportModuleGraph(input: {
     butlerData,
     butlerHome,
     serviceClient,
-    sessionBindingStore,
     messageFiles,
     host,
   } = input;
   const appTransportQueue = new AppTransportQueueStore(
     butlerData,
-    butlerHome,
     serviceClient,
-    sessionBindingStore,
     messageFiles,
     (chatId) => host.getChatRow(chatId),
     (projectId) => host.getProjectRow(projectId),
-    () => host.getSettings(),
     (turnId) => host.getTurn(turnId),
     (type, payload) => {
       host.appendEvent(type, payload);
@@ -113,25 +101,6 @@ export function createAppTransportModuleGraph(input: {
         error_name: error instanceof Error ? error.name : "unknown",
       },
     }, { butlerData });
-  const historicalReconciliationOwner =
-    new AppTransportHistoricalReconciliationOwner({
-      reconcileNextPage: () =>
-        transportProjection.reconcileNextHistoricalPage(),
-      recordFailure: (error) =>
-        recordProjectionFailure(
-          "app.transport_historical_reconciliation",
-          error,
-        ),
-    });
-  const terminalSettlementWakes = new TerminalSettlementWakeStore(db);
-  const terminalSettlementWakeOwner = new TerminalSettlementWakeOwner({
-    consumeNextBatch: () =>
-      terminalSettlementWakes.consumeNextBatch((turnId) =>
-        host.scheduleTerminalTurnRetention(turnId),
-      ),
-    recordFailure: (error) =>
-      recordProjectionFailure("app.terminal_settlement_wake", error),
-  });
   const transportProjectionOwner = new AppTransportProjectionOwner({
     butlerData,
     syncNextBatch: () => transportProjection.syncNextBatch(),
@@ -142,17 +111,8 @@ export function createAppTransportModuleGraph(input: {
     syncTerminalQueue: () => transportProjection.syncDeferredNextBatch(),
     reopenCompletedLiveLanes: () =>
       transportProjection.reopenCompletedLiveLanes(),
-    terminalSettlementWakeOwner,
     recordFailure: (error) =>
       recordProjectionFailure("app.transport_projection", error),
-    maintenanceOwner: {
-      start: () => {
-        historicalReconciliationOwner.start();
-      },
-      close: () => {
-        historicalReconciliationOwner.close();
-      },
-    },
   });
   return { appTransportQueue, transportProjection, transportProjectionOwner };
 }
