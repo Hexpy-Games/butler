@@ -304,21 +304,14 @@ test("session-bound executor fails closed when its WorkspaceReference is omitted
   })).rejects.toThrow("session_workspace_unavailable");
 });
 
-test("Project Ledger tool wrappers resolve active app project id through the app registry", async () => {
+test("Project Ledger tool wrappers resolve bounded project and workspace facts", async () => {
   const butlerHome = join(tempDir, "butler-home");
   const butlerData = join(tempDir, "butler-data");
   const workspacePath = join(tempDir, "workspaces", "sandy-folder");
-  const appDbPath = join(tempDir, "butler-client.sqlite");
   const cliPath = join(butlerHome, "packages", "project-ledger", "bin", "project-ledger");
   mkdirSync(workspacePath, { recursive: true });
   mkdirSync(join(butlerHome, "packages", "project-ledger", "bin"), { recursive: true });
   writeFileSync(join(workspacePath, "package.json"), `${JSON.stringify({ name: "sandy-bot" })}\n`, "utf8");
-  writeAppProjectDb(appDbPath, {
-    id: "project-sandy-bot-35a0e102",
-    displayName: "Sandy Bot",
-    workspacePath,
-    ledgerProjectId: "sandy-bot",
-  });
   writeFileSync(
     cliPath,
     "console.log(JSON.stringify({ ok: true, command: process.argv.slice(2).join(' '), privacy: {}, data: { argv: process.argv.slice(2) } }));\n",
@@ -328,8 +321,8 @@ test("Project Ledger tool wrappers resolve active app project id through the app
   const execute = createButlerToolExecutor({
     butlerHome,
     butlerData,
-    appMessageDbPath: appDbPath,
     projectId: "project-sandy-bot-35a0e102",
+    workspacePath,
   });
   const result = await execute({
     name: "inspect_project_status",
@@ -355,18 +348,10 @@ test("Project Ledger read tools cannot leave the active App project", async () =
   const butlerHome = join(tempDir, "butler-home");
   const butlerData = join(tempDir, "butler-data");
   const workspacePath = join(tempDir, "workspaces", "sandy-folder");
-  const appDbPath = join(tempDir, "butler-client.sqlite");
   mkdirSync(workspacePath, { recursive: true });
-  writeAppProjectDb(appDbPath, {
-    id: "project-sandy-bot-35a0e102",
-    displayName: "Sandy Bot",
-    workspacePath,
-    ledgerProjectId: "sandy-bot",
-  });
   const execute = createButlerToolExecutor({
     butlerHome,
     butlerData,
-    appMessageDbPath: appDbPath,
     projectId: "project-sandy-bot-35a0e102",
   });
   const calls = [

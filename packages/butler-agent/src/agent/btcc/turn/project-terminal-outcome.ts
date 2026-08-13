@@ -13,5 +13,8 @@ export function projectTerminalOutcome(turn: TurnRecord): BtccTurnOutcome {
     turnId: turn.turnId,
     messageId: turn.canonicalAssistantMessageId,
     content: turn.finalPayload.content,
+    ...(turn.finalPayload.modelIdentity
+      ? { modelIdentity: turn.finalPayload.modelIdentity }
+      : {}),
   };
 }

@@ -138,7 +138,8 @@ export function createSessionStoreApi(
       return kernel.conversationProjection.status();
     },
     replayConversationProjection(input = {}) {
-      return kernel.conversationProjection.replayOutbox(input);
+      void input;
+      return kernel.conversationProjection.replayOutbox();
     },
     rebuildConversationProjection(conversationSessionId) {
       return kernel.conversationProjection.rebuildSession(conversationSessionId);

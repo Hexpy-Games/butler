@@ -6,8 +6,6 @@ import {
   isPidRunning,
   readServiceState,
 } from "../../../../operations/service/native-service-supervisor.ts";
-import type { SessionBindingStore } from "../../../../test-support/harness/session-store.ts";
-import type { SessionTransportBinding } from "../../../../test-support/harness/contracts.ts";
 import type { ButlerServiceClient } from "../../../core/client.ts";
 import {
   APP_ACCOUNT,
@@ -19,15 +17,9 @@ import type { ProjectRow, ChatRow } from "../core/records.ts";
 import { appSafeResponderError } from "./failure-ux-contract.ts";
 import { APP_TURN_QUEUE_FAILED_CODE } from "./btcc-public-projection.ts";
 import { safeTurnFailureEventPayload } from "./turn-failure-projection.ts";
-import { appRuntimePolicy, stringArray } from "../../domain/runtime/app-runtime-policy.ts";
-import {
-  mergeTransportBindings,
-  normalizeAppModelRef,
-} from "./app-transport-metadata.ts";
 import { sessionHintForRow } from "../../domain/sessions/session-read-model.ts";
 import type {
   MessageRecord,
-  SettingsView,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
@@ -35,18 +27,14 @@ import {
   verifyTurnExecutionControls,
   type TurnExecutionControlsV1,
 } from "../../../core/turn-execution-controls.ts";
-import { resolveSessionWorkspaceAuthority } from "../../../../agent/session-workspaces/index.ts";
 
 export class AppTransportQueueStore {
   constructor(
     private readonly butlerData: string,
-    private readonly butlerHome: string,
     private readonly serviceClient: ButlerServiceClient,
-    private readonly sessionBindingStore: SessionBindingStore,
     private readonly messageFiles: AppMessageFileStore,
     private readonly getChatRow: (chatId: string) => ChatRow | null,
     private readonly getProjectRow: (projectId: string) => ProjectRow | null,
-    private readonly getSettings: () => SettingsView,
     private readonly getTurn: (turnId: string) => TurnRecord,
     private readonly appendEvent: (
       type: string,
@@ -96,13 +84,6 @@ export class AppTransportQueueStore {
         ? this.getProjectRow(chat.project_id)
         : null;
       const sessionId = sessionHintForRow(input.chatId);
-      this.ensureAppTransportSessionBinding({
-        chatId: input.chatId,
-        sessionId,
-        project,
-        sessionKind: chat?.kind ?? "chat",
-        executionControls,
-      });
       const queued = this.serviceClient.enqueueAppTurn(
         {
           chatId: input.chatId,
@@ -117,6 +98,32 @@ export class AppTransportQueueStore {
           senderDisplayName: "Butler App",
           projectId: chat?.project_id ?? undefined,
           executionControls,
+          appTurnContext: {
+            version: 1,
+            session: {
+              id: input.chatId,
+              kind: chat?.kind === "project" ? "project" : "chat",
+            },
+            conversation: {
+              chatId: input.chatId,
+              userMessageId: input.message.id,
+              turnId: input.turnId,
+              turnAttempt: this.getTurn(input.turnId).attempt,
+            },
+            ...(project ? {
+              project: {
+                id: project.id,
+                workspacePath: project.workspace_path,
+                ...(project.ledger_project_id
+                  ? { ledgerProjectId: project.ledger_project_id }
+                  : {}),
+              },
+            } : {}),
+            model: {
+              requestedModelRef: executionControls.model_ref,
+              reasoningEffort: executionControls.reasoning_effort,
+            },
+          },
           attachments: this.messageFiles.attachmentsForTransport(
             input.message.id,
           ),
@@ -190,70 +197,4 @@ export class AppTransportQueueStore {
     return failedTurn;
   }
 
-  private ensureAppTransportSessionBinding(input: {
-    chatId: string;
-    sessionId: string;
-    project: ProjectRow | null;
-    sessionKind: ChatRow["kind"];
-    executionControls: TurnExecutionControlsV1;
-  }): void {
-    const existing = this.sessionBindingStore.getBySessionId(input.sessionId);
-    const modelRef = normalizeAppModelRef(
-      input.executionControls.model_ref ?? existing?.modelRef,
-    );
-    const appBinding: SessionTransportBinding = {
-      transport: APP_TRANSPORT,
-      accountId: APP_ACCOUNT,
-      peerId: input.chatId,
-    };
-    const transportBindings = mergeTransportBindings([
-      ...(existing?.transportBindings ?? []),
-      appBinding,
-    ]);
-    const settings = this.getSettings();
-    const runtimePolicy = appRuntimePolicy({
-      existing: existing?.metadata?.runtimePolicy,
-      accessMode: input.executionControls.access_mode,
-      projectId: input.project?.id ?? existing?.projectId,
-      sessionKind: input.sessionKind,
-    });
-    const workspaceAuthority = resolveSessionWorkspaceAuthority({
-      binding: existing,
-      projectWorkspacePath: input.project?.workspace_path,
-    });
-    this.sessionBindingStore.upsert({
-      sessionId: input.sessionId,
-      role: existing?.role ?? "butler",
-      projectId: input.project?.id ?? existing?.projectId,
-      workspacePath:
-        workspaceAuthority.workspacePath ??
-        existing?.workspacePath ??
-        input.project?.workspace_path ??
-        this.butlerHome,
-      runtimeAdapterId: "btcc-turn-runtime",
-      modelProviderId:
-        modelRef.split("/", 1)[0] || existing?.modelProviderId || "openai",
-      modelRef,
-      runtimeSessionRef: existing?.runtimeSessionRef,
-      providerThreadRef: existing?.providerThreadRef,
-      lifecycleState: "active",
-      transportBindings,
-      metadata: {
-        ...(existing?.metadata ?? {}),
-        source: "app-server",
-        appSessionKind: input.sessionKind,
-        accessMode: input.executionControls.access_mode,
-        requiredNativeTools: stringArray(runtimePolicy.requiredNativeTools),
-        required_tools: stringArray(runtimePolicy.required_tools),
-        requiredNativeToolProfiles: stringArray(
-          runtimePolicy.requiredNativeToolProfiles,
-        ),
-        runtimePolicy,
-        reasoning_effort: input.executionControls.reasoning_effort,
-        plan_mode: input.executionControls.plan_mode,
-        turnExecutionControls: input.executionControls,
-        workerModelRules: settings.worker_model_rules,
-      },
-    });
-  }
 }

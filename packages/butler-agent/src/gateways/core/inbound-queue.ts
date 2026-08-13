@@ -127,6 +127,23 @@ export class NativeInboundQueue {
     return record;
   }
 
+  enqueueIdempotent(
+    envelope: InboundEnvelope,
+    metadata: Record<string, unknown> = {},
+    now = new Date(),
+  ): QueuedInboundEvent {
+    const queueId = `idempotent-${safeQueueId(envelope.eventId)}`;
+    for (const state of ["pending", "processing", "processed", "failed"] as const) {
+      const existing = this.readQueuedRecord(join(this.dir(state), `${queueId}.json`));
+      if (existing) return existing;
+    }
+    const record: QueuedInboundEvent = {
+      version: 1, queueId, envelope, enqueuedAt: now.toISOString(), attempts: 0, metadata,
+    };
+    atomicWriteInboundQueueRecord(join(this.dir("pending"), `${queueId}.json`), record);
+    return record;
+  }
+
   claimEligible(
     limit = 10,
     isEligible: (event: QueuedInboundEvent) => boolean,

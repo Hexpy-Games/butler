@@ -407,7 +407,6 @@ export function readProfilingExtractorModelConfig(
     config.personalization?.profiling?.extractorModel,
   );
   const butlerModel =
-    readAppSettingsModelRef(butlerData) ??
     normalizeButlerModelRef(config) ??
     DEFAULT_MODEL_REF;
   const explicitModel = configured && configured !== PROFILE_EXTRACTOR_MODEL_DEFAULT
@@ -417,7 +416,6 @@ export function readProfilingExtractorModelConfig(
     normalizeProfilingExtractorReasoningEffort(
       config.personalization?.profiling?.extractorReasoningEffort,
     ) ??
-    readAppSettingsReasoningEffort(butlerData) ??
     DEFAULT_REASONING_EFFORT;
   return {
     configured_model: explicitModel,
@@ -1874,66 +1872,6 @@ function normalizeButlerModelRef(config: JsonRecord): string | null {
   if (typeof raw !== "string" || !raw.trim()) return null;
   const parsed = parseModelRef(raw);
   return parsed.modelId ? parsed.canonicalRef : null;
-}
-
-function readAppSettingsModelRef(butlerData: string): string | null {
-  const path = join(butlerData, "app-server", "butler-client.sqlite");
-  if (!existsSync(path)) return null;
-  let db: Database;
-  try {
-    db = new Database(path, { readonly: true });
-  } catch {
-    return null;
-  }
-  try {
-    const row = db.query(`
-      SELECT value_json
-      FROM app_settings
-      WHERE key = 'settings'
-      LIMIT 1
-    `).get() as { value_json?: string } | null;
-    if (!row?.value_json) return null;
-    const parsed = JSON.parse(row.value_json) as { model?: unknown };
-    if (typeof parsed.model !== "string" || !parsed.model.trim()) return null;
-    const model = parseModelRef(parsed.model);
-    return model.modelId ? model.canonicalRef : null;
-  } catch {
-    return null;
-  } finally {
-    db.close();
-  }
-}
-
-function readAppSettingsReasoningEffort(
-  butlerData: string,
-): ReasoningEffort | null {
-  const path = join(butlerData, "app-server", "butler-client.sqlite");
-  if (!existsSync(path)) return null;
-  let db: Database;
-  try {
-    db = new Database(path, { readonly: true });
-  } catch {
-    return null;
-  }
-  try {
-    const row = db.query(`
-      SELECT value_json
-      FROM app_settings
-      WHERE key = 'settings'
-      LIMIT 1
-    `).get() as { value_json?: string } | null;
-    if (!row?.value_json) return null;
-    const parsed = JSON.parse(row.value_json) as {
-      reasoning_effort?: unknown;
-    };
-    return normalizeProfilingExtractorReasoningEffort(
-      parsed.reasoning_effort,
-    );
-  } catch {
-    return null;
-  } finally {
-    db.close();
-  }
 }
 
 function normalizeRuntimeProfileProjection(value: unknown): RuntimeProfileProjection {

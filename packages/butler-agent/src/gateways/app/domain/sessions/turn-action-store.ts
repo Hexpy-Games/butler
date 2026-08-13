@@ -22,9 +22,11 @@ import type {
 } from "./message-responder-contract.ts";
 import type { TurnExecutionControlsV1 } from "../../../core/turn-execution-controls.ts";
 import { AppTurnCancellation } from "./turn-cancellation.ts";
+import type { ButlerServiceClient } from "../../../core/client.ts";
 
 interface TurnActionStoreInput {
   db: Database;
+  serviceClient: ButlerServiceClient;
   getTurn: (turnId: string) => TurnRecord;
   getTurnRow: (turnId: string) => TurnRow | null;
   runtimeFaultRecordForTurn: (turnId: string) => Record<string, unknown> | null;
@@ -61,7 +63,6 @@ interface TurnActionStoreInput {
     responder: AppMessageResponder;
     options: SendMessageOptions;
   }) => Promise<TurnActionResult>;
-  cancelResponder: (turnId: string) => boolean;
   finalizeCancelledTurn: (chatId: string, turnId: string) => TurnRecord;
   cleanupTurnEventSequences: (chatId: string, turnId: string) => void;
   ensureCancelledTurnActivityMessage: (

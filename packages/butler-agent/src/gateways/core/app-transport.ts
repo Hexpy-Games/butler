@@ -26,12 +26,24 @@ export interface AppInboundInput {
   attachments?: InboundEnvelope["message"]["attachments"];
   raw?: InboundEnvelope["raw"];
   rawSource?: string;
+  appTurnContext?: InboundEnvelope["appTurnContext"];
+}
+
+export interface AppCancellationInput {
+  chatId: string;
+  sessionId: string;
+  turnId: string;
+  requestId: string;
+  requestedAt: string;
 }
 
 export function createAppInboundEnvelope(input: AppInboundInput): InboundEnvelope {
   const executionControls = input.executionControls
     ? verifyTurnExecutionControls(input.executionControls)
     : undefined;
+  if (input.appTurnContext) {
+    verifyAppTurnContext(input.appTurnContext, input, executionControls);
+  }
   return {
     eventId: `${APP_TRANSPORT}:${input.messageId}`,
     signal: input.signal,
@@ -58,9 +70,73 @@ export function createAppInboundEnvelope(input: AppInboundInput): InboundEnvelop
       turnId: input.turnId,
     },
     executionControls,
+    appTurnContext: input.appTurnContext,
     raw: input.raw ?? {
       source: input.rawSource ?? "app-server",
     },
+  };
+}
+
+function verifyAppTurnContext(
+  context: NonNullable<InboundEnvelope["appTurnContext"]>,
+  input: AppInboundInput,
+  controls: TurnExecutionControlsV1 | undefined,
+): void {
+  if (
+    !controls ||
+    context.version !== 1 ||
+    context.session.id !== input.chatId ||
+    context.conversation.chatId !== input.chatId ||
+    context.conversation.userMessageId !== input.messageId ||
+    context.conversation.turnId !== input.turnId ||
+    !Number.isSafeInteger(context.conversation.turnAttempt) ||
+    context.conversation.turnAttempt < 1 ||
+    context.model.requestedModelRef !== controls.model_ref ||
+    context.model.reasoningEffort !== controls.reasoning_effort
+  ) {
+    throw new Error("app_turn_context_identity_mismatch");
+  }
+  for (const value of [
+    context.session.id,
+    context.conversation.chatId,
+    context.conversation.userMessageId,
+    context.conversation.turnId,
+    context.project?.id,
+    context.project?.ledgerProjectId,
+  ]) {
+    if (value !== undefined && (!value.trim() || value.length > 512)) {
+      throw new Error("app_turn_context_value_invalid");
+    }
+  }
+  if (context.project && (
+    !context.project.workspacePath.trim() ||
+    context.project.workspacePath.length > 4_096
+  )) {
+    throw new Error("app_turn_context_workspace_invalid");
+  }
+}
+
+export function createAppCancellationEnvelope(
+  input: AppCancellationInput,
+): InboundEnvelope {
+  return {
+    eventId: `${APP_TRANSPORT}:cancel:${input.requestId}`,
+    transport: APP_TRANSPORT,
+    accountId: APP_ACCOUNT,
+    peer: { kind: "dm", id: input.chatId },
+    sender: { id: APP_SENDER_ID, displayName: "Butler App" },
+    message: {
+      id: input.requestId,
+      timestamp: input.requestedAt,
+    },
+    routingHints: { sessionId: input.sessionId, turnId: input.turnId },
+    control: {
+      kind: "cancel_turn",
+      requestId: input.requestId,
+      turnId: input.turnId,
+      requestedAt: input.requestedAt,
+    },
+    raw: { source: "app-server" },
   };
 }
 

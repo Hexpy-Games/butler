@@ -14,7 +14,6 @@ import {
   GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES,
   guidedNativeToolDefinitions,
   hiddenNativeToolNamesForGuidedTurn,
-  routeForUsedTools,
   selectedModelRef,
 } from "./guided-turn-policy.ts";
 import { selectGuidedTurnPhasePolicy } from "./guided-phase-policy.ts";
@@ -23,7 +22,6 @@ import { createGuidedToolExecutionBoundary } from
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
 import { renderGuidedEffectContext } from "./guided-effect-context.ts";
 import { renderDurableWorkContext } from "./durable-work-tools.ts";
-import { isDurableWorkTool } from "../work/index.ts";
 import {
   backfillTurnToolResults,
   safeImportOpenLegacyWork,
@@ -42,7 +40,6 @@ import { createGuidedPersistentEffectResolver } from
 import {
   createModelRoutePort,
   currentModelRouteCandidate,
-  type ModelRouteEvent,
 } from "../model-route/index.ts";
 import { createGuidedExecutionWindowObserver } from "./execution-window-observation.ts";
 import { createGuidedSessionWorkspaceRuntime } from "./guided-session-workspace-recovery.ts";
@@ -51,6 +48,9 @@ import {
 } from "../operation-result-replay/index.ts";
 import type { ProductionGuidedTurnAgentInput } from "./guided-turn-agent-input.ts";
 import { guidedContinuationBudget } from "./guided-continuation-budget.ts";
+import { guidedTurnResult } from "./guided-turn-result.ts";
+import { createGuidedRouteEventHandler } from
+  "./guided-route-event-handler.ts";
 
 export function createProductionGuidedTurnAgent(
   input: ProductionGuidedTurnAgentInput,
@@ -116,7 +116,6 @@ export function createProductionGuidedTurnAgent(
       const execute = createButlerToolExecutor({
         butlerHome: input.butlerHome,
         butlerData: input.butlerData,
-        appMessageDbPath: input.appMessageDbPath,
         workspacePath: policy.workspacePath,
         sessionId: turn.sessionId,
         originChatId: turn.sessionId,
@@ -161,7 +160,6 @@ export function createProductionGuidedTurnAgent(
           resolvePersistentEffect: createGuidedPersistentEffectResolver({
             butlerHome: input.butlerHome,
             butlerData: input.butlerData,
-            appMessageDbPath: input.appMessageDbPath,
             workspacePath: policy.workspacePath,
             workspaceReference,
             sessionId: turn.sessionId,
@@ -180,6 +178,7 @@ export function createProductionGuidedTurnAgent(
         managedInitially: initialWorkBound,
       });
       let activeModelRef = selectedModelRef(turn);
+      let acceptedModelIdentity: BtccAgentLoopResult["modelIdentity"];
       const toolCalls = createGuidedToolCallExecutor({
         turn,
         signal,
@@ -201,47 +200,14 @@ export function createProductionGuidedTurnAgent(
         : undefined;
       const selectedReasoningEffort = routedCandidate?.reasoningEffort ??
         turn.modelSelection.reasoningEffort;
-      let pendingFallbackProjection: { roundId: string; modelRef: string } | undefined;
-      const onRouteEvent = async (event: ModelRouteEvent) => {
-        const persisted = await recordModelRouteEvent?.(event);
-        if (
-          event.type === "model.attempt.started" &&
-          pendingFallbackProjection?.roundId === event.roundId &&
-          pendingFallbackProjection.modelRef === event.modelRef
-        ) {
-          pendingFallbackProjection = undefined;
-          try {
-            await progress?.modelRoundWaitingChanged?.({
-              turnId: turn.turnId,
-              requestId: event.roundId,
-              status: "started",
-              modelRef: event.modelRef,
-            });
-          } catch {
-            // Public model identity cannot veto the provider dispatch.
-          }
-        }
-        if (event.type === "model.fallback.selected") {
-          activeModelRef = event.modelRef;
-          pendingFallbackProjection = {
-            roundId: event.roundId,
-            modelRef: event.modelRef,
-          };
-          try {
-            await progress?.phaseActivityChanged?.({
-              turnId: turn.turnId,
-              semanticState: turn.semanticState,
-              activityId: `${turn.turnId}:model-fallback:${event.roundId}:${event.candidateIndex}`,
-              title: "대체 모델 경로 선택",
-              summary: `${event.modelRef} 모델로 계속 진행합니다.`,
-              modelRef: event.modelRef,
-            });
-          } catch {
-            // Public fallback notice cannot veto the next provider dispatch.
-          }
-        }
-        return persisted;
-      };
+      const onRouteEvent = createGuidedRouteEventHandler({
+        turn,
+        progress,
+        record: recordModelRouteEvent,
+        selectModel(modelRef) {
+          activeModelRef = modelRef;
+        },
+      });
       const modelRound = turn.modelRoute
         ? createModelRoutePort({
             base: baseModelRound,
@@ -250,7 +216,23 @@ export function createProductionGuidedTurnAgent(
             onRouteEvent,
             loadAttemptHistory: loadModelRouteAttemptHistory,
             loadAcceptedResponse: loadModelRoundAcceptance,
-            recordAcceptedResponse: recordModelRoundAcceptance,
+            recordAcceptedResponse: recordModelRoundAcceptance
+              ? async (accepted) => {
+                  await recordModelRoundAcceptance(accepted);
+                  acceptedModelIdentity = {
+                    requestedModelRef: `${turn.modelSelection.provider}/${turn.modelSelection.model}`,
+                    effectiveModelRef: accepted.modelRef,
+                    ...(accepted.result.providerIdentity
+                      ? {
+                          providerReportedModelRef:
+                            accepted.result.providerIdentity.reportedModel.includes("/")
+                              ? accepted.result.providerIdentity.reportedModel
+                              : `${accepted.result.providerIdentity.provider}/${accepted.result.providerIdentity.reportedModel}`,
+                        }
+                      : {}),
+                  };
+                }
+              : undefined,
           })
         : baseModelRound;
       const responseLanguage = renderGuidedResponseLanguage(turn, input.contextDocuments);
@@ -336,14 +318,12 @@ export function createProductionGuidedTurnAgent(
         },
       });
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
-      return {
+      return guidedTurnResult({
         content: text,
-        route: routeForUsedTools(
-          toolCalls.usedTools,
-          Boolean(finalWork) ||
-            toolCalls.usedTools.some(isDurableWorkTool),
-        ),
-      };
+        modelIdentity: acceptedModelIdentity,
+        usedTools: toolCalls.usedTools,
+        hasFinalWork: Boolean(finalWork),
+      });
     },
   };
 }
