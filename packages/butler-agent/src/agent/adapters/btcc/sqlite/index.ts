@@ -10,3 +10,15 @@ export {
   SqliteBtccWakeAuthorizationRepository,
   type BtccWakeAuthorizationRepository,
 } from "./sqlite-btcc-wake-authorization-repository.ts";
+export {
+  activateAgentBtccStorage,
+  agentBtccStoragePaths,
+  prepareAgentBtccStorage,
+  validateAgentBtccStorageForReadiness,
+} from "./storage-ownership/index.ts";
+export type {
+  AgentBtccActivationMarker,
+  AgentBtccMigrationReceipt,
+  LegacyWriterFenceReceipt,
+  PrepareAgentBtccStorageResult,
+} from "./storage-ownership/index.ts";
