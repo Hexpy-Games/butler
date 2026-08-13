@@ -6,7 +6,11 @@ import { join } from "node:path";
 import { cleanupButlerRuntime } from "../support/agent-benchmark/butler-runtime-cleanup.ts";
 import { createButlerAdapter } from "../support/agent-benchmark/butler-adapter.ts";
 import { replacementEligibility } from "../support/agent-benchmark/paired-contract.ts";
-import { exportedM1V2Metrics, materializeM1V2EvidenceExport, verifyM1V2EvidenceExport } from "../support/agent-benchmark/m1-v2-evidence-export.ts";
+import { redactBenchmarkPlan } from "../support/agent-benchmark/checkpoint.ts";
+import { benchmarkPlanIdentity } from "../support/agent-benchmark/planning.ts";
+import failedAttemptManifest from "../support/agent-benchmark/fixtures/m1-v2/failed-attempt-03-redacted-manifest.json";
+import failedAttemptIdentities from "../support/agent-benchmark/fixtures/m1-v2/failed-attempt-03-identities.json";
+import { durableM1V2Arithmetic, exportedM1V2Metrics, materializeM1V2EvidenceExport, verifyM1V2EvidenceExport } from "../support/agent-benchmark/m1-v2-evidence-export.ts";
 
 test("durable SC01 projection survives cleanup and preserves exact nullable attempt rows", () => {
   const fixture = exportFixture();
@@ -171,6 +175,138 @@ test("non-Agent physical digests are exact identities without SC01 segments", ()
   expect(exported.counts).toMatchObject({ attempts: 1, overhead: 2, segments: 2 });
 });
 
+test("role-aware SC01 preserves exact 591-byte title and auxiliary telemetry outside Agent arithmetic", () => {
+  const fixture = exportFixture();
+  fixture.input.providerRequests[1]!.serializedRequestBytes = 591;
+  const auxiliaryDigest = "C".repeat(43);
+  fixture.input.providerRequests.push({ ...fixture.input.providerRequests[1]!, ordinal: 3, requestKind: "auxiliary",
+    attemptDigest: auxiliaryDigest, serializedRequestBytes: 31, requestStartedAtMs: 210, completedAtMs: 230, terminatedAtMs: 230 });
+  (fixture.input.target.providerRequestIdentities as Record<string, unknown>[]).push({ ordinal: 3,
+    sessionId: fixture.input.identity.sessionId, turnId: fixture.input.identity.turnId,
+    requestKind: "auxiliary", physicalAttemptDigest: auxiliaryDigest });
+  const overheadRows = (attemptDigest: string, bytes: number, usageBearing: boolean) => [
+    { ...fixture.input.metrics[0]!, dimensions: { ...fixture.input.metrics[0]!.dimensions!, attemptDigest, armId: null,
+      providerSendBytes: bytes, retryOrdinal: 0, eligibility: usageBearing ? "eligible" : "usage_unavailable" } },
+    { ...fixture.input.metrics[1]!, dimensions: { ...fixture.input.metrics[1]!.dimensions!, attemptDigest,
+      segmentId: `${attemptDigest[0]}-carrier`, providerSendBytes: Math.floor(bytes / 2) } },
+    { ...fixture.input.metrics[2]!, dimensions: { ...fixture.input.metrics[2]!.dimensions!, attemptDigest,
+      segmentId: `${attemptDigest[0]}-request`, providerSendBytes: bytes - Math.floor(bytes / 2) } },
+    { ...fixture.input.metrics[3]!, dimensions: { ...fixture.input.metrics[3]!.dimensions!, attemptDigest,
+      ...(usageBearing ? { status: "usage_bearing", promptTokens: 7, outputTokens: 3, totalTokens: 10 } : {}) } },
+  ];
+  fixture.input.metrics.push(...overheadRows("B".repeat(43), 591, true), ...overheadRows(auxiliaryDigest, 31, false));
+  const exported = materializeM1V2EvidenceExport(fixture.input).evidence;
+  const arithmetic = durableM1V2Arithmetic(exported);
+  expect(arithmetic.agentAttempts.map((row) => row.providerSendBytes)).toEqual([100]);
+  expect(arithmetic.unarmedPhysicalOverhead.title).toEqual({ attempts: 1, providerSendBytes: 591 });
+  expect(arithmetic.unarmedPhysicalOverhead.auxiliary).toEqual({ attempts: 1, providerSendBytes: 31 });
+  expect(arithmetic.overheadUsage).toMatchObject({
+    title: { observed: 1, usageBearing: 1, unavailable: 0 },
+    auxiliary: { observed: 1, usageBearing: 0, unavailable: 1 },
+  });
+  expect(arithmetic.allPhysical).toEqual({ attempts: 3, providerSendBytes: 722, observedUsageRows: 3, usageBearingRows: 1, unavailableUsageRows: 2 });
+  expect(exported.overhead[0]!.observation!.segments.reduce((sum, row) => sum + Number(row.providerSendBytes), 0)).toBe(591);
+});
+
+test("role-aware non-Agent SC01 rejects arm tags, byte sums, and digest-role conflicts", () => {
+  const armTagged = exportFixture();
+  armTagged.input.metrics.push({ ...armTagged.input.metrics[0]!, dimensions: { ...armTagged.input.metrics[0]!.dimensions!, attemptDigest: "B".repeat(43) } });
+  expect(() => materializeM1V2EvidenceExport(armTagged.input)).toThrow("arm_tagged_non_agent");
+
+  const badSum = exportFixture();
+  badSum.input.metrics.push(
+    { ...badSum.input.metrics[0]!, dimensions: { ...badSum.input.metrics[0]!.dimensions!, attemptDigest: "B".repeat(43), armId: null, providerSendBytes: 20 } },
+    { ...badSum.input.metrics[1]!, dimensions: { ...badSum.input.metrics[1]!.dimensions!, attemptDigest: "B".repeat(43), segmentId: "title-only", providerSendBytes: 19 } },
+  );
+  expect(() => materializeM1V2EvidenceExport(badSum.input)).toThrow("non_agent_segment_sum_mismatch");
+
+  const roleConflict = exportFixture();
+  (roleConflict.input.target.providerRequestIdentities as Record<string, unknown>[])[1]!.requestKind = "auxiliary";
+  expect(() => materializeM1V2EvidenceExport(roleConflict.input)).toThrow();
+});
+
+test("overhead SC01 creation validates full typed envelope segment and usage values", () => {
+  const mutations = [
+    (rows: ReturnType<typeof exportFixture>["input"]["metrics"]) => { rows[0]!.dimensions!.schemaVersion = "wrong"; },
+    (rows: ReturnType<typeof exportFixture>["input"]["metrics"]) => { rows[0]!.dimensions!.turnDigest = "bad"; },
+    (rows: ReturnType<typeof exportFixture>["input"]["metrics"]) => { rows[0]!.dimensions!.retryOrdinal = -1; },
+    (rows: ReturnType<typeof exportFixture>["input"]["metrics"]) => { rows[0]!.dimensions!.eligibility = "unknown"; },
+    (rows: ReturnType<typeof exportFixture>["input"]["metrics"]) => { rows[1]!.dimensions!.schemaVersion = "wrong"; },
+    (rows: ReturnType<typeof exportFixture>["input"]["metrics"]) => { rows[1]!.dimensions!.stability = "unknown"; },
+    (rows: ReturnType<typeof exportFixture>["input"]["metrics"]) => { rows[1]!.dimensions!.estimatedInputTokens = -1; },
+    (rows: ReturnType<typeof exportFixture>["input"]["metrics"]) => { rows[3]!.dimensions!.schemaVersion = "wrong"; },
+    (rows: ReturnType<typeof exportFixture>["input"]["metrics"]) => { rows[3]!.dimensions!.promptTokens = -1; },
+  ];
+  for (const mutate of mutations) {
+    const fixture = exportFixture();
+    const rows = fixture.input.metrics.slice(0, 4).map((row) => ({ ...row, dimensions: { ...row.dimensions, attemptDigest: "B".repeat(43), ...(row.name === "m1_v2_request_envelope" ? { armId: null, providerSendBytes: 20 } : row.name === "m1_v2_request_segment" ? { providerSendBytes: 10 } : {}) } }));
+    mutate(rows);
+    fixture.input.metrics.push(...rows);
+    expect(() => materializeM1V2EvidenceExport(fixture.input)).toThrow();
+  }
+});
+
+test("durable reopen rejects fully rehashed invalid overhead typed values", () => {
+  const fixture = exportFixture();
+  fixture.input.metrics.push(...fixture.input.metrics.slice(0, 4).map((row) => ({ ...row, dimensions: { ...row.dimensions, attemptDigest: "B".repeat(43), ...(row.name === "m1_v2_request_envelope" ? { armId: null, providerSendBytes: 20 } : row.name === "m1_v2_request_segment" ? { providerSendBytes: 10 } : {}) } })));
+  const mutations = [
+    (value: any) => { value.overhead[0].observation.envelope.phaseDigest = "bad"; },
+    (value: any) => { value.overhead[0].observation.segments[0].providerSendBytes = -1; value.overhead[0].observation.segments[0].byteLength = -1; },
+    (value: any) => { value.overhead[0].observation.usage.availabilityReason = "wrong"; },
+    (value: any) => { value.overhead[0].observation.usage.promptTokens = "7"; },
+  ];
+  for (const mutate of mutations) {
+    const copy = exportFixture();
+    copy.input.metrics.push(...fixture.input.metrics.slice(4));
+    const output = materializeM1V2EvidenceExport(copy.input);
+    rewriteDurableEvidence(output.absolutePath, mutate);
+    expect(() => verifyM1V2EvidenceExport({ path: output.absolutePath, expected: output.evidence.identity })).toThrow();
+  }
+});
+
+test("fresh plan identity is one pathless value across runtime and persisted manifest shapes", () => {
+  const historicalManifestIdentity = failedAttemptIdentities.manifestSemanticPlanIdentity;
+  const historicalRuntimeIdentity = failedAttemptIdentities.runtimeResultPlanIdentity;
+  expect(historicalManifestIdentity).not.toBe(historicalRuntimeIdentity);
+  const fixture = exportFixture();
+  const arm = { key: "direct-cold:before", scenario: "direct-cold" as const, repetition: 1, order: 0,
+    agent: "butler" as const, track: "controlled" as const, cache: "cold" as const, fixtureHash: "f".repeat(64),
+    effectiveConfig: { model: "openai/gpt-5.6-sol", reasoning: "medium", permissions: "full_access", tools: [], memoryEnabled: true, skillsEnabled: true, pluginsEnabled: true, mcpEnabled: true, provider: "openai", variant: null },
+    sourceRoot: join(fixture.root, "private-source"), outputRoot: join(fixture.input.runRoot, "arms/one/output"),
+    dataRoot: join(fixture.input.runRoot, "arms/one/data"), evidenceRoot: join(fixture.input.runRoot, "arms/one/evidence"),
+    cacheRoot: join(fixture.input.runRoot, "cache/one"), cachePairId: "pair", timeoutMs: 1_000,
+    sourceRevision: "c".repeat(40), version: "before" as const, pairId: "pair", block: 1 };
+  const plan = { schema: "butler.agent-benchmark.v1" as const, kind: "agent_benchmark_plan" as const,
+    campaign: "m1-v2-paired" as const, runId: "fresh", createdAt: "2026-08-13T00:00:00.000Z", seed: 1,
+    baselineSha: "c".repeat(40), runRoot: fixture.input.runRoot, sourceRoot: join(fixture.root, "private-source"),
+    harnessRoot: join(fixture.root, "private-harness"), provenanceJsonlPath: join(fixture.root, "private-authority.jsonl"),
+    tracks: ["controlled" as const], fixtures: [{ id: "direct-cold" as const, version: "v1", sha256: "f".repeat(64), promptCount: 1 }], arms: [arm] };
+  const runtimeIdentity = benchmarkPlanIdentity(plan);
+  const manifestIdentity = benchmarkPlanIdentity(redactBenchmarkPlan(plan));
+  expect(runtimeIdentity).toBe(manifestIdentity);
+  expect(runtimeIdentity).not.toBe(historicalManifestIdentity);
+  expect(runtimeIdentity).not.toBe(historicalRuntimeIdentity);
+  const relocated = { ...plan, runRoot: join(fixture.root, "other-run"), sourceRoot: join(fixture.root, "other-source"),
+    harnessRoot: join(fixture.root, "other-harness"), provenanceJsonlPath: join(fixture.root, "other.jsonl"),
+    arms: [{ ...arm, sourceRoot: join(fixture.root, "other-source"), outputRoot: join(fixture.root, "other-run/arms/one/output"),
+      dataRoot: join(fixture.root, "other-run/arms/one/data"), evidenceRoot: join(fixture.root, "other-run/arms/one/evidence"), cacheRoot: join(fixture.root, "other-run/cache/one") }] };
+  expect(benchmarkPlanIdentity(relocated)).toBe(runtimeIdentity);
+});
+
+test("immutable failed Attempt -03 fixture reproduces the exact persisted identity split without promotion", () => {
+  const manifestText = JSON.stringify(failedAttemptManifest);
+  const identitiesText = JSON.stringify(failedAttemptIdentities);
+  expect(benchmarkPlanIdentity(failedAttemptManifest as never)).toBe(failedAttemptIdentities.manifestSemanticPlanIdentity);
+  expect(failedAttemptIdentities.runtimeResultPlanIdentity).toBe(failedAttemptIdentities.beforeReceiptPlanIdentity);
+  expect(failedAttemptIdentities.runtimeResultPlanIdentity).toBe(failedAttemptIdentities.afterReceiptPlanIdentity);
+  expect(failedAttemptIdentities.runtimeResultPlanIdentity).not.toBe(failedAttemptIdentities.manifestSemanticPlanIdentity);
+  expect(failedAttemptIdentities).toMatchObject({ provenance: "immutable-redacted-failed-attempt-03-evidence-copy", promoted: false });
+  for (const text of [manifestText, identitiesText]) {
+    expect(text).not.toMatch(/\/(?:Users|home|private|var\/folders)\//u);
+    expect(text).not.toMatch(/(?:authorization|credential|secret|rawPrompt|rawToolPayload|transcript|responseBody)/iu);
+  }
+});
+
 test("non-Agent physical identity fails closed on digest and fabricated SC01 evidence", () => {
   const missing = exportFixture(); missing.input.providerRequests[1]!.attemptDigest = null;
   expect(() => materializeM1V2EvidenceExport(missing.input)).toThrow("attempt_digest_invalid");
@@ -182,7 +318,7 @@ test("non-Agent physical identity fails closed on digest and fabricated SC01 evi
   fabricatedSegment.input.metrics.push({ ...fabricatedSegment.input.metrics[1]!, dimensions: {
     ...fabricatedSegment.input.metrics[1]!.dimensions!, attemptDigest: "B".repeat(43), segmentId: "non-agent-segment",
   } });
-  expect(() => materializeM1V2EvidenceExport(fabricatedSegment.input)).toThrow("non_agent_sc01_evidence_invalid");
+  expect(() => materializeM1V2EvidenceExport(fabricatedSegment.input)).toThrow("non_agent_partial_telemetry");
 
   const armTagged = exportFixture();
   armTagged.input.metrics.push({ ...armTagged.input.metrics[0]!, dimensions: {
@@ -342,7 +478,7 @@ test("SC01 rejects missing and unknown same-arm Agent ownership", () => {
   missing.input.providerRequests.push({ ...missing.input.providerRequests[0]!, ordinal: 3, attemptDigest: "W".repeat(43) });
   expect(() => materializeM1V2EvidenceExport(missing.input)).toThrow("membership_incomplete");
   const extra = exportFixture(); extra.input.metrics.unshift(...extra.input.metrics.slice(0, 4).map((row) => ({ ...row, dimensions: { ...row.dimensions, attemptDigest: "X".repeat(43) } })));
-  expect(() => materializeM1V2EvidenceExport(extra.input)).toThrow("physical_attempt_join_failed");
+  expect(() => materializeM1V2EvidenceExport(extra.input)).toThrow("unknown_physical_telemetry");
   const orphanRequest = exportFixture(); orphanRequest.input.providerRequests.push({ ...orphanRequest.input.providerRequests[0]!, ordinal: 4, attemptDigest: null });
   expect(() => materializeM1V2EvidenceExport(orphanRequest.input)).toThrow("attempt_digest_invalid");
   const missingOverhead = exportFixture(); missingOverhead.input.providerRequests.splice(1, 1);

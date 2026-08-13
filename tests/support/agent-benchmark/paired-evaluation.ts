@@ -61,7 +61,11 @@ export function pairEligibility(input: { before: PairComparableIdentity; after: 
 type Usage = Record<"promptTokens" | "cacheReadTokens" | "cacheWriteTokens" | "outputTokens" | "reasoningTokens" | "totalTokens", number | null>;
 export interface PairedMetricRow {
   pairId: string; fixture: M1V2ArmId; version: BenchmarkVersion; identity: PairComparableIdentity;
-  providerSendBytes: number; physicalRequests: number; modelRounds: number; toolCalls: number;
+  /** Causal Agent bytes only; this is the registered SC01 reduction measure. */
+  providerSendBytes: number;
+  /** Explicit all-physical bytes, including role-classified non-Agent overhead. */
+  allPhysicalProviderSendBytes: number;
+  physicalRequests: number; modelRounds: number; toolCalls: number;
   elapsedMs: number | null; firstUsefulMs: number | null; usage: Usage;
   segments: Partial<Record<M1RequestSegmentKind, number>>; qualityPassed: boolean;
 }
@@ -74,6 +78,7 @@ export function aggregatePairedMetrics(rows: readonly PairedMetricRow[]) {
   const summarize = (pairs: Array<[PairedMetricRow, PairedMetricRow]>) => ({
     pairs: pairs.length,
     providerSendBytes: metric(pairs, (row) => row.providerSendBytes),
+    allPhysicalProviderSendBytes: metric(pairs, (row) => row.allPhysicalProviderSendBytes),
     physicalRequests: metric(pairs, (row) => row.physicalRequests),
     modelRounds: metric(pairs, (row) => row.modelRounds), toolCalls: metric(pairs, (row) => row.toolCalls),
     elapsedMs: metric(pairs, (row) => row.elapsedMs), firstUsefulMs: metric(pairs, (row) => row.firstUsefulMs),
@@ -106,7 +111,8 @@ export function summarizePairedBenchmarkResult(result: BenchmarkResultFile) {
     if (!identity) return [];
     return [{ pairId, fixture: repetition.armId, version,
       identity,
-      providerSendBytes: attempt.reduce((sum, item) => sum + item.providerSendBytes, 0) +
+      providerSendBytes: attempt.reduce((sum, item) => sum + item.providerSendBytes, 0),
+      allPhysicalProviderSendBytes: attempt.reduce((sum, item) => sum + item.providerSendBytes, 0) +
         Object.values(repetition.unarmedPhysicalOverhead).reduce((sum, item) => sum + item.providerSendBytes, 0),
       physicalRequests: attempt.length + repetition.auxiliaryPhysicalAttempts + repetition.titlePhysicalAttempts + repetition.providerToolPhysicalAttempts,
       modelRounds: repetition.semanticRounds, toolCalls: repetition.toolCalls,

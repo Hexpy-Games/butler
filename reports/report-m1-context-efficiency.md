@@ -797,3 +797,88 @@ broad unit phase and hit its 301-second limit, so an unbounded full pass is not
 claimed. No provider, Electron, prepared build, smoke, campaign, Hermes, or
 OpenCode execution was performed, and failed Final Attempt
 `A-M1-V2-FINAL-BENCHMARK-20260813-02` remains immutable.
+
+## SC01 role-aware unarmed overhead repair
+
+Task: `T-M1-V2-SC01-ROLE-AWARE-OVERHEAD-REPAIR-20260813`
+
+This bounded repair starts from exact source
+`c5e8bc516068cb748a4fa67df84d5eba019d189e`. The product producer emits one
+request envelope, a complete ordered segment partition, and nullable response
+usage for every instrumented physical provider attempt. Its `armId` is nullable:
+Agent turns may carry the benchmark arm, while title, auxiliary, and
+tool-provider attempts legitimately emit the same SC01 telemetry unarmed with
+`armId: null`.
+
+The durable projection must therefore preserve two disjoint classes. Agent rows
+own causal SC01 envelope, segment, usage, token attribution, and reduction
+arithmetic. Exactly joined non-Agent rows may own an unarmed envelope, segments,
+and nullable usage, but remain role-classified physical overhead. Each overhead
+envelope byte count must independently equal both its ordered segment sum and
+its provider-observed serialized bytes. Durable restart, evaluator, and report
+paths reopen and recompute Agent totals, per-role overhead count/bytes/usage,
+and explicit all-physical totals without allowing overhead into Agent reduction
+or token attribution.
+
+Legitimate non-Agent telemetry requires an exact join across typed physical
+ordinal, role, Session, Turn, Step membership when present, attempt digest,
+provider bytes, route/model/tier/status, serializer digest, and terminal timing;
+unarmed physical overhead may have no Step membership but still requires the
+same exact provider/telemetry join. A non-Agent `armId`, missing or fabricated
+rows, duplicate/conflicting rows, cross-role digest, byte or segment-order
+mismatch, status mismatch, ambiguous ownership, and privacy-unsafe material
+fail closed. A typed title or auxiliary request with no SC01 rows remains valid
+only when producer evidence establishes that no attribution observation was
+emitted; it is still preserved as typed overhead rather than ignored.
+
+The same repair also corrects fresh-plan identity propagation. The immutable
+failed Attempt -03 is not patched, normalized, reinterpreted, reconstructed, or
+promoted: its persisted manifest recomputes to
+`99af7c8337056bb145938a03cb6e2e4ef106c5478886d2445ad776b3706f1dd2`, while
+its immutable runtime result and before/after preflight receipts carry
+`20413529b0e32bedd53736b9d0ff806a6e1de83089951ba9b7fb9260ca1bd5fa`.
+For future fresh plans, one canonical identity is computed exactly once from
+public immutable semantic fields after private prepared-resource pins have been
+resolved to their pathless identities. The identical value is then carried
+through the manifest, both preflight receipts, steps, runtime result,
+checkpoint, SC01 export, evaluator, and report. Runtime paths and prepared
+resource directories cannot affect it; any runtime prepared-verification
+identity is separately named. Any mismatch fails before fresh dispatch.
+
+Acceptance is provider-free and focused: reproduce the Agent plus exact
+591-byte title telemetry and auxiliary-overhead shape with distinct digests;
+prove Agent-only versus overhead and all-physical arithmetic; cover nullable
+usage and one retry; reject non-Agent segment-sum, arm tag, digest/role/ordinal,
+ordering, status, duplicate, missing, conflict, and unsafe-field faults; preserve
+valid typed non-emission; reproduce the historical `99af...` versus `2041...`
+identity split without changing its files; and run the real public
+CLI-to-proxy/runner-to-durable-export-to-evaluator/report path. Provider,
+Electron, prepared-resource build, campaign, final 4x3, replacement, default,
+24-step order, pin, and cleanup policy remain out of scope and unchanged.
+
+The repair is complete. The exporter now stores optional typed overhead
+observations and applies the same envelope, ordered-segment, nullable-usage,
+terminal, tier, and privacy invariants during creation and durable reopen.
+Agent causal bytes remain the registered reduction measure; the paired result
+also publishes separately named all-physical bytes. The fresh planner computes
+one pathless semantic identity, binds every Arm to it, and every manifest,
+preflight, checkpoint/result, export, evaluator, and report consumer revalidates
+that carried identity before dispatch or acceptance. Prepared-resource
+verification remains a separately named identity.
+
+The immutable failed Attempt -03 evidence was read only. An exact redacted
+manifest fixture recomputes to `99af...`; a separate minimal allowlisted fixture
+records the result and both launch-smoke receipts as `2041...`. The regression
+proves the historical split without rewriting or promoting the Attempt. The
+original artifact remains unchanged.
+
+Validation passed 29 focused exporter tests, 81 focused producer/identity/
+runtime-export/adapter tests, 12 public paired CLI/workflow/evaluator/report
+tests, root and UI typecheck, lint with zero errors and 20 pre-existing warnings,
+BTCC shape (`4 domains / 203 files`), module audit, and `git diff --check`.
+Independent fast Sol review approved with P0-P3 none after two P1 findings were
+repaired: full typed overhead parity and artifact-derived Attempt -03 identity
+reproduction. The exporter remains a size-review trigger at roughly 660 lines,
+but the reviewer found its durable materialize/verify responsibility cohesive.
+Provider, Electron, prepared-resource, campaign, final 4x3, Hermes, OpenCode,
+and the 300-second repository-wide check were intentionally not run.

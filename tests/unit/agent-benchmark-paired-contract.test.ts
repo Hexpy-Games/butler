@@ -135,6 +135,9 @@ describe("final paired M1 campaign contract", () => {
     expect(readFileSync(join(runRoot, "manifest.json"), "utf8")).toBe(manifest);
     expect(manifest).not.toContain("secret-token");
     expect(manifest).not.toContain("/private/path");
+    const persistedPlan = JSON.parse(manifest) as { planIdentity: string; arms: Array<{ planIdentity: string }> };
+    expect(persistedPlan.planIdentity).toMatch(/^[a-f0-9]{64}$/);
+    expect(persistedPlan.arms.every((arm) => arm.planIdentity === persistedPlan.planIdentity)).toBe(true);
     expect(executor.requests).toHaveLength(4);
     expect(executor.requests.every((request) => request.executable.startsWith("/") &&
       request.env.PATH === process.env.PATH && request.env.HOME === process.env.HOME &&
@@ -198,9 +201,13 @@ describe("final paired M1 campaign contract", () => {
     });
     expect(dispatches).toBe(0);
     expect(completed.result.observations).toHaveLength(24);
+    expect(completed.result.run.planIdentity).toBe(plan.planIdentity!);
+    expect(completed.result.plan.arms.every((arm) => arm.planIdentity === plan.planIdentity!)).toBe(true);
     expect(completed.result.observations.every((row) => row.gateCode === "configuration_unverifiable")).toBe(true);
     expect(summarizeBenchmarkResult(completed.result).pairedCampaign?.acceptance.complete).toBe(false);
     const report = writeBenchmarkReport(completed.result, join(plan.runRoot, "report"));
+    const reportSummary = JSON.parse(readFileSync(report.jsonPath, "utf8")) as { planIdentity: string };
+    expect(reportSummary.planIdentity).toBe(plan.planIdentity!);
     expect(readFileSync(report.comparisonIndexPath, "utf8")).toContain('"status": "unranked"');
     expect(readFileSync(report.comparisonHtmlPath, "utf8")).toContain("paired_incomplete_or_rejected");
 
@@ -531,10 +538,13 @@ describe("final paired M1 campaign contract", () => {
     expect(existsSync(join(runRoot, "manifest.json"))).toBeFalse();
     expect(existsSync(join(runRoot, "result.json"))).toBeFalse();
     expect(existsSync(join(runRoot, "arms"))).toBeFalse();
+    const receiptPlanIdentities: string[] = [];
     for (const version of ["before", "after"] as const) {
       const dedicatedRoot = join(runRoot, "preflight", "launch-smoke", version);
       expect(existsSync(join(dedicatedRoot, "receipt.json"))).toBeTrue();
-      expect(JSON.parse(readFileSync(join(dedicatedRoot, "receipt.json"), "utf8"))).toMatchObject({
+      const receipt = JSON.parse(readFileSync(join(dedicatedRoot, "receipt.json"), "utf8")) as { planIdentity: string; preparedResourceIdentity: unknown };
+      receiptPlanIdentities.push(receipt.planIdentity);
+      expect(receipt).toMatchObject({
         schema: "butler.paired-launch-smoke-preflight.v1",
         version,
         operationKind: "launch_smoke",
@@ -548,9 +558,12 @@ describe("final paired M1 campaign contract", () => {
         providerRequests: 0,
         turnObservations: 0,
       });
+      expect(receipt.preparedResourceIdentity).toBeDefined();
       expect(existsSync(join(dedicatedRoot, "evidence", "data"))).toBeFalse();
       expect(existsSync(join(dedicatedRoot, "evidence", "sc01-public-evidence.json"))).toBeFalse();
     }
+    expect(new Set(receiptPlanIdentities).size).toBe(1);
+    expect(receiptPlanIdentities[0]).toMatch(/^[a-f0-9]{64}$/);
 
     const rerunOutput = JSON.parse(await runAgentBenchmarkCli(args, {
       createAdapters: (_sourceRoot, options) => {
@@ -755,8 +768,8 @@ describe("final paired M1 campaign contract", () => {
   test("reports per-arm/overall paired deltas, nullable usage, and historical unranked index", () => {
     const usage = { promptTokens: null, cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null, reasoningTokens: null, totalTokens: null };
     const rows = (["direct-cold", "direct-warm", "current-web-cold", "landing-cold"] as const).flatMap((fixture, index) => [1, 2, 3].flatMap((repetition) => [
-      { pairId: `${fixture}:${repetition}`, fixture, version: "before" as const, identity: comparable(FINAL_BEFORE_REVISION), providerSendBytes: 100 + index, physicalRequests: 10, modelRounds: 8, toolCalls: 4, elapsedMs: 1000, firstUsefulMs: 100, usage, segments: {}, qualityPassed: true },
-      { pairId: `${fixture}:${repetition}`, fixture, version: "after" as const, identity: comparable(FINAL_AFTER_REVISION), providerSendBytes: 60 + index, physicalRequests: 6, modelRounds: 5, toolCalls: 4, elapsedMs: 750, firstUsefulMs: 80, usage, segments: {}, qualityPassed: true },
+      { pairId: `${fixture}:${repetition}`, fixture, version: "before" as const, identity: comparable(FINAL_BEFORE_REVISION), providerSendBytes: 100 + index, allPhysicalProviderSendBytes: 120 + index, physicalRequests: 10, modelRounds: 8, toolCalls: 4, elapsedMs: 1000, firstUsefulMs: 100, usage, segments: {}, qualityPassed: true },
+      { pairId: `${fixture}:${repetition}`, fixture, version: "after" as const, identity: comparable(FINAL_AFTER_REVISION), providerSendBytes: 60 + index, allPhysicalProviderSendBytes: 80 + index, physicalRequests: 6, modelRounds: 5, toolCalls: 4, elapsedMs: 750, firstUsefulMs: 80, usage, segments: {}, qualityPassed: true },
     ]));
     const aggregate = aggregatePairedMetrics(rows);
     expect(aggregate.byArm["direct-cold"].providerSendBytes.ratio.median).toBe(-0.4);

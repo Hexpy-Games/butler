@@ -23,6 +23,7 @@ export function m1V2ReportLines(campaign: M1V2CampaignResult | null): string[] {
     `- Rejected: ${campaign.counts.rejected}`,
     `- Gated: ${campaign.counts.gated}`,
     "- Provider usage remains nullable; retry/cache/identity failures are ineligible and are not replacement observations.",
+    "- Agent causal provider-send bytes are reported separately from per-role overhead and explicit all-physical totals.",
     "- Work/Ledger, memory, source, schema, replay, and carrier byte costs remain separated in the machine-readable summary.",
     "",
   ];

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import {
   AGENT_BENCHMARK_BASELINE_SHA,
   AGENT_BENCHMARK_SCHEMA,
@@ -185,7 +185,7 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
     }
     }
   }
-  return {
+  const plan: BenchmarkPlan = {
     schema: AGENT_BENCHMARK_SCHEMA,
     kind: "agent_benchmark_plan",
     campaign,
@@ -215,28 +215,31 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
     } } : {}),
     arms,
   };
+  plan.planIdentity = computeBenchmarkPlanSemanticIdentity(plan);
+  plan.arms = plan.arms.map((arm) => ({ ...arm, planIdentity: plan.planIdentity }));
+  return plan;
 }
 
 /** Stable identity for checkpoint resume; excludes only volatile createdAt. */
 export function benchmarkPlanIdentity(
+  plan: Pick<BenchmarkPlan, "campaign" | "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "harnessRoot" | "provenanceJsonlPath" | "provenance" | "preparedButlerResource" | "pairedCampaign" | "tracks" | "fixtures" | "arms" | "policy" | "planIdentity">,
+): string {
+  const computed = computeBenchmarkPlanSemanticIdentity(plan);
+  if (plan.planIdentity !== undefined && plan.planIdentity !== computed) {
+    throw new Error("Benchmark plan carried identity mismatch.");
+  }
+  const identity = plan.planIdentity ?? computed;
+  if (plan.arms.some((arm) => arm.planIdentity !== undefined && arm.planIdentity !== identity)) {
+    throw new Error("Benchmark arm carried identity mismatch.");
+  }
+  return identity;
+}
+
+function computeBenchmarkPlanSemanticIdentity(
   plan: Pick<BenchmarkPlan, "campaign" | "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "harnessRoot" | "provenanceJsonlPath" | "provenance" | "preparedButlerResource" | "pairedCampaign" | "tracks" | "fixtures" | "arms" | "policy">,
 ): string {
-  const stable = {
-    runId: plan.runId,
-    campaign: plan.campaign,
-    seed: plan.seed,
-    baselineSha: plan.baselineSha,
-    runRoot: plan.runRoot,
-    sourceRoot: plan.sourceRoot,
-    harnessRoot: plan.harnessRoot,
-    provenanceJsonlPath: plan.provenanceJsonlPath ?? null,
-    provenance: plan.provenance ?? null,
-    preparedButlerResource: plan.preparedButlerResource ?? null,
-    pairedCampaign: plan.pairedCampaign ?? null,
-    tracks: plan.tracks,
-    fixtures: plan.fixtures,
-    policy: plan.policy ?? null,
-    arms: plan.arms.map((arm) => ({
+  const publicPath = (path: string) => (isAbsolute(path) ? relative(plan.runRoot, path) : path).replaceAll("\\", "/");
+  const publicArm = (arm: BenchmarkArmPlan) => ({
       key: arm.key,
       scenario: arm.scenario,
       repetition: arm.repetition,
@@ -246,11 +249,11 @@ export function benchmarkPlanIdentity(
       cache: arm.cache,
       fixtureHash: arm.fixtureHash,
       effectiveConfig: arm.effectiveConfig,
-      sourceRoot: arm.sourceRoot,
-      outputRoot: arm.outputRoot,
-      dataRoot: arm.dataRoot,
-      evidenceRoot: arm.evidenceRoot,
-      cacheRoot: arm.cacheRoot,
+      sourceRoot: `<${arm.version ?? "source"}-source-root>`,
+      outputRoot: publicPath(arm.outputRoot),
+      dataRoot: publicPath(arm.dataRoot),
+      evidenceRoot: publicPath(arm.evidenceRoot),
+      cacheRoot: publicPath(arm.cacheRoot),
       cachePairId: arm.cachePairId,
       timeoutMs: arm.timeoutMs,
       sourceRevision: arm.sourceRevision,
@@ -258,7 +261,23 @@ export function benchmarkPlanIdentity(
       pairId: arm.pairId ?? null,
       block: arm.block ?? null,
       pairedExecution: arm.pairedExecution ?? null,
-    })),
+    });
+  const stable = {
+    runId: plan.runId,
+    campaign: plan.campaign,
+    seed: plan.seed,
+    baselineSha: plan.baselineSha,
+    runRoot: "<run-root>",
+    sourceRoot: "<source-root>",
+    harnessRoot: "<harness-root>",
+    provenanceJsonlPath: plan.provenanceJsonlPath ? "<provenance-jsonl>" : null,
+    provenance: plan.provenance ?? null,
+    preparedButlerResource: plan.preparedButlerResource ?? null,
+    pairedCampaign: plan.pairedCampaign ?? null,
+    tracks: plan.tracks,
+    fixtures: plan.fixtures,
+    policy: plan.policy ?? null,
+    arms: plan.arms.map(publicArm),
   };
   return createHash("sha256").update(JSON.stringify(stable)).digest("hex");
 }

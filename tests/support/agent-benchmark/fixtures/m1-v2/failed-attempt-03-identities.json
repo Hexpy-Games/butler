@@ -1,0 +1,9 @@
+{
+  "schema": "butler.agent-benchmark.failed-attempt-identity-regression.v1",
+  "provenance": "immutable-redacted-failed-attempt-03-evidence-copy",
+  "promoted": false,
+  "manifestSemanticPlanIdentity": "99af7c8337056bb145938a03cb6e2e4ef106c5478886d2445ad776b3706f1dd2",
+  "runtimeResultPlanIdentity": "20413529b0e32bedd53736b9d0ff806a6e1de83089951ba9b7fb9260ca1bd5fa",
+  "beforeReceiptPlanIdentity": "20413529b0e32bedd53736b9d0ff806a6e1de83089951ba9b7fb9260ca1bd5fa",
+  "afterReceiptPlanIdentity": "20413529b0e32bedd53736b9d0ff806a6e1de83089951ba9b7fb9260ca1bd5fa"
+}
