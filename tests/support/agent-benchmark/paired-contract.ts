@@ -21,6 +21,25 @@ export const FINAL_ACCEPTANCE = { providerSendByteReductionMinimum: 0.30,
 export type BenchmarkVersion = "before" | "after";
 export type ProviderAuthMode = "oauth" | "api_key" | "managed";
 
+export interface M1V2ActivationIdentity {
+  schema: "butler.m1-v2-activation-identity.v1";
+  mode: "off" | "on";
+  segmentAttribution: true;
+  toolInstructionSurface: boolean;
+  exactOnceReplay: boolean;
+  boundedStatelessContext: boolean;
+  continuationLimits: "product_default";
+}
+
+export const FINAL_ACTIVATION: Readonly<Record<BenchmarkVersion, M1V2ActivationIdentity>> = {
+  before: { schema: "butler.m1-v2-activation-identity.v1", mode: "off", segmentAttribution: true,
+    toolInstructionSurface: false, exactOnceReplay: false, boundedStatelessContext: false,
+    continuationLimits: "product_default" },
+  after: { schema: "butler.m1-v2-activation-identity.v1", mode: "on", segmentAttribution: true,
+    toolInstructionSurface: true, exactOnceReplay: true, boundedStatelessContext: true,
+    continuationLimits: "product_default" },
+} as const;
+
 export interface PairedSourcePin {
   version: BenchmarkVersion;
   revision: string;
@@ -28,6 +47,7 @@ export interface PairedSourcePin {
   platform: string;
   mode: "bundled_agent_release";
   preparedResource: PreparedButlerResourceIdentity;
+  activation: M1V2ActivationIdentity;
 }
 
 export interface PairedStepIdentity {
@@ -231,9 +251,11 @@ export function replacementEligibility(input: {
 }
 
 function validatePin(pin: PairedSourcePin, version: BenchmarkVersion): void {
-  if (pin.version !== version || !/^[a-f0-9]{40}$/u.test(pin.revision) ||
+  const expectedRevision = version === "before" ? FINAL_BEFORE_REVISION : FINAL_AFTER_REVISION;
+  if (pin.version !== version || pin.revision !== expectedRevision ||
       !/^[a-z0-9_-]+$/u.test(pin.platform) || pin.mode !== "bundled_agent_release" ||
       pin.preparedResource.sourceRevision !== pin.revision ||
+      JSON.stringify(pin.activation) !== JSON.stringify(FINAL_ACTIVATION[version]) ||
       pin.preparedResource.sourceCompatibilitySha256 !== pin.compatibilitySha256 ||
       ![pin.compatibilitySha256, pin.preparedResource.manifestSha256, pin.preparedResource.dependencyClosureSha256,
         pin.preparedResource.resourceSha256, pin.preparedResource.archiveSha256].every((value) => /^[a-f0-9]{64}$/u.test(value)) ||

@@ -16,7 +16,7 @@ import {
   sumNullable,
 } from "./butler-output.ts";
 import { sanitizeIdentifier } from "./identifiers.ts";
-import { cleanupButlerRuntime, readButlerHarnessEvidence } from "./butler-runtime-cleanup.ts";
+import { cleanupButlerRuntime, prunePrivateButlerEvidenceCorpus, readButlerHarnessEvidence, removeRawButlerHarnessEvidence } from "./butler-runtime-cleanup.ts";
 import {
   collectButlerM1V2Evidence,
   withButlerM1V2Environment,
@@ -72,21 +72,21 @@ export function createButlerAdapter(
     },
     async run(input: AdapterRunInput): Promise<AdapterRunResult> {
       const startedAtMs = Date.now();
-      let evidence: Record<string, unknown>;
+      let evidence: Record<string, unknown> = { error: true, run: { dataRoot: join(input.arm.evidenceRoot, "data") } };
+      let adapterResult: AdapterRunResult | null = null;
       try {
         evidence = await runner(input);
       } catch (error) {
         if (error instanceof PreparedButlerResourceError) {
-          return gatedAdapterResult("measurement_unavailable", error.code, adapterVersion);
+          adapterResult = gatedAdapterResult("measurement_unavailable", boundedPreparedResourceCode(error.code), adapterVersion);
+        } else {
+          const recoveredEvidence = readButlerHarnessEvidence(input.arm.evidenceRoot);
+          if (!recoveredEvidence && input.fixture.m1V2) {
+            adapterResult = gatedAdapterResult("measurement_unavailable", "Butler M1 product-path evidence was unavailable after harness failure.", adapterVersion);
+          } else if (!recoveredEvidence) throw error;
+          else evidence = recoveredEvidence;
         }
-        const recoveredEvidence = readButlerHarnessEvidence(input.arm.evidenceRoot);
-        if (!recoveredEvidence && input.fixture.m1V2) {
-          return gatedAdapterResult("measurement_unavailable", "Butler M1 product-path evidence was unavailable after harness failure.", adapterVersion);
-        }
-        if (!recoveredEvidence) throw error;
-        evidence = recoveredEvidence;
       }
-      let adapterResult: AdapterRunResult | null = null;
       try {
         const infrastructureGate = input.fixture.m1V2 ? butlerM1V2InfrastructureGate(evidence) : null;
         if (infrastructureGate) {
@@ -119,6 +119,9 @@ export function createButlerAdapter(
               adapterResult.evidenceRefs = [
                 ...adapterResult.evidenceRefs,
                 adapterResult.m1V2Evidence.exportHandle!,
+                ...(adapterResult.m1V2Evidence.activationReceiptHandle
+                  ? [adapterResult.m1V2Evidence.activationReceiptHandle]
+                  : []),
               ];
             } catch (_error) {
               adapterResult = { ...adapterResult, gateCode: "measurement_unavailable",
@@ -127,12 +130,29 @@ export function createButlerAdapter(
           }
         }
       } finally {
+        const rawEvidenceRemoved = !input.fixture.m1V2 ||
+          removeRawButlerHarnessEvidence(input.arm.evidenceRoot);
         const durableExport = !input.fixture.m1V2
           ? "not_armed"
           : adapterResult?.m1V2Evidence?.exportSha256
           ? "verified"
-          : "missing_or_failed";
+          : "privacy_failed_arm";
         const cleanup = cleanupButlerRuntime(evidence, input.arm, durableExport);
+        const verifiedTypedFiles = new Set<string>();
+        if (adapterResult?.m1V2Evidence?.exportSha256) verifiedTypedFiles.add("sc01-public-evidence.json");
+        if (adapterResult?.m1V2Evidence?.activationReceipt?.identitySha256) {
+          verifiedTypedFiles.add("m1-v2-runtime-activation-receipt.json");
+        }
+        const privateCorpusRemoved = !input.fixture.m1V2 ||
+          prunePrivateButlerEvidenceCorpus(input.arm.evidenceRoot, verifiedTypedFiles);
+        if (adapterResult && input.fixture.m1V2) {
+          const typedHandles = new Set([
+            adapterResult.m1V2Evidence?.exportHandle,
+            adapterResult.m1V2Evidence?.activationReceiptHandle,
+          ].filter((value): value is string => Boolean(value)));
+          adapterResult = { ...adapterResult,
+            evidenceRefs: adapterResult.evidenceRefs.filter((value) => typedHandles.has(value)) };
+        }
         if (adapterResult && (cleanup.status === "unsafe" || cleanup.status === "failed")) {
           const productFailure = adapterResult.exitCode !== 0 || adapterResult.timedOut || adapterResult.cancelled || evidence.error !== undefined || evidence.ok === false;
           const postDispatch = adapterResult.providerDispatchState === "provider_dispatched" || adapterResult.providerDispatchState === "provider_output_observed";
@@ -142,6 +162,14 @@ export function createButlerAdapter(
           } else if (!productFailure) {
             adapterResult = gatedAdapterResult("configuration_unverifiable", cleanup.diagnostic ?? "Butler runtime cleanup could not be verified.", adapterVersion);
           }
+        }
+        if (adapterResult && !rawEvidenceRemoved) {
+          adapterResult = { ...adapterResult, gateCode: "measurement_unavailable",
+            stderr: boundedDiagnostic(adapterResult.stderr, "raw_harness_evidence_retention_failed") };
+        }
+        if (adapterResult && !privateCorpusRemoved) {
+          adapterResult = { ...adapterResult, gateCode: "measurement_unavailable",
+            stderr: boundedDiagnostic(adapterResult.stderr, "private_evidence_corpus_retention_failed") };
         }
       }
       if (!adapterResult) throw new Error("Butler adapter did not produce a structured result.");
@@ -159,6 +187,10 @@ function providerDispatchState(evidence: Record<string, unknown>): "adapter_ente
 
 function boundedDiagnostic(current: string, diagnostic: string): string {
   return [current.trim(), diagnostic].filter(Boolean).join("\n").slice(-2_000);
+}
+
+function boundedPreparedResourceCode(value: string): string {
+  return /^[a-z][a-z0-9_]{0,119}$/u.test(value) ? value : "prepared_resource_unavailable";
 }
 
 export function createElectronButlerRunner(

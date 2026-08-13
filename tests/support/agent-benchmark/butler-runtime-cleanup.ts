@@ -1,4 +1,4 @@
-import { lstatSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { BenchmarkArmPlan } from "./contracts.ts";
 import {
@@ -8,6 +8,7 @@ import {
 } from "./butler-runtime-export-decision.ts";
 import {
   hasButlerRuntimeSymlinkComponent,
+  hasUnsafeButlerRuntimeDirectoryComponent,
   isStrictlyInsideButlerRuntime,
 } from "./butler-runtime-path-safety.ts";
 
@@ -41,6 +42,36 @@ export function readButlerHarnessEvidence(evidenceRoot: string): Record<string, 
   } catch {
     return null;
   }
+}
+
+/** Raw Electron evidence is transient input, never retained campaign evidence. */
+export function removeRawButlerHarnessEvidence(evidenceRoot: string): boolean {
+  const root = resolve(evidenceRoot); const evidencePath = join(root, "evidence.json");
+  if (hasUnsafeButlerRuntimeDirectoryComponent(root)) return false;
+  try {
+    const stat = lstatSync(evidencePath);
+    if (hasButlerRuntimeSymlinkComponent(evidencePath)) return false;
+    if (!stat.isFile() || stat.isSymbolicLink()) return false;
+    unlinkSync(evidencePath); return true;
+  } catch (error) { return isMissingPath(error); }
+}
+
+/** Removes every non-typed arm artifact after extraction, including failure logs and workspaces. */
+export function prunePrivateButlerEvidenceCorpus(
+  evidenceRoot: string,
+  verifiedTypedFiles: ReadonlySet<string>,
+): boolean {
+  const root = resolve(evidenceRoot);
+  if (hasUnsafeButlerRuntimeDirectoryComponent(root)) return false;
+  try {
+    const stat = lstatSync(root);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) return false;
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+      if (verifiedTypedFiles.has(entry.name) && entry.isFile() && !entry.isSymbolicLink()) continue;
+      rmSync(join(root, entry.name), { recursive: true, force: true });
+    }
+    return true;
+  } catch (error) { return isMissingPath(error); }
 }
 
 /**

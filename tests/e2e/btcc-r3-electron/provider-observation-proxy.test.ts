@@ -62,6 +62,14 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
     model: "gpt-test",
     input: "한글 request body",
     prompt_cache_key: "benchmark:btcc-agent-loop",
+    tools: [{ type: "function", name: "read_operation_results", parameters: {
+      type: "object", additionalProperties: false, properties: {
+        result_ref: { type: "string", minLength: 1, maxLength: 256 }, sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+        revision: { anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }] }, work_id: { anyOf: [{ type: "string", minLength: 1, maxLength: 256 }, { type: "null" }] },
+        offset: { type: "integer", minimum: 0 }, length: { type: "integer", minimum: 1, maximum: 4096 },
+      },
+      required: ["result_ref", "sha256", "revision", "work_id", "offset", "length"],
+    } }],
   }));
   let capturedBody: Buffer = Buffer.alloc(0);
   let capturedAuthorization = "";
@@ -156,6 +164,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       serializedRequestDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1",
       serializerContract: "butler.openai-codex-final-json.v1",
+      exactResultReadSchemaObserved: true,
       firstContentBearingDeltaAtMs: 200,
       completedAtMs: 300,
       terminatedAtMs: 300,
@@ -207,6 +216,23 @@ test("paired proxy preserves service-tier omission and rejects an explicit tier"
     expect(conflict.status).toBeGreaterThanOrEqual(500);
     expect(proxy.observations()[2]!.serializedRequestDigest).not.toBe(proxy.observations()[0]!.serializedRequestDigest);
   } finally { await proxy.close(); await upstream.close(); }
+});
+
+test("exact-result schema observation rejects a near-miss byte ceiling", async () => {
+  const proxy = await startProviderObservationProxy({ fixture: { responses: [{ requestKind: "agent", text: "ok" }] } });
+  try {
+    const response = await fetch(proxy.endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+      model: "gpt-test", prompt_cache_key: "benchmark:btcc-agent-loop", tools: [{ type: "function", name: "read_operation_results", parameters: {
+        type: "object", additionalProperties: false, properties: {
+          result_ref: { type: "string", minLength: 1, maxLength: 256 }, sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          revision: { anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }] }, work_id: { anyOf: [{ type: "string", minLength: 1, maxLength: 256 }, { type: "null" }] },
+          offset: { type: "integer", minimum: 0 }, length: { type: "integer", minimum: 1, maximum: 4095 },
+        }, required: ["result_ref", "sha256", "revision", "work_id", "offset", "length"],
+      } }],
+    }) });
+    await response.text();
+    expect(proxy.observations()[0]?.exactResultReadSchemaObserved).toBe(false);
+  } finally { await proxy.close(); }
 });
 
 test("provider observation binds the direct Responses route to its exact final serializer", async () => {

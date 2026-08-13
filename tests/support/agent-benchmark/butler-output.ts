@@ -11,16 +11,26 @@ export function copyGeneratedArtifacts(
   const run = asRecord(evidence.run);
   const workspaceRoot = typeof run?.workspaceRoot === "string" ? run.workspaceRoot : null;
   if (!workspaceRoot) return;
-  const generatedFiles = inventoryOutputFiles(workspaceRoot).filter((path) => !isExcludedWorkspacePath(path));
+  const expected = new Set(input.fixture.expectedFiles);
+  const generatedFiles = inventoryOutputFiles(workspaceRoot)
+    .filter((path) => expected.has(path.replaceAll("\\", "/")))
+    .filter((path) => !isExcludedWorkspacePath(path));
   for (const path of generatedFiles) {
     const source = resolve(workspaceRoot, path);
     const destination = resolve(input.arm.outputRoot, path);
     const relativePath = relative(resolve(input.arm.outputRoot), destination);
     if (relativePath === ".." || relativePath.startsWith("../") || relativePath.includes("\0")) continue;
     if (!existsSync(source) || !lstatSync(source).isFile()) continue;
+    if (!isPrivacySafeRetainedArtifact(source, path)) continue;
     mkdirSync(resolve(destination, ".."), { recursive: true });
     copyFileSync(source, destination);
   }
+}
+
+function isPrivacySafeRetainedArtifact(source: string, relativePath: string): boolean {
+  if (/(?:credential|secret|token|auth|password)/iu.test(relativePath)) return false;
+  const text = readFileSync(source, "utf8");
+  return !/(?:sk-[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9._-]{12,}|\/Users\/[^/\s]+\/|\/home\/[^/\s]+\/|[A-Za-z]:\\Users\\[^\\\s]+\\|(?:password|secret|token|api[_-]?key|authorization|credential\s*value|credentialValue)\s*[:=]\s*\S+|["']?(?:prompt|transcript|messages?|tool[_-]?(?:result|arguments?))\s*["']?\s*[:=]|\braw\s+(?:prompt|transcript|tool\s+result)\b|\btool\s+result\s+(?:contains?|was|is)\b)/iu.test(text);
 }
 
 function isArtifactProducingLandingFixture(

@@ -26,6 +26,7 @@ import { runPairedLaunchSmokePreflight } from "./paired-launch-smoke-preflight.t
 import { verifyM1V2AuthoritativeProvenance } from "./m1-v2-provenance.ts";
 import {
   createPairedCampaignContract,
+  FINAL_ACTIVATION,
   FINAL_AFTER_REVISION,
   FINAL_BEFORE_REVISION,
   requireAvailableProviderAuth,
@@ -73,12 +74,14 @@ export async function runAgentBenchmarkCli(argv: readonly string[], composition:
           compatibilitySha256: options.pairedPreparedButlerResources!.before.sourceCompatibilitySha256,
           platform: `${process.platform}-${process.arch}`, mode: "bundled_agent_release",
           preparedResource: preparedResourceIdentity(options.pairedPreparedButlerResources!.before),
+          activation: FINAL_ACTIVATION.before,
         },
         after: {
           version: "after", revision: FINAL_AFTER_REVISION,
           compatibilitySha256: options.pairedPreparedButlerResources!.after.sourceCompatibilitySha256,
           platform: `${process.platform}-${process.arch}`, mode: "bundled_agent_release",
           preparedResource: preparedResourceIdentity(options.pairedPreparedButlerResources!.after),
+          activation: FINAL_ACTIVATION.after,
         },
         execution: pairedExecution!,
         authReceipt: authReceipt!,

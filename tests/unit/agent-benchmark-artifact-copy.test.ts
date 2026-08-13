@@ -17,6 +17,7 @@ test("canonical M1 landing artifact copy preserves generated files and excludes 
     } as const;
     writeWorkspaceFiles(workspace, generated);
     writeWorkspaceFiles(workspace, {
+      "model-provider-credentials.json": "secret-token",
       ".benchmark-input/repository/README.md": "excluded",
       "node_modules/dependency/index.js": "excluded",
       "dist/bundle.js": "excluded",
@@ -35,6 +36,7 @@ test("canonical M1 landing artifact copy preserves generated files and excludes 
     for (const excludedRoot of [".benchmark-input", "node_modules", "dist", "build", "coverage", ".cache", ".next", "out"]) {
       expect(existsSync(join(arm.outputRoot, excludedRoot))).toBe(false);
     }
+    expect(existsSync(join(arm.outputRoot, "model-provider-credentials.json"))).toBe(false);
   });
 });
 
@@ -55,6 +57,18 @@ test("artifact copy remains disabled for non-landing fixtures", () => {
     copyGeneratedArtifacts({ run: { workspaceRoot: workspace } }, { arm, fixture });
     expect(existsSync(join(arm.outputRoot, "answer.txt"))).toBe(false);
   });
+});
+
+test("landing allowlist rejects credential assignments and raw prompt structures inside expected files", () => {
+  const fixture = loadM1V2BenchmarkFixtures(process.cwd()).find((candidate) => candidate.id === "landing-cold")!;
+  for (const unsafe of ["password: hunter2", "credentialValue: private", '{"prompt":"private transcript"}',
+    "My raw prompt is private", "raw transcript follows", "tool_result = raw payload", "tool result contains private output", "/Users/private/project"]) {
+    withArtifactWorkspace(fixture, ({ arm, workspace }) => {
+      writeWorkspaceFiles(workspace, { "README.md": unsafe, "index.html": unsafe, "styles.css": unsafe, "package.json": unsafe });
+      copyGeneratedArtifacts({ run: { workspaceRoot: workspace } }, { arm, fixture });
+      expect(existsSync(join(arm.outputRoot, "index.html"))).toBe(false);
+    });
+  }
 });
 
 function withArtifactWorkspace(

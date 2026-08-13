@@ -12,6 +12,7 @@ import {
   hasUnsafeButlerRuntimeDirectoryComponent,
   isStrictlyInsideButlerRuntime,
 } from "./butler-runtime-path-safety.ts";
+import { FINAL_ACTIVATION } from "./paired-contract.ts";
 
 const MAX_PREFLIGHT_RECEIPT_BYTES = 16 * 1024;
 type PreflightVersion = "before" | "after";
@@ -105,6 +106,7 @@ function preparePreflightArm(
     armKey: arm.key,
     fixtureHash: arm.fixtureHash,
     sourceRevision: arm.sourceRevision,
+    activation: arm.activation,
     preparedResourceIdentity: preparedResourceIdentity(input.preparedButlerResources[version]),
     version,
     operationKind: "launch_smoke",
@@ -119,6 +121,9 @@ function preparePreflightArm(
     turnObservations: 0,
   }, null, 2)}\n`;
   const prepared = { version, arm, preflightRoot, receiptPath, receiptText, preflightArm };
+  if (JSON.stringify(arm.activation) !== JSON.stringify(FINAL_ACTIVATION[version])) {
+    throw new Error(`Paired Butler ${version} launch-smoke activation identity was invalid.`);
+  }
   assertSafeDerivedPreflightPaths(input.plan.runRoot, prepared);
   const rootStat = optionalLstat(preflightRoot);
   if (!rootStat) return { ...prepared, state: "fresh" };
@@ -149,7 +154,7 @@ function assertSuccessfulEvidenceState(prepared: Omit<PreparedPreflightArm, "sta
   if (!evidenceStat?.isDirectory() || evidenceStat.isSymbolicLink() ||
       optionalLstat(join(prepared.preflightArm.evidenceRoot, "data")) ||
       optionalLstat(join(prepared.preflightArm.evidenceRoot, "sc01-public-evidence.json"))) {
-    throw new Error(`Paired Butler ${prepared.version} launch-smoke evidence state was invalid.`);
+    throw new Error(`Paired Butler ${prepared.version} launch-smoke preflight failed.`);
   }
 }
 

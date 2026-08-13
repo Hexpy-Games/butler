@@ -3,6 +3,18 @@ import { readOperationalMetricEvents } from
 import type { AdapterRunInput, AdapterRunResult } from "./contracts.ts";
 import { readM1V2DbEvidence } from "./m1-v2-db-evidence.ts";
 import { materializeM1V2EvidenceExport } from "./m1-v2-evidence-export.ts";
+import { FINAL_ACTIVATION, FINAL_AFTER_REVISION, FINAL_BEFORE_REVISION } from "./paired-contract.ts";
+import { materializeM1V2RuntimeActivationReceipt } from "./m1-v2-activation-receipt.ts";
+import type { ProviderRequestObservation } from "../../e2e/btcc-r3-electron/provider-observation-proxy.ts";
+import { join, relative } from "node:path";
+
+const M1_FLAGS = [
+  "BUTLER_M1_V2_SEGMENT_ATTRIBUTION",
+  "BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE",
+  "BUTLER_M1_V2_EXACT_ONCE_REPLAY",
+  "BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT",
+] as const;
+const CONTINUATION_OVERRIDE_PREFIX = "BUTLER_M1_V2_CONTINUATION_";
 
 export async function collectButlerM1V2Evidence(input: {
   benchmark: AdapterRunInput;
@@ -25,6 +37,16 @@ export async function collectButlerM1V2Evidence(input: {
   const sessionId = typeof target.sessionId === "string" ? target.sessionId : null;
   if (!sessionId) throw new Error("M1 v2 product evidence omitted Session identity");
   const db = readM1V2DbEvidence(dataRoot, turnId);
+  const activationReceipt = input.benchmark.arm.version && input.benchmark.arm.activation
+    ? materializeM1V2RuntimeActivationReceipt({
+        runRoot: input.benchmark.benchmarkEvidence.runRoot,
+        dataRoot, evidenceRoot: input.benchmark.arm.evidenceRoot, turnId,
+        version: input.benchmark.arm.version,
+        sourceRevision: input.benchmark.arm.sourceRevision,
+        declaredActivation: input.benchmark.arm.activation,
+        providerRequests: providerRequests as unknown as ProviderRequestObservation[],
+      })
+    : undefined;
   const landingValidation = input.benchmark.fixture.m1V2.armId === "landing-cold"
     ? await validateLandingEvidence(input.benchmark.arm.evidenceRoot, workspaceRoot)
     : null;
@@ -69,6 +91,11 @@ export async function collectButlerM1V2Evidence(input: {
     exportSha256: exported.sha256,
     exportPath: exported.absolutePath,
     exportIdentity: exported.evidence.identity,
+    ...(activationReceipt ? { activationReceipt } : {}),
+    ...(activationReceipt ? { activationReceiptHandle: relative(
+      input.benchmark.benchmarkEvidence.runRoot,
+      join(input.benchmark.arm.evidenceRoot, "m1-v2-runtime-activation-receipt.json"),
+    ).replaceAll("\\", "/") } : {}),
   };
 }
 
@@ -82,12 +109,29 @@ export async function withButlerM1V2Environment<T>(
   run: () => Promise<T>,
 ): Promise<T> {
   if (!input.fixture.m1V2) return run();
-  const previous = new Map([
-    ["BUTLER_M1_V2_SEGMENT_ATTRIBUTION", process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION],
+  const version = input.arm.version;
+  if (version) {
+    const expectedRevision = version === "before" ? FINAL_BEFORE_REVISION : FINAL_AFTER_REVISION;
+    if (input.arm.sourceRevision !== expectedRevision ||
+        JSON.stringify(input.arm.activation) !== JSON.stringify(FINAL_ACTIVATION[version])) {
+      throw new Error("m1_activation_source_identity_mismatch");
+    }
+  }
+  for (const name of Object.keys(process.env)) {
+    if (name.startsWith(CONTINUATION_OVERRIDE_PREFIX)) {
+      throw new Error("m1_continuation_default_override_forbidden");
+    }
+  }
+  const previous = new Map<string, string | undefined>([
+    ...M1_FLAGS.map((name) => [name, process.env[name]] as const),
     ["BUTLER_M1_SOURCE_REVISION", process.env.BUTLER_M1_SOURCE_REVISION],
     ["BUTLER_MODEL_API_RETRY_ATTEMPTS", process.env.BUTLER_MODEL_API_RETRY_ATTEMPTS],
   ]);
   process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION = "1";
+  const enabled = version === "after";
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = enabled ? "1" : "0";
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = enabled ? "1" : "0";
+  process.env.BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT = enabled ? "1" : "0";
   if (input.arm.sourceRevision) process.env.BUTLER_M1_SOURCE_REVISION = input.arm.sourceRevision;
   process.env.BUTLER_MODEL_API_RETRY_ATTEMPTS = "3";
   try {

@@ -14,6 +14,7 @@ import {
   waitForNativeExecutorReadiness,
 } from "./native-executor.ts";
 import { productLaunchEnvironment } from "./product-launch.ts";
+import { buildBundledAgentSupervisorEnv } from "../../../packages/butler-app/client/electron/app-agent-supervisor.mjs";
 
 function preparedRun(
   root: string,
@@ -72,6 +73,10 @@ test("Electron-owned launch receives the prepared Agent resource and R2 removes 
   const inherited = {
     BUTLER_APP_BUNDLED_AGENT_DIR: "/stale/resource",
     PATH: "/usr/bin:/bin",
+    BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE: "1",
+    BUTLER_M1_V2_EXACT_ONCE_REPLAY: "1",
+    BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT: "1",
+    BUTLER_M1_V2_SEGMENT_ATTRIBUTION: "1",
   };
   const electronRun = preparedRun(root, "electron");
   expect(
@@ -79,7 +84,20 @@ test("Electron-owned launch receives the prepared Agent resource and R2 removes 
   ).toMatchObject({
     BUTLER_APP_BUNDLED_AGENT_DIR: electronRun.bundledAgentResourceDir,
     BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
+    BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE: "1",
+    BUTLER_M1_V2_EXACT_ONCE_REPLAY: "1",
+    BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT: "1",
+    BUTLER_M1_V2_SEGMENT_ATTRIBUTION: "1",
   });
+  expect(buildBundledAgentSupervisorEnv({ baseEnv: productLaunchEnvironment(electronRun,
+    "http://127.0.0.1:19001", inherited), gatewayEnv: {}, port: 19002,
+    serverUrl: "http://127.0.0.1:19002", appVersion: "test", rendererOrigin: "file://",
+    projectFolderTokenSecret: null, localAuth: { filePath: "/tmp/auth", token: "test-local-auth-token" } })).toMatchObject({
+      BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE: "1",
+      BUTLER_M1_V2_EXACT_ONCE_REPLAY: "1",
+      BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT: "1",
+      BUTLER_M1_V2_SEGMENT_ATTRIBUTION: "1",
+    });
   expect(
     productLaunchEnvironment(
       preparedRun(root, "harness"),
