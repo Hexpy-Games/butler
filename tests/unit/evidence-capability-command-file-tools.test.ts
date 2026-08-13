@@ -5,8 +5,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   buildEvidenceCapabilityLedger,
+  parseEvidenceCapabilityReceipt,
 } from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
 import { executeGrepFilesTool } from "../../packages/butler-agent/src/agent/tools/file-tools/grep_files/index.ts";
+import { executeListFilesTool } from "../../packages/butler-agent/src/agent/tools/file-tools/list_files/index.ts";
 import { executeReadFileTool } from "../../packages/butler-agent/src/agent/tools/file-tools/read_file/index.ts";
 import { executeWriteFileTool } from "../../packages/butler-agent/src/agent/tools/file-tools/write_file/index.ts";
 import { runCommandTool } from "../../packages/butler-agent/src/agent/tools/run-command/run_command/executor.ts";
@@ -234,6 +236,41 @@ describe("run_command evidence capability receipts", () => {
 });
 
 describe("file tool evidence capability receipts", () => {
+  test("records typed workspace_file_list discovery without source verification", async () => {
+    await mkdir(join(workspace, "src"));
+    await writeFile(join(workspace, "src", "candidate.ts"), "candidate\n");
+
+    const result = await executeListFilesTool(call({
+      workspace_root: workspace,
+      root: "src",
+      max_results: 1,
+    }));
+    const receipts = (result as Record<string, unknown>).evidence_capability_receipts as unknown[];
+    const parsed = receipts[0] as Record<string, unknown>;
+    expect(parseEvidenceCapabilityReceipt(parsed)).toMatchObject({
+      ok: true,
+      receipt: { capability: "workspace_file_list" },
+    });
+
+    expect(parsed).toMatchObject({
+      capability: "workspace_file_list",
+      evidence_kind: "workspace_inspection",
+      maturity: "candidate",
+      verified: false,
+      references: [{ path: "src/candidate.ts" }],
+    });
+    expect(parsed).not.toHaveProperty("satisfies");
+    expect(buildEvidenceCapabilityLedger({
+      required: ["source_verified"],
+      receipts,
+    })).toMatchObject({
+      satisfied: [],
+      missing: ["source_verified"],
+    });
+    expect(JSON.stringify(receipts)).not.toContain(workspace);
+    expect(JSON.stringify(receipts)).not.toContain("candidate\n");
+  });
+
   test("records write mutations with path metadata and no file content", async () => {
     const result = await executeWriteFileTool(call({
       workspace_root: workspace,

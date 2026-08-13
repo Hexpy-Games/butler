@@ -1,6 +1,6 @@
 let mutationTail = Promise.resolve();
 
-/** Serializes this process's write_file and edit_file mutations. */
+/** Serialize this process's native file mutations. */
 export async function withButlerFileMutationLock<T>(
   action: () => Promise<T>,
 ): Promise<T> {

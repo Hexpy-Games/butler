@@ -1733,6 +1733,7 @@ test("Guided discovery exposes registry read tools without enabling unsupported 
 
 test("Guided replay keeps native read-only MCP and automation tools retryable", () => {
   for (const name of [
+    "bind_session_git_worktree",
     "list_automations",
     "list_mcp_capabilities",
     "read_mcp_resource",

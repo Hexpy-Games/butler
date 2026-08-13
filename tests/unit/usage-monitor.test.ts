@@ -109,7 +109,10 @@ test("usage monitor summarizes model cache and search usage without private quer
         source: "local_telemetry",
         remaining: expect.objectContaining({
           available: false,
-          reason: expect.stringContaining("quota"),
+          reason: expect.objectContaining({
+            code: "provider_quota_surface_unavailable",
+            message: expect.stringContaining("quota"),
+          }),
         }),
         billing: expect.objectContaining({
           available: false,

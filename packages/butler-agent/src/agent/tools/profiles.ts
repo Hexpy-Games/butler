@@ -63,6 +63,7 @@ const WORKSPACE_TOOL_NAMES = [
   "write_file",
   "edit_file",
   "grep_files",
+  "list_files",
   "read_tool_evidence_artifact",
   "read_tool_output_artifact",
 ] as const;
@@ -130,6 +131,7 @@ const WORKER_DEFAULT_TOOL_NAMES = [
   "write_file",
   "edit_file",
   "grep_files",
+  "list_files",
   "read_tool_evidence_artifact",
   "read_tool_output_artifact",
   "project_ledger_status",
@@ -368,6 +370,9 @@ export function selectButlerToolsForTurn(input: {
     for (const profile of selectButlerToolProfiles(input)) {
       for (const name of PROFILE_TOOL_NAMES[profile]) allowedNames.add(name);
     }
+    if (hasProjectContext(input) && trackingPolicyString(input, "accessMode", "access_mode") === "full_access") {
+      allowedNames.add("bind_session_git_worktree");
+    }
   }
   for (const name of requiredToolNamesForTurn(input)) {
     if (input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(name)) continue;
@@ -409,6 +414,7 @@ export function selectButlerToolsForTurn(input: {
 function fixedWorkspaceToolDefinition(tool: FunctionToolDefinition): FunctionToolDefinition {
   if (
     tool.name !== "grep_files" &&
+    tool.name !== "list_files" &&
     tool.name !== "read_file" &&
     tool.name !== "write_file" &&
     tool.name !== "edit_file"

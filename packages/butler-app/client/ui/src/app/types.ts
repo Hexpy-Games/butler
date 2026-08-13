@@ -1071,10 +1071,7 @@ export interface UsageMonitorView {
     providers: Array<UsageTokenBucketView & {
       providerId: string;
       source: "local_telemetry" | "provider_adapter";
-      remaining: {
-        available: boolean;
-        reason: string;
-      };
+      remaining: ProviderQuotaResultView;
       billing: {
         available: boolean;
         reason: string;
@@ -1093,6 +1090,45 @@ export interface UsageMonitorView {
   };
   generated_at: string;
   raw_text_included: false;
+}
+
+export type ProviderQuotaPlanKind = "subscription" | "api" | "unknown";
+export type ProviderQuotaSourceKind =
+  | "codex_app_server"
+  | "zai_usage_query"
+  | "provider_quota";
+export type ProviderQuotaReasonCode =
+  | "provider_quota_surface_unavailable"
+  | "provider_auth_not_applicable"
+  | "provider_auth_required"
+  | "provider_auth_surface_mismatch"
+  | "provider_executable_unavailable"
+  | "provider_timeout"
+  | "provider_response_malformed"
+  | "provider_auth_failure"
+  | "provider_rpc_failure"
+  | "provider_temporary_failure";
+
+export interface ProviderQuotaResultView {
+  available: boolean;
+  stale: boolean;
+  sourceKind: ProviderQuotaSourceKind;
+  sourceId: string;
+  planKind: ProviderQuotaPlanKind;
+  planName: string | null;
+  windows: Array<{
+    id: string;
+    usedPercent: number | null;
+    remainingPercent: number | null;
+    windowDurationMins: number | null;
+    resetsAt: string | null;
+    expiresAt: string | null;
+  }>;
+  fetchedAt: string | null;
+  reason: {
+    code: ProviderQuotaReasonCode;
+    message: string;
+  } | null;
 }
 
 export interface NewChatBriefingSuggestion {
@@ -1228,6 +1264,10 @@ export interface SessionSummaryView {
     branch_name?: string;
     safe_status?: string;
     safe_error_code?: string;
+    workspace_binding?: "project" | "session_worktree";
+    workspace_label?: string;
+    workspace_status?: "available" | "unavailable";
+    dirty?: boolean;
   };
   context_details?: ContextDetailsView;
   artifacts?: SessionArtifactSummary[];

@@ -64,6 +64,8 @@ import {
   loadGuidedOperationalFacts,
 } from "./guided-operational-facts.ts";
 import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
+import { createGuidedSessionWorkspaceRuntime, type GuidedSessionWorkspaceBindingStore } from "./guided-session-workspace-recovery.ts";
+
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
   butlerData: string;
@@ -73,10 +75,12 @@ export function createProductionGuidedTurnAgent(input: {
   effectJournal: SqliteGuidedEffectJournal;
   durableWork: DurableWorkService;
   modelRound?: ModelRoundPort;
+  sessionBindingStore?: GuidedSessionWorkspaceBindingStore;
   /** Test seam for exercising more than one internal execution window. */
   executionWindowSize?: number;
 }): BtccAgentLoop {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
+  const sessionWorkspace = createGuidedSessionWorkspaceRuntime({ butlerData: input.butlerData, bindingStore: input.sessionBindingStore });
   return {
     async run({
       turn, recoveryAttempt,
@@ -91,6 +95,7 @@ export function createProductionGuidedTurnAgent(input: {
       const progressCapture = createGuidedOperationalProgressCapture(progress);
       const observedProgress = progressCapture.observer;
       const policy = guidedPolicy(turn);
+      const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
       const workScope = workScopeForTurn(turn, policy.trackingMode);
       let initialWork = policy.trackingMode === "none"
         ? null
@@ -122,6 +127,8 @@ export function createProductionGuidedTurnAgent(input: {
         sessionId: turn.sessionId,
         originChatId: turn.sessionId,
         projectId: policy.projectId ?? turn.context.projectRef,
+        workspaceReference,
+        sessionBindingStore: sessionWorkspace.bindingStore,
         turnId: turn.turnId,
         imageManifests: providerImageAttachments(turn).flatMap((a) => a.visualManifest ? [a.visualManifest] : []),
         ...(turn.context.imageAdmission ? { imageCarrier: turn.context.imageAdmission.tuple, imageCapability: turn.context.imageAdmission.capability } : {}),
@@ -153,7 +160,7 @@ export function createProductionGuidedTurnAgent(input: {
             call,
             accessMode: policy.accessMode,
             butlerData: input.butlerData,
-            workspacePath: policy.workspacePath,
+            workspacePath: workspaceReference.get(),
             originalRequest: turn.originalMessage,
             signal,
           }),
@@ -162,6 +169,9 @@ export function createProductionGuidedTurnAgent(input: {
             butlerData: input.butlerData,
             appMessageDbPath: input.appMessageDbPath,
             workspacePath: policy.workspacePath,
+            workspaceReference,
+            sessionId: turn.sessionId,
+            sessionBindingStore: sessionWorkspace.bindingStore,
             projectId: policy.projectId,
             trackingMode: policy.trackingMode,
             projectLedgerResolver,
