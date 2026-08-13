@@ -1015,7 +1015,6 @@ function createRuntime(input: {
     agent: createProductionGuidedTurnAgent({
       butlerHome: input.root,
       butlerData: input.root,
-      appMessageDbPath: input.dbPath,
       contextDocuments: input.stores.contextDocuments,
       toolJournal: input.stores.guidedToolJournal,
       effectJournal: input.stores.guidedEffectJournal,

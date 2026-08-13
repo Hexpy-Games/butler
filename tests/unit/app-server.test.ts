@@ -23,7 +23,6 @@ import {
 } from "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
 import { compactionPath } from "../../packages/butler-agent/src/agent/context/compaction.ts";
 import { appendRuntimeTurnContextMetric } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
-import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
 import {
   appendTranscriptEvent,
   createTranscriptEvent,
@@ -68,7 +67,6 @@ import {
   ScriptedBtccGatewayRuntime,
   StoppableBtccGatewayRuntime,
 } from "./support/fake-btcc-gateway-runtime.ts";
-import { BTCC_SUCCESSOR_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import {
   clearAppForegroundExecutorReadiness,
   publishAppForegroundExecutorReadiness,
@@ -2655,7 +2653,7 @@ test("native butler-main default provider generates app transport session titles
   }
 });
 
-test("App Stop reaches the App BTCC Stop consumer and preserves its public snapshot", async () => {
+test("App Stop uses the inbound cancellation protocol and preserves its public snapshot", async () => {
   const dbPath = join(tempDir, "app-server", "butler-client.sqlite");
   mkdirSync(join(tempDir, "app-server"), { recursive: true });
   const runtime = new StoppableBtccGatewayRuntime();
@@ -2667,12 +2665,6 @@ test("App Stop reaches the App BTCC Stop consumer and preserves its public snaps
     butlerHome: process.cwd(),
     port: 0,
   });
-  const btccSchema = new Database(dbPath);
-  try {
-    btccSchema.exec(BTCC_SUCCESSOR_SCHEMA);
-  } finally {
-    btccSchema.close();
-  }
   const nativeMain = runNativeButlerMain({
     butlerHome: process.cwd(),
     butlerData: tempDir,
@@ -2706,21 +2698,6 @@ test("App Stop reaches the App BTCC Stop consumer and preserves its public snaps
     const messageId = "msg-native-stop-snapshot";
     const createdAt = "2026-07-13T03:00:00.000Z";
     try {
-      db.exec(BTCC_SUCCESSOR_SCHEMA);
-      db.query(`
-        INSERT INTO btcc_turns (
-          turn_id, session_id, inbox_id, trigger_key, original_message_id,
-          original_message, admission_snapshot_ref, model_selection_json,
-          context_json, semantic_state, revision, execution_fence
-        ) VALUES (?, 'general', ?, ?, ?, 'stop native execution', ?, '{}', '{}',
-          'admitted', 1, 1)
-      `).run(
-        turnId,
-        `inbox:${turnId}`,
-        `trigger:${turnId}`,
-        `message:${turnId}`,
-        `admission:${turnId}`,
-      );
       db.query(`
         INSERT INTO messages (
           id, chat_id, turn_id, role, text, status, created_at, updated_at,
@@ -7516,7 +7493,7 @@ test("posted messages persist and replay after restart", async () => {
   }
 });
 
-test("app transport session binding preserves selected reasoning effort", async () => {
+test("app transport preserves selected reasoning effort in App-owned turn context", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   const server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
@@ -7547,20 +7524,7 @@ test("app transport session binding preserves selected reasoning effort", async 
     });
     expect(sessionView.data.active_turn.execution_model).toBeUndefined();
 
-    const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
-    try {
-      const binding = store.getBySessionId("butler/app-general");
-      expect(binding?.modelRef).toBe("openai/gpt-5.5");
-      expect(binding?.metadata).toMatchObject({
-        reasoning_effort: "low",
-        turnExecutionControls: {
-          turn_id: sent.data.turn.id,
-          model_ref: "openai/gpt-5.5",
-        },
-      });
-    } finally {
-      store.close();
-    }
+    expect(existsSync(join(tempDir, "runtime", "session-store.sqlite"))).toBeFalse();
   } finally {
     server.stop();
   }
@@ -8131,7 +8095,7 @@ test("app transport send accepts live native main state when service supervisor 
   }
 });
 
-test("app transport send binds current settings model without persisting implicit composer defaults", async () => {
+test("app transport send snapshots current settings model without opening Agent sessions", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     butlerData: tempDir,
@@ -8151,16 +8115,8 @@ test("app transport send binds current settings model without persisting implici
     });
     expect(result.data.turn.state).toBe("thinking");
 
-    const bindings = new SessionBindingStore(
-      join(tempDir, "runtime", "session-store.sqlite"),
-    );
-    try {
-      expect(
-        bindings.getBySessionId("butler/app-general")?.modelRef,
-      ).toBe("zai/glm-5.2");
-    } finally {
-      bindings.close();
-    }
+    expect(result.data.turn.execution_controls.model_ref).toBe("zai/glm-5.2");
+    expect(existsSync(join(tempDir, "runtime", "session-store.sqlite"))).toBeFalse();
 
     const db = new Database(join(tempDir, "app.sqlite"));
     try {
@@ -8222,16 +8178,7 @@ test("legacy session controls without explicit marker do not override app settin
       text: "use settings despite legacy stale controls",
       client_message_id: "client-55555555-5555-4555-8555-555555555555",
     });
-    const bindings = new SessionBindingStore(
-      join(tempDir, "runtime", "session-store.sqlite"),
-    );
-    try {
-      expect(bindings.getBySessionId("butler/app-general")?.modelRef).toBe(
-        "zai/glm-5.2",
-      );
-    } finally {
-      bindings.close();
-    }
+    expect(existsSync(join(tempDir, "runtime", "session-store.sqlite"))).toBeFalse();
 
     const explicit = await patchJson(`${server.url}sessions/general/controls`, {
       model: "openai/gpt-5.5",
@@ -9718,7 +9665,7 @@ test("app transport final result projection does not resurrect cancelled turns",
     retryable: false,
   });
   const stoppingMessages = await getJson(`${url}messages?chat_id=general`);
-  expect(stoppingMessages.data.messages).toContainEqual(
+  expect(stoppingMessages.data.messages).not.toContainEqual(
     expect.objectContaining({
       turn_id: turnId,
       role: "assistant",
@@ -12480,7 +12427,7 @@ test("deferred logical turns outlive gateway request timeout while provider roun
   }
 });
 
-test("turn cancel aborts in-flight responder without creating a failure reply", async () => {
+test("turn cancel waits for transcript authority without synthesizing a failure reply", async () => {
   let markStarted: (() => void) | undefined;
   let aborted = false;
   const started = new Promise<void>((resolve) => {
@@ -12522,7 +12469,7 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
       {},
     );
     expect(cancel.data.turn).toMatchObject({
-      state: "cancelled",
+      state: "cancelling",
       retryable: false,
       cancellable: false,
     });
@@ -12536,13 +12483,13 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
       cancellable: true,
     });
     expect(body.data.replies).toEqual([]);
-    expect(aborted).toBe(true);
+    expect(aborted).toBe(false);
 
     const finalTurns = await getJson(
       `${server.url}turns?chat_id=general&cursor=0`,
     );
     expect(finalTurns.data.turns[0]).toMatchObject({
-      state: "cancelled",
+      state: "cancelling",
       retryable: false,
       cancellable: false,
     });
@@ -12550,46 +12497,14 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
     );
-    expect(messages.data.messages).toContainEqual(
-      expect.objectContaining({
-        role: "assistant",
-        status: "cancelled",
-        text: "Stopped.",
-        turn_id: turnId,
-        work_blocks: [
-          expect.objectContaining({
-            id: "cancel-work",
-            label: "중단 전 실행한 검증",
-            state: "cancelled",
-            rows: [
-              expect.objectContaining({
-                id: "cancel-progress-row",
-                state: "cancelled",
-                safe_tool_name: "Bash",
-              }),
-            ],
-          }),
-        ],
-      }),
+    expect(messages.data.messages).not.toContainEqual(
+      expect.objectContaining({ role: "assistant", text: "Stopped.", turn_id: turnId }),
     );
     const events = await getJson(`${server.url}events?cursor=0`);
-    expect(events.data.events).toContainEqual(
-      expect.objectContaining({
-        type: "message.created",
-        payload: expect.objectContaining({
-          message: expect.objectContaining({
-            role: "assistant",
-            status: "cancelled",
-            turn_id: turnId,
-            work_blocks: [
-              expect.objectContaining({
-                id: "cancel-work",
-                state: "cancelled",
-              }),
-            ],
-          }),
-        }),
-      }),
+    expect(events.data.events).not.toContainEqual(
+      expect.objectContaining({ type: "message.created", payload: expect.objectContaining({
+        message: expect.objectContaining({ status: "cancelled", turn_id: turnId }),
+      }) }),
     );
     expect(JSON.stringify(messages)).not.toContain("could not verify");
   } finally {
@@ -12713,14 +12628,14 @@ test("turn cancel preserves earlier assistant work history while stopping active
     );
     expect(cancel.data.turn).toMatchObject({
       id: secondTurnId,
-      state: "cancelled",
+      state: "cancelling",
       retryable: false,
       cancellable: false,
     });
 
     const completedRequest = await inFlight;
     expect(completedRequest.status).toBe(202);
-    expect(aborted).toBe(true);
+    expect(aborted).toBe(false);
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
@@ -12728,7 +12643,7 @@ test("turn cancel preserves earlier assistant work history while stopping active
     const assistantMessages = messages.data.messages.filter(
       (message: { role: string }) => message.role === "assistant",
     );
-    expect(assistantMessages).toHaveLength(2);
+    expect(assistantMessages).toHaveLength(1);
     expect(
       assistantMessages.find(
         (message: { text: string }) => message.text === "기본 작업은 완료했습니다.",
@@ -12750,34 +12665,9 @@ test("turn cancel preserves earlier assistant work history while stopping active
         }),
       ],
     });
-    expect(
-      assistantMessages.find(
-        (message: { status: string }) => message.status === "cancelled",
-      ),
-    ).toMatchObject({
-      turn_id: secondTurnId,
-      text: "Stopped.",
-      status: "cancelled",
-      work_blocks: [
-        expect.objectContaining({
-          id: "cancel-work",
-          label: "중단할 작업",
-          state: "cancelled",
-          rows: [expect.objectContaining({ id: "cancel-progress-row", state: "cancelled" })],
-        }),
-      ],
-      turn_activity_rows: [
-        expect.objectContaining({
-          id: "cancel-phase-activity",
-          state: "cancelled",
-        }),
-        expect.objectContaining({
-          id: "cancel-operation-activity",
-          state: "cancelled",
-          safe_label: "현재 작업 상태 확인",
-        }),
-      ],
-    });
+    expect(assistantMessages.some(
+      (message: { status: string }) => message.status === "cancelled",
+    )).toBeFalse();
     expect(messages.data.turn_progress[secondTurnId].safe_progress_rows)
       .toContainEqual(
         expect.objectContaining({
@@ -12854,7 +12744,7 @@ test("turn cancel freezes same-turn assistant content and attachments in place",
       `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
       {},
     );
-    expect(cancel.data.turn.state).toBe("cancelled");
+    expect(cancel.data.turn.state).toBe("cancelling");
     expect((await inFlight).status).toBe(202);
     const duplicateCancel = await postJson(
       `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
@@ -12862,7 +12752,7 @@ test("turn cancel freezes same-turn assistant content and attachments in place",
     );
     expect(duplicateCancel.data.turn).toMatchObject({
       id: turnId,
-      state: "cancelled",
+      state: "cancelling",
     });
 
     const assertFrozenSnapshot = async () => {
@@ -12875,7 +12765,7 @@ test("turn cancel freezes same-turn assistant content and attachments in place",
         turn_id: turnId,
         role: "assistant",
         text: "정지 전까지 작성된 답변입니다.",
-        status: "cancelled",
+        status: "streaming",
         created_at: createdAt,
         attachments: [expect.objectContaining({ file_id: fileId })],
       });
@@ -12885,20 +12775,17 @@ test("turn cancel freezes same-turn assistant content and attachments in place",
       expect(messages.data.turn_progress[turnId].safe_progress_rows).toContainEqual(
         expect.objectContaining({
           id: "snapshot-first-visible-row",
-          state: "cancelled",
+          state: "running",
         }),
       );
     };
 
     await assertFrozenSnapshot();
     const events = await getJson(`${server.url}events?cursor=0`);
-    expect(events.data.events).toContainEqual(
-      expect.objectContaining({
-        type: "message.updated",
-        payload: expect.objectContaining({
-          message: expect.objectContaining({ id: messageId, status: "cancelled" }),
-        }),
-      }),
+    expect(events.data.events).not.toContainEqual(
+      expect.objectContaining({ type: "message.updated", payload: expect.objectContaining({
+        message: expect.objectContaining({ id: messageId, status: "cancelled" }),
+      }) }),
     );
     expect(events.data.events).not.toContainEqual(
       expect.objectContaining({ type: "message.deleted" }),
@@ -12912,7 +12799,7 @@ test("turn cancel freezes same-turn assistant content and attachments in place",
   }
 });
 
-test("app startup repairs cancelled turns that lost their activity carrier", async () => {
+test("app startup does not infer cancellation without transcript authority", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let markStarted: (() => void) | undefined;
   const started = new Promise<void>((resolve) => {
@@ -13015,23 +12902,9 @@ test("app startup repairs cancelled turns that lost their activity carrier", asy
     expect(messages.data.messages).toContainEqual(
       expect.objectContaining({
         role: "assistant",
-        status: "cancelled",
+        status: "retrying",
         text: "Retrying this turn.",
         turn_id: turnId,
-        work_blocks: [
-          expect.objectContaining({
-            id: "legacy-cancel-work",
-            label: "중단 전에 남아 있던 작업",
-            state: "cancelled",
-            rows: [
-              expect.objectContaining({
-                id: "legacy-cancel-progress-row",
-                state: "cancelled",
-                safe_tool_name: "Bash",
-              }),
-            ],
-          }),
-        ],
       }),
     );
     expect(JSON.stringify(messages)).not.toContain("Continuing current turn");

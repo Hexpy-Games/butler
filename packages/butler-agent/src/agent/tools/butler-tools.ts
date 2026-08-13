@@ -134,7 +134,6 @@ function toolResultSucceeded(result: unknown): boolean {
 export function createButlerToolExecutor(input: {
   butlerHome: string;
   butlerData: string;
-  appMessageDbPath?: string;
   workspacePath?: string;
   sessionId?: string; originChatId?: string;
   projectId?: string; turnId?: string;
@@ -210,7 +209,6 @@ export function createButlerToolExecutor(input: {
     ...createProjectLedgerToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
-      appMessageDbPath: input.appMessageDbPath,
       workspacePath: input.workspacePath,
       workspaceReference: projectLedgerWorkspaceReference,
       sessionId: input.sessionId, projectId: input.projectId,
@@ -256,7 +254,6 @@ export function createButlerToolExecutor(input: {
     ...createMemoryToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
-      appMessageDbPath: input.appMessageDbPath,
       sessionId: input.sessionId,
       projectId: input.projectId,
       memoryVectorBackend: input.memoryVectorBackend,

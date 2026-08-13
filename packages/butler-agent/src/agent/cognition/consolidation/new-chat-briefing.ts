@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
@@ -548,7 +547,7 @@ function readBriefingSettings(butlerData: string): {
   reasoningEffort: ReasoningEffort;
   configured: boolean;
 } {
-  const settings = readAppSettings(butlerData);
+  const settings = readButlerSettings(butlerData);
   return {
     locale: settings.language === "ko" ? "ko" : "en",
     model: normalizeModelRef(settings.consolidation_model) ?? normalizeModelRef(settings.model) ?? DEFAULT_MODEL_REF,
@@ -559,39 +558,21 @@ function readBriefingSettings(butlerData: string): {
   };
 }
 
-function readAppSettings(butlerData: string): Record<string, unknown> {
-  const path = join(butlerData, "app-server", "butler-client.sqlite");
-  if (!existsSync(path)) return {};
-  let db: Database;
+function readButlerSettings(butlerData: string): Record<string, unknown> {
   try {
-    db = new Database(path, { readonly: true });
-  } catch {
-    return {};
-  }
-  try {
-    const row = db.query(`
-      SELECT value_json
-      FROM app_settings
-      WHERE key = 'settings'
-      LIMIT 1
-    `).get() as { value_json?: string } | null;
-    if (!row?.value_json) return {};
-    const parsed = JSON.parse(row.value_json);
+    const parsed = JSON.parse(readFileSync(join(butlerData, "butler.config.json"), "utf8"));
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? parsed as Record<string, unknown>
       : {};
   } catch {
     return {};
-  } finally {
-    db.close();
   }
 }
 
 function listActiveProjectSignals(butlerData: string): AppProjectSignal[] {
-  const projects = listProjectsFromAppStore(butlerData);
   const ledgerProjects = listProjectsFromLedger(butlerData);
   const byId = new Map<string, AppProjectSignal>();
-  for (const project of [...projects, ...ledgerProjects]) {
+  for (const project of ledgerProjects) {
     byId.set(project.id, {
       ...project,
       recentSessionTitles: uniqueStrings([
@@ -605,50 +586,6 @@ function listActiveProjectSignals(butlerData: string): AppProjectSignal[] {
     });
   }
   return [...byId.values()].sort((left, right) => left.displayName.localeCompare(right.displayName));
-}
-
-function listProjectsFromAppStore(butlerData: string): AppProjectSignal[] {
-  const path = join(butlerData, "app-server", "butler-client.sqlite");
-  if (!existsSync(path)) return [];
-  let db: Database;
-  try {
-    db = new Database(path, { readonly: true });
-  } catch {
-    return [];
-  }
-  try {
-    const rows = db.query(`
-      SELECT id, display_name
-      FROM projects
-      WHERE archived = 0
-      ORDER BY updated_at DESC
-    `).all() as Array<{ id: string; display_name: string }>;
-    return rows.map((row) => ({
-      id: row.id,
-      displayName: row.display_name || row.id,
-      recentSessionTitles: recentProjectSessionTitles(db, row.id),
-      ledgerEventSummary: ledgerEventSummary(butlerData, row.id),
-    }));
-  } catch {
-    return [];
-  } finally {
-    db.close();
-  }
-}
-
-function recentProjectSessionTitles(db: Database, projectId: string): string[] {
-  try {
-    const rows = db.query(`
-      SELECT title
-      FROM chats
-      WHERE project_id = $project_id
-      ORDER BY updated_at DESC
-      LIMIT 8
-    `).all({ $project_id: projectId }) as Array<{ title?: string }>;
-    return uniqueStrings(rows.map((row) => normalizeString(row.title)));
-  } catch {
-    return [];
-  }
 }
 
 function listProjectsFromLedger(butlerData: string): AppProjectSignal[] {

@@ -336,7 +336,7 @@ test("production composition reaches the official serializer with bounded multi-
     metadata: { accessMode: "read_only", runtimePolicy: { trackingMode: "none" } },
   });
   const composition = createProductionBtccComposition({
-    butlerHome: root, butlerData: root, appMessageDbPath: join(root, "app.sqlite"),
+    butlerHome: root, butlerData: root,
     ownerId: "bounded-production", sessionBindings: bindings,
     modelRound: {
       runRound: (request) => runOpenAIModelRound(request, {
@@ -469,7 +469,6 @@ for (const transport of ["official", "codex"] as const) {
     const composition = createProductionBtccComposition({
       butlerHome: root,
       butlerData: root,
-      appMessageDbPath: join(root, "app.sqlite"),
       ownerId: `stack-${transport}`,
       sessionBindings: bindings,
       modelRound: { runRound: (request) => runOpenAIModelRound(request, auth) },
@@ -968,7 +967,7 @@ test("exact official attachment bytes terminalize durably before fetch", async (
     metadata: { accessMode: "read_only", runtimePolicy: { trackingMode: "none" } },
   });
   const composition = createProductionBtccComposition({
-    butlerHome: root, butlerData: root, appMessageDbPath: dbPath,
+    butlerHome: root, butlerData: root,
     ownerId: "attachment-cap", sessionBindings: bindings,
     modelRound: { runRound: (request) => runOpenAIModelRound(request, {
       authorization: "Bearer test", mode: "api_key",

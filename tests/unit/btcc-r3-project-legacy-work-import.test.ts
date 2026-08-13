@@ -51,7 +51,6 @@ test("imports only the stable canonical Project Program into one concise R3 Work
     });
     const source = createProjectLedgerLegacyWorkSource({
       butlerData: join(fixture.root, "data"),
-      appMessageDbPath: join(fixture.root, "missing.sqlite"),
     });
     const service = createDurableWorkService(new SqliteGuidedWorkStore(db, source));
     const scope = {
@@ -127,7 +126,6 @@ test("refuses local fallback when the canonical Program manifest is missing", as
     });
     const source = createProjectLedgerLegacyWorkSource({
       butlerData: join(fixture.root, "data"),
-      appMessageDbPath: join(fixture.root, "missing.sqlite"),
     });
     const service = createDurableWorkService(new SqliteGuidedWorkStore(db, source));
 
@@ -149,7 +147,6 @@ test("does not initialize a missing Project Ledger during optional import", asyn
   let reads = 0;
   const source = createProjectLedgerLegacyWorkSource({
     butlerData,
-    appMessageDbPath: join(root, "missing.sqlite"),
     reader: {
       async observeCanonicalHead() {
         reads += 1;
@@ -181,7 +178,6 @@ test("rejects multiple open Programs and a repeatedly drifting canonical head", 
   await publishBoundProgram(fixture.core, fixture.ledgerRoot, "program-second", "turn-second");
   const source = createProjectLedgerLegacyWorkSource({
     butlerData: join(fixture.root, "data"),
-    appMessageDbPath: join(fixture.root, "missing.sqlite"),
   });
   const db = new Database(":memory:");
   try {
@@ -209,7 +205,6 @@ test("rejects multiple open Programs and a repeatedly drifting canonical head", 
   const reader = createLegacyProjectWorkReader();
   const drifting = createProjectLedgerLegacyWorkSource({
     butlerData: join(fixture.root, "data"),
-    appMessageDbPath: join(fixture.root, "missing.sqlite"),
     reader: {
       observeCanonicalHead: (root) => reader.observeCanonicalHead(root),
       async loadProgram(root, programId) {

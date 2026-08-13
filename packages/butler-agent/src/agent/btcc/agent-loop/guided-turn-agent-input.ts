@@ -8,7 +8,6 @@ import type { GuidedSessionWorkspaceBindingStore } from
 export type ProductionGuidedTurnAgentInput = {
   butlerHome: string;
   butlerData: string;
-  appMessageDbPath: string;
   contextDocuments: { resolve(contextRef: string): string };
   toolJournal: GuidedToolJournal;
   operationResultReader?: GuidedOperationResultReader;

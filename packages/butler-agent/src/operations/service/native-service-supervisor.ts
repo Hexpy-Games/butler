@@ -22,6 +22,8 @@ import {
   resolveAppGatewayRuntimeConfig,
 } from "../gateway/registry.ts";
 import { windowsEmbedPipe } from "./windows-service-endpoints.ts";
+import { agentBtccStorageIsActivated } from
+  "../../agent/adapters/btcc/sqlite/storage-ownership/index.ts";
 
 export const NATIVE_SUPERVISOR_ID = "native-supervisor";
 
@@ -236,13 +238,39 @@ export function resolveAppManagedNativeSupervisorPaths(
     throw new Error("missing App-managed Agent runtime pointer");
   }
   assertValidAppManagedLocalAuth(input.localAuthFile);
+  const runtimeHome = safeAppManagedRuntimeHome(input.butlerData, pointer);
+  assertSplitAwareRuntimeAfterActivation(input.butlerData, runtimeHome);
   return {
-    butlerHome: safeAppManagedRuntimeHome(input.butlerData, pointer),
+    butlerHome: runtimeHome,
     butlerData: input.butlerData,
     runtimePointerPath,
     localAuthFile: input.localAuthFile,
     runtimeVersion: typeof pointer.version === "string" ? pointer.version : null,
   };
+}
+
+function assertSplitAwareRuntimeAfterActivation(
+  butlerData: string,
+  runtimeHome: string,
+): void {
+  if (!agentBtccStorageIsActivated(butlerData)) return;
+  const contractPath = join(
+    runtimeHome,
+    "packages",
+    "butler-agent",
+    "resources",
+    "runtime",
+    "storage-contract",
+  );
+  let contract = "";
+  try {
+    contract = readFileSync(contractPath, "utf8").trim();
+  } catch {}
+  if (contract !== "split-v1") {
+    throw new Error(
+      "activated Agent storage requires a split-v1 runtime; restore the pre-cutover snapshot before manual rollback",
+    );
+  }
 }
 
 function assertValidAppManagedLocalAuth(localAuthFile: string): void {

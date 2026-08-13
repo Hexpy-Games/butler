@@ -19,7 +19,6 @@ type ToolCall = { args: Record<string, unknown> };
 export function createMemoryToolHandlers(input: {
   butlerHome: string;
   butlerData: string;
-  appMessageDbPath?: string;
   sessionId?: string;
   projectId?: string;
   memoryVectorBackend?: VectorEpisodeBackend;
@@ -43,7 +42,6 @@ export function createMemoryToolHandlers(input: {
         ok: true,
         ...queryMemory({
           butlerData: input.butlerData,
-          appMessageDbPath: input.appMessageDbPath,
           query: typeof call.args.query === "string" ? call.args.query : undefined,
           scope,
           sessionId,

@@ -185,26 +185,25 @@ function projectLedgerMutationBindingError(input: {
   projectRef: string;
   resolveActiveProjectReference(): ActiveProjectLedgerReference;
 }): {
-  code: "project_ledger_active_app_binding_required";
+  code: "project_ledger_active_context_required";
   message: string;
   recoverable: true;
 } | null {
   try {
     const reference = input.resolveActiveProjectReference();
     if (
-      reference.source === "app_project_db" &&
-      reference.degradation_code === undefined &&
+      reference.source === "workspace_metadata" &&
       reference.app_project_id === input.projectRef &&
       reference.ledger_root === input.projectRoot
     ) {
       return null;
     }
   } catch {
-    // A lookup failure is the same safety outcome as a missing exact App row.
+    // Missing bounded project context fails closed before mutation.
   }
   return {
-    code: "project_ledger_active_app_binding_required",
-    message: "Project Ledger changes require the exact active App project binding. Refresh the project session before retrying.",
+    code: "project_ledger_active_context_required",
+    message: "Project Ledger changes require the exact bounded project and workspace context. Refresh the project session before retrying.",
     recoverable: true,
   };
 }
