@@ -1,0 +1,1864 @@
+{
+  "schema": "butler.agent-benchmark.v1",
+  "kind": "agent_benchmark_plan",
+  "campaign": "m1-v2-paired",
+  "runId": "m1-v2-final-paired-fresh-20260813-04",
+  "createdAt": "2026-08-13T01:18:23.672Z",
+  "seed": 20260813,
+  "baselineSha": "394c98a97428b741f8ea54273a226cb062455ab0",
+  "runRoot": "<run-root>",
+  "sourceRoot": "<source-root>",
+  "harnessRoot": "<harness-root>",
+  "provenanceJsonlPath": "<provenance-jsonl>",
+  "provenance": {
+    "schema": "butler.agent-benchmark.provenance-identity.v1",
+    "authorityJsonlBasename": "rollout-2026-08-10T14-23-27-019fea20-37ab-7780-a38b-ca33c846ef9e.jsonl",
+    "metadataSha256": "3479600c8bc4c66725d8c74980bb5dd51ee35d945203879e0cb8cd8b2b93e2e5",
+    "jsonlSha256": "b2d7ead5f6ac65ad4dc4b7a63b032be0be8840354d4b33cfa448c2a83d956721",
+    "verifiedSha256": "ac3ed36e8e0662096a43eff18e8e4eb1fcfe3c02a82bbc8524858ca2f9ebfec0"
+  },
+  "pairedCampaign": {
+    "schema": "butler.agent-benchmark.paired-contract.v1",
+    "before": {
+      "version": "before",
+      "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+      "platform": "darwin-arm64",
+      "mode": "bundled_agent_release",
+      "preparedResource": {
+        "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+        "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+        "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+        "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+        "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+        "resourceBytes": 274484152,
+        "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+        "archiveBytes": 213367567
+      }
+    },
+    "after": {
+      "version": "after",
+      "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+      "platform": "darwin-arm64",
+      "mode": "bundled_agent_release",
+      "preparedResource": {
+        "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+        "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+        "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+        "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+        "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+        "resourceBytes": 275006165,
+        "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+        "archiveBytes": 213889580
+      }
+    },
+    "execution": {
+      "provider": "openai",
+      "authMode": "managed",
+      "model": "openai/gpt-5.6-sol",
+      "reasoning": "medium",
+      "executionMode": "ordinary_non_fast",
+      "serviceTier": "default",
+      "requestExecutionMode": "auto_by_omission"
+    },
+    "authReceipt": {
+      "schema": "butler.provider-auth-preflight-receipt.v1",
+      "authority": "butler_auth_status_and_model_catalog",
+      "provider": "openai",
+      "authMode": "managed",
+      "observedProductAuthMode": "codex_subscription",
+      "observedProductAuthSource": "BUTLER_CODEX_AUTH_PROFILE",
+      "model": "openai/gpt-5.6-sol",
+      "reasoning": "medium",
+      "executionMode": "ordinary_non_fast",
+      "modelCallability": "available",
+      "configured": true
+    },
+    "fixtureHashes": {
+      "direct-cold": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+      "direct-warm": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+      "current-web-cold": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+      "landing-cold": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df"
+    },
+    "provenance": {
+      "schema": "butler.agent-benchmark.provenance-identity.v1",
+      "authorityJsonlBasename": "rollout-2026-08-10T14-23-27-019fea20-37ab-7780-a38b-ca33c846ef9e.jsonl",
+      "metadataSha256": "3479600c8bc4c66725d8c74980bb5dd51ee35d945203879e0cb8cd8b2b93e2e5",
+      "jsonlSha256": "b2d7ead5f6ac65ad4dc4b7a63b032be0be8840354d4b33cfa448c2a83d956721",
+      "verifiedSha256": "ac3ed36e8e0662096a43eff18e8e4eb1fcfe3c02a82bbc8524858ca2f9ebfec0"
+    },
+    "preparedPinsIdentity": "74fa32a3398c08f18d3d7bc97e24a370048af8c5adf4de53f99a7c7422541a5d",
+    "steps": [
+      {
+        "key": "direct-cold:rep-1:before",
+        "version": "before",
+        "fixture": "direct-cold",
+        "repetition": 1,
+        "block": 0,
+        "order": 0,
+        "pairId": "direct-cold:rep-1",
+        "fixtureSha256": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "direct-cold:rep-1:after",
+        "version": "after",
+        "fixture": "direct-cold",
+        "repetition": 1,
+        "block": 0,
+        "order": 1,
+        "pairId": "direct-cold:rep-1",
+        "fixtureSha256": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      },
+      {
+        "key": "direct-warm:rep-1:before",
+        "version": "before",
+        "fixture": "direct-warm",
+        "repetition": 1,
+        "block": 1,
+        "order": 2,
+        "pairId": "direct-warm:rep-1",
+        "fixtureSha256": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "direct-warm:rep-1:after",
+        "version": "after",
+        "fixture": "direct-warm",
+        "repetition": 1,
+        "block": 1,
+        "order": 3,
+        "pairId": "direct-warm:rep-1",
+        "fixtureSha256": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      },
+      {
+        "key": "current-web-cold:rep-1:before",
+        "version": "before",
+        "fixture": "current-web-cold",
+        "repetition": 1,
+        "block": 2,
+        "order": 4,
+        "pairId": "current-web-cold:rep-1",
+        "fixtureSha256": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "current-web-cold:rep-1:after",
+        "version": "after",
+        "fixture": "current-web-cold",
+        "repetition": 1,
+        "block": 2,
+        "order": 5,
+        "pairId": "current-web-cold:rep-1",
+        "fixtureSha256": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      },
+      {
+        "key": "landing-cold:rep-1:before",
+        "version": "before",
+        "fixture": "landing-cold",
+        "repetition": 1,
+        "block": 3,
+        "order": 6,
+        "pairId": "landing-cold:rep-1",
+        "fixtureSha256": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "landing-cold:rep-1:after",
+        "version": "after",
+        "fixture": "landing-cold",
+        "repetition": 1,
+        "block": 3,
+        "order": 7,
+        "pairId": "landing-cold:rep-1",
+        "fixtureSha256": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      },
+      {
+        "key": "direct-cold:rep-2:before",
+        "version": "before",
+        "fixture": "direct-cold",
+        "repetition": 2,
+        "block": 4,
+        "order": 8,
+        "pairId": "direct-cold:rep-2",
+        "fixtureSha256": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "direct-cold:rep-2:after",
+        "version": "after",
+        "fixture": "direct-cold",
+        "repetition": 2,
+        "block": 4,
+        "order": 9,
+        "pairId": "direct-cold:rep-2",
+        "fixtureSha256": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      },
+      {
+        "key": "direct-warm:rep-2:before",
+        "version": "before",
+        "fixture": "direct-warm",
+        "repetition": 2,
+        "block": 5,
+        "order": 10,
+        "pairId": "direct-warm:rep-2",
+        "fixtureSha256": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "direct-warm:rep-2:after",
+        "version": "after",
+        "fixture": "direct-warm",
+        "repetition": 2,
+        "block": 5,
+        "order": 11,
+        "pairId": "direct-warm:rep-2",
+        "fixtureSha256": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      },
+      {
+        "key": "current-web-cold:rep-2:before",
+        "version": "before",
+        "fixture": "current-web-cold",
+        "repetition": 2,
+        "block": 6,
+        "order": 12,
+        "pairId": "current-web-cold:rep-2",
+        "fixtureSha256": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "current-web-cold:rep-2:after",
+        "version": "after",
+        "fixture": "current-web-cold",
+        "repetition": 2,
+        "block": 6,
+        "order": 13,
+        "pairId": "current-web-cold:rep-2",
+        "fixtureSha256": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      },
+      {
+        "key": "landing-cold:rep-2:before",
+        "version": "before",
+        "fixture": "landing-cold",
+        "repetition": 2,
+        "block": 7,
+        "order": 14,
+        "pairId": "landing-cold:rep-2",
+        "fixtureSha256": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "landing-cold:rep-2:after",
+        "version": "after",
+        "fixture": "landing-cold",
+        "repetition": 2,
+        "block": 7,
+        "order": 15,
+        "pairId": "landing-cold:rep-2",
+        "fixtureSha256": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      },
+      {
+        "key": "direct-cold:rep-3:before",
+        "version": "before",
+        "fixture": "direct-cold",
+        "repetition": 3,
+        "block": 8,
+        "order": 16,
+        "pairId": "direct-cold:rep-3",
+        "fixtureSha256": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "direct-cold:rep-3:after",
+        "version": "after",
+        "fixture": "direct-cold",
+        "repetition": 3,
+        "block": 8,
+        "order": 17,
+        "pairId": "direct-cold:rep-3",
+        "fixtureSha256": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      },
+      {
+        "key": "direct-warm:rep-3:before",
+        "version": "before",
+        "fixture": "direct-warm",
+        "repetition": 3,
+        "block": 9,
+        "order": 18,
+        "pairId": "direct-warm:rep-3",
+        "fixtureSha256": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "direct-warm:rep-3:after",
+        "version": "after",
+        "fixture": "direct-warm",
+        "repetition": 3,
+        "block": 9,
+        "order": 19,
+        "pairId": "direct-warm:rep-3",
+        "fixtureSha256": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      },
+      {
+        "key": "current-web-cold:rep-3:before",
+        "version": "before",
+        "fixture": "current-web-cold",
+        "repetition": 3,
+        "block": 10,
+        "order": 20,
+        "pairId": "current-web-cold:rep-3",
+        "fixtureSha256": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "current-web-cold:rep-3:after",
+        "version": "after",
+        "fixture": "current-web-cold",
+        "repetition": 3,
+        "block": 10,
+        "order": 21,
+        "pairId": "current-web-cold:rep-3",
+        "fixtureSha256": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      },
+      {
+        "key": "landing-cold:rep-3:before",
+        "version": "before",
+        "fixture": "landing-cold",
+        "repetition": 3,
+        "block": 11,
+        "order": 22,
+        "pairId": "landing-cold:rep-3",
+        "fixtureSha256": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+        "source": {
+          "version": "before",
+          "revision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+          "compatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+            "sourceCompatibilitySha256": "5a3077032c598d8aaa505b98b46c88f0236ade607086dca9a7fdfd1ebb564162",
+            "manifestSha256": "a5e9ea1c6072e582db9545916d28c4bbb80a8ffd89efb8fb520314da7b64517c",
+            "dependencyClosureSha256": "ea161753273dd7a3cd418956662eea5c1ccb10dfaa4c61c61c4aa35c5afeee6e",
+            "resourceSha256": "32cb4e2c2b4bf0456d6ec490d305abd7d02cde1bfaea1f7d66c6e1d97811070d",
+            "resourceBytes": 274484152,
+            "archiveSha256": "2ecbc3c0675cd398f4057f2148a867b899c74f7b87be5e4e26ca2ca2add510f6",
+            "archiveBytes": 213367567
+          }
+        }
+      },
+      {
+        "key": "landing-cold:rep-3:after",
+        "version": "after",
+        "fixture": "landing-cold",
+        "repetition": 3,
+        "block": 11,
+        "order": 23,
+        "pairId": "landing-cold:rep-3",
+        "fixtureSha256": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+        "source": {
+          "version": "after",
+          "revision": "394c98a97428b741f8ea54273a226cb062455ab0",
+          "compatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+          "platform": "darwin-arm64",
+          "mode": "bundled_agent_release",
+          "preparedResource": {
+            "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+            "sourceCompatibilitySha256": "4c683c5b44a56deb940ce1f56219e55d713e8e73f8116bbaac0a92bca52cc7cb",
+            "manifestSha256": "fe9ce7ed7be6def59639081926542c6d1333a9df7b451b009692bb6a21f02b05",
+            "dependencyClosureSha256": "a05e6cdf7a98c494aaa47b87ba82e81d1af68835225f9956af96c970a2992266",
+            "resourceSha256": "d73e316cfd84cb9ac99e67e17556a49fa7ae7315bd901b0ea4fd8edec63fad7b",
+            "resourceBytes": 275006165,
+            "archiveSha256": "60ab0c4f7cd303b4710f15278bbda00f24ba56205c669239c8acfecaca616dd9",
+            "archiveBytes": 213889580
+          }
+        }
+      }
+    ],
+    "policy": {
+      "sequential": true,
+      "runtimeReorderAllowed": false,
+      "replacementRunsAllowed": "pre_provider_infrastructure_only",
+      "preProviderInfrastructureReplacementMax": 1,
+      "postProviderReplacementAllowed": false,
+      "cacheMismatch": "descriptive_only",
+      "usageUnavailable": "nullable"
+    },
+    "acceptance": {
+      "providerSendByteReductionMinimum": 0.3,
+      "requestHypothesis": {
+        "kind": "frozen_baseline_range",
+        "before": 45,
+        "afterMinimum": 38,
+        "afterMaximum": 40
+      },
+      "elapsedReductionTarget": [
+        0.18,
+        0.3
+      ],
+      "zeroQualityRegression": true
+    },
+    "identity": "5a91e2ea75d692e94fe723b2950e31ef56c5d92d1d0b4930721e7f59b12e549b"
+  },
+  "tracks": [
+    "controlled"
+  ],
+  "fixtures": [
+    {
+      "id": "direct-cold",
+      "version": "spec-m1-context-efficiency-r2-v1",
+      "sha256": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+      "promptCount": 1
+    },
+    {
+      "id": "direct-warm",
+      "version": "spec-m1-context-efficiency-r2-v1",
+      "sha256": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+      "promptCount": 2
+    },
+    {
+      "id": "current-web-cold",
+      "version": "spec-m1-context-efficiency-r2-v1",
+      "frozenEvaluationDate": "2026-08-10",
+      "sha256": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+      "promptCount": 1
+    },
+    {
+      "id": "landing-cold",
+      "version": "spec-m1-context-efficiency-r2-v1",
+      "sha256": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+      "promptCount": 1
+    }
+  ],
+  "policy": {
+    "sequential": true,
+    "observerOnly": true,
+    "retryContaminatedAccepted": false,
+    "replacementRunsAllowed": false,
+    "directWarmSameSession": true,
+    "expectedObservedCacheBoundaryMustMatch": true,
+    "rubricVersion": "spec-m1-context-efficiency-r2-v1"
+  },
+  "arms": [
+    {
+      "key": "direct-cold:rep-1:before",
+      "scenario": "direct-cold",
+      "repetition": 1,
+      "order": 0,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-0/before/output",
+      "dataRoot": "arms/block-0/before/data",
+      "evidenceRoot": "arms/block-0/before/evidence",
+      "cacheRoot": "cache/direct-cold:rep-1/before",
+      "cachePairId": "direct-cold:rep-1",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "direct-cold:rep-1",
+      "block": 0,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "direct-cold:rep-1:after",
+      "scenario": "direct-cold",
+      "repetition": 1,
+      "order": 1,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-0/after/output",
+      "dataRoot": "arms/block-0/after/data",
+      "evidenceRoot": "arms/block-0/after/evidence",
+      "cacheRoot": "cache/direct-cold:rep-1/after",
+      "cachePairId": "direct-cold:rep-1",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "direct-cold:rep-1",
+      "block": 0,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "direct-warm:rep-1:before",
+      "scenario": "direct-warm",
+      "repetition": 1,
+      "order": 2,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "warm",
+      "fixtureHash": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-1/before/output",
+      "dataRoot": "arms/block-1/before/data",
+      "evidenceRoot": "arms/block-1/before/evidence",
+      "cacheRoot": "cache/direct-warm:rep-1/before",
+      "cachePairId": "direct-warm:rep-1",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "direct-warm:rep-1",
+      "block": 1,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "direct-warm:rep-1:after",
+      "scenario": "direct-warm",
+      "repetition": 1,
+      "order": 3,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "warm",
+      "fixtureHash": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-1/after/output",
+      "dataRoot": "arms/block-1/after/data",
+      "evidenceRoot": "arms/block-1/after/evidence",
+      "cacheRoot": "cache/direct-warm:rep-1/after",
+      "cachePairId": "direct-warm:rep-1",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "direct-warm:rep-1",
+      "block": 1,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "current-web-cold:rep-1:before",
+      "scenario": "current-web-cold",
+      "repetition": 1,
+      "order": 4,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-2/before/output",
+      "dataRoot": "arms/block-2/before/data",
+      "evidenceRoot": "arms/block-2/before/evidence",
+      "cacheRoot": "cache/current-web-cold:rep-1/before",
+      "cachePairId": "current-web-cold:rep-1",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "current-web-cold:rep-1",
+      "block": 2,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "current-web-cold:rep-1:after",
+      "scenario": "current-web-cold",
+      "repetition": 1,
+      "order": 5,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-2/after/output",
+      "dataRoot": "arms/block-2/after/data",
+      "evidenceRoot": "arms/block-2/after/evidence",
+      "cacheRoot": "cache/current-web-cold:rep-1/after",
+      "cachePairId": "current-web-cold:rep-1",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "current-web-cold:rep-1",
+      "block": 2,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "landing-cold:rep-1:before",
+      "scenario": "landing-cold",
+      "repetition": 1,
+      "order": 6,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-3/before/output",
+      "dataRoot": "arms/block-3/before/data",
+      "evidenceRoot": "arms/block-3/before/evidence",
+      "cacheRoot": "cache/landing-cold:rep-1/before",
+      "cachePairId": "landing-cold:rep-1",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "landing-cold:rep-1",
+      "block": 3,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "landing-cold:rep-1:after",
+      "scenario": "landing-cold",
+      "repetition": 1,
+      "order": 7,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-3/after/output",
+      "dataRoot": "arms/block-3/after/data",
+      "evidenceRoot": "arms/block-3/after/evidence",
+      "cacheRoot": "cache/landing-cold:rep-1/after",
+      "cachePairId": "landing-cold:rep-1",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "landing-cold:rep-1",
+      "block": 3,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "direct-cold:rep-2:before",
+      "scenario": "direct-cold",
+      "repetition": 2,
+      "order": 8,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-4/before/output",
+      "dataRoot": "arms/block-4/before/data",
+      "evidenceRoot": "arms/block-4/before/evidence",
+      "cacheRoot": "cache/direct-cold:rep-2/before",
+      "cachePairId": "direct-cold:rep-2",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "direct-cold:rep-2",
+      "block": 4,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "direct-cold:rep-2:after",
+      "scenario": "direct-cold",
+      "repetition": 2,
+      "order": 9,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-4/after/output",
+      "dataRoot": "arms/block-4/after/data",
+      "evidenceRoot": "arms/block-4/after/evidence",
+      "cacheRoot": "cache/direct-cold:rep-2/after",
+      "cachePairId": "direct-cold:rep-2",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "direct-cold:rep-2",
+      "block": 4,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "direct-warm:rep-2:before",
+      "scenario": "direct-warm",
+      "repetition": 2,
+      "order": 10,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "warm",
+      "fixtureHash": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-5/before/output",
+      "dataRoot": "arms/block-5/before/data",
+      "evidenceRoot": "arms/block-5/before/evidence",
+      "cacheRoot": "cache/direct-warm:rep-2/before",
+      "cachePairId": "direct-warm:rep-2",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "direct-warm:rep-2",
+      "block": 5,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "direct-warm:rep-2:after",
+      "scenario": "direct-warm",
+      "repetition": 2,
+      "order": 11,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "warm",
+      "fixtureHash": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-5/after/output",
+      "dataRoot": "arms/block-5/after/data",
+      "evidenceRoot": "arms/block-5/after/evidence",
+      "cacheRoot": "cache/direct-warm:rep-2/after",
+      "cachePairId": "direct-warm:rep-2",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "direct-warm:rep-2",
+      "block": 5,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "current-web-cold:rep-2:before",
+      "scenario": "current-web-cold",
+      "repetition": 2,
+      "order": 12,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-6/before/output",
+      "dataRoot": "arms/block-6/before/data",
+      "evidenceRoot": "arms/block-6/before/evidence",
+      "cacheRoot": "cache/current-web-cold:rep-2/before",
+      "cachePairId": "current-web-cold:rep-2",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "current-web-cold:rep-2",
+      "block": 6,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "current-web-cold:rep-2:after",
+      "scenario": "current-web-cold",
+      "repetition": 2,
+      "order": 13,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-6/after/output",
+      "dataRoot": "arms/block-6/after/data",
+      "evidenceRoot": "arms/block-6/after/evidence",
+      "cacheRoot": "cache/current-web-cold:rep-2/after",
+      "cachePairId": "current-web-cold:rep-2",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "current-web-cold:rep-2",
+      "block": 6,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "landing-cold:rep-2:before",
+      "scenario": "landing-cold",
+      "repetition": 2,
+      "order": 14,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-7/before/output",
+      "dataRoot": "arms/block-7/before/data",
+      "evidenceRoot": "arms/block-7/before/evidence",
+      "cacheRoot": "cache/landing-cold:rep-2/before",
+      "cachePairId": "landing-cold:rep-2",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "landing-cold:rep-2",
+      "block": 7,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "landing-cold:rep-2:after",
+      "scenario": "landing-cold",
+      "repetition": 2,
+      "order": 15,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-7/after/output",
+      "dataRoot": "arms/block-7/after/data",
+      "evidenceRoot": "arms/block-7/after/evidence",
+      "cacheRoot": "cache/landing-cold:rep-2/after",
+      "cachePairId": "landing-cold:rep-2",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "landing-cold:rep-2",
+      "block": 7,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "direct-cold:rep-3:before",
+      "scenario": "direct-cold",
+      "repetition": 3,
+      "order": 16,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-8/before/output",
+      "dataRoot": "arms/block-8/before/data",
+      "evidenceRoot": "arms/block-8/before/evidence",
+      "cacheRoot": "cache/direct-cold:rep-3/before",
+      "cachePairId": "direct-cold:rep-3",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "direct-cold:rep-3",
+      "block": 8,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "direct-cold:rep-3:after",
+      "scenario": "direct-cold",
+      "repetition": 3,
+      "order": 17,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "0e0b383934aaf4fd5fa3ae0b0b391f2939011ad7b6d190c1b51e97e59c267125",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-8/after/output",
+      "dataRoot": "arms/block-8/after/data",
+      "evidenceRoot": "arms/block-8/after/evidence",
+      "cacheRoot": "cache/direct-cold:rep-3/after",
+      "cachePairId": "direct-cold:rep-3",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "direct-cold:rep-3",
+      "block": 8,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "direct-warm:rep-3:before",
+      "scenario": "direct-warm",
+      "repetition": 3,
+      "order": 18,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "warm",
+      "fixtureHash": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-9/before/output",
+      "dataRoot": "arms/block-9/before/data",
+      "evidenceRoot": "arms/block-9/before/evidence",
+      "cacheRoot": "cache/direct-warm:rep-3/before",
+      "cachePairId": "direct-warm:rep-3",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "direct-warm:rep-3",
+      "block": 9,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "direct-warm:rep-3:after",
+      "scenario": "direct-warm",
+      "repetition": 3,
+      "order": 19,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "warm",
+      "fixtureHash": "f0459e6b9727851c945e2593723977ce243732947e7778c5c05b40910fdadcb1",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-9/after/output",
+      "dataRoot": "arms/block-9/after/data",
+      "evidenceRoot": "arms/block-9/after/evidence",
+      "cacheRoot": "cache/direct-warm:rep-3/after",
+      "cachePairId": "direct-warm:rep-3",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "direct-warm:rep-3",
+      "block": 9,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "current-web-cold:rep-3:before",
+      "scenario": "current-web-cold",
+      "repetition": 3,
+      "order": 20,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-10/before/output",
+      "dataRoot": "arms/block-10/before/data",
+      "evidenceRoot": "arms/block-10/before/evidence",
+      "cacheRoot": "cache/current-web-cold:rep-3/before",
+      "cachePairId": "current-web-cold:rep-3",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "current-web-cold:rep-3",
+      "block": 10,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "current-web-cold:rep-3:after",
+      "scenario": "current-web-cold",
+      "repetition": 3,
+      "order": 21,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "76c9a7b3f52f3dd7fb62bd936a37f22d7f48b1f99a802993b8679deb92505b16",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-10/after/output",
+      "dataRoot": "arms/block-10/after/data",
+      "evidenceRoot": "arms/block-10/after/evidence",
+      "cacheRoot": "cache/current-web-cold:rep-3/after",
+      "cachePairId": "current-web-cold:rep-3",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "current-web-cold:rep-3",
+      "block": 10,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "landing-cold:rep-3:before",
+      "scenario": "landing-cold",
+      "repetition": 3,
+      "order": 22,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<before-source-root>",
+      "outputRoot": "arms/block-11/before/output",
+      "dataRoot": "arms/block-11/before/data",
+      "evidenceRoot": "arms/block-11/before/evidence",
+      "cacheRoot": "cache/landing-cold:rep-3/before",
+      "cachePairId": "landing-cold:rep-3",
+      "timeoutMs": 900000,
+      "sourceRevision": "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+      "version": "before",
+      "pairId": "landing-cold:rep-3",
+      "block": 11,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    },
+    {
+      "key": "landing-cold:rep-3:after",
+      "scenario": "landing-cold",
+      "repetition": 3,
+      "order": 23,
+      "agent": "butler",
+      "track": "controlled",
+      "cache": "cold",
+      "fixtureHash": "80b2d3f052120291fb962d745660102a9e09dcab900b99f34724c510bd6fa8df",
+      "effectiveConfig": {
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "permissions": "benchmark-workspace-full-source-read-only",
+        "tools": [
+          "product-default"
+        ],
+        "memoryEnabled": null,
+        "skillsEnabled": null,
+        "pluginsEnabled": null,
+        "mcpEnabled": null,
+        "provider": null,
+        "variant": null
+      },
+      "sourceRoot": "<after-source-root>",
+      "outputRoot": "arms/block-11/after/output",
+      "dataRoot": "arms/block-11/after/data",
+      "evidenceRoot": "arms/block-11/after/evidence",
+      "cacheRoot": "cache/landing-cold:rep-3/after",
+      "cachePairId": "landing-cold:rep-3",
+      "timeoutMs": 900000,
+      "sourceRevision": "394c98a97428b741f8ea54273a226cb062455ab0",
+      "version": "after",
+      "pairId": "landing-cold:rep-3",
+      "block": 11,
+      "pairedExecution": {
+        "provider": "openai",
+        "authMode": "managed",
+        "model": "openai/gpt-5.6-sol",
+        "reasoning": "medium",
+        "executionMode": "ordinary_non_fast",
+        "serviceTier": "default",
+        "requestExecutionMode": "auto_by_omission"
+      }
+    }
+  ]
+}

@@ -58,6 +58,8 @@ export interface BenchmarkFixtureSummary {
 }
 
 export interface BenchmarkArmPlan {
+  /** Execution binding added after the plan semantic digest; excluded from digest input. */
+  planIdentity?: string;
   key: string;
   scenario: BenchmarkScenario;
   repetition: number;
@@ -87,6 +89,8 @@ export interface BenchmarkPlan {
   campaign: BenchmarkCampaign;
   runId: string;
   createdAt: string;
+  /** Canonical pathless semantic identity, computed once by the planner and carried unchanged. */
+  planIdentity?: string;
   seed: number;
   baselineSha: string;
   runRoot: string;

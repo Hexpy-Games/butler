@@ -54,8 +54,11 @@ export interface M1V2EvidenceExport {
     requestedModel: string | null; providerReportedModel: string | null; requestedReasoning: string | null; authorizationScheme: string | null;
     requestedServiceTierMode: "auto_by_omission"; effectiveServiceTier: string | null;
     effectiveServiceTierAvailability: "reported" | "unavailable"; effectiveServiceTierReason: "provider_response_reported" | "provider_response_omitted";
-    serializerContract: "butler.openai-codex-final-json.v1" | "butler.openai-responses-final-json.v1"; serializedRequestDigest: string; serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1" }>;
-  counts: { attempts: number; segments: number; canonicalUsageRows: number; projectedUsage: number; overhead: number };
+    serializerContract: "butler.openai-codex-final-json.v1" | "butler.openai-responses-final-json.v1"; serializedRequestDigest: string; serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1";
+    observation: null | { envelope: Record<string, string | number | boolean | null>; segments: Array<Record<string, string | number | boolean | null>>;
+      usage: Record<string, string | number | boolean | null> } }>;
+  counts: { attempts: number; segments: number; canonicalUsageRows: number; projectedUsage: number; overhead: number;
+    overheadObserved: number; overheadSegments: number; overheadCanonicalUsageRows: number };
   retention: { owner: "agent-benchmark-run"; cleanup: "with-run-evidence" };
   contentSha256: string;
 }
@@ -122,11 +125,14 @@ export function verifyM1V2EvidenceExport(input: { path: string; expected: M1V2Ev
   if (value.contentSha256 !== contentSha256) throw new Error("sc01_export_content_hash_mismatch");
   if (value.counts.attempts !== value.attempts.length || value.counts.overhead !== value.overhead.length ||
       value.counts.segments !== value.attempts.reduce((sum, row) => sum + row.segments.length, 0) || value.counts.projectedUsage !== value.attempts.length ||
-      value.counts.canonicalUsageRows !== value.attempts.filter((row) => row.usage.availabilityReason !== "provider_usage_row_absent").length) {
+      value.counts.canonicalUsageRows !== value.attempts.filter((row) => row.usage.availabilityReason !== "provider_usage_row_absent").length ||
+      value.counts.overheadObserved !== value.overhead.filter((row) => row.observation !== null).length ||
+      value.counts.overheadSegments !== value.overhead.reduce((sum, row) => sum + (row.observation?.segments.length ?? 0), 0) ||
+      value.counts.overheadCanonicalUsageRows !== value.overhead.filter((row) => row.observation?.usage.availabilityReason !== "provider_usage_row_absent" && row.observation !== null).length) {
     throw new Error("sc01_export_count_mismatch");
   }
   assertExportRows(value);
-  assertExactKeys(value.counts, ["attempts", "segments", "canonicalUsageRows", "projectedUsage", "overhead"]);
+  assertExactKeys(value.counts, ["attempts", "segments", "canonicalUsageRows", "projectedUsage", "overhead", "overheadObserved", "overheadSegments", "overheadCanonicalUsageRows"]);
   assertExactKeys(value.retention, ["owner", "cleanup"]);
   if (value.retention.owner !== "agent-benchmark-run" || value.retention.cleanup !== "with-run-evidence") throw new Error("sc01_export_retention_invalid");
   assertNoUnsafeMaterial(value);
@@ -172,6 +178,8 @@ export function durableM1V2Arithmetic(evidence: M1V2EvidenceExport): {
   agentAttempts: M1V2AttemptSummary[]; otherShare: number | null; reducibleShare: number | null; semanticRounds: number;
   auxiliaryPhysicalAttempts: number; titlePhysicalAttempts: number; providerToolPhysicalAttempts: number;
   unarmedPhysicalOverhead: { auxiliary: { attempts: number; providerSendBytes: number }; title: { attempts: number; providerSendBytes: number }; toolProvider: { attempts: number; providerSendBytes: number } };
+  overheadUsage: { auxiliary: { observed: number; usageBearing: number; unavailable: number }; title: { observed: number; usageBearing: number; unavailable: number }; toolProvider: { observed: number; usageBearing: number; unavailable: number } };
+  allPhysical: { attempts: number; providerSendBytes: number; observedUsageRows: number; usageBearingRows: number; unavailableUsageRows: number };
 } {
   const agentAttempts = evidence.attempts.filter((row) => row.ownership === "target_step").map((attempt) => {
     const segments: Partial<Record<M1RequestSegmentKind, number>> = {};
@@ -194,13 +202,22 @@ export function durableM1V2Arithmetic(evidence: M1V2EvidenceExport): {
   const reducible = agentAttempts.reduce((sum, row) => sum + Object.entries(row.segments).filter(([kind]) => POTENTIALLY_REDUCIBLE_M1_SEGMENTS.has(kind as M1RequestSegmentKind)).reduce((subtotal, [, bytes]) => subtotal + (bytes ?? 0), 0), 0);
   const overhead = (role: "auxiliary" | "title" | "tool_provider") => {
     const rows = evidence.overhead.filter((row) => row.role === role);
-    return { attempts: rows.length, providerSendBytes: rows.reduce((sum, row) => sum + row.providerSendBytes, 0) };
+    return { attempts: rows.length, providerSendBytes: rows.reduce((sum, row) => sum + row.providerSendBytes, 0),
+      usage: { observed: rows.filter((row) => row.observation !== null).length,
+        usageBearing: rows.filter((row) => row.observation?.usage.status === "usage_bearing").length,
+        unavailable: rows.filter((row) => row.observation?.usage.status === "unavailable").length } };
   };
   const auxiliary = overhead("auxiliary"), title = overhead("title"), toolProvider = overhead("tool_provider");
   return { agentAttempts, otherShare: total > 0 ? other / total : null, reducibleShare: total > 0 ? reducible / total : null,
     semanticRounds: new Set(evidence.attempts.filter((row) => row.ownership === "target_step").map((row) => row.envelope.roundIndex)).size,
     auxiliaryPhysicalAttempts: auxiliary.attempts, titlePhysicalAttempts: title.attempts, providerToolPhysicalAttempts: toolProvider.attempts,
-    unarmedPhysicalOverhead: { auxiliary, title, toolProvider } };
+    unarmedPhysicalOverhead: { auxiliary: { attempts: auxiliary.attempts, providerSendBytes: auxiliary.providerSendBytes }, title: { attempts: title.attempts, providerSendBytes: title.providerSendBytes }, toolProvider: { attempts: toolProvider.attempts, providerSendBytes: toolProvider.providerSendBytes } },
+    overheadUsage: { auxiliary: auxiliary.usage, title: title.usage, toolProvider: toolProvider.usage },
+    allPhysical: { attempts: evidence.attempts.length + evidence.overhead.length,
+      providerSendBytes: evidence.attempts.reduce((sum, row) => sum + row.serializedRequestBytes, 0) + evidence.overhead.reduce((sum, row) => sum + row.providerSendBytes, 0),
+      observedUsageRows: evidence.attempts.length + evidence.overhead.filter((row) => row.observation !== null).length,
+      usageBearingRows: evidence.attempts.filter((row) => row.usage.status === "usage_bearing").length + evidence.overhead.filter((row) => row.observation?.usage.status === "usage_bearing").length,
+      unavailableUsageRows: evidence.attempts.filter((row) => row.usage.status === "unavailable").length + evidence.overhead.filter((row) => row.observation?.usage.status === "unavailable").length } };
 }
 
 function metricRow(name: string, ts: number, dimensions: Record<string, string | number | boolean | null>): OperationalMetricEvent {
@@ -227,15 +244,14 @@ function buildExport(input: Parameters<typeof materializeM1V2EvidenceExport>[0])
   }
   const membershipByOrdinal = new Map(memberships.map((row) => [integer(row.ordinal), row]));
   const agentMemberships = memberships.filter((row) => row.requestKind === "agent");
-  const nonAgentDigests = new Set(input.providerRequests.filter((row) => row.requestKind !== "agent").map((row) => requiredDigest(row.attemptDigest)));
-  for (const metric of input.metrics) {
+  const allPhysicalDigests = new Set(providerDigests);
+  const providerByDigest = new Map(input.providerRequests.map((request) => [requiredDigest(request.attemptDigest), request]));
+  for (const metric of input.metrics.filter((row) => SC01_NAMES.has(row.name))) {
     const metricDigest = typeof metric.dimensions?.attemptDigest === "string" ? metric.dimensions.attemptDigest : null;
-    if (!metricDigest || !nonAgentDigests.has(metricDigest)) continue;
-    if (metric.name === "m1_v2_request_envelope" && metric.dimensions?.armId === input.identity.armId) {
+    if (!metricDigest || !allPhysicalDigests.has(metricDigest)) throw new Error("sc01_export_unknown_physical_telemetry");
+    const request = providerByDigest.get(metricDigest)!;
+    if (request.requestKind !== "agent" && metric.name === "m1_v2_request_envelope" && metric.dimensions?.armId !== null) {
       throw new Error("sc01_export_arm_tagged_non_agent_rejected");
-    }
-    if (metric.name === "m1_v2_request_envelope" || metric.name === "m1_v2_request_segment" || metric.name === "m1_v2_response_usage") {
-      throw new Error("sc01_export_non_agent_sc01_evidence_invalid");
     }
   }
   const envelopes = input.metrics.filter((row) => row.name === "m1_v2_request_envelope" && row.dimensions?.armId === input.identity.armId);
@@ -297,7 +313,30 @@ function buildExport(input: Parameters<typeof materializeM1V2EvidenceExport>[0])
     const ordinal = integer(row.ordinal); const membership = membershipByOrdinal.get(ordinal);
     const physical = projectPhysicalRequest(row, membership, input.identity.stepId);
     if (physical.role !== role || physical.attemptDigest !== attemptDigest) throw new Error("sc01_export_non_agent_ownership_ambiguous");
-    return { ...physical, role: role as "auxiliary" | "title" | "tool_provider", armed: false as const, armId: null };
+    const telemetry = input.metrics.filter((metric) => SC01_NAMES.has(metric.name) && metric.dimensions?.attemptDigest === attemptDigest);
+    const envelopeRows = telemetry.filter((metric) => metric.name === "m1_v2_request_envelope");
+    const segmentRows = telemetry.filter((metric) => metric.name === "m1_v2_request_segment");
+    const usageRows = telemetry.filter((metric) => metric.name === "m1_v2_response_usage");
+    if (envelopeRows.length === 0) {
+      if (segmentRows.length > 0 || usageRows.length > 0) throw new Error("sc01_export_non_agent_partial_telemetry");
+      return { ...physical, role: role as "auxiliary" | "title" | "tool_provider", armed: false as const, armId: null, observation: null };
+    }
+    if (envelopeRows.length !== 1 || usageRows.length > 1) throw new Error("sc01_export_non_agent_telemetry_cardinality_invalid");
+    const envelopeEvent = envelopeRows[0]!; assertMetric(envelopeEvent, "envelope");
+    const envelope = projectEnvelope(envelopeEvent);
+    if (envelope.armId !== null) throw new Error("sc01_export_arm_tagged_non_agent_rejected");
+    if (envelope.sourceRevision !== input.identity.sourceRevision || envelope.providerSendBytes !== physical.providerSendBytes ||
+        envelope.providerId !== input.identity.expectedProviderId || envelope.modelRef !== input.identity.expectedModelRef ||
+        !physicalRequestEnvelopeMatches(row, { physicalAttemptDigest: attemptDigest, providerSendBytes: physical.providerSendBytes, observedAtMs: envelopeEvent.ts })) {
+      throw new Error("sc01_export_non_agent_envelope_identity_mismatch");
+    }
+    const segments = segmentRows.map((metric, index) => projectSegment(metric, index));
+    if (segments.length === 0 || segments.reduce((sum, segment) => sum + Number(segment.providerSendBytes), 0) !== physical.providerSendBytes) {
+      throw new Error("sc01_export_non_agent_segment_sum_mismatch");
+    }
+    const usage = usageRows.length === 1 ? projectUsage(usageRows[0]!) : absentUsage(attemptDigest);
+    return { ...physical, role: role as "auxiliary" | "title" | "tool_provider", armed: false as const, armId: null,
+      observation: { envelope, segments, usage } };
   });
   const nonAgentMemberships = memberships.filter((row) => row.requestKind !== "agent");
   if (nonAgentMemberships.some((membership) => !overhead.some((row) => row.ordinal === membership.ordinal && row.role === membership.requestKind))) {
@@ -313,7 +352,10 @@ function buildExport(input: Parameters<typeof materializeM1V2EvidenceExport>[0])
   const identity = { ...input.identity, membershipSha256 };
   const base = { schema: SCHEMA, identity, attempts, overhead,
     counts: { attempts: attempts.length, segments: attempts.reduce((sum, row) => sum + row.segments.length, 0),
-      canonicalUsageRows: attempts.filter((row) => row.usage.availabilityReason !== "provider_usage_row_absent").length, projectedUsage: attempts.length, overhead: overhead.length },
+      canonicalUsageRows: attempts.filter((row) => row.usage.availabilityReason !== "provider_usage_row_absent").length, projectedUsage: attempts.length, overhead: overhead.length,
+      overheadObserved: overhead.filter((row) => row.observation !== null).length,
+      overheadSegments: overhead.reduce((sum, row) => sum + (row.observation?.segments.length ?? 0), 0),
+      overheadCanonicalUsageRows: overhead.filter((row) => row.observation !== null && row.observation.usage.availabilityReason !== "provider_usage_row_absent").length },
     retention: { owner: "agent-benchmark-run" as const, cleanup: "with-run-evidence" as const }, contentSha256: "" };
   const result = { ...base, contentSha256: digest(base) };
   assertExportRows(result);
@@ -388,13 +430,20 @@ const USAGE = ["schemaVersion", "attemptDigest", "status", "promptTokens", "cach
 const PROVIDER = ["ordinal", "attemptDigest", "requestKind", "requestedModel", "requestedReasoning", "requestedServiceTier", "requestedServiceTierMode", "authorizationScheme", "routeId", "requestStartedAtMs", "serializedRequestBytes", "serializedRequestDigest", "serializedRequestDigestAlgorithm", "serializerContract", "firstContentBearingDeltaAtMs", "completedAtMs", "terminatedAtMs", "termination", "status", "hasTextContent", "hasToolArgumentContent", "hasReasoningContent", "streamedTextChars", "finalTextChars", "providerReportedModel", "providerReportedServiceTier", "effectiveServiceTierAvailability", "effectiveServiceTierReason"];
 const MEMBERSHIP = ["ordinal", "sessionId", "turnId", "requestKind", "physicalAttemptDigest", "stepId"];
 const ATTEMPT = ["ordinal", "role", "ownership", "stepId", "sessionId", "turnId", "attemptDigest", "requestStartedAtMs", "terminatedAtMs", "durationMs", "terminalStatus", "providerStatus", "routeId", "requestedModel", "providerReportedModel", "requestedReasoning", "authorizationScheme", "requestedServiceTierMode", "effectiveServiceTier", "effectiveServiceTierAvailability", "effectiveServiceTierReason", "serializerContract", "serializedRequestBytes", "serializedRequestDigest", "serializedRequestDigestAlgorithm", "envelope", "segments", "usage"];
-const OVERHEAD = ["ordinal", "role", "ownership", "stepId", "sessionId", "turnId", "attemptDigest", "armed", "armId", "providerSendBytes", "requestStartedAtMs", "terminatedAtMs", "durationMs", "terminalStatus", "providerStatus", "routeId", "requestedModel", "providerReportedModel", "requestedReasoning", "authorizationScheme", "requestedServiceTierMode", "effectiveServiceTier", "effectiveServiceTierAvailability", "effectiveServiceTierReason", "serializerContract", "serializedRequestDigest", "serializedRequestDigestAlgorithm"];
-function projectEnvelope(row: OperationalMetricEvent) { assertExactKeys(row.dimensions!, ENVELOPE); return { ...row.dimensions!, observedAtMs: row.ts }; }
+const OVERHEAD = ["ordinal", "role", "ownership", "stepId", "sessionId", "turnId", "attemptDigest", "armed", "armId", "providerSendBytes", "requestStartedAtMs", "terminatedAtMs", "durationMs", "terminalStatus", "providerStatus", "routeId", "requestedModel", "providerReportedModel", "requestedReasoning", "authorizationScheme", "requestedServiceTierMode", "effectiveServiceTier", "effectiveServiceTierAvailability", "effectiveServiceTierReason", "serializerContract", "serializedRequestDigest", "serializedRequestDigestAlgorithm", "observation"];
+const SC01_NAMES = new Set(["m1_v2_request_envelope", "m1_v2_request_segment", "m1_v2_response_usage"]);
+function projectEnvelope(row: OperationalMetricEvent): Record<string, string | number | boolean | null> {
+  if (!row.dimensions) throw new Error("sc01_export_envelope_invalid");
+  assertExactKeys(row.dimensions, ENVELOPE);
+  return { ...row.dimensions, observedAtMs: row.ts };
+}
 function projectSegment(row: OperationalMetricEvent, order: number) { assertMetric(row, "segment"); assertExactKeys(row.dimensions!, SEGMENT); const d = row.dimensions!;
   const kind = bounded(d.kind); if (!OBSERVED_M1_REQUEST_SEGMENT_KINDS.some((value) => value === kind)) throw new Error("sc01_export_segment_kind_invalid");
   return { ...d, order, byteLength: positiveInteger(d.providerSendBytes), providerSendBytes: positiveInteger(d.providerSendBytes) }; }
 function projectUsage(row: OperationalMetricEvent) { assertMetric(row, "usage"); assertExactKeys(row.dimensions!, USAGE); const d = row.dimensions!;
-  if (d.status !== "usage_bearing" && d.status !== "unavailable") throw new Error("sc01_export_usage_status_invalid"); return { ...d, availabilityReason: d.status === "unavailable" ? "provider_usage_unavailable" : "provider_usage_reported" }; }
+  const usage = { ...d, availabilityReason: d.status === "unavailable" ? "provider_usage_unavailable" : "provider_usage_reported" };
+  assertUsageValues(usage, requiredDigest(d.attemptDigest));
+  return usage; }
 function absentUsage(attemptDigest: string) { return { schemaVersion: "butler.m1-response-usage.v2", attemptDigest, status: "unavailable", promptTokens: null,
   cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null, reasoningTokens: null, totalTokens: null, availabilityReason: "provider_usage_row_absent" }; }
 function assertMetric(row: OperationalMetricEvent, kind: string) { if (row.schema !== "butler.operational-metric.v1" || row.category !== "context" || row.status !== "ok" || row.rawTextStored !== false || !row.dimensions) throw new Error(`sc01_export_${kind}_invalid`); }
@@ -430,13 +479,8 @@ function assertAttempt(attempt: M1V2EvidenceExport["attempts"][number], identity
       !SHA256.test(attempt.serializedRequestDigest) || attempt.serializedRequestDigestAlgorithm !== "hmac-sha256-observer-private-v1") throw new Error("sc01_export_attempt_value_invalid");
   route(attempt.routeId); serializer(attempt.serializerContract, attempt.routeId);
   const envelope = attempt.envelope;
-  if (envelope.schemaVersion !== "butler.m1-request-envelope.v2" || envelope.attemptDigest !== attempt.attemptDigest ||
-      !DIGEST.test(String(envelope.turnDigest)) || !DIGEST.test(String(envelope.phaseDigest)) || !nonnegativeIntegerValue(envelope.roundIndex) ||
-      !nonnegativeIntegerValue(envelope.retryOrdinal) || envelope.providerId !== identity.expectedProviderId || envelope.modelRef !== identity.expectedModelRef ||
-      envelope.armId !== identity.armId || envelope.sourceRevision !== identity.sourceRevision || !nullablePublicRef(envelope.cacheBoundaryRevision) ||
-      envelope.cacheBoundaryRevision !== identity.expectedCacheBoundaryRevision || attempt.routeId !== identity.expectedRouteId ||
-      envelope.providerSendBytes !== attempt.serializedRequestBytes || !nullableNonnegativeInteger(envelope.estimatedInputTokens) ||
-      typeof envelope.eligibility !== "string" || !ELIGIBILITY.has(envelope.eligibility) || !nonnegativeIntegerValue(envelope.observedAtMs)) throw new Error("sc01_export_envelope_value_invalid");
+  assertEnvelopeValues(envelope, attempt.attemptDigest, attempt.serializedRequestBytes, identity, identity.armId);
+  if (attempt.routeId !== identity.expectedRouteId || envelope.cacheBoundaryRevision !== identity.expectedCacheBoundaryRevision) throw new Error("sc01_export_envelope_value_invalid");
   if (Math.abs(Number(envelope.observedAtMs) - attempt.terminatedAtMs) > 5_000) throw new Error("sc01_export_envelope_timing_mismatch");
   const segmentIds = new Set<string>();
   attempt.segments.forEach((segment, order) => {
@@ -448,14 +492,7 @@ function assertAttempt(attempt: M1V2EvidenceExport["attempts"][number], identity
     segmentIds.add(String(segment.segmentId));
   });
   if (attempt.segments.reduce((sum, row) => sum + Number(row.providerSendBytes), 0) !== attempt.serializedRequestBytes) throw new Error("sc01_export_byte_invariant_failed");
-  const usage = attempt.usage;
-  if (usage.schemaVersion !== "butler.m1-response-usage.v2" || usage.attemptDigest !== attempt.attemptDigest ||
-      (usage.status !== "usage_bearing" && usage.status !== "unavailable") || !["provider_usage_unavailable", "provider_usage_reported", "provider_usage_row_absent"].includes(String(usage.availabilityReason)) ||
-      (usage.status === "usage_bearing" && usage.availabilityReason !== "provider_usage_reported") ||
-      !["promptTokens", "cacheReadTokens", "cacheWriteTokens", "outputTokens", "reasoningTokens", "totalTokens"].every((key) => nullableNonnegativeInteger(usage[key])) ||
-      (usage.status === "unavailable" && !["promptTokens", "cacheReadTokens", "cacheWriteTokens", "outputTokens", "reasoningTokens", "totalTokens"].every((key) => usage[key] === null))) {
-    throw new Error("sc01_export_usage_value_invalid");
-  }
+  assertUsageValues(attempt.usage, attempt.attemptDigest, true);
 }
 function assertOverhead(row: M1V2EvidenceExport["overhead"][number], identity: M1V2EvidenceExportIdentity): void {
   assertExactKeys(row, OVERHEAD);
@@ -463,6 +500,44 @@ function assertOverhead(row: M1V2EvidenceExport["overhead"][number], identity: M
   if (row.armed !== false || row.armId !== null ||
       !SHA256.test(row.serializedRequestDigest) || row.serializedRequestDigestAlgorithm !== "hmac-sha256-observer-private-v1") throw new Error("sc01_export_overhead_value_invalid");
   route(row.routeId); serializer(row.serializerContract, row.routeId);
+  if (row.observation === null) return;
+  assertExactKeys(row.observation, ["envelope", "segments", "usage"]);
+  assertExactKeys(row.observation.envelope, [...ENVELOPE, "observedAtMs"]);
+  assertExactKeys(row.observation.usage, [...USAGE, "availabilityReason"]);
+  row.observation.segments.forEach((segment) => assertExactKeys(segment, [...SEGMENT, "order", "byteLength"]));
+  assertEnvelopeValues(row.observation.envelope, row.attemptDigest, row.providerSendBytes, identity, null);
+  if (Math.abs(Number(row.observation.envelope.observedAtMs) - row.terminatedAtMs) > 5_000) throw new Error("sc01_export_overhead_envelope_invalid");
+  const ids = new Set<string>();
+  row.observation.segments.forEach((segment, order) => {
+    if (segment.schemaVersion !== "butler.m1-request-segment.v2" || segment.attemptDigest !== row.attemptDigest || segment.order !== order || segment.byteLength !== segment.providerSendBytes ||
+        !publicId(segment.segmentId) || ids.has(String(segment.segmentId)) || !OBSERVED_M1_REQUEST_SEGMENT_KINDS.includes(segment.kind as never) ||
+        (segment.stability !== "stable" && segment.stability !== "dynamic") || !nonnegativeIntegerValue(segment.providerSendBytes) ||
+        !nullableNonnegativeInteger(segment.estimatedInputTokens) || !DIGEST.test(String(segment.keyedContentDigest))) throw new Error("sc01_export_overhead_segment_invalid");
+    ids.add(String(segment.segmentId));
+  });
+  if (row.observation.segments.reduce((sum, segment) => sum + Number(segment.providerSendBytes), 0) !== row.providerSendBytes) throw new Error("sc01_export_overhead_byte_invariant_failed");
+  try { assertUsageValues(row.observation.usage, row.attemptDigest); } catch { throw new Error("sc01_export_overhead_usage_invalid"); }
+}
+
+const USAGE_TOKEN_KEYS = ["promptTokens", "cacheReadTokens", "cacheWriteTokens", "outputTokens", "reasoningTokens", "totalTokens"] as const;
+function assertEnvelopeValues(envelope: Record<string, unknown>, attemptDigest: string, bytes: number, identity: M1V2EvidenceExportIdentity, armId: M1V2ArmId | null): void {
+  if (envelope.schemaVersion !== "butler.m1-request-envelope.v2" || envelope.attemptDigest !== attemptDigest ||
+      !DIGEST.test(String(envelope.turnDigest)) || !DIGEST.test(String(envelope.phaseDigest)) || !nonnegativeIntegerValue(envelope.roundIndex) ||
+      !nonnegativeIntegerValue(envelope.retryOrdinal) || envelope.providerId !== identity.expectedProviderId || envelope.modelRef !== identity.expectedModelRef ||
+      envelope.armId !== armId || envelope.sourceRevision !== identity.sourceRevision || !nullablePublicRef(envelope.cacheBoundaryRevision) ||
+      envelope.providerSendBytes !== bytes || !nullableNonnegativeInteger(envelope.estimatedInputTokens) ||
+      typeof envelope.eligibility !== "string" || !ELIGIBILITY.has(envelope.eligibility) || !nonnegativeIntegerValue(envelope.observedAtMs)) {
+    throw new Error(armId === null ? "sc01_export_overhead_envelope_invalid" : "sc01_export_envelope_value_invalid");
+  }
+}
+function assertUsageValues(usage: Record<string, unknown>, attemptDigest: string, allowAbsent = false): void {
+  const reasons = allowAbsent ? ["provider_usage_unavailable", "provider_usage_reported", "provider_usage_row_absent"] : ["provider_usage_unavailable", "provider_usage_reported"];
+  if (usage.schemaVersion !== "butler.m1-response-usage.v2" || usage.attemptDigest !== attemptDigest ||
+      (usage.status !== "usage_bearing" && usage.status !== "unavailable") || !reasons.includes(String(usage.availabilityReason)) ||
+      (usage.status === "usage_bearing" && usage.availabilityReason !== "provider_usage_reported") ||
+      (usage.status === "unavailable" && usage.availabilityReason === "provider_usage_reported") ||
+      !USAGE_TOKEN_KEYS.every((key) => nullableNonnegativeInteger(usage[key])) ||
+      (usage.status === "unavailable" && !USAGE_TOKEN_KEYS.every((key) => usage[key] === null))) throw new Error("sc01_export_usage_value_invalid");
 }
 
 type DurablePhysicalRequest = M1V2EvidenceExport["attempts"][number] | M1V2EvidenceExport["overhead"][number];

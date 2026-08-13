@@ -70,6 +70,12 @@ export function emptyM1V2Repetition(
       title: { attempts: 0, providerSendBytes: 0 },
       toolProvider: { attempts: 0, providerSendBytes: 0 },
     },
+    overheadUsage: {
+      auxiliary: { observed: 0, usageBearing: 0, unavailable: 0 },
+      title: { observed: 0, usageBearing: 0, unavailable: 0 },
+      toolProvider: { observed: 0, usageBearing: 0, unavailable: 0 },
+    },
+    allPhysical: { attempts: 0, providerSendBytes: 0, observedUsageRows: 0, usageBearingRows: 0, unavailableUsageRows: 0 },
     otherShare: null,
     reducibleShare: null,
     semanticRounds: 0,

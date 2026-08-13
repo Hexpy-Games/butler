@@ -12,8 +12,10 @@ import { m1V2ReportLines, summarizeM1V2Campaign } from "./m1-v2-report.ts";
 import { comparisonIndexForResult, comparisonIndexHtml, summarizePairedBenchmarkResult } from "./paired-evaluation.ts";
 import { verifyM1V2DurableProjection } from "./m1-v2-evidence-export.ts";
 import { getBenchmarkFixture } from "./fixtures.ts";
+import { benchmarkPlanIdentity } from "./planning.ts";
 
 export interface BenchmarkReportSummary {
+  planIdentity: string;
   runId: string;
   baselineSha: string;
   seed: number;
@@ -161,6 +163,7 @@ export function summarizeBenchmarkResult(result: BenchmarkResultFile): Benchmark
     };
   });
   return {
+    planIdentity: benchmarkPlanIdentity(result.plan),
     runId: result.run.runId,
     baselineSha: result.run.baselineSha,
     seed: result.run.seed,
@@ -210,6 +213,7 @@ export function generateBenchmarkReport(result: BenchmarkResultFile): string {
     "",
     `- Schema: \`${result.schema}\``,
     `- Run: \`${summary.runId}\``,
+    `- Plan identity: \`${summary.planIdentity}\``,
     `- Baseline: \`${summary.baselineSha}\``,
     `- Seed: \`${summary.seed}\``,
     `- Observations: ${summary.observationCount}`,

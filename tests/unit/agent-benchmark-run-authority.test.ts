@@ -54,10 +54,10 @@ test("M1 preflight accepts its exact plan source and gates a checkout mismatch",
     schema: "butler.agent-benchmark.provenance-identity.v1",
     authorityJsonlBasename: "authority.jsonl",
   });
-  expect(benchmarkPlanIdentity({
+  expect(() => benchmarkPlanIdentity({
     ...exact,
     provenance: { ...exact.provenance!, metadataSha256: "0".repeat(64) },
-  })).not.toBe(benchmarkPlanIdentity(exact));
+  })).toThrow("carried identity mismatch");
   const exactRun = await runAgentBenchmark({
     plan: exact,
     adapters,

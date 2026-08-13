@@ -161,6 +161,11 @@ export interface M1V2PhysicalOverheadSummary {
   attempts: number;
   providerSendBytes: number;
 }
+export interface M1V2OverheadUsageSummary {
+  observed: number;
+  usageBearing: number;
+  unavailable: number;
+}
 
 export interface M1V2RepetitionResult {
   armId: M1V2ArmId;
@@ -177,6 +182,8 @@ export interface M1V2RepetitionResult {
     title: M1V2PhysicalOverheadSummary;
     toolProvider: M1V2PhysicalOverheadSummary;
   };
+  overheadUsage?: Record<"auxiliary" | "title" | "toolProvider", M1V2OverheadUsageSummary>;
+  allPhysical?: { attempts: number; providerSendBytes: number; observedUsageRows: number; usageBearingRows: number; unavailableUsageRows: number };
   otherShare: number | null;
   reducibleShare: number | null;
   semanticRounds: number;
