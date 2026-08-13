@@ -15,7 +15,6 @@ import type {
 
 export const OPERATION_RESULT_REFERENCE_SCHEMA =
   "butler.operation-result-reference.v1" as const;
-export const OPERATION_RESULT_REPLAY_MIN_BYTES = 8 * 1024;
 const TRUE_FLAG_VALUES = new Set(["1", "true", "on", "yes"]);
 
 export function operationResultReplayEnabled(
@@ -89,8 +88,13 @@ export function createOperationResultReplay(input: {
           input.turnId,
           message.operationResultCallId ?? message.toolCallId,
         );
-        if (!record || !isReplayableLargeResult(record)) return message;
+        if (!record || !hasDurableReplayResult(record)) return message;
+        const reference = referenceFor(record);
+        const referenceContent = stableJson(reference);
         if (!record.deliveryState) {
+          if (!referenceSavesProviderMessageBytes(message.content, referenceContent)) {
+            return message;
+          }
           input.journal.admitResultDelivery({
             turnId: input.turnId,
             callId: record.callId,
@@ -117,10 +121,9 @@ export function createOperationResultReplay(input: {
             callId: record.callId,
           });
         }
-        const reference = referenceFor(record);
         return {
           ...message,
-          content: stableJson(reference),
+          content: referenceContent,
           imageAttachments: undefined,
           requestSegmentKind: "older_tool_result_projection",
           operationResultReference: reference,
@@ -238,10 +241,17 @@ function resultSucceeded(value: unknown): boolean {
     (value as Record<string, unknown>).ok === false);
 }
 
-function isReplayableLargeResult(record: GuidedToolJournalRecord): boolean {
+function hasDurableReplayResult(record: GuidedToolJournalRecord): boolean {
   if (record.status !== "completed" || record.result === undefined || !record.resultSha256) {
     return false;
   }
-  return Buffer.byteLength(stableJson(record.result), "utf8") >=
-    OPERATION_RESULT_REPLAY_MIN_BYTES;
+  return true;
+}
+
+function referenceSavesProviderMessageBytes(
+  raw: string,
+  reference: string,
+): boolean {
+  return Buffer.byteLength(JSON.stringify(reference), "utf8") <
+    Buffer.byteLength(JSON.stringify(raw), "utf8");
 }
