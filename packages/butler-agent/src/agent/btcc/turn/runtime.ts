@@ -51,7 +51,6 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
   private readonly activeTurns = new Map<string, Promise<BtccTurnOutcome>>();
 
   constructor(private readonly dependencies: TurnRuntimeDependencies) {}
-
   runTurn(
     command: BtccRunCommand,
     progress?: BtccTurnProgressObserver,

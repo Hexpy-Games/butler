@@ -18,14 +18,10 @@ export const AGENT_BTCC_STATEFUL_TABLES = [
   "btcc_guided_tool_calls",
   "btcc_guided_turn_work_bindings",
   "btcc_guided_work_checkpoint_revisions",
-  "btcc_guided_work_closeout_diagnostics",
-  "btcc_guided_work_disposition_commands",
-  "btcc_guided_work_disposition_revisions",
   "btcc_guided_work_effect_blockers",
   "btcc_guided_work_legacy_imports",
   "btcc_guided_work_mutations",
   "btcc_guided_work_plan_revisions",
-  "btcc_guided_work_relation_commands",
   "btcc_guided_work_results",
   "btcc_guided_work_review_revisions",
   "btcc_guided_work_session_heads",
@@ -50,4 +46,3 @@ export const AGENT_BTCC_STATEFUL_TABLES = [
 export const AGENT_BTCC_MIGRATION_MANIFEST_ID = createHash("sha256")
   .update(JSON.stringify({ schema: "butler.agent-btcc-manifest.v1", tables: AGENT_BTCC_STATEFUL_TABLES }))
   .digest("hex");
-

@@ -1,10 +1,11 @@
 import { spawn, type ChildProcess } from "child_process";
 import {
   closeSync,
+  existsSync,
   mkdirSync,
   openSync,
 } from "fs";
-import { dirname } from "path";
+import { dirname, join } from "path";
 import type { EventEmitter } from "events";
 import {
   NATIVE_SUPERVISOR_ID,
@@ -185,7 +186,13 @@ export class ManagedServiceDaemon {
     this.running.delete(serviceId);
     removeServiceState(this.options.butlerData, serviceId);
     this.log(`${serviceId} exited code=${code ?? "null"} signal=${signal ?? "null"}`);
-    if (this.stopping || running.spec.restartPolicy !== "watchdog") return;
+    const migrationFence = join(
+      this.options.butlerData,
+      "locks",
+      "app-gateway-migration-fence",
+    );
+    if (this.stopping || running.spec.restartPolicy !== "watchdog" ||
+      (serviceId === "app-gateway" && existsSync(migrationFence))) return;
     this.startChild(running.spec);
   }
 

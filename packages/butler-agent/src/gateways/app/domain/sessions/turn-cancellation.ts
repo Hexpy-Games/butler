@@ -34,19 +34,26 @@ export class AppTurnCancellation {
     }
 
     this.recordDecision(row);
-    const enqueueCancellation = this.input.serviceClient.enqueueAppCancellation;
-    if (!enqueueCancellation) throw new Error("app_cancellation_queue_unavailable");
-    enqueueCancellation.call(this.input.serviceClient, {
-      chatId: row.chat_id,
-      sessionId: sessionHintForRow(row.chat_id),
-      turnId,
-      requestId: `cancel:${turnId}`,
-      requestedAt: new Date().toISOString(),
-    }, { source: "app-turn-cancellation" });
+    this.dispatchPending(turnId, row.chat_id);
     return emptyResult(this.input.getTurn(turnId));
   }
 
   reconcile(sessionId?: string): void {
+    const pending = this.input.db
+      .query<{ id: string; chat_id: string }, [string | null, string | null]>(`
+        SELECT turns.id, turns.chat_id
+        FROM turns
+        JOIN app_turn_cancel_outbox
+          ON app_turn_cancel_outbox.turn_id = turns.id
+        WHERE turns.state = 'cancelling'
+          AND app_turn_cancel_outbox.state = 'pending'
+          AND app_turn_cancel_outbox.queue_id IS NULL
+          AND (? IS NULL OR turns.chat_id = ?)
+        ORDER BY turns.rowid ASC
+      `)
+      .all(sessionId ?? null, sessionId ?? null);
+    for (const row of pending) this.dispatchPending(row.id, row.chat_id);
+
     const rows = this.input.db
       .query<{ id: string; chat_id: string }, [string | null, string | null]>(`
         SELECT turns.id, turns.chat_id
@@ -111,6 +118,24 @@ export class AppTurnCancellation {
     })();
   }
 
+  private dispatchPending(turnId: string, chatId: string): void {
+    const pending = this.input.db.query<{ created_at: string }, [string]>(`
+      SELECT created_at FROM app_turn_cancel_outbox
+      WHERE turn_id = ? AND state = 'pending' AND queue_id IS NULL
+    `).get(turnId);
+    if (!pending) return;
+    const queued = this.input.serviceClient.enqueueAppCancellation({
+      chatId,
+      sessionId: sessionHintForRow(chatId),
+      turnId,
+      requestId: `cancel:${turnId}`,
+      requestedAt: pending.created_at,
+    }, { source: "app-turn-cancellation" });
+    this.input.db.query(`
+      UPDATE app_turn_cancel_outbox SET queue_id = ?
+      WHERE turn_id = ? AND state = 'pending' AND queue_id IS NULL
+    `).run(queued.queueId, turnId);
+  }
 }
 
 function emptyResult(turn: TurnRecord): TurnActionResult {
