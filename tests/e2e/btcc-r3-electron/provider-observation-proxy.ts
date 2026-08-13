@@ -610,6 +610,8 @@ async function serveFixtureResponse(input: {
   }
   input.observation.providerReportedModel = responseModel;
   input.observation.providerReportedServiceTier = "default";
+  input.observation.effectiveServiceTierAvailability = "reported";
+  input.observation.effectiveServiceTierReason = "provider_response_reported";
   const text = input.fixtureResponse.text ?? "fixture response";
   const output = {
     type: "message",

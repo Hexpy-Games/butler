@@ -40,6 +40,12 @@ interface TestProviderRequest extends Record<string, unknown> {
 }
 
 describe("M1 v2 product-owned evidence identity", () => {
+  test("typed Step identity rejects every physical request missing a bounded digest", () => {
+    expect(() => providerRequestTurnIdentities({
+      requests: [request(1, null, "title", 17, 110)], ordinalsBeforeSubmission: new Set(),
+      sessionId: "session-safe", turnId: "turn-safe",
+    })).toThrow("provider_request_physical_attempt_digest_invalid");
+  });
   test("accepts the exact clean Electron product session instead of reconstructing it from arm.key", () => {
     const { arm, fixture } = identityFixture();
     const sessionId = "chat-btcc-r3-e2e-agent-benchmark-direct-cold-controlled-rep-1";
@@ -80,15 +86,15 @@ describe("M1 v2 product-owned evidence identity", () => {
   test("joins only target Agent attempts while preserving typed title and auxiliary overhead", () => {
     const sessionId = "chat-btcc-r3-e2e-agent-benchmark-direct-cold-controlled-rep-1";
     const turnId = "turn-product-owned";
+    const auxiliaryAttempt = "V".repeat(43);
     const requests = [
       request(1, titleAttempt, "title", 17, 110),
-      request(2, null, "auxiliary", 23, 120),
+      request(2, auxiliaryAttempt, "auxiliary", 23, 120),
       request(3, attemptA, "agent", 100, 130),
     ];
     const summary = summarizePhysicalRequests(
       requests,
       [
-        envelope(titleAttempt, 17, 115, 0, null),
         envelope(attemptA, 100, 140, 0),
       ],
       "direct-cold",
@@ -97,7 +103,7 @@ describe("M1 v2 product-owned evidence identity", () => {
         turnId,
         providerRequestIdentities: [
           ownership(1, sessionId, turnId, "title", titleAttempt),
-          ownership(2, sessionId, turnId, "auxiliary", null),
+          ownership(2, sessionId, turnId, "auxiliary", auxiliaryAttempt),
           ownership(3, sessionId, turnId, "agent", attemptA),
         ],
       },
@@ -119,7 +125,7 @@ describe("M1 v2 product-owned evidence identity", () => {
     const overlappingPriorTitle = timedRequest(
       2, titleAttempt, "title", 17, 90, 130, 130,
     );
-    const targetAuxiliary = timedRequest(3, null, "auxiliary", 23, 105, 115, 115);
+    const targetAuxiliary = timedRequest(3, "V".repeat(43), "auxiliary", 23, 105, 115, 115);
     const targetAgent = timedRequest(4, attemptA, "agent", 100, 110, 150, 150);
     const targetTitleAttempt = "U".repeat(43);
     const targetTitle = timedRequest(
@@ -146,8 +152,6 @@ describe("M1 v2 product-owned evidence identity", () => {
       identities: targetIdentities,
       metrics: [
         ...attemptMetrics(attemptA, 100, 0, "eligible", "direct-warm"),
-        envelope(titleAttempt, 17, 130, 0, null),
-        envelope(targetTitleAttempt, 19, 165, 0, null),
       ],
       sessionId,
       turnId: targetTurnId,
@@ -187,7 +191,6 @@ describe("M1 v2 product-owned evidence identity", () => {
     const summary = summarizePhysicalRequests(
       [campaignTitle, targetAgent],
       [
-        envelope(titleAttempt, 17, terminatedAtMs, 0, null),
         envelope(attemptA, 100, 150, 0),
       ],
       "direct-cold",
@@ -305,14 +308,13 @@ describe("M1 v2 product-owned evidence identity", () => {
     const requests = [
       request(1, attemptA, "agent", 100, 130),
       request(2, titleAttempt, "title", 17, 205),
-      request(3, null, "auxiliary", 23, 210),
-      request(4, null, "tool_provider", 31, 215),
+      request(3, "V".repeat(43), "auxiliary", 23, 210),
+      request(4, "W".repeat(43), "tool_provider", 31, 215),
     ];
     const summary = summarizePhysicalRequests(
       requests,
       [
         envelope(attemptA, 100, 140, 0),
-        envelope(titleAttempt, 17, 210, 0, null),
       ],
       "direct-cold",
       {
@@ -334,7 +336,7 @@ describe("M1 v2 product-owned evidence identity", () => {
     });
   });
 
-  test("rejects a typed non-Agent envelope carrying the target arm", () => {
+  test.each([null, "direct-cold"] as const)("rejects a typed non-Agent SC01 envelope for arm %s", (envelopeArm) => {
     const sessionId = "chat-product-session";
     const turnId = "turn-product-owned";
     const summary = summarizePhysicalRequests(
@@ -344,7 +346,7 @@ describe("M1 v2 product-owned evidence identity", () => {
       ],
       [
         envelope(attemptA, 100, 140, 0),
-        envelope(titleAttempt, 17, 160, 0, "direct-cold"),
+        envelope(titleAttempt, 17, 160, 0, envelopeArm),
       ],
       "direct-cold",
       {
@@ -468,8 +470,8 @@ describe("M1 v2 product-owned evidence identity", () => {
         turnId,
       }),
       metrics: [
-        ...attemptMetrics(attemptA, 100, 0, "retry_contaminated"),
-        ...attemptMetrics(attemptB, 120, 1, "eligible"),
+        ...attemptMetrics(attemptA, 100, 0, "eligible"),
+        ...attemptMetrics(attemptB, 120, 1, "retry_contaminated"),
       ],
       sessionId,
       turnId,
@@ -481,7 +483,7 @@ describe("M1 v2 product-owned evidence identity", () => {
     for (const corrupt of [
       { ...cleanIdentities[0]!, sessionId: "chat-wrong" },
       { ...cleanIdentities[0]!, turnId: "turn-wrong" },
-      { ...cleanIdentities[0]!, attemptDigest: attemptB },
+      { ...cleanIdentities[0]!, physicalAttemptDigest: attemptB },
     ]) {
       const wrong = evaluateProductEvidence({
         requests: [agentA], metrics: attemptMetrics(attemptA, 100, 0, "eligible"),
@@ -491,14 +493,11 @@ describe("M1 v2 product-owned evidence identity", () => {
     }
 
     const lateTitle = request(2, titleAttempt, "title", 17, 205);
-    const lateAuxiliary = request(3, null, "auxiliary", 23, 205);
+    const lateAuxiliary = request(3, "V".repeat(43), "auxiliary", 23, 205);
     const late = evaluateProductEvidence({
       requests: [agentA, lateTitle, lateAuxiliary],
       identities: cleanIdentities,
-      metrics: [
-        ...attemptMetrics(attemptA, 100, 0, "eligible"),
-        ...attemptMetrics(titleAttempt, 17, 0, "eligible", null),
-      ],
+      metrics: attemptMetrics(attemptA, 100, 0, "eligible"),
       sessionId,
       turnId,
     });
@@ -607,9 +606,9 @@ function ownership(
   sessionId: string,
   turnId: string,
   requestKind: "agent" | "auxiliary" | "title",
-  attemptDigest: string | null,
+  physicalAttemptDigest: string,
 ) {
-  return { ordinal, sessionId, turnId, requestKind, attemptDigest };
+  return { ordinal, sessionId, turnId, requestKind, physicalAttemptDigest };
 }
 
 function envelope(

@@ -6,8 +6,7 @@ import type { OperationalMetricEvent } from
   "../../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
 import type { ProviderRequestTurnIdentity } from
   "../../e2e/btcc-r3-electron/contracts.ts";
-
-const TERMINAL_JOIN_TOLERANCE_MS = 5_000;
+import { isAgentSc01Role, isPhysicalRequestRole, physicalAttemptDigest, physicalRequestEnvelopeMatches, physicalRequestIdentityMatches } from "./physical-request-identity.ts";
 
 export function summarizePhysicalRequests(
   requests: Record<string, unknown>[],
@@ -32,21 +31,18 @@ export function summarizePhysicalRequests(
     turnId: stringValue(identity.turnId) ?? "",
     requestKind: stringValue(identity.requestKind) as
       ProviderRequestTurnIdentity["requestKind"],
-    attemptDigest: stringValue(identity.attemptDigest),
+    physicalAttemptDigest: stringValue(identity.physicalAttemptDigest) ?? "",
   }));
   const ownershipByOrdinal = new Map<number, ProviderRequestTurnIdentity>();
   const ownershipByDigest = new Map<string, ProviderRequestTurnIdentity>();
   const invalidAgentOrdinals: number[] = [];
   let invalidRequestIdentityCount = 0;
   for (const identity of targetRequests) {
-    const validKind = isProviderRequestKind(identity.requestKind);
-    const validAgentDigest = identity.requestKind !== "agent" ||
-      identity.attemptDigest !== null;
-    const conflictingDigest = identity.attemptDigest === null
-      ? false
-      : ownershipByDigest.has(identity.attemptDigest);
+    const validKind = isPhysicalRequestRole(identity.requestKind);
+    const validPhysicalDigest = physicalAttemptDigest(identity.physicalAttemptDigest) !== null;
+    const conflictingDigest = ownershipByDigest.has(identity.physicalAttemptDigest);
     if (!Number.isInteger(identity.ordinal) || identity.ordinal < 1 ||
-      !validKind || !validAgentDigest || ownershipByOrdinal.has(identity.ordinal) ||
+      !validKind || !validPhysicalDigest || ownershipByOrdinal.has(identity.ordinal) ||
       conflictingDigest || identity.sessionId !== targetSessionId ||
       identity.turnId !== targetTurnId) {
       invalidRequestIdentityCount += 1;
@@ -55,9 +51,7 @@ export function summarizePhysicalRequests(
       continue;
     }
     ownershipByOrdinal.set(identity.ordinal, identity);
-    if (identity.attemptDigest !== null) {
-      ownershipByDigest.set(identity.attemptDigest, identity);
-    }
+    ownershipByDigest.set(identity.physicalAttemptDigest, identity);
   }
   const requestsByOrdinal = new Map<number, Record<string, unknown>[]>();
   for (const request of requests) {
@@ -81,8 +75,7 @@ export function summarizePhysicalRequests(
       continue;
     }
     const request = matching[0]!;
-    const exactIdentity = request.requestKind === identity.requestKind &&
-      stringValue(request.attemptDigest) === identity.attemptDigest;
+    const exactIdentity = physicalRequestIdentityMatches(request, identity);
     const completeObservation = terminalTimestamp(request) !== null &&
       numberValue(request.serializedRequestBytes) !== null;
     if (!exactIdentity || !completeObservation) {
@@ -96,18 +89,23 @@ export function summarizePhysicalRequests(
     digest: string;
     request: Record<string, unknown> | null;
     armed: boolean;
-    excludedNonAgent: boolean;
     requestKind: ProviderRequestTurnIdentity["requestKind"] | null;
   }> = [];
+  const nonAgentRequestDigests = new Set(requests.flatMap((request) =>
+    isPhysicalRequestRole(request.requestKind) && !isAgentSc01Role(request.requestKind)
+      ? [stringValue(request.attemptDigest)] : []).filter((digest): digest is string => digest !== null));
   for (const envelope of envelopes) {
     const digest = stringValue(envelope.dimensions?.attemptDigest);
     const bytes = numberValue(envelope.dimensions?.providerSendBytes);
     if (!digest || bytes === null) continue;
+    if (nonAgentRequestDigests.has(digest)) {
+      joined.push({ digest, request: null, armed: false, requestKind: null });
+      continue;
+    }
     const candidates = targetCandidates
-      .filter(({ request, used }) => !used &&
-        stringValue(request.attemptDigest) === digest &&
-        numberValue(request.serializedRequestBytes) === bytes &&
-        Math.abs(envelope.ts - terminalTimestamp(request)!) <= TERMINAL_JOIN_TOLERANCE_MS)
+      .filter(({ request, used }) => !used && physicalRequestEnvelopeMatches(request, {
+        physicalAttemptDigest: digest, providerSendBytes: bytes, observedAtMs: envelope.ts,
+      }))
       .sort((left, right) => {
         const timeDelta = Math.abs(envelope.ts - terminalTimestamp(left.request)!) -
           Math.abs(envelope.ts - terminalTimestamp(right.request)!);
@@ -122,7 +120,6 @@ export function summarizePhysicalRequests(
         digest,
         request: null,
         armed: false,
-        excludedNonAgent: false,
         requestKind: null,
       });
       continue;
@@ -133,8 +130,6 @@ export function summarizePhysicalRequests(
       request: match.request,
       armed: match.identity.requestKind === "agent" &&
         envelope.dimensions?.armId === armId,
-      excludedNonAgent: match.identity.requestKind !== "agent" &&
-        envelope.dimensions?.armId === null,
       requestKind: match.identity.requestKind,
     });
   }
@@ -142,7 +137,7 @@ export function summarizePhysicalRequests(
     identity.requestKind === "agent" ? [] : [identity.ordinal]));
   const excluded = requests.filter((request) => {
     const ordinal = numberValue(request.ordinal);
-    if (!isProviderRequestKind(request.requestKind) || request.requestKind === "agent" ||
+    if (!isPhysicalRequestRole(request.requestKind) || isAgentSc01Role(request.requestKind) ||
       terminalTimestamp(request) === null ||
       numberValue(request.serializedRequestBytes) === null) return false;
     return ordinal === null || targetNonAgentOrdinals.has(ordinal) ||
@@ -152,7 +147,7 @@ export function summarizePhysicalRequests(
     identity.requestKind === "agent" ? [request] : []);
   const relevantEnvelopeDigests = new Set([
     ...targetCandidates.flatMap(({ identity }) =>
-      identity.attemptDigest === null ? [] : [identity.attemptDigest]),
+      [identity.physicalAttemptDigest]),
     ...envelopes.flatMap((envelope) =>
       envelope.dimensions?.armId === armId
         ? [stringValue(envelope.dimensions?.attemptDigest)]
@@ -163,7 +158,7 @@ export function summarizePhysicalRequests(
     title: physicalOverhead(excluded, "title"),
     toolProvider: physicalOverhead(excluded, "tool_provider"),
     unmatchedEnvelopeDigests: joined.flatMap((item) =>
-      item.request && (item.armed || item.excludedNonAgent)
+      item.request && item.armed
         ? []
         : [item.digest]),
     unmatchedRequestOrdinals: [
@@ -180,12 +175,6 @@ export function summarizePhysicalRequests(
   };
 }
 
-function isProviderRequestKind(
-  value: unknown,
-): value is ProviderRequestTurnIdentity["requestKind"] {
-  return value === "agent" || value === "auxiliary" ||
-    value === "title" || value === "tool_provider";
-}
 function duplicateValues(values: string[]): string[] {
   const seen = new Set<string>();
   const duplicates = new Set<string>();

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cleanupButlerRuntime } from "../support/agent-benchmark/butler-runtime-cleanup.ts";
@@ -15,6 +15,7 @@ test("durable SC01 projection survives cleanup and preserves exact nullable atte
   expect(result.evidence.attempts[0]!.segments.reduce((sum, row) => sum + Number(row.providerSendBytes), 0)).toBe(100);
   expect(result.evidence.attempts[0]!.usage.promptTokens).toBeNull();
   expect(result.evidence.overhead.map((row) => row.role)).toEqual(["title"]);
+  expect(result.evidence.overhead[0]!.attemptDigest).toBe("B".repeat(43));
   expect(JSON.stringify(result.evidence)).not.toContain(fixture.root);
   expect(exportedM1V2Metrics(result.evidence).filter((row) => row.name === "m1_v2_request_segment")
     .reduce((sum, row) => sum + Number(row.dimensions?.providerSendBytes), 0)).toBe(100);
@@ -24,7 +25,7 @@ test("durable SC01 projection survives cleanup and preserves exact nullable atte
   const cleanup = cleanupButlerRuntime(fixture.evidence, fixture.arm, "verified");
   expect(cleanup.status).toBe("removed");
   expect(existsSync(fixture.dataRoot)).toBe(false);
-  expect(verifyM1V2EvidenceExport({ path: result.absolutePath, expected: fixture.input.identity }).sha256).toBe(result.sha256);
+  expect(verifyM1V2EvidenceExport({ path: result.absolutePath, expected: result.evidence.identity }).sha256).toBe(result.sha256);
 });
 
 test("SC01 export fails closed on privacy extras, temp/conflict/mutation, and blocks cleanup", () => {
@@ -74,7 +75,7 @@ test("SC01 export fails closed on privacy extras, temp/conflict/mutation, and bl
   const mutated = exportFixture();
   const output = materializeM1V2EvidenceExport(mutated.input);
   writeFileSync(output.absolutePath, readFileSync(output.absolutePath, "utf8").replace("100", "101"));
-  expect(() => verifyM1V2EvidenceExport({ path: output.absolutePath, expected: mutated.input.identity })).toThrow();
+  expect(() => verifyM1V2EvidenceExport({ path: output.absolutePath, expected: output.evidence.identity })).toThrow();
   expect(() => materializeM1V2EvidenceExport(mutated.input)).toThrow("immutable");
 
 });
@@ -85,7 +86,7 @@ test("SC01 reopen rejects a malicious typed value even with a recomputed content
   forgedValue.attempts[0]!.usage.promptTokens = "raw private data";
   forgedValue.contentSha256 = createHash("sha256").update(JSON.stringify({ ...forgedValue, contentSha256: "" })).digest("hex");
   writeFileSync(forgedOutput.absolutePath, `${JSON.stringify(forgedValue, null, 2)}\n`);
-  expect(() => verifyM1V2EvidenceExport({ path: forgedOutput.absolutePath, expected: forged.input.identity })).toThrow("usage_value_invalid");
+  expect(() => verifyM1V2EvidenceExport({ path: forgedOutput.absolutePath, expected: forgedOutput.evidence.identity })).toThrow("usage_value_invalid");
 });
 
 test("SC01 rejects unavailable usage tokens and provider identity drift before cleanup", () => {
@@ -108,15 +109,33 @@ test("unknown effective tier remains durable but reconstructs a rejected target 
   expect(exportedM1V2Metrics(exported).find((row) => row.name === "m1_v2_request_envelope")?.dimensions?.eligibility).toBe("rejected");
 });
 
+test("non-Agent effective tier is preserved for default, nondefault, and unknown responses", () => {
+  const cases = [
+    ["default", "reported", "provider_response_reported"],
+    ["flex", "reported", "provider_response_reported"],
+    [null, "unavailable", "provider_response_omitted"],
+  ] as const;
+  for (const [tier, availability, reason] of cases) {
+    const fixture = exportFixture(); const request = fixture.input.providerRequests[1]!;
+    Object.assign(request, { providerReportedServiceTier: tier });
+    request.effectiveServiceTierAvailability = availability;
+    request.effectiveServiceTierReason = reason;
+    expect(materializeM1V2EvidenceExport(fixture.input).evidence.overhead[0]).toMatchObject({
+      requestedServiceTierMode: "auto_by_omission", effectiveServiceTier: tier,
+      effectiveServiceTierAvailability: availability, effectiveServiceTierReason: reason,
+    });
+  }
+});
+
 test("SC01 export keeps retries and typed overhead ownership separate with nullable usage", () => {
-  const fixture = exportFixture(); const secondDigest = "B".repeat(43);
+  const fixture = exportFixture(); const secondDigest = "E".repeat(43);
   const firstRequest = fixture.input.providerRequests[0]!;
   fixture.input.providerRequests.push({ ...firstRequest, ordinal: 3, attemptDigest: secondDigest, requestStartedAtMs: 210, completedAtMs: 300, terminatedAtMs: 300 });
-  fixture.input.providerRequests.push({ ...firstRequest, ordinal: 4, attemptDigest: null, requestKind: "auxiliary", serializedRequestBytes: 20, requestStartedAtMs: 310, completedAtMs: 320, terminatedAtMs: 320 });
-  fixture.input.providerRequests.push({ ...firstRequest, ordinal: 5, attemptDigest: null, requestKind: "tool_provider", serializedRequestBytes: 30, requestStartedAtMs: 330, completedAtMs: 350, terminatedAtMs: 350 });
+  fixture.input.providerRequests.push({ ...firstRequest, ordinal: 4, attemptDigest: "C".repeat(43), requestKind: "auxiliary", serializedRequestBytes: 20, requestStartedAtMs: 310, completedAtMs: 320, terminatedAtMs: 320 });
+  fixture.input.providerRequests.push({ ...firstRequest, ordinal: 5, attemptDigest: "D".repeat(43), requestKind: "tool_provider", serializedRequestBytes: 30, requestStartedAtMs: 330, completedAtMs: 350, terminatedAtMs: 350 });
   const memberships = fixture.input.target.providerRequestIdentities as Record<string, unknown>[];
-  memberships.push({ ordinal: 3, sessionId: fixture.input.identity.sessionId, turnId: fixture.input.identity.turnId, requestKind: "agent", attemptDigest: secondDigest });
-  memberships.push({ ordinal: 4, sessionId: fixture.input.identity.sessionId, turnId: fixture.input.identity.turnId, requestKind: "auxiliary", attemptDigest: null });
+  memberships.push({ ordinal: 3, sessionId: fixture.input.identity.sessionId, turnId: fixture.input.identity.turnId, requestKind: "agent", physicalAttemptDigest: secondDigest });
+  memberships.push({ ordinal: 4, sessionId: fixture.input.identity.sessionId, turnId: fixture.input.identity.turnId, requestKind: "auxiliary", physicalAttemptDigest: "C".repeat(43) });
   const source = fixture.input.metrics.slice(0, 4);
   fixture.input.metrics.push(...source.map((row) => ({ ...row, ts: 300, dimensions: { ...row.dimensions, attemptDigest: secondDigest,
     ...(row.name === "m1_v2_request_envelope" ? { retryOrdinal: 1, eligibility: "retry_contaminated" } : {}) } })));
@@ -126,18 +145,163 @@ test("SC01 export keeps retries and typed overhead ownership separate with nulla
   expect(exported.overhead.map((row) => [row.role, row.ownership])).toEqual([
     ["title", "target_step"], ["auxiliary", "target_step"], ["tool_provider", "unarmed_physical_overhead"],
   ]);
+  expect(exported.overhead.map((row) => row.attemptDigest)).toEqual([
+    "B".repeat(43), "C".repeat(43), "D".repeat(43),
+  ]);
+});
+
+test("non-Agent physical digests are exact identities without SC01 segments", () => {
+  const fixture = exportFixture();
+  fixture.input.providerRequests.push({
+    ...fixture.input.providerRequests[0]!, ordinal: 3, requestKind: "auxiliary",
+    attemptDigest: "C".repeat(43), serializedRequestBytes: 30,
+    requestStartedAtMs: 210, completedAtMs: 230, terminatedAtMs: 230,
+  });
+  (fixture.input.target.providerRequestIdentities as Record<string, unknown>[]).push({
+    ordinal: 3, sessionId: fixture.input.identity.sessionId,
+    turnId: fixture.input.identity.turnId, requestKind: "auxiliary",
+    physicalAttemptDigest: "C".repeat(43),
+  });
+  const exported = materializeM1V2EvidenceExport(fixture.input).evidence;
+  expect(exported.attempts.map((row) => row.serializedRequestBytes)).toEqual([100]);
+  expect(exported.overhead.map((row) => [row.role, row.attemptDigest, row.providerSendBytes])).toEqual([
+    ["title", "B".repeat(43), 20],
+    ["auxiliary", "C".repeat(43), 30],
+  ]);
+  expect(exported.counts).toMatchObject({ attempts: 1, overhead: 2, segments: 2 });
+});
+
+test("non-Agent physical identity fails closed on digest and fabricated SC01 evidence", () => {
+  const missing = exportFixture(); missing.input.providerRequests[1]!.attemptDigest = null;
+  expect(() => materializeM1V2EvidenceExport(missing.input)).toThrow("attempt_digest_invalid");
+
+  const crossRole = exportFixture(); crossRole.input.providerRequests[1]!.attemptDigest = "A".repeat(43);
+  expect(() => materializeM1V2EvidenceExport(crossRole.input)).toThrow();
+
+  const fabricatedSegment = exportFixture();
+  fabricatedSegment.input.metrics.push({ ...fabricatedSegment.input.metrics[1]!, dimensions: {
+    ...fabricatedSegment.input.metrics[1]!.dimensions!, attemptDigest: "B".repeat(43), segmentId: "non-agent-segment",
+  } });
+  expect(() => materializeM1V2EvidenceExport(fabricatedSegment.input)).toThrow("non_agent_sc01_evidence_invalid");
+
+  const armTagged = exportFixture();
+  armTagged.input.metrics.push({ ...armTagged.input.metrics[0]!, dimensions: {
+    ...armTagged.input.metrics[0]!.dimensions!, attemptDigest: "B".repeat(43), providerSendBytes: 20,
+  } });
+  expect(() => materializeM1V2EvidenceExport(armTagged.input)).toThrow("arm_tagged_non_agent_rejected");
+});
+
+test("physical request identity fails closed on role, owner, ordinal, bytes, status, and timing drift", () => {
+  const mutations: Array<[string, (fixture: ReturnType<typeof exportFixture>) => void]> = [
+    ["role", (fixture) => { fixture.input.providerRequests[1]!.requestKind = "auxiliary"; }],
+    ["turn", (fixture) => { (fixture.input.target.providerRequestIdentities as Record<string, unknown>[])[1]!.turnId = "turn-other"; }],
+    ["ordinal", (fixture) => { fixture.input.providerRequests[1]!.ordinal = 1; }],
+    ["bytes", (fixture) => { fixture.input.providerRequests[0]!.serializedRequestBytes = 101; }],
+    ["status", (fixture) => { fixture.input.providerRequests[1]!.status = 99; }],
+    ["timing", (fixture) => { fixture.input.providerRequests[1]!.terminatedAtMs = 1; }],
+  ];
+  for (const [, mutate] of mutations) {
+    const fixture = exportFixture(); mutate(fixture);
+    expect(() => materializeM1V2EvidenceExport(fixture.input)).toThrow();
+  }
+});
+
+test("durable overhead tamper fails closed on terminal, provider status, and effective tier", () => {
+  for (const mutate of [
+    (row: Record<string, unknown>) => { row.terminalStatus = "pending"; },
+    (row: Record<string, unknown>) => { row.providerStatus = 99; },
+    (row: Record<string, unknown>) => { row.effectiveServiceTierAvailability = "unavailable"; },
+    (row: Record<string, unknown>) => { row.effectiveServiceTierReason = "provider_response_omitted"; },
+  ]) {
+    const fixture = exportFixture(); const output = materializeM1V2EvidenceExport(fixture.input);
+    const value = JSON.parse(readFileSync(output.absolutePath, "utf8")) as Record<string, unknown> & { overhead: Record<string, unknown>[]; contentSha256: string };
+    mutate(value.overhead[0]!);
+    value.contentSha256 = createHash("sha256").update(JSON.stringify({ ...value, contentSha256: "" })).digest("hex");
+    writeFileSync(output.absolutePath, `${JSON.stringify(value, null, 2)}\n`);
+    expect(() => verifyM1V2EvidenceExport({ path: output.absolutePath, expected: output.evidence.identity })).toThrow();
+  }
+});
+
+test("durable reopen rejects ownership inversion and cross-role digest tamper with a recomputed hash", () => {
+  const mutations: Array<(value: DurableFixtureValue) => void> = [
+    (value) => { value.overhead[0]!.sessionId = "session-other"; },
+    (value) => { value.overhead[0]!.attemptDigest = value.attempts[0]!.attemptDigest; },
+    (value) => { value.attempts[0]!.ownership = "other_step"; },
+  ];
+  for (const mutate of mutations) {
+    const fixture = exportFixture(); const output = materializeM1V2EvidenceExport(fixture.input);
+    rewriteDurableEvidence(output.absolutePath, mutate);
+    expect(() => verifyM1V2EvidenceExport({ path: output.absolutePath, expected: output.evidence.identity })).toThrow();
+  }
+});
+
+test("external membership identity rejects fully rewritten primary and retry ownership", () => {
+  const retryDigest = "R".repeat(43);
+  for (const index of [0, 1]) {
+    const copy = exportFixture();
+    copy.input.providerRequests.push({ ...copy.input.providerRequests[0]!, ordinal: 3, attemptDigest: retryDigest, requestStartedAtMs: 210, completedAtMs: 230, terminatedAtMs: 230 });
+    (copy.input.target.providerRequestIdentities as Record<string, unknown>[]).push({ ordinal: 3, sessionId: copy.input.identity.sessionId,
+      turnId: copy.input.identity.turnId, requestKind: "agent", physicalAttemptDigest: retryDigest });
+    copy.input.metrics.push(...copy.input.metrics.slice(0, 4).map((row) => ({ ...row, ts: 230, dimensions: { ...row.dimensions, attemptDigest: retryDigest,
+      ...(row.name === "m1_v2_request_envelope" ? { retryOrdinal: 1, eligibility: "retry_contaminated" } : {}) } })));
+    const copyOutput = materializeM1V2EvidenceExport(copy.input);
+    rewriteDurableEvidence(copyOutput.absolutePath, (value) => {
+      const row = value.attempts[index]!;
+      row.ownership = "other_step"; row.stepId = "other-step"; row.sessionId = "other-session"; row.turnId = "other-turn";
+      row.envelope.retryOrdinal = 0; row.envelope.eligibility = "usage_unavailable";
+    }, true);
+    expect(() => verifyM1V2EvidenceExport({ path: copyOutput.absolutePath, expected: copyOutput.evidence.identity })).toThrow("identity_mismatch");
+  }
+});
+
+test("durable reopen rejects envelope timing and terminal status drift", () => {
+  for (const mutate of [
+    (value: DurableFixtureValue) => { value.attempts[0]!.envelope.observedAtMs = value.attempts[0]!.terminatedAtMs + 5_001; },
+    (value: DurableFixtureValue) => { value.attempts[0]!.providerStatus = 500; },
+  ]) {
+    const fixture = exportFixture(); const output = materializeM1V2EvidenceExport(fixture.input);
+    rewriteDurableEvidence(output.absolutePath, mutate);
+    expect(() => verifyM1V2EvidenceExport({ path: output.absolutePath, expected: output.evidence.identity })).toThrow();
+  }
+});
+
+test("durable retries require exact contiguous ordinals and contaminated eligibility", () => {
+  const fixture = exportFixture(); const retryDigest = "R".repeat(43);
+  fixture.input.providerRequests.push({ ...fixture.input.providerRequests[0]!, ordinal: 3, attemptDigest: retryDigest, requestStartedAtMs: 210, completedAtMs: 230, terminatedAtMs: 230 });
+  (fixture.input.target.providerRequestIdentities as Record<string, unknown>[]).push({ ordinal: 3, sessionId: fixture.input.identity.sessionId,
+    turnId: fixture.input.identity.turnId, requestKind: "agent", physicalAttemptDigest: retryDigest });
+  fixture.input.metrics.push(...fixture.input.metrics.slice(0, 4).map((row) => ({ ...row, ts: 230, dimensions: { ...row.dimensions, attemptDigest: retryDigest,
+    ...(row.name === "m1_v2_request_envelope" ? { retryOrdinal: 1, eligibility: "retry_contaminated" } : {}) } })));
+  const output = materializeM1V2EvidenceExport(fixture.input);
+  expect(output.evidence.attempts.map((row) => row.envelope.retryOrdinal)).toEqual([0, 1]);
+
+  for (const mutate of [
+    (value: DurableFixtureValue) => { value.attempts[1]!.envelope.retryOrdinal = 0; },
+    (value: DurableFixtureValue) => { value.attempts[1]!.envelope.retryOrdinal = 2; },
+    (value: DurableFixtureValue) => { value.attempts[1]!.envelope.eligibility = "usage_unavailable"; },
+  ]) {
+    const tampered = exportFixture();
+    tampered.input.providerRequests.push({ ...tampered.input.providerRequests[0]!, ordinal: 3, attemptDigest: retryDigest, requestStartedAtMs: 210, completedAtMs: 230, terminatedAtMs: 230 });
+    (tampered.input.target.providerRequestIdentities as Record<string, unknown>[]).push({ ordinal: 3, sessionId: tampered.input.identity.sessionId,
+      turnId: tampered.input.identity.turnId, requestKind: "agent", physicalAttemptDigest: retryDigest });
+    tampered.input.metrics.push(...tampered.input.metrics.slice(0, 4).map((row) => ({ ...row, ts: 230, dimensions: { ...row.dimensions, attemptDigest: retryDigest,
+      ...(row.name === "m1_v2_request_envelope" ? { retryOrdinal: 1, eligibility: "retry_contaminated" } : {}) } })));
+    const tamperedOutput = materializeM1V2EvidenceExport(tampered.input);
+    rewriteDurableEvidence(tamperedOutput.absolutePath, mutate);
+    expect(() => verifyM1V2EvidenceExport({ path: tamperedOutput.absolutePath, expected: tamperedOutput.evidence.identity })).toThrow();
+  }
 });
 
 test("failed physical attempt without canonical usage stays explicit unavailable before successful retry", () => {
   const fixture = exportFixture(); const retryDigest = "R".repeat(43);
   fixture.input.metrics[0]!.dimensions!.eligibility = "rejected";
   fixture.input.metrics.splice(3, 1);
-  fixture.input.providerRequests[0]!.termination = "failed"; fixture.input.providerRequests[0]!.status = 500;
-  fixture.input.providerRequests.push({ ...fixture.input.providerRequests[0]!, ordinal: 3, attemptDigest: retryDigest, termination: "completed", status: 200 });
+  fixture.input.providerRequests[0]!.termination = "failed"; Object.assign(fixture.input.providerRequests[0]!, { completedAtMs: null }); fixture.input.providerRequests[0]!.status = 500;
+  fixture.input.providerRequests.push({ ...fixture.input.providerRequests[0]!, ordinal: 3, attemptDigest: retryDigest, termination: "completed", completedAtMs: 203, terminatedAtMs: 203, status: 200 });
   (fixture.input.target.providerRequestIdentities as Record<string, unknown>[]).push({ ordinal: 3, sessionId: fixture.input.identity.sessionId,
-    turnId: fixture.input.identity.turnId, requestKind: "agent", attemptDigest: retryDigest });
+    turnId: fixture.input.identity.turnId, requestKind: "agent", physicalAttemptDigest: retryDigest });
   fixture.input.metrics.push(...exportFixture().input.metrics.map((row) => ({ ...row, dimensions: { ...row.dimensions, attemptDigest: retryDigest,
-    ...(row.name === "m1_v2_request_envelope" ? { retryOrdinal: 1 } : {}) } })));
+    ...(row.name === "m1_v2_request_envelope" ? { retryOrdinal: 1, eligibility: "retry_contaminated" } : {}) } })));
   const exported = materializeM1V2EvidenceExport(fixture.input).evidence;
   expect(exported.attempts[0]!.usage).toMatchObject({ status: "unavailable", promptTokens: null, availabilityReason: "provider_usage_row_absent" });
   expect(exported.counts).toMatchObject({ canonicalUsageRows: 1, projectedUsage: 2 });
@@ -151,7 +315,7 @@ test("direct-warm export selects target membership before same-arm warmup metric
   fixture.input.providerRequests.unshift({ ...fixture.input.providerRequests[0]!, ordinal: 3, attemptDigest: warmupDigest,
     requestStartedAtMs: 50, completedAtMs: 90, terminatedAtMs: 90 });
   fixture.input.observations.unshift({ stepId: "warmup", sessionId: "session-warmup", turnId: "turn-warmup", providerRequestIdentities: [
-    { ordinal: 3, sessionId: "session-warmup", turnId: "turn-warmup", requestKind: "agent", attemptDigest: warmupDigest },
+    { ordinal: 3, sessionId: "session-warmup", turnId: "turn-warmup", requestKind: "agent", physicalAttemptDigest: warmupDigest },
   ] });
   fixture.input.metrics.unshift(...targetRows.map((row) => ({ ...row, ts: 90, dimensions: { ...row.dimensions, attemptDigest: warmupDigest,
     ...(row.name === "m1_v2_request_envelope" ? { armId: "direct-warm", roundIndex: 0 } : {}) } })));
@@ -166,21 +330,21 @@ test("direct-warm export selects target membership before same-arm warmup metric
 test("other-step membership must match its owning observation Session and Turn", () => {
   const fixture = exportFixture(); const digest = "W".repeat(43);
   fixture.input.observations.unshift({ stepId: "warmup", sessionId: "session-warmup", turnId: "turn-warmup", providerRequestIdentities: [
-    { ordinal: 3, sessionId: "session-safe", turnId: "turn-warmup", requestKind: "agent", attemptDigest: digest },
+    { ordinal: 3, sessionId: "session-safe", turnId: "turn-warmup", requestKind: "agent", physicalAttemptDigest: digest },
   ] });
   expect(() => materializeM1V2EvidenceExport(fixture.input)).toThrow("membership_owner_identity_mismatch");
 });
 
 test("SC01 rejects missing and unknown same-arm Agent ownership", () => {
   const missing = exportFixture(); missing.input.observations.push({ stepId: "warmup", sessionId: "session-warmup", turnId: "turn-warmup", providerRequestIdentities: [
-    { ordinal: 3, sessionId: "session-warmup", turnId: "turn-warmup", requestKind: "agent", attemptDigest: "W".repeat(43) },
+    { ordinal: 3, sessionId: "session-warmup", turnId: "turn-warmup", requestKind: "agent", physicalAttemptDigest: "W".repeat(43) },
   ] });
   missing.input.providerRequests.push({ ...missing.input.providerRequests[0]!, ordinal: 3, attemptDigest: "W".repeat(43) });
   expect(() => materializeM1V2EvidenceExport(missing.input)).toThrow("membership_incomplete");
   const extra = exportFixture(); extra.input.metrics.unshift(...extra.input.metrics.slice(0, 4).map((row) => ({ ...row, dimensions: { ...row.dimensions, attemptDigest: "X".repeat(43) } })));
   expect(() => materializeM1V2EvidenceExport(extra.input)).toThrow("physical_attempt_join_failed");
   const orphanRequest = exportFixture(); orphanRequest.input.providerRequests.push({ ...orphanRequest.input.providerRequests[0]!, ordinal: 4, attemptDigest: null });
-  expect(() => materializeM1V2EvidenceExport(orphanRequest.input)).toThrow("membership_incomplete");
+  expect(() => materializeM1V2EvidenceExport(orphanRequest.input)).toThrow("attempt_digest_invalid");
   const missingOverhead = exportFixture(); missingOverhead.input.providerRequests.splice(1, 1);
   expect(() => materializeM1V2EvidenceExport(missingOverhead.input)).toThrow("non_agent_membership_incomplete");
 });
@@ -189,6 +353,23 @@ test("SC01 publication rejects a symlinked evidence root", () => {
   const fixture = exportFixture(); const external = mkdtempSync(join(tmpdir(), "sc01-external-")); const link = join(fixture.input.runRoot, "linked-evidence");
   symlinkSync(external, link); fixture.input.evidenceRoot = link;
   expect(() => materializeM1V2EvidenceExport(fixture.input)).toThrow("symlink_rejected");
+});
+
+test("durable authority precedes evidence publication and makes a write failure retryable", () => {
+  const fixture = exportFixture();
+  const evidencePath = join(fixture.input.evidenceRoot, "sc01-public-evidence.json");
+  mkdirSync(evidencePath);
+  expect(() => materializeM1V2EvidenceExport(fixture.input)).toThrow();
+  expect(readdirSync(join(fixture.input.runRoot, ".sc01-durable-authority"))).toHaveLength(1);
+  rmSync(evidencePath, { recursive: true });
+  expect(materializeM1V2EvidenceExport(fixture.input).evidence.attempts).toHaveLength(1);
+});
+
+test("durable authority publication rejects a pre-positioned symlink", () => {
+  const fixture = exportFixture(); const external = mkdtempSync(join(tmpdir(), "sc01-authority-external-"));
+  symlinkSync(external, join(fixture.input.runRoot, ".sc01-durable-authority"));
+  expect(() => materializeM1V2EvidenceExport(fixture.input)).toThrow("authority_symlink_rejected");
+  expect(readdirSync(external)).toEqual([]);
 });
 
 test("real Butler adapter blocks failed export, preserves dataRoot, and forbids post-dispatch replacement", async () => {
@@ -219,7 +400,7 @@ function exportFixture() {
   const root = mkdtempSync(join(tmpdir(), "sc01-export-"));
   const runRoot = join(root, "run"); const evidenceRoot = join(runRoot, "arms/block-1/before/evidence");
   const dataRoot = join(evidenceRoot, "data"); mkdirSync(dataRoot, { recursive: true });
-  const digest = "A".repeat(43); const sessionId = "session-safe"; const turnId = "turn-safe";
+  const digest = "A".repeat(43); const titleDigest = "B".repeat(43); const sessionId = "session-safe"; const turnId = "turn-safe";
   const provider = (ordinal: number, role: "agent" | "title" | "auxiliary" | "tool_provider", bytes: number, attemptDigest: string | null) => ({
     ordinal, attemptDigest, requestKind: role, requestedModel: "gpt-5.6-sol", requestedReasoning: "medium", requestedServiceTier: null, requestedServiceTierMode: "auto_by_omission",
     authorizationScheme: "bearer", routeId: "openai-codex-responses", requestStartedAtMs: 100 + ordinal,
@@ -243,14 +424,33 @@ function exportFixture() {
       cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null, reasoningTokens: null, totalTokens: null }),
   ];
   const target = { stepId: "target", sessionId, turnId, providerRequestIdentities: [
-    { ordinal: 1, sessionId, turnId, requestKind: "agent", attemptDigest: digest },
-    { ordinal: 2, sessionId, turnId, requestKind: "title", attemptDigest: null },
+    { ordinal: 1, sessionId, turnId, requestKind: "agent", physicalAttemptDigest: digest },
+    { ordinal: 2, sessionId, turnId, requestKind: "title", physicalAttemptDigest: titleDigest },
   ] };
   const evidence = { run: { dataRoot } };
   const arm = { evidenceRoot, outputRoot: join(runRoot, "output"), cacheRoot: join(runRoot, "cache"), dataRoot: join(runRoot, "declared-data"), sourceRoot: join(root, "source") };
   return { root, dataRoot, evidence, arm, input: { runRoot, evidenceRoot, identity: { planIdentity: "a".repeat(64), sourceRevision: "c".repeat(40), fixtureHash: "f".repeat(64),
     armKey: "direct-cold:before", armId: "direct-cold" as const, repetition: 1, block: 1, stepId: "target",
     version: "before" as const, pairId: "pair-1", armOrder: 0, sessionId, turnId, expectedProviderId: "openai-codex" as const,
-    expectedModelRef: "openai/gpt-5.6-sol", expectedRouteId: "openai-codex-responses" as const, expectedCacheBoundaryRevision: "current" },
-    target, observations: [target], providerRequests: [provider(1, "agent", 100, digest), provider(2, "title", 20, null)], metrics } };
+    expectedModelRef: "openai/gpt-5.6-sol", expectedRouteId: "openai-codex-responses" as const, expectedCacheBoundaryRevision: "current", membershipSha256: null },
+    target, observations: [target], providerRequests: [provider(1, "agent", 100, digest), provider(2, "title", 20, titleDigest)], metrics } };
+}
+
+type DurableFixtureValue = {
+  identity: { membershipSha256: string | null };
+  attempts: Array<{ ownership: string; stepId: string; sessionId: string; turnId: string; role: string; ordinal: number; attemptDigest: string; terminatedAtMs: number; providerStatus: number | null; envelope: Record<string, unknown> }>;
+  overhead: Array<{ sessionId: string | null; attemptDigest: string }>;
+  contentSha256: string;
+};
+
+function rewriteDurableEvidence(path: string, mutate: (value: DurableFixtureValue) => void, rewriteMembership = false): void {
+  const value = JSON.parse(readFileSync(path, "utf8")) as DurableFixtureValue;
+  mutate(value);
+  if (rewriteMembership) value.identity.membershipSha256 = createHash("sha256").update(JSON.stringify([...value.attempts, ...value.overhead].map((row) => ({
+    ordinal: (row as { ordinal?: number }).ordinal, role: (row as { role?: string }).role, ownership: (row as { ownership?: string }).ownership,
+    stepId: (row as { stepId?: string | null }).stepId, sessionId: row.sessionId, turnId: (row as { turnId?: string | null }).turnId,
+    physicalAttemptDigest: row.attemptDigest,
+  })))).digest("hex");
+  value.contentSha256 = createHash("sha256").update(JSON.stringify({ ...value, contentSha256: "" })).digest("hex");
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }

@@ -146,7 +146,7 @@ describe("unified agent benchmark M1 v2 campaign", () => {
           sessionId: `chat-btcc-r3-e2e-agent-benchmark-${arm.key.replaceAll(":", "-")}`,
           turnId: "turn-direct",
           requestKind: "agent",
-          attemptDigest,
+          physicalAttemptDigest: attemptDigest,
         }],
       }],
       providerRequests: [{ attemptDigest, requestKind: "agent", requestStartedAtMs: 120, completedAtMs: 150, terminatedAtMs: 150, serializedRequestBytes: 100, ordinal: 1, firstContentBearingDeltaAtMs: 5 }],
