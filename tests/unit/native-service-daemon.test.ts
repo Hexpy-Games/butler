@@ -42,6 +42,7 @@ import {
   NATIVE_SUPERVISOR_ID,
   appManagedRuntimePointerPath,
   defaultNativeServiceSpecs,
+  readServiceState,
   serviceStatePath,
   writeServiceState,
   type NativeServiceId,
@@ -381,6 +382,43 @@ test("migration fence suppresses App Gateway watchdog restart", () => {
     writeFileSync(join(butlerData, "locks", "app-gateway-migration-fence"), "test\n");
     daemon.handleChildExit("app-gateway", 0, null);
     expect(spawned).toEqual([6201]);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("service daemon prepares storage before App Gateway and Native Butler stay online", async () => {
+  const butlerHome = "/opt/butler";
+  const butlerData = tempRoot();
+  const spawned: NativeServiceId[] = [];
+  try {
+    const service = (id: "butler-main" | "app-gateway"): NativeServiceSpec => ({
+      id,
+      command: "bun",
+      args: [id],
+      cwd: butlerHome,
+      stdoutFile: join(butlerData, `${id}.out.log`),
+      stderrFile: join(butlerData, `${id}.err.log`),
+      restartPolicy: "watchdog",
+    });
+    const specs = [service("butler-main"), service("app-gateway")];
+    const daemon = new ManagedServiceDaemon({
+      butlerData,
+      specs,
+      parentPid: 6300,
+      spawnChild: (spec) => {
+        spawned.push(spec.id);
+        return { pid: 6301 + spawned.length };
+      },
+    });
+
+    await daemon.prepareStorageAndStartAll();
+    expect(spawned).toEqual(["butler-main", "app-gateway"]);
+    expect(readServiceState(butlerData, "app-gateway")?.pid).toBe(6303);
+
+    daemon.handleChildExit("butler-main", 1, null);
+    expect(spawned).toEqual(["butler-main", "app-gateway", "butler-main"]);
+    expect(readServiceState(butlerData, "app-gateway")?.pid).toBe(6303);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

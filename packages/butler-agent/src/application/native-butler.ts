@@ -1,5 +1,4 @@
-import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type {
   DeliveryResult,
@@ -23,9 +22,6 @@ import {
   resolveTelegramGatewayRuntimeConfig,
 } from "../operations/gateway/registry.ts";
 import {
-  activateAgentBtccStorage,
-  agentBtccStoragePaths,
-  prepareAgentBtccStorage,
   validateAgentBtccStorageForReadiness,
 } from "../agent/adapters/index.ts";
 import {
@@ -57,10 +53,6 @@ import {
   clearAppForegroundExecutorReadiness,
   publishAppForegroundExecutorReadiness,
 } from "../operations/service/app-foreground-readiness.ts";
-import {
-  defaultNativeServiceSpecs,
-  stopServiceBounded,
-} from "../operations/service/native-service-supervisor.ts";
 
 export interface NativeButlerMainOptions {
   butlerHome?: string;
@@ -131,46 +123,6 @@ export async function runNativeButlerMain(
     });
     persistButlerSessionPointer(butlerData, binding.sessionId);
     if (!btcc) {
-      const migrationFencePath = join(
-        butlerData,
-        "locks",
-        "app-gateway-migration-fence",
-      );
-      let legacyWriteFence: Database | undefined;
-      try {
-        await prepareAgentBtccStorage({
-          butlerData,
-          quiesceLegacyWriter: async () => {
-          const legacySourceExists = existsSync(
-            agentBtccStoragePaths(butlerData).legacyAppDbPath,
-          );
-          if (legacySourceExists) {
-            mkdirSync(join(butlerData, "locks"), { recursive: true });
-            writeFileSync(migrationFencePath, `${process.pid}\n`);
-            const appGateway = defaultNativeServiceSpecs({ butlerHome, butlerData })
-              .find((service) => service.id === "app-gateway");
-            if (appGateway) await stopServiceBounded(butlerData, appGateway);
-            legacyWriteFence = new Database(
-              agentBtccStoragePaths(butlerData).legacyAppDbPath,
-            );
-            legacyWriteFence.exec("BEGIN IMMEDIATE");
-          }
-          return {
-            fenceId: `native-butler-pre-readiness:${process.pid}`,
-            reconciledClaims: 0,
-            parkedClaims: 0,
-          };
-          },
-        });
-        activateAgentBtccStorage({
-          butlerData,
-          runtimeVersion: "native-butler-split-v1",
-        });
-      } finally {
-        if (legacyWriteFence?.inTransaction) legacyWriteFence.exec("ROLLBACK");
-        legacyWriteFence?.close();
-        rmSync(migrationFencePath, { force: true });
-      }
       validateAgentBtccStorageForReadiness({ butlerData });
       const composition = createProductionBtccComposition({
         butlerHome,
