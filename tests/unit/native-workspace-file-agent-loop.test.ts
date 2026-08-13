@@ -507,7 +507,6 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
     const agent = createProductionGuidedTurnAgent({
       butlerHome: process.cwd(),
       butlerData: data,
-      appMessageDbPath: dbPath,
       contextDocuments: stores.contextDocuments,
       toolJournal: stores.guidedToolJournal,
       effectJournal: stores.guidedEffectJournal,

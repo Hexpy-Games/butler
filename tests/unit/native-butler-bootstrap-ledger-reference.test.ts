@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, rmSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/application/native-butler.ts";
@@ -25,7 +25,7 @@ const provider: ModelProviderAdapter = {
   },
 };
 
-test("production native bootstrap opens BTCC stores in the App message database", async () => {
+test("production native bootstrap migrates before readiness and opens BTCC stores only in Agent storage", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-bootstrap-ledger-"));
   roots.push(butlerData);
   mkdirSync(join(butlerData, "app-server"), { recursive: true });
@@ -38,7 +38,7 @@ test("production native bootstrap opens BTCC stores in the App message database"
   });
 
   expect(result.shutdownReason).toBe("bootstrap-only");
-  const db = new Database(join(butlerData, "app-server", "butler-client.sqlite"), {
+  const db = new Database(join(butlerData, "agent-runtime", "btcc.sqlite"), {
     readonly: true,
   });
   try {
@@ -47,5 +47,15 @@ test("production native bootstrap opens BTCC stores in the App message database"
     `).get()?.name).toBe("btcc_turns");
   } finally {
     db.close();
+  }
+  const appDbPath = join(butlerData, "app-server", "butler-client.sqlite");
+  if (!existsSync(appDbPath)) return;
+  const appDb = new Database(appDbPath, { readonly: true });
+  try {
+    expect(appDb.query<{ name: string }, []>(`
+      SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'btcc_turns'
+    `).get()).toBeNull();
+  } finally {
+    appDb.close();
   }
 });

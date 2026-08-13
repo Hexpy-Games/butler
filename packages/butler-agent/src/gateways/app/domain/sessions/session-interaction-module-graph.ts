@@ -8,6 +8,7 @@ import { AppSessionQueueStore } from "./session-queue-store.ts";
 import { AppSessionViewStore } from "./session-view-store.ts";
 import { AppSystemResponderTurnStore } from "./system-responder-turn-store.ts";
 import { AppTurnActionStore } from "./turn-action-store.ts";
+import type { ButlerServiceClient } from "../../../core/client.ts";
 
 export interface AppSessionInteractionModuleGraph {
   generatedSessionTitles: AppGeneratedSessionTitleStore;
@@ -25,9 +26,10 @@ export function createAppSessionInteractionModuleGraph(input: {
   butlerData: string;
   defaultChatTitle: string;
   messageFiles: AppMessageFileStore;
+  serviceClient: ButlerServiceClient;
   host: any;
 }): AppSessionInteractionModuleGraph {
-  const { db, butlerData, defaultChatTitle, messageFiles, host } = input;
+  const { db, butlerData, defaultChatTitle, messageFiles, serviceClient, host } = input;
   const generatedSessionTitles = new AppGeneratedSessionTitleStore({
     db,
     defaultChatTitle,
@@ -49,6 +51,7 @@ export function createAppSessionInteractionModuleGraph(input: {
   });
   const turnActions = new AppTurnActionStore({
     db,
+    serviceClient,
     getTurn: (turnId) => host.getTurn(turnId),
     getTurnRow: (turnId) => host.getTurnRow(turnId),
     runtimeFaultRecordForTurn: (turnId) =>
@@ -68,7 +71,6 @@ export function createAppSessionInteractionModuleGraph(input: {
     dispatchDeferredResponderTurn: (turnInput) =>
       host.dispatchDeferredResponderTurn(turnInput),
     completeResponderTurn: (turnInput) => host.completeResponderTurn(turnInput),
-    cancelResponder: (turnId) => responderRuntime.cancel(turnId),
     finalizeCancelledTurn: (chatId, turnId) =>
       host.finalizeCancelledTurn(chatId, turnId),
     cleanupTurnEventSequences: (chatId, turnId) =>

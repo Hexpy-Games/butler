@@ -809,7 +809,7 @@ function exactAppBinding(
     workspace_path: projectRoot,
     ledger_project_id: "legacy-fixture-alias",
     ledger_root: projectRoot,
-    source: "app_project_db",
+    source: "workspace_metadata",
     resolved_at: "2026-07-31T00:00:00.000Z",
     initialized: true,
     initialization_generation: "test",

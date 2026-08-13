@@ -1,27 +1,10 @@
-import { homedir } from "os";
-import { join } from "path";
-import type {
-  DeliveryResult,
-  OutboundAction,
-  InboundEnvelope,
-  ModelProviderAdapter,
-  SessionLifecycleState,
-  StoredSessionBinding,
-} from "../test-support/harness/contracts.ts";
-import type { Btcc } from "../agent/btcc/index.ts";
-import { getStewardSessionPointer, registerRuntimeSession } from "../test-support/harness/session-runtime.ts";
-import { SessionBindingStore } from "../test-support/harness/session-store.ts";
-import {
-  createProductionBtccComposition,
-  type BtccComposition,
-} from "../agent/composition/index.ts";
-import {
-  createBtccGatewayHandlers,
-} from "../interfaces/gateway/btcc/index.ts";
-import { DeliveryGuard } from "../interfaces/transport/delivery-guard.ts";
-import { createTelegramTransportAdapter } from "../interfaces/transport/telegram/adapter.ts";
-import { createNativeButlerProgressPublisher } from "../interfaces/gateway/native-butler/index.ts";
-import { resolveAppGatewayRuntimeConfig } from "../operations/gateway/registry.ts";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type { DeliveryResult, InboundEnvelope } from
+  "../test-support/harness/contracts.ts";
+import { readTranscript } from "../test-support/harness/transcripts.ts";
+import { NativeInboundQueue } from "../gateways/core/inbound-queue.ts";
 
 export interface NativeStewardTelegramTurnInput {
   projectName: string;
@@ -34,14 +17,6 @@ export interface NativeStewardTelegramTurnInput {
   senderDisplayName?: string;
   butlerHome?: string;
   butlerData?: string;
-  btcc?: Btcc;
-  btccHost?: BtccComposition["host"];
-  provider?: ModelProviderAdapter;
-  sendTelegram?: (input: {
-    chatId: string;
-    text: string;
-    threadId?: string;
-  }) => Promise<DeliveryResult>;
 }
 
 export interface NativeStewardTelegramTurnResult {
@@ -50,100 +25,14 @@ export interface NativeStewardTelegramTurnResult {
   delivery: DeliveryResult;
 }
 
-function getButlerHome(explicit?: string): string {
-  return explicit || process.env.BUTLER_HOME || process.cwd();
-}
+const COMPLETION_TIMEOUT_MS = 120_000;
 
-function getButlerData(_butlerHome: string, explicit?: string): string {
+function getButlerData(explicit?: string): string {
   return explicit || process.env.BUTLER_DATA || join(homedir(), ".butler");
-}
-
-function defaultProvider(): ModelProviderAdapter {
-  return {
-    id: "openai",
-    capabilities: {
-      supportsStreaming: false,
-      supportsToolCalls: true,
-      supportsImages: false,
-      supportsAudio: false,
-      supportsServerThreads: false,
-      supportsReasoningConfig: true,
-      supportsPromptCaching: true,
-      supportsSameTurnToolSchemaPromotion: true,
-    },
-    async invoke() {
-      throw new Error("Native steward application does not call provider.invoke directly");
-    },
-  };
 }
 
 function makeSessionId(projectName: string): string {
   return `steward/${projectName.replace(/[^A-Za-z0-9._-]/g, "-")}`;
-}
-
-function resolveSessionId(store: SessionBindingStore, butlerData: string, projectName: string): string {
-  const pointer = getStewardSessionPointer(butlerData, projectName);
-  if (pointer) return pointer;
-
-  const existing = store
-    .listSessions({ lifecycleState: ["active", "closing"] satisfies SessionLifecycleState[] })
-    .find((session) => session.role === "steward" && session.projectId === projectName);
-  if (existing) return existing.sessionId;
-
-  return makeSessionId(projectName);
-}
-
-function ensureStewardSession(input: {
-  store: SessionBindingStore;
-  sessionId: string;
-  projectName: string;
-  workspacePath: string;
-  runtimeAdapterId: string;
-  provider: ModelProviderAdapter;
-  butlerHome: string;
-  butlerData: string;
-}): StoredSessionBinding {
-  const existing = input.store.getBySessionId(input.sessionId);
-  if (!existing || existing.lifecycleState === "closed" || existing.lifecycleState === "crashed") {
-    return registerRuntimeSession({
-      sessionId: input.sessionId,
-      role: "steward",
-      workspacePath: input.workspacePath,
-      runtimeAdapterId: input.runtimeAdapterId,
-      modelProviderId: input.provider.id,
-      butlerHome: input.butlerHome,
-      butlerData: input.butlerData,
-      source: "native-steward-application",
-    });
-  }
-
-  const updated = input.store.upsert({
-    sessionId: existing.sessionId,
-    role: existing.role,
-    projectId: existing.projectId,
-    workspacePath: existing.workspacePath,
-    runtimeAdapterId: input.runtimeAdapterId,
-    modelProviderId: providerIdFromModelRef(
-      existing.modelRef,
-      input.provider.id,
-    ),
-    modelRef: existing.modelRef,
-    runtimeSessionRef: existing.runtimeSessionRef,
-    providerThreadRef: existing.providerThreadRef,
-    transportBindings: existing.transportBindings,
-    metadata: existing.metadata,
-    lifecycleState: "active",
-    createdAt: existing.createdAt,
-  });
-
-  return updated;
-}
-
-function providerIdFromModelRef(
-  modelRef: string | undefined,
-  fallback: string,
-): string {
-  return modelRef?.split("/", 1)[0]?.trim() || fallback;
 }
 
 function buildEnvelope(input: NativeStewardTelegramTurnInput): InboundEnvelope {
@@ -153,15 +42,8 @@ function buildEnvelope(input: NativeStewardTelegramTurnInput): InboundEnvelope {
     transport: "telegram",
     accountId: "default",
     peer: input.threadId
-      ? {
-          kind: "thread",
-          id: input.threadId,
-          parentId: input.chatId,
-        }
-      : {
-          kind: "group",
-          id: input.chatId,
-        },
+      ? { kind: "thread", id: input.threadId, parentId: input.chatId }
+      : { kind: "group", id: input.chatId },
     sender: {
       id: input.senderId?.trim() || "telegram-user",
       displayName: input.senderDisplayName?.trim() || undefined,
@@ -175,122 +57,80 @@ function buildEnvelope(input: NativeStewardTelegramTurnInput): InboundEnvelope {
       projectId: input.projectName,
       stewardId: makeSessionId(input.projectName),
     },
+    nativeStewardContext: {
+      version: 1,
+      projectName: input.projectName,
+      workspacePath: input.workspacePath,
+    },
   };
 }
 
 export async function handleNativeStewardTelegramTurn(
   input: NativeStewardTelegramTurnInput,
 ): Promise<NativeStewardTelegramTurnResult> {
-  const butlerHome = getButlerHome(input.butlerHome);
-  const butlerData = getButlerData(butlerHome, input.butlerData);
-  const provider = input.provider ?? defaultProvider();
-  const appGateway = resolveAppGatewayRuntimeConfig({ butlerData });
-  const appMessageDbPath = appGateway.dbPath ?? join(
+  const butlerData = getButlerData(input.butlerData);
+  const sessionId = makeSessionId(input.projectName);
+  const queue = new NativeInboundQueue(butlerData);
+  const queued = queue.enqueue(buildEnvelope(input), {
+    source: "application/native-steward.ts",
+    completionAuthority: "delivery-guard-transcript",
+  });
+  return await waitForTranscriptCompletion({
     butlerData,
-    "app-server",
-    "butler-client.sqlite",
-  );
-  const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
-  let btcc: Btcc | undefined = input.btcc;
-  let btccHost: BtccComposition["host"] | undefined = input.btccHost;
-  let btccReady: Promise<void> | undefined;
-  const deliveryGuard = new DeliveryGuard({
-    adapters: [
-      createTelegramTransportAdapter({
-        butlerHome,
-        sendTelegram: input.sendTelegram,
-      }),
-    ],
+    sessionId,
+    queueId: queued.queueId,
   });
-  const progressPublisher = createNativeButlerProgressPublisher({
-    deliver: (sessionId, action, metadata) => deliveryGuard.deliver(sessionId, action, metadata),
-  });
+}
 
-  try {
-    const sessionId = resolveSessionId(store, butlerData, input.projectName);
-    ensureStewardSession({
-      store,
-      sessionId,
-      projectName: input.projectName,
-      workspacePath: input.workspacePath,
-      runtimeAdapterId: "btcc-turn-runtime",
-      provider,
-      butlerHome,
-      butlerData,
+async function waitForTranscriptCompletion(input: {
+  butlerData: string;
+  sessionId: string;
+  queueId: string;
+}): Promise<NativeStewardTelegramTurnResult> {
+  const deadline = Date.now() + COMPLETION_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const events = readTranscript(input.sessionId, input.butlerData);
+    const outbound = events.find((event) => {
+      const metadata = event.payload.metadata;
+      const record = metadata && typeof metadata === "object" && !Array.isArray(metadata)
+        ? metadata as Record<string, unknown>
+        : null;
+      return event.kind === "outbound" && record?.queueId === input.queueId &&
+        record.kind === "final_result";
     });
-
-    if (!btcc) {
-      const composition = createProductionBtccComposition({
-        butlerHome,
-        butlerData,
-        appMessageDbPath,
-        ownerId: `native-steward:${process.pid}`,
-        sessionBindings: store,
-      });
-      btcc = composition.btcc;
-      btccHost = composition.host;
-      btccReady = composition.ready;
-    }
-    if (!btcc) throw new Error("BTCC facade was not created");
-    await btccReady;
-
-    const envelope = buildEnvelope(input);
-    const route = {
-      sessionId,
-      role: "steward",
-      reason: "transport-binding",
-      projectId: input.projectName,
-      workspacePath: input.workspacePath,
-    } as const;
-    const handler = createBtccGatewayHandlers({ btcc }).steward;
-    if (!handler) throw new Error("BTCC steward handler is unavailable");
-    const result = await handler({ envelope, route });
-    const text = typeof result.metadata?.text === "string"
-      ? result.metadata.text
-      : "";
-
-    const action: OutboundAction = {
-      actionId: `telegram-out:${sessionId}:${input.chatId}:${input.threadId ?? "main"}:${input.messageId ?? Date.now()}`,
-      transport: "telegram",
-      accountId: "default",
-      peer: input.threadId
-        ? {
-            kind: "thread",
-            id: input.chatId,
-            threadId: input.threadId,
-          }
-        : {
-            kind: "group",
-            id: input.chatId,
+    const actionId = typeof outbound?.payload.actionId === "string"
+      ? outbound.payload.actionId
+      : null;
+    if (outbound && actionId) {
+      const delivery = events.find((event) =>
+        event.kind === "delivery" && event.payload.actionId === actionId,
+      );
+      if (delivery) {
+        const message = outbound.payload.message;
+        const record = message && typeof message === "object" && !Array.isArray(message)
+          ? message as Record<string, unknown>
+          : null;
+        const text = typeof record?.text === "string"
+          ? record.text
+          : "";
+        return {
+          sessionId: input.sessionId,
+          text,
+          delivery: {
+            ok: delivery.payload.ok === true,
+            error: typeof delivery.payload.error === "string" ? delivery.payload.error : undefined,
+            transportMessageId: typeof delivery.payload.transportMessageId === "string"
+              ? delivery.payload.transportMessageId
+              : undefined,
+            raw: delivery.payload.raw,
           },
-      message: {
-        text,
-      },
-      metadata: {
-        source: "application/native-steward.ts",
-      },
-    };
-    const [deliveryResult] = await deliveryGuard.deliverAll(sessionId, [action], {
-      source: "application/native-steward.ts",
-    });
-    const delivery: DeliveryResult = {
-      ok: deliveryResult.ok,
-      error: deliveryResult.error,
-      raw: deliveryResult.raw,
-      transportMessageId: deliveryResult.transportMessageId,
-    };
-
-    return {
-      sessionId,
-      text,
-      delivery,
-    };
-  } finally {
-    try {
-      await btccHost?.progress.reconcile(progressPublisher);
-    } finally {
-      await btccHost?.close();
+        };
+      }
     }
-    store.close();
+    if (existsSync(join(input.butlerData, "runtime", "inbound-events", "failed", `${input.queueId}.json`))) {
+      throw new Error("native_steward_queue_failed");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
+  throw new Error("native_steward_transcript_completion_timeout");
 }

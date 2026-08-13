@@ -15,6 +15,7 @@ import type {
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
 import type { DeliveryGuard } from "../../transport/delivery-guard.ts";
 import { controlAckActions } from "./control-ack-action.ts";
+import { bindQueuedInboundSession } from "./queued-inbound-session-binder.ts";
 
 type BtccInboundServer = {
   handleInbound(
@@ -124,6 +125,7 @@ async function dispatchItem(
   options: BtccInboundDispatchOptions,
 ): Promise<BtccInboundDispatchSummary> {
   const summary = { ...emptySummary(), claimed: 1 };
+  bindQueuedInboundSession(item.envelope, options.store);
   reactivateSession(item, options.store, options.now?.());
   try {
     const result = await options.server.handleInbound(item.envelope);
@@ -312,12 +314,15 @@ function claimableSession(
 }
 
 function sessionKeyFor(event: QueuedInboundEvent): string {
-  return event.envelope.routingHints?.sessionId?.trim() || [
+  const base = event.envelope.routingHints?.sessionId?.trim() || [
     event.envelope.transport,
     event.envelope.accountId,
     event.envelope.peer.kind,
     event.envelope.peer.id,
   ].join(":");
+  return event.envelope.control?.kind === "cancel_turn"
+    ? `${base}:cancel:${event.envelope.control.requestId}`
+    : base;
 }
 
 function optionalText(value: unknown): string | undefined {

@@ -296,36 +296,40 @@ test("native Butler does not poll legacy task completion into a wake", async () 
   expect(btcc.commands).toEqual([]);
 });
 
-test("native Steward enters the same BTCC facade and preserves Telegram delivery", async () => {
+test("native Steward queues to the single Butler host and observes transcript completion", async () => {
   const btcc = new ScriptedBtccGatewayRuntime("steward reply");
   const btccHost = createBtccTestHost(btcc);
   const deliveries: Array<{ chatId: string; text: string; threadId?: string }> = [];
-  btcc.progressEvents.append({
-    sessionId: "steward/demo",
-    turnId: "steward-telegram-progress",
-    destination: {
-      transport: "telegram",
-      accountId: "default",
-      peer: { kind: "group", id: "123" },
-      replyToMessageId: "steward-message-1",
-    },
-    event: { kind: "turn.started" },
+  writeGatewaySettings(tempDir, "telegram", {
+    enabled: true,
+    config: { chatId: "123" },
   });
+  const controller = new AbortController();
+  const main = runNativeButlerMain({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    btcc,
+    btccHost,
+    provider: fakeProvider,
+    shutdownSignal: controller.signal,
+    shutdownPollMs: 5,
+    enableTelegramPolling: false,
+    sendTelegram: async (input) => {
+      deliveries.push(input);
+      if (input.text === "steward reply") controller.abort();
+      return { ok: true, transportMessageId: "telegram-1" };
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
   const result = await handleNativeStewardTelegramTurn({
     projectName: "demo",
     workspacePath: tempDir,
     message: "steward ingress",
     chatId: "123",
     messageId: "steward-message-1",
-    butlerHome: tempDir,
     butlerData: tempDir,
-    btcc,
-    btccHost,
-    sendTelegram: async (input) => {
-      deliveries.push(input);
-      return { ok: true, transportMessageId: "telegram-1" };
-    },
   });
+  await main;
 
   expect(result.sessionId).toBe("steward/demo");
   expect(result.text).toBe("steward reply");
@@ -336,8 +340,7 @@ test("native Steward enters the same BTCC facade and preserves Telegram delivery
     message: { content: "steward ingress" },
   });
   expect(deliveries).toContainEqual(expect.objectContaining({ text: "steward reply" }));
-  expect(deliveries.map((delivery) => delivery.text)).toEqual(["steward reply"]);
-  expect(btcc.progressEvents.pending()).toEqual([]);
+  expect(deliveries.filter((delivery) => delivery.text === "steward reply")).toHaveLength(1);
 });
 
 test("native Telegram /update command checks service updates without model routing", async () => {

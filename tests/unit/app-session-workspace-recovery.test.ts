@@ -23,7 +23,7 @@ import {
 import { createPlatformCommandExecutor } from "../../packages/butler-agent/src/runtime/command/platform-command-executor.ts";
 import type { ButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
 
-test("App transport and relaunch preserve the marked session worktree", async () => {
+test("Agent relaunch preserves its worktree while App reads only App-owned workspace facts", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-app-worktree-relaunch-"));
   const dbPath = join(root, "app.sqlite");
   const bindingStorePath = join(root, "runtime", "session-store.sqlite");
@@ -37,7 +37,6 @@ test("App transport and relaunch preserve the marked session worktree", async ()
       butlerData: root,
       butlerHome: process.cwd(),
       projectWorkspaceRoot: join(root, "projects"),
-      sessionBindingStore: bindingStore,
       serviceClient,
       port: 0,
     });
@@ -81,7 +80,6 @@ test("App transport and relaunch preserve the marked session worktree", async ()
     const executor = createAgentToolExecutor({
       butlerHome: process.cwd(),
       butlerData: root,
-      appMessageDbPath: dbPath,
       workspacePath: sourcePath,
       sessionId: runtimeSessionId,
       projectId,
@@ -106,8 +104,8 @@ test("App transport and relaunch preserve the marked session worktree", async ()
       `${server.url}session-view?session_id=${encodeURIComponent(chatId)}`,
     );
     expect(firstView.data.branch).toMatchObject({
-      workspace_binding: "session_worktree",
-      workspace_label: "session-worktree/feature/relaunch",
+      workspace_binding: "project",
+      workspace_label: "Relaunch project",
       workspace_status: "available",
       dirty: false,
     });
@@ -182,7 +180,6 @@ test("App transport and relaunch preserve the marked session worktree", async ()
       butlerData: root,
       butlerHome: process.cwd(),
       projectWorkspaceRoot: join(root, "projects"),
-      sessionBindingStore: bindingStore,
       serviceClient: queueClient(),
       port: 0,
     });
@@ -190,10 +187,10 @@ test("App transport and relaunch preserve the marked session worktree", async ()
       `${relaunched.url}session-summary?session_id=${encodeURIComponent(chatId)}`,
     );
     expect(relaunchedView.data.branch_info).toMatchObject({
-      workspace_binding: "session_worktree",
-      workspace_label: "session-worktree/feature/relaunch",
+      workspace_binding: "project",
+      workspace_label: "Relaunch project",
       workspace_status: "available",
-      dirty: true,
+      dirty: false,
     });
     expect(JSON.stringify(relaunchedView.data.branch_info)).not.toContain(sourcePath);
 
@@ -219,7 +216,6 @@ test("App transport and relaunch preserve the marked session worktree", async ()
     const relaunchedExecutor = createAgentToolExecutor({
       butlerHome: process.cwd(),
       butlerData: root,
-      appMessageDbPath: dbPath,
       workspacePath: sourcePath,
       sessionId: runtimeSessionId,
       projectId,
@@ -257,7 +253,6 @@ test("App transport and relaunch preserve the marked session worktree", async ()
       butlerData: root,
       butlerHome: process.cwd(),
       projectWorkspaceRoot: join(root, "projects"),
-      sessionBindingStore: bindingStore,
       port: 0,
     });
     try {
@@ -265,9 +260,9 @@ test("App transport and relaunch preserve the marked session worktree", async ()
         `${staleServer.url}session-summary?session_id=${encodeURIComponent(chatId)}`,
       );
       expect(staleView.data.branch_info).toMatchObject({
-        workspace_binding: "session_worktree",
-        workspace_status: "unavailable",
-        safe_error_code: "session_workspace_unavailable",
+        workspace_binding: "project",
+        workspace_status: "available",
+        workspace_label: "Relaunch project",
       });
       expect(JSON.stringify(staleView.data.branch_info)).not.toContain(
         sourcePath,

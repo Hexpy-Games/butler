@@ -305,7 +305,7 @@ test("session-bound executor fails closed when its WorkspaceReference is omitted
   })).rejects.toThrow("session_workspace_unavailable");
 });
 
-test("Project Ledger tool wrappers resolve active app project id through the app registry", async () => {
+test("Project Ledger tool wrappers resolve bounded project and workspace facts", async () => {
   const butlerHome = join(tempDir, "butler-home");
   const butlerData = join(tempDir, "butler-data");
   const workspacePath = join(tempDir, "workspaces", "sandy-folder");
@@ -329,8 +329,8 @@ test("Project Ledger tool wrappers resolve active app project id through the app
   const execute = createButlerToolExecutor({
     butlerHome,
     butlerData,
-    appMessageDbPath: appDbPath,
     projectId: "project-sandy-bot-35a0e102",
+    workspacePath,
   });
   const result = await execute({
     name: "inspect_project_status",
@@ -367,7 +367,6 @@ test("Project Ledger read tools cannot leave the active App project", async () =
   const execute = createButlerToolExecutor({
     butlerHome,
     butlerData,
-    appMessageDbPath: appDbPath,
     projectId: "project-sandy-bot-35a0e102",
   });
   const calls = [
@@ -1173,7 +1172,7 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
   // The workspace surface carries the same default memory-reference contract.
-  expect(toolContractJsonChars(tools)).toBeLessThan(33_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(33_500);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {

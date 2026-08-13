@@ -39,7 +39,6 @@ type ExecuteRegisteredTool = (prepared?: {
 export function createGuidedPersistentEffectResolver(input: {
   butlerHome: string;
   butlerData: string;
-  appMessageDbPath: string;
   workspacePath: string;
   workspaceReference?: WorkspaceReference;
   sessionId?: string;
@@ -143,7 +142,6 @@ export function createGuidedPersistentEffectResolver(input: {
       return null;
     }
     const ledgerLookup = {
-      appMessageDbPath: input.appMessageDbPath,
       appProjectId: input.projectId,
       workspacePath: activeWorkspacePath(),
     };
