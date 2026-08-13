@@ -8,6 +8,70 @@ import { AGENT_BTCC_STATEFUL_TABLES } from "./manifest.ts";
 
 type CopyableValue = string | number | bigint | Uint8Array | null;
 type TableInfo = { name: string; pk: number; hidden?: number };
+type ReferenceRule = {
+  name: string;
+  fromTable: string;
+  fromColumn: string;
+  toTable: string;
+  toColumn: string;
+};
+
+const DURABLE_REFERENCE_RULES: readonly ReferenceRule[] = [
+  { name: "turn_inbox", fromTable: "btcc_turns", fromColumn: "inbox_id", toTable: "btcc_inbound_inbox", toColumn: "inbox_id" },
+  { name: "turn_checkpoint", fromTable: "btcc_turns", fromColumn: "active_checkpoint_id", toTable: "btcc_checkpoints", toColumn: "checkpoint_id" },
+  { name: "turn_outbox", fromTable: "btcc_turns", fromColumn: "delivery_outbox_id", toTable: "btcc_delivery_outbox", toColumn: "outbox_id" },
+  { name: "turn_message", fromTable: "btcc_turns", fromColumn: "canonical_assistant_message_id", toTable: "btcc_messages", toColumn: "message_id" },
+  { name: "admission_inbox", fromTable: "btcc_admission_claims", fromColumn: "inbox_id", toTable: "btcc_inbound_inbox", toColumn: "inbox_id" },
+  { name: "admission_owner", fromTable: "btcc_admission_claims", fromColumn: "owner_id", toTable: "btcc_runtime_owners", toColumn: "owner_id" },
+  { name: "checkpoint_turn", fromTable: "btcc_checkpoints", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "checkpoint_claim", fromTable: "btcc_checkpoints", fromColumn: "active_claim_id", toTable: "btcc_state_claims", toColumn: "claim_id" },
+  { name: "state_claim_turn", fromTable: "btcc_state_claims", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "state_claim_checkpoint", fromTable: "btcc_state_claims", fromColumn: "checkpoint_id", toTable: "btcc_checkpoints", toColumn: "checkpoint_id" },
+  { name: "state_claim_owner", fromTable: "btcc_state_claims", fromColumn: "owner_id", toTable: "btcc_runtime_owners", toColumn: "owner_id" },
+  { name: "outbox_turn", fromTable: "btcc_delivery_outbox", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "delivery_turn", fromTable: "btcc_canonical_deliveries", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "delivery_outbox", fromTable: "btcc_canonical_deliveries", fromColumn: "outbox_id", toTable: "btcc_delivery_outbox", toColumn: "outbox_id" },
+  { name: "tool_turn", fromTable: "btcc_guided_tool_calls", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "progress_turn", fromTable: "btcc_progress_events", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "continuation_turn", fromTable: "btcc_continuation_triggers", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "continuation_source_turn", fromTable: "btcc_continuation_triggers", fromColumn: "source_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "wake_fact_turn", fromTable: "btcc_wake_request_facts", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "wake_fact_source_turn", fromTable: "btcc_wake_request_facts", fromColumn: "source_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "route_turn", fromTable: "btcc_model_route_events", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "acceptance_turn", fromTable: "btcc_model_round_acceptances", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "work_head", fromTable: "btcc_guided_work_session_heads", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "work_origin_turn", fromTable: "btcc_guided_works", fromColumn: "origin_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "work_current_plan", fromTable: "btcc_guided_works", fromColumn: "current_plan_revision_id", toTable: "btcc_guided_work_plan_revisions", toColumn: "plan_revision_id" },
+  { name: "work_binding", fromTable: "btcc_guided_turn_work_bindings", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "work_binding_turn", fromTable: "btcc_guided_turn_work_bindings", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "work_plan", fromTable: "btcc_guided_work_plan_revisions", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "work_plan_origin_turn", fromTable: "btcc_guided_work_plan_revisions", fromColumn: "origin_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "work_checkpoint", fromTable: "btcc_guided_work_checkpoint_revisions", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "work_checkpoint_origin_turn", fromTable: "btcc_guided_work_checkpoint_revisions", fromColumn: "origin_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "checkpoint_plan", fromTable: "btcc_guided_work_checkpoint_revisions", fromColumn: "plan_revision_id", toTable: "btcc_guided_work_plan_revisions", toColumn: "plan_revision_id" },
+  { name: "work_review", fromTable: "btcc_guided_work_review_revisions", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "work_review_origin_turn", fromTable: "btcc_guided_work_review_revisions", fromColumn: "origin_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "review_plan", fromTable: "btcc_guided_work_review_revisions", fromColumn: "bound_plan_revision_id", toTable: "btcc_guided_work_plan_revisions", toColumn: "plan_revision_id" },
+  { name: "review_result", fromTable: "btcc_guided_work_review_revisions", fromColumn: "bound_result_review_revision_id", toTable: "btcc_guided_work_review_revisions", toColumn: "review_revision_id" },
+  { name: "work_disposition", fromTable: "btcc_guided_work_disposition_revisions", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "work_disposition_origin_turn", fromTable: "btcc_guided_work_disposition_revisions", fromColumn: "origin_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "disposition_command_work", fromTable: "btcc_guided_work_disposition_commands", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "disposition_command_revision", fromTable: "btcc_guided_work_disposition_commands", fromColumn: "disposition_revision_id", toTable: "btcc_guided_work_disposition_revisions", toColumn: "disposition_revision_id" },
+  { name: "relation_command_work", fromTable: "btcc_guided_work_relation_commands", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "work_mutation", fromTable: "btcc_guided_work_mutations", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "work_result", fromTable: "btcc_guided_work_results", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "work_result_origin_turn", fromTable: "btcc_guided_work_results", fromColumn: "origin_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "work_result_tool", fromTable: "btcc_guided_work_results", fromColumn: "tool_call_id", toTable: "btcc_guided_tool_calls", toColumn: "call_id" },
+  { name: "effect_work", fromTable: "btcc_guided_effects", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "effect_plan", fromTable: "btcc_guided_effects", fromColumn: "plan_revision_id", toTable: "btcc_guided_work_plan_revisions", toColumn: "plan_revision_id" },
+  { name: "effect_hint", fromTable: "btcc_guided_effect_recovery_hints", fromColumn: "effect_id", toTable: "btcc_guided_effects", toColumn: "effect_id" },
+  { name: "effect_payload", fromTable: "btcc_guided_effect_recovery_payloads", fromColumn: "effect_id", toTable: "btcc_guided_effects", toColumn: "effect_id" },
+  { name: "effect_blocker_work", fromTable: "btcc_guided_work_effect_blockers", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "effect_blocker_source_turn", fromTable: "btcc_guided_work_effect_blockers", fromColumn: "source_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "closeout_turn", fromTable: "btcc_guided_work_closeout_diagnostics", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
+  { name: "closeout_work", fromTable: "btcc_guided_work_closeout_diagnostics", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+  { name: "legacy_import_work", fromTable: "btcc_guided_work_legacy_imports", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
+];
 
 export function copyAndValidateStatefulTables(
   source: Database | undefined,
@@ -15,6 +79,14 @@ export function copyAndValidateStatefulTables(
 ): AgentBtccMigrationTableReceipt[] {
   return AGENT_BTCC_STATEFUL_TABLES.map((table) =>
     copyAndValidateTable(source, target, table),
+  );
+}
+
+export function snapshotStatefulTables(
+  db: Database,
+): AgentBtccMigrationTableReceipt[] {
+  return AGENT_BTCC_STATEFUL_TABLES.map((table) =>
+    tableReceipt(db, table, tableColumns(db, table)),
   );
 }
 
@@ -51,6 +123,30 @@ export function validateAgentBtccDatabase(db: Database): void {
   }
   if (db.query("PRAGMA foreign_key_check").all().length > 0) {
     throw new Error("agent_btcc_migration_reference_check_failed");
+  }
+  for (const rule of DURABLE_REFERENCE_RULES) validateReferenceRule(db, rule);
+  const invalidStop = db.query(`
+    SELECT 1 FROM btcc_stop_requests AS stop
+    LEFT JOIN btcc_turns AS turn ON turn.turn_id = stop.turn_id
+    WHERE turn.turn_id IS NULL AND stop.status != 'cancelled_before_admission'
+    LIMIT 1
+  `).get();
+  if (invalidStop) {
+    throw new Error("agent_btcc_migration_reference_check_failed:stop_turn");
+  }
+}
+
+function validateReferenceRule(db: Database, rule: ReferenceRule): void {
+  const orphan = db.query(`
+    SELECT 1 FROM ${quoteIdentifier(rule.fromTable)} AS source
+    LEFT JOIN ${quoteIdentifier(rule.toTable)} AS target
+      ON target.${quoteIdentifier(rule.toColumn)} = source.${quoteIdentifier(rule.fromColumn)}
+    WHERE source.${quoteIdentifier(rule.fromColumn)} IS NOT NULL
+      AND target.${quoteIdentifier(rule.toColumn)} IS NULL
+    LIMIT 1
+  `).get();
+  if (orphan) {
+    throw new Error(`agent_btcc_migration_reference_check_failed:${rule.name}`);
   }
 }
 

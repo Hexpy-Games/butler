@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prepareAgentBtccStorage, activateAgentBtccStorage } from
@@ -45,6 +45,17 @@ test("live App and Agent compositions hold distinct writable SQLite inodes", asy
     expect(`${appIdentity.dev}:${appIdentity.ino}`).not.toBe(
       `${agentIdentity.dev}:${agentIdentity.ino}`,
     );
+    const writablePaths = [
+      appDbPath,
+      agentDbPath,
+      join(butlerData, "runtime", "conversation-store.sqlite"),
+      join(butlerData, "runtime", "session-store.sqlite"),
+    ].filter(existsSync);
+    const identities = writablePaths.map((path) => {
+      const identity = statSync(path);
+      return `${identity.dev}:${identity.ino}`;
+    });
+    expect(new Set(identities).size).toBe(identities.length);
     expect(tableNames(app.db)).not.toContain("btcc_turns");
     const agentDb = new Database(agentDbPath, { readonly: true });
     try {
@@ -62,25 +73,43 @@ test("live App and Agent compositions hold distinct writable SQLite inodes", asy
 test("App and Agent writes are reciprocally independent under BEGIN IMMEDIATE", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-reciprocal-lock-"));
   roots.push(root);
-  const appPath = join(root, "app.sqlite");
-  const agentPath = join(root, "agent.sqlite");
-  const app = new Database(appPath, { create: true });
-  const agent = new Database(agentPath, { create: true });
-  app.exec("CREATE TABLE projection (id TEXT PRIMARY KEY)");
-  agent.exec("CREATE TABLE checkpoint (id TEXT PRIMARY KEY)");
+  const appPath = join(root, "app-server", "butler-client.sqlite");
+  mkdirSync(join(root, "app-server"), { recursive: true });
+  const appStore = new AppServerStore({ dbPath: appPath, butlerData: root });
+  await prepareAgentBtccStorage({
+    butlerData: root,
+    quiesceLegacyWriter: async () => ({
+      fenceId: "test-reciprocal-fence",
+      reconciledClaims: 0,
+      parkedClaims: 0,
+    }),
+  });
+  activateAgentBtccStorage({ butlerData: root, runtimeVersion: "test-split-v1" });
+  const agentPath = join(root, "agent-runtime", "btcc.sqlite");
+  const agent = new Database(agentPath);
   try {
-    app.exec("BEGIN IMMEDIATE");
-    agent.query("INSERT INTO checkpoint (id) VALUES (?)").run("route-checkpoint");
-    app.exec("ROLLBACK");
+    appStore.db.exec("BEGIN IMMEDIATE");
+    agent.query(`
+      INSERT INTO btcc_context_documents (
+        context_ref, content_sha256, scope_kind, scope_id, projection_class,
+        source_id, source_revision, content, created_at
+      ) VALUES ('lock-agent', 'sha', 'session', 's', 'turn', 'src', '1', 'x', 'now')
+    `).run();
+    appStore.db.exec("ROLLBACK");
 
     agent.exec("BEGIN IMMEDIATE");
-    app.query("INSERT INTO projection (id) VALUES (?)").run("app-projection");
+    appStore.db.query(`
+      INSERT INTO app_settings (key, value_json, updated_at)
+      VALUES ('lock-app', '{}', 'now')
+    `).run();
     agent.exec("ROLLBACK");
-    expect(app.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM projection").get()?.count)
+    expect(appStore.db.query<{ count: number }, []>(
+      "SELECT COUNT(*) AS count FROM app_settings WHERE key = 'lock-app'",
+    ).get()?.count)
       .toBe(1);
   } finally {
     agent.close();
-    app.close();
+    appStore.close();
   }
 });
 

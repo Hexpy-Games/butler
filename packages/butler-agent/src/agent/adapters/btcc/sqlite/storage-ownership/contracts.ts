@@ -8,6 +8,7 @@ export type LegacyWriterFenceReceipt = {
   fenceId: string;
   reconciledClaims: number;
   parkedClaims: number;
+  claimDispositionSha256?: string;
 };
 
 export type AgentBtccMigrationTableReceipt = {

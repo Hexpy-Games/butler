@@ -492,6 +492,9 @@ test("carries a supported visual tuple from upload through both queues to the na
   );
   const transportInputs: Array<{ attachments?: unknown[] }> = [];
   const serviceClient: ButlerServiceClient = {
+    enqueueAppCancellation() {
+      throw new Error("unexpected cancellation");
+    },
     enqueueAppTurn(input) {
       transportInputs.push({ attachments: input.attachments });
       return {
