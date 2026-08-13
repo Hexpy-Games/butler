@@ -58,6 +58,11 @@ export type TurnRecord = {
     content: string;
     contentSha256: string;
     artifacts?: BtccFinalArtifact[];
+    modelIdentity?: {
+      requestedModelRef: string;
+      effectiveModelRef: string;
+      providerReportedModelRef?: string;
+    };
   };
   deliveryOutbox?: DeliveryOutbox;
   canonicalAssistantMessageId?: string;

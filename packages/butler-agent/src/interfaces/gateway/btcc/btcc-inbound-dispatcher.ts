@@ -14,6 +14,7 @@ import type {
 } from "../../../test-support/harness/contracts.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
 import type { DeliveryGuard } from "../../transport/delivery-guard.ts";
+import { controlAckActions } from "./control-ack-action.ts";
 
 type BtccInboundServer = {
   handleInbound(
@@ -188,6 +189,15 @@ function finalActions(
   result: Extract<GatewayDispatchResult, { status: "handled" }>,
   store: SessionBindingStore,
 ): OutboundAction[] {
+  const controlAck = result.handlerResult.metadata?.controlAck;
+  if (controlAck && typeof controlAck === "object" && !Array.isArray(controlAck)) {
+    const binding = store.getBySessionId(result.route.sessionId);
+    return controlAckActions({
+      item,
+      controlAck: controlAck as Record<string, unknown>,
+      targets: binding?.transportBindings ?? [],
+    });
+  }
   const text = result.handlerResult.metadata?.text;
   if (typeof text !== "string" || !text.trim()) return [];
   const binding = store.getBySessionId(result.route.sessionId);
@@ -202,6 +212,7 @@ function finalActions(
     text,
     artifacts,
     generatedSessionTitle,
+    executionModel: result.handlerResult.metadata?.executionModel,
     canonicalMessageId: optionalText(result.handlerResult.metadata?.canonicalMessageId),
     turnId: optionalText(result.handlerResult.metadata?.turnId) ??
       item.envelope.routingHints?.turnId,
@@ -216,6 +227,7 @@ function finalAction(input: {
   generatedSessionTitle?: string;
   canonicalMessageId?: string;
   turnId?: string;
+  executionModel?: unknown;
 }): OutboundAction {
   const { item, target } = input;
   return {
@@ -240,6 +252,7 @@ function finalAction(input: {
       turnId: input.turnId,
       canonicalMessageId: input.canonicalMessageId,
       generatedSessionTitle: input.generatedSessionTitle,
+      ...(input.executionModel ? { executionModel: input.executionModel } : {}),
     },
   };
 }
