@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type {
   AgentAdapter,
   BenchmarkPlan,
@@ -18,7 +18,7 @@ import { runBenchmarkArm, type LandingValidator } from "./workflow-arm.ts";
 import { verifyM1V2AuthoritativeProvenance } from "./m1-v2-provenance.ts";
 import { replacementEligibility } from "./paired-contract.ts";
 import { benchmarkPlanIdentity } from "./planning.ts";
-import { verifyM1V2DurableProjection, type M1V2EvidenceExportIdentity } from "./m1-v2-evidence-export.ts";
+import { hasM1V2DurableAuthority, recoverM1V2DurableProjection, verifyM1V2DurableProjection } from "./m1-v2-evidence-export.ts";
 import { emptyM1V2Repetition } from "./m1-v2-aggregate.ts";
 import { getBenchmarkFixture } from "./fixtures.ts";
 
@@ -174,11 +174,13 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
       completed.delete(arm.key);
     }
     if (!completed.has(arm.key) && (input.plan.campaign === "m1-v2" || input.plan.campaign === "m1-v2-paired")) {
-      if (existsSync(join(arm.evidenceRoot, "sc01-public-evidence.json.tmp"))) {
-        throw new Error("sc01_export_temporary_state_conflict");
-      }
-      if (existsSync(join(arm.evidenceRoot, "sc01-public-evidence.json"))) {
-        const recovered = recoverOrphanedDurableEvidence(input.plan, arm, preflight[arm.agent]);
+      const planIdentity = benchmarkPlanIdentity(input.plan);
+      const temporary = existsSync(join(arm.evidenceRoot, "sc01-public-evidence.json.tmp"));
+      const evidence = existsSync(join(arm.evidenceRoot, "sc01-public-evidence.json"));
+      const authority = hasM1V2DurableAuthority({ runRoot: input.plan.runRoot, planIdentity, armKey: arm.key });
+      if (temporary || evidence || authority) {
+        const recovered = recoverOrphanedDurableEvidence(input.plan, arm, preflight[arm.agent],
+          !temporary && evidence && authority);
         result.observations.push(recovered); completed.set(arm.key, recovered);
         await input.store.save(result);
         break;
@@ -210,20 +212,28 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
   return { result, preflight };
 }
 
-function recoverOrphanedDurableEvidence(plan: BenchmarkPlan, arm: import("./contracts.ts").BenchmarkArmPlan, preflight: PreflightResult): import("./contracts.ts").BenchmarkObservation {
-  const path = join(arm.evidenceRoot, "sc01-public-evidence.json");
-  const parsed = JSON.parse(readFileSync(path, "utf8")) as { identity: M1V2EvidenceExportIdentity };
+function recoverOrphanedDurableEvidence(plan: BenchmarkPlan, arm: import("./contracts.ts").BenchmarkArmPlan, preflight: PreflightResult,
+  completeCommit: boolean): import("./contracts.ts").BenchmarkObservation {
   const fixture = getBenchmarkFixture(arm.scenario, plan.harnessRoot);
-  const handle = relative(resolve(plan.runRoot), path).replaceAll("\\", "/");
-  const verified = verifyM1V2DurableProjection({ planIdentity: benchmarkPlanIdentity(plan), runRoot: plan.runRoot, arm, fixture,
-    target: { sessionId: parsed.identity.sessionId, turnId: parsed.identity.turnId }, durable: { handle, sha256: null } });
+  let verified: ReturnType<typeof recoverM1V2DurableProjection> | null = null;
+  let reason = "sc01_export_recovery_incomplete";
+  if (completeCommit) {
+    try {
+      verified = recoverM1V2DurableProjection({ planIdentity: benchmarkPlanIdentity(plan), runRoot: plan.runRoot, arm, fixture });
+      reason = "sc01_export_recovered_after_checkpoint_crash";
+    } catch {
+      reason = "sc01_export_recovery_verification_failed";
+    }
+  }
   const observation = createGatedBenchmarkObservation(arm, { ...preflight, available: false, configVerified: false,
-    gateCode: "measurement_unavailable", diagnostic: "sc01_export_recovered_after_checkpoint_crash" });
+    gateCode: "measurement_unavailable", diagnostic: reason });
   observation.providerDispatchState = "provider_dispatched";
   observation.infrastructureGateStage = null;
-  observation.m1V2 = { ...emptyM1V2Repetition(verified.identity.armId, arm.repetition, "gated", "sc01_export_recovered_after_checkpoint_crash"),
-    ...verified.arithmetic, targetEvidenceIdentity: { sessionId: verified.identity.sessionId, turnId: verified.identity.turnId },
-    durableEvidence: { handle: verified.handle, sha256: verified.sha256, identity: verified.identity } };
+  observation.m1V2 = verified
+    ? { ...emptyM1V2Repetition(fixture.m1V2!.armId, arm.repetition, "gated", reason),
+        ...verified.arithmetic, targetEvidenceIdentity: { sessionId: verified.identity.sessionId, turnId: verified.identity.turnId },
+        durableEvidence: { handle: verified.handle, sha256: verified.sha256, identity: verified.identity } }
+    : emptyM1V2Repetition(fixture.m1V2!.armId, arm.repetition, "gated", reason);
   return observation;
 }
 
@@ -231,7 +241,8 @@ function verifyTerminalDurableEvidence(plan: BenchmarkPlan, observation: import(
   const durable = observation.m1V2?.durableEvidence;
   if (!durable) {
     const postDispatch = observation.providerDispatchState === "provider_dispatched" || observation.providerDispatchState === "provider_output_observed";
-    if ((plan.campaign === "m1-v2" || plan.campaign === "m1-v2-paired") && observation.m1V2 && postDispatch) {
+    const safeOrphanGate = observation.m1V2?.reasons.length === 1 && observation.m1V2.reasons[0]?.startsWith("sc01_export_recover");
+    if ((plan.campaign === "m1-v2" || plan.campaign === "m1-v2-paired") && observation.m1V2 && postDispatch && !safeOrphanGate) {
       throw new Error("sc01_export_resume_evidence_missing");
     }
     return;
@@ -239,7 +250,7 @@ function verifyTerminalDurableEvidence(plan: BenchmarkPlan, observation: import(
   const fixture = getBenchmarkFixture(observation.arm.scenario, plan.harnessRoot);
   if (!observation.m1V2?.targetEvidenceIdentity) throw new Error("sc01_export_resume_target_identity_missing");
   verifyM1V2DurableProjection({ planIdentity: benchmarkPlanIdentity(plan), runRoot: plan.runRoot, arm: observation.arm, fixture,
-    target: observation.m1V2.targetEvidenceIdentity, durable: { handle: durable.handle, sha256: durable.sha256 } });
+    target: observation.m1V2.targetEvidenceIdentity, durable: { handle: durable.handle, sha256: durable.sha256, identity: durable.identity } });
 }
 
 function assertAdapterAuthority(

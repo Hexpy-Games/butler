@@ -49,6 +49,7 @@ export async function collectButlerM1V2Evidence(input: {
       expectedModelRef: input.benchmark.fixture.m1V2.scenario.model!,
       expectedRouteId: "openai-codex-responses",
       expectedCacheBoundaryRevision: input.benchmark.fixture.m1V2.scenario.cacheBoundaryEvidence?.expectedRevision ?? "current",
+      membershipSha256: null,
     },
     target,
     observations: (Array.isArray(input.evidence.observations) ? input.evidence.observations : []).map(recordValue).filter((row): row is Record<string, unknown> => row !== null),

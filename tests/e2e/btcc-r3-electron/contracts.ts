@@ -267,13 +267,13 @@ export interface StepObservation {
   screenshots: string[];
 }
 
-export interface ProviderRequestTurnIdentity {
+export type ProviderRequestTurnIdentity = {
   ordinal: number;
   sessionId: string;
   turnId: string;
-  requestKind: ProviderFixtureRequestKind;
-  attemptDigest: string | null;
-}
+  physicalAttemptDigest: string;
+} & ({ requestKind: "agent" } | { requestKind: "auxiliary" } |
+  { requestKind: "tool_provider" } | { requestKind: "title" });
 
 export type ProviderRequestSerializerContract =
   | "butler.openai-codex-final-json.v1"

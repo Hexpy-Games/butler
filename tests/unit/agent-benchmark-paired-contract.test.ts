@@ -40,6 +40,8 @@ import { createButlerAdapter } from "../support/agent-benchmark/butler-adapter.t
 import type { ProductionAgentAdapterOptions } from "../support/agent-benchmark/adapters.ts";
 import { Database } from "bun:sqlite";
 import { verifyM1V2EvidenceExport } from "../support/agent-benchmark/m1-v2-evidence-export.ts";
+import { startProviderObservationProxy } from "../e2e/btcc-r3-electron/provider-observation-proxy.ts";
+import { providerRequestTurnIdentities } from "../e2e/btcc-r3-electron/provider-request-turn-identity.ts";
 
 const root = mkdtempSync(join(process.cwd(), ".agent-benchmark-paired-contract-"));
 const authority = prepareTestHarnessAuthority(root);
@@ -296,28 +298,46 @@ describe("final paired M1 campaign contract", () => {
       runnerCalls += 1;
       const dataRoot = join(input.arm.evidenceRoot, "data"); mkdirSync(join(dataRoot, "metrics"), { recursive: true });
       const db = new Database(join(dataRoot, "runtime.sqlite")); db.exec("CREATE TABLE safe(value TEXT)"); db.close();
-      const now = Date.now(), digest = "A".repeat(43), turnId = `turn-${input.arm.order}`, sessionId = `session-${input.arm.order}`;
-      const metric = (name: string, dimensions: Record<string, string | number | boolean | null>) => JSON.stringify({ schema: "butler.operational-metric.v1", ts: now + 50,
+      const submittedAtMs = Date.now(), digest = "A".repeat(43), titleDigest = "B".repeat(43), auxiliaryDigest = "C".repeat(43);
+      const turnId = `turn-${input.arm.order}`, sessionId = `session-${input.arm.order}`;
+      const proxy = await startProviderObservationProxy({
+        fixture: { responses: [
+          { requestKind: "agent", requestModel: "gpt-5.6-sol", responseModel: "gpt-5.6-sol", text: "agent" },
+          { requestKind: "title", requestModel: "gpt-5.6-sol", responseModel: "gpt-5.6-sol", text: "title" },
+          { requestKind: "auxiliary", requestModel: "gpt-5.6-sol", responseModel: "gpt-5.6-sol", text: "auxiliary" },
+        ] },
+        execution: { model: "openai/gpt-5.6-sol", reasoning: "medium", serviceTier: "default" },
+      });
+      for (const [physicalDigest, body] of [
+        [digest, { model: "gpt-5.6-sol", input: "agent", tools: [], reasoning: { effort: "medium" }, prompt_cache_key: "benchmark:btcc-agent-loop" }],
+        [titleDigest, { model: "gpt-5.6-sol", input: "title", reasoning: { effort: "medium" }, prompt_cache_key: "benchmark:native-butler-title-provider" }],
+        [auxiliaryDigest, { model: "gpt-5.6-sol", input: "auxiliary", reasoning: { effort: "medium" } }],
+      ] as const) {
+        const response = await fetch(proxy.endpoint, { method: "POST", headers: { authorization: "Bearer fixture", "content-type": "application/json",
+          "x-butler-m1-physical-attempt": physicalDigest }, body: JSON.stringify(body) });
+        await response.text();
+      }
+      const providerRequests = await proxy.close();
+      const agentRequest = providerRequests.find((request) => request.requestKind === "agent")!;
+      const terminalAtMs = Math.max(...providerRequests.map((request) => request.terminatedAtMs!));
+      const metric = (name: string, dimensions: Record<string, string | number | boolean | null>) => JSON.stringify({ schema: "butler.operational-metric.v1", ts: agentRequest.terminatedAtMs!,
         category: "context", name, status: "ok", dimensions, rawTextStored: false });
       writeFileSync(join(dataRoot, "metrics", "operational-events.jsonl"), [
         metric("m1_v2_request_envelope", { schemaVersion: "butler.m1-request-envelope.v2", attemptDigest: digest, turnDigest: "T".repeat(43), phaseDigest: "P".repeat(43),
           roundIndex: 0, retryOrdinal: 0, providerId: "openai-codex", modelRef: "openai/gpt-5.6-sol", armId: input.arm.scenario,
-          sourceRevision: input.arm.sourceRevision, cacheBoundaryRevision: input.fixture.m1V2!.scenario.cacheBoundaryEvidence?.expectedRevision ?? "current", providerSendBytes: 100, estimatedInputTokens: null, eligibility: "usage_unavailable" }),
+          sourceRevision: input.arm.sourceRevision, cacheBoundaryRevision: input.fixture.m1V2!.scenario.cacheBoundaryEvidence?.expectedRevision ?? "current", providerSendBytes: agentRequest.serializedRequestBytes, estimatedInputTokens: null, eligibility: "usage_unavailable" }),
         metric("m1_v2_request_segment", { schemaVersion: "butler.m1-request-segment.v2", attemptDigest: digest, segmentId: "segment-01", kind: "provider_carrier_overhead",
-          stability: "dynamic", providerSendBytes: 100, estimatedInputTokens: null, keyedContentDigest: "K".repeat(43) }),
+          stability: "dynamic", providerSendBytes: agentRequest.serializedRequestBytes, estimatedInputTokens: null, keyedContentDigest: "K".repeat(43) }),
         metric("m1_v2_response_usage", { schemaVersion: "butler.m1-response-usage.v2", attemptDigest: digest, status: "unavailable", promptTokens: null,
           cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null, reasoningTokens: null, totalTokens: null }),
       ].join("\n") + "\n");
-      return { ok: true, generatedAt: new Date(now).toISOString(), run: { dataRoot, runRoot: input.arm.evidenceRoot, workspaceRoot: join(input.arm.evidenceRoot, "workspace"),
+      const providerRequestIdentities = providerRequestTurnIdentities({ requests: providerRequests, ordinalsBeforeSubmission: new Set(), sessionId, turnId });
+      return { ok: true, generatedAt: new Date(submittedAtMs).toISOString(), run: { dataRoot, runRoot: input.arm.evidenceRoot, workspaceRoot: join(input.arm.evidenceRoot, "workspace"),
         model: "openai/gpt-5.6-sol", reasoningEffort: "medium" }, session: { id: sessionId }, isolation: { bindingWorkspace: join(input.arm.evidenceRoot, "workspace"), workspaceInsideRunRoot: true, sourceDataIsRunData: false },
-        observations: [{ stepId: input.fixture.m1V2!.targetStepId, sessionId, turnId, providerRequestIdentities: [{ ordinal: 1, sessionId, turnId, requestKind: "agent", attemptDigest: digest }],
+        observations: [{ stepId: input.fixture.m1V2!.targetStepId, sessionId, turnId, providerRequestIdentities,
           terminalState: "delivered", finalText: "안녕하세요.", providerReportedModel: "gpt-5.6-sol", providerAgentModels: ["gpt-5.6-sol"], promptSha256: input.fixture.m1V2!.promptSha256[input.fixture.m1V2!.targetStepId],
-          timing: { submittedAtMs: now, terminalAtMs: now + 100, elapsedMs: 100 }, reload: { tested: true, finalMatched: true } }],
-        providerRequests: [{ ordinal: 1, attemptDigest: digest, requestKind: "agent", requestedModel: "gpt-5.6-sol", requestedReasoning: "medium", requestedServiceTier: null, requestedServiceTierMode: "auto_by_omission", authorizationScheme: "bearer",
-          routeId: "openai-codex-responses", requestStartedAtMs: now + 10, serializedRequestBytes: 100, serializedRequestDigest: "d".repeat(64), serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1", serializerContract: "butler.openai-codex-final-json.v1",
-          firstContentBearingDeltaAtMs: 5, completedAtMs: now + 50, terminatedAtMs: now + 50, termination: "completed", status: 200, hasTextContent: true, hasToolArgumentContent: false,
-          hasReasoningContent: false, streamedTextChars: 1, finalTextChars: 0, providerReportedModel: "gpt-5.6-sol", providerReportedServiceTier: "default",
-          effectiveServiceTierAvailability: "reported", effectiveServiceTierReason: "provider_response_reported" }] };
+          timing: { submittedAtMs, terminalAtMs, elapsedMs: terminalAtMs - submittedAtMs }, reload: { tested: true, finalMatched: true } }],
+        providerRequests };
     }, afterRoot);
     const unavailable = (agent: "hermes" | "opencode"): AgentAdapter => ({ agent, async preflight() { throw new Error("not scheduled"); }, async run() { throw new Error("not scheduled"); } });
     const args = cliArgs(runRoot, files).map((value, index) => index === 0 ? "run" : value === join(root, "private-before-source") ? beforeRoot : value === join(root, "private-after-source") ? afterRoot : value);
@@ -329,8 +349,33 @@ describe("final paired M1 campaign contract", () => {
     expect(readFileSync(join(runRoot, "report", "agent-benchmark-report.md"), "utf8")).toContain("Final paired M1 contract");
     const completedResult = JSON.parse(readFileSync(join(runRoot, "result.json"), "utf8")) as BenchmarkResultFile;
     const hardPath = join(runRoot, "arms", "block-1", "before", "evidence", "sc01-public-evidence.json");
-    const hardIdentity = (JSON.parse(readFileSync(hardPath, "utf8")) as { identity: import("../support/agent-benchmark/m1-v2-evidence-export.ts").M1V2EvidenceExportIdentity }).identity;
+    const hardEvidence = JSON.parse(readFileSync(hardPath, "utf8")) as {
+      identity: import("../support/agent-benchmark/m1-v2-evidence-export.ts").M1V2EvidenceExportIdentity;
+      attempts: Array<{ attemptDigest: string; serializedRequestBytes: number }>;
+      overhead: Array<{ role: string; attemptDigest: string; providerSendBytes: number }>;
+    };
+    const hardIdentity = hardEvidence.identity;
     expect(() => verifyM1V2EvidenceExport({ path: hardPath, expected: hardIdentity })).not.toThrow();
+    expect(hardEvidence.attempts).toHaveLength(1);
+    expect(hardEvidence.overhead.map((row) => [row.role, row.attemptDigest])).toEqual([
+      ["title", "B".repeat(43)], ["auxiliary", "C".repeat(43)],
+    ]);
+    expect(completedResult.observations[0]!.m1V2).toMatchObject({
+      titlePhysicalAttempts: 1, auxiliaryPhysicalAttempts: 1,
+    });
+    const completedM1 = completedResult.observations[0]!.m1V2!;
+    const titleBytes = hardEvidence.overhead.find((row) => row.role === "title")!.providerSendBytes;
+    const auxiliaryBytes = hardEvidence.overhead.find((row) => row.role === "auxiliary")!.providerSendBytes;
+    expect(completedM1.agentAttempts[0]!.providerSendBytes).toBe(hardEvidence.attempts[0]!.serializedRequestBytes);
+    expect(completedM1.unarmedPhysicalOverhead).toMatchObject({
+      title: { attempts: 1, providerSendBytes: titleBytes },
+      auxiliary: { attempts: 1, providerSendBytes: auxiliaryBytes },
+    });
+    expect(completedM1.agentAttempts[0]!.providerSendBytes +
+      completedM1.unarmedPhysicalOverhead.title.providerSendBytes +
+      completedM1.unarmedPhysicalOverhead.auxiliary.providerSendBytes).toBe(
+      hardEvidence.attempts[0]!.serializedRequestBytes + titleBytes + auxiliaryBytes,
+    );
     expect(completedResult.observations[0]!.m1V2, JSON.stringify(completedResult.observations[0]!.diagnostics)).not.toBeNull();
     expect(completedResult.observations[0]!.m1V2!.durableEvidence, JSON.stringify({ gate: completedResult.observations[0]!.gateCode, diagnostics: completedResult.observations[0]!.diagnostics })).toBeDefined();
     const reportAuthorityResult = { ...completedResult, run: { ...completedResult.run, runRoot }, plan: { ...completedResult.plan, runRoot } };
@@ -345,7 +390,7 @@ describe("final paired M1 campaign contract", () => {
     const copiedHandle = structuredClone(reportAuthorityResult); copiedHandle.observations[0]!.m1V2!.durableEvidence!.handle = "copied-evidence/sc01-public-evidence.json";
     expect(summarizeBenchmarkResult(copiedHandle).arms[0]).toMatchObject({ terminalState: "gated", gateCode: "measurement_unavailable" });
     const originalDurable = readFileSync(completedDurablePath, "utf8");
-    writeFileSync(completedDurablePath, originalDurable.replace('"providerSendBytes": 100', '"providerSendBytes": 101'));
+    writeFileSync(completedDurablePath, originalDurable.replace(/"providerSendBytes": (\d+)/u, (_match, bytes) => `"providerSendBytes": ${Number(bytes) + 1}`));
     expect(summarizeBenchmarkResult(reportAuthorityResult).arms[0]).toMatchObject({ terminalState: "gated", gateCode: "measurement_unavailable" });
     const tamperedReportRoot = join(runRoot, "tampered-report"); writeBenchmarkReport(reportAuthorityResult, tamperedReportRoot);
     expect(readFileSync(join(tamperedReportRoot, "comparison-index.json"), "utf8")).toContain('"status": "unranked"');
@@ -361,16 +406,30 @@ describe("final paired M1 campaign contract", () => {
     const persisted = JSON.parse(readFileSync(join(runRoot, "result.json"), "utf8")) as BenchmarkResultFile;
     expect(persisted.observations[0]).toMatchObject({ terminalState: "gated", gateCode: "measurement_unavailable", providerDispatchState: "provider_dispatched",
       infrastructureGateStage: null, m1V2: { reasons: ["sc01_export_recovered_after_checkpoint_crash"] } });
+    expect(persisted.observations[0]!.m1V2).toMatchObject({
+      agentAttempts: completedM1.agentAttempts,
+      titlePhysicalAttempts: 1,
+      auxiliaryPhysicalAttempts: 1,
+      unarmedPhysicalOverhead: completedM1.unarmedPhysicalOverhead,
+      durableEvidence: completedM1.durableEvidence,
+    });
     await runAgentBenchmarkCli(args, { createAdapters: () => ({ butler: mustNotDispatch, hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
       preflightExecutor: authExecutor(true), landingValidator: async () => { throw new Error("must not validate"); } });
     expect(restartDispatches).toBe(0);
     const twiceResumed = JSON.parse(readFileSync(join(runRoot, "result.json"), "utf8")) as BenchmarkResultFile;
     expect(twiceResumed.replacements ?? []).toHaveLength(0);
-    const durablePath = join(runRoot, persisted.observations[0]!.m1V2!.durableEvidence!.handle);
-    writeFileSync(durablePath, readFileSync(durablePath, "utf8").replace('"providerSendBytes": 100', '"providerSendBytes": 101'));
+    expect(persisted.observations[0]!.m1V2!.durableEvidence).toBeDefined();
     expect(summarizeBenchmarkResult(persisted).pairedCampaign?.acceptance.complete).toBe(false);
     expect(comparisonIndexForResult({ ...persisted, observations: persisted.observations.map((row, index) => index === 0 ? { ...row, terminalState: "gated" } : row) })
       .find((entry) => entry.id === "paired-butler")?.status).toBe("unranked");
+    rmSync(completedDurablePath);
+    writeFileSync(join(runRoot, "result.json"), `${JSON.stringify({ ...completedResult, observations: [], run: { ...completedResult.run, state: "running" } }, null, 2)}\n`);
+    await runAgentBenchmarkCli(args, { createAdapters: () => ({ butler: mustNotDispatch, hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
+      preflightExecutor: authExecutor(true), landingValidator: async () => { throw new Error("must not validate"); } });
+    expect(restartDispatches).toBe(0);
+    const partialRecovery = JSON.parse(readFileSync(join(runRoot, "result.json"), "utf8")) as BenchmarkResultFile;
+    expect(partialRecovery.observations[0]).toMatchObject({ terminalState: "gated", gateCode: "measurement_unavailable",
+      m1V2: { reasons: ["sc01_export_recovery_incomplete"], agentAttempts: [] } });
   }, 30_000);
 
   test("runs public paired CLI through auth preflight, real Butler adapter, launch-smoke runner, and cleanup provider-free", async () => {
@@ -901,7 +960,7 @@ function completeFakeResult(input: AdapterRunInput): AdapterRunResult {
     session: { id: sessionId }, observations: [{ stepId: fixture.m1V2!.targetStepId, sessionId, turnId, terminalState: "delivered",
       promptSha256: fixture.m1V2!.promptSha256[fixture.m1V2!.targetStepId], finalText, providerReportedModel: "gpt-5.6-sol",
       providerAgentModels: ["gpt-5.6-sol"], timing: { submittedAtMs: now, terminalAtMs: now + 100, elapsedMs: before ? 100 : 75 },
-      reload: { tested: true, finalMatched: true }, providerRequestIdentities: attempts.map((item) => ({ ...item, sessionId, turnId, requestKind: "agent" })), work }],
+      reload: { tested: true, finalMatched: true }, providerRequestIdentities: attempts.map((item) => ({ ordinal: item.ordinal, physicalAttemptDigest: item.attemptDigest, sessionId, turnId, requestKind: "agent" as const })), work }],
     providerRequests: attempts.map((item) => ({ ...item, requestKind: "agent", requestStartedAtMs: now + 10,
       firstContentBearingDeltaAtMs: 10, completedAtMs: now + 50, terminatedAtMs: now + 50, serializedRequestBytes: before ? 100 : 60 })) };
   const metric = (name: string, dimensions: Record<string, string | number | boolean | null>) => ({ schema: "butler.operational-metric.v1" as const,

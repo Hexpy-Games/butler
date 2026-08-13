@@ -289,6 +289,11 @@ test("deterministic provider fixture fails the primary once and reports the back
         termination: "completed",
       },
     ]);
+    expect(proxy.observations()[1]).toMatchObject({
+      providerReportedServiceTier: "default",
+      effectiveServiceTierAvailability: "reported",
+      effectiveServiceTierReason: "provider_response_reported",
+    });
   } finally {
     await proxy.close();
   }

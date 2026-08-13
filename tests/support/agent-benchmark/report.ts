@@ -190,7 +190,7 @@ function reportEvidenceCheckedResult(result: BenchmarkResultFile): BenchmarkResu
       const fixture = getBenchmarkFixture(observation.arm.scenario, result.plan.harnessRoot);
       const verified = verifyM1V2DurableProjection({ planIdentity: result.run.planIdentity, runRoot: result.plan.runRoot,
         arm: observation.arm, fixture, target: observation.m1V2.targetEvidenceIdentity,
-        durable: { handle: durable.handle, sha256: durable.sha256 } });
+        durable: { handle: durable.handle, sha256: durable.sha256, identity: durable.identity } });
       if (!observation.m1V2) throw new Error();
       return { ...observation, m1V2: { ...observation.m1V2, ...verified.arithmetic } };
     } catch {

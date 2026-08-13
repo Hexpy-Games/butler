@@ -54,7 +54,7 @@ export function evaluateM1V2AdapterEvidence(input: {
       targetEvidenceIdentity = { sessionId: target.sessionId, turnId: target.turnId };
       const verified = verifyM1V2DurableProjection({ planIdentity: evidence.exportPlanIdentity, runRoot: evidence.exportRunRoot,
         arm: input.arm, fixture: input.fixture, target: { sessionId: target.sessionId, turnId: target.turnId },
-        durable: { handle: evidence.exportHandle, sha256: evidence.exportSha256 } });
+        durable: { handle: evidence.exportHandle, sha256: evidence.exportSha256, identity: evidence.exportIdentity } });
       durableArithmetic = verified.arithmetic;
       metrics = exportedM1V2Metrics(verified.evidence);
     } catch {

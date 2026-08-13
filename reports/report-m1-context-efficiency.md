@@ -755,3 +755,45 @@ non-ENOENT path ambiguity, successful and partial restart, prepared-resource
 identity mutation, safe receipt resume, unsafe/partial roots, adapter
 classification, campaign root preservation, and the real public paired CLI
 composition. No provider, live Electron, prepared build, or campaign was run.
+
+## Durable physical-request digest repair
+
+Task: `T-M1-V2-DURABLE-PHYSICAL-DIGEST-REPAIR-20260813`
+
+The canonical proxy captures the bounded HMAC attempt digest before it
+classifies the physical request role. The typed Step identity therefore now
+models `physicalAttemptDigest` as a required identity for Agent, title,
+auxiliary, and tool-provider requests. Durable evidence schema v2 preserves
+each physical request exactly once with its ordinal, role, Step/Session/Turn
+ownership, terminal status, provider bytes and timing, route/model/auth/tier
+fields, serializer digest, and physical attempt digest. It stores no prompt,
+body, response, credential, path, or reasoning content.
+
+The durable rows are role-discriminated. Only Agent attempts may own SC01
+request envelopes, segments, and nullable usage, and only their exact segment
+sum enters SC01 Agent arithmetic. Non-Agent rows must be unarmed and cannot
+fabricate SC01 evidence; their title, auxiliary, and tool-provider counts and
+bytes are recomputed separately. A shared physical-request verifier rejects
+missing, malformed, duplicate, conflicting, cross-role, cross-turn, stale,
+status, timing, byte, ordinal, and retry-ownership mismatches.
+
+Restart verification is anchored by an atomic, symlink-safe external
+membership authority plus the immutable evidence SHA. A complete authority and
+export independently reconstruct Agent arithmetic and non-Agent overhead.
+Authority-only, evidence-only, or temporary partial crash states fail closed as
+`measurement_unavailable` without replacement or provider redispatch. Report
+and evaluator paths re-open the durable export instead of trusting the stored
+summary.
+
+Provider-free coverage includes the real public paired CLI through the Butler
+adapter, runner fixture, provider proxy, typed identities, durable exporter,
+evaluator, and report for all 24 steps. Its exact failing shape has one Agent,
+one title, and one auxiliary request with distinct legitimate digests; the
+Agent byte sum excludes overhead while title and auxiliary bytes remain exact.
+Focused and public tests, root/UI typecheck, full lint with zero errors, BTCC
+shape, module audit, and diff check passed. Sol-high independently approved the
+final diff with P0-P3 none. The bounded repository-wide check again reached the
+broad unit phase and hit its 301-second limit, so an unbounded full pass is not
+claimed. No provider, Electron, prepared build, smoke, campaign, Hermes, or
+OpenCode execution was performed, and failed Final Attempt
+`A-M1-V2-FINAL-BENCHMARK-20260813-02` remains immutable.
