@@ -4,7 +4,7 @@ import type { ToolProgressSummary } from "../tools/tool-support.ts";
 import type { ModelRouteState } from "./model-route/index.ts";
 import type { M1CacheBoundaryEvidence } from
   "./ports/provider-request-attribution.ts";
-
+import type { InboundEnvelope } from "../../gateways/core/contracts.ts";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export type AdmittedModelSelection = {
@@ -103,7 +103,17 @@ export type BtccRunCommand = Exclude<BtccTurnCommand, { kind: "stop" }>;
 export type BtccStopCommand = Extract<BtccTurnCommand, { kind: "stop" }>;
 
 export type BtccTurnOutcome = (
-  | { kind: "delivered"; turnId: string; messageId: string; content: string }
+  | {
+      kind: "delivered";
+      turnId: string;
+      messageId: string;
+      content: string;
+      modelIdentity?: {
+        requestedModelRef: string;
+        effectiveModelRef: string;
+        providerReportedModelRef?: string;
+      };
+    }
   | { kind: "cancelled"; turnId: string }
   | { kind: "already_cancelled"; turnId: string }
   | { kind: "already_finalizing"; turnId: string }
@@ -207,6 +217,7 @@ export type BtccTurnRequest = {
   };
   progressDestination?: BtccProgressDestination;
   executionControls?: BtccTurnExecutionControls;
+  appTurnContext?: InboundEnvelope["appTurnContext"];
   signal?: AbortSignal;
 };
 
@@ -329,6 +340,7 @@ export interface BtccTurnProgressObserver {
     detailRows?: ToolProgressSummary["detailRows"];
     resultRef?: { id: string; sha256: string };
     byteLength?: number;
+    resultJson?: string;
   }): void | Promise<void>;
   /** Presentation-only liveness for the provider request currently in flight. */
   modelRoundWaitingChanged?(update: {

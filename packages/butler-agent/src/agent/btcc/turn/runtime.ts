@@ -246,6 +246,7 @@ function guidedFinalTransition(turn: TurnRecord, result: BtccAgentLoopResult) {
     route: result.route,
     disposition: "completed" as const,
     content,
+    ...(result.modelIdentity ? { modelIdentity: result.modelIdentity } : {}),
   };
   const finalPayload = {
     ref: contentRef("payload", finalPayloadBody),

@@ -29,6 +29,11 @@ export type BtccAgentLoopToolCall = ModelRoundToolCall;
 export type BtccAgentLoopResult = {
   content: string;
   route: "direct" | "assisted" | "managed";
+  modelIdentity?: {
+    requestedModelRef: string;
+    effectiveModelRef: string;
+    providerReportedModelRef?: string;
+  };
 };
 
 export interface BtccAgentLoop {

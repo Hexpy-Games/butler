@@ -117,6 +117,32 @@ export class AppTransportQueueStore {
           senderDisplayName: "Butler App",
           projectId: chat?.project_id ?? undefined,
           executionControls,
+          appTurnContext: {
+            version: 1,
+            session: {
+              id: input.chatId,
+              kind: chat?.kind === "project" ? "project" : "chat",
+            },
+            conversation: {
+              chatId: input.chatId,
+              userMessageId: input.message.id,
+              turnId: input.turnId,
+              turnAttempt: this.getTurn(input.turnId).attempt,
+            },
+            ...(project ? {
+              project: {
+                id: project.id,
+                workspacePath: project.workspace_path,
+                ...(project.ledger_project_id
+                  ? { ledgerProjectId: project.ledger_project_id }
+                  : {}),
+              },
+            } : {}),
+            model: {
+              requestedModelRef: executionControls.model_ref,
+              reasoningEffort: executionControls.reasoning_effort,
+            },
+          },
           attachments: this.messageFiles.attachmentsForTransport(
             input.message.id,
           ),

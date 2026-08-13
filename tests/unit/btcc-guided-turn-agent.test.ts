@@ -769,7 +769,15 @@ test("primary-only route uses the durable routed path", async () => {
     let attemptHistoryLoads = 0;
     const agent = fixture.agent({
       async runRound() {
-        return { text: "primary answer", toolCalls: [] };
+        return {
+          text: "primary answer",
+          toolCalls: [],
+          providerIdentity: {
+            provider: "openai",
+            configuredModel: "openai/gpt-5.5",
+            reportedModel: "gpt-5.5-served",
+          },
+        };
       },
     });
     const turn = turnRecord(fixture.root, { turnId: "guided-primary-only-route" });
@@ -778,7 +786,7 @@ test("primary-only route uses the durable routed path", async () => {
       reasoningEffort: "medium",
       retryCeiling: 3,
     });
-    await agent.run({
+    const result = await agent.run({
       turn,
       signal: new AbortController().signal,
       recordModelRouteEvent: async () => {
@@ -797,6 +805,11 @@ test("primary-only route uses the durable routed path", async () => {
     expect(routeEvents).toBe(1);
     expect(acceptedResponses).toBe(1);
     expect(attemptHistoryLoads).toBe(1);
+    expect(result.modelIdentity).toEqual({
+      requestedModelRef: "openai/gpt-5.6-sol",
+      effectiveModelRef: "openai/gpt-5.5",
+      providerReportedModelRef: "openai/gpt-5.5-served",
+    });
   } finally {
     fixture.close();
   }
