@@ -1,4 +1,4 @@
-import { isDurableWorkTool, type DurableWorkService } from "../work/index.ts";
+import type { DurableWorkService } from "../work/index.ts";
 import type { BtccAgentLoop, BtccAgentLoopInput, BtccAgentLoopResult } from "./contracts.ts";
 import type { ModelRoundPort } from "../ports/model-round.ts";
 import { createGuidedEffectService } from "../effects/index.ts";
@@ -22,7 +22,6 @@ import {
   guidedPolicy,
   hiddenNativeToolNamesForGuidedTurn,
   isZaiMcpVisionTurn,
-  routeForUsedTools,
   selectedModelRef,
   visibleToolDefinitions,
 } from "./guided-turn-policy.ts";
@@ -59,11 +58,8 @@ import {
 import { createGuidedOperationalProgressCapture } from
   "./guided-operational-progress.ts";
 import { throwIfExecutionWindowAborted } from "./execution-window.ts";
-import {
-  guidedOperationalFallbackAfterInternalId,
-  loadGuidedOperationalFacts,
-} from "./guided-operational-facts.ts";
-import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
+import { loadGuidedOperationalFacts } from "./guided-operational-facts.ts";
+import { finalizeGuidedTurnResult } from "./guided-turn-result.ts";
 import { createGuidedSessionWorkspaceRuntime, type GuidedSessionWorkspaceBindingStore } from "./guided-session-workspace-recovery.ts";
 
 export function createProductionGuidedTurnAgent(input: {
@@ -343,33 +339,12 @@ export function createProductionGuidedTurnAgent(input: {
       });
       await closeout.recordMissingDiagnostic();
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
-      const internalWorkIds = [initialWork?.work.workId, finalWork?.workId]
-        .filter((workId): workId is string => Boolean(workId));
-      const content = internalWorkIds.some((workId) => text.includes(workId))
-        ? await guidedOperationalFallbackAfterInternalId({
-            originalRequest: turn.originalMessage,
-            turnId: turn.turnId,
-            responseLanguage,
-            finalWork,
-            internalWorkIds,
-            listToolCalls: () => input.toolJournal.list(turn.turnId),
-            listEffectsForWork: (workId) => input.effectJournal.listForWork(workId),
-            readProgress: () => progressCapture.facts(),
-          })
-        : text;
-      const artifacts = collectGuidedFinalArtifacts(
-        input.toolJournal.list(turn.turnId),
-      );
-      return {
-        content,
-        ...(acceptedModelIdentity ? { modelIdentity: acceptedModelIdentity } : {}),
-        ...(artifacts.length > 0 ? { artifacts } : {}),
-        route: routeForUsedTools(
-          toolCalls.usedTools,
-          Boolean(finalWork) ||
-            toolCalls.usedTools.some(isDurableWorkTool),
-        ),
-      };
+      return finalizeGuidedTurnResult({
+        text, originalRequest: turn.originalMessage, turnId: turn.turnId,
+        responseLanguage, initialWorkId: initialWork?.work.workId, finalWork,
+        usedTools: toolCalls.usedTools, toolJournal: input.toolJournal,
+        effectJournal: input.effectJournal, readProgress: progressCapture.facts, modelIdentity: acceptedModelIdentity,
+      });
     },
   };
 }

@@ -106,6 +106,71 @@ test("unknown legacy btcc tables fail closed without publishing a target", async
   expect(Bun.file(paths.agentBtccDbPath).size).toBe(0);
 });
 
+test("orphaned durable Turn references fail closed before publish", async () => {
+  const { paths, butlerData } = fixture();
+  const source = new Database(paths.legacyAppDbPath);
+  source.query(`
+    INSERT INTO btcc_turns (
+      turn_id, session_id, inbox_id, trigger_key, original_message_id,
+      original_message, admission_snapshot_ref, model_selection_json,
+      context_json, semantic_state, revision, execution_fence
+    ) VALUES ('orphan-turn', 'session-1', 'missing-inbox', 'trigger',
+      'message-1', 'request', 'record:missing', '{}', '{}', 'admitted', 1, 1)
+  `).run();
+  source.close();
+
+  await expect(prepareAgentBtccStorage({
+    butlerData,
+    quiesceLegacyWriter: async () => ({
+      fenceId: "legacy-fence-orphan",
+      reconciledClaims: 0,
+      parkedClaims: 0,
+    }),
+  })).rejects.toThrow("agent_btcc_migration_reference_check_failed:turn_inbox");
+  expect(Bun.file(paths.agentBtccDbPath).size).toBe(0);
+});
+
+test("pre-admission cancellation remains valid without a Turn row", async () => {
+  const { paths, butlerData } = fixture();
+  const source = new Database(paths.legacyAppDbPath);
+  source.query(`
+    INSERT INTO btcc_stop_requests (
+      stop_request_id, turn_id, status, observed_turn_revision, created_at, updated_at
+    ) VALUES ('stop-1', 'not-admitted', 'cancelled_before_admission', -1, 'now', 'now')
+  `).run();
+  source.close();
+  const result = await prepareAgentBtccStorage({
+    butlerData,
+    quiesceLegacyWriter: async () => ({
+      fenceId: "legacy-fence-stop", reconciledClaims: 0, parkedClaims: 0,
+    }),
+  });
+  expect(result.kind).toBe("migrated");
+});
+
+test("already relinquished claims remain valid receipt state", async () => {
+  const { paths, butlerData } = fixture();
+  const source = new Database(paths.legacyAppDbPath);
+  source.query(`INSERT INTO btcc_inbound_inbox
+    (inbox_id, session_id, trigger_key, turn_id, admission_input_hash, command_json, status)
+    VALUES ('inbox-r', 'session-r', 'trigger-r', 'turn-r', 'hash', '{}', 'pending')`).run();
+  source.query(`INSERT INTO btcc_runtime_owners
+    (owner_id, host_id, process_id, process_started_at_ms, owner_generation,
+      status, registered_at, closed_at)
+    VALUES ('owner-r', 'host-r', 1, 1, 1, 'closed', 'now', 'now')`).run();
+  source.query(`INSERT INTO btcc_admission_claims
+    (claim_id, inbox_id, owner_id, owner_generation, lease_generation, status)
+    VALUES ('claim-r', 'inbox-r', 'owner-r', 1, 1, 'relinquished')`).run();
+  source.close();
+  const result = await prepareAgentBtccStorage({
+    butlerData,
+    quiesceLegacyWriter: async () => ({
+      fenceId: "legacy-fence-relinquished", reconciledClaims: 0, parkedClaims: 0,
+    }),
+  });
+  expect(result.receipt.fence.parkedClaims).toBe(0);
+});
+
 test("interrupted migration removes only its temporary target and retries safely", async () => {
   const { paths, butlerData } = fixture();
   let interrupted = true;

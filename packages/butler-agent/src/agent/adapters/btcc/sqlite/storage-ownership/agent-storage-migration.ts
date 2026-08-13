@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -26,6 +27,7 @@ import {
   validateAgentBtccDatabase,
   validateCanonicalManifest,
   validateReceiptSnapshot,
+  snapshotStatefulTables,
 } from "./migration-table-copy.ts";
 
 const STORAGE_METADATA_SCHEMA = `
@@ -83,9 +85,11 @@ export async function prepareAgentBtccStorage(input: {
     target.exec(STORAGE_METADATA_SCHEMA);
     validateCanonicalManifest(target);
     if (source) rejectUnknownSourceTables(source);
-    const tables = target.transaction(() =>
+    target.transaction(() =>
       copyAndValidateStatefulTables(source, target!),
     ).immediate();
+    const claimDisposition = parkLegacyClaims(target);
+    const tables = snapshotStatefulTables(target);
     input.faultHook?.("after_copy");
     validateAgentBtccDatabase(target);
     const receipt: AgentBtccMigrationReceipt = {
@@ -94,7 +98,12 @@ export async function prepareAgentBtccStorage(input: {
       sourceKind: source ? "legacy_app_db" : "fresh_install",
       sourceSchemaVersion: source ? pragmaUserVersion(source) : 0,
       sourceSizeBytes,
-      fence,
+      fence: {
+        ...fence,
+        reconciledClaims: claimDisposition.reconciledClaims,
+        parkedClaims: claimDisposition.parkedClaims,
+        claimDispositionSha256: claimDisposition.sha256,
+      },
       tables,
       completedAt: (input.now?.() ?? new Date()).toISOString(),
     };
@@ -131,6 +140,43 @@ export async function prepareAgentBtccStorage(input: {
   }
 }
 
+function parkLegacyClaims(db: Database): {
+  reconciledClaims: number;
+  parkedClaims: number;
+  sha256: string;
+} {
+  const claims = [
+    ...db.query<{ claim_id: string; owner_id: string; status: string }, []>(`
+      SELECT claim_id, owner_id, status FROM btcc_admission_claims ORDER BY claim_id
+    `).all().map((row) => ({ kind: "admission", ...row })),
+    ...db.query<{ claim_id: string; owner_id: string; status: string }, []>(`
+      SELECT claim_id, owner_id, status FROM btcc_state_claims ORDER BY claim_id
+    `).all().map((row) => ({ kind: "state", ...row })),
+  ];
+  const active = claims.filter((claim) => claim.status === "active");
+  db.transaction(() => {
+    db.query("UPDATE btcc_admission_claims SET status = 'relinquished' WHERE status = 'active'").run();
+    db.query("UPDATE btcc_state_claims SET status = 'relinquished' WHERE status = 'active'").run();
+    db.query(`
+      UPDATE btcc_checkpoints SET active_claim_id = NULL
+      WHERE active_claim_id IN (
+        SELECT claim_id FROM btcc_state_claims WHERE status = 'relinquished'
+      )
+    `).run();
+  }).immediate();
+  const disposition = claims.map((claim) => ({
+    kind: claim.kind,
+    claimId: claim.claim_id,
+    ownerId: claim.owner_id,
+    status: claim.status === "active" ? "relinquished" : claim.status,
+  }));
+  return {
+    reconciledClaims: claims.length,
+    parkedClaims: active.length,
+    sha256: createHash("sha256").update(JSON.stringify(disposition)).digest("hex"),
+  };
+}
+
 export function readValidatedReceipt(dbPath: string): AgentBtccMigrationReceipt {
   const db = new Database(dbPath, { readonly: true, strict: true });
   try {
@@ -156,11 +202,43 @@ export function readValidatedReceipt(dbPath: string): AgentBtccMigrationReceipt 
     validateAgentBtccDatabase(db);
     if (!activationMarkerExists(db)) {
       validateReceiptSnapshot(db, receipt);
+      if (receipt.fence.claimDispositionSha256) {
+        const classified = classifyParkedClaims(db);
+        if (classified.sha256 !== receipt.fence.claimDispositionSha256 ||
+          classified.reconciledClaims !== receipt.fence.reconciledClaims ||
+          classified.activeClaims !== 0) {
+          throw new Error("agent_btcc_storage_claim_disposition_mismatch");
+        }
+      }
     }
     return receipt;
   } finally {
     db.close();
   }
+}
+
+function classifyParkedClaims(db: Database): {
+  reconciledClaims: number;
+  activeClaims: number;
+  sha256: string;
+} {
+  const claims = [
+    ...db.query<{ claim_id: string; owner_id: string; status: string }, []>(`
+      SELECT claim_id, owner_id, status FROM btcc_admission_claims ORDER BY claim_id
+    `).all().map((row) => ({ kind: "admission", ...row })),
+    ...db.query<{ claim_id: string; owner_id: string; status: string }, []>(`
+      SELECT claim_id, owner_id, status FROM btcc_state_claims ORDER BY claim_id
+    `).all().map((row) => ({ kind: "state", ...row })),
+  ];
+  const disposition = claims.map((claim) => ({
+    kind: claim.kind, claimId: claim.claim_id, ownerId: claim.owner_id,
+    status: claim.status,
+  }));
+  return {
+    reconciledClaims: claims.length,
+    activeClaims: claims.filter((claim) => claim.status === "active").length,
+    sha256: createHash("sha256").update(JSON.stringify(disposition)).digest("hex"),
+  };
 }
 
 function activationMarkerExists(db: Database): boolean {

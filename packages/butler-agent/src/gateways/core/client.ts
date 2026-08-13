@@ -12,7 +12,7 @@ export interface ButlerServiceClient {
     input: AppInboundInput,
     metadata?: Record<string, unknown>,
   ): QueuedInboundEvent;
-  enqueueAppCancellation?(
+  enqueueAppCancellation(
     input: AppCancellationInput,
     metadata?: Record<string, unknown>,
   ): QueuedInboundEvent;
@@ -40,7 +40,7 @@ export class FileQueueButlerServiceClient implements ButlerServiceClient {
     input: AppCancellationInput,
     metadata: Record<string, unknown> = {},
   ): QueuedInboundEvent {
-    return this.queue.enqueue(createAppCancellationEnvelope(input), metadata);
+    return this.queue.enqueueIdempotent(createAppCancellationEnvelope(input), metadata);
   }
 }
 

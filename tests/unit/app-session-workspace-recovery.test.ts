@@ -483,6 +483,9 @@ function gitText(cwd: string, args: string[]): string {
 
 function queueClient(): ButlerServiceClient {
   return {
+    enqueueAppCancellation() {
+      throw new Error("unexpected cancellation");
+    },
     enqueueAppTurn(input, metadata = {}) {
       return {
         version: 1,
