@@ -59,6 +59,7 @@ export interface ProviderRequestObservation {
   serializedRequestDigest: string | null;
   serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1" | null;
   serializerContract: ProviderRequestSerializerContract | null;
+  exactResultReadSchemaObserved: boolean;
   firstContentBearingDeltaAtMs: number | null;
   completedAtMs: number | null;
   terminatedAtMs: number | null;
@@ -163,6 +164,34 @@ function requestedModel(body: Buffer): string | null {
   }
 }
 
+function exactResultReadSchemaObserved(body: Buffer): boolean {
+  try {
+    const parsed = JSON.parse(body.toString("utf8")) as { tools?: unknown };
+    if (!Array.isArray(parsed.tools)) return false;
+    return parsed.tools.some((value) => {
+      if (!value || typeof value !== "object") return false;
+      const tool = value as Record<string, unknown>;
+      const parameters = tool.parameters;
+      if (tool.type !== "function" || tool.name !== "read_operation_results" ||
+          !parameters || typeof parameters !== "object" || Array.isArray(parameters)) return false;
+      return JSON.stringify(parameters) === JSON.stringify({
+        type: "object", additionalProperties: false,
+        properties: {
+          result_ref: { type: "string", minLength: 1, maxLength: 256 },
+          sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          revision: { anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }] },
+          work_id: { anyOf: [{ type: "string", minLength: 1, maxLength: 256 }, { type: "null" }] },
+          offset: { type: "integer", minimum: 0 },
+          length: { type: "integer", minimum: 1, maximum: 4096 },
+        },
+        required: ["result_ref", "sha256", "revision", "work_id", "offset", "length"],
+      });
+    });
+  } catch {
+    return false;
+  }
+}
+
 function safeObservation(
   observation: MutableProviderRequestObservation,
 ): ProviderRequestObservation {
@@ -181,6 +210,7 @@ function safeObservation(
     serializedRequestDigest: observation.serializedRequestDigest,
     serializedRequestDigestAlgorithm: observation.serializedRequestDigestAlgorithm,
     serializerContract: observation.serializerContract,
+    exactResultReadSchemaObserved: observation.exactResultReadSchemaObserved,
     firstContentBearingDeltaAtMs:
       observation.firstContentBearingDeltaAtMs,
     completedAtMs: observation.completedAtMs,
@@ -671,6 +701,7 @@ async function forwardRequest(input: {
   observation.serializedRequestDigestAlgorithm = "hmac-sha256-observer-private-v1";
   observation.requestKind = providerRequestKind(body);
   observation.requestedModel = requestedModel(body);
+  observation.exactResultReadSchemaObserved = exactResultReadSchemaObserved(body);
   const requestIdentity = executionRequestIdentity(body);
   observation.requestedReasoning = requestIdentity.reasoning;
   observation.requestedServiceTier = requestIdentity.serviceTier;
@@ -875,6 +906,7 @@ export async function startProviderObservationProxy(
       serializedRequestDigest: null,
       serializedRequestDigestAlgorithm: null,
       serializerContract: null,
+      exactResultReadSchemaObserved: false,
       firstContentBearingDeltaAtMs: null,
       completedAtMs: null,
       terminatedAtMs: null,

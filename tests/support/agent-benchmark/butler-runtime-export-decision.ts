@@ -18,11 +18,11 @@ const SC01_METRICS = new Set([
   "m1_v2_response_usage",
 ]);
 
-export type ButlerDurableExportState = "not_armed" | "verified" | "missing_or_failed";
+export type ButlerDurableExportState = "not_armed" | "verified" | "missing_or_failed" | "privacy_failed_arm";
 export type ButlerHarnessOperationKind = "launch_smoke" | "scenario_run";
 
 export type ButlerRuntimeExportDecision =
-  | { cleanupAllowed: true; reason: "export_not_armed" | "verified_export" | "verified_non_turn_launch_smoke" }
+  | { cleanupAllowed: true; reason: "export_not_armed" | "verified_export" | "verified_non_turn_launch_smoke" | "privacy_minimized_failed_export" }
   | { cleanupAllowed: false; reason: "durable_export_required" | "runtime_observation_ambiguous" };
 
 /** Absence is an idempotent terminal state only when no runtime observation is
@@ -35,6 +35,9 @@ export function decideAbsentButlerRuntimeExport(
   }
   if (durableExport === "not_armed") {
     return { cleanupAllowed: true, reason: "export_not_armed" };
+  }
+  if (durableExport === "privacy_failed_arm") {
+    return { cleanupAllowed: true, reason: "privacy_minimized_failed_export" };
   }
   return { cleanupAllowed: false, reason: "runtime_observation_ambiguous" };
 }
@@ -50,6 +53,13 @@ export function decideButlerRuntimeExport(input: {
 }): ButlerRuntimeExportDecision {
   if (input.durableExport === "verified") {
     return { cleanupAllowed: true, reason: "verified_export" };
+  }
+  // Failed arms retain only the typed, allowlisted evidence already published
+  // outside dataRoot. The isolated runtime may contain copied provider
+  // credentials, prompts, transcripts, and private paths and is never itself
+  // an evidence corpus.
+  if (input.durableExport === "privacy_failed_arm") {
+    return { cleanupAllowed: true, reason: "privacy_minimized_failed_export" };
   }
 
   const evidence = input.evidence;

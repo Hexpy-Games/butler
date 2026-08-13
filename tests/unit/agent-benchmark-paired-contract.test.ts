@@ -17,6 +17,7 @@ import {
 import {
   corroborateExecution,
   createPairedCampaignContract,
+  FINAL_ACTIVATION,
   FINAL_AFTER_REVISION,
   FINAL_BEFORE_REVISION,
   replacementEligibility,
@@ -42,6 +43,7 @@ import { Database } from "bun:sqlite";
 import { verifyM1V2EvidenceExport } from "../support/agent-benchmark/m1-v2-evidence-export.ts";
 import { startProviderObservationProxy } from "../e2e/btcc-r3-electron/provider-observation-proxy.ts";
 import { providerRequestTurnIdentities } from "../e2e/btcc-r3-electron/provider-request-turn-identity.ts";
+import { withButlerM1V2Environment } from "../support/agent-benchmark/butler-m1-observation.ts";
 
 const root = mkdtempSync(join(process.cwd(), ".agent-benchmark-paired-contract-"));
 const authority = prepareTestHarnessAuthority(root);
@@ -68,6 +70,8 @@ describe("final paired M1 campaign contract", () => {
     expect(JSON.stringify(contract)).not.toContain(root);
     expect(new Set(contract.steps.map((step) => step.block)).size).toBe(12);
     expect(contract.policy).toMatchObject({ runtimeReorderAllowed: false, postProviderReplacementAllowed: false });
+    expect(contract.before.activation).toEqual(FINAL_ACTIVATION.before);
+    expect(contract.after.activation).toEqual(FINAL_ACTIVATION.after);
 
     const plan = createBenchmarkPlan({
       campaign: "m1-v2-paired", runId: "paired-contract", seed: 20260813,
@@ -102,6 +106,33 @@ describe("final paired M1 campaign contract", () => {
       priorityForgery.identity = createHash("sha256").update(JSON.stringify(forgedStable)).digest("hex");
       expect(() => validatePairedCampaignContract(priorityForgery), label).toThrow();
     }
+  });
+
+  test("binds source/version activation before dispatch and preserves product continuation defaults", async () => {
+    const contract = pairedContract();
+    for (const version of ["before", "after"] as const) {
+      const source = contract[version];
+      const observed = await withButlerM1V2Environment({
+        arm: { version, sourceRevision: source.revision, activation: source.activation },
+        fixture: { m1V2: {} },
+      } as never, async () => ({
+        segment: process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION,
+        tool: process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE,
+        replay: process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY,
+        bounded: process.env.BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT,
+      }));
+      expect(observed).toEqual({ segment: "1", tool: version === "after" ? "1" : "0",
+        replay: version === "after" ? "1" : "0", bounded: version === "after" ? "1" : "0" });
+    }
+    await expect(withButlerM1V2Environment({ arm: { version: "after", sourceRevision: FINAL_BEFORE_REVISION,
+      activation: FINAL_ACTIVATION.after }, fixture: { m1V2: {} } } as never,
+    async () => { throw new Error("dispatched"); })).rejects.toThrow("m1_activation_source_identity_mismatch");
+    process.env.BUTLER_M1_V2_CONTINUATION_MAX_MODEL_FACING_BYTES = "4096";
+    try {
+      await expect(withButlerM1V2Environment({ arm: { version: "after", sourceRevision: FINAL_AFTER_REVISION,
+        activation: FINAL_ACTIVATION.after }, fixture: { m1V2: {} } } as never,
+      async () => undefined)).rejects.toThrow("m1_continuation_default_override_forbidden");
+    } finally { delete process.env.BUTLER_M1_V2_CONTINUATION_MAX_MODEL_FACING_BYTES; }
   });
 
   test("fails closed for stale or cross-version prepared pins", () => {
@@ -304,9 +335,20 @@ describe("final paired M1 campaign contract", () => {
     const butler = createButlerAdapter(async (input) => {
       runnerCalls += 1;
       const dataRoot = join(input.arm.evidenceRoot, "data"); mkdirSync(join(dataRoot, "metrics"), { recursive: true });
-      const db = new Database(join(dataRoot, "runtime.sqlite")); db.exec("CREATE TABLE safe(value TEXT)"); db.close();
+      const db = new Database(join(dataRoot, "runtime.sqlite"));
+      db.exec("CREATE TABLE btcc_turns (turn_id TEXT PRIMARY KEY, continuation_budget_json TEXT); CREATE TABLE btcc_model_round_acceptances (turn_id TEXT, normalized_response_json TEXT, created_at TEXT)");
       const submittedAtMs = Date.now(), digest = "A".repeat(43), titleDigest = "B".repeat(43), auxiliaryDigest = "C".repeat(43);
       const turnId = `turn-${input.arm.order}`, sessionId = `session-${input.arm.order}`;
+      const after = input.arm.version === "after";
+      const limits = { maxModelRequests: 60, maxToolRounds: 60, maxModelFacingBytes: 196_608,
+        maxCumulativeModelFacingBytes: 8_388_608, maxOutputBytes: 524_288, maxElapsedMs: 7_200_000, maxIdleMs: 1_200_000 };
+      db.query("INSERT INTO btcc_turns VALUES (?, ?)").run(turnId, after ? JSON.stringify({ schemaVersion: "butler.turn-continuation-budget.v2", limits }) : null);
+      if (after) db.query("INSERT INTO btcc_model_round_acceptances VALUES (?, ?, ?)").run(turnId, JSON.stringify({ toolCalls: [], continuation: {
+        providerRouteIdentity: { schemaVersion: "butler.provider-route-cache-identity.v1", routeDigest: "d".repeat(64), routeCursor: 0,
+          providerId: "openai-codex", modelRef: "openai/gpt-5.6-sol", authMode: "codex_oauth", capabilityDigest: "c".repeat(64),
+          toolProfileRevision: "butler.btcc-tool-instruction-policy.v1", stablePrefixRevision: "butler.btcc-stable-provider-prefix.v1",
+          serializerContract: "butler.openai-codex-final-json.v1", serializedStablePrefixSha256: "e".repeat(64), serializedStablePrefixBytes: 100 } } }), "2026-08-13T00:00:00.000Z");
+      db.close();
       const proxy = await startProviderObservationProxy({
         fixture: { responses: [
           { requestKind: "agent", requestModel: "gpt-5.6-sol", responseModel: "gpt-5.6-sol", text: "agent" },
@@ -316,7 +358,13 @@ describe("final paired M1 campaign contract", () => {
         execution: { model: "openai/gpt-5.6-sol", reasoning: "medium", serviceTier: "default" },
       });
       for (const [physicalDigest, body] of [
-        [digest, { model: "gpt-5.6-sol", input: "agent", tools: [], reasoning: { effort: "medium" }, prompt_cache_key: "benchmark:btcc-agent-loop" }],
+        [digest, { model: "gpt-5.6-sol", input: "agent", tools: after ? [{ type: "function", name: "read_operation_results", parameters: {
+          type: "object", additionalProperties: false, properties: {
+            result_ref: { type: "string", minLength: 1, maxLength: 256 }, sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+            revision: { anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }] }, work_id: { anyOf: [{ type: "string", minLength: 1, maxLength: 256 }, { type: "null" }] },
+            offset: { type: "integer", minimum: 0 }, length: { type: "integer", minimum: 1, maximum: 4096 },
+          }, required: ["result_ref", "sha256", "revision", "work_id", "offset", "length"],
+        } }] : [], reasoning: { effort: "medium" }, prompt_cache_key: "benchmark:btcc-agent-loop" }],
         [titleDigest, { model: "gpt-5.6-sol", input: "title", reasoning: { effort: "medium" }, prompt_cache_key: "benchmark:native-butler-title-provider" }],
         [auxiliaryDigest, { model: "gpt-5.6-sol", input: "auxiliary", reasoning: { effort: "medium" } }],
       ] as const) {
@@ -542,7 +590,7 @@ describe("final paired M1 campaign contract", () => {
     for (const version of ["before", "after"] as const) {
       const dedicatedRoot = join(runRoot, "preflight", "launch-smoke", version);
       expect(existsSync(join(dedicatedRoot, "receipt.json"))).toBeTrue();
-      const receipt = JSON.parse(readFileSync(join(dedicatedRoot, "receipt.json"), "utf8")) as { planIdentity: string; preparedResourceIdentity: unknown };
+      const receipt = JSON.parse(readFileSync(join(dedicatedRoot, "receipt.json"), "utf8")) as { planIdentity: string; preparedResourceIdentity: unknown; activation: unknown };
       receiptPlanIdentities.push(receipt.planIdentity);
       expect(receipt).toMatchObject({
         schema: "butler.paired-launch-smoke-preflight.v1",
@@ -559,6 +607,7 @@ describe("final paired M1 campaign contract", () => {
         turnObservations: 0,
       });
       expect(receipt.preparedResourceIdentity).toBeDefined();
+      expect(receipt.activation).toEqual(FINAL_ACTIVATION[version]);
       expect(existsSync(join(dedicatedRoot, "evidence", "data"))).toBeFalse();
       expect(existsSync(join(dedicatedRoot, "evidence", "sc01-public-evidence.json"))).toBeFalse();
     }
@@ -821,7 +870,7 @@ function authReceipt() { return { schema: "butler.provider-auth-preflight-receip
   executionMode: "ordinary_non_fast" as const, modelCallability: "available" as const, configured: true }; }
 
 function sourcePin(version: "before" | "after", revision: string, fill: string) {
-  return { version, revision, compatibilitySha256: fill.repeat(64), platform: "darwin-arm64", mode: "bundled_agent_release" as const, preparedResource: pin(revision, fill) };
+  return { version, revision, compatibilitySha256: fill.repeat(64), platform: "darwin-arm64", mode: "bundled_agent_release" as const, preparedResource: pin(revision, fill), activation: FINAL_ACTIVATION[version] };
 }
 
 function pin(revision: string, fill: string) {

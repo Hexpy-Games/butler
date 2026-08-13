@@ -3,8 +3,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cleanupButlerRuntime } from "../support/agent-benchmark/butler-runtime-cleanup.ts";
+import { cleanupButlerRuntime, removeRawButlerHarnessEvidence } from "../support/agent-benchmark/butler-runtime-cleanup.ts";
 import { createButlerAdapter } from "../support/agent-benchmark/butler-adapter.ts";
+import { PreparedButlerResourceError } from "../support/agent-benchmark/prepared-butler-resource-error.ts";
 import { replacementEligibility } from "../support/agent-benchmark/paired-contract.ts";
 import { redactBenchmarkPlan } from "../support/agent-benchmark/checkpoint.ts";
 import { benchmarkPlanIdentity } from "../support/agent-benchmark/planning.ts";
@@ -27,18 +28,24 @@ test("durable SC01 projection survives cleanup and preserves exact nullable atte
 
   const resumed = materializeM1V2EvidenceExport(fixture.input);
   expect(resumed.sha256).toBe(result.sha256);
+  writeFileSync(join(fixture.arm.evidenceRoot, "evidence.json"), JSON.stringify({
+    run: { dataRoot: fixture.dataRoot, repoRoot: fixture.root, electronProfile: join(fixture.root, "profile") },
+    credentialFile: "model-provider-credentials.json", credentialValue: "secret-provider-value",
+  }));
+  expect(removeRawButlerHarnessEvidence(fixture.arm.evidenceRoot)).toBe(true);
+  expect(existsSync(join(fixture.arm.evidenceRoot, "evidence.json"))).toBe(false);
   const cleanup = cleanupButlerRuntime(fixture.evidence, fixture.arm, "verified");
   expect(cleanup.status).toBe("removed");
   expect(existsSync(fixture.dataRoot)).toBe(false);
   expect(verifyM1V2EvidenceExport({ path: result.absolutePath, expected: result.evidence.identity }).sha256).toBe(result.sha256);
 });
 
-test("SC01 export fails closed on privacy extras, temp/conflict/mutation, and blocks cleanup", () => {
+test("SC01 export failure retains no credential-bearing runtime corpus", () => {
   const unsafe = exportFixture();
   unsafe.input.metrics[0]!.dimensions!.prompt = "raw";
   expect(() => materializeM1V2EvidenceExport(unsafe.input)).toThrow("allowlist");
-  expect(cleanupButlerRuntime(unsafe.evidence, unsafe.arm, "missing_or_failed").status).toBe("failed");
-  expect(existsSync(unsafe.dataRoot)).toBe(true);
+  expect(cleanupButlerRuntime(unsafe.evidence, unsafe.arm, "privacy_failed_arm").status).toBe("removed");
+  expect(existsSync(unsafe.dataRoot)).toBe(false);
 
   const rawBody = exportFixture();
   (rawBody.input.providerRequests[0] as Record<string, unknown>).responseBody = "secret";
@@ -578,7 +585,7 @@ test("durable authority publication rejects a pre-positioned symlink", () => {
   expect(readdirSync(external)).toEqual([]);
 });
 
-test("real Butler adapter blocks failed export, preserves dataRoot, and forbids post-dispatch replacement", async () => {
+test("real Butler adapter blocks failed export, removes private dataRoot, and forbids post-dispatch replacement", async () => {
   const fixture = exportFixture(); const identity = fixture.input.identity;
   const arm = { key: identity.armKey, scenario: identity.armId, repetition: 1, order: 0, agent: "butler" as const, track: "controlled" as const,
     cache: "cold" as const, fixtureHash: identity.fixtureHash, effectiveConfig: { model: "openai/gpt-5.6-sol", reasoning: "medium", permissions: "full_access", tools: [], memoryEnabled: true, skillsEnabled: true, pluginsEnabled: true, mcpEnabled: true, provider: "openai", variant: null },
@@ -592,14 +599,54 @@ test("real Butler adapter blocks failed export, preserves dataRoot, and forbids 
     isolation: { bindingWorkspace: join(fixture.arm.evidenceRoot, "workspace"), workspaceInsideRunRoot: true, sourceDataIsRunData: false },
     observations: [{ ...fixture.input.target, terminalState: "delivered", finalText: "안녕하세요.", providerReportedModel: "gpt-5.6-sol",
       providerAgentModels: ["gpt-5.6-sol"], timing: { submittedAtMs: Date.now() - 10, terminalAtMs: Date.now(), elapsedMs: 10 }, reload: { tested: true, finalMatched: true }, promptSha256: "a".repeat(64) }], providerRequests: fixture.input.providerRequests };
+  mkdirSync(join(fixture.arm.evidenceRoot, "screenshots"), { recursive: true });
+  const rawScreenshot = join(fixture.arm.evidenceRoot, "screenshots", "private.png");
+  writeFileSync(rawScreenshot, "private screenshot bytes");
+  (evidence.observations as Array<Record<string, unknown>>)[0]!.screenshots = [rawScreenshot];
+  writeFileSync(join(fixture.arm.evidenceRoot, "evidence.json"), JSON.stringify({ ...evidence,
+    credentialFile: "model-provider-credentials.json", credentialValue: "secret-provider-value",
+    privatePath: join(fixture.root, "private-user-path") }));
   const adapter = createButlerAdapter(async () => evidence, fixture.arm.sourceRoot);
   const result = await adapter.run({ arm, fixture: benchmarkFixture, prompt: "safe", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "safe",
     signal: new AbortController().signal, benchmarkEvidence: { planIdentity: identity.planIdentity, runRoot: fixture.input.runRoot } });
   expect(result.gateCode).toBe("measurement_unavailable");
   expect(result).toMatchObject({ exitCode: 0, finalText: "안녕하세요.", providerDispatchState: "provider_output_observed" });
   expect(result.evidenceRefs).toEqual([]);
-  expect(existsSync(fixture.dataRoot)).toBe(true);
+  expect(existsSync(rawScreenshot)).toBe(false);
+  expect(existsSync(fixture.dataRoot)).toBe(false);
+  expect(existsSync(join(fixture.arm.evidenceRoot, "evidence.json"))).toBe(false);
+  const retained = readdirSync(fixture.arm.evidenceRoot, { withFileTypes: true })
+    .filter((entry) => entry.isFile()).map((entry) => readFileSync(join(fixture.arm.evidenceRoot, entry.name), "utf8")).join("\n");
+  expect(retained).not.toContain(fixture.root);
+  expect(retained).not.toContain("model-provider-credentials.json");
+  expect(retained).not.toContain("secret-provider-value");
   expect(replacementEligibility({ providerDispatchState: "provider_dispatched", infrastructureGateStage: null }).allowed).toBe(false);
+});
+
+test("prepared-resource and unrecovered M1 failures cross the single privacy boundary", async () => {
+  for (const failure of [new PreparedButlerResourceError("/Users/person/secret"), new Error("private failure /Users/person/secret")]) {
+    const fixture = exportFixture(); const evidenceRoot = fixture.arm.evidenceRoot;
+    const arm = { ...fixture.arm, key: "privacy-failure", scenario: "direct-cold" as const, repetition: 1, order: 0,
+      agent: "butler" as const, track: "controlled" as const, cache: "cold" as const, fixtureHash: "a".repeat(64),
+      effectiveConfig: { model: "openai/gpt-5.6-sol", reasoning: "medium", permissions: "full_access", tools: [], memoryEnabled: true,
+        skillsEnabled: true, pluginsEnabled: true, mcpEnabled: true, provider: "openai", variant: null }, cachePairId: "pair", timeoutMs: 1_000,
+      sourceRevision: "c".repeat(40) };
+    mkdirSync(join(evidenceRoot, "data", "auth"), { recursive: true });
+    writeFileSync(join(evidenceRoot, "data", "auth", "model-provider-credentials.json"), "secret-provider-value");
+    writeFileSync(join(evidenceRoot, "evidence.json"), JSON.stringify({ privatePath: "/Users/person/secret" }));
+    writeFileSync(join(evidenceRoot, "sc01-public-evidence.json"), '{"prompt":"secret-provider-value"}');
+    writeFileSync(join(evidenceRoot, "m1-v2-runtime-activation-receipt.json"), '{"credentialValue":"secret-provider-value"}');
+    mkdirSync(join(evidenceRoot, "generated-private")); writeFileSync(join(evidenceRoot, "generated-private", "transcript.txt"), "private");
+    const adapter = createButlerAdapter(async () => { throw failure; }, process.cwd());
+    const result = await adapter.run({ arm, fixture: { id: "direct-cold", version: "v1", prompts: ["safe"], m1V2: {
+      armId: "direct-cold", scenario: { schema: "butler.btcc-r3-electron-scenario.v1", id: "safe", attributionArmId: "direct-cold", steps: [] },
+      targetStepId: "target", publicBenchmarkFixture: true, promptSha256: { target: "a".repeat(64) }, fixtureSha256: { target: "a".repeat(64) } } },
+      prompt: "safe", sessionId: null, sourceEvidenceRoot: "", runtimeInstructions: "safe", signal: new AbortController().signal,
+      benchmarkEvidence: { planIdentity: "b".repeat(64), runRoot: fixture.input.runRoot } });
+    expect(result.gateCode).toBe("measurement_unavailable");
+    expect(result.stderr).not.toContain("/Users/person/secret");
+    expect(readdirSync(evidenceRoot)).toEqual([]);
+  }
 });
 
 function exportFixture() {

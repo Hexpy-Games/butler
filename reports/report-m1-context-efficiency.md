@@ -882,3 +882,62 @@ reproduction. The exporter remains a size-review trigger at roughly 660 lines,
 but the reviewer found its durable materialize/verify responsibility cohesive.
 Provider, Electron, prepared-resource, campaign, final 4x3, Hermes, OpenCode,
 and the 300-second repository-wide check were intentionally not run.
+
+## Final benchmark activation and privacy repair
+
+Task: `T-M1-V2-FINAL-BENCHMARK-ACTIVATION-PRIVACY-REPAIR-20260813`
+
+The corrected final benchmark contract binds exact before source
+`c46aae1af1b78a6f81ea40c3099edde0ba35ebd5` to explicit M1 off and exact after
+source `394c98a97428b741f8ea54273a226cb062455ab0` to explicit Tool Instruction
+Surface, Exact-once Replay, and Bounded Stateless Context on. Segment
+attribution remains enabled in both arms. Source, version, prepared-resource,
+and activation identity are one typed paired contract and any cross-version or
+stale combination fails before provider dispatch. The same identity is carried
+by the public launch-smoke receipt and every planned arm.
+
+The canonical Electron launch environment now supplies all four explicit flags
+to the Electron-owned bundled Agent child. After a real Turn, a create-only,
+privacy-safe runtime receipt joins final `openai-codex-responses` serializer
+observations to the admitted Turn continuation state and accepted provider route
+identity. Before must remain legacy with no exact-result tool schema,
+continuation budget, or M1 route identity. After must prove phase-minimal policy
+revision `butler.btcc-tool-instruction-policy.v1`, the exact-result read schema
+and reference owner `butler.operation-result-reference.v1`, admitted
+`butler.turn-continuation-budget.v2`, stable prefix revision
+`butler.btcc-stable-provider-prefix.v1`, and the normalized route/cache identity
+at `butler.openai-codex-final-json.v1`. Every observed Agent request must use the
+final serializer and after requests must all carry the exact-result schema.
+Flags that reach a legacy route fail closed.
+
+Continuation uses only the shipped defaults: 60 model requests, 60 tool rounds,
+192 KiB per model-facing request, 8 MiB cumulative model-facing bytes, 512 KiB
+output, two hours elapsed, and twenty minutes idle. Ambient benchmark overrides
+are rejected before launch, and the receipt requires the exact limit key and
+value set. No static 4 KiB or 18 KiB test ceiling is admitted into the campaign.
+
+The retention boundary publishes typed SC01 evidence and the activation receipt
+before cleanup, removes transient raw Electron evidence, and removes the
+isolated product data root for successful and failed M1 arms. Landing artifacts
+are restricted to the fixture allowlist and rejected when their names or
+contents contain credential/secret markers or private absolute paths. Raw
+prompts, transcripts, result bodies, credentials, and private paths are not
+fields of the receipt. Existing failed Attempts, manifests, and data roots are
+outside this repair and remain immutable.
+
+Provider-free validation passed the public paired CLI, activation receipt,
+privacy cleanup, product-launch ownership, proxy, exporter, and artifact tests:
+73 tests and 462 assertions. Root and UI typecheck, scoped lint, BTCC shape
+(`4 domains / 203 files`), module audit, and `git diff --check` passed. The
+module audit retained review warnings for existing large benchmark authority
+files; the new runtime receipt is a separate cohesive module. No provider,
+Electron campaign, prepared-resource build, final 4x3 execution, merge, or
+default-on change was performed during this repair.
+
+Independent ordinary non-fast Sol-high review initially rejected two privacy
+and activation-proof gaps. The repair then routed pre-evidence failures through
+the same cleanup boundary, preserved only successfully verified typed files,
+removed raw screenshot references, strengthened the landing artifact privacy
+filter, required the full canonical exact-read schema, preserved and validated
+the actual twelve-field route/cache identity, and added run-root and ancestor
+symlink checks. Final re-review approved with no P0-P3 findings.

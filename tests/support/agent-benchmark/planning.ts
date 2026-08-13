@@ -126,6 +126,7 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
         sourceRevision: step.source.revision, version: step.version,
         pairId: step.pairId, block: step.block,
         pairedExecution: input.pairedCampaign!.execution,
+        activation: step.source.activation,
       });
     }
   } else for (const fixture of campaignFixtures) {
@@ -258,6 +259,7 @@ function computeBenchmarkPlanSemanticIdentity(
       timeoutMs: arm.timeoutMs,
       sourceRevision: arm.sourceRevision,
       version: arm.version ?? null,
+      ...(arm.activation ? { activation: arm.activation } : {}),
       pairId: arm.pairId ?? null,
       block: arm.block ?? null,
       pairedExecution: arm.pairedExecution ?? null,

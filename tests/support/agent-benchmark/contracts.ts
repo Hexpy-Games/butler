@@ -81,6 +81,7 @@ export interface BenchmarkArmPlan {
   pairId?: string;
   block?: number;
   pairedExecution?: import("./paired-contract.ts").PairedExecutionContract;
+  activation?: import("./paired-contract.ts").M1V2ActivationIdentity;
 }
 
 export interface BenchmarkPlan {
@@ -316,6 +317,8 @@ export interface AdapterRunResult {
     exportSha256?: string;
     exportPath?: string;
     exportIdentity?: import("./m1-v2-evidence-export.ts").M1V2EvidenceExportIdentity;
+    activationReceipt?: import("./m1-v2-activation-receipt.ts").M1V2RuntimeActivationReceipt;
+    activationReceiptHandle?: string;
   };
 }
 

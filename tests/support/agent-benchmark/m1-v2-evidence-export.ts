@@ -234,7 +234,7 @@ function buildExport(input: Parameters<typeof materializeM1V2EvidenceExport>[0])
     });
   });
   memberships.forEach((row) => assertExactKeys(row, MEMBERSHIP));
-  input.providerRequests.forEach((row) => assertExactKeys(row, PROVIDER));
+  input.providerRequests.forEach((row) => assertProviderKeys(row));
   if (new Set(memberships.map((row) => integer(row.ordinal))).size !== memberships.length) throw new Error("sc01_export_membership_ambiguous");
   if (new Set(input.providerRequests.map((row) => integer(row.ordinal))).size !== input.providerRequests.length) throw new Error("sc01_export_provider_ordinal_ambiguous");
   const membershipDigests = memberships.map((row) => requiredDigest(row.physicalAttemptDigest));
@@ -426,7 +426,7 @@ function projectPhysicalRequest(
 const ENVELOPE = ["schemaVersion", "attemptDigest", "turnDigest", "phaseDigest", "roundIndex", "retryOrdinal", "providerId", "modelRef", "armId", "sourceRevision", "cacheBoundaryRevision", "providerSendBytes", "estimatedInputTokens", "eligibility"];
 const SEGMENT = ["schemaVersion", "attemptDigest", "segmentId", "kind", "stability", "providerSendBytes", "estimatedInputTokens", "keyedContentDigest"];
 const USAGE = ["schemaVersion", "attemptDigest", "status", "promptTokens", "cacheReadTokens", "cacheWriteTokens", "outputTokens", "reasoningTokens", "totalTokens"];
-const PROVIDER = ["ordinal", "attemptDigest", "requestKind", "requestedModel", "requestedReasoning", "requestedServiceTier", "requestedServiceTierMode", "authorizationScheme", "routeId", "requestStartedAtMs", "serializedRequestBytes", "serializedRequestDigest", "serializedRequestDigestAlgorithm", "serializerContract", "firstContentBearingDeltaAtMs", "completedAtMs", "terminatedAtMs", "termination", "status", "hasTextContent", "hasToolArgumentContent", "hasReasoningContent", "streamedTextChars", "finalTextChars", "providerReportedModel", "providerReportedServiceTier", "effectiveServiceTierAvailability", "effectiveServiceTierReason"];
+const PROVIDER = ["ordinal", "attemptDigest", "requestKind", "requestedModel", "requestedReasoning", "requestedServiceTier", "requestedServiceTierMode", "authorizationScheme", "routeId", "requestStartedAtMs", "serializedRequestBytes", "serializedRequestDigest", "serializedRequestDigestAlgorithm", "serializerContract", "exactResultReadSchemaObserved", "firstContentBearingDeltaAtMs", "completedAtMs", "terminatedAtMs", "termination", "status", "hasTextContent", "hasToolArgumentContent", "hasReasoningContent", "streamedTextChars", "finalTextChars", "providerReportedModel", "providerReportedServiceTier", "effectiveServiceTierAvailability", "effectiveServiceTierReason"];
 const MEMBERSHIP = ["ordinal", "sessionId", "turnId", "requestKind", "physicalAttemptDigest", "stepId"];
 const ATTEMPT = ["ordinal", "role", "ownership", "stepId", "sessionId", "turnId", "attemptDigest", "requestStartedAtMs", "terminatedAtMs", "durationMs", "terminalStatus", "providerStatus", "routeId", "requestedModel", "providerReportedModel", "requestedReasoning", "authorizationScheme", "requestedServiceTierMode", "effectiveServiceTier", "effectiveServiceTierAvailability", "effectiveServiceTierReason", "serializerContract", "serializedRequestBytes", "serializedRequestDigest", "serializedRequestDigestAlgorithm", "envelope", "segments", "usage"];
 const OVERHEAD = ["ordinal", "role", "ownership", "stepId", "sessionId", "turnId", "attemptDigest", "armed", "armId", "providerSendBytes", "requestStartedAtMs", "terminatedAtMs", "durationMs", "terminalStatus", "providerStatus", "routeId", "requestedModel", "providerReportedModel", "requestedReasoning", "authorizationScheme", "requestedServiceTierMode", "effectiveServiceTier", "effectiveServiceTierAvailability", "effectiveServiceTierReason", "serializerContract", "serializedRequestDigest", "serializedRequestDigestAlgorithm", "observation"];
@@ -603,6 +603,16 @@ function serializer(value: unknown, routeId: unknown): "butler.openai-codex-fina
   if (!expected || value !== expected) throw new Error("sc01_export_serializer_invalid"); return expected; }
 function digestAlgorithm(value: unknown): "hmac-sha256-observer-private-v1" { if (value !== "hmac-sha256-observer-private-v1") throw new Error("sc01_export_digest_algorithm_invalid"); return value; }
 function assertExactKeys(value: object, allowed: readonly string[]) { const keys = Object.keys(value); if (keys.length !== allowed.length || keys.some((key) => !allowed.includes(key))) throw new Error("sc01_export_allowlist_rejected"); }
+function assertProviderKeys(value: Record<string, unknown>) {
+  const allowed = value.exactResultReadSchemaObserved === undefined
+    ? PROVIDER.filter((key) => key !== "exactResultReadSchemaObserved")
+    : PROVIDER;
+  assertExactKeys(value, allowed);
+  if (value.exactResultReadSchemaObserved !== undefined &&
+      typeof value.exactResultReadSchemaObserved !== "boolean") {
+    throw new Error("sc01_export_provider_activation_invalid");
+  }
+}
 const PUBLIC_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/u;
 const PUBLIC_REF = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$/u;
 function publicId(value: unknown): value is string { return typeof value === "string" && PUBLIC_ID.test(value); }
