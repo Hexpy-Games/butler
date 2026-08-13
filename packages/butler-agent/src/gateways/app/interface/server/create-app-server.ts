@@ -2,10 +2,6 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  createConversationProjectionReader,
-  type ManagedConversationProjectionReader,
-} from "../../../../agent/conversation/projection-reader.ts";
-import {
   AppServerStore,
   AppStoreOperationError,
   type AppMessageResponder,
@@ -56,13 +52,11 @@ function createComposedAppServer(
     serverIdleTimeoutSeconds?: number;
   },
 ): AppServerHandle {
-  const ownedConversationReader = createOwnedConversationReader(options);
   const butlerData = resolve(
     options.butlerData ?? process.env.BUTLER_DATA ?? join(homedir(), ".butler"),
   );
   const store = createStore(
     { ...options, butlerData },
-    options.conversationProjectionReader ?? ownedConversationReader?.reader,
   );
   const messageRateLimiter = new FixedWindowRateLimiter(
     options.messageRateLimit,
@@ -125,14 +119,12 @@ function createComposedAppServer(
       serverShutdownController.abort();
       server.stop();
       store.close();
-      ownedConversationReader?.close();
     },
   };
 }
 
 function createStore(
   options: CreateAppServerOptions,
-  conversationProjectionReader?: CreateAppServerOptions["conversationProjectionReader"],
 ): AppServerStore {
   return new AppServerStore({
     dbPath: options.dbPath,
@@ -145,17 +137,8 @@ function createStore(
     projectWorkspaceRoot: options.projectWorkspaceRoot,
     folderSelectionSecret: options.folderSelectionSecret,
     serviceClient: options.serviceClient,
-    conversationProjectionReader,
-    sessionBindingStore: options.sessionBindingStore,
     providerQuotaMonitor: options.providerQuotaMonitor,
   });
-}
-
-function createOwnedConversationReader(
-  options: CreateAppServerOptions,
-): ManagedConversationProjectionReader | null {
-  if (options.conversationProjectionReader || !options.butlerData) return null;
-  return createConversationProjectionReader({ butlerData: options.butlerData });
 }
 
 function resolveUiRoot(options: CreateAppServerOptions): string {

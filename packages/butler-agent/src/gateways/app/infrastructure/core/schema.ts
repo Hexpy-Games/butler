@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { ensureAppMessageQuerySchema } from "../../../../agent/cognition/memory/exact-query.ts";
+import { ensureAppMessageQuerySchema } from "./message-query-schema.ts";
 import { ensureColumn, tableExists } from "./schema-migration.ts";
 import { ensureTerminalRetentionSchema } from "../retention/schema.ts";
 import { initializeProjectLedgerBindings } from "./project-ledger-binding-migration.ts";

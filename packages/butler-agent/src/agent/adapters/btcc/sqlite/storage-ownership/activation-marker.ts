@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { existsSync } from "node:fs";
 import type {
   AgentBtccActivationMarker,
   AgentBtccMigrationReceipt,
@@ -52,6 +53,21 @@ export function validateAgentBtccStorageForReadiness(input: {
     return marker;
   } finally {
     db.close();
+  }
+}
+
+export function agentBtccStorageIsActivated(butlerData: string): boolean {
+  const path = agentBtccStoragePaths(butlerData).agentBtccDbPath;
+  if (!existsSync(path)) return false;
+  try {
+    const db = new Database(path, { readonly: true, strict: true });
+    try {
+      return Boolean(readActivationMarker(db));
+    } finally {
+      db.close();
+    }
+  } catch (error) {
+    throw new Error("agent_btcc_storage_activation_state_unreadable", { cause: error });
   }
 }
 

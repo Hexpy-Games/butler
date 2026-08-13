@@ -116,7 +116,6 @@ export function createProductionGuidedTurnAgent(
       const execute = createButlerToolExecutor({
         butlerHome: input.butlerHome,
         butlerData: input.butlerData,
-        appMessageDbPath: input.appMessageDbPath,
         workspacePath: policy.workspacePath,
         sessionId: turn.sessionId,
         originChatId: turn.sessionId,
@@ -161,7 +160,6 @@ export function createProductionGuidedTurnAgent(
           resolvePersistentEffect: createGuidedPersistentEffectResolver({
             butlerHome: input.butlerHome,
             butlerData: input.butlerData,
-            appMessageDbPath: input.appMessageDbPath,
             workspacePath: policy.workspacePath,
             workspaceReference,
             sessionId: turn.sessionId,

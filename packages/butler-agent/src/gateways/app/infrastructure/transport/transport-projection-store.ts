@@ -34,8 +34,6 @@ import { projectAppWorkerResult } from "./worker-result-projection.ts";
 import type {
   AppTransportProjectionStoreOptions,
 } from "./transport-projection-contract.ts";
-import { AppTransportHistoricalReconciliationStore } from
-  "./historical-reconciliation-store.ts";
 import { StagedTransportOutboundStore } from
   "./staged-transport-outbound-store.ts";
 import { OPERATION_OUTPUT_CHUNK_EVENT_KIND } from
@@ -51,7 +49,6 @@ export class AppTransportProjectionStore {
   private readonly transcriptSync: AppTransportTranscriptSyncStore;
   private readonly projectedEvents: AppProjectedTransportEventStore;
   private readonly stagedOutbounds: StagedTransportOutboundStore;
-  private readonly historical: AppTransportHistoricalReconciliationStore;
   private readonly operationOutputs: AppOperationOutputProjectionStore;
   private transcriptCycleComplete = false;
   private deferredCycleComplete = false;
@@ -61,13 +58,6 @@ export class AppTransportProjectionStore {
     this.projectedEvents = new AppProjectedTransportEventStore(options.db);
     this.operationOutputs = new AppOperationOutputProjectionStore(options.db);
     this.stagedOutbounds = new StagedTransportOutboundStore(options.db);
-    this.historical = new AppTransportHistoricalReconciliationStore({
-      options,
-      hasProjectedAction: (actionId) =>
-        this.hasProjectedTransportEvent(actionId),
-      markProjectedAction: (actionId, eventId, targetChatId) =>
-        this.markProjectedTransportEvent(actionId, eventId, targetChatId),
-    });
     this.transcriptSync = new AppTransportTranscriptSyncStore({
       db: options.db,
       butlerData: options.butlerData,
@@ -120,10 +110,6 @@ export class AppTransportProjectionStore {
     if (this.deferredCycleComplete) this.deferredFinalCursor = "";
     this.transcriptCycleComplete = false;
     this.deferredCycleComplete = false;
-  }
-
-  reconcileNextHistoricalPage(): boolean {
-    return this.historical.reconcileNextPage();
   }
 
   private resetBatchCycle(): void {

@@ -138,7 +138,6 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
     const agent = createProductionGuidedTurnAgent({
       butlerHome: fixture.root,
       butlerData: fixture.root,
-      appMessageDbPath: fixture.dbPath,
       contextDocuments: fixture.stores.contextDocuments,
       toolJournal: fixture.stores.guidedToolJournal,
       effectJournal: fixture.stores.guidedEffectJournal,
@@ -654,7 +653,6 @@ test("production Guided Turn rereads Work across execution windows in one agent 
     const agent = createProductionGuidedTurnAgent({
       butlerHome: fixture.root,
       butlerData: fixture.root,
-      appMessageDbPath: fixture.dbPath,
       contextDocuments: fixture.stores.contextDocuments,
       toolJournal: fixture.stores.guidedToolJournal,
       effectJournal: fixture.stores.guidedEffectJournal,
@@ -1288,7 +1286,7 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
   }
 });
 
-test("Guided Project Ledger mutation fails closed for missing or archived App rows", async () => {
+test("Guided Project Ledger mutation uses bounded workspace context without App rows", async () => {
   for (const archived of [false, true]) {
     const fixture = createFixture(
       archived ? "guided-archived-project-binding" : "guided-missing-project-binding",
@@ -1326,7 +1324,7 @@ test("Guided Project Ledger mutation fails closed for missing or archived App ro
                 target: "project-ledger:work:W-BINDING-FAIL-CLOSED",
               },
             }],
-            checks: ["No mutation occurs without the exact App project row"],
+            checks: ["The bounded workspace context owns project resolution"],
           }),
           toolCall("review-1", "record_work_review", {
             subject: "plan",
@@ -1336,14 +1334,14 @@ test("Guided Project Ledger mutation fails closed for missing or archived App ro
           toolCall("mutation-1", "project_ledger_create", {
             kind: "work",
             id: "W-BINDING-FAIL-CLOSED",
-            title: "Must not be created",
-            acceptance: "The exact App row is required",
+            title: "Create from bounded context",
+            acceptance: "No App database lookup is required",
           }),
         ]),
         () => {
           mutationResult = fixture.stores.guidedToolJournal.list(turnId)
             .at(-1)?.result;
-          return { text: "바인딩이 없어 변경하지 않았습니다.", toolCalls: [] };
+          return { text: "bounded context로 기록했습니다.", toolCalls: [] };
         },
       ]), { butlerHome: process.cwd() });
       const runtime = createGuidedTurnRuntime({
@@ -1355,19 +1353,13 @@ test("Guided Project Ledger mutation fails closed for missing or archived App ro
       });
       await runtime.runTurn(projectRunCommand(fixture.root, turnId));
 
-      expect(mutationResult).toMatchObject({
-        ok: false,
-        error: {
-          code: "effect_reconciliation_required",
-          message: expect.stringContaining("exact active App project binding"),
-        },
-      });
+      expect(mutationResult).toMatchObject({ ok: true });
       expect(existsSync(join(
         fixture.root,
         "project-ledger",
         "projects",
         ledgerId,
-      ))).toBe(false);
+      ))).toBe(true);
     } finally {
       fixture.close();
     }
@@ -3910,7 +3902,6 @@ function createFixture(label: string) {
       return createProductionGuidedTurnAgent({
         butlerHome,
         butlerData: root,
-        appMessageDbPath: dbPath,
         contextDocuments: stores.contextDocuments,
         toolJournal: stores.guidedToolJournal,
         operationResultReader: stores.guidedOperationResultReader,
