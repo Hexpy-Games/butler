@@ -188,6 +188,7 @@ function providerCandidateToolNames(
   }
   if (phase === "execution") {
     for (const tool of DURABLE_WORK_TOOL_DEFINITIONS) names.add(tool.name);
+    if (authorizedTools.some((tool) => tool.name === "inspect_workspace_page")) names.add("inspect_workspace_page");
   }
   return names;
 }
