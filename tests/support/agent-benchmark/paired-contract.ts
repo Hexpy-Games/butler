@@ -4,7 +4,7 @@ import type { PreparedButlerResourceIdentity } from "./prepared-butler-resource.
 import type { M1V2ProvenanceIdentity } from "./m1-v2-types.ts";
 
 export const FINAL_BEFORE_REVISION = "6db1eb01d7ab73116b9cba37180d3d027e29d6e0" as const;
-export const FINAL_AFTER_REVISION = "708c3b99987c71dd5f0c86ab6b101f9f1312768d" as const;
+export const FINAL_AFTER_REVISION = "19fcc9d116765c098f466425cadc4803d45ad18a" as const;
 export const FINAL_MODEL = "openai/gpt-5.6-sol" as const;
 export const FINAL_REASONING = "medium" as const;
 export const FINAL_AUTH_MODE = "managed" as const;
