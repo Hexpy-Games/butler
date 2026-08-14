@@ -3,11 +3,19 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync,
 import { dirname, join } from "path";
 import { cognitionConsolidationRoot } from "../paths.ts";
 import {
-  DEFAULT_MODEL_REF,
-  DEFAULT_REASONING_EFFORT,
+  findModelMetadata,
+  listModelMetadata,
+  localModelConfigToMetadata,
+  type ProviderModelMetadata,
   type ReasoningEffort,
 } from "../../../integrations/providers/model-catalog.ts";
 import { parseModelRef } from "../../../integrations/providers/model-ref.ts";
+import { resolveProviderAdapterDefinition } from "../../../integrations/providers/registry.ts";
+import { readLocalModelConfigs } from "../../../integrations/providers/local/models.ts";
+import {
+  readRegisteredHostedModelConfigs,
+  resolveProviderCredentialSecret,
+} from "../../../integrations/providers/shared/registered-models.ts";
 import {
   runPromptTextWithUsage,
   type PromptUsageReport,
@@ -107,16 +115,42 @@ export interface GenerateNewChatBriefingsInput {
 }
 
 export interface NewChatBriefingGenerationMetrics extends Record<string, unknown> {
+  outcome: "completed" | "configuration_unavailable";
+  skip_reason: NewChatBriefingConfigurationSkipReason | null;
   generated_count: number;
   failed_count: number;
   skipped_project_count: number;
   general_artifact_path: string | null;
   project_artifact_paths: string[];
-  model_ref: string;
-  reasoning_effort: ReasoningEffort;
+  model_ref: string | null;
+  reasoning_effort: ReasoningEffort | null;
   model_usage: ConsolidationModelUsageSummary;
   raw_text_included: false;
 }
+
+type NewChatBriefingConfigurationSkipReason =
+  | "missing_model"
+  | "missing_reasoning_effort"
+  | "invalid_reasoning_effort"
+  | "model_unavailable"
+  | "reasoning_effort_unsupported"
+  | "provider_route_unavailable";
+
+type BriefingSettings = {
+  locale: NewChatBriefingLocale;
+} & (
+  | {
+      configured: true;
+      model: string;
+      reasoningEffort: ReasoningEffort;
+    }
+  | {
+      configured: false;
+      model: null;
+      reasoningEffort: null;
+      skipReason: NewChatBriefingConfigurationSkipReason;
+    }
+);
 
 interface AppProjectSignal {
   id: string;
@@ -193,8 +227,10 @@ export async function generateNewChatBriefings(
   const now = input.now ?? new Date();
   const date = datePart(now.toISOString());
   const settings = readBriefingSettings(input.butlerData);
-  if (!settings.configured && !input.modelRunner) {
+  if (!settings.configured) {
     return {
+      outcome: "configuration_unavailable",
+      skip_reason: settings.skipReason,
       generated_count: 0,
       failed_count: 0,
       skipped_project_count: 0,
@@ -292,6 +328,8 @@ export async function generateNewChatBriefings(
   }
 
   return {
+    outcome: "completed",
+    skip_reason: null,
     generated_count: generatedCount,
     failed_count: failedCount,
     skipped_project_count: skippedProjectCount,
@@ -541,20 +579,94 @@ function parseModelJson(raw: string): ParsedModelOutput {
   return JSON.parse(text.slice(start, end + 1)) as ParsedModelOutput;
 }
 
-function readBriefingSettings(butlerData: string): {
-  locale: NewChatBriefingLocale;
-  model: string;
-  reasoningEffort: ReasoningEffort;
-  configured: boolean;
-} {
+function readBriefingSettings(butlerData: string): BriefingSettings {
   const settings = readButlerSettings(butlerData);
+  const locale = settings.language === "ko" ? "ko" : "en";
+  const rawModel = explicitBriefingModel(settings);
+  if (!rawModel) return unavailableBriefingSettings(locale, "missing_model");
+  const rawReasoning = explicitBriefingReasoning(settings);
+  if (rawReasoning === null) {
+    return unavailableBriefingSettings(locale, "missing_reasoning_effort");
+  }
+  const reasoningEffort = normalizeReasoningEffort(rawReasoning);
+  if (!reasoningEffort) {
+    return unavailableBriefingSettings(locale, "invalid_reasoning_effort");
+  }
+  const model = resolveBriefingModelMetadata(butlerData, rawModel);
+  if (!model) return unavailableBriefingSettings(locale, "model_unavailable");
+  if (!model.reasoning_efforts.includes(reasoningEffort)) {
+    return unavailableBriefingSettings(locale, "reasoning_effort_unsupported");
+  }
+  try {
+    resolveProviderAdapterDefinition(model.model_ref);
+  } catch {
+    return unavailableBriefingSettings(locale, "provider_route_unavailable");
+  }
   return {
-    locale: settings.language === "ko" ? "ko" : "en",
-    model: normalizeModelRef(settings.consolidation_model) ?? normalizeModelRef(settings.model) ?? DEFAULT_MODEL_REF,
-    reasoningEffort: normalizeReasoningEffort(settings.consolidation_reasoning_effort) ??
-      normalizeReasoningEffort(settings.reasoning_effort) ??
-      DEFAULT_REASONING_EFFORT,
-    configured: Object.keys(settings).length > 0,
+    locale,
+    model: model.model_ref,
+    reasoningEffort,
+    configured: true,
+  };
+}
+
+function explicitBriefingModel(settings: Record<string, unknown>): string | null {
+  const consolidationModel = normalizeModelRef(settings.consolidation_model);
+  if (consolidationModel && consolidationModel !== "custom/default") {
+    return consolidationModel;
+  }
+  return normalizeModelRef(settings.model);
+}
+
+function explicitBriefingReasoning(settings: Record<string, unknown>): unknown | null {
+  if (settings.consolidation_reasoning_effort !== undefined) {
+    return settings.consolidation_reasoning_effort;
+  }
+  return settings.reasoning_effort ?? null;
+}
+
+function resolveBriefingModelMetadata(
+  butlerData: string,
+  modelRef: string,
+): ProviderModelMetadata | null {
+  const parsed = parseModelRef(modelRef);
+  if (parsed.providerId === "local") {
+    return findModelMetadata(
+      modelRef,
+      readLocalModelConfigs(butlerData).map(localModelConfigToMetadata),
+    ) ?? null;
+  }
+  const model = findModelMetadata(modelRef, listModelMetadata());
+  if (
+    model?.runtime_supported !== true ||
+    model.enabled === false ||
+    model.registered === false
+  ) return null;
+  const registration = readRegisteredHostedModelConfigs(butlerData).find(
+    (candidate) => candidate.model_ref === model.model_ref,
+  );
+  if (!registration) return parsed.providerId === "openai" ? model : null;
+  if (registration.auth_type === "api_key") {
+    const credential = resolveProviderCredentialSecret(
+      registration.credential_id,
+      registration.provider_id,
+      butlerData,
+    );
+    if (!credential) return null;
+  }
+  return model;
+}
+
+function unavailableBriefingSettings(
+  locale: NewChatBriefingLocale,
+  skipReason: NewChatBriefingConfigurationSkipReason,
+): BriefingSettings {
+  return {
+    locale,
+    configured: false,
+    model: null,
+    reasoningEffort: null,
+    skipReason,
   };
 }
 
