@@ -45,7 +45,7 @@ export interface WorkflowRunResult {
 
 export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<WorkflowRunResult> {
   validateBenchmarkPlan(input.plan);
-  if (input.plan.campaign === "m1-v2" || input.plan.campaign === "m1-v2-paired") {
+  if (input.plan.campaign === "m1-v2" || input.plan.campaign === "m1-v2-paired" || input.plan.campaign === "m1-v2-after-only") {
     let current: NonNullable<BenchmarkPlan["provenance"]>;
     try {
       current = verifyM1V2AuthoritativeProvenance({
@@ -103,7 +103,9 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
     const snapshot = sourceContexts.get(input.plan.sourceRoot)?.evidenceSnapshot;
     if (snapshot) {
       result.plan.repositoryEvidence = {
-        relativeRoot: "evidence/repository",
+        relativeRoot: input.plan.campaign === "m1-v2-after-only"
+          ? "evidence/repository-after"
+          : "evidence/repository",
         files: snapshot.files,
         sha256: snapshot.sha256,
       };
@@ -166,14 +168,15 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
         infrastructureGateStage: prior.infrastructureGateStage ?? null,
       });
       const alreadyReplaced = result.replacements?.some((item) => item.armKey === arm.key) ?? false;
-      if (input.plan.campaign !== "m1-v2-paired" || !replacement.allowed || alreadyReplaced ||
+      if ((input.plan.campaign !== "m1-v2-paired" && input.plan.campaign !== "m1-v2-after-only") ||
+          !replacement.allowed || alreadyReplaced ||
           prior.gateCode !== "measurement_unavailable") continue;
       result.replacements ??= [];
       result.replacements.push({ armKey: arm.key, reason: replacement.reason as "pre_provider_infrastructure_replacement", observation: prior });
       result.observations = result.observations.filter((item) => item.arm.key !== arm.key);
       completed.delete(arm.key);
     }
-    if (!completed.has(arm.key) && (input.plan.campaign === "m1-v2" || input.plan.campaign === "m1-v2-paired")) {
+    if (!completed.has(arm.key) && (input.plan.campaign === "m1-v2" || input.plan.campaign === "m1-v2-paired" || input.plan.campaign === "m1-v2-after-only")) {
       const planIdentity = benchmarkPlanIdentity(input.plan);
       const temporary = existsSync(join(arm.evidenceRoot, "sc01-public-evidence.json.tmp"));
       const evidence = existsSync(join(arm.evidenceRoot, "sc01-public-evidence.json"));
@@ -198,7 +201,7 @@ export async function runAgentBenchmark(input: RunAgentBenchmarkInput): Promise<
       evidenceSnapshot: sourceContext.evidenceSnapshot,
       sourceDiagnostic: sourceContext.diagnostic,
       evidenceDiagnostic: sourceContext.evidenceDiagnostic,
-      pairedAuthReceipt: input.plan.pairedCampaign?.authReceipt,
+      pairedAuthReceipt: input.plan.pairedCampaign?.authReceipt ?? input.plan.afterOnlyCampaign?.authReceipt,
     });
     const existingIndex = result.observations.findIndex((value) => value.arm.key === arm.key);
     if (existingIndex >= 0) result.observations[existingIndex] = observation;
@@ -242,7 +245,7 @@ function verifyTerminalDurableEvidence(plan: BenchmarkPlan, observation: import(
   if (!durable) {
     const postDispatch = observation.providerDispatchState === "provider_dispatched" || observation.providerDispatchState === "provider_output_observed";
     const safeOrphanGate = observation.m1V2?.reasons.length === 1 && observation.m1V2.reasons[0]?.startsWith("sc01_export_recover");
-    if ((plan.campaign === "m1-v2" || plan.campaign === "m1-v2-paired") && observation.m1V2 && postDispatch && !safeOrphanGate) {
+    if ((plan.campaign === "m1-v2" || plan.campaign === "m1-v2-paired" || plan.campaign === "m1-v2-after-only") && observation.m1V2 && postDispatch && !safeOrphanGate) {
       throw new Error("sc01_export_resume_evidence_missing");
     }
     return;

@@ -32,6 +32,11 @@ import {
   requireAvailableProviderAuth,
 } from "./paired-contract.ts";
 import { observeProviderAuthPreflight } from "./provider-auth-preflight.ts";
+import {
+  AFTER_ONLY_AFTER_REVISION,
+  readAfterOnlyCampaignContract,
+  type AfterOnlyCampaignContract,
+} from "./after-only-contract.ts";
 export interface AgentBenchmarkCliOptions {
   command: "plan" | "pilot" | "preflight" | "run";
   runRoot: string;
@@ -45,12 +50,15 @@ export interface AgentBenchmarkCliOptions {
   controlledModel: string;
   controlledReasoning: string;
   visualReviewPath: string | null;
-  campaign: "cross-agent-pilot" | "m1-v2" | "m1-v2-paired";
+  campaign: "cross-agent-pilot" | "m1-v2" | "m1-v2-paired" | "m1-v2-after-only";
   repetitions: number;
   sourceRevision: string;
   preparedButlerResource: PreparedButlerResourceReference | null;
   pairedSourceRoots: Readonly<Record<"before" | "after", string>> | null;
   pairedPreparedButlerResources: Readonly<Record<"before" | "after", PreparedButlerResourceReference>> | null;
+  afterOnlyCampaignInput: {
+    manifestPath: string; resultPath: string; manifestSha256: string; resultSha256: string;
+  } | null;
 }
 const CANONICAL_PILOT_MODEL = "openai/gpt-5.6-sol";
 const CANONICAL_PILOT_REASONING = "medium";
@@ -61,10 +69,11 @@ export async function runAgentBenchmarkCli(argv: readonly string[], composition:
   preflightEnvironment?: NodeJS.ProcessEnv;
 } = {}): Promise<string> {
   const options = parseOptions(argv);
-  const authReceipt = options.campaign === "m1-v2-paired"
+  const pairedMode = options.campaign === "m1-v2-paired" || options.campaign === "m1-v2-after-only";
+  const authReceipt = pairedMode
     ? await observeProviderAuthPreflight(composition.preflightExecutor ?? createProcessExecutor(), options.sourceRoot,
         composition.preflightEnvironment ?? process.env) : null;
-  const pairedExecution = options.campaign === "m1-v2-paired"
+  const pairedExecution = pairedMode
     ? requireAvailableProviderAuth(authReceipt!)
     : null;
   const pairedCampaign = options.campaign === "m1-v2-paired"
@@ -93,6 +102,20 @@ export async function runAgentBenchmarkCli(argv: readonly string[], composition:
         }).identity,
       })
     : undefined;
+  const afterOnlyCampaign: AfterOnlyCampaignContract | undefined = options.campaign === "m1-v2-after-only"
+    ? await readAfterOnlyCampaignContract({
+        ...options.afterOnlyCampaignInput!,
+        afterCompatibilitySha256: options.preparedButlerResource!.sourceCompatibilitySha256,
+        afterPreparedResource: preparedResourceIdentity(options.preparedButlerResource!),
+        platform: `${process.platform}-${process.arch}`,
+        execution: pairedExecution!, authReceipt: authReceipt!,
+        fixtureHashes: Object.fromEntries(loadM1V2BenchmarkFixtures(options.harnessRoot)
+          .map((fixture) => [fixture.id, hashBenchmarkFixture(fixture)])) as Record<"direct-cold" | "direct-warm" | "current-web-cold" | "landing-cold", string>,
+        provenance: verifyM1V2AuthoritativeProvenance({
+          repoRoot: options.harnessRoot, jsonlPath: options.provenanceJsonlPath!,
+        }).identity,
+      })
+    : undefined;
   const proposedPlan = createBenchmarkPlan({
     campaign: options.campaign,
     runId: options.runId,
@@ -110,6 +133,7 @@ export async function runAgentBenchmarkCli(argv: readonly string[], composition:
       : undefined,
     pairedCampaign,
     pairedRuntimeSources: options.pairedSourceRoots ?? undefined,
+    afterOnlyCampaign,
   });
   const planPath = join(options.runRoot, "manifest.json");
   const resultPath = join(options.runRoot, "result.json");
@@ -179,26 +203,28 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
   const harnessRootOption = option(argv, "--harness-root");
   const harnessRoot = resolve(harnessRootOption ?? process.cwd());
   const runRootOption = option(argv, "--run-root");
-  if (campaignOption(argv) === "m1-v2-paired" && !runRootOption)
-    throw new Error("The paired campaign requires an explicit durable --run-root");
+  if ((campaignOption(argv) === "m1-v2-paired" || campaignOption(argv) === "m1-v2-after-only") && !runRootOption)
+    throw new Error("The paired/AFTER-only campaign requires an explicit durable --run-root");
   const runRoot = resolve(runRootOption ?? mkdtempSync(join(tmpdir(), "butler-agent-benchmark-")));
   const outputDirectory = resolve(option(argv, "--output") ?? join(runRoot, "report"));
   if (!insideRoot(runRoot, outputDirectory)) throw new Error("--output must remain inside --run-root");
-  if (campaignOption(argv) === "m1-v2-paired" && insideRoot(tmpdir(), runRoot))
-    throw new Error("The paired --run-root must be durable and outside the private temporary root");
+  if ((campaignOption(argv) === "m1-v2-paired" || campaignOption(argv) === "m1-v2-after-only") && insideRoot(tmpdir(), runRoot))
+    throw new Error("The paired/AFTER-only --run-root must be durable and outside the private temporary root");
   assertNoSymlinkComponents(runRoot);
   assertNoSymlinkComponents(outputDirectory);
   const controlledModel = option(argv, "--controlled-model");
   if (!controlledModel) throw new Error("Missing required option: --controlled-model");
   const controlledReasoning = option(argv, "--controlled-reasoning") ?? CANONICAL_PILOT_REASONING;
   const campaign = option(argv, "--campaign") ?? "cross-agent-pilot";
-  if (campaign !== "cross-agent-pilot" && campaign !== "m1-v2" && campaign !== "m1-v2-paired") throw new Error("--campaign must be cross-agent-pilot, m1-v2, or m1-v2-paired");
+  if (campaign !== "cross-agent-pilot" && campaign !== "m1-v2" && campaign !== "m1-v2-paired" && campaign !== "m1-v2-after-only") throw new Error("--campaign must be cross-agent-pilot, m1-v2, m1-v2-paired, or m1-v2-after-only");
   if (campaign !== "cross-agent-pilot" && !harnessRootOption) {
     throw new Error("Missing required M1 v2 option: --harness-root");
   }
   const repetitions = Number(option(argv, "--repetitions") ?? (campaign !== "cross-agent-pilot" ? "3" : "1"));
   const sourceRevision = option(argv, "--source-revision") ?? AGENT_BENCHMARK_BASELINE_SHA;
-  const preparedPinPath = option(argv, "--prepared-butler-resource-pin");
+  const preparedPinPath = campaign === "m1-v2-after-only"
+    ? requiredOption(argv, "--after-prepared-butler-resource-pin")
+    : option(argv, "--prepared-butler-resource-pin");
   const preparedButlerResource = preparedPinPath
     ? readPreparedButlerResourceReference(resolve(preparedPinPath))
     : null;
@@ -211,6 +237,18 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
     before: readPreparedButlerResourceReference(resolve(requiredOption(argv, "--before-prepared-butler-resource-pin"))),
     after: readPreparedButlerResourceReference(resolve(requiredOption(argv, "--after-prepared-butler-resource-pin"))),
   } : null;
+  const afterOnlyCampaignInput = campaign === "m1-v2-after-only" ? {
+    manifestPath: resolve(requiredOption(argv, "--frozen-before-manifest")),
+    resultPath: resolve(requiredOption(argv, "--frozen-before-result")),
+    manifestSha256: requiredShaOption(argv, "--frozen-before-manifest-sha256"),
+    resultSha256: requiredShaOption(argv, "--frozen-before-result-sha256"),
+  } : null;
+  if (campaign === "m1-v2-after-only") {
+    sourceRoot = resolve(requiredOption(argv, "--after-source-root"));
+  }
+  if (campaign === "m1-v2-after-only" && preparedButlerResource) {
+    assertPairedRootIsolation(runRoot, harnessRoot, sourceRoot, preparedButlerResource.resourceDir);
+  }
   if (pairedSourceRoots && pairedPreparedButlerResources) {
     assertPairedRootIsolation(runRoot, harnessRoot, pairedSourceRoots.before, pairedSourceRoots.after,
       pairedPreparedButlerResources.before.resourceDir, pairedPreparedButlerResources.after.resourceDir);
@@ -219,6 +257,11 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
       (controlledModel !== CANONICAL_PILOT_MODEL || controlledReasoning !== CANONICAL_PILOT_REASONING ||
        sourceRevision !== FINAL_AFTER_REVISION || repetitions !== 3)) {
     throw new Error("The final paired campaign requires exact after revision, 3 repetitions, and ordinary openai/gpt-5.6-sol medium.");
+  }
+  if (campaign === "m1-v2-after-only" &&
+      (controlledModel !== CANONICAL_PILOT_MODEL || controlledReasoning !== CANONICAL_PILOT_REASONING ||
+       sourceRevision !== AFTER_ONLY_AFTER_REVISION || repetitions !== 3 || !preparedButlerResource)) {
+    throw new Error("The AFTER-only campaign requires exact AFTER revision, prepared resource, 3 repetitions, and ordinary openai/gpt-5.6-sol medium.");
   }
   if (command === "pilot" && (controlledModel.trim() !== CANONICAL_PILOT_MODEL || controlledReasoning.trim() !== CANONICAL_PILOT_REASONING)) {
     throw new Error(`The canonical pilot requires ${CANONICAL_PILOT_MODEL} with ${CANONICAL_PILOT_REASONING} reasoning`);
@@ -244,11 +287,12 @@ export function parseOptions(argv: readonly string[]): AgentBenchmarkCliOptions 
     preparedButlerResource,
     pairedSourceRoots,
     pairedPreparedButlerResources,
+    afterOnlyCampaignInput,
   };
 }
 
 function validateFlags(argv: readonly string[]): void {
-  const valueFlags = new Set(["--seed", "--run-id", "--source-root", "--harness-root", "--provenance-jsonl", "--run-root", "--output", "--controlled-model", "--controlled-reasoning", "--visual-review", "--campaign", "--repetitions", "--source-revision", "--prepared-butler-resource-pin", "--before-source-root", "--after-source-root", "--before-prepared-butler-resource-pin", "--after-prepared-butler-resource-pin"]);
+  const valueFlags = new Set(["--seed", "--run-id", "--source-root", "--harness-root", "--provenance-jsonl", "--run-root", "--output", "--controlled-model", "--controlled-reasoning", "--visual-review", "--campaign", "--repetitions", "--source-revision", "--prepared-butler-resource-pin", "--before-source-root", "--after-source-root", "--before-prepared-butler-resource-pin", "--after-prepared-butler-resource-pin", "--frozen-before-manifest", "--frozen-before-result", "--frozen-before-manifest-sha256", "--frozen-before-result-sha256"]);
   const booleanFlags = new Set(["--execute-available"]);
   for (let index = 1; index < argv.length; index += 1) {
     const flag = argv[index]!;
@@ -297,6 +341,11 @@ function option(argv: readonly string[], name: string): string | undefined {
 function requiredOption(argv: readonly string[], name: string): string {
   const value = option(argv, name);
   if (!value) throw new Error(`Missing required paired option: ${name}`);
+  return value;
+}
+function requiredShaOption(argv: readonly string[], name: string): string {
+  const value = requiredOption(argv, name);
+  if (!/^[a-f0-9]{64}$/u.test(value)) throw new Error(`${name} must be an exact SHA-256 digest`);
   return value;
 }
 const campaignOption = (argv: readonly string[]): string => option(argv, "--campaign") ?? "cross-agent-pilot";

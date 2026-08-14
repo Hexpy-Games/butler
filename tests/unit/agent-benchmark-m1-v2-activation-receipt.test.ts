@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { materializeM1V2RuntimeActivationReceipt } from "../support/agent-benchmark/m1-v2-activation-receipt.ts";
 import { FINAL_ACTIVATION, FINAL_AFTER_REVISION, FINAL_BEFORE_REVISION } from "../support/agent-benchmark/paired-contract.ts";
+import { AFTER_ONLY_AFTER_REVISION } from "../support/agent-benchmark/after-only-contract.ts";
 import type { ProviderRequestObservation } from "../e2e/btcc-r3-electron/provider-observation-proxy.ts";
 
 test("runtime receipt combines final serializer and admitted canonical after state", () => {
@@ -27,6 +28,23 @@ test("runtime receipt combines final serializer and admitted canonical after sta
     expect(() => materializeM1V2RuntimeActivationReceipt({ runRoot: root, dataRoot: join(root, "data"), evidenceRoot: join(root, "evidence"),
       turnId: "turn-1", version: "after", sourceRevision: FINAL_AFTER_REVISION,
       declaredActivation: FINAL_ACTIVATION.after, providerRequests: [request(true)] })).toThrow("existing_target_conflict");
+  });
+});
+
+test("runtime receipt accepts exact AFTER-only ON identity and rejects OFF or version drift", () => {
+  withRoot((root) => {
+    seed(root, true);
+    const base = { runRoot: root, dataRoot: join(root, "data"), evidenceRoot: join(root, "after-only"),
+      turnId: "turn-1", version: "after" as const, sourceRevision: AFTER_ONLY_AFTER_REVISION,
+      declaredActivation: FINAL_ACTIVATION.after, providerRequests: [request(true)] };
+    const receipt = materializeM1V2RuntimeActivationReceipt(base);
+    expect(receipt).toMatchObject({ version: "after", sourceRevision: AFTER_ONLY_AFTER_REVISION,
+      declaredActivation: { mode: "on", toolInstructionSurface: true, exactOnceReplay: true,
+        boundedStatelessContext: true }, policyMode: "phase_minimal" });
+    expect(() => materializeM1V2RuntimeActivationReceipt({ ...base, evidenceRoot: join(root, "off-drift"),
+      declaredActivation: FINAL_ACTIVATION.before })).toThrow("declared_identity_mismatch");
+    expect(() => materializeM1V2RuntimeActivationReceipt({ ...base, evidenceRoot: join(root, "version-drift"),
+      version: "before", declaredActivation: FINAL_ACTIVATION.before })).toThrow("declared_identity_mismatch");
   });
 });
 

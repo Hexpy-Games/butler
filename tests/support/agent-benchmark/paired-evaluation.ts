@@ -35,14 +35,16 @@ export function comparableIdentityForArm(arm: BenchmarkArmPlan, repetition: M1V2
     retryOrdinal: Math.max(0, ...attempts.map((attempt) => attempt.retryOrdinal)), usageAvailability };
 }
 
-export function pairEligibility(input: { before: PairComparableIdentity; after: PairComparableIdentity }): Omit<PairDecision, "pairId"> {
+export function pairEligibility(input: { before: PairComparableIdentity; after: PairComparableIdentity }, revisions = {
+  before: "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+  after: "394c98a97428b741f8ea54273a226cb062455ab0",
+}): Omit<PairDecision, "pairId"> {
   const exact = ["fixture", "model", "reasoning", "executionMode", "provider", "providerTransport", "authMode"] as const;
   for (const key of exact) if (input.before[key] !== input.after[key]) return { status: "rejected", reason: `${key}_mismatch` };
   if (input.before.sourceRevision === input.after.sourceRevision) return { status: "rejected", reason: "source_not_paired" };
   if (input.before.retryOrdinal > 0 || input.after.retryOrdinal > 0) return { status: "rejected", reason: "retry_contaminated" };
   if (input.before.route !== input.after.route) return { status: "rejected", reason: "route_mismatch" };
-  if (input.before.sourceRevision !== "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5" ||
-      input.after.sourceRevision !== "394c98a97428b741f8ea54273a226cb062455ab0")
+  if (input.before.sourceRevision !== revisions.before || input.after.sourceRevision !== revisions.after)
     return { status: "rejected", reason: "source_mismatch" };
   for (const identity of [input.before, input.after]) {
     if (identity.model !== "openai/gpt-5.6-sol" || identity.reasoning !== "medium" ||
@@ -70,9 +72,9 @@ export interface PairedMetricRow {
   segments: Partial<Record<M1RequestSegmentKind, number>>; qualityPassed: boolean;
 }
 
-export function aggregatePairedMetrics(rows: readonly PairedMetricRow[]) {
+export function aggregatePairedMetrics(rows: readonly PairedMetricRow[], revisions?: { before: string; after: string }) {
   const allPairs = paired(rows);
-  const decisions = allPairs.map(([before, after]) => ({ pairId: before.pairId, ...pairEligibility({ before: before.identity, after: after.identity }) }));
+  const decisions = allPairs.map(([before, after]) => ({ pairId: before.pairId, ...pairEligibility({ before: before.identity, after: after.identity }, revisions) }));
   const eligibleIds = new Set(decisions.filter((item) => item.status === "eligible").map((item) => item.pairId));
   const eligible = allPairs.filter(([before]) => eligibleIds.has(before.pairId));
   const summarize = (pairs: Array<[PairedMetricRow, PairedMetricRow]>) => ({
@@ -96,32 +98,19 @@ export function aggregatePairedMetrics(rows: readonly PairedMetricRow[]) {
 }
 
 export function summarizePairedBenchmarkResult(result: BenchmarkResultFile) {
-  if (result.plan.campaign !== "m1-v2-paired") return null;
+  if (result.plan.campaign !== "m1-v2-paired" && result.plan.campaign !== "m1-v2-after-only") return null;
   const cardinality = observationCardinality(result);
-  const rows = result.observations.flatMap((observation): PairedMetricRow[] => {
-    const repetition = observation.m1V2;
-    const version = observation.arm.version;
-    const pairId = observation.arm.pairId;
-    const execution = observation.arm.pairedExecution;
-    if (!repetition || !version || !pairId || !execution) return [];
-    const attempt = repetition.agentAttempts;
-    const usage = (key: keyof Usage) => attempt.length > 0 && attempt.every((item) => item[key] !== null)
-      ? attempt.reduce((sum, item) => sum + (item[key] ?? 0), 0) : null;
-    const identity = observation.pairedComparableIdentity;
-    if (!identity) return [];
-    return [{ pairId, fixture: repetition.armId, version,
-      identity,
-      providerSendBytes: attempt.reduce((sum, item) => sum + item.providerSendBytes, 0),
-      allPhysicalProviderSendBytes: attempt.reduce((sum, item) => sum + item.providerSendBytes, 0) +
-        Object.values(repetition.unarmedPhysicalOverhead).reduce((sum, item) => sum + item.providerSendBytes, 0),
-      physicalRequests: attempt.length + repetition.auxiliaryPhysicalAttempts + repetition.titlePhysicalAttempts + repetition.providerToolPhysicalAttempts,
-      modelRounds: repetition.semanticRounds, toolCalls: repetition.toolCalls,
-      elapsedMs: repetition.elapsedMs, firstUsefulMs: repetition.firstUsefulMs,
-      usage: { promptTokens: usage("promptTokens"), cacheReadTokens: usage("cacheReadTokens"), cacheWriteTokens: usage("cacheWriteTokens"), outputTokens: usage("outputTokens"), reasoningTokens: usage("reasoningTokens"), totalTokens: usage("totalTokens") },
-      segments: Object.fromEntries(OBSERVED_M1_REQUEST_SEGMENT_KINDS.map((kind) => [kind, attempt.reduce((sum, item) => sum + (item.segments[kind] ?? 0), 0)])),
-      qualityPassed: observation.terminalState === "accepted" && observation.evaluation.accepted === true && repetitionQualityPassed(repetition) }];
+  const liveRows = result.observations.flatMap((observation): PairedMetricRow[] => {
+    const row = pairedMetricRowForObservation(observation);
+    return row ? [row] : [];
   });
-  const aggregate = aggregatePairedMetrics(rows);
+  const frozenRows = result.plan.afterOnlyCampaign?.frozenBefore.cells.flatMap((cell) => cell.comparison ? [cell.comparison] : []) ?? [];
+  const rows = [...frozenRows, ...liveRows];
+  const revisions = result.plan.afterOnlyCampaign ? {
+    before: "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
+    after: result.plan.afterOnlyCampaign.after.revision,
+  } : undefined;
+  const aggregate = aggregatePairedMetrics(rows, revisions);
   const bytes = aggregate.overall.providerSendBytes.total.ratio;
   const elapsed = aggregate.overall.elapsedMs.total.ratio;
   const requestBefore = aggregate.overall.physicalRequests.total.before;
@@ -132,15 +121,40 @@ export function summarizePairedBenchmarkResult(result: BenchmarkResultFile) {
     requestCountReductionPassed: complete && requestBefore === 45 && requestAfter !== null && requestAfter >= 38 && requestAfter <= 40,
     elapsedTargetPassed: complete && elapsed !== null && elapsed <= -0.18 && elapsed >= -0.30,
     zeroQualityRegressionPassed: complete && aggregate.overall.qualityPassed };
-  return { contractIdentity: result.plan.pairedCampaign?.identity ?? null, rows, aggregate, cardinality, acceptance };
+  return { contractIdentity: result.plan.pairedCampaign?.identity ?? result.plan.afterOnlyCampaign?.identity ?? null, rows, aggregate, cardinality, acceptance };
+}
+
+export function pairedMetricRowForObservation(observation: BenchmarkResultFile["observations"][number]): PairedMetricRow | null {
+    const repetition = observation.m1V2;
+    const version = observation.arm.version;
+    const pairId = observation.arm.pairId;
+    const execution = observation.arm.pairedExecution;
+    if (!repetition || !version || !pairId || !execution) return null;
+    const attempt = repetition.agentAttempts;
+    const usage = (key: keyof Usage) => attempt.length > 0 && attempt.every((item) => item[key] !== null)
+      ? attempt.reduce((sum, item) => sum + (item[key] ?? 0), 0) : null;
+    const identity = observation.pairedComparableIdentity;
+    if (!identity) return null;
+    return { pairId, fixture: repetition.armId, version,
+      identity,
+      providerSendBytes: attempt.reduce((sum, item) => sum + item.providerSendBytes, 0),
+      allPhysicalProviderSendBytes: attempt.reduce((sum, item) => sum + item.providerSendBytes, 0) +
+        Object.values(repetition.unarmedPhysicalOverhead).reduce((sum, item) => sum + item.providerSendBytes, 0),
+      physicalRequests: attempt.length + repetition.auxiliaryPhysicalAttempts + repetition.titlePhysicalAttempts + repetition.providerToolPhysicalAttempts,
+      modelRounds: repetition.semanticRounds, toolCalls: repetition.toolCalls,
+      elapsedMs: repetition.elapsedMs, firstUsefulMs: repetition.firstUsefulMs,
+      usage: { promptTokens: usage("promptTokens"), cacheReadTokens: usage("cacheReadTokens"), cacheWriteTokens: usage("cacheWriteTokens"), outputTokens: usage("outputTokens"), reasoningTokens: usage("reasoningTokens"), totalTokens: usage("totalTokens") },
+      segments: Object.fromEntries(OBSERVED_M1_REQUEST_SEGMENT_KINDS.map((kind) => [kind, attempt.reduce((sum, item) => sum + (item.segments[kind] ?? 0), 0)])),
+      qualityPassed: observation.terminalState === "accepted" && observation.evaluation.accepted === true && repetitionQualityPassed(repetition) };
 }
 
 export function observationCardinality(result: BenchmarkResultFile): { valid: boolean; reason: string } {
   const expected = result.plan.arms, actual = result.observations;
   const actualKeys = actual.map((row) => row.arm.key);
-  return expected.length === 24 && actual.length === 24 && expected.every((arm, index) =>
+  const expectedLength = result.plan.campaign === "m1-v2-after-only" ? 12 : 24;
+  return expected.length === expectedLength && actual.length === expectedLength && expected.every((arm, index) =>
     actual[index]?.arm.key === arm.key && pairedObservationIdentityMatches(arm, actual[index]!.arm)) &&
-    new Set(actualKeys).size === 24 ? { valid: true, reason: "exact_24_plan_order" } :
+    new Set(actualKeys).size === expectedLength ? { valid: true, reason: `exact_${expectedLength}_plan_order` } :
     { valid: false, reason: "observation_identity_or_cardinality_mismatch" };
 }
 

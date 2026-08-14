@@ -19,7 +19,7 @@ export function validateBenchmarkPlan(plan: BenchmarkPlan): void {
   assertNoSymlinkComponents(harnessRoot);
   if (runRoot === sourceRoot || inside(sourceRoot, runRoot) || inside(runRoot, sourceRoot)) throw new Error("Benchmark run root and source root must be isolated");
   if (runRoot === harnessRoot || inside(harnessRoot, runRoot) || inside(runRoot, harnessRoot)) throw new Error("Benchmark run root and harness authority root must be isolated");
-  if ((plan.campaign === "m1-v2" || plan.campaign === "m1-v2-paired") && (!plan.provenanceJsonlPath ||
+  if ((plan.campaign === "m1-v2" || plan.campaign === "m1-v2-paired" || plan.campaign === "m1-v2-after-only") && (!plan.provenanceJsonlPath ||
     plan.provenance?.schema !== "butler.agent-benchmark.provenance-identity.v1" ||
     ![plan.provenance.metadataSha256, plan.provenance.jsonlSha256, plan.provenance.verifiedSha256]
       .every((value) => typeof value === "string" && /^[a-f0-9]{64}$/u.test(value)))) {
@@ -44,17 +44,23 @@ export function validateBenchmarkPlan(plan: BenchmarkPlan): void {
       (plan.pairedCampaign?.steps.length !== 24 || plan.arms.length !== 24)) {
     throw new Error("Paired M1 plan must contain exactly 24 immutable steps");
   }
+  if (plan.campaign === "m1-v2-after-only" &&
+      (plan.afterOnlyCampaign?.steps.length !== 12 || plan.arms.length !== 12)) {
+    throw new Error("AFTER-only M1 plan must contain exactly 12 immutable AFTER steps");
+  }
   for (const arm of plan.arms) {
     if (arm.fixtureHash !== fixtureHashes.get(arm.scenario)) throw new Error(`Fixture hash mismatch for arm ${arm.key}`);
     for (const path of [arm.outputRoot, arm.dataRoot, arm.evidenceRoot, arm.cacheRoot]) {
       if (!inside(runRoot, resolve(path))) throw new Error(`Arm path escapes run root: ${path}`);
     }
     assertNoSymlinkComponents(resolve(arm.sourceRoot));
-    if (plan.campaign !== "m1-v2-paired") {
+    if (plan.campaign !== "m1-v2-paired" && plan.campaign !== "m1-v2-after-only") {
       if (resolve(arm.sourceRoot) !== sourceRoot) throw new Error(`Arm source root mismatch: ${arm.key}`);
       if (arm.sourceRevision !== plan.baselineSha) throw new Error(`Arm source revision mismatch: ${arm.key}`);
     } else {
-      const step = plan.pairedCampaign?.steps[arm.order];
+      const step = plan.campaign === "m1-v2-paired"
+        ? plan.pairedCampaign?.steps[arm.order]
+        : plan.afterOnlyCampaign?.steps[arm.order];
       if (!step || arm.key !== step.key || arm.version !== step.version ||
           arm.pairId !== step.pairId || arm.block !== step.block ||
           arm.sourceRevision !== step.source.revision) {

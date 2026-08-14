@@ -5,6 +5,7 @@ import { Database } from "bun:sqlite";
 import type { ProviderRequestObservation } from "../../e2e/btcc-r3-electron/provider-observation-proxy.ts";
 import { FINAL_ACTIVATION, FINAL_AFTER_REVISION, FINAL_BEFORE_REVISION,
   type BenchmarkVersion, type M1V2ActivationIdentity } from "./paired-contract.ts";
+import { AFTER_ONLY_AFTER_REVISION } from "./after-only-contract.ts";
 import { hasUnsafeButlerRuntimeDirectoryComponent, isStrictlyInsideButlerRuntime } from "./butler-runtime-path-safety.ts";
 
 const DEFAULT_LIMITS = {
@@ -39,8 +40,8 @@ export function materializeM1V2RuntimeActivationReceipt(input: {
       hasUnsafeButlerRuntimeDirectoryComponent(evidenceRoot)) {
     throw new Error("m1_activation_receipt_evidence_root_invalid");
   }
-  const expectedRevision = input.version === "before" ? FINAL_BEFORE_REVISION : FINAL_AFTER_REVISION;
-  if (input.sourceRevision !== expectedRevision ||
+  const expectedRevisions: readonly string[] = input.version === "before" ? [FINAL_BEFORE_REVISION] : [FINAL_AFTER_REVISION, AFTER_ONLY_AFTER_REVISION];
+  if (!expectedRevisions.includes(input.sourceRevision) ||
       JSON.stringify(input.declaredActivation) !== JSON.stringify(FINAL_ACTIVATION[input.version])) {
     throw new Error("m1_activation_receipt_declared_identity_mismatch");
   }
