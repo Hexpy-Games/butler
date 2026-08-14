@@ -1,5 +1,4 @@
 export {
-  appTurnStateDbPath,
   bindButlerSession,
   createNativeButlerDefaultProvider,
   persistButlerSessionPointer,

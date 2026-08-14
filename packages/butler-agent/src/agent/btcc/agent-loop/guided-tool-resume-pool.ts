@@ -1,4 +1,4 @@
-import type { GuidedToolJournalRecord } from "../../adapters/index.ts";
+import type { GuidedToolJournalRecord } from "../ports/index.ts";
 import {
   guidedToolCatalogIdFromRawArguments,
   guidedToolIdentitySignature,

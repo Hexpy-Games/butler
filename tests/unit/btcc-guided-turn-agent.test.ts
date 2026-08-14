@@ -59,6 +59,8 @@ import { ModelProviderRequestError } from
   "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { buildModelRoute } from
   "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
+import { runOpenAIModelRound } from
+  "../../packages/butler-agent/src/integrations/providers/openai/model-round.ts";
 
 type ScriptedModelRoundStep =
   | ModelRoundResult
@@ -116,17 +118,26 @@ function toolMessageOutput(message: ModelRoundMessage | undefined): unknown {
 test("real Guided Turn enters the BTCC agent-loop through the one-round port", async () => {
   const fixture = createFixture("guided-btcc-loop-entry");
   try {
-    const requests: Array<{ messages: readonly { role: string; content: string }[] }> = [];
+    const requests: Array<{
+      messages: readonly { role: string; content: string }[];
+      requestSegmentSources: ModelRoundRequest["requestSegmentSources"];
+      attributionArmId: ModelRoundRequest["attributionArmId"];
+      cacheBoundaryEvidence: ModelRoundRequest["cacheBoundaryEvidence"];
+    }> = [];
     const modelRound: ModelRoundPort = {
       async runRound(request) {
-        requests.push({ messages: request.messages });
+        requests.push({
+          messages: request.messages,
+          requestSegmentSources: request.requestSegmentSources,
+          attributionArmId: request.attributionArmId,
+          cacheBoundaryEvidence: request.cacheBoundaryEvidence,
+        });
         return { text: "BTCC final answer", toolCalls: [] };
       },
     };
     const agent = createProductionGuidedTurnAgent({
       butlerHome: fixture.root,
       butlerData: fixture.root,
-      appMessageDbPath: fixture.dbPath,
       contextDocuments: fixture.stores.contextDocuments,
       toolJournal: fixture.stores.guidedToolJournal,
       effectJournal: fixture.stores.guidedEffectJournal,
@@ -135,17 +146,710 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
     });
 
     const result = await agent.run({
-      turn: turnRecord(fixture.root, { turnId: "guided-btcc-loop-entry" }),
+      turn: turnRecord(fixture.root, {
+        turnId: "guided-btcc-loop-entry",
+        attributionArmId: "direct-cold",
+        cacheBoundaryEvidence: { expectedRevision: "expected", observedRevision: "observed" },
+      }),
       signal: new AbortController().signal,
+      recordModelRoundAcceptance: async () => {},
+      loadModelRoundAcceptance: async () => undefined,
     });
 
     expect(result.content).toBe("BTCC final answer");
     expect(requests).toHaveLength(1);
+    expect(requests[0]?.requestSegmentSources?.input?.map((source) => source.kind))
+      .toContain("current_user_request");
+    expect(requests[0]?.requestSegmentSources?.instructions?.map((source) => source.kind))
+      .toContain("stable_btcc_protocol");
+    expect(requests[0]?.cacheBoundaryEvidence).toEqual({
+      expectedRevision: "expected", observedRevision: "observed",
+    });
+    expect(requests[0]?.attributionArmId).toBe("direct-cold");
     expect(requests[0]?.messages[0]).toMatchObject({
       role: "user",
       content: expect.stringContaining("요청을 처리해 주세요"),
     });
   } finally {
+    fixture.close();
+  }
+});
+
+test("M1 Guided Turn restores the existing bounded Work closeout opportunity", async () => {
+  const previousSurface = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  const fixture = createFixture("guided-m1-closeout-restoration");
+  try {
+    const turnId = "guided-m1-closeout-restoration-turn";
+    let modelCalls = 0;
+    let dispositionOutput: unknown;
+    const modelRound: ModelRoundPort = {
+      async runRound(request) {
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          return toolResponse([toolCall("closeout-plan", "replace_work_plan", {
+            start_new: true,
+            objective: "현재 Turn의 작업을 완료한다",
+            actions: [{ action_key: "finish", dependency_keys: [] }],
+            checks: [],
+          })]);
+        }
+        if (modelCalls === 2) {
+          return { text: "첫 번째 최종 후보", toolCalls: [] };
+        }
+        if (modelCalls === 3) {
+          expect(request.tools.map((tool) => tool.name)).toContain(
+            "record_work_disposition",
+          );
+          const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+          expect(bound).not.toBeNull();
+          return toolResponse([toolCall(
+            "closeout-disposition",
+            "record_work_disposition",
+            {
+              work_id: bound!.workId,
+              disposition: "completed",
+              summary: "현재 Turn의 작업을 완료했습니다.",
+              action_updates: [{ action_key: "finish", status: "done" }],
+            },
+          )]);
+        }
+        const dispositionResult = messagesWithToolResults(request).find(
+          (message) => message.name === "record_work_disposition",
+        );
+        expect(dispositionResult).toBeDefined();
+        dispositionOutput = JSON.parse(dispositionResult!.content);
+        return { text: "최종 답변", toolCalls: [] };
+      },
+    };
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent: fixture.agent(modelRound),
+    });
+
+    const result = await runtime.runTurn(localRunCommand(fixture.root, turnId));
+
+    expect(dispositionOutput).toMatchObject({
+      ok: true,
+      output: {
+        ok: true,
+        work: { status: "completed" },
+      },
+    });
+    expect(result).toMatchObject({ kind: "delivered", content: "최종 답변" });
+    expect(modelCalls).toBe(4);
+    await expect(fixture.stores.durableWork.boundWorkForTurn(turnId)).resolves
+      .toMatchObject({
+        status: "completed",
+        latestDisposition: {
+          originTurnId: turnId,
+          disposition: "completed",
+        },
+      });
+  } finally {
+    fixture.close();
+    if (previousSurface === undefined) {
+      delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    } else {
+      process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousSurface;
+    }
+  }
+});
+
+test("failed closeout correction still delivers and records one diagnostic", async () => {
+  const previousSurface = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  const fixture = createFixture("guided-m1-closeout-missing");
+  try {
+    const turnId = "guided-m1-closeout-missing-turn";
+    let modelCalls = 0;
+    const agent = fixture.agent({
+      async runRound() {
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          return toolResponse([toolCall("missing-plan", "replace_work_plan", {
+            start_new: true,
+            objective: "닫히지 않은 작업",
+            actions: [{ action_key: "finish", dependency_keys: [] }],
+            checks: [],
+          })]);
+        }
+        if (modelCalls === 2) return { text: "첫 후보", toolCalls: [] };
+        if (modelCalls === 3) {
+          const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+          return toolResponse([toolCall(
+            "missing-disposition",
+            "record_work_disposition",
+            {
+              work_id: bound!.workId,
+              disposition: "completed",
+              summary: "없는 근거로 잘못 닫기",
+              action_updates: [{ action_key: "finish", status: "done" }],
+              evidence_refs: ["missing-current-turn-evidence"],
+            },
+          )]);
+        }
+        return { text: "실패 후에도 전달할 최종 답변", toolCalls: [] };
+      },
+    });
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+
+    await expect(runtime.runTurn(localRunCommand(fixture.root, turnId))).resolves
+      .toMatchObject({
+        kind: "delivered",
+        content: "실패 후에도 전달할 최종 답변",
+      });
+    expect(modelCalls).toBe(4);
+    const db = new Database(fixture.dbPath);
+    try {
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_work_closeout_diagnostics
+        WHERE code = 'closeout_missing' AND turn_id = ?
+      `).get(turnId)?.count).toBe(1);
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_work_disposition_revisions
+      `).get()?.count).toBe(0);
+      expect(db.query<{ status: string }, [string]>(`
+        SELECT status FROM btcc_guided_works WHERE origin_turn_id = ?
+      `).get(turnId)?.status).toBe("open");
+    } finally {
+      db.close(false);
+    }
+  } finally {
+    fixture.close();
+    if (previousSurface === undefined) {
+      delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    } else {
+      process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousSurface;
+    }
+  }
+});
+
+test("a late same-Turn result invalidates disposition and records the bounded diagnostic", async () => {
+  const previousSurface = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  const fixture = createFixture("guided-stale-disposition-closeout");
+  try {
+    writeFileSync(join(fixture.root, "late.txt"), "late evidence\n");
+    const turnId = "guided-stale-disposition-turn";
+    let modelCalls = 0;
+    const agent = fixture.agent({
+      async runRound() {
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          return toolResponse([toolCall("stale-plan", "replace_work_plan", {
+            start_new: true,
+            objective: "완료 선언 뒤 늦은 결과를 검증한다",
+            actions: [{ action_key: "finish", dependency_keys: [] }],
+            checks: [],
+          })]);
+        }
+        if (modelCalls === 2) {
+          return { text: "첫 번째 최종 후보", toolCalls: [] };
+        }
+        if (modelCalls === 3) {
+          const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+          return toolResponse([
+            toolCall("stale-disposition", "record_work_disposition", {
+              work_id: bound!.workId,
+              disposition: "completed",
+              summary: "현재까지의 Work를 완료했습니다.",
+              action_updates: [{ action_key: "finish", status: "done" }],
+            }),
+            toolCall("stale-late-read", "read_file", { path: "late.txt" }),
+          ]);
+        }
+        return { text: "늦은 결과까지 전달했습니다.", toolCalls: [] };
+      },
+    });
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    await expect(runtime.runTurn(localRunCommand(fixture.root, turnId))).resolves
+      .toMatchObject({
+        kind: "delivered",
+        content: "늦은 결과까지 전달했습니다.",
+      });
+    expect(modelCalls).toBe(4);
+    await expect(fixture.stores.durableWork.boundWorkForTurn(turnId)).resolves
+      .toMatchObject({
+        status: "open",
+        latestDisposition: {
+          disposition: "completed",
+          originTurnId: turnId,
+        },
+      });
+    const db = new Database(fixture.dbPath);
+    try {
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count
+        FROM btcc_guided_work_closeout_diagnostics
+        WHERE code = 'closeout_missing' AND turn_id = ?
+      `).get(turnId)?.count).toBe(1);
+    } finally {
+      db.close(false);
+    }
+  } finally {
+    fixture.close();
+    if (previousSurface === undefined) {
+      delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    } else {
+      process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousSurface;
+    }
+  }
+});
+
+test("production Guided Turn sends the admitted M1 v2 direct surface and stable prefix", async () => {
+  const fixture = createFixture("guided-m1-v2-direct-surface");
+  const previousFlag = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  try {
+    let captured: ModelRoundRequest | undefined;
+    const agent = fixture.agent({
+      async runRound(request) {
+        captured = request;
+        return { text: "direct answer", toolCalls: [] };
+      },
+    });
+    const result = await agent.run({
+      turn: turnRecord(fixture.root, {
+        turnId: "guided-m1-v2-direct-surface",
+        accessMode: "read_only",
+        trackingMode: "none",
+      }),
+      signal: new AbortController().signal,
+    });
+
+    expect(result.content).toBe("direct answer");
+    expect(captured?.tools.map((tool) => tool.name)).toContain("web_search");
+    expect(captured?.tools.map((tool) => tool.name)).toContain("recall_memory");
+    expect(captured?.tools.map((tool) => tool.name)).not.toContain("read_file");
+    expect(captured?.tools.map((tool) => tool.name)).not.toContain("replace_work_plan");
+    expect(captured?.instructions).toContain("This is a direct non-project phase");
+    expect(captured?.instructions).not.toContain("The Work stage is process guidance");
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    } else {
+      process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousFlag;
+    }
+    fixture.close();
+  }
+});
+
+test("production Guided Turn exposes and executes exact result reads only through selected phase capability", async () => {
+  const fixture = createFixture("guided-m1-v2-exact-read");
+  const previousFlag = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  const turnId = "guided-m1-v2-exact-read";
+  try {
+    fixture.stores.guidedToolJournal.start({
+      turnId, callId: "durable-result", toolName: "read_file",
+      rawArguments: "{}", arguments: {},
+    });
+    fixture.stores.guidedToolJournal.finish({
+      callId: "durable-result", status: "completed",
+      result: { ok: true, content: "exact durable content" },
+    });
+    const stored = fixture.stores.guidedToolJournal.findForTurn(turnId, "durable-result")!;
+    const requests: ModelRoundRequest[] = [];
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        requests.push(request);
+        expect(request.tools.map((tool) => tool.name)).toContain("read_operation_results");
+        return toolResponse([toolCall("exact-read", "read_operation_results", {
+          result_ref: "durable-result", sha256: stored.resultSha256, revision: null,
+          work_id: null, offset: 0, length: 32,
+        })]);
+      },
+      (request) => {
+        requests.push(request);
+        expect(JSON.stringify(messagesWithToolResults(request))).toContain("base64");
+        return { text: "exact result verified", toolCalls: [] };
+      },
+    ]));
+    const turn = turnRecord(fixture.root, {
+        turnId, accessMode: "read_only", trackingMode: "none",
+      });
+    turn.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol", backupModelRefs: [],
+      reasoningEffort: "low", catalogGeneration: "test",
+    });
+    const result = await agent.run({
+      turn,
+      signal: new AbortController().signal,
+      recordModelRoundAcceptance: async () => {},
+      loadModelRoundAcceptance: async () => undefined,
+    });
+    expect(result.content).toBe("exact result verified");
+    expect(requests).toHaveLength(2);
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previousFlag;
+    fixture.close();
+  }
+});
+
+test("enabled exact replay fails before provider dispatch without durable route acceptance ports", async () => {
+  const fixture = createFixture("guided-exact-replay-preflight");
+  const previousFlag = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  let calls = 0;
+  try {
+    const agent = fixture.agent({ async runRound() {
+      calls += 1;
+      return { text: "must not dispatch", toolCalls: [] };
+    } });
+    await expect(agent.run({
+      turn: turnRecord(fixture.root), signal: new AbortController().signal,
+    })).rejects.toThrow("operation_result_route_acceptance_dependency_missing");
+    expect(calls).toBe(0);
+  } finally {
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previousFlag;
+    fixture.close();
+  }
+});
+
+test("production Turn resolves a Work created after replay runtime construction", async () => {
+  const fixture = createFixture("guided-dynamic-work-exact-read");
+  const previousReplay = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  const previousSurface = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  writeFileSync(join(fixture.root, "large.txt"), "W".repeat(12_000));
+  writeFileSync(join(fixture.root, "small.txt"), "small");
+  try {
+    let reference: Record<string, unknown> | undefined;
+    let rounds = 0;
+    const agent = fixture.agent(scriptedModelRound([
+      () => { rounds += 1; return toolResponse([toolCall("plan", "replace_work_plan", {
+        objective: "Read one durable large result",
+        actions: [{ action_key: "read", description: "Read the large file" }],
+        checks: ["The exact range is available"],
+      })]); },
+      () => { rounds += 1; return toolResponse([toolCall("large", "read_file", { path: "large.txt" })]); },
+      () => { rounds += 1; return toolResponse([toolCall("small", "read_file", { path: "small.txt" })]); },
+      (request) => {
+        rounds += 1;
+        const referenceMessage = messagesWithToolResults(request)
+          .find((message) => message.name === "read_file" &&
+            message.content.includes("butler.operation-result-reference.v1"));
+        expect(referenceMessage).toBeDefined();
+        reference = JSON.parse(referenceMessage!.content) as Record<string, unknown>;
+        const identity = reference.identity as Record<string, unknown>;
+        const integrity = reference.integrity as Record<string, unknown>;
+        expect(identity.kind).toBe("work");
+        expect(identity.work_id).toBeString();
+        return toolResponse([toolCall("exact", "read_operation_results", {
+          result_ref: identity.result_ref, sha256: integrity.sha256,
+          revision: integrity.revision, work_id: identity.work_id,
+          offset: 0, length: 64,
+        })]);
+      },
+      async (request) => {
+        rounds += 1;
+        const exact = messagesWithToolResults(request).find((message) => message.name === "read_operation_results");
+        expect(JSON.parse(exact!.content)).toMatchObject({
+          ok: true, output: { encoding: "base64", offset: 0, length: 64 },
+        });
+        const bound = await fixture.stores.durableWork.boundWorkForTurn(
+          "dynamic-work-turn",
+        );
+        return toolResponse([toolCall("dynamic-work-disposition", "record_work_disposition", {
+          work_id: bound!.workId,
+          disposition: "completed",
+          summary: "The exact range is available.",
+          action_updates: [{ action_key: "read", status: "done" }],
+        })]);
+      },
+      () => {
+        rounds += 1;
+        return { text: "dynamic Work exact range verified", toolCalls: [] };
+      },
+    ]));
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    const command = localRunCommand(fixture.root, "dynamic-work-turn");
+    command.modelSelection.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol", backupModelRefs: [],
+      reasoningEffort: "low", catalogGeneration: "test",
+    });
+    const result = await runtime.runTurn(command);
+    expect(rounds).toBe(6);
+    expect(reference).toBeDefined();
+    expect(result).toMatchObject({
+      kind: "delivered", content: "dynamic Work exact range verified",
+    });
+  } finally {
+    if (previousReplay === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previousReplay;
+    if (previousSurface === undefined) delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    else process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousSurface;
+    fixture.close();
+  }
+});
+
+test("production Guided Turn projects economical results through the actual Codex serializer", async () => {
+  const fixture = createFixture("guided-m1-v2-codex-exact-replay");
+  const previousFlag = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  const previousBase = process.env.BUTLER_CODEX_BASE_URL;
+  const originalFetch = globalThis.fetch;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  process.env.BUTLER_CODEX_BASE_URL = "https://example.test/backend-api";
+  writeFileSync(join(fixture.root, "large.txt"), "L".repeat(2_700));
+  writeFileSync(join(fixture.root, "small.txt"), "small evidence");
+  bindAppProject(fixture.dbPath, {
+    id: "guided-agent-session", workspacePath: fixture.root,
+    ledgerProjectId: "guided-m1-v2-codex-exact-replay",
+  });
+  const requestBodies: Record<string, unknown>[] = [];
+  let responseIndex = 0;
+  globalThis.fetch = (async (_input, init) => {
+    requestBodies.push(JSON.parse(String(init?.body ?? "{}")));
+    responseIndex += 1;
+    const items = responseIndex === 1
+      ? [{ type: "function_call", call_id: "large-read", name: "read_file", arguments: JSON.stringify({ path: "large.txt" }) }]
+      : responseIndex === 2
+        ? [{ type: "function_call", call_id: "small-read", name: "read_file", arguments: JSON.stringify({ path: "small.txt" }) }]
+        : [{ type: "message", content: [{ type: "output_text", text: "serializer verified" }] }];
+    const output = items.map((item) =>
+      `data: ${JSON.stringify({ type: "response.output_item.done", item })}\n\n`,
+    ).join("");
+    const completed = { type: "response.completed", response: {
+      id: `response-${responseIndex}`, status: "completed", output: [],
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2,
+        input_tokens_details: { cached_tokens: 0 } },
+    } };
+    return new Response(`${output}data: ${JSON.stringify(completed)}\n\ndata: [DONE]\n\n`);
+  }) as typeof fetch;
+  try {
+    const authorization = `Bearer e30.${Buffer.from(JSON.stringify({
+      "https://api.openai.com/auth": { chatgpt_account_id: "account" },
+    })).toString("base64url")}.signature`;
+    const agent = fixture.agent({
+      async runRound(request) {
+        const result = await runOpenAIModelRound(
+          request, { authorization, mode: "codex_oauth" }, "openai/gpt-5.6-sol",
+        );
+        return result;
+      },
+    });
+    const turn = turnRecord(fixture.root, {
+        turnId: "guided-m1-v2-codex-exact-replay",
+        accessMode: "read_only", trackingMode: "none",
+        projectId: "guided-m1-v2-codex-exact-replay",
+      });
+    turn.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol", backupModelRefs: [],
+      reasoningEffort: "low", catalogGeneration: "test",
+    });
+    const result = await agent.run({
+      turn,
+      signal: AbortSignal.timeout(20_000),
+      recordModelRoundAcceptance: async () => {},
+      loadModelRoundAcceptance: async () => undefined,
+    });
+    expect(result.content).toBe("serializer verified");
+    expect(requestBodies).toHaveLength(3);
+    const second = JSON.stringify(requestBodies[1]);
+    const third = JSON.stringify(requestBodies[2]);
+    expect(second).toContain("L".repeat(1024));
+    expect(third).not.toContain("L".repeat(1024));
+    expect(third).toContain("butler.operation-result-reference.v1");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previousFlag;
+    if (previousBase === undefined) delete process.env.BUTLER_CODEX_BASE_URL;
+    else process.env.BUTLER_CODEX_BASE_URL = previousBase;
+    fixture.close();
+  }
+}, 30_000);
+
+test("production Guided Turn preserves official Responses continuation for economical replay", async () => {
+  const fixture = createFixture("guided-m1-v2-official-exact-replay");
+  const previousFlag = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  const previousBase = process.env.OPENAI_BASE_URL;
+  const originalFetch = globalThis.fetch;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  process.env.OPENAI_BASE_URL = "https://example.test/v1";
+  writeFileSync(join(fixture.root, "official-large.txt"), "O".repeat(2_700));
+  writeFileSync(join(fixture.root, "official-small.txt"), "small");
+  const bodies: Record<string, unknown>[] = [];
+  const responses = [
+    { id: "official-1", model: "gpt-5.6-sol", output: [{
+      type: "function_call", call_id: "official-large", name: "read_file",
+      arguments: JSON.stringify({ path: "official-large.txt" }),
+    }] },
+    { id: "official-2", model: "gpt-5.6-sol", output: [{
+      type: "function_call", call_id: "official-small", name: "read_file",
+      arguments: JSON.stringify({ path: "official-small.txt" }),
+    }] },
+    { id: "official-3", model: "gpt-5.6-sol", output: [{
+      type: "message", role: "assistant",
+      content: [{ type: "output_text", text: "official serializer verified" }],
+    }] },
+  ];
+  let responseIndex = 0;
+  globalThis.fetch = (async (_input, init) => {
+    bodies.push(JSON.parse(String(init?.body ?? "{}")));
+    return Response.json(responses[responseIndex++]!);
+  }) as typeof fetch;
+  try {
+    const agent = fixture.agent({ runRound: (request) => runOpenAIModelRound(
+      request, { authorization: "Bearer test-key", mode: "api_key" },
+      "openai/gpt-5.6-sol",
+    ) });
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-official-exact", accessMode: "read_only", trackingMode: "none",
+    });
+    turn.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol", backupModelRefs: [],
+      reasoningEffort: "low", catalogGeneration: "test",
+    });
+    const result = await agent.run({
+      turn, signal: new AbortController().signal,
+      loadModelRoundAcceptance: async () => undefined,
+      recordModelRoundAcceptance: async () => {},
+    });
+    expect(result.content).toBe("official serializer verified");
+    expect(bodies).toHaveLength(3);
+    expect(JSON.stringify(bodies[1])).toContain("O".repeat(1024));
+    expect(bodies[1]?.previous_response_id).toBe("official-1");
+    expect(JSON.stringify(bodies[2])).not.toContain("O".repeat(1024));
+    expect(JSON.stringify(bodies[2])).not.toContain("butler.operation-result-reference.v1");
+    expect(bodies[2]?.previous_response_id).toBe("official-2");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousFlag === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previousFlag;
+    if (previousBase === undefined) delete process.env.OPENAI_BASE_URL;
+    else process.env.OPENAI_BASE_URL = previousBase;
+    fixture.close();
+  }
+}, 30_000);
+
+test("production M1 v2 read-only surface executes an admitted native registry tool", async () => {
+  const fixture = createFixture("guided-m1-v2-read-only-native");
+  const previousFlag = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  writeFileSync(join(fixture.root, "evidence.txt"), "native evidence\n");
+  bindAppProject(fixture.dbPath, {
+    id: "guided-agent-session",
+    workspacePath: fixture.root,
+    ledgerProjectId: "guided-m1-v2-read-only",
+  });
+  try {
+    const requests: ModelRoundRequest[] = [];
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        requests.push(request);
+        return toolResponse([toolCall("read-evidence", "read_file", {
+          path: "evidence.txt",
+        })]);
+      },
+      (request) => {
+        requests.push(request);
+        expect(JSON.stringify(messagesWithToolResults(request)))
+          .toContain("native evidence");
+        return { text: "read-only evidence accepted", toolCalls: [] };
+      },
+    ]));
+    const result = await agent.run({
+      turn: turnRecord(fixture.root, {
+        turnId: "guided-m1-v2-read-only-native",
+        accessMode: "read_only",
+        trackingMode: "none",
+        projectId: "guided-m1-v2-read-only",
+      }),
+      signal: new AbortController().signal,
+    });
+
+    expect(result.content).toBe("read-only evidence accepted");
+    expect(requests[0]?.tools.map((tool) => tool.name)).toContain("read_file");
+    expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("write_file");
+    expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("run_command");
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    } else {
+      process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousFlag;
+    }
+    fixture.close();
+  }
+});
+
+test("production M1 v2 execution instructions preserve guarded effects and atomic Work closeout", async () => {
+  const fixture = createFixture("guided-m1-v2-execution-instructions");
+  const previousFlag = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  bindAppProject(fixture.dbPath, {
+    id: "guided-agent-session",
+    workspacePath: fixture.root,
+    ledgerProjectId: "guided-m1-v2-execution",
+  });
+  try {
+    let captured: ModelRoundRequest | undefined;
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        captured = request;
+        return toolResponse([toolCall("lifecycle-search", "tool_search", {
+          query: "project_ledger_work_complete",
+          include_disabled: true,
+        })]);
+      },
+      { text: "execution instructions accepted", toolCalls: [] },
+    ]));
+    await agent.run({
+      turn: turnRecord(fixture.root, {
+        turnId: "guided-m1-v2-execution-instructions",
+        accessMode: "full_access",
+        trackingMode: "ledger",
+        projectId: "guided-m1-v2-execution",
+      }),
+      signal: new AbortController().signal,
+    });
+
+    expect(captured?.instructions).toContain("create or reuse one Work");
+    expect(captured?.instructions).toContain("execute effects through the existing guard");
+    expect(captured?.instructions).toContain("inspect the actual result");
+    expect(captured?.instructions).toContain("record_work_disposition");
+    expect(captured?.instructions).toContain("optional quality records");
+    expect(captured?.instructions).not.toContain("required accepted Plan Review");
+    expect(captured?.instructions).toContain("admitted native tools");
+    expect(captured?.tools.map((tool) => tool.name)).toContain("replace_work_plan");
+    expect(captured?.tools.map((tool) => tool.name)).toContain("record_work_disposition");
+    expect(captured?.tools.map((tool) => tool.name)).toContain("run_command");
+    expect(captured?.tools.map((tool) => tool.name))
+      .not.toContain("project_ledger_work_complete");
+    expect(JSON.stringify(fixture.stores.guidedToolJournal.list(
+      "guided-m1-v2-execution-instructions",
+    ))).toContain("native:project_ledger_work_complete");
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    } else {
+      process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousFlag;
+    }
     fixture.close();
   }
 });
@@ -200,7 +904,6 @@ test("production Guided Turn rereads Work across execution windows in one agent 
     const agent = createProductionGuidedTurnAgent({
       butlerHome: fixture.root,
       butlerData: fixture.root,
-      appMessageDbPath: fixture.dbPath,
       contextDocuments: fixture.stores.contextDocuments,
       toolJournal: fixture.stores.guidedToolJournal,
       effectJournal: fixture.stores.guidedEffectJournal,
@@ -221,10 +924,10 @@ test("production Guided Turn rereads Work across execution windows in one agent 
       kind: "delivered",
       content: "확인된 근거를 바탕으로 답변을 완료했습니다.",
     });
-    expect(modelCalls).toBe(3);
+    expect(modelCalls).toBe(4);
     expect(loadContextCalls).toBeGreaterThanOrEqual(3);
     expect(boundWorkCalls).toBeGreaterThanOrEqual(3);
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(4);
     expect(requests[0]?.messages.filter((message) => message.role === "user"))
       .toHaveLength(1);
     expect(requests[1]?.messages.filter((message) => message.role === "user"))
@@ -315,7 +1018,15 @@ test("primary-only route uses the durable routed path", async () => {
     let attemptHistoryLoads = 0;
     const agent = fixture.agent({
       async runRound() {
-        return { text: "primary answer", toolCalls: [] };
+        return {
+          text: "primary answer",
+          toolCalls: [],
+          providerIdentity: {
+            provider: "openai",
+            configuredModel: "openai/gpt-5.5",
+            reportedModel: "gpt-5.5-served",
+          },
+        };
       },
     });
     const turn = turnRecord(fixture.root, { turnId: "guided-primary-only-route" });
@@ -324,7 +1035,7 @@ test("primary-only route uses the durable routed path", async () => {
       reasoningEffort: "medium",
       retryCeiling: 3,
     });
-    await agent.run({
+    const result = await agent.run({
       turn,
       signal: new AbortController().signal,
       recordModelRouteEvent: async () => {
@@ -343,6 +1054,11 @@ test("primary-only route uses the durable routed path", async () => {
     expect(routeEvents).toBe(1);
     expect(acceptedResponses).toBe(1);
     expect(attemptHistoryLoads).toBe(1);
+    expect(result.modelIdentity).toEqual({
+      requestedModelRef: "openai/gpt-5.6-sol",
+      effectiveModelRef: "openai/gpt-5.5",
+      providerReportedModelRef: "openai/gpt-5.5-served",
+    });
   } finally {
     fixture.close();
   }
@@ -657,6 +1373,8 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
 
 test("Guided project Work initializes and closes Project Ledger through reviewed effects", async () => {
   const fixture = createFixture("guided-project-ledger-lifecycle");
+  const previousFlag = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
   const ledgerRoot = join(
     fixture.root,
     "project-ledger",
@@ -673,9 +1391,8 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
     ledgerProjectId: "guided-ledger-project",
   });
   try {
-    const results: unknown[] = [];
     const turnId = "turn-guided-project-ledger-lifecycle";
-    const calls = [
+    const planCalls = [
       toolCall("plan-1", "replace_work_plan", {
         objective: "Complete one tracked project change",
         actions: [{
@@ -701,20 +1418,44 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
         verdict: "accept",
         summary: "The plan is concise and matches the project request.",
       }),
-      toolCall("create-1", "project_ledger_create", {
+    ];
+    const searchCalls = [
+      toolCall("search-create", "tool_search", {
+        query: "project_ledger_create",
+        include_disabled: true,
+      }),
+      toolCall("search-complete", "tool_search", {
+        query: "project_ledger_work_complete",
+        include_disabled: true,
+      }),
+    ];
+    const describeCalls = [toolCall("describe-effects", "tool_describe", {
+      ids: [
+        "native:project_ledger_create",
+        "native:project_ledger_work_complete",
+      ],
+    })];
+    const createCalls = [toolCall("create-1", "tool_call", {
+      id: "native:project_ledger_create",
+      arguments: {
         kind: "work",
         id: "W-GUIDED-LIFECYCLE",
         title: "Guided project lifecycle",
         status: "proposed",
         spec: "SPEC-GUIDED-LIFECYCLE",
         acceptance: "The tracked project result is validated and reported",
-      }),
-      toolCall("complete-1", "project_ledger_work_complete", {
+      },
+    })];
+    const completeCalls = [toolCall("complete-1", "tool_call", {
+      id: "native:project_ledger_work_complete",
+      arguments: {
         id: "W-GUIDED-LIFECYCLE",
         validation: "Lifecycle integration test passed",
         review: "The requested tracked outcome is complete",
         report: "The Guided result contains the completed outcome",
-      }),
+      },
+    })];
+    const reviewCalls = [
       toolCall("checkpoint-1", "record_work_checkpoint", {
         action_updates: [{ action_key: "create-ledger-work", status: "done" }, {
           action_key: "complete-ledger-work",
@@ -736,10 +1477,24 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
       }),
     ];
     const agent = fixture.agent(scriptedModelRound([
-      toolResponse(calls),
+      toolResponse(planCalls),
+      toolResponse(searchCalls),
+      toolResponse(describeCalls),
+      toolResponse(createCalls),
+      toolResponse(completeCalls),
+      toolResponse(reviewCalls),
+      async () => {
+        const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+        return toolResponse([toolCall("disposition-1", "record_work_disposition", {
+          work_id: bound!.workId,
+          disposition: "completed",
+          summary: "The tracked project change is complete.",
+          action_updates: [{ action_key: "create-ledger-work", status: "done" }, {
+            action_key: "complete-ledger-work", status: "done",
+          }],
+        })]);
+      },
       (request) => {
-        results.push(...fixture.stores.guidedToolJournal.list(turnId)
-          .map((entry) => entry.result));
         expect(existsSync(ledgerRoot)).toBe(true);
         expect(request.messages.some((message) => message.role === "tool")).toBe(true);
         return { text: "프로젝트 작업과 기록을 완료했습니다.", toolCalls: [] };
@@ -752,14 +1507,25 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
       committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
       agent,
     });
-    expect(await runtime.runTurn(projectRunCommand(fixture.root, turnId)))
+    const delivered = await runtime.runTurn(projectRunCommand(fixture.root, turnId));
+    expect(delivered)
       .toMatchObject({
       kind: "delivered",
       content: "프로젝트 작업과 기록을 완료했습니다.",
     });
-    for (const result of results) {
-      expect(result).toMatchObject({ ok: true });
-    }
+    const journal = fixture.stores.guidedToolJournal.list(turnId);
+    expect(journal.find((entry) => entry.toolName === "tool_search" &&
+      JSON.stringify(entry.arguments).includes("project_ledger_create"))?.result)
+      .toMatchObject({ results: [expect.objectContaining({
+        id: "native:project_ledger_create",
+        enabled: true,
+      })] });
+    expect(journal.find((entry) => entry.toolName === "tool_describe")?.result)
+      .toMatchObject({ ok: true, missing: [] });
+    expect(journal.find((entry) => entry.toolName === "project_ledger_create")?.result)
+      .toMatchObject({ ok: true });
+    expect(journal.find((entry) => entry.toolName === "project_ledger_work_complete")?.result)
+      .toMatchObject({ ok: true });
     expect(existsSync(join(ledgerRoot, "project.json"))).toBe(true);
     expect(existsSync(join(ledgerRoot, "work", "W-GUIDED-LIFECYCLE", "work.md")))
       .toBe(true);
@@ -773,11 +1539,16 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
       .toHaveLength(2);
     expect((await fixture.stores.turns.findTurn(turnId))?.route).toBe("managed");
   } finally {
+    if (previousFlag === undefined) {
+      delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    } else {
+      process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousFlag;
+    }
     fixture.close();
   }
 });
 
-test("Guided Project Ledger mutation fails closed for missing or archived App rows", async () => {
+test("Guided Project Ledger mutation uses bounded workspace context without App rows", async () => {
   for (const archived of [false, true]) {
     const fixture = createFixture(
       archived ? "guided-archived-project-binding" : "guided-missing-project-binding",
@@ -815,7 +1586,7 @@ test("Guided Project Ledger mutation fails closed for missing or archived App ro
                 target: "project-ledger:work:W-BINDING-FAIL-CLOSED",
               },
             }],
-            checks: ["No mutation occurs without the exact App project row"],
+            checks: ["The bounded workspace context owns project resolution"],
           }),
           toolCall("review-1", "record_work_review", {
             subject: "plan",
@@ -825,14 +1596,14 @@ test("Guided Project Ledger mutation fails closed for missing or archived App ro
           toolCall("mutation-1", "project_ledger_create", {
             kind: "work",
             id: "W-BINDING-FAIL-CLOSED",
-            title: "Must not be created",
-            acceptance: "The exact App row is required",
+            title: "Create from bounded context",
+            acceptance: "No App database lookup is required",
           }),
         ]),
         () => {
           mutationResult = fixture.stores.guidedToolJournal.list(turnId)
             .at(-1)?.result;
-          return { text: "바인딩이 없어 변경하지 않았습니다.", toolCalls: [] };
+          return { text: "bounded context로 기록했습니다.", toolCalls: [] };
         },
       ]), { butlerHome: process.cwd() });
       const runtime = createGuidedTurnRuntime({
@@ -844,19 +1615,13 @@ test("Guided Project Ledger mutation fails closed for missing or archived App ro
       });
       await runtime.runTurn(projectRunCommand(fixture.root, turnId));
 
-      expect(mutationResult).toMatchObject({
-        ok: false,
-        error: {
-          code: "effect_reconciliation_required",
-          message: expect.stringContaining("exact active App project binding"),
-        },
-      });
+      expect(mutationResult).toMatchObject({ ok: true });
       expect(existsSync(join(
         fixture.root,
         "project-ledger",
         "projects",
         ledgerId,
-      ))).toBe(false);
+      ))).toBe(true);
     } finally {
       fixture.close();
     }
@@ -1235,6 +2000,164 @@ test("Guided discovery exposes registry read tools without enabling unsupported 
   }
 });
 
+test("flag-off Guided discovery and capability lists preserve the prior surface", async () => {
+  const fixture = createFixture("guided-exact-replay-off-discovery");
+  const previous = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  const previousSurface = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  try {
+    const turn = turnRecord(fixture.root, { trackingMode: "none" });
+    turn.context.executionPolicy!.requiredNativeTools = ["list_tool_capabilities"];
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        expect(request.tools.map((tool) => tool.name))
+          .not.toContain("read_operation_results");
+        expect(request.tools.map((tool) => tool.name))
+          .toContain("list_tool_capabilities");
+        return toolResponse([
+        toolCall("search-exact", "tool_search", {
+          query: "read_operation_results", include_disabled: true,
+        }),
+        toolCall("describe-exact", "tool_describe", {
+          ids: ["native:read_operation_results"],
+        }),
+        toolCall("capabilities", "list_tool_capabilities", {
+          include_disabled: true,
+        }),
+        ]);
+      },
+      (request) => {
+        const messages = messagesWithToolResults(request);
+        const result = toolMessageOutput(messages
+          .find((message) => message.toolCallId === "search-exact")) as {
+            results?: Array<{ name: string }>;
+          };
+        expect(result.results?.map((entry) => entry.name) ?? [])
+          .not.toContain("read_operation_results");
+        expect(toolMessageOutput(messages.find((message) =>
+          message.toolCallId === "describe-exact"))).toMatchObject({
+            ok: false,
+            descriptions: [],
+            missing: [{
+              id: "native:read_operation_results",
+              error: "unknown_tool_catalog_id",
+            }],
+          });
+        const capabilityResult = toolMessageOutput(messages.find((message) =>
+          message.toolCallId === "capabilities")) as {
+            ok?: boolean;
+            current_turn_surface_known?: boolean;
+            capabilities?: Array<{ name: string }>;
+          };
+        expect(capabilityResult).toMatchObject({
+          ok: true,
+          current_turn_surface_known: true,
+        });
+        expect(capabilityResult.capabilities?.map((entry) => entry.name) ?? [])
+          .not.toContain("read_operation_results");
+        expect(JSON.stringify(capabilityResult))
+          .not.toContain("read_operation_results");
+        return { text: "exact replay remains disabled", toolCalls: [] };
+      },
+    ]));
+    const output = await agent.run({
+      turn,
+      signal: new AbortController().signal,
+    });
+    expect(output.content).toBe("exact replay remains disabled");
+  } finally {
+    if (previous === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previous;
+    if (previousSurface === undefined) delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    else process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousSurface;
+    fixture.close();
+  }
+});
+
+test("flag-on Guided capability list exposes the canonical exact reader as callable", async () => {
+  const fixture = createFixture("guided-exact-replay-on-capabilities");
+  const previous = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  const previousSurface = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+  process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = "on";
+  process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = "on";
+  try {
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        expect(request.tools.map((tool) => tool.name))
+          .toContain("read_operation_results");
+        expect(request.tools.map((tool) => tool.name))
+          .toContain("list_tool_capabilities");
+        return toolResponse([toolCall("capabilities", "list_tool_capabilities", {
+          include_disabled: true,
+        })]);
+      },
+      (request) => {
+        const result = toolMessageOutput(messagesWithToolResults(request)
+          .find((message) => message.toolCallId === "capabilities")) as {
+            capabilities?: Array<{
+              name: string;
+              enabled: boolean;
+              current_turn_selected: boolean;
+              current_turn_callable: boolean;
+            }>;
+          };
+        const exact = result.capabilities?.filter((entry) =>
+          entry.name === "read_operation_results");
+        expect(exact).toEqual([expect.objectContaining({
+          enabled: true,
+          current_turn_selected: true,
+          current_turn_callable: true,
+        })]);
+        return { text: "canonical exact reader is callable", toolCalls: [] };
+      },
+    ]));
+    const turn = turnRecord(fixture.root, {
+      accessMode: "full_access", trackingMode: "local",
+    });
+    turn.context.executionPolicy!.requiredNativeTools = ["list_tool_capabilities"];
+    turn.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.6-sol", backupModelRefs: [],
+      reasoningEffort: "low", catalogGeneration: "test",
+    });
+    const output = await agent.run({
+      turn,
+      signal: new AbortController().signal,
+      recordModelRoundAcceptance: async () => {},
+      loadModelRoundAcceptance: async () => undefined,
+    });
+    expect(output.content).toBe("canonical exact reader is callable");
+  } finally {
+    if (previous === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previous;
+    if (previousSurface === undefined) delete process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
+    else process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = previousSurface;
+    fixture.close();
+  }
+});
+
+test("flag-off required exact capability fails before Guided provider dispatch", async () => {
+  const fixture = createFixture("guided-exact-replay-off-required");
+  const previous = process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+  let calls = 0;
+  try {
+    const agent = fixture.agent({ async runRound() {
+      calls += 1;
+      return { text: "must not dispatch", toolCalls: [] };
+    } });
+    const turn = turnRecord(fixture.root, { accessMode: "full_access" });
+    turn.context.executionPolicy!.requiredNativeTools = ["read_operation_results"];
+    await expect(agent.run({ turn, signal: new AbortController().signal }))
+      .rejects.toThrow("required tool is unavailable while exact replay is disabled");
+    expect(calls).toBe(0);
+  } finally {
+    if (previous === undefined) delete process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY;
+    else process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = previous;
+    fixture.close();
+  }
+});
+
 test("Guided replay keeps native read-only MCP and automation tools retryable", () => {
   for (const name of [
     "bind_session_git_worktree",
@@ -1345,12 +2268,21 @@ test("Guided catalog and tool_call execute the same simple write_file contract",
     ];
     const agent = fixture.agent(scriptedModelRound([
       toolResponse(calls),
+      async () => {
+        const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+        return toolResponse([toolCall("disposition-1", "record_work_disposition", {
+          work_id: bound!.workId,
+          disposition: "completed",
+          summary: "The requested file was written.",
+          action_updates: [{ action_key: "write-bridged-file", status: "done" }],
+        })]);
+      },
       (request) => {
         const results = fixture.stores.guidedToolJournal.list(turnId)
           .map((entry) => entry.result);
         description = results[2];
         writeResult = results[3];
-        expect(messagesWithToolResults(request)).toHaveLength(calls.length);
+        expect(messagesWithToolResults(request)).toHaveLength(calls.length + 1);
         return { text: "브리지 경로로 파일을 작성했습니다.", toolCalls: [] };
       },
     ]));
@@ -1450,6 +2382,15 @@ test("Guided agent applies a small edit through the reviewed durable effect", as
     ];
     const agent = fixture.agent(scriptedModelRound([
       toolResponse(calls),
+      async () => {
+        const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+        return toolResponse([toolCall("disposition-1", "record_work_disposition", {
+          work_id: bound!.workId,
+          disposition: "completed",
+          summary: "The requested stylesheet correction is complete.",
+          action_updates: [{ action_key: "correct-style", status: "done" }],
+        })]);
+      },
       (request) => {
         results.push(...fixture.stores.guidedToolJournal.list(turnId)
           .map((entry) => entry.result));
@@ -1457,7 +2398,7 @@ test("Guided agent applies a small edit through the reviewed durable effect", as
         editResult = toolMessageOutput(
           messages.find((message) => message.toolCallId === "edit-1"),
         );
-        expect(messages).toHaveLength(calls.length);
+        expect(messages).toHaveLength(calls.length + 1);
         return { text: "가로 넘침 수정을 완료했습니다.", toolCalls: [] };
       },
     ]));
@@ -1668,7 +2609,7 @@ test("Guided agent renders CSV text once and passes image attachments to the pro
   }
 });
 
-test("Guided agent offers only the three optional R3 Work tools and keeps direct turns free of Work", async () => {
+test("Guided agent offers the existing Work controls plus disposition and keeps direct turns free of Work", async () => {
   const fixture = createFixture("guided-work-surface");
   try {
     let visibleNames: string[] = [];
@@ -1691,6 +2632,7 @@ test("Guided agent offers only the three optional R3 Work tools and keeps direct
     expect(visibleNames).toContain("replace_work_plan");
     expect(visibleNames).toContain("record_work_checkpoint");
     expect(visibleNames).toContain("record_work_review");
+    expect(visibleNames).toContain("record_work_disposition");
     expect(visibleNames).not.toContain("update_todo_list");
     expect(visibleNames).not.toContain("list_todo_list");
     expect(visibleNames).not.toContain("list_work_streams");
@@ -3241,9 +4183,9 @@ function createFixture(label: string) {
       return createProductionGuidedTurnAgent({
         butlerHome,
         butlerData: root,
-        appMessageDbPath: dbPath,
         contextDocuments: stores.contextDocuments,
         toolJournal: stores.guidedToolJournal,
+        operationResultReader: stores.guidedOperationResultReader,
         effectJournal: stores.guidedEffectJournal,
         durableWork: stores.durableWork,
         modelRound,
@@ -3345,6 +4287,10 @@ function turnRecord(
     trackingMode?: "ledger" | "local" | "none";
     projectId?: string;
     attachments?: NonNullable<TurnRecord["context"]["attachments"]>;
+    attributionArmId?: string;
+    cacheBoundaryEvidence?: NonNullable<
+      TurnRecord["context"]["providerRequestAttribution"]
+    >["cacheBoundaryEvidence"];
   } = {},
 ): TurnRecord {
   const turnId = options.turnId ?? "guided-agent-turn";
@@ -3370,6 +4316,14 @@ function turnRecord(
       mandatoryHotCacheRefs: [],
       optionalHotCacheRefs: [],
       baselineObservationScopeRefs: [`workspace:${workspacePath}`],
+      ...(options.attributionArmId || options.cacheBoundaryEvidence
+        ? { providerRequestAttribution: {
+            ...(options.attributionArmId ? { armId: options.attributionArmId } : {}),
+            ...(options.cacheBoundaryEvidence
+              ? { cacheBoundaryEvidence: options.cacheBoundaryEvidence }
+              : {}),
+          } }
+        : {}),
       executionPolicy: {
         role: "butler",
         accessMode: options.accessMode ?? "full_access",

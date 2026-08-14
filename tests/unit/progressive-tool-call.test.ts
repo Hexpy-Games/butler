@@ -128,6 +128,24 @@ test("progressive tool_describe and tool_call dispatch native list_files", async
   expect(called.bridge_invocation).toEqual({ id: "native:list_files", provider: "native", affordance: "native_tool" });
 });
 
+test("tool_describe preserves schema const while redacting sensitive annotations", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    currentToolNames: ["tool_describe", "project_ledger_create"],
+  });
+  const described = await execute({
+    name: "tool_describe",
+    args: { ids: ["native:project_ledger_create"] },
+    rawArguments: "{}",
+  }) as any;
+  const schema = described.descriptions[0].schema;
+
+  expect(JSON.stringify(schema)).toContain('"const":"work"');
+  expect(JSON.stringify(schema)).not.toContain('"default"');
+  expect(JSON.stringify(described)).not.toContain(tempDir);
+});
+
 test("progressive tool_call dispatches canonical edit_file batches through the registered executor", async () => {
   writeFileSync(`${tempDir}/first.txt`, "first\n", "utf8");
   writeFileSync(`${tempDir}/second.txt`, "second\n", "utf8");

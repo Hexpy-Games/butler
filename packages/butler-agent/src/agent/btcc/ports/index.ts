@@ -8,3 +8,14 @@ export type {
   ModelRoundTool,
   ModelRoundToolCall,
 } from "./model-round.ts";
+export type {
+  GuidedOperationResultReader,
+  GuidedToolJournal,
+  GuidedToolJournalRecord,
+  OperationResultDeliveryState,
+} from "./guided-tool-journal.ts";
+export {
+  parseDeliveredThroughOrdinal,
+  turnItemOrdinal,
+  validateBoundedProviderOrdinals,
+} from "./bounded-provider-continuation.ts";

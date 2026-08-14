@@ -5,8 +5,7 @@ import { parseToolCatalogId } from "../../tools/progressive-catalog.ts";
 import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
 import { PROJECT_LEDGER_MUTATION_TOOL_NAME_SET } from
   "../../tools/project-ledger/mutation-tools.ts";
-import { selectInitialToolsFromSurfaceController } from
-  "../../tools/tool-surface-selection.ts";
+import { selectButlerToolsForTurn } from "../../tools/profiles.ts";
 import { WORK_TRACKING_TOOL_NAMES } from "../../tools/work-tracking/shared.ts";
 import type { FunctionToolDefinition } from
   "../../../integrations/providers/runtime-contracts.ts";
@@ -29,6 +28,8 @@ import {
   applyGuidedWorkspaceAuthorization,
   guidedWorkspaceVisibleToolNames,
 } from "./guided-session-workspace-policy.ts";
+import { readOperationResultsToolDefinition } from
+  "../../tools/monitoring/read_operation_results/index.ts";
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
   disabledReason:
@@ -80,6 +81,7 @@ export function guidedPolicy(turn: TurnRecord): ButlerExecutionPolicy {
 export function authorizedToolDefinitions(
   turn: TurnRecord,
   env: NodeJS.ProcessEnv = process.env,
+  exactResultReplayEnabled = false,
 ): FunctionToolDefinition[] {
   const policy = guidedPolicy(turn);
   const requiredProfiles = new Set([
@@ -96,15 +98,15 @@ export function authorizedToolDefinitions(
     requiredNativeTools: policy.requiredNativeTools,
     ...(policy.projectId ? { projectId: policy.projectId } : {}),
   };
-  const selected = selectInitialToolsFromSurfaceController({
+  const selected = selectButlerToolsForTurn({
     role: policy.role,
-    message: turn.originalMessage,
+    text: turn.originalMessage,
     sessionMetadata: {
       ...(policy.projectId ? { projectId: policy.projectId } : {}),
       runtimePolicy,
     },
-    tools: BUTLER_TOOLS,
-  }).tools;
+    tools: guidedNativeToolDefinitions(exactResultReplayEnabled),
+  });
   const names = new Set(selected.map((tool) => tool.name));
   for (const name of [
     "tool_search",
@@ -136,7 +138,8 @@ export function authorizedToolDefinitions(
   for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
   for (const name of guidedLedgerEffects) names.add(name);
   return [
-    ...BUTLER_TOOLS.filter((tool) => names.has(tool.name)),
+    ...guidedNativeToolDefinitions(exactResultReplayEnabled)
+      .filter((tool) => names.has(tool.name)),
     ...(policy.trackingMode === "none" ? [] : DURABLE_WORK_TOOL_DEFINITIONS),
   ];
 }
@@ -191,8 +194,13 @@ export function visibleToolDefinitions(
   return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
 }
 
-export function guidedNativeToolDefinitions(): ButlerToolDefinition[] {
-  return BUTLER_TOOLS.map(guidedToolDefinition);
+export function guidedNativeToolDefinitions(
+  exactResultReplayEnabled = false,
+): ButlerToolDefinition[] {
+  return BUTLER_TOOLS
+    .filter((tool) => exactResultReplayEnabled ||
+      tool.name !== readOperationResultsToolDefinition.name)
+    .map(guidedToolDefinition);
 }
 
 export function selectedModelRef(turn: TurnRecord): string {

@@ -32,11 +32,12 @@ test("Managed Work exposes the fixed six-stage transition guide", () => {
   expect(allowedNextWorkStages("reporting")).toEqual(["validation"]);
 });
 
-test("the existing Review tool exposes completion Validation without adding a tool", async () => {
+test("Work exposes atomic disposition alongside optional Review", async () => {
   expect(DURABLE_WORK_TOOL_DEFINITIONS.map(({ name }) => name)).toEqual([
     "replace_work_plan",
     "record_work_checkpoint",
     "record_work_review",
+    "record_work_disposition",
   ]);
   const review = DURABLE_WORK_TOOL_DEFINITIONS.find(({ name }) =>
     name === "record_work_review",
@@ -102,13 +103,12 @@ test("result acceptance enters Review but cannot complete Work", async () => {
     subject: "result",
     entryStage: "review",
     currentStage: "execution",
-    completeWork: false,
     nextStage: "validation",
   });
   expect(command?.expectedResultReviewRevisionId).toBeUndefined();
 });
 
-test("completion acceptance binds the current result Review and completes only terminal Work", async () => {
+test("completion acceptance binds the current result Review without closing Work", async () => {
   let command: RecordWorkReviewCommand | undefined;
   const resultReview = acceptedResultReview(["result-1"]);
   const view = workView({
@@ -149,7 +149,6 @@ test("completion acceptance binds the current result Review and completes only t
     entryStage: "validation",
     currentStage: "validation",
     expectedResultReviewRevisionId: resultReview.reviewRevisionId,
-    completeWork: true,
     nextStage: "reporting",
   });
 });
@@ -190,7 +189,6 @@ test("completion acceptance stays open when the accepted result Review is stale"
 
   expect(command).toMatchObject({
     entryStage: "validation",
-    completeWork: false,
   });
   expect(command?.expectedResultReviewRevisionId).toBeUndefined();
 });
@@ -215,6 +213,8 @@ function fakeStore(input: {
     replacePlan: () => Promise.resolve(input.context.work),
     recordCheckpoint: () => Promise.resolve(input.context.work),
     recordReview: input.recordReview,
+    recordDisposition: () => Promise.resolve(input.context.work),
+    recordCloseoutMissing: () => Promise.resolve(),
     attachToolResult: () => Promise.resolve(input.context.work),
     boundWorkForTurn: () => Promise.resolve(input.context.work),
   };

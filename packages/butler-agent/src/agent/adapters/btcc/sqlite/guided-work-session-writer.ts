@@ -102,6 +102,14 @@ export class GuidedWorkSessionWriter {
     return this.requireBound(scope, true);
   }
 
+  requireBoundForDisposition(scope: WorkTurnScope): GuidedWorkRow {
+    return this.requireBound(scope, false);
+  }
+
+  requireBoundForCloseoutDiagnostic(scope: WorkTurnScope): GuidedWorkRow {
+    return this.requireBound(scope, true);
+  }
+
   private requireBound(
     scope: WorkTurnScope,
     allowCompleted: boolean,

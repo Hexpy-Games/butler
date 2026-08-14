@@ -5,6 +5,10 @@ import {
   normalizeTurnStateContractPayload,
 } from "./turn-state-contract.ts";
 import { progressRowFromSharedTurnEvent } from "./progress-projection.ts";
+import {
+  normalizeOperationOutputChunkPayload,
+  OPERATION_OUTPUT_CHUNK_EVENT_KIND,
+} from "./operation-output-event.ts";
 
 export { isPublicTextSafe, sanitizePublicText } from "./public-text.ts";
 
@@ -30,6 +34,7 @@ export const TURN_EVENT_KINDS = [
   "tool.cancelled",
   "tool_result.finalized",
   "tool_result.failed",
+  OPERATION_OUTPUT_CHUNK_EVENT_KIND,
   "guard.started",
   "guard.completed",
   "cognition.feedback.captured",
@@ -201,7 +206,9 @@ export function createAgentTurnEvent(input: AgentTurnEventInput): AgentTurnEvent
     createdAt: input.createdAt || new Date().toISOString(),
     kind: input.kind,
     visibility: input.visibility ?? "public",
-    payload: sanitizeTurnEventPayload(
+    payload: input.kind === OPERATION_OUTPUT_CHUNK_EVENT_KIND
+      ? normalizeOperationOutputChunkPayload(input.payload ?? {})
+      : sanitizeTurnEventPayload(
       normalizeTurnStateContractPayload(input.kind, input.payload ?? {}) ??
         normalizeProviderStreamPayload(input.kind, input.payload ?? {}, input.visibility ?? "public") ??
         input.payload ??

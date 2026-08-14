@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, statSync } from "fs";
 import path, { basename, join, resolve } from "path";
-import { Database } from "bun:sqlite";
 import {
   ActiveProjectLedgerResolutionError,
   canonicalRootFromExplicit,
@@ -22,7 +21,7 @@ export interface ActiveProjectLedgerReference {
   display_name?: string;
   ledger_project_id: string;
   ledger_root: string;
-  source: "app_project_db" | "workspace_metadata" | "explicit_canonical_ref";
+  source: "workspace_metadata" | "explicit_canonical_ref";
   resolved_at: string;
   initialized: boolean;
   degradation_code?: "app_project_db_missing" | "app_project_row_missing";
@@ -42,22 +41,11 @@ export interface PublicActiveProjectLedgerReference {
   degradation_code?: ActiveProjectLedgerReference["degradation_code"];
 }
 
-interface AppProjectRow {
-  id: string;
-  display_name: string | null;
-  workspace_path: string | null;
-  workspace_label: string | null;
-  safe_path_label: string | null;
-  ledger_project_id: string | null;
-  updated_at: string;
-}
-
 export class ActiveProjectLedgerResolver {
   private readonly cache = new Map<string, ActiveProjectLedgerReference>();
 
   resolve(input: {
     butlerData: string;
-    appMessageDbPath?: string;
     appProjectId?: string;
     workspacePath?: string;
     explicitRef?: string;
@@ -65,14 +53,7 @@ export class ActiveProjectLedgerResolver {
     now?: Date;
   }): ActiveProjectLedgerReference {
     const projectsRoot = resolve(input.butlerData, "project-ledger", "projects");
-    const explicitLookupRef = input.explicitRef?.trim() || "";
-    const lookupRef = explicitLookupRef || input.appProjectId?.trim() || "";
-    const appLookup = lookupAppProject(
-      input.appMessageDbPath,
-      lookupRef,
-      Boolean(explicitLookupRef),
-    );
-    const cacheKey = this.cacheKey(input, appLookup.row, projectsRoot);
+    const cacheKey = this.cacheKey(input, projectsRoot);
     const cached = this.cache.get(cacheKey);
     if (cached && cached.initialization_generation === ledgerInitializationGeneration(cached.ledger_root)) return cached;
     if (cached) this.cache.delete(cacheKey);
@@ -96,13 +77,11 @@ export class ActiveProjectLedgerResolver {
       : undefined;
     // A live session workspace is authoritative for workspace-scoped operations,
     // while the App row still supplies the canonical Ledger identity below.
-    const workspacePath = explicitWorkspacePath ?? input.workspacePath ?? appLookup.row?.workspace_path ?? input.fallbackWorkspacePath;
+    const workspacePath = explicitWorkspacePath ?? input.workspacePath ?? input.fallbackWorkspacePath;
     const candidateIds = orderedCandidateIds({
-      row: appLookup.row,
       workspacePath,
       explicitRef: input.explicitRef,
       appProjectId: input.appProjectId,
-      allowAppProjectIdFallback: !input.appMessageDbPath || Boolean(appLookup.row),
     });
     const roots = candidateIds.map((id) => ({ id, root: join(projectsRoot, safeProjectId(id)) }));
     for (const candidate of roots) validateCanonicalContainment(projectsRoot, candidate.root);
@@ -116,21 +95,16 @@ export class ActiveProjectLedgerResolver {
     if (!selected || !referenceWorkspacePath) {
       throw new ActiveProjectLedgerResolutionError("active_project_ledger_unresolved", {
         candidate_count: candidateIds.length,
-        app_row_found: Boolean(appLookup.row),
+        app_row_found: false,
       });
     }
-    const source = appLookup.row ? "app_project_db" : "workspace_metadata";
-    const degradationCode = appLookup.degradation;
     const reference = buildReference({
-      appProjectId: appLookup.row?.id ?? input.appProjectId ?? selected.id,
+      appProjectId: input.appProjectId ?? selected.id,
       workspacePath: referenceWorkspacePath,
-      workspaceLabel: appLookup.row?.workspace_label ?? undefined,
-      displayName: appLookup.row?.display_name ?? undefined,
       ledgerProjectId: selected.id,
       ledgerRoot: selected.root,
-      source,
+      source: "workspace_metadata",
       now: input.now,
-      degradationCode,
       ambiguityCount: initialized.length > 1 ? initialized.length : undefined,
     });
     this.store(cacheKey, reference);
@@ -146,8 +120,7 @@ export class ActiveProjectLedgerResolver {
   }
 
   private cacheKey(
-    input: { butlerData: string; appMessageDbPath?: string; appProjectId?: string; workspacePath?: string; explicitRef?: string },
-    row: AppProjectRow | null,
+    input: { butlerData: string; appProjectId?: string; workspacePath?: string; explicitRef?: string },
     projectsRoot: string,
   ): string {
     return JSON.stringify({
@@ -155,8 +128,6 @@ export class ActiveProjectLedgerResolver {
       appProjectId: input.appProjectId ?? "",
       workspacePath: input.workspacePath ?? "",
       explicitRef: input.explicitRef ?? "",
-      appDbGeneration: fileGeneration(input.appMessageDbPath),
-      appRowGeneration: row?.updated_at ?? "",
       projectsGeneration: fileGeneration(projectsRoot),
     });
   }
@@ -187,22 +158,18 @@ export function publicActiveProjectLedgerReference(
 }
 
 function orderedCandidateIds(input: {
-  row: AppProjectRow | null;
   workspacePath?: string;
   explicitRef?: string;
   appProjectId?: string;
-  allowAppProjectIdFallback: boolean;
 }): string[] {
   const workspaceIds = input.workspacePath ? workspaceProjectIds(input.workspacePath) : [];
-  const values = input.row
-    ? [input.row.ledger_project_id, input.row.id]
-    : [
-        ...workspaceIds,
-        input.explicitRef && !path.isAbsolute(input.explicitRef)
-          ? input.explicitRef
-          : null,
-        input.allowAppProjectIdFallback ? input.appProjectId : null,
-      ];
+  const values = [
+    ...workspaceIds,
+    input.explicitRef && !path.isAbsolute(input.explicitRef)
+      ? input.explicitRef
+      : null,
+    input.appProjectId,
+  ];
   const seen = new Set<string>();
   return values.flatMap((value) => {
     const normalized = value?.trim();
@@ -219,42 +186,6 @@ function workspaceProjectIds(workspacePath: string): string[] {
     readJsonString(join(workspace, "package.json"), "name"),
     basename(workspace),
   ].filter((value): value is string => Boolean(value));
-}
-
-function lookupAppProject(
-  dbPath: string | undefined,
-  lookupRef: string,
-  allowAliasLookup: boolean,
-): { row: AppProjectRow | null; degradation?: ActiveProjectLedgerReference["degradation_code"] } {
-  if (!dbPath?.trim() || !existsSync(dbPath)) return { row: null, degradation: "app_project_db_missing" };
-  if (!lookupRef) return { row: null, degradation: "app_project_row_missing" };
-  let db: Database | null = null;
-  try {
-    db = new Database(dbPath, { readonly: true });
-    const exact = db.query<AppProjectRow, [string]>(`
-      SELECT id, display_name, workspace_path, workspace_label, safe_path_label,
-        ledger_project_id, updated_at
-      FROM projects
-      WHERE archived = 0 AND id = ?
-      LIMIT 1
-    `).get(lookupRef);
-    if (exact) return { row: exact };
-    if (!allowAliasLookup) {
-      return { row: null, degradation: "app_project_row_missing" };
-    }
-    const row = db.query<AppProjectRow, [string, string, string, string]>(`
-      SELECT id, display_name, workspace_path, workspace_label, safe_path_label,
-        ledger_project_id, updated_at
-      FROM projects
-      WHERE archived = 0 AND (display_name = ? OR workspace_path = ? OR workspace_label = ? OR safe_path_label = ?)
-      ORDER BY updated_at DESC, id ASC LIMIT 1
-    `).get(lookupRef, lookupRef, lookupRef, lookupRef);
-    return row ? { row } : { row: null, degradation: "app_project_row_missing" };
-  } catch {
-    return { row: null, degradation: "app_project_db_missing" };
-  } finally {
-    db?.close(false);
-  }
 }
 
 function buildReference(input: {

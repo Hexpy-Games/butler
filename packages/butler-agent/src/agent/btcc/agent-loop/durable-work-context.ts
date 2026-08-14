@@ -19,13 +19,13 @@ export function renderDurableWorkContext(
     );
     if (work.currentStage === "review") {
       rows.push(
-        "Stage focus: review the current Plan or actual execution result and record " +
-          "material corrections before moving on.",
+        "Optional stage focus: review the current Plan or actual execution result and " +
+          "record material corrections when that quality check is useful.",
       );
     } else if (work.currentStage === "validation") {
       rows.push(
-        "Stage focus: validate the whole Work against the original request, current " +
-          "Plan and checks, terminal actions, actual results, and effect receipts before reporting.",
+        "Optional stage focus: validate the whole Work against the original request, " +
+          "current Plan and checks, terminal actions, actual results, and effect receipts.",
       );
     }
   }
@@ -82,10 +82,33 @@ export function renderDurableWorkContext(
       work.latestCompletionValidation.corrections,
     );
   }
+  if (work.latestDisposition) {
+    rows.push(
+      `Latest Work disposition: ${work.latestDisposition.disposition} — ` +
+        singleLine(work.latestDisposition.summary, 300),
+    );
+    if (work.latestDisposition.remainingActions.length > 0) {
+      rows.push(
+        `Disposition remaining actions: ${summarizeList(
+          work.latestDisposition.remainingActions,
+          6,
+          120,
+        )}`,
+      );
+    }
+    if (work.latestDisposition.nextCondition) {
+      rows.push(
+        `Disposition next condition: ${singleLine(
+          work.latestDisposition.nextCondition,
+          300,
+        )}`,
+      );
+    }
+  }
   rows.push(
     "Guardrail: choose the next useful unresolved action, stay within the original " +
-      "request and governing checks, review the actual result, then validate the " +
-      "whole Work before reporting.",
+      "request and governing checks. Use optional Reviews or Validation when they help, " +
+      "then settle the bound Work with a truthful disposition before reporting.",
   );
   if (plan) {
     rows.push("Current plan details:");

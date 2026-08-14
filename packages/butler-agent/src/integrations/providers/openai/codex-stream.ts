@@ -1,10 +1,18 @@
-import type { CodexSseAccumulator, OpenAIResponse, PromptUsageAttribution, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
+import type { CodexSseAccumulator, OpenAIResponse, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
 import { codexAccountIdFromAuthorization, codexRequestBody } from "./responses-client.ts";
 import { codexSseResponseFromAccumulator } from "./codex-response-assembly.ts";
 import { emitProviderStreamProjectionBestEffort } from "../shared/runtime-support.ts";
 import { getCodexOriginator, getCodexResponsesUrl, getCodexUserAgent } from "./config.ts";
+import { establishFinalProviderCacheIdentity } from "./stable-provider-prefix.ts";
 import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
+import {
+  observeM1ProviderAttempt,
+  M1_PHYSICAL_ATTEMPT_HEADER,
+  finalizeM1ProviderAttempt,
+  recordM1ResponseUsage,
+} from "../shared/m1-segment-attribution.ts";
+import type { OpenAIProviderBudgetContext } from "./responses-client.ts";
 
 export function createCodexSseAccumulator(
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
@@ -300,7 +308,7 @@ export async function createCodexResponse(
   authorization: string,
   signal?: AbortSignal,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
-  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
+  budgetContext?: OpenAIProviderBudgetContext,
   onProviderRoundProgress?: () => void,
   onProviderRoundStarted?: () => void,
 ): Promise<OpenAIResponse> {
@@ -316,6 +324,39 @@ export async function createCodexResponse(
     usageAttribution: budgetContext?.attribution,
     roundIndex: budgetContext?.roundIndex,
   });
+  const observedRequest = observeM1ProviderAttempt({
+    providerId: "openai-codex",
+    modelRef: admittedRequest.plan.model_ref,
+    body: requestBody,
+    turnId: budgetContext?.attribution?.turnId,
+    phase: budgetContext?.attribution?.phase,
+    roundIndex: budgetContext?.roundIndex ?? 0,
+    routeTransportAttemptOrdinal: budgetContext?.routeTransportAttemptOrdinal ?? 0,
+    providerRetryOrdinal: budgetContext?.providerRetryOrdinal ?? 0,
+    estimatedInputTokens: admittedRequest.plan.compiled_input_tokens,
+    armId: budgetContext?.attributionArmId,
+    segmentManifest: budgetContext?.segmentManifests?.codex,
+    butlerData: budgetContext?.butlerData,
+    deferRecord: true,
+    cacheBoundaryRevision: budgetContext?.cacheBoundaryEvidence?.observedRevision,
+  });
+  if (budgetContext?.stableProviderCachePrefix) {
+    budgetContext.onProviderRouteCacheIdentity?.(establishFinalProviderCacheIdentity({
+      body: requestBody,
+      serializedBody: observedRequest.serializedRequest,
+      stable: budgetContext.stableProviderCachePrefix,
+      route: budgetContext.routeContext,
+      providerId: "openai-codex",
+      authMode: budgetContext.authMode === "codex_oauth"
+        ? "codex_oauth"
+        : "codex_subscription",
+      serializerContract: "butler.openai-codex-final-json.v1",
+      previousIdentity: budgetContext.previousProviderRouteIdentity,
+    }));
+  }
+  await budgetContext?.admitBoundedProviderBody?.(
+    Buffer.byteLength(observedRequest.serializedRequest, "utf8"),
+  );
   let response: Response;
   try {
     onProviderRoundStarted?.();
@@ -329,11 +370,15 @@ export async function createCodexResponse(
         "User-Agent": getCodexUserAgent(),
         "chatgpt-account-id": accountId,
         originator: getCodexOriginator(),
+        ...(observedRequest.observation
+          ? { [M1_PHYSICAL_ATTEMPT_HEADER]: observedRequest.observation.envelope.attemptDigest }
+          : {}),
       },
-      body: admittedRequest.serialized_request,
+      body: observedRequest.serializedRequest,
       signal,
     });
   } catch (error) {
+    finalizeCodexAttempt(observedRequest.observation, budgetContext, "rejected");
     throw providerNetworkError({
       provider: "openai-codex",
       api: "codex_responses",
@@ -353,6 +398,7 @@ export async function createCodexResponse(
       parsed = JSON.parse(raw);
       detail = parsed?.error?.message || raw;
     } catch {}
+    finalizeCodexAttempt(observedRequest.observation, budgetContext, "rejected");
     throw providerHttpError({
       provider: "openai-codex",
       api: "codex_responses",
@@ -366,5 +412,43 @@ export async function createCodexResponse(
     });
   }
 
-  return await readCodexSseResponse(response, onProviderStreamEvent, onProviderRoundProgress);
+  let parsed: OpenAIResponse;
+  try {
+    parsed = await readCodexSseResponse(response, onProviderStreamEvent, onProviderRoundProgress);
+  } catch (error) {
+    finalizeCodexAttempt(observedRequest.observation, budgetContext, "rejected");
+    throw error;
+  }
+  finalizeCodexAttempt(
+    observedRequest.observation,
+    budgetContext,
+    parsed.usage ? "eligible" : "usage_unavailable",
+  );
+  recordM1ResponseUsage({
+    attemptDigest: observedRequest.observation?.envelope.attemptDigest,
+    response: parsed,
+    butlerData: budgetContext?.butlerData,
+  });
+  return parsed;
+}
+
+function finalizeCodexAttempt(
+  observation: ReturnType<typeof observeM1ProviderAttempt>["observation"],
+  context: OpenAIProviderBudgetContext | undefined,
+  terminal: "eligible" | "usage_unavailable" | "rejected",
+): void {
+  finalizeM1ProviderAttempt({
+    observation,
+    eligibility: terminal === "rejected"
+      ? "rejected"
+      : (context?.routeTransportAttemptOrdinal ?? 0) > 0 ||
+          (context?.providerRetryOrdinal ?? 0) > 0
+        ? "retry_contaminated"
+        : context?.cacheBoundaryEvidence &&
+            context.cacheBoundaryEvidence.expectedRevision !==
+              context.cacheBoundaryEvidence.observedRevision
+          ? "cache_mismatch"
+          : terminal,
+    butlerData: context?.butlerData,
+  });
 }

@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import {
   BTCC_GUIDED_WORK_CHECKPOINT_TABLE_SCHEMA,
+  BTCC_GUIDED_WORK_DISPOSITION_TABLE_SCHEMA,
   BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA,
 } from "./guided-work-schema.ts";
 import { BTCC_GUIDED_EFFECT_RECOVERY_PAYLOAD_TABLE_SCHEMA } from "./guided-effect-schema.ts";
@@ -11,14 +12,47 @@ export function migrateBtccSchema(db: Database): void {
   db.transaction(() => {
     ensureLegacyWorkImportProvenance(db);
     ensureGuidedEffectRecoveryPayloadTable(db);
+    ensureGuidedWorkDispositionSchema(db);
     ensureGuidedWorkProgressColumns(db);
     ensureTurnProgressDestination(db);
     ensureTurnRouteState(db);
+    ensureTurnContinuationBudget(db);
     ensureModelRoundAcceptanceCheckpoint(db);
     ensureModelRouteFailureDisposition(db);
+    ensureGuidedToolResultDeliveryColumns(db);
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
+}
+
+function ensureGuidedWorkDispositionSchema(db: Database): void {
+  if (!tableExists(db, "btcc_guided_works")) return;
+  db.exec(BTCC_GUIDED_WORK_DISPOSITION_TABLE_SCHEMA);
+  if (!tableExists(db, "btcc_guided_work_disposition_revisions")) return;
+  ensureColumn(
+    db,
+    "btcc_guided_work_disposition_revisions",
+    "result_sequence",
+    "INTEGER NOT NULL DEFAULT 0",
+  );
+  ensureColumn(
+    db,
+    "btcc_guided_work_disposition_revisions",
+    "material_fingerprint",
+    "TEXT NOT NULL DEFAULT ''",
+  );
+}
+
+function ensureTurnContinuationBudget(db: Database): void {
+  if (!tableExists(db, "btcc_turns")) return;
+  ensureColumn(db, "btcc_turns", "continuation_budget_json", "TEXT");
+}
+
+function ensureGuidedToolResultDeliveryColumns(db: Database): void {
+  if (!tableExists(db, "btcc_guided_tool_calls")) return;
+  ensureColumn(db, "btcc_guided_tool_calls", "delivery_state", "TEXT");
+  ensureColumn(db, "btcc_guided_tool_calls", "delivery_round_id", "TEXT");
+  ensureColumn(db, "btcc_guided_tool_calls", "delivery_response_sha256", "TEXT");
 }
 
 function ensureGuidedEffectRecoveryPayloadTable(db: Database): void {

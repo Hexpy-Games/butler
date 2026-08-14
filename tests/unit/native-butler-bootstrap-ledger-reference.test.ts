@@ -1,9 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, rmSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/application/native-butler.ts";
+import { prepareAgentStorageForNativeServiceLaunch } from
+  "../../packages/butler-agent/src/operations/service/native-service-storage-preparation.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 const roots: string[] = [];
@@ -25,10 +27,15 @@ const provider: ModelProviderAdapter = {
   },
 };
 
-test("production native bootstrap opens BTCC stores in the App message database", async () => {
+test("service lifecycle migration precedes Native Butler readiness and opens only Agent storage", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-bootstrap-ledger-"));
   roots.push(butlerData);
   mkdirSync(join(butlerData, "app-server"), { recursive: true });
+  await prepareAgentStorageForNativeServiceLaunch({
+    butlerData,
+    runtimeVersion: "test-split-v1",
+    quiesceLegacyWriter: async () => {},
+  });
   const result = await runNativeButlerMain({
     butlerHome: process.cwd(),
     butlerData,
@@ -38,7 +45,7 @@ test("production native bootstrap opens BTCC stores in the App message database"
   });
 
   expect(result.shutdownReason).toBe("bootstrap-only");
-  const db = new Database(join(butlerData, "app-server", "butler-client.sqlite"), {
+  const db = new Database(join(butlerData, "agent-runtime", "btcc.sqlite"), {
     readonly: true,
   });
   try {
@@ -47,5 +54,15 @@ test("production native bootstrap opens BTCC stores in the App message database"
     `).get()?.name).toBe("btcc_turns");
   } finally {
     db.close();
+  }
+  const appDbPath = join(butlerData, "app-server", "butler-client.sqlite");
+  if (!existsSync(appDbPath)) return;
+  const appDb = new Database(appDbPath, { readonly: true });
+  try {
+    expect(appDb.query<{ name: string }, []>(`
+      SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'btcc_turns'
+    `).get()).toBeNull();
+  } finally {
+    appDb.close();
   }
 });

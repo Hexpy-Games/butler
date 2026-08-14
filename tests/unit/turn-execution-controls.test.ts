@@ -83,10 +83,28 @@ describe("immutable turn execution controls", () => {
       timestamp: "2026-07-14T00:00:00.000Z",
       sessionId: "general",
       executionControls: controls,
+      appTurnContext: {
+        version: 1,
+        session: { id: "general", kind: "chat" },
+        conversation: {
+          chatId: "general",
+          userMessageId: "message-a",
+          turnId: "turn-a",
+          turnAttempt: 1,
+        },
+        model: {
+          requestedModelRef: "openai/gpt-5.6-sol",
+          reasoningEffort: "medium",
+        },
+      },
     });
 
     expect(envelope.executionControls).toEqual(controls);
     expect(envelope.executionControls).not.toBe(controls);
+    expect(envelope.appTurnContext).toMatchObject({
+      conversation: { userMessageId: "message-a", turnId: "turn-a" },
+      model: { requestedModelRef: "openai/gpt-5.6-sol" },
+    });
   });
 
   test("does not project a provider identity observed before response acceptance", async () => {

@@ -22,17 +22,18 @@ import {
   resolveTelegramGatewayRuntimeConfig,
 } from "../operations/gateway/registry.ts";
 import {
+  validateAgentBtccStorageForReadiness,
+} from "../agent/adapters/index.ts";
+import {
   createProductionBtccComposition,
   type BtccComposition,
 } from "../agent/composition/index.ts";
-import { AppBtccStopConsumer } from "../gateways/app/application/btcc-stop-consumer.ts";
 import {
   BtccInboundDispatcher,
   createBtccGatewayHandlers,
 } from "../interfaces/gateway/btcc/index.ts";
 import {
   appTurnEventAction,
-  appTurnStateDbPath,
   bindButlerSession,
   createNativeButlerProgressPublisher,
   createNativeButlerDefaultProvider,
@@ -89,7 +90,6 @@ export async function runNativeButlerMain(
     butlerData,
     compatibilityConfig: config as Record<string, any>,
   });
-  const appMessageDbPath = appTurnStateDbPath(butlerData);
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
   let btcc: Btcc | undefined = input.btcc;
@@ -101,7 +101,6 @@ export async function runNativeButlerMain(
   let sessionId: string | null = null;
   let stopTelegramPolling = false;
   let telegramPolling: Promise<void> | undefined;
-  let stopConsumer: AppBtccStopConsumer | undefined;
   const inboundDispatcher = new BtccInboundDispatcher();
   const inboundQueue = new NativeInboundQueue(butlerData);
   const serviceShouldStop = () =>
@@ -113,6 +112,7 @@ export async function runNativeButlerMain(
     });
   const telegramShouldStop = () => serviceShouldStop() || !currentTelegramGateway().enabled;
   try {
+    clearAppForegroundExecutorReadiness(butlerData);
     sessionId = resolveButlerSession(store, butlerData);
     const binding = bindButlerSession({
       store,
@@ -123,10 +123,10 @@ export async function runNativeButlerMain(
     });
     persistButlerSessionPointer(butlerData, binding.sessionId);
     if (!btcc) {
+      validateAgentBtccStorageForReadiness({ butlerData });
       const composition = createProductionBtccComposition({
         butlerHome,
         butlerData,
-        appMessageDbPath,
         ownerId: `native-butler:${process.pid}`,
         sessionBindings: store,
       });
@@ -166,11 +166,7 @@ export async function runNativeButlerMain(
     const progressPublisher = createNativeButlerProgressPublisher({
       deliver: deliverThroughEnabledGate,
     });
-    if (btccHost) {
-      stopConsumer = new AppBtccStopConsumer(appMessageDbPath, btcc, btccHost.progress);
-      await stopConsumer.reconcile();
-      await btccHost.progress.reconcile(progressPublisher);
-    }
+    if (btccHost) await btccHost.progress.reconcile(progressPublisher);
     const recovered = inboundQueue.recoverRuntimeInterruptions(() => true);
     if (recovered.requeued > 0) {
       process.stdout.write(
@@ -239,7 +235,6 @@ export async function runNativeButlerMain(
         signal: input.shutdownSignal,
         pollMs,
         onPoll: async () => {
-          await stopConsumer?.reconcile();
           await btccHost?.progress.reconcile(progressPublisher);
           const summary = inboundDispatcher.poll({
             queue: inboundQueue,
@@ -312,7 +307,6 @@ export async function runNativeButlerMain(
   } finally {
     clearAppForegroundExecutorReadiness(butlerData);
     stopTelegramPolling = true;
-    stopConsumer?.close();
     await btccHost?.close();
     store.close();
   }

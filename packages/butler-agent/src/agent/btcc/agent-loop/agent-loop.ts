@@ -1,22 +1,15 @@
-import { createToolResultModelPreviewContext } from
-  "../../tools/tool-result-serialization.ts";
-import type { ToolResultModelPreviewContext } from
-  "../../tools/tool-result-model-preview.ts";
-import { emptyResponseRecoveryObservation } from
-  "./empty-response-recovery.ts";
+import { createToolResultModelPreviewContext } from "../../tools/tool-result-serialization.ts";
+import { emptyResponseRecoveryObservation } from "./empty-response-recovery.ts";
 import type {
-  BtccAgentLoopEvent,
   BtccAgentLoopInput,
-  BtccAgentLoopMessage,
+  BtccAgentLoopEvent,
   BtccAgentLoopOutput,
   BtccAgentLoopToolCall,
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
+import { emitAgentLoopEvent as emit } from "./agent-loop-events.ts";
 import type { ModelRoundResult } from "../ports/model-round.ts";
-import {
-  executePreparedBtccToolCall,
-  prepareBtccToolCall,
-} from "./tool-execution.ts";
+import { executePreparedBtccToolCall, prepareBtccToolCall } from "./tool-execution.ts";
 import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
 import { publishModelRoundWaiting } from "./guided-tool-progress.ts";
 import { renderPartialLimitResponse } from "./partial-limit-response.ts";
@@ -26,20 +19,14 @@ import {
   resolveExecutionWindowSize,
   throwIfExecutionWindowAborted,
 } from "./execution-window.ts";
-
-function emit(
-  events: BtccAgentLoopEvent[],
-  onEvent: BtccAgentLoopInput["onEvent"],
-  event: BtccAgentLoopEvent,
-): void {
-  events.push(event);
-  onEvent?.(event);
-}
-
+import { modelRoundOutputBytes, prepareBoundedModelContext } from "./bounded-turn-context.ts";
+import { appendAssistantResponse } from "./assistant-response.ts";
+import { createTurnContinuationItems } from "./continuation-item-identity.ts";
 export async function runBtccAgentLoop(
   input: BtccAgentLoopInput,
 ): Promise<BtccAgentLoopOutput> {
-  const messages: BtccAgentLoopMessage[] = [{ role: "user", content: input.prompt }];
+  const continuationItems = createTurnContinuationItems(input.prompt);
+  const { messages } = continuationItems;
   const events: BtccAgentLoopEvent[] = [];
   const maxIterations = resolveExecutionWindowSize(input);
   const toolResults: BtccAgentLoopToolResult[] = [];
@@ -59,6 +46,7 @@ export async function runBtccAgentLoop(
     const roundIndex = (input.usageAttribution?.roundIndex ?? 0) + modelRoundIndex;
     modelRoundIndex += 1;
     const requestId = `btcc-model-round-${roundIndex}`;
+    const responseItemId = continuationItems.nextId();
     const resolveModelRef = () => input.resolveModelRef?.() ?? input.model ?? "";
     const publishWaiting = async (
       status: "started" | "completed" | "failed" | "cancelled",
@@ -73,11 +61,24 @@ export async function runBtccAgentLoop(
       });
     };
     await publishWaiting("started");
+    const replayMessages = input.operationResultReplay
+      ? input.operationResultReplay.prepareMessages(messages, requestId)
+      : [...messages];
+    const bounded = await prepareBoundedModelContext({
+      messages: replayMessages,
+      instructions: request.instructions,
+      tools: request.tools,
+      toolChoice: request.toolChoice,
+      budget: input.continuationBudget,
+      roundId: requestId,
+      responseItemId,
+    });
+    const roundMessages = bounded.messages;
     try {
       const response = await input.modelRound.runRound({
         roundId: requestId,
         model: resolveModelRef(),
-        messages: [...messages],
+        messages: roundMessages,
         instructions: request.instructions,
         tools: request.tools,
         toolChoice: request.toolChoice,
@@ -88,44 +89,41 @@ export async function runBtccAgentLoop(
         usageAttribution: input.usageAttribution
           ? { ...input.usageAttribution, roundIndex }
           : undefined,
+        requestSegmentSources: input.requestSegmentSources,
         cacheScope: input.cacheScope,
+        attributionArmId: input.attributionArmId,
+        cacheBoundaryEvidence: input.cacheBoundaryEvidence,
+        stableProviderCachePrefix: input.stableProviderCachePrefix,
         providerRetryAttempts: input.providerRetryAttempts,
         continuation,
+        ...(bounded.envelope
+          ? { boundedContinuation: bounded.envelope }
+          : {}),
         onProviderStreamEvent: input.onProviderStreamEvent,
         onProviderResponseIdentity: input.onProviderResponseIdentity,
       });
+      input.operationResultReplay?.accepted(requestId, response);
+      if (input.continuationBudget) {
+        await input.continuationBudget.recordOutput({
+          roundId: requestId,
+          outputBytes: modelRoundOutputBytes(response),
+        });
+      }
       continuation = response.continuation;
       await publishWaiting("completed");
-      return response;
+      return continuationItems.identifyResponse(response, responseItemId);
     } catch (error) {
+      input.operationResultReplay?.failed(requestId);
       await publishWaiting(input.signal?.aborted ? "cancelled" : "failed");
       throw error;
     }
   };
-
-  const appendAssistantResponse = (response: ModelRoundResult): {
-    text: string;
-    calls: BtccAgentLoopToolCall[];
-  } => {
-    const text = response.text?.trim() ?? "";
-    const calls = response.toolCalls ?? [];
-    if (text || calls.length > 0) {
-      messages.push(response.assistantMessage ?? {
-        role: "assistant",
-        content: text,
-        toolCalls: calls,
-        providerData: response.raw,
-      });
-    }
-    return { text, calls };
-  };
-
   const synthesizeFinalResponseForLoop = (iterationBase: number) => synthesizeFinalResponse({
     synthesis: input.finalSynthesis,
     messages,
     maxIterations: iterationBase,
     runModelRound,
-    appendAssistantResponse,
+    appendAssistantResponse: (response) => appendAssistantResponse(messages, response),
     emit: (event) => emit(events, input.onEvent, event),
   });
 
@@ -136,9 +134,10 @@ export async function runBtccAgentLoop(
     evaluateStop?: boolean;
   }): Promise<string | null> => {
     toolResults.push(record.result);
-    messages.push(toolResultToMessage({
+    continuationItems.push(toolResultToMessage({
       result: record.result,
       modelPreviewContext,
+      operationResultCallId: input.resolveOperationResultCallId?.(record.call.id),
     }));
     emit(events, input.onEvent, {
       type: "tool_result",
@@ -172,7 +171,7 @@ export async function runBtccAgentLoop(
       text: response.text,
     });
 
-    const { text, calls } = appendAssistantResponse(response);
+    const { text, calls } = appendAssistantResponse(messages, response);
     if (calls.length === 0 && response.textToolCallNames?.length) {
       const lastMessage = messages.at(-1);
       if (lastMessage?.role === "assistant") messages.pop();
@@ -193,7 +192,7 @@ export async function runBtccAgentLoop(
       }
       const observation = disposition.observation.trim();
       if (!observation) throw new Error("btcc_text_tool_call_observation_missing");
-      messages.push({ role: "user", content: observation });
+      continuationItems.push({ role: "user", content: observation });
       continue;
     }
 
@@ -225,7 +224,7 @@ export async function runBtccAgentLoop(
           });
       if (recoveryObservation) {
         emptyResponseRecoveryUsed = true;
-        messages.push({ role: "user", content: recoveryObservation });
+        continuationItems.push({ role: "user", content: recoveryObservation });
         continue;
       }
       if (!text && input.onExecutionWindowBoundary) {
@@ -240,7 +239,7 @@ export async function runBtccAgentLoop(
         if (review.status === "continue") {
           const observation = review.observation.trim();
           if (!observation) throw new Error("btcc_agent_loop_final_candidate_observation_missing");
-          messages.push({ role: "user", content: observation });
+          continuationItems.push({ role: "user", content: observation });
           continue;
         }
         return {
@@ -251,6 +250,10 @@ export async function runBtccAgentLoop(
         };
       }
       return { finalText: text, messages, events, stoppedByLimit: false };
+    }
+
+    if (input.continuationBudget) {
+      await input.continuationBudget.recordToolRound({ roundId: `btcc-tool-round-${currentIteration}` });
     }
 
     const preparedCalls = calls.map((call) => prepareBtccToolCall({ tools }, call));
@@ -285,7 +288,7 @@ export async function runBtccAgentLoop(
         if (finalText === null && candidate) finalText = candidate;
       }
       if (finalText) {
-        messages.push({ role: "assistant", content: finalText });
+        continuationItems.push({ role: "assistant", content: finalText });
         return { finalText, messages, events, stoppedByLimit: false };
       }
       continue;
@@ -304,7 +307,7 @@ export async function runBtccAgentLoop(
         iteration: currentIteration,
       });
       if (finalText) {
-        messages.push({ role: "assistant", content: finalText });
+        continuationItems.push({ role: "assistant", content: finalText });
         return { finalText, messages, events, stoppedByLimit: false };
       }
     }
@@ -320,7 +323,7 @@ export async function runBtccAgentLoop(
       toolResults,
     });
     if (boundaryObservation !== undefined) {
-      messages.push({ role: "user", content: boundaryObservation });
+      continuationItems.push({ role: "user", content: boundaryObservation });
       windowIndex += 1;
       continue;
     }
@@ -332,7 +335,7 @@ export async function runBtccAgentLoop(
     maxIterations,
   }))?.trim();
   if (synthesizedText) {
-    messages.push({ role: "assistant", content: synthesizedText });
+    continuationItems.push({ role: "assistant", content: synthesizedText });
     return { finalText: synthesizedText, messages, events, stoppedByLimit: true };
   }
   const finalSynthesisText = toolResults.length > 0
@@ -342,6 +345,6 @@ export async function runBtccAgentLoop(
     return { finalText: finalSynthesisText, messages, events, stoppedByLimit: true };
   }
   const finalText = renderPartialLimitResponse(toolResults);
-  messages.push({ role: "assistant", content: finalText });
+  continuationItems.push({ role: "assistant", content: finalText });
   return { finalText, messages, events, stoppedByLimit: true };
 }

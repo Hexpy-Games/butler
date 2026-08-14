@@ -17,6 +17,10 @@ import type {
   ReasoningEffort,
 } from "../../../integrations/providers/runtime-contracts.ts";
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
+import type { M1RequestSegmentSource } from
+  "../ports/provider-request-attribution.ts";
+import type { OperationResultReplay } from "../operation-result-replay/index.ts";
+import type { TurnContinuationBudgetState } from "../turn/index.ts";
 
 export type BtccAgentLoopMessage = ModelRoundMessage;
 export type BtccAgentLoopToolDefinition = ModelRoundTool;
@@ -25,6 +29,11 @@ export type BtccAgentLoopToolCall = ModelRoundToolCall;
 export type BtccAgentLoopResult = {
   content: string;
   route: "direct" | "assisted" | "managed";
+  modelIdentity?: {
+    requestedModelRef: string;
+    effectiveModelRef: string;
+    providerReportedModelRef?: string;
+  };
 };
 
 export interface BtccAgentLoop {
@@ -64,6 +73,9 @@ export interface BtccAgentLoop {
       modelRef: string;
       result: import("../ports/model-round.ts").ModelRoundResult;
     }) => Promise<void>;
+    transitionContinuationBudget?: (
+      event: import("../turn/index.ts").TurnContinuationBudgetEvent,
+    ) => Promise<import("../turn/index.ts").TurnContinuationBudgetState>;
   }): Promise<BtccAgentLoopResult>;
 }
 
@@ -111,10 +123,17 @@ export interface BtccAgentLoopInput {
   instructions?: string;
   reasoningEffort?: ReasoningEffort;
   cacheScope?: string;
+  attributionArmId?: string;
+  cacheBoundaryEvidence?: import("../ports/provider-request-attribution.ts").M1CacheBoundaryEvidence;
+  stableProviderCachePrefix?: import("../ports/model-round.ts").StableProviderCachePrefixContract;
   signal?: AbortSignal;
   attachments?: readonly AttachmentRef[];
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
+  requestSegmentSources?: Partial<Record<
+    "instructions" | "input",
+    readonly M1RequestSegmentSource[]
+  >>;
   onProviderStreamEvent?: ProviderStreamProjectionHandler;
   onProviderResponseIdentity?: (identity: {
     provider: string;
@@ -128,6 +147,16 @@ export interface BtccAgentLoopInput {
   resolveTools?: () => readonly BtccAgentLoopToolDefinition[];
   resolveToolChoice?: () => "auto" | "required" | undefined;
   modelRound: ModelRoundPort;
+  operationResultReplay?: OperationResultReplay;
+  continuationBudget?: {
+    state: TurnContinuationBudgetState;
+    admitRequest(input: {
+      roundId: string; requestDigest: string; modelFacingBytes: number;
+    }): Promise<void>;
+    recordOutput(input: { roundId: string; outputBytes: number }): Promise<void>;
+    recordToolRound(input: { roundId: string }): Promise<void>;
+  };
+  resolveOperationResultCallId?: (providerCallId: string) => string | undefined;
   /**
    * The execution window is an internal scheduling boundary, not a semantic
    * model/tool budget. A guided caller supplies this callback to reread

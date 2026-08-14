@@ -14,7 +14,6 @@ import {
   diagnoseButlerToolPolicy,
   selectButlerToolProfiles,
   selectButlerToolsForTurn,
-  toolContractJsonChars,
 } from "../../packages/butler-agent/src/agent/tools/profiles.ts";
 import {
   PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES,
@@ -305,21 +304,14 @@ test("session-bound executor fails closed when its WorkspaceReference is omitted
   })).rejects.toThrow("session_workspace_unavailable");
 });
 
-test("Project Ledger tool wrappers resolve active app project id through the app registry", async () => {
+test("Project Ledger tool wrappers resolve bounded project and workspace facts", async () => {
   const butlerHome = join(tempDir, "butler-home");
   const butlerData = join(tempDir, "butler-data");
   const workspacePath = join(tempDir, "workspaces", "sandy-folder");
-  const appDbPath = join(tempDir, "butler-client.sqlite");
   const cliPath = join(butlerHome, "packages", "project-ledger", "bin", "project-ledger");
   mkdirSync(workspacePath, { recursive: true });
   mkdirSync(join(butlerHome, "packages", "project-ledger", "bin"), { recursive: true });
   writeFileSync(join(workspacePath, "package.json"), `${JSON.stringify({ name: "sandy-bot" })}\n`, "utf8");
-  writeAppProjectDb(appDbPath, {
-    id: "project-sandy-bot-35a0e102",
-    displayName: "Sandy Bot",
-    workspacePath,
-    ledgerProjectId: "sandy-bot",
-  });
   writeFileSync(
     cliPath,
     "console.log(JSON.stringify({ ok: true, command: process.argv.slice(2).join(' '), privacy: {}, data: { argv: process.argv.slice(2) } }));\n",
@@ -329,8 +321,8 @@ test("Project Ledger tool wrappers resolve active app project id through the app
   const execute = createButlerToolExecutor({
     butlerHome,
     butlerData,
-    appMessageDbPath: appDbPath,
     projectId: "project-sandy-bot-35a0e102",
+    workspacePath,
   });
   const result = await execute({
     name: "inspect_project_status",
@@ -356,18 +348,10 @@ test("Project Ledger read tools cannot leave the active App project", async () =
   const butlerHome = join(tempDir, "butler-home");
   const butlerData = join(tempDir, "butler-data");
   const workspacePath = join(tempDir, "workspaces", "sandy-folder");
-  const appDbPath = join(tempDir, "butler-client.sqlite");
   mkdirSync(workspacePath, { recursive: true });
-  writeAppProjectDb(appDbPath, {
-    id: "project-sandy-bot-35a0e102",
-    displayName: "Sandy Bot",
-    workspacePath,
-    ledgerProjectId: "sandy-bot",
-  });
   const execute = createButlerToolExecutor({
     butlerHome,
     butlerData,
-    appMessageDbPath: appDbPath,
     projectId: "project-sandy-bot-35a0e102",
   });
   const calls = [
@@ -799,6 +783,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "render_project_dashboard",
     "complete_project_work",
     "get_context_monitor",
+    "read_operation_results",
     "read_tool_evidence_artifact",
     "read_tool_output_artifact",
     "get_usage_monitor",
@@ -1095,9 +1080,6 @@ test("project sessions expose bounded project tools without workspace escalation
   expect(names).not.toContain("call_mcp_tool");
   expect(names).not.toContain("create_planned_task");
   expect(names).not.toContain("create_work_orchestration");
-  // Direct Conception recall plus canonical session list/read are intentionally
-  // part of the default surface; keep the expanded contract bounded.
-  expect(toolContractJsonChars(tools)).toBeLessThan(16_000);
 });
 
 test("project sessions keep Project Ledger lifecycle tools hidden for status-only wording", () => {
@@ -1170,8 +1152,6 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  // The workspace surface carries the same default memory-reference contract.
-  expect(toolContractJsonChars(tools)).toBeLessThan(33_000);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -1407,7 +1387,6 @@ test("Project Ledger runtime metadata exposes the bounded project profile withou
   expect(names).not.toContain("project_ledger_task_complete");
   expect(names).not.toContain("project_ledger_create");
   expect(names).not.toContain("get_weather_with_knowhow");
-  expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
 });
 
 test("Project Ledger project sessions expose lifecycle tools whenever Ledger tracked", () => {

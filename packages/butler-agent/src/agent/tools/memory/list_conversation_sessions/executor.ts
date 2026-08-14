@@ -10,7 +10,6 @@ export function createListConversationSessionsToolHandler(
   return async (call: { args: Record<string, unknown> }) =>
     listConversationSessions({
       butlerData: input.butlerData,
-      appMessageDbPath: input.appMessageDbPath,
       currentSessionId: input.sessionId ?? "butler/main",
       projectId: input.projectId,
       scope: sessionScope(call.args.scope),

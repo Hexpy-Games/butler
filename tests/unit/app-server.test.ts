@@ -23,7 +23,6 @@ import {
 } from "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
 import { compactionPath } from "../../packages/butler-agent/src/agent/context/compaction.ts";
 import { appendRuntimeTurnContextMetric } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
-import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
 import {
   appendTranscriptEvent,
   createTranscriptEvent,
@@ -31,7 +30,7 @@ import {
 import { PlannedTaskStore } from "../../packages/butler-agent/src/agent/work/planned-task.ts";
 import { buildTaskOriginContext } from "../../packages/butler-agent/src/agent/work/task-origin.ts";
 import { TaskStore } from "../../packages/butler-agent/src/agent/work/task-store.ts";
-import { selectInitialToolsFromSurfaceController } from "../../packages/butler-agent/src/agent/tools/tool-surface-selection.ts";
+import { selectButlerToolsForTurn } from "../../packages/butler-agent/src/agent/tools/profiles.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { WorkOrchestrationStore } from "../../packages/butler-agent/src/agent/work/work-orchestration.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
@@ -58,7 +57,10 @@ import {
   FIRST_VISIBLE_PROGRESS_EVENT_KIND,
   type RuntimeTurnEventInput,
 } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
-import type { ButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
+import {
+  FileQueueButlerServiceClient,
+  type ButlerServiceClient,
+} from "../../packages/butler-agent/src/gateways/core/client.ts";
 import type {
   ModelProviderAdapter,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
@@ -68,7 +70,6 @@ import {
   ScriptedBtccGatewayRuntime,
   StoppableBtccGatewayRuntime,
 } from "./support/fake-btcc-gateway-runtime.ts";
-import { BTCC_SUCCESSOR_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import {
   clearAppForegroundExecutorReadiness,
   publishAppForegroundExecutorReadiness,
@@ -2220,9 +2221,9 @@ test("ordinary app project turns derive Ledger tracking before tool selection", 
     projectId: "butler",
     sessionKind: "project",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "코드 수정 방향만 검토해줘.",
+    text: "코드 수정 방향만 검토해줘.",
     sessionMetadata: {
       projectId: "butler",
       runtimePolicy,
@@ -2230,21 +2231,20 @@ test("ordinary app project turns derive Ledger tracking before tool selection", 
     turnMetadata: {
       runtimePolicy,
     },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     tracking_mode: "ledger",
     closeout_strategy: "ledger",
   });
-  expect(selection.toolNames).toContain("run_command");
-  expect(selection.toolNames).toContain("project_ledger_status");
-  expect(selection.toolNames).toContain("project_ledger_task_complete");
-  expect(selection.toolNames).toContain("project_ledger_work_complete");
-  expect(selection.toolNames).toContain("project_ledger_attempt_succeed");
-  expect(selection.toolNames).toContain("inspect_project_status");
-  expect(selection.toolNames).toContain("query_project_work");
-  expect(selection.toolNames).toContain("render_project_dashboard");
+  expect(toolNames).toContain("run_command");
+  expect(toolNames).toContain("project_ledger_status");
+  expect(toolNames).toContain("project_ledger_task_complete");
+  expect(toolNames).toContain("project_ledger_work_complete");
+  expect(toolNames).toContain("project_ledger_attempt_succeed");
+  expect(toolNames).toContain("inspect_project_status");
+  expect(toolNames).toContain("query_project_work");
+  expect(toolNames).toContain("render_project_dashboard");
 });
 
 test("legacy app project local tracking is upgraded to Ledger before tool selection", () => {
@@ -2260,9 +2260,9 @@ test("legacy app project local tracking is upgraded to Ledger before tool select
     projectId: "project-sandy-bot-35a0e102",
     sessionKind: "project",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "59부터 닫고 남은거 살펴봐줘",
+    text: "59부터 닫고 남은거 살펴봐줘",
     sessionMetadata: {
       projectId: "project-sandy-bot-35a0e102",
       runtimePolicy,
@@ -2270,8 +2270,7 @@ test("legacy app project local tracking is upgraded to Ledger before tool select
     turnMetadata: {
       runtimePolicy,
     },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     trackingMode: "ledger",
@@ -2282,11 +2281,11 @@ test("legacy app project local tracking is upgraded to Ledger before tool select
     closeout_strategy: "ledger",
     requiredNativeToolProfiles: ["workspace", "project", "project-lifecycle"],
   });
-  expect(selection.toolNames).toContain("project_ledger_status");
-  expect(selection.toolNames).toContain("project_ledger_task_complete");
-  expect(selection.toolNames).toContain("project_ledger_work_complete");
-  expect(selection.toolNames).toContain("project_ledger_attempt_succeed");
-  expect(selection.toolNames).toContain("query_project_work");
+  expect(toolNames).toContain("project_ledger_status");
+  expect(toolNames).toContain("project_ledger_task_complete");
+  expect(toolNames).toContain("project_ledger_work_complete");
+  expect(toolNames).toContain("project_ledger_attempt_succeed");
+  expect(toolNames).toContain("query_project_work");
 });
 
 test("explicit local app tracking keeps Ledger tools out of the surface", () => {
@@ -2296,9 +2295,9 @@ test("explicit local app tracking keeps Ledger tools out of the surface", () => 
     projectId: "butler",
     sessionKind: "project",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "Project Ledger 상태 확인하고 dashboard 렌더해줘.",
+    text: "Project Ledger 상태 확인하고 dashboard 렌더해줘.",
     sessionMetadata: {
       projectId: "butler",
       runtimePolicy,
@@ -2306,8 +2305,7 @@ test("explicit local app tracking keeps Ledger tools out of the surface", () => 
     turnMetadata: {
       runtimePolicy,
     },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     tracking_mode: "local",
@@ -2315,13 +2313,13 @@ test("explicit local app tracking keeps Ledger tools out of the surface", () => 
     closeout_strategy: "local_workstream",
     requiredNativeToolProfiles: ["workspace"],
   });
-  expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
-  expect(selection.toolNames).not.toContain("inspect_project_status");
-  expect(selection.toolNames).not.toContain("query_project_work");
-  expect(selection.toolNames).not.toContain("render_project_dashboard");
-  expect(selection.toolNames).not.toContain("project_ledger_task_complete");
-  expect(selection.toolNames).not.toContain("project_ledger_work_complete");
-  expect(selection.toolNames).not.toContain("project_ledger_attempt_succeed");
+  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(toolNames).not.toContain("inspect_project_status");
+  expect(toolNames).not.toContain("query_project_work");
+  expect(toolNames).not.toContain("render_project_dashboard");
+  expect(toolNames).not.toContain("project_ledger_task_complete");
+  expect(toolNames).not.toContain("project_ledger_work_complete");
+  expect(toolNames).not.toContain("project_ledger_attempt_succeed");
 });
 
 test("read-only app project tracking keeps Ledger mutation markers out of the surface", () => {
@@ -2331,9 +2329,9 @@ test("read-only app project tracking keeps Ledger mutation markers out of the su
     projectId: "butler",
     sessionKind: "project",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "Project Ledger 상태만 읽어줘.",
+    text: "Project Ledger 상태만 읽어줘.",
     sessionMetadata: {
       projectId: "butler",
       runtimePolicy,
@@ -2341,21 +2339,20 @@ test("read-only app project tracking keeps Ledger mutation markers out of the su
     turnMetadata: {
       runtimePolicy,
     },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     accessMode: "read_only",
     tracking_mode: "ledger",
     requiredNativeToolProfiles: ["project"],
   });
-  expect(selection.toolNames).toContain("project_ledger_status");
-  expect(selection.toolNames).toContain("project_ledger_check");
-  expect(selection.toolNames).toContain("inspect_project_status");
-  expect(selection.toolNames).toContain("query_project_work");
-  expect(selection.toolNames).not.toContain("project_ledger_task_complete");
-  expect(selection.toolNames).not.toContain("project_ledger_work_complete");
-  expect(selection.toolNames).not.toContain("project_ledger_attempt_succeed");
+  expect(toolNames).toContain("project_ledger_status");
+  expect(toolNames).toContain("project_ledger_check");
+  expect(toolNames).toContain("inspect_project_status");
+  expect(toolNames).toContain("query_project_work");
+  expect(toolNames).not.toContain("project_ledger_task_complete");
+  expect(toolNames).not.toContain("project_ledger_work_complete");
+  expect(toolNames).not.toContain("project_ledger_attempt_succeed");
 });
 
 test("app tracking policy treats snake case tracking mode as authoritative", () => {
@@ -2372,9 +2369,9 @@ test("app tracking policy treats snake case tracking mode as authoritative", () 
     projectId: "butler",
     sessionKind: "project",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "Project Ledger task T-1 complete 처리해줘.",
+    text: "Project Ledger task T-1 complete 처리해줘.",
     sessionMetadata: {
       projectId: "butler",
       runtimePolicy,
@@ -2382,8 +2379,7 @@ test("app tracking policy treats snake case tracking mode as authoritative", () 
     turnMetadata: {
       runtimePolicy,
     },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     trackingMode: "local",
@@ -2394,10 +2390,10 @@ test("app tracking policy treats snake case tracking mode as authoritative", () 
     closeout_strategy: "local_workstream",
     requiredNativeToolProfiles: ["workspace"],
   });
-  expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
-  expect(selection.toolNames).not.toContain("query_project_work");
-  expect(selection.toolNames).not.toContain("inspect_project_status");
-  expect(selection.toolNames).not.toContain("render_project_dashboard");
+  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(toolNames).not.toContain("query_project_work");
+  expect(toolNames).not.toContain("inspect_project_status");
+  expect(toolNames).not.toContain("render_project_dashboard");
 });
 
 test("ordinary app chat turns derive session Work tracking before tool selection", () => {
@@ -2406,22 +2402,21 @@ test("ordinary app chat turns derive session Work tracking before tool selection
     accessMode: "full_access",
     sessionKind: "chat",
   });
-  const selection = selectInitialToolsFromSurfaceController({
+  const toolNames = selectButlerToolsForTurn({
     role: "butler",
-    message: "오늘 할 일 세 가지로 정리해줘.",
+    text: "오늘 할 일 세 가지로 정리해줘.",
     sessionMetadata: { runtimePolicy },
     turnMetadata: { runtimePolicy },
-    providerCapabilities: { supportsToolCalls: true },
-  });
+  }).map((tool) => tool.name);
 
   expect(runtimePolicy).toMatchObject({
     tracking_mode: "local",
     closeout_strategy: "local_workstream",
   });
-  expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
-  expect(selection.toolNames).not.toContain("inspect_project_status");
-  expect(selection.toolNames).not.toContain("query_project_work");
-  expect(selection.toolNames).not.toContain("render_project_dashboard");
+  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(toolNames).not.toContain("inspect_project_status");
+  expect(toolNames).not.toContain("query_project_work");
+  expect(toolNames).not.toContain("render_project_dashboard");
 });
 
 test("project session hints are normalized before becoming local ids", async () => {
@@ -2661,7 +2656,7 @@ test("native butler-main default provider generates app transport session titles
   }
 });
 
-test("App Stop reaches the App BTCC Stop consumer and preserves its public snapshot", async () => {
+test("App Stop uses the inbound cancellation protocol and preserves its public snapshot", async () => {
   const dbPath = join(tempDir, "app-server", "butler-client.sqlite");
   mkdirSync(join(tempDir, "app-server"), { recursive: true });
   const runtime = new StoppableBtccGatewayRuntime();
@@ -2673,12 +2668,6 @@ test("App Stop reaches the App BTCC Stop consumer and preserves its public snaps
     butlerHome: process.cwd(),
     port: 0,
   });
-  const btccSchema = new Database(dbPath);
-  try {
-    btccSchema.exec(BTCC_SUCCESSOR_SCHEMA);
-  } finally {
-    btccSchema.close();
-  }
   const nativeMain = runNativeButlerMain({
     butlerHome: process.cwd(),
     butlerData: tempDir,
@@ -2712,21 +2701,6 @@ test("App Stop reaches the App BTCC Stop consumer and preserves its public snaps
     const messageId = "msg-native-stop-snapshot";
     const createdAt = "2026-07-13T03:00:00.000Z";
     try {
-      db.exec(BTCC_SUCCESSOR_SCHEMA);
-      db.query(`
-        INSERT INTO btcc_turns (
-          turn_id, session_id, inbox_id, trigger_key, original_message_id,
-          original_message, admission_snapshot_ref, model_selection_json,
-          context_json, semantic_state, revision, execution_fence
-        ) VALUES (?, 'general', ?, ?, ?, 'stop native execution', ?, '{}', '{}',
-          'admitted', 1, 1)
-      `).run(
-        turnId,
-        `inbox:${turnId}`,
-        `trigger:${turnId}`,
-        `message:${turnId}`,
-        `admission:${turnId}`,
-      );
       db.query(`
         INSERT INTO messages (
           id, chat_id, turn_id, role, text, status, created_at, updated_at,
@@ -7522,7 +7496,7 @@ test("posted messages persist and replay after restart", async () => {
   }
 });
 
-test("app transport session binding preserves selected reasoning effort", async () => {
+test("app transport preserves selected reasoning effort in App-owned turn context", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   const server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
@@ -7553,20 +7527,7 @@ test("app transport session binding preserves selected reasoning effort", async 
     });
     expect(sessionView.data.active_turn.execution_model).toBeUndefined();
 
-    const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
-    try {
-      const binding = store.getBySessionId("butler/app-general");
-      expect(binding?.modelRef).toBe("openai/gpt-5.5");
-      expect(binding?.metadata).toMatchObject({
-        reasoning_effort: "low",
-        turnExecutionControls: {
-          turn_id: sent.data.turn.id,
-          model_ref: "openai/gpt-5.5",
-        },
-      });
-    } finally {
-      store.close();
-    }
+    expect(existsSync(join(tempDir, "runtime", "session-store.sqlite"))).toBeFalse();
   } finally {
     server.stop();
   }
@@ -7574,6 +7535,9 @@ test("app transport session binding preserves selected reasoning effort", async 
 
 test("app transport send fails the turn instead of leaving thinking when queue handoff fails", async () => {
   const serviceClient: ButlerServiceClient = {
+    enqueueAppCancellation() {
+      throw new Error("unexpected cancellation");
+    },
     enqueueAppTurn() {
       throw new Error("simulated queue write failure");
     },
@@ -8137,7 +8101,7 @@ test("app transport send accepts live native main state when service supervisor 
   }
 });
 
-test("app transport send binds current settings model without persisting implicit composer defaults", async () => {
+test("app transport send snapshots current settings model without opening Agent sessions", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     butlerData: tempDir,
@@ -8157,16 +8121,8 @@ test("app transport send binds current settings model without persisting implici
     });
     expect(result.data.turn.state).toBe("thinking");
 
-    const bindings = new SessionBindingStore(
-      join(tempDir, "runtime", "session-store.sqlite"),
-    );
-    try {
-      expect(
-        bindings.getBySessionId("butler/app-general")?.modelRef,
-      ).toBe("zai/glm-5.2");
-    } finally {
-      bindings.close();
-    }
+    expect(result.data.turn.execution_controls.model_ref).toBe("zai/glm-5.2");
+    expect(existsSync(join(tempDir, "runtime", "session-store.sqlite"))).toBeFalse();
 
     const db = new Database(join(tempDir, "app.sqlite"));
     try {
@@ -8228,16 +8184,7 @@ test("legacy session controls without explicit marker do not override app settin
       text: "use settings despite legacy stale controls",
       client_message_id: "client-55555555-5555-4555-8555-555555555555",
     });
-    const bindings = new SessionBindingStore(
-      join(tempDir, "runtime", "session-store.sqlite"),
-    );
-    try {
-      expect(bindings.getBySessionId("butler/app-general")?.modelRef).toBe(
-        "zai/glm-5.2",
-      );
-    } finally {
-      bindings.close();
-    }
+    expect(existsSync(join(tempDir, "runtime", "session-store.sqlite"))).toBeFalse();
 
     const explicit = await patchJson(`${server.url}sessions/general/controls`, {
       model: "openai/gpt-5.5",
@@ -9724,7 +9671,7 @@ test("app transport final result projection does not resurrect cancelled turns",
     retryable: false,
   });
   const stoppingMessages = await getJson(`${url}messages?chat_id=general`);
-  expect(stoppingMessages.data.messages).toContainEqual(
+  expect(stoppingMessages.data.messages).not.toContainEqual(
     expect.objectContaining({
       turn_id: turnId,
       role: "assistant",
@@ -12486,7 +12433,7 @@ test("deferred logical turns outlive gateway request timeout while provider roun
   }
 });
 
-test("turn cancel aborts in-flight responder without creating a failure reply", async () => {
+test("turn cancel waits for transcript authority without synthesizing a failure reply", async () => {
   let markStarted: (() => void) | undefined;
   let aborted = false;
   const started = new Promise<void>((resolve) => {
@@ -12528,7 +12475,7 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
       {},
     );
     expect(cancel.data.turn).toMatchObject({
-      state: "cancelled",
+      state: "cancelling",
       retryable: false,
       cancellable: false,
     });
@@ -12542,13 +12489,13 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
       cancellable: true,
     });
     expect(body.data.replies).toEqual([]);
-    expect(aborted).toBe(true);
+    expect(aborted).toBe(false);
 
     const finalTurns = await getJson(
       `${server.url}turns?chat_id=general&cursor=0`,
     );
     expect(finalTurns.data.turns[0]).toMatchObject({
-      state: "cancelled",
+      state: "cancelling",
       retryable: false,
       cancellable: false,
     });
@@ -12556,46 +12503,14 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
     );
-    expect(messages.data.messages).toContainEqual(
-      expect.objectContaining({
-        role: "assistant",
-        status: "cancelled",
-        text: "Stopped.",
-        turn_id: turnId,
-        work_blocks: [
-          expect.objectContaining({
-            id: "cancel-work",
-            label: "중단 전 실행한 검증",
-            state: "cancelled",
-            rows: [
-              expect.objectContaining({
-                id: "cancel-progress-row",
-                state: "cancelled",
-                safe_tool_name: "Bash",
-              }),
-            ],
-          }),
-        ],
-      }),
+    expect(messages.data.messages).not.toContainEqual(
+      expect.objectContaining({ role: "assistant", text: "Stopped.", turn_id: turnId }),
     );
     const events = await getJson(`${server.url}events?cursor=0`);
-    expect(events.data.events).toContainEqual(
-      expect.objectContaining({
-        type: "message.created",
-        payload: expect.objectContaining({
-          message: expect.objectContaining({
-            role: "assistant",
-            status: "cancelled",
-            turn_id: turnId,
-            work_blocks: [
-              expect.objectContaining({
-                id: "cancel-work",
-                state: "cancelled",
-              }),
-            ],
-          }),
-        }),
-      }),
+    expect(events.data.events).not.toContainEqual(
+      expect.objectContaining({ type: "message.created", payload: expect.objectContaining({
+        message: expect.objectContaining({ status: "cancelled", turn_id: turnId }),
+      }) }),
     );
     expect(JSON.stringify(messages)).not.toContain("could not verify");
   } finally {
@@ -12719,14 +12634,14 @@ test("turn cancel preserves earlier assistant work history while stopping active
     );
     expect(cancel.data.turn).toMatchObject({
       id: secondTurnId,
-      state: "cancelled",
+      state: "cancelling",
       retryable: false,
       cancellable: false,
     });
 
     const completedRequest = await inFlight;
     expect(completedRequest.status).toBe(202);
-    expect(aborted).toBe(true);
+    expect(aborted).toBe(false);
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
@@ -12734,7 +12649,7 @@ test("turn cancel preserves earlier assistant work history while stopping active
     const assistantMessages = messages.data.messages.filter(
       (message: { role: string }) => message.role === "assistant",
     );
-    expect(assistantMessages).toHaveLength(2);
+    expect(assistantMessages).toHaveLength(1);
     expect(
       assistantMessages.find(
         (message: { text: string }) => message.text === "기본 작업은 완료했습니다.",
@@ -12756,34 +12671,9 @@ test("turn cancel preserves earlier assistant work history while stopping active
         }),
       ],
     });
-    expect(
-      assistantMessages.find(
-        (message: { status: string }) => message.status === "cancelled",
-      ),
-    ).toMatchObject({
-      turn_id: secondTurnId,
-      text: "Stopped.",
-      status: "cancelled",
-      work_blocks: [
-        expect.objectContaining({
-          id: "cancel-work",
-          label: "중단할 작업",
-          state: "cancelled",
-          rows: [expect.objectContaining({ id: "cancel-progress-row", state: "cancelled" })],
-        }),
-      ],
-      turn_activity_rows: [
-        expect.objectContaining({
-          id: "cancel-phase-activity",
-          state: "cancelled",
-        }),
-        expect.objectContaining({
-          id: "cancel-operation-activity",
-          state: "cancelled",
-          safe_label: "현재 작업 상태 확인",
-        }),
-      ],
-    });
+    expect(assistantMessages.some(
+      (message: { status: string }) => message.status === "cancelled",
+    )).toBeFalse();
     expect(messages.data.turn_progress[secondTurnId].safe_progress_rows)
       .toContainEqual(
         expect.objectContaining({
@@ -12860,7 +12750,7 @@ test("turn cancel freezes same-turn assistant content and attachments in place",
       `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
       {},
     );
-    expect(cancel.data.turn.state).toBe("cancelled");
+    expect(cancel.data.turn.state).toBe("cancelling");
     expect((await inFlight).status).toBe(202);
     const duplicateCancel = await postJson(
       `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
@@ -12868,7 +12758,7 @@ test("turn cancel freezes same-turn assistant content and attachments in place",
     );
     expect(duplicateCancel.data.turn).toMatchObject({
       id: turnId,
-      state: "cancelled",
+      state: "cancelling",
     });
 
     const assertFrozenSnapshot = async () => {
@@ -12881,7 +12771,7 @@ test("turn cancel freezes same-turn assistant content and attachments in place",
         turn_id: turnId,
         role: "assistant",
         text: "정지 전까지 작성된 답변입니다.",
-        status: "cancelled",
+        status: "streaming",
         created_at: createdAt,
         attachments: [expect.objectContaining({ file_id: fileId })],
       });
@@ -12891,20 +12781,17 @@ test("turn cancel freezes same-turn assistant content and attachments in place",
       expect(messages.data.turn_progress[turnId].safe_progress_rows).toContainEqual(
         expect.objectContaining({
           id: "snapshot-first-visible-row",
-          state: "cancelled",
+          state: "running",
         }),
       );
     };
 
     await assertFrozenSnapshot();
     const events = await getJson(`${server.url}events?cursor=0`);
-    expect(events.data.events).toContainEqual(
-      expect.objectContaining({
-        type: "message.updated",
-        payload: expect.objectContaining({
-          message: expect.objectContaining({ id: messageId, status: "cancelled" }),
-        }),
-      }),
+    expect(events.data.events).not.toContainEqual(
+      expect.objectContaining({ type: "message.updated", payload: expect.objectContaining({
+        message: expect.objectContaining({ id: messageId, status: "cancelled" }),
+      }) }),
     );
     expect(events.data.events).not.toContainEqual(
       expect.objectContaining({ type: "message.deleted" }),
@@ -12918,7 +12805,7 @@ test("turn cancel freezes same-turn assistant content and attachments in place",
   }
 });
 
-test("app startup repairs cancelled turns that lost their activity carrier", async () => {
+test("app startup does not infer cancellation without transcript authority", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let markStarted: (() => void) | undefined;
   const started = new Promise<void>((resolve) => {
@@ -13021,23 +12908,9 @@ test("app startup repairs cancelled turns that lost their activity carrier", asy
     expect(messages.data.messages).toContainEqual(
       expect.objectContaining({
         role: "assistant",
-        status: "cancelled",
+        status: "retrying",
         text: "Retrying this turn.",
         turn_id: turnId,
-        work_blocks: [
-          expect.objectContaining({
-            id: "legacy-cancel-work",
-            label: "중단 전에 남아 있던 작업",
-            state: "cancelled",
-            rows: [
-              expect.objectContaining({
-                id: "legacy-cancel-progress-row",
-                state: "cancelled",
-                safe_tool_name: "Bash",
-              }),
-            ],
-          }),
-        ],
       }),
     );
     expect(JSON.stringify(messages)).not.toContain("Continuing current turn");
@@ -13882,6 +13755,51 @@ test("turn cancel endpoint returns safe conflict for completed turns", async () 
       `).get()?.count,
     ).toBe(0);
     db.close();
+  } finally {
+    server.stop();
+  }
+});
+
+test("pending cancellation outbox dispatches after App restart", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  const queue = new FileQueueButlerServiceClient({ butlerData: tempDir });
+  const failingClient: ButlerServiceClient = {
+    enqueueAppTurn: (input, metadata) => queue.enqueueAppTurn(input, metadata),
+    enqueueAppCancellation(input, metadata) {
+      queue.enqueueAppCancellation(input, metadata);
+      throw new Error("simulated crash after cancellation queue write");
+    },
+  };
+  let server = createAppServer({
+    dbPath, butlerData: tempDir, port: 0, serviceClient: failingClient,
+  });
+  const sent = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "cancel after restart",
+  });
+  const turnId = sent.data.turn.id as string;
+  const response = await fetch(
+    `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+  );
+  expect(response.status).toBe(500);
+  server.stop();
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const db = new Database(dbPath, { readonly: true });
+    const outbox = db.query<{ queue_id: string | null }, [string]>(`
+      SELECT queue_id FROM app_turn_cancel_outbox WHERE turn_id = ?
+    `).get(turnId);
+    db.close();
+    expect(outbox?.queue_id).toBeString();
+    const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+    const controls = readdirSync(pendingDir).map((name) =>
+      JSON.parse(readFileSync(join(pendingDir, name), "utf8"))
+        .envelope?.control?.kind,
+    );
+    expect(controls).toContain("cancel_turn");
+    expect(controls.filter((kind) => kind === "cancel_turn")).toHaveLength(1);
   } finally {
     server.stop();
   }

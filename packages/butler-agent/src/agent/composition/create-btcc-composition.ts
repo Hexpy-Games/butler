@@ -1,4 +1,5 @@
 import {
+  agentBtccStoragePaths,
   createProjectLedgerLegacyWorkSource,
   openBtccSqliteStores,
 } from "../adapters/index.ts";
@@ -16,8 +17,6 @@ import { AgentConversationStore } from "../conversation/index.ts";
 import { PromptAssembler } from "../prompt/prompt-assembler.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 
-type BtccStores = ReturnType<typeof openBtccSqliteStores>;
-
 /**
  * Production wiring only.  Lifecycle policy lives in `agent/btcc/btcc.ts`
  * and `agent/btcc/turn/turn.ts`; this function supplies stores and adapters.
@@ -25,7 +24,6 @@ type BtccStores = ReturnType<typeof openBtccSqliteStores>;
 export function createProductionBtccComposition(input: {
   butlerHome: string;
   butlerData: string;
-  appMessageDbPath: string;
   ownerId: string;
   /** Test-only one-round provider seam; production callers omit it. */
   modelRound?: ModelRoundPort;
@@ -35,11 +33,10 @@ export function createProductionBtccComposition(input: {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   const legacyProjectWorkSource = createProjectLedgerLegacyWorkSource({
     butlerData: input.butlerData,
-    appMessageDbPath: input.appMessageDbPath,
     resolver: projectLedgerResolver,
   });
   const stores = openBtccSqliteStores({
-    dbPath: input.appMessageDbPath,
+    dbPath: agentBtccStoragePaths(input.butlerData).agentBtccDbPath,
     ownerId: input.ownerId,
     legacyProjectWorkSource,
   });
@@ -61,9 +58,9 @@ export function createProductionBtccComposition(input: {
     agent: createProductionGuidedTurnAgent({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
-      appMessageDbPath: input.appMessageDbPath,
       contextDocuments: stores.contextDocuments,
       toolJournal: stores.guidedToolJournal,
+      operationResultReader: stores.guidedOperationResultReader,
       effectJournal: stores.guidedEffectJournal,
       durableWork: stores.durableWork,
       modelRound: input.modelRound,

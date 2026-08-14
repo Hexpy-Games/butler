@@ -1,22 +1,71 @@
 import { renderAttachmentContext } from "../../context/attachment-context.ts";
 import type { ButlerExecutionPolicy } from "../contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
-import type { SqliteGuidedToolJournal } from
-  "../../adapters/index.ts";
+import type { GuidedToolJournal } from "../ports/index.ts";
 import { guidedPolicy } from "./guided-turn-policy.ts";
 import { projectGuidedToolContext } from
   "./guided-tool-context-projection.ts";
+import type { M1RequestSegmentSource } from "../ports/provider-request-attribution.ts";
+
+export interface GuidedTextAttribution {
+  text: string;
+  sources: readonly M1RequestSegmentSource[];
+}
+
+export interface GuidedTurnRequestAttribution {
+  prompt: string;
+  instructions: string;
+  requestSegmentSources: {
+    input: readonly M1RequestSegmentSource[];
+    instructions: readonly M1RequestSegmentSource[];
+  };
+}
+
+export function renderGuidedTurnRequestAttribution(
+  turn: TurnRecord,
+  stableInstructionPrefix: string,
+  responseLanguage: string,
+  input: Parameters<typeof renderGuidedPromptAttribution>[1],
+): GuidedTurnRequestAttribution {
+  const prompt = renderGuidedPromptAttribution(turn, input);
+  const instructions = guidedInstructionsAttribution(
+    stableInstructionPrefix,
+    renderGuidedPersonaInstructions(turn, input.contextDocuments),
+    responseLanguage,
+  );
+  return {
+    prompt: prompt.text,
+    instructions: instructions.text,
+    requestSegmentSources: {
+      input: prompt.sources,
+      instructions: instructions.sources,
+    },
+  };
+}
 
 export function renderGuidedPrompt(
   turn: TurnRecord,
   input: {
     butlerData: string;
     contextDocuments: { resolve(contextRef: string): string };
-    toolJournal: SqliteGuidedToolJournal;
+    toolJournal: GuidedToolJournal;
     workContext?: string | null;
     effectContext?: string | null;
   },
 ): string {
+  return renderGuidedPromptAttribution(turn, input).text;
+}
+
+export function renderGuidedPromptAttribution(
+  turn: TurnRecord,
+  input: {
+    butlerData: string;
+    contextDocuments: { resolve(contextRef: string): string };
+    toolJournal: GuidedToolJournal;
+    workContext?: string | null;
+    effectContext?: string | null;
+  },
+): GuidedTextAttribution {
   const policy = guidedPolicy(turn);
   const context = renderContextDocuments(turn, input.contextDocuments);
   const attachments = renderAttachmentContext(turn.context.attachments, {
@@ -28,17 +77,29 @@ export function renderGuidedPrompt(
   });
   const priorTools = renderPriorToolFacts(input.toolJournal.list(turn.turnId));
   const workStorage = workStorageForPolicy(policy);
-  return [
-    `User request:\n${turn.originalMessage}`,
-    `Current scope:\n- role: ${policy.role}\n- workspace: ${policy.workspacePath}` +
+  const entries: Array<{ text: string; kind: M1RequestSegmentSource["kind"] }> = [
+    { text: `User request:\n${turn.originalMessage}`, kind: "current_user_request" },
+    { text: `Current scope:\n- role: ${policy.role}\n- workspace: ${policy.workspacePath}` +
       `\n- access: ${policy.accessMode}\n- work storage: ${workStorage}` +
       (policy.projectId ? `\n- project: ${policy.projectId}` : ""),
-    renderCurrentWork(input.workContext),
-    renderCurrentEffects(input.effectContext),
-    context,
-    attachments,
-    priorTools,
-  ].filter(Boolean).join("\n\n");
+      kind: policy.trackingMode === "ledger"
+        ? "project_ledger_and_work_authority"
+        : "other_typed_context" },
+    { text: renderCurrentWork(input.workContext), kind: "project_ledger_and_work_authority" },
+    { text: renderCurrentEffects(input.effectContext), kind: "phase_continuity" },
+    { text: context, kind: "memory_recall_context" },
+    { text: attachments, kind: "source_reference" },
+    { text: priorTools, kind: "older_tool_result_projection" },
+  ];
+  const sources: M1RequestSegmentSource[] = [];
+  for (const entry of entries.filter((candidate) => Boolean(candidate.text))) {
+    sources.push({
+      kind: entry.kind,
+      stability: "dynamic",
+      text: `${sources.length > 0 ? "\n\n" : ""}${entry.text}`,
+    });
+  }
+  return { text: sources.map((source) => source.text).join(""), sources };
 }
 
 export function guidedInstructions(
@@ -52,12 +113,13 @@ export function guidedInstructions(
     "Use tools when current, external, workspace, attachment, or project facts are needed.",
     "During Conception, treat injected profile, recent feedback, and Hot Cache as a bounded baseline, not exhaustive memory. Before closing a substantial goal, actively use recall_memory when durable user preferences, corrections, prior decisions, related work outcomes, or relationship context could materially improve personalization or goal fidelity. Preserve the fast path when current context is genuinely sufficient; this is your semantic choice, not a runtime keyword rule.",
     "When the user refers to a particular other Butler conversation, use list_conversation_sessions and then read_conversation_session. Use all_sessions only when that reference is outside the active project. Use query_memory for exact wording and recall_memory for associative personalization; do not substitute Hot Cache for either when the needed evidence is absent.",
-    "For substantial work: understand the goal, make a concise plan, review the Plan when useful, execute it, review the actual result, validate the whole Work, then report.",
+    "For substantial work: understand the goal, make a concise plan when useful, execute it, and report a truthful result. Optional Plan/result Reviews and completion Validation can improve quality but are never runtime closeout requirements.",
     "Use Work when the task needs continuation across turns, a persistent artifact, several dependent actions, or an external effect.",
     "Skip Work for simple conversation, stable knowledge, or a single-step read-only lookup.",
     "Multi-source or multi-step research that must produce a meaningful synthesized result is substantial Work even when every source tool is read-only.",
     "When the request asks you to inspect multiple sources and compare or synthesize them, start Work before the first source tool.",
-    "When Work is useful, decide whether the current open Work continues or is superseded before changing its progress or doing dependent work. Use start_new only at that decision point; after continuing the current Work in this Turn, keep the same Work, then call replace_work_plan before the dependent work only when opening or revising a Plan. Use the same record_work_review tool for Plan Review, result Review, and separate completion Validation through subject completion.",
+    "When Work is useful, decide whether the current open Work continues or is superseded before changing its progress or doing dependent work. Use start_new only at that decision point; after continuing the current Work in this Turn, keep the same Work, then call replace_work_plan before the dependent work only when opening or revising a Plan. Use record_work_review for optional Plan Review, result Review, or completion Validation when those quality records help; they never replace record_work_disposition.",
+    "When a bound Work Turn is ready to settle, call record_work_disposition with the exact Work id, completed/open/blocked status, concise summary, and truthful terminal action/evidence details. This atomic closeout is valid without a Plan, Review, Validation, or fixed stage sequence; detailed Reviews remain optional quality records rather than a completion gate.",
     "Keep the Work objective as the overall user outcome across Turns. Put a single Turn's milestone and progress in Plan actions and checkpoints instead of opening a new Work for that milestone.",
     "For Managed Work, the original request, stable Work objective, governing references, Plan checks, current stage, and unresolved actions are the guardrails. Recheck them before choosing another action and during completion Validation; do not replace the requested outcome with an optional detail.",
     "The Work stage is process guidance, not tool authority. Use record_work_checkpoint to enter an allowed next stage or update action statuses. If a transition is rejected, follow the returned allowed next stages without discarding useful work or exposing the internal correction to the user.",
@@ -71,8 +133,8 @@ export function guidedInstructions(
     "For Managed Work, use record_work_checkpoint only for meaningful stage or action progress when you are not also recording a Review; do not use it to narrate every tool call. Direct and single-step Assisted requests must not use it.",
     "The active Plan action_key is the model-authored execution activity title. Make it encompass the whole action or outcome, not merely the first lookup, command, file, or other immediate tool step. Keep read, edit, command, validation, publication, and deployment labels nested under that activity; do not create narrower activity titles such as an XML size investigation. Assistant text is the full activity summary, never the title source. When the active action changes, record the new active action_key before its tools.",
     "When recording a Plan or result Review, include any known action_updates and the legal stage to enter after the Review as next_stage in record_work_review itself instead of making separate checkpoints around it.",
-    "Before reporting substantial Work, finish any Project Ledger publication or closeout effect, then record a result Review of the actual result with every current Plan action explicitly done, skipped, or blocked. After an accepted result Review, separately validate the whole Work against the original request, current Plan and checks, terminal actions, actual results or artifacts, and effect receipts using record_work_review subject completion. Use next_stage reporting only when completion Validation accepts; otherwise use partial or revise and return to the needed stage with a concrete continuation or blocker. Accept a usable requested outcome despite disclosed non-critical limits; do not keep Work open for optional improvements.",
-    "When an accepted completion Validation uses next_stage reporting, accompany that record_work_review tool call with one concise user-visible sentence that describes the focus or structure of the upcoming report. Write the reporting direction, not the report itself, a draft of the final answer, or copied final-answer wording. For example: 변경 내용, 검증 결과, 운영 반영 순서로 정리해 보고합니다. Then write the actual final answer only after the tool result is accepted.",
+    "Before reporting substantial Work, finish any Project Ledger publication or closeout effect. If useful, record a result Review or completion Validation against the original request, current Plan and checks, terminal actions, actual results or artifacts, and effect receipts; these records are optional quality evidence. Settle the bound Work with record_work_disposition using completed only when every current Plan action is done or skipped, no material action remains, evidence is eligible, and effects are not unresolved or in flight. Use open or blocked with a truthful continuation condition when work remains. Accept a usable requested outcome despite disclosed non-critical limits; do not keep Work open for optional improvements.",
+    "If you record completion Validation or another Review, a concise user-visible progress sentence may describe the upcoming report, but reporting never depends on a Review. Write the reporting direction, not the report itself, a draft of the final answer, or copied final-answer wording. For example: 변경 내용, 검증 결과, 운영 반영 순서로 정리해 보고합니다.",
     "If Work bookkeeping fails, continue and deliver any truthful artifact or final answer you can support.",
     ...(policy.trackingMode === "ledger"
       ? [
@@ -99,6 +161,51 @@ export function guidedInstructions(
         ]
       : []),
   ].join("\n");
+}
+
+export function guidedInstructionsAttribution(
+  stableInstructionPrefix: string,
+  personaAndProfile = "",
+  responseLanguage = "",
+): GuidedTextAttribution {
+  const prefix = stableInstructionPrefix;
+  const persona = personaAndProfile.trim();
+  const responseDirective = responseLanguage.trim()
+    ? `Use ${responseLanguage.trim()} for every user-facing message in this Turn.`
+    : "";
+  const roleEnd = Math.max(0, prefix.indexOf("\n") + 1);
+  const sources: M1RequestSegmentSource[] = [{
+    kind: "stable_safety_and_role_instructions", stability: "stable", text: prefix.slice(0, roleEnd),
+  }];
+  if (roleEnd < prefix.length) {
+    sources.push({
+      kind: "stable_btcc_protocol",
+      stability: "stable",
+      text: prefix.slice(roleEnd),
+    });
+  }
+  if (responseDirective) {
+    sources.push({
+      kind: "accepted_corrections_and_unresolved_obligations",
+      stability: "dynamic",
+      text: `\n${responseDirective}`,
+    });
+  }
+  if (persona) {
+    sources.push({
+      kind: "memory_recall_context",
+      stability: "dynamic",
+      text: [
+        "",
+        "Apply the following current Butler persona and user personalization to every user-facing message in this Turn, including progress, review, failure, and final reporting. Preserve it across every tool round. These instructions are provider-neutral and must not be weakened by report formatting.",
+        persona,
+      ].join("\n"),
+    });
+  }
+  return {
+    text: sources.map((source) => source.text).join(""),
+    sources: sources.filter((source) => source.text.length > 0),
+  };
 }
 
 export function renderGuidedPersonaInstructions(
@@ -172,7 +279,7 @@ function renderContextRefs(
 }
 
 function renderPriorToolFacts(
-  records: ReturnType<SqliteGuidedToolJournal["list"]>,
+  records: ReturnType<GuidedToolJournal["list"]>,
 ): string {
   const recent = projectGuidedToolContext(records);
   if (recent.length === 0) return "";

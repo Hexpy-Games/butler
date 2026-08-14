@@ -3,6 +3,8 @@ import type {
   ModelRoundResult,
   ModelRoundToolCall,
 } from "../../../btcc/ports/index.ts";
+import { parseDeliveredThroughOrdinal } from
+  "../../../btcc/ports/index.ts";
 
 /**
  * Acceptance replay is deliberately limited to the normalized response
@@ -11,6 +13,9 @@ import type {
  * message data needed to resume the admitted round are retained explicitly.
  */
 export function normalizeAcceptedModelRound(result: ModelRoundResult): ModelRoundResult {
+  const boundedContinuation = isRecord(result.continuation) &&
+    (Object.hasOwn(result.continuation, "deliveredThroughOrdinal") ||
+      Object.hasOwn(result.continuation, "boundedItemKeys"));
   const normalized: ModelRoundResult = {
     toolCalls: result.toolCalls.map(normalizeToolCall),
   };
@@ -24,9 +29,14 @@ export function normalizeAcceptedModelRound(result: ModelRoundResult): ModelRoun
     });
   }
   if (result.assistantMessage) {
-    normalized.assistantMessage = normalizeAssistantMessage(result.assistantMessage);
+    normalized.assistantMessage = normalizeAssistantMessage(
+      result.assistantMessage,
+      !boundedContinuation,
+    );
   }
-  const continuation = safeJsonClone(result.continuation);
+  const continuation = boundedContinuation
+    ? normalizeBoundedContinuation(result.continuation)
+    : safeJsonClone(result.continuation);
   if (continuation !== undefined) normalized.continuation = continuation;
   if (result.usage === null) {
     normalized.usage = null;
@@ -43,6 +53,54 @@ export function normalizeAcceptedModelRound(result: ModelRoundResult): ModelRoun
     normalized.providerIdentity = normalizeProviderIdentity(result.providerIdentity);
   }
   return normalized;
+}
+
+function normalizeBoundedContinuation(value: unknown): Record<string, unknown> {
+  if (!isRecord(value) || value.provider !== "openai" ||
+      typeof value.responseId !== "string" || value.responseId.length === 0 ||
+      value.responseId.length > 200) {
+    throw new Error("BTCC bounded continuation has invalid provider identity");
+  }
+  const allowed = new Set([
+    "provider", "responseId", "deliveredThroughOrdinal", "providerRouteIdentity",
+  ]);
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    throw new Error("BTCC bounded continuation has unknown private fields");
+  }
+  return {
+    provider: "openai",
+    responseId: value.responseId,
+    deliveredThroughOrdinal: parseDeliveredThroughOrdinal(value.deliveredThroughOrdinal),
+    ...(value.providerRouteIdentity === undefined
+      ? {}
+      : { providerRouteIdentity: normalizeProviderRouteCacheIdentity(
+          value.providerRouteIdentity,
+        ) }),
+  };
+}
+
+function normalizeProviderRouteCacheIdentity(value: unknown): Record<string, unknown> {
+  if (!isRecord(value) ||
+      value.schemaVersion !== "butler.provider-route-cache-identity.v1" ||
+      typeof value.routeDigest !== "string" || !/^[a-f0-9]{64}$/u.test(value.routeDigest) ||
+      !Number.isSafeInteger(value.routeCursor) || Number(value.routeCursor) < 0 ||
+      (value.providerId !== "openai" && value.providerId !== "openai-codex") ||
+      typeof value.modelRef !== "string" || value.modelRef.length === 0 || value.modelRef.length > 200 ||
+      (value.authMode !== "api_key" && value.authMode !== "codex_subscription" &&
+        value.authMode !== "codex_oauth") ||
+      typeof value.capabilityDigest !== "string" || !/^[a-f0-9]{64}$/u.test(value.capabilityDigest) ||
+      (value.serializerContract !== "butler.openai-responses-final-json.v1" &&
+        value.serializerContract !== "butler.openai-codex-final-json.v1") ||
+      typeof value.toolProfileRevision !== "string" || value.toolProfileRevision.length > 120 ||
+      typeof value.stablePrefixRevision !== "string" || value.stablePrefixRevision.length > 120 ||
+      typeof value.serializedStablePrefixSha256 !== "string" ||
+        !/^[a-f0-9]{64}$/u.test(value.serializedStablePrefixSha256) ||
+      !Number.isSafeInteger(value.serializedStablePrefixBytes) ||
+        Number(value.serializedStablePrefixBytes) < 1 ||
+        Number(value.serializedStablePrefixBytes) > 1_000_000) {
+    throw new Error("BTCC bounded continuation has invalid provider route cache identity");
+  }
+  return { ...value };
 }
 
 export function hydrateAcceptedModelRound(
@@ -88,7 +146,10 @@ function normalizeToolCall(call: ModelRoundToolCall): ModelRoundToolCall {
   };
 }
 
-function normalizeAssistantMessage(message: ModelRoundMessage): ModelRoundMessage {
+function normalizeAssistantMessage(
+  message: ModelRoundMessage,
+  retainProviderData: boolean,
+): ModelRoundMessage {
   if (!isRecord(message) ||
       (message.role !== "system" && message.role !== "user" &&
         message.role !== "assistant" && message.role !== "tool") ||
@@ -102,8 +163,10 @@ function normalizeAssistantMessage(message: ModelRoundMessage): ModelRoundMessag
     ...(typeof message.name === "string" ? { name: message.name } : {}),
     ...(message.toolCalls ? { toolCalls: message.toolCalls.map(normalizeToolCall) } : {}),
   };
-  const providerData = safeJsonClone(message.providerData);
-  if (providerData !== undefined) normalized.providerData = providerData;
+  if (retainProviderData) {
+    const providerData = safeJsonClone(message.providerData);
+    if (providerData !== undefined) normalized.providerData = providerData;
+  }
   const imageAttachments = safeJsonClone(message.imageAttachments);
   if (Array.isArray(imageAttachments)) {
     normalized.imageAttachments = imageAttachments as ModelRoundMessage["imageAttachments"];

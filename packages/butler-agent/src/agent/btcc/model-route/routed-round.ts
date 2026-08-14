@@ -70,7 +70,13 @@ export function createModelRoutePort(input: {
           candidateIndex: route.activeCursor,
           modelRef: candidate.modelRef,
         });
-        if (accepted) return accepted;
+        if (accepted) return {
+          ...accepted,
+          acceptedCheckpoint: accepted.acceptedCheckpoint ?? {
+            roundId, candidateIndex: route.activeCursor,
+            transportAttempt: 0, modelRef: candidate.modelRef,
+          },
+        };
 
         if (loadedAttemptKey !== attemptKey) {
           loadedAttemptKey = attemptKey;
@@ -132,7 +138,6 @@ export function createModelRoutePort(input: {
             continue;
           }
         }
-
         const startedResult = await input.onRouteEvent?.({
           type: "model.attempt.started",
           roundId,
@@ -194,7 +199,13 @@ export function createModelRoutePort(input: {
                 }
               : {}),
             providerRetryAttempts: 1,
+            routeTransportAttemptOrdinal: transportAttempt - 1,
             continuation,
+            routeContext: {
+              schemaVersion: "butler.model-route-request.v1",
+              routeDigest: route.routeDigest,
+              cursor: route.activeCursor, modelRef: candidate.modelRef,
+            },
           });
         } catch (error) {
           const disposition = classifyModelRouteFailure(error);
@@ -252,7 +263,13 @@ export function createModelRoutePort(input: {
             modelRef: candidate.modelRef,
           });
         }
-        return result;
+        return input.recordAcceptedResponse ? {
+          ...result,
+          acceptedCheckpoint: {
+            roundId, candidateIndex: route.activeCursor,
+            transportAttempt, modelRef: candidate.modelRef,
+          },
+        } : result;
       }
 
       // The loop either returns a provider result or throws a typed failure.
