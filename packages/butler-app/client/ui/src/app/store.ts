@@ -525,7 +525,10 @@ function applyMessageListView(
 function messageListViewFromSessionView(view: SessionView): MessageListView {
   const turnProgress =
     view.latest_turn?.id && view.latest_turn.progress
-      ? { [view.latest_turn.id]: view.latest_turn.progress }
+      ? { [view.latest_turn.id]: {
+          ...view.latest_turn.progress,
+          started_at: view.latest_turn.created_at,
+        } }
       : {};
   return {
     chat_id: view.session_id,
@@ -539,7 +542,10 @@ function messageListViewFromSessionView(view: SessionView): MessageListView {
 }
 
 function summaryFromSessionView(view: SessionView): SessionSummaryView {
-  const latestProgress = view.latest_turn?.progress ?? {
+  const latestProgress = view.latest_turn ? {
+    ...view.latest_turn.progress,
+    started_at: view.latest_turn.created_at,
+  } : {
     state: "idle",
     safe_progress_rows: [],
     updated_at: view.updated_at,

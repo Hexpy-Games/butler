@@ -193,7 +193,10 @@ export function useAppBootstrap() {
             chat_id: data.session_id,
             messages: data.messages,
             turn_progress: data.latest_turn?.id
-              ? { [data.latest_turn.id]: data.latest_turn.progress }
+              ? { [data.latest_turn.id]: {
+                  ...data.latest_turn.progress,
+                  started_at: data.latest_turn.created_at,
+                } }
               : {},
             next_cursor: data.message_window.next_cursor,
             ...(data.message_window.next_cursor_token

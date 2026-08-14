@@ -30,6 +30,17 @@ Worker remains an independent execution subsystem, not a principal-Turn
 fallback. Gateway read routes expose committed BTCC projections rather than raw
 prompts, provider payloads, or private runtime state.
 
+## Runtime interruption contract
+
+- An execution-integrity interruption preserves the admitted Turn and parks the
+  exact inbound queue item for process replacement; it must not synthesize a
+  failure or replay inside the process that observed the interruption.
+- Native Butler must then end that process cleanly so the watchdog starts a new
+  owner. The new owner is the only path that may recover and resume the parked
+  item.
+- A parked interruption must therefore never leave a healthy-looking native
+  process alive indefinitely with the App Turn still displayed as running.
+
 ## Related Specs
 
 - `SPEC-NATIVE-PRODUCT` - Native Butler Product

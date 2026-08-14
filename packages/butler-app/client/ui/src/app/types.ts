@@ -845,6 +845,7 @@ export interface OperationOutputView {
 
 export interface TurnProgressSnapshot {
   turn_id?: string;
+  started_at?: string;
   summary?: string;
   updated_at?: string;
   state?: string;

@@ -6,17 +6,21 @@ import { CurrentPhaseActivity } from "./CurrentPhaseActivity";
 import { AssistantStatusLabel } from "./AssistantStatusLabel";
 import { useButlerMarkTheme } from "./hooks/useButlerMarkTheme";
 import { Typo } from "@/butler-ds";
+import { useElapsedTime } from "./hooks/useElapsedTime";
 
 export function CurrentTurnStatus({
   operation,
   modelRoundWait,
   publicActivity,
+  startedAt,
 }: {
   operation?: ProgressRow;
   modelRoundWait?: ProgressRow;
   publicActivity?: ProgressRow;
+  startedAt?: string;
 }) {
   const markTheme = useButlerMarkTheme();
+  const elapsed = useElapsedTime(startedAt);
   const operationLabel = operation
     ? operation.safe_label || publicOperationTitle(operation.safe_tool_name)
     : undefined;
@@ -45,7 +49,7 @@ export function CurrentTurnStatus({
               as="p"
               data-test-class="turn-status-fallback"
             >
-              {fullLabel}
+              {fullLabel}{elapsed ? ` · ${elapsed}` : ""}
             </Typo.Body>
           )}
         </div>
