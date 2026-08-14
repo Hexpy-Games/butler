@@ -52,6 +52,8 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 describe("final paired M1 campaign contract", () => {
   test("freezes 24 adjacent before/after steps and pathless public identity", () => {
     const contract = pairedContract();
+    expect(FINAL_BEFORE_REVISION).toBe("251f529af72e611096e6ca80a58b85c3e32a7903");
+    expect(FINAL_AFTER_REVISION).toBe("761f8de091193a1a587894bf142e7d4a5ce05a73");
     expect(contract.steps).toHaveLength(24);
     expect(contract.steps.map((step) => `${step.fixture}:${step.repetition}:${step.version}`)).toEqual([
       "direct-cold:1:before", "direct-cold:1:after",
@@ -72,6 +74,9 @@ describe("final paired M1 campaign contract", () => {
     expect(contract.policy).toMatchObject({ runtimeReorderAllowed: false, postProviderReplacementAllowed: false });
     expect(contract.before.activation).toEqual(FINAL_ACTIVATION.before);
     expect(contract.after.activation).toEqual(FINAL_ACTIVATION.after);
+    expect(contract.before.activation).toMatchObject({ mode: "on", toolInstructionSurface: true,
+      exactOnceReplay: true, boundedStatelessContext: true });
+    expect(contract.before.activation).toEqual(contract.after.activation);
 
     const plan = createBenchmarkPlan({
       campaign: "m1-v2-paired", runId: "paired-contract", seed: 20260813,
@@ -121,8 +126,7 @@ describe("final paired M1 campaign contract", () => {
         replay: process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY,
         bounded: process.env.BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT,
       }));
-      expect(observed).toEqual({ segment: "1", tool: version === "after" ? "1" : "0",
-        replay: version === "after" ? "1" : "0", bounded: version === "after" ? "1" : "0" });
+      expect(observed).toEqual({ segment: "1", tool: "1", replay: "1", bounded: "1" });
     }
     await expect(withButlerM1V2Environment({ arm: { version: "after", sourceRevision: FINAL_BEFORE_REVISION,
       activation: FINAL_ACTIVATION.after }, fixture: { m1V2: {} } } as never,
@@ -339,11 +343,11 @@ describe("final paired M1 campaign contract", () => {
       db.exec("CREATE TABLE btcc_turns (turn_id TEXT PRIMARY KEY, continuation_budget_json TEXT); CREATE TABLE btcc_model_round_acceptances (turn_id TEXT, normalized_response_json TEXT, created_at TEXT)");
       const submittedAtMs = Date.now(), digest = "A".repeat(43), titleDigest = "B".repeat(43), auxiliaryDigest = "C".repeat(43);
       const turnId = `turn-${input.arm.order}`, sessionId = `session-${input.arm.order}`;
-      const after = input.arm.version === "after";
+      const enabled = input.arm.activation?.mode === "on";
       const limits = { maxModelRequests: 60, maxToolRounds: 60, maxModelFacingBytes: 196_608,
         maxCumulativeModelFacingBytes: 8_388_608, maxOutputBytes: 524_288, maxElapsedMs: 7_200_000, maxIdleMs: 1_200_000 };
-      db.query("INSERT INTO btcc_turns VALUES (?, ?)").run(turnId, after ? JSON.stringify({ schemaVersion: "butler.turn-continuation-budget.v2", limits }) : null);
-      if (after) db.query("INSERT INTO btcc_model_round_acceptances VALUES (?, ?, ?)").run(turnId, JSON.stringify({ toolCalls: [], continuation: {
+      db.query("INSERT INTO btcc_turns VALUES (?, ?)").run(turnId, enabled ? JSON.stringify({ schemaVersion: "butler.turn-continuation-budget.v2", limits }) : null);
+      if (enabled) db.query("INSERT INTO btcc_model_round_acceptances VALUES (?, ?, ?)").run(turnId, JSON.stringify({ toolCalls: [], continuation: {
         providerRouteIdentity: { schemaVersion: "butler.provider-route-cache-identity.v1", routeDigest: "d".repeat(64), routeCursor: 0,
           providerId: "openai-codex", modelRef: "openai/gpt-5.6-sol", authMode: "codex_oauth", capabilityDigest: "c".repeat(64),
           toolProfileRevision: "butler.btcc-tool-instruction-policy.v1", stablePrefixRevision: "butler.btcc-stable-provider-prefix.v1",
@@ -358,7 +362,7 @@ describe("final paired M1 campaign contract", () => {
         execution: { model: "openai/gpt-5.6-sol", reasoning: "medium", serviceTier: "default" },
       });
       for (const [physicalDigest, body] of [
-        [digest, { model: "gpt-5.6-sol", input: "agent", tools: after ? [{ type: "function", name: "read_operation_results", parameters: {
+        [digest, { model: "gpt-5.6-sol", input: "agent", tools: enabled ? [{ type: "function", name: "read_operation_results", parameters: {
           type: "object", additionalProperties: false, properties: {
             result_ref: { type: "string", minLength: 1, maxLength: 256 }, sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
             revision: { anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }] }, work_id: { anyOf: [{ type: "string", minLength: 1, maxLength: 256 }, { type: "null" }] },

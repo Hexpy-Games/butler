@@ -1,5 +1,5 @@
 import type { BenchmarkArmPlan, BenchmarkResultFile } from "./contracts.ts";
-import type { BenchmarkVersion } from "./paired-contract.ts";
+import { FINAL_AFTER_REVISION, FINAL_BEFORE_REVISION, type BenchmarkVersion } from "./paired-contract.ts";
 import { pairedObservationIdentityMatches } from "./paired-observation-identity.ts";
 import { OBSERVED_M1_REQUEST_SEGMENT_KINDS, type M1RequestSegmentKind, type M1V2ArmId, type M1V2RepetitionResult } from "./m1-v2-types.ts";
 
@@ -35,9 +35,11 @@ export function comparableIdentityForArm(arm: BenchmarkArmPlan, repetition: M1V2
     retryOrdinal: Math.max(0, ...attempts.map((attempt) => attempt.retryOrdinal)), usageAvailability };
 }
 
-export function pairEligibility(input: { before: PairComparableIdentity; after: PairComparableIdentity }, revisions = {
-  before: "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5",
-  after: "394c98a97428b741f8ea54273a226cb062455ab0",
+export function pairEligibility(input: { before: PairComparableIdentity; after: PairComparableIdentity }, revisions: {
+  before: string; after: string;
+} = {
+  before: FINAL_BEFORE_REVISION,
+  after: FINAL_AFTER_REVISION,
 }): Omit<PairDecision, "pairId"> {
   const exact = ["fixture", "model", "reasoning", "executionMode", "provider", "providerTransport", "authMode"] as const;
   for (const key of exact) if (input.before[key] !== input.after[key]) return { status: "rejected", reason: `${key}_mismatch` };
