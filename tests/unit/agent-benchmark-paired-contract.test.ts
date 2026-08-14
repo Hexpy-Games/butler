@@ -727,7 +727,7 @@ describe("final paired M1 campaign contract", () => {
     expect(existsSync(join(ambiguousRunRoot, "preflight", "launch-smoke", "before", "receipt.json"))).toBeFalse();
     expect(existsSync(join(ambiguousRunRoot, "manifest.json"))).toBeFalse();
 
-    for (const dispatch of ["known_zero", "unknown", "malformed"] as const) {
+    for (const dispatch of ["known_zero", "known_one", "unknown", "malformed", "partial", "incoherent_tier"] as const) {
       const failureRunRoot = join(root, `launch-cleanup-failure-${dispatch}`);
       const failureArgs = argsForRoot(failureRunRoot);
       const privateEvidencePath = join(
@@ -753,7 +753,20 @@ describe("final paired M1 campaign contract", () => {
           run: { dataRoot: join(input.arm.evidenceRoot, "data"), runRoot: input.arm.evidenceRoot },
           observations: [],
           ...(dispatch === "known_zero" ? { providerRequests: [] } :
-            dispatch === "malformed" ? { providerRequests: [{}] } : {}),
+            dispatch === "known_one" ? { providerRequests: [canonicalProviderRequestObservation()] } :
+            dispatch === "malformed" ? { providerRequests: [{}] } :
+            dispatch === "partial" ? { providerRequests: [{
+              ordinal: 1,
+              requestKind: "agent",
+              requestStartedAtMs: 1,
+              hasTextContent: false,
+              hasToolArgumentContent: false,
+              hasReasoningContent: false,
+              firstContentBearingDeltaAtMs: null,
+            }] } : dispatch === "incoherent_tier" ? { providerRequests: [{
+              ...canonicalProviderRequestObservation(),
+              requestedServiceTier: "priority",
+            }] } : {}),
           sanitizedElectronLogTail: [
             "renderer terminated before readiness",
             "secret-token prompt-body /private/path/raw-electron.log",
@@ -787,8 +800,9 @@ describe("final paired M1 campaign contract", () => {
         owner: "electron_process",
         exitCode: 23,
         signal: "SIGTERM",
-        providerDispatchState: dispatch === "known_zero" ? "adapter_entered" : null,
-        providerDispatchCount: dispatch === "known_zero" ? 0 : null,
+        providerDispatchState: dispatch === "known_zero" ? "adapter_entered" :
+          dispatch === "known_one" ? "provider_dispatched" : null,
+        providerDispatchCount: dispatch === "known_zero" ? 0 : dispatch === "known_one" ? 1 : null,
         sanitizedElectronLogTail: ["renderer terminated before readiness"],
         sanitizedExecutorLogTail: ["executor observed child exit"],
       });
@@ -907,6 +921,41 @@ describe("final paired M1 campaign contract", () => {
       expect(existsSync(privateEvidencePath)).toBeFalse();
       expect(existsSync(join(evidenceRoot, "data"))).toBeFalse();
     }
+
+    const noEvidenceRunRoot = join(root, "launch-cleanup-generic-without-child-evidence");
+    let noEvidencePublicFailure = "";
+    try {
+      await runAgentBenchmarkCli(argsForRoot(noEvidenceRunRoot), {
+        createAdapters: () => ({
+          butler: createButlerAdapter(async () => {
+            throw new Error("private pre-harness failure: secret-token /private/path prompt-body tool_payload");
+          }, afterRoot),
+          hermes: unavailable("hermes"),
+          opencode: unavailable("opencode"),
+        }),
+        preflightExecutor: authExecutor(true),
+      });
+    } catch (error) {
+      noEvidencePublicFailure = error instanceof Error ? error.message : String(error);
+    }
+    expect(noEvidencePublicFailure).toStartWith("Paired Butler launch-smoke preflight failed: ");
+    expect(JSON.parse(noEvidencePublicFailure.slice(noEvidencePublicFailure.indexOf("{")))).toMatchObject({
+      schema: "butler.paired-launch-smoke-failure.v1",
+      version: "before",
+      stage: null,
+      cause: null,
+      owner: null,
+      exitCode: null,
+      signal: null,
+      providerDispatchState: null,
+      providerDispatchCount: null,
+      sanitizedElectronLogTail: [],
+      sanitizedExecutorLogTail: [],
+    });
+    expect(noEvidencePublicFailure).not.toContain("secret-token");
+    expect(noEvidencePublicFailure).not.toContain("prompt-body");
+    expect(noEvidencePublicFailure).not.toContain("tool_payload");
+    expect(noEvidencePublicFailure).not.toContain("/private/path");
 
     const failedRunRoot = join(root, "launch-cleanup-failed-run");
     const failedArgs = args.map((value) => value === runRoot ? failedRunRoot :
@@ -1189,6 +1238,38 @@ function observedAttempt(arm: import("../support/agent-benchmark/contracts.ts").
 
 function unavailableGate() { return { available: false, executable: null, version: null, authenticated: true,
   configVerified: false, gateCode: "measurement_unavailable" as const, diagnostic: "pre-provider infrastructure unavailable" }; }
+
+function canonicalProviderRequestObservation() { return {
+  ordinal: 1,
+  attemptDigest: "A".repeat(43),
+  requestKind: "agent",
+  requestedModel: "gpt-5.6-sol",
+  requestedReasoning: "medium",
+  requestedServiceTier: null,
+  requestedServiceTierMode: "auto_by_omission",
+  authorizationScheme: "bearer",
+  routeId: "openai-codex-responses",
+  requestStartedAtMs: 1,
+  serializedRequestBytes: 42,
+  serializedRequestDigest: "a".repeat(64),
+  serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1",
+  serializerContract: "butler.openai-codex-final-json.v1",
+  exactResultReadSchemaObserved: true,
+  firstContentBearingDeltaAtMs: null,
+  completedAtMs: 2,
+  terminatedAtMs: 2,
+  termination: "failed",
+  status: 500,
+  hasTextContent: false,
+  hasToolArgumentContent: false,
+  hasReasoningContent: false,
+  streamedTextChars: 0,
+  finalTextChars: 0,
+  providerReportedModel: null,
+  providerReportedServiceTier: null,
+  effectiveServiceTierAvailability: "unavailable",
+  effectiveServiceTierReason: "provider_response_omitted",
+}; }
 
 function completeFakeResult(input: AdapterRunInput): AdapterRunResult {
   const { arm, fixture } = input, before = arm.version === "before";

@@ -74,18 +74,15 @@ export function createButlerAdapter(
     async run(input: AdapterRunInput): Promise<AdapterRunResult> {
       const startedAtMs = Date.now();
       let evidence: Record<string, unknown> = { error: true, run: { dataRoot: join(input.arm.evidenceRoot, "data") } };
-      let hasHarnessEvidence = false;
       let runnerError: unknown = null;
       let adapterResult: AdapterRunResult | null = null;
       try {
         evidence = await runner(input);
-        hasHarnessEvidence = true;
       } catch (error) {
         runnerError = error;
         const recoveredEvidence = readButlerHarnessEvidence(input.arm.evidenceRoot);
         if (recoveredEvidence) {
           evidence = recoveredEvidence;
-          hasHarnessEvidence = true;
         } else if (error instanceof PreparedButlerResourceError) {
           adapterResult = gatedAdapterResult("measurement_unavailable", boundedPreparedResourceCode(error.code), adapterVersion);
         } else {
@@ -94,9 +91,7 @@ export function createButlerAdapter(
           } else throw error;
         }
       }
-      const failure = hasHarnessEvidence
-        ? projectButlerAdapterFailure(evidence)
-        : null;
+      const failure = projectButlerAdapterFailure(evidence);
       if (runnerError instanceof PreparedButlerResourceError && !failure) {
         adapterResult = gatedAdapterResult(
           "measurement_unavailable",

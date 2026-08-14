@@ -15,6 +15,18 @@ const FAILURE_SIGNALS = new Set([
   "SIGXCPU", "SIGXFSZ",
 ]);
 const PRIVATE_FAILURE_TEXT = /(?:file:\/\/|(?:^|[\s="'(])(?:\/|\.{1,2}\/)[^\s]+|[A-Za-z]:\\|prompt|body|transcript|(?:tool|raw)[_ -]?payload|authorization|credential|secret|api[_-]?key|Bearer\s|(?:sk|sess)-[A-Za-z0-9._-]{12,})/iu;
+const PROVIDER_REQUEST_KEYS = [
+  "attemptDigest", "authorizationScheme", "completedAtMs", "effectiveServiceTierAvailability",
+  "effectiveServiceTierReason", "exactResultReadSchemaObserved", "finalTextChars",
+  "firstContentBearingDeltaAtMs", "hasReasoningContent", "hasTextContent",
+  "hasToolArgumentContent", "ordinal", "providerReportedModel", "providerReportedServiceTier",
+  "requestKind", "requestedModel", "requestedReasoning", "requestedServiceTier",
+  "requestedServiceTierMode", "requestStartedAtMs", "routeId", "serializedRequestBytes",
+  "serializedRequestDigest", "serializedRequestDigestAlgorithm", "serializerContract", "status",
+  "streamedTextChars", "terminatedAtMs", "termination",
+].sort();
+const OBSERVER_DIGEST = /^[A-Za-z0-9_-]{43}$/u;
+const OBSERVER_BODY_DIGEST = /^[a-f0-9]{64}$/u;
 
 export function projectButlerAdapterFailure(
   evidence: Record<string, unknown>,
@@ -47,7 +59,9 @@ function providerDispatchEvidence(evidence: Record<string, unknown>): {
 } {
   if (!Array.isArray(evidence.providerRequests)) return { state: null, count: null };
   const requests = evidence.providerRequests.map(asRecord);
-  if (requests.some((row) => !isProviderRequestObservation(row))) return { state: null, count: null };
+  if (requests.some((row, index) => !isProviderRequestObservation(row) || row.ordinal !== index + 1)) {
+    return { state: null, count: null };
+  }
   const typedRequests = requests as Record<string, unknown>[];
   if (typedRequests.some((row) => row.hasTextContent === true || row.hasToolArgumentContent === true ||
       row.hasReasoningContent === true || typeof row.firstContentBearingDeltaAtMs === "number")) {
@@ -79,15 +93,46 @@ function isFailureSignal(value: unknown): value is NodeJS.Signals {
 }
 
 function isProviderRequestObservation(value: Record<string, unknown> | null): value is Record<string, unknown> {
-  return value !== null && Number.isSafeInteger(value.ordinal) && Number(value.ordinal) > 0 &&
+  if (!value || Object.keys(value).sort().join("|") !== PROVIDER_REQUEST_KEYS.join("|")) return false;
+  const digestValid = value.serializedRequestDigest === null && value.serializedRequestDigestAlgorithm === null ||
+    typeof value.serializedRequestDigest === "string" && OBSERVER_BODY_DIGEST.test(value.serializedRequestDigest) &&
+      value.serializedRequestDigestAlgorithm === "hmac-sha256-observer-private-v1";
+  const tierValid = value.effectiveServiceTierAvailability === "reported"
+    ? value.effectiveServiceTierReason === "provider_response_reported" && typeof value.providerReportedServiceTier === "string"
+    : value.effectiveServiceTierAvailability === "unavailable" &&
+      value.effectiveServiceTierReason === "provider_response_omitted" && value.providerReportedServiceTier === null;
+  const requestedTierValid = value.requestedServiceTierMode === null && value.requestedServiceTier === null ||
+    value.requestedServiceTierMode === "auto_by_omission" && value.requestedServiceTier === null ||
+    value.requestedServiceTierMode === "explicit" && typeof value.requestedServiceTier === "string";
+  return Number.isSafeInteger(value.ordinal) && Number(value.ordinal) > 0 &&
+    (value.attemptDigest === null || typeof value.attemptDigest === "string" && OBSERVER_DIGEST.test(value.attemptDigest)) &&
     (value.requestKind === "agent" || value.requestKind === "auxiliary" ||
       value.requestKind === "tool_provider" || value.requestKind === "title") &&
+    nullableString(value.requestedModel) && nullableString(value.requestedReasoning) &&
+    nullableString(value.requestedServiceTier) && nullableString(value.authorizationScheme) &&
+    nullableString(value.routeId) &&
+    requestedTierValid &&
     typeof value.requestStartedAtMs === "number" && Number.isFinite(value.requestStartedAtMs) &&
+    Number.isSafeInteger(value.serializedRequestBytes) && Number(value.serializedRequestBytes) >= 0 &&
+    digestValid &&
+    (value.serializerContract === null || value.serializerContract === "butler.openai-codex-final-json.v1" ||
+      value.serializerContract === "butler.openai-responses-final-json.v1") &&
+    typeof value.exactResultReadSchemaObserved === "boolean" &&
     typeof value.hasTextContent === "boolean" && typeof value.hasToolArgumentContent === "boolean" &&
     typeof value.hasReasoningContent === "boolean" &&
-    (value.firstContentBearingDeltaAtMs === null ||
-      typeof value.firstContentBearingDeltaAtMs === "number" && Number.isFinite(value.firstContentBearingDeltaAtMs));
+    nullableFiniteNumber(value.firstContentBearingDeltaAtMs) &&
+    nullableFiniteNumber(value.completedAtMs) && nullableFiniteNumber(value.terminatedAtMs) &&
+    (value.termination === null || value.termination === "cancelled" || value.termination === "completed" ||
+      value.termination === "failed") &&
+    (value.status === null || Number.isSafeInteger(value.status)) &&
+    Number.isSafeInteger(value.streamedTextChars) && Number(value.streamedTextChars) >= 0 &&
+    Number.isSafeInteger(value.finalTextChars) && Number(value.finalTextChars) >= 0 &&
+    nullableString(value.providerReportedModel) && tierValid;
 }
+
+const nullableString = (value: unknown): boolean => value === null || typeof value === "string";
+const nullableFiniteNumber = (value: unknown): boolean => value === null ||
+  typeof value === "number" && Number.isFinite(value);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
