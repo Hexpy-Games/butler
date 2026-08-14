@@ -6,6 +6,7 @@ import { MessageRow } from "@/butler-ds";
 interface TurnActivityMessageProps {
   progressRows: ProgressRow[];
   turnState?: string;
+  startedAt?: string;
   turnId?: string;
   virtualRow: VirtualItem;
   topOffset: number;
@@ -15,6 +16,7 @@ interface TurnActivityMessageProps {
 export function TurnActivityMessage({
   progressRows,
   turnState,
+  startedAt,
   turnId,
   virtualRow,
   topOffset,
@@ -32,7 +34,12 @@ export function TurnActivityMessage({
         transform: `translateY(${virtualRow.start + topOffset}px)`,
       }}
     >
-      <TurnActivityPanel rows={progressRows} state={turnState} turnId={turnId} />
+      <TurnActivityPanel
+        rows={progressRows}
+        state={turnState}
+        startedAt={startedAt}
+        turnId={turnId}
+      />
     </MessageRow>
   );
 }

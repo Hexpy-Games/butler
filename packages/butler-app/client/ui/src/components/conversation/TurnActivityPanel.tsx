@@ -12,10 +12,12 @@ export function TurnActivityPanel({
   rows,
   state,
   turnId,
+  startedAt,
 }: {
   rows: ProgressRow[];
   state?: string;
   turnId?: string;
+  startedAt?: string;
 }) {
   const {
     decisions,
@@ -65,7 +67,16 @@ export function TurnActivityPanel({
         modelRoundWait={modelRoundWait}
         operation={operation}
         publicActivity={publicActivity}
+        startedAt={startedAt ?? earliestProgressTimestamp(rows)}
       />
     </Stack>
   );
+}
+
+function earliestProgressTimestamp(rows: ProgressRow[]): string | undefined {
+  return rows
+    .map((row) => row.created_at)
+    .filter((value): value is string =>
+      typeof value === "string" && Number.isFinite(Date.parse(value)))
+    .sort((left, right) => Date.parse(left) - Date.parse(right))[0];
 }
