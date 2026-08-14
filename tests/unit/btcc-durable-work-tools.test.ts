@@ -13,11 +13,12 @@ import {
   renderDurableWorkContext,
 } from "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tools.ts";
 
-test("R3 Work exposes only three compact optional control tools", () => {
+test("R3 Work exposes three optional controls plus atomic disposition", () => {
   expect(DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name)).toEqual([
     "replace_work_plan",
     "record_work_checkpoint",
     "record_work_review",
+    "record_work_disposition",
   ]);
   expect(DURABLE_WORK_TOOL_DEFINITIONS[0]?.description)
     .toContain("multi-source or multi-step research");
@@ -110,9 +111,6 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
       actions: [{ action_key: "research", status: "pending" }],
       unresolved_action_keys: ["research"],
       completion_blockers: [
-        "current_plan_review_required",
-        "current_result_review_required",
-        "completion_validation_required",
         "unresolved_actions",
       ],
       latest_plan_review: null,
@@ -260,9 +258,6 @@ test("R3 Work tool results do not repeat anchored Plan detail", async () => {
       actions: [{ action_key: "research", status: "active" }],
       unresolved_action_keys: ["research"],
       completion_blockers: [
-        "current_plan_review_required",
-        "current_result_review_required",
-        "completion_validation_required",
         "unresolved_actions",
       ],
       latest_plan_review: null,
@@ -532,6 +527,8 @@ function fakeService(
     replacePlan: async () => workView(),
     recordCheckpoint: async () => workView(),
     recordReview: async () => workView(),
+    recordDisposition: async () => workView(),
+    recordCloseoutMissing: async () => {},
     attachToolResult: async () => workView(),
     boundWorkForTurn: async () => null,
     ...overrides,

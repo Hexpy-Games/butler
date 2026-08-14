@@ -45,6 +45,46 @@ function sha256(path: string): string {
 
 test("legacy BTCC state migrates exactly into a create-only Agent database", async () => {
   const { paths, butlerData } = fixture();
+  const legacy = new Database(paths.legacyAppDbPath);
+  legacy.exec(`
+    INSERT INTO btcc_inbound_inbox
+      (inbox_id, session_id, trigger_key, turn_id, admission_input_hash,
+        command_json, status)
+    VALUES ('inbox-work-1', 'session-1', 'trigger-work-1', 'turn-work-1',
+      'admission-work-1', '{}', 'claimed');
+    INSERT INTO btcc_turns
+      (turn_id, session_id, inbox_id, trigger_key, original_message_id,
+        original_message, admission_snapshot_ref, model_selection_json,
+        context_json, semantic_state, revision, execution_fence)
+    VALUES ('turn-work-1', 'session-1', 'inbox-work-1', 'trigger-work-1',
+      'message-work-1', 'complete the work', 'snapshot-work-1', '{}', '{}',
+      'admitted', 1, 1);
+    INSERT INTO btcc_guided_works
+      (work_id, session_id, scope_kind, scope_ref, origin_turn_id,
+        origin_message_id, objective, status, current_plan_revision_id,
+        created_at, updated_at)
+    VALUES ('work-1', 'session-1', 'session', 'session-1', 'turn-work-1',
+      'message-work-1', 'complete the work', 'completed', NULL,
+      '2026-08-13T00:00:00.000Z', '2026-08-13T00:01:00.000Z');
+    INSERT INTO btcc_guided_work_disposition_revisions
+      (disposition_revision_id, work_id, revision, result_sequence,
+        material_fingerprint, disposition, summary, action_updates_json,
+        remaining_actions_json, next_condition, evidence_refs_json,
+        evidence_snapshot_json, followups_json, origin_turn_id, created_at)
+    VALUES ('disposition-1', 'work-1', 1, 0, 'material-1', 'completed',
+      'completed', '[]', '[]', NULL, '[]', '[]', '[]', 'turn-work-1',
+      '2026-08-13T00:01:00.000Z');
+    INSERT INTO btcc_guided_work_disposition_commands
+      (mutation_call_id, request_sha256, work_id, disposition_revision_id,
+        created_at)
+    VALUES ('mutation-1', 'request-1', 'work-1', 'disposition-1',
+      '2026-08-13T00:01:00.000Z');
+    INSERT INTO btcc_guided_work_closeout_diagnostics
+      (diagnostic_id, diagnostic_key, code, turn_id, work_id, created_at)
+    VALUES ('diagnostic-1', 'turn-work-1:work-1', 'closeout_missing',
+      'turn-work-1', 'work-1', '2026-08-13T00:01:00.000Z');
+  `);
+  legacy.close();
   const before = sha256(paths.legacyAppDbPath);
   let fenced = 0;
   const result = await prepareAgentBtccStorage({
@@ -67,6 +107,17 @@ test("legacy BTCC state migrates exactly into a create-only Agent database", asy
   try {
     expect(target.query("SELECT message_id FROM btcc_messages").get())
       .toEqual({ message_id: "message-1" });
+    expect(target.query(`
+      SELECT disposition_revision_id, disposition
+      FROM btcc_guided_work_disposition_revisions
+    `).get()).toEqual({
+      disposition_revision_id: "disposition-1",
+      disposition: "completed",
+    });
+    expect(target.query("SELECT mutation_call_id FROM btcc_guided_work_disposition_commands").get())
+      .toEqual({ mutation_call_id: "mutation-1" });
+    expect(target.query("SELECT diagnostic_id FROM btcc_guided_work_closeout_diagnostics").get())
+      .toEqual({ diagnostic_id: "diagnostic-1" });
     expect(target.query("PRAGMA quick_check").get()).toEqual({ quick_check: "ok" });
   } finally {
     target.close();

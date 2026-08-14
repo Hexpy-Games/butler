@@ -1,5 +1,7 @@
 import type {
   DurableWorkReview,
+  RecordCloseoutMissingInput,
+  RecordWorkDispositionInput,
   DurableWorkService,
   DurableWorkStore,
   DurableWorkView,
@@ -12,7 +14,6 @@ import {
   applyWorkActionUpdates,
   assertWorkStageTransition,
   progressForReplacementPlan,
-  unresolvedWorkActionKeys,
 } from "./work-progress-policy.ts";
 import { digest, stableJson } from "../identity/index.ts";
 
@@ -122,12 +123,6 @@ export function createDurableWorkService(
         input.actionUpdates ?? [],
       );
       const acceptedResultReview = currentAcceptedResultReview(context.work);
-      const completeWork = input.subject === "completion" &&
-        input.verdict === "accept" &&
-        unresolvedWorkActionKeys(actionProgress).length === 0 &&
-        hasCurrentAcceptedPlanReview(context.work) &&
-        acceptedResultReview !== undefined &&
-        (context.work.effectBlockers?.length ?? 0) === 0;
       return store.recordReview({
         ...input,
         expectedPlanRevisionId: plan.planRevisionId,
@@ -155,8 +150,27 @@ export function createDurableWorkService(
         entryStage,
         actionProgress,
         progressChanged: (input.actionUpdates?.length ?? 0) > 0,
-        completeWork,
       });
+    },
+    recordDisposition(input) {
+      validateDisposition(input);
+      const { backfillToolCallIds: _backfillToolCallIds, ...identityInput } = input;
+      return store.recordDisposition({
+        ...input,
+        summary: input.summary.trim(),
+        actionUpdates: input.actionUpdates ?? [],
+        remainingActions: input.remainingActions ?? [],
+        evidenceRefs: input.evidenceRefs ?? [],
+        followups: input.followups ?? [],
+        requestSha256: workRequestFingerprint(
+          "record_work_disposition",
+          identityInput,
+        ),
+      });
+    },
+    recordCloseoutMissing(input) {
+      validateCloseoutMissing(input);
+      return store.recordCloseoutMissing(input);
     },
     attachToolResult(input) {
       validateMutation(input);
@@ -230,6 +244,32 @@ function validateReview(input: RecordWorkReviewInput): void {
   validateActionUpdates(input.actionUpdates ?? []);
 }
 
+function validateDisposition(input: RecordWorkDispositionInput): void {
+  validateMutation(input);
+  requiredText(input.workId, "workId");
+  requiredText(input.summary, "summary");
+  input.actionUpdates?.forEach((update, index) => {
+    requiredText(update.actionKey, `actionUpdates[${index}].actionKey`);
+    if (update.note !== undefined) {
+      requiredText(update.note, `actionUpdates[${index}].note`);
+    }
+  });
+  input.remainingActions?.forEach((action, index) =>
+    requiredText(action, `remainingActions[${index}]`));
+  if (input.nextCondition !== undefined) {
+    requiredText(input.nextCondition, "nextCondition");
+  }
+  input.evidenceRefs?.forEach((reference, index) =>
+    requiredText(reference, `evidenceRefs[${index}]`));
+  input.followups?.forEach((followup, index) =>
+    requiredText(followup, `followups[${index}]`));
+}
+
+function validateCloseoutMissing(input: RecordCloseoutMissingInput): void {
+  validateScope(input);
+  requiredText(input.workId, "workId");
+}
+
 function validateActionUpdates(updates: RecordWorkCheckpointInput["actionUpdates"]): void {
   const actionKeys = new Set<string>();
   for (const [index, update] of (updates ?? []).entries()) {
@@ -272,11 +312,6 @@ async function requireWorkContext(
 
 function workRequestFingerprint(operation: string, input: unknown): string {
   return digest(stableJson({ operation, input }));
-}
-
-function hasCurrentAcceptedPlanReview(work: DurableWorkView): boolean {
-  return work.latestPlanReview?.verdict === "accept" &&
-    work.latestPlanReview.boundPlanRevisionId === work.currentPlan?.planRevisionId;
 }
 
 function currentAcceptedResultReview(

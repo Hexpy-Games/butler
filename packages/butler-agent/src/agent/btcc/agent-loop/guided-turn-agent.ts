@@ -51,6 +51,7 @@ import { guidedContinuationBudget } from "./guided-continuation-budget.ts";
 import { guidedTurnResult } from "./guided-turn-result.ts";
 import { createGuidedRouteEventHandler } from
   "./guided-route-event-handler.ts";
+import { createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
 
 export function createProductionGuidedTurnAgent(
   input: ProductionGuidedTurnAgentInput,
@@ -250,6 +251,12 @@ export function createProductionGuidedTurnAgent(
             : "",
         },
       );
+      const closeout = createGuidedTurnCloseout({
+        durableWork: input.durableWork,
+        workScope,
+        turnId: turn.turnId,
+        trackingMode: policy.trackingMode,
+      });
       const loopOptions: BtccAgentLoopInput = {
         prompt: requestAttribution.prompt,
         turnId: turn.turnId,
@@ -291,6 +298,7 @@ export function createProductionGuidedTurnAgent(
             args: call.arguments,
           })),
         }),
+        reviewFinalCandidate: closeout.reviewFinalCandidate,
         executeTool: async (call) => await toolCalls.executeTool({
           name: call.name,
           args: call.arguments,
@@ -317,6 +325,7 @@ export function createProductionGuidedTurnAgent(
           };
         },
       });
+      await closeout.recordMissingDiagnostic();
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
       return guidedTurnResult({
         content: text,

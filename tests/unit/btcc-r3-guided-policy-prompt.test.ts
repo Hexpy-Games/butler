@@ -152,7 +152,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "mark the first action you will execute active in that same call's action_updates",
   );
   expect(instructions).toContain(
-    "same record_work_review tool for Plan Review, result Review, and separate completion Validation",
+    "record_work_review for optional Plan Review, result Review, or completion Validation",
   );
   expect(instructions).toContain(
     "smallest evidence set that supports a useful and truthful result",
@@ -170,16 +170,16 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "include any known action_updates and the legal stage to enter after the Review as next_stage",
   );
   expect(instructions).toContain(
-    "every current Plan action explicitly done, skipped, or blocked",
+    "record_work_disposition using completed only when every current Plan action is done or skipped",
   );
   expect(instructions).toContain(
-    "separately validate the whole Work against the original request",
+    "these records are optional quality evidence",
   );
   expect(instructions).toContain(
-    "Use next_stage reporting only when completion Validation accepts",
+    "reporting never depends on a Review",
   );
   expect(instructions).toContain(
-    "describes the focus or structure of the upcoming report",
+    "may describe the upcoming report",
   );
   expect(instructions).toContain(
     "not the report itself, a draft of the final answer, or copied final-answer wording",
@@ -197,7 +197,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "finish any Project Ledger publication or closeout effect",
   );
   expect(instructions).toContain(
-    "record a result Review of the actual result with every current Plan action",
+    "If useful, record a result Review or completion Validation",
   );
   expect(instructions).toContain(
     "make a path contain the complete desired file",
@@ -208,13 +208,13 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain(
     "correct and re-inspect only when a visible defect materially harms",
   );
-  expect(instructions.indexOf("record a result Review of the actual result with every"))
-    .toBeLessThan(instructions.indexOf("separately validate the whole Work"));
+  expect(instructions.indexOf("If useful, record a result Review or completion Validation"))
+    .toBeLessThan(instructions.indexOf("Settle the bound Work with record_work_disposition"));
   expect(instructions).toContain(
     "despite disclosed non-critical limits",
   );
   expect(instructions).toContain(
-    "otherwise use partial or revise and return to the needed stage",
+    "Use open or blocked with a truthful continuation condition",
   );
   expect(instructions).toContain(
     "do not keep Work open for optional improvements",
@@ -243,7 +243,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "If Project Ledger bookkeeping fails, still deliver the truthful result",
   );
   expect(projectInstructions.indexOf("finish any Project Ledger publication or closeout effect"))
-    .toBeLessThan(projectInstructions.indexOf("record a result Review of the actual result with every"));
+    .toBeLessThan(projectInstructions.indexOf("If useful, record a result Review or completion Validation"));
   expect(projectInstructions).not.toContain(
     "Do not attempt to mutate the Project Ledger",
   );
