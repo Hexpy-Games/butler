@@ -724,6 +724,80 @@ describe("final paired M1 campaign contract", () => {
     expect(existsSync(join(ambiguousRunRoot, "preflight", "launch-smoke", "before", "receipt.json"))).toBeFalse();
     expect(existsSync(join(ambiguousRunRoot, "manifest.json"))).toBeFalse();
 
+    for (const dispatch of ["known_zero", "unknown", "malformed"] as const) {
+      const failureRunRoot = join(root, `launch-cleanup-failure-${dispatch}`);
+      const failureArgs = argsForRoot(failureRunRoot);
+      const privateEvidencePath = join(
+        failureRunRoot,
+        "preflight",
+        "launch-smoke",
+        "before",
+        "evidence",
+        "evidence.json",
+      );
+      const failureButler = createButlerAdapter(async (input) => {
+        const evidence = {
+          kind: "launch_smoke",
+          ok: false,
+          error: "raw error must not cross the adapter boundary: secret-token /private/path prompt-body tool_payload",
+          failure: {
+            stage: "renderer_ready",
+            cause: "electron_exited",
+            owner: "electron_process",
+            exitCode: 23,
+            signal: "SIGTERM",
+          },
+          run: { dataRoot: join(input.arm.evidenceRoot, "data"), runRoot: input.arm.evidenceRoot },
+          observations: [],
+          ...(dispatch === "known_zero" ? { providerRequests: [] } :
+            dispatch === "malformed" ? { providerRequests: [{}] } : {}),
+          sanitizedElectronLogTail: [
+            "renderer terminated before readiness",
+            "secret-token prompt-body /private/path/raw-electron.log",
+          ],
+          sanitizedExecutorLogTail: [
+            "executor observed child exit",
+            "tool_payload=/private/path/raw-payload.json",
+          ],
+        };
+        mkdirSync(join(privateEvidencePath, ".."), { recursive: true });
+        writeFileSync(privateEvidencePath, `${JSON.stringify(evidence)}\n`, { mode: 0o600 });
+        throw new Error("child process failed after writing private evidence");
+      }, afterRoot);
+      let publicFailure = "";
+      try {
+        await runAgentBenchmarkCli(failureArgs, {
+          createAdapters: () => ({ butler: failureButler,
+            hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
+          preflightExecutor: authExecutor(true),
+        });
+      } catch (error) {
+        publicFailure = error instanceof Error ? error.message : String(error);
+      }
+      expect(publicFailure).toStartWith("Paired Butler launch-smoke preflight failed: ");
+      const failure = JSON.parse(publicFailure.slice(publicFailure.indexOf("{") )) as Record<string, unknown>;
+      expect(failure).toMatchObject({
+        schema: "butler.paired-launch-smoke-failure.v1",
+        version: "before",
+        stage: "renderer_ready",
+        cause: "electron_exited",
+        owner: "electron_process",
+        exitCode: 23,
+        signal: "SIGTERM",
+        providerDispatchState: dispatch === "known_zero" ? "adapter_entered" : null,
+        providerDispatchCount: dispatch === "known_zero" ? 0 : null,
+        sanitizedElectronLogTail: ["renderer terminated before readiness"],
+        sanitizedExecutorLogTail: ["executor observed child exit"],
+      });
+      expect(failure.planIdentity).toMatch(/^[a-f0-9]{64}$/);
+      expect(publicFailure).not.toContain("secret-token");
+      expect(publicFailure).not.toContain("prompt-body");
+      expect(publicFailure).not.toContain("tool_payload");
+      expect(publicFailure).not.toContain("/private/path");
+      expect(publicFailure).not.toContain("raw-payload");
+      expect(existsSync(privateEvidencePath)).toBeFalse();
+    }
+
     const failedRunRoot = join(root, "launch-cleanup-failed-run");
     const failedArgs = args.map((value) => value === runRoot ? failedRunRoot :
       value === join(runRoot, "report") ? join(failedRunRoot, "report") : value);

@@ -1,7 +1,7 @@
 import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createProductionAgentAdapters } from "./adapters.ts";
-import type { BenchmarkArmPlan, BenchmarkPlan } from "./contracts.ts";
+import type { AdapterRunFailure, BenchmarkArmPlan, BenchmarkPlan } from "./contracts.ts";
 import { getBenchmarkFixture } from "./fixtures.ts";
 import { benchmarkPlanIdentity } from "./planning.ts";
 import {
@@ -16,6 +16,22 @@ import { FINAL_ACTIVATION } from "./paired-contract.ts";
 
 const MAX_PREFLIGHT_RECEIPT_BYTES = 16 * 1024;
 type PreflightVersion = "before" | "after";
+
+interface PairedLaunchSmokeFailure extends Omit<AdapterRunFailure, "schema"> {
+  schema: "butler.paired-launch-smoke-failure.v1";
+  planIdentity: string;
+  version: PreflightVersion;
+}
+
+class PairedLaunchSmokePreflightError extends Error {
+  readonly failure: PairedLaunchSmokeFailure;
+
+  constructor(failure: PairedLaunchSmokeFailure) {
+    super(`Paired Butler launch-smoke preflight failed: ${JSON.stringify(failure)}`);
+    this.name = "PairedLaunchSmokePreflightError";
+    this.failure = failure;
+  }
+}
 
 interface PreparedPreflightArm {
   version: PreflightVersion;
@@ -68,6 +84,15 @@ export async function runPairedLaunchSmokePreflight(input: {
     });
     if (result.exitCode !== 0 || result.gateCode !== "none" ||
         result.providerDispatchState !== "adapter_entered" || result.m1V2Evidence !== undefined) {
+      if (result.failure) {
+        const failure: PairedLaunchSmokeFailure = {
+          ...result.failure,
+          schema: "butler.paired-launch-smoke-failure.v1",
+          planIdentity: benchmarkPlanIdentity(input.plan),
+          version: prepared.version,
+        };
+        throw new PairedLaunchSmokePreflightError(failure);
+      }
       throw new Error(`Paired Butler ${prepared.version} launch-smoke preflight failed.`);
     }
     assertSafeDerivedPreflightPaths(input.plan.runRoot, prepared);
