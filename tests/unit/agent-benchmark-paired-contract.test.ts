@@ -44,6 +44,9 @@ import { verifyM1V2EvidenceExport } from "../support/agent-benchmark/m1-v2-evide
 import { startProviderObservationProxy } from "../e2e/btcc-r3-electron/provider-observation-proxy.ts";
 import { providerRequestTurnIdentities } from "../e2e/btcc-r3-electron/provider-request-turn-identity.ts";
 import { withButlerM1V2Environment } from "../support/agent-benchmark/butler-m1-observation.ts";
+import { failureEvidence, writeEvidence } from "../e2e/btcc-r3-electron/evidence.ts";
+import type { PreparedRun, StepObservation } from "../e2e/btcc-r3-electron/contracts.ts";
+import { PreparedButlerResourceError } from "../support/agent-benchmark/prepared-butler-resource.ts";
 
 const root = mkdtempSync(join(process.cwd(), ".agent-benchmark-paired-contract-"));
 const authority = prepareTestHarnessAuthority(root);
@@ -796,6 +799,113 @@ describe("final paired M1 campaign contract", () => {
       expect(publicFailure).not.toContain("/private/path");
       expect(publicFailure).not.toContain("raw-payload");
       expect(existsSync(privateEvidencePath)).toBeFalse();
+    }
+
+    for (const failureMode of ["prepared_override_without_tuple", "parse_throw_with_tuple"] as const) {
+      const failureRunRoot = join(root, `launch-cleanup-real-shape-${failureMode}`);
+      const failureArgs = argsForRoot(failureRunRoot);
+      const evidenceRoot = join(
+        failureRunRoot,
+        "preflight",
+        "launch-smoke",
+        "before",
+        "evidence",
+      );
+      const privateEvidencePath = join(evidenceRoot, "evidence.json");
+      const failureButler = createButlerAdapter(async (input) => {
+        const dataRoot = join(input.arm.evidenceRoot, "data");
+        const childError = new Error("private child failure: secret-token /private/path prompt-body tool_payload");
+        if (failureMode === "parse_throw_with_tuple") {
+          Object.assign(childError, { failure: {
+            stage: "renderer_ready",
+            cause: "electron_exited",
+            owner: "electron_process",
+            exitCode: 23,
+            signal: "SIGTERM",
+          } });
+          mkdirSync(dataRoot, { recursive: true });
+          writeFileSync(join(dataRoot, "transcripts"), "not-a-directory\n");
+        }
+        const observations = failureMode === "parse_throw_with_tuple"
+          ? [{ turnId: "turn-1" }] as unknown as StepObservation[]
+          : [];
+        const run = {
+          accessMode: "full_access",
+          agentOwnership: "electron",
+          bundledAgentResourceDir: null,
+          dataRoot,
+          debugPort: 0,
+          electronProfile: join(input.arm.evidenceRoot, "profile"),
+          evidencePath: privateEvidencePath,
+          interruptedExecutorReplacementUsed: false,
+          model: "openai/gpt-5.6-sol",
+          projectDisplayName: null,
+          projectId: null,
+          projectWorkspaceRoot: join(input.arm.evidenceRoot, "workspace"),
+          reasoningEffort: "medium",
+          repoRoot: input.arm.sourceRoot,
+          runId: "actual-harness-failure",
+          runRoot: input.arm.evidenceRoot,
+          serverPort: 0,
+          sessionId: "actual-harness-failure",
+          sessionKind: "chat",
+          sessionTitle: "actual harness failure",
+          sourceData: dataRoot,
+          workspaceRoot: join(input.arm.evidenceRoot, "workspace"),
+        } satisfies PreparedRun;
+        writeEvidence(privateEvidencePath, failureEvidence({
+          electronOutput: [
+            "renderer terminated before readiness\n",
+            "secret-token prompt-body /private/path/raw-electron.log\n",
+          ],
+          error: childError,
+          executorOutput: [
+            "executor observed child exit\n",
+            "tool_payload=/private/path/raw-payload.json\n",
+          ],
+          observations,
+          options: { smoke: true, keepLogs: true },
+          providerRequests: [],
+          run,
+        }));
+        if (failureMode === "prepared_override_without_tuple") {
+          throw new PreparedButlerResourceError("prepared_resource_post_run_verification_failed");
+        }
+        throw new Error("child process failed after writing private evidence");
+      }, afterRoot);
+      let publicFailure = "";
+      try {
+        await runAgentBenchmarkCli(failureArgs, {
+          createAdapters: () => ({ butler: failureButler,
+            hermes: unavailable("hermes"), opencode: unavailable("opencode") }),
+          preflightExecutor: authExecutor(true),
+        });
+      } catch (error) {
+        publicFailure = error instanceof Error ? error.message : String(error);
+      }
+      expect(publicFailure).toStartWith("Paired Butler launch-smoke preflight failed: ");
+      const failure = JSON.parse(publicFailure.slice(publicFailure.indexOf("{"))) as Record<string, unknown>;
+      expect(failure).toMatchObject({
+        schema: "butler.paired-launch-smoke-failure.v1",
+        version: "before",
+        stage: failureMode === "parse_throw_with_tuple" ? "renderer_ready" : null,
+        cause: failureMode === "parse_throw_with_tuple" ? "electron_exited" : null,
+        owner: failureMode === "parse_throw_with_tuple" ? "electron_process" : null,
+        exitCode: failureMode === "parse_throw_with_tuple" ? 23 : null,
+        signal: failureMode === "parse_throw_with_tuple" ? "SIGTERM" : null,
+        providerDispatchState: "adapter_entered",
+        providerDispatchCount: 0,
+        sanitizedElectronLogTail: ["renderer terminated before readiness"],
+        sanitizedExecutorLogTail: ["executor observed child exit"],
+      });
+      expect(failure.planIdentity).toMatch(/^[a-f0-9]{64}$/);
+      expect(publicFailure).not.toContain("secret-token");
+      expect(publicFailure).not.toContain("prompt-body");
+      expect(publicFailure).not.toContain("tool_payload");
+      expect(publicFailure).not.toContain("/private/path");
+      expect(publicFailure).not.toContain("raw-payload");
+      expect(existsSync(privateEvidencePath)).toBeFalse();
+      expect(existsSync(join(evidenceRoot, "data"))).toBeFalse();
     }
 
     const failedRunRoot = join(root, "launch-cleanup-failed-run");

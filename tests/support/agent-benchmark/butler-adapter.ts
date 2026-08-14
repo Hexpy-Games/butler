@@ -74,66 +74,91 @@ export function createButlerAdapter(
     async run(input: AdapterRunInput): Promise<AdapterRunResult> {
       const startedAtMs = Date.now();
       let evidence: Record<string, unknown> = { error: true, run: { dataRoot: join(input.arm.evidenceRoot, "data") } };
+      let hasHarnessEvidence = false;
+      let runnerError: unknown = null;
       let adapterResult: AdapterRunResult | null = null;
       try {
         evidence = await runner(input);
+        hasHarnessEvidence = true;
       } catch (error) {
-        if (error instanceof PreparedButlerResourceError) {
+        runnerError = error;
+        const recoveredEvidence = readButlerHarnessEvidence(input.arm.evidenceRoot);
+        if (recoveredEvidence) {
+          evidence = recoveredEvidence;
+          hasHarnessEvidence = true;
+        } else if (error instanceof PreparedButlerResourceError) {
           adapterResult = gatedAdapterResult("measurement_unavailable", boundedPreparedResourceCode(error.code), adapterVersion);
         } else {
-          const recoveredEvidence = readButlerHarnessEvidence(input.arm.evidenceRoot);
-          if (!recoveredEvidence && input.fixture.m1V2) {
+          if (input.fixture.m1V2) {
             adapterResult = gatedAdapterResult("measurement_unavailable", "Butler M1 product-path evidence was unavailable after harness failure.", adapterVersion);
-          } else if (!recoveredEvidence) throw error;
-          else evidence = recoveredEvidence;
+          } else throw error;
         }
       }
+      const failure = hasHarnessEvidence
+        ? projectButlerAdapterFailure(evidence)
+        : null;
+      if (runnerError instanceof PreparedButlerResourceError && !failure) {
+        adapterResult = gatedAdapterResult(
+          "measurement_unavailable",
+          boundedPreparedResourceCode(runnerError.code),
+          adapterVersion,
+        );
+      }
       try {
-        const infrastructureGate = input.fixture.m1V2 ? butlerM1V2InfrastructureGate(evidence) : null;
-        if (infrastructureGate) {
-          adapterResult = gatedAdapterResult(infrastructureGate.code, infrastructureGate.diagnostic, adapterVersion);
-        }
-        if (input.fixture.id === "butler_landing_page") {
-          const run = asRecord(evidence.run);
-          const workspaceRoot = typeof run?.workspaceRoot === "string" ? run.workspaceRoot : null;
-          if (!workspaceRoot || !input.sourceEvidenceRoot) {
-            adapterResult = gatedAdapterResult("configuration_unverifiable", "Butler landing workspace did not expose the pinned evidence root.", adapterVersion);
-          } else if (rootsOverlap(workspaceRoot, input.arm.outputRoot)) {
-            adapterResult = gatedAdapterResult("configuration_unverifiable", "Butler evidence workspace overlaps the generated output workspace.", adapterVersion);
-          } else {
-            const evidenceCheck = verifyEvidenceWorkspace(
-              { root: input.sourceEvidenceRoot, files: readRepositoryEvidenceFiles(input.sourceEvidenceRoot).map((file) => file.path.replace(/^\.benchmark-input\/repository\//u, "")), sha256: "" },
-              workspaceRoot,
-            );
-            if (!evidenceCheck.ok) {
-              adapterResult = gatedAdapterResult("configuration_unverifiable", evidenceCheck.diagnostic ?? "Butler workspace repository evidence verification failed.", adapterVersion);
+        try {
+          const infrastructureGate = input.fixture.m1V2 ? butlerM1V2InfrastructureGate(evidence) : null;
+          if (infrastructureGate) {
+            adapterResult = gatedAdapterResult(infrastructureGate.code, infrastructureGate.diagnostic, adapterVersion);
+          }
+          if (input.fixture.id === "butler_landing_page") {
+            const run = asRecord(evidence.run);
+            const workspaceRoot = typeof run?.workspaceRoot === "string" ? run.workspaceRoot : null;
+            if (!workspaceRoot || !input.sourceEvidenceRoot) {
+              adapterResult = gatedAdapterResult("configuration_unverifiable", "Butler landing workspace did not expose the pinned evidence root.", adapterVersion);
+            } else if (rootsOverlap(workspaceRoot, input.arm.outputRoot)) {
+              adapterResult = gatedAdapterResult("configuration_unverifiable", "Butler evidence workspace overlaps the generated output workspace.", adapterVersion);
+            } else {
+              const evidenceCheck = verifyEvidenceWorkspace(
+                { root: input.sourceEvidenceRoot, files: readRepositoryEvidenceFiles(input.sourceEvidenceRoot).map((file) => file.path.replace(/^\.benchmark-input\/repository\//u, "")), sha256: "" },
+                workspaceRoot,
+              );
+              if (!evidenceCheck.ok) {
+                adapterResult = gatedAdapterResult("configuration_unverifiable", evidenceCheck.diagnostic ?? "Butler workspace repository evidence verification failed.", adapterVersion);
+              }
             }
           }
-        }
-        if (!adapterResult) {
-          copyGeneratedArtifacts(evidence, input);
-          adapterResult = { ...parseButlerEvidence(evidence, startedAtMs, Date.now(), input), adapterVersion };
-          adapterResult.providerDispatchState = providerDispatchState(evidence);
-          if (input.fixture.m1V2 && evidence.kind !== "launch_smoke") {
-            try {
-              adapterResult.m1V2Evidence = await collectButlerM1V2Evidence({ benchmark: input, evidence, attemptStartedAtMs: startedAtMs });
-              adapterResult.evidenceRefs = [
-                ...adapterResult.evidenceRefs,
-                adapterResult.m1V2Evidence.exportHandle!,
-                ...(adapterResult.m1V2Evidence.activationReceiptHandle
-                  ? [adapterResult.m1V2Evidence.activationReceiptHandle]
-                  : []),
-              ];
-            } catch (_error) {
-              adapterResult = { ...adapterResult, gateCode: "measurement_unavailable",
-                stderr: boundedDiagnostic(adapterResult.stderr, "sc01_durable_evidence_export_failed"), m1V2Evidence: undefined };
+          if (!adapterResult) {
+            copyGeneratedArtifacts(evidence, input);
+            adapterResult = { ...parseButlerEvidence(evidence, startedAtMs, Date.now(), input), adapterVersion };
+            adapterResult.providerDispatchState = providerDispatchState(evidence);
+            if (input.fixture.m1V2 && evidence.kind !== "launch_smoke") {
+              try {
+                adapterResult.m1V2Evidence = await collectButlerM1V2Evidence({ benchmark: input, evidence, attemptStartedAtMs: startedAtMs });
+                adapterResult.evidenceRefs = [
+                  ...adapterResult.evidenceRefs,
+                  adapterResult.m1V2Evidence.exportHandle!,
+                  ...(adapterResult.m1V2Evidence.activationReceiptHandle
+                    ? [adapterResult.m1V2Evidence.activationReceiptHandle]
+                    : []),
+                ];
+              } catch (_error) {
+                adapterResult = { ...adapterResult, gateCode: "measurement_unavailable",
+                  stderr: boundedDiagnostic(adapterResult.stderr, "sc01_durable_evidence_export_failed"), m1V2Evidence: undefined };
+              }
             }
           }
+        } catch (error) {
+          if (!failure) throw error;
+          adapterResult = gatedAdapterResult(
+            "measurement_unavailable",
+            "Butler Electron harness failure evidence could not be parsed.",
+            adapterVersion,
+          );
         }
-        const failure = projectButlerAdapterFailure(evidence);
         if (adapterResult && failure) {
+          const { providerDispatchState: _unverifiedDispatchState, ...resultWithoutDispatchState } = adapterResult;
           adapterResult = {
-            ...adapterResult,
+            ...resultWithoutDispatchState,
             failure,
             ...(failure.providerDispatchState
               ? { providerDispatchState: failure.providerDispatchState }
