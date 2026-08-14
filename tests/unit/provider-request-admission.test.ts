@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { getEncoding } from "js-tiktoken";
 import { createAnthropicMessage } from "../../packages/butler-agent/src/integrations/providers/anthropic/runtime.ts";
 import { createGeminiContent } from "../../packages/butler-agent/src/integrations/providers/google/runtime.ts";
 import { createLocalChatCompletion } from "../../packages/butler-agent/src/integrations/providers/local/client.ts";
@@ -102,6 +103,36 @@ test("shared provider admission measures and admits the exact request body", () 
   expect(receipt.serialized_request).toContain("EXACT_TOOL_RESULT");
   expect(receipt.serialized_request).not.toContain("completed-tool-evidence");
   expect(receipt.serialized_request).not.toContain("evidence_packet");
+});
+
+test("literal tokenizer special tokens in tool text are estimated without changing transport bytes", () => {
+  const body = {
+    model: "gpt-5.5",
+    input: [{
+      role: "tool",
+      content: "The web result contains the literal token <|endoftext|>.",
+    }],
+  };
+
+  const receipt = admitSerializedProviderRequest({
+    providerId: "openai",
+    modelRef: "openai/gpt-5.5",
+    body,
+    requestedOutputTokens: 1_024,
+  });
+
+  expect(receipt.serialized_request).toBe(JSON.stringify(body));
+  expect(receipt.plan.compiled_input_tokens).toBeGreaterThan(0);
+  expect(receipt.plan.admission).toBe("admitted");
+
+  // Treating the marker as a control token would under-count this literal
+  // content. The admission estimate must stay at least as conservative.
+  const controlTokenCount = getEncoding("o200k_base").encode(
+    receipt.serialized_request,
+    ["<|endoftext|>"],
+    [],
+  ).length;
+  expect(receipt.plan.compiled_input_tokens).toBeGreaterThanOrEqual(controlTokenCount);
 });
 
 test("image inputs keep exact transport bytes without counting base64 as text", () => {
