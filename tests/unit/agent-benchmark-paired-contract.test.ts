@@ -56,7 +56,7 @@ describe("final paired M1 campaign contract", () => {
   test("freezes 24 adjacent before/after steps and pathless public identity", () => {
     const contract = pairedContract();
     expect(FINAL_BEFORE_REVISION).toBe("6db1eb01d7ab73116b9cba37180d3d027e29d6e0");
-    expect(FINAL_AFTER_REVISION).toBe("19fcc9d116765c098f466425cadc4803d45ad18a");
+    expect(FINAL_AFTER_REVISION).toBe("96a94212a779633cc8d5aad44229544c16a1cc9b");
     expect(contract.steps).toHaveLength(24);
     expect(contract.steps.map((step) => `${step.fixture}:${step.repetition}:${step.version}`)).toEqual([
       "direct-cold:1:before", "direct-cold:1:after",
