@@ -203,7 +203,9 @@ export function createElectronButlerRunner(
 ): ButlerBenchmarkRunner {
   return (input): Promise<Record<string, unknown>> => withPreparedButlerResource({
       reference: input.arm.version
-        ? options.pairedPreparedButlerResources?.[input.arm.version]
+        ? options.pairedPreparedButlerResources
+          ? options.pairedPreparedButlerResources[input.arm.version]
+          : preparedResource
         : preparedResource,
       sourceRoot: input.arm.sourceRoot,
       sourceRevision: input.arm.sourceRevision,

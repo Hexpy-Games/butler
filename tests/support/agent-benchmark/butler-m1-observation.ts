@@ -4,6 +4,7 @@ import type { AdapterRunInput, AdapterRunResult } from "./contracts.ts";
 import { readM1V2DbEvidence } from "./m1-v2-db-evidence.ts";
 import { materializeM1V2EvidenceExport } from "./m1-v2-evidence-export.ts";
 import { FINAL_ACTIVATION, FINAL_AFTER_REVISION, FINAL_BEFORE_REVISION } from "./paired-contract.ts";
+import { AFTER_ONLY_AFTER_REVISION } from "./after-only-contract.ts";
 import { materializeM1V2RuntimeActivationReceipt } from "./m1-v2-activation-receipt.ts";
 import type { ProviderRequestObservation } from "../../e2e/btcc-r3-electron/provider-observation-proxy.ts";
 import { join, relative } from "node:path";
@@ -111,8 +112,8 @@ export async function withButlerM1V2Environment<T>(
   if (!input.fixture.m1V2) return run();
   const version = input.arm.version;
   if (version) {
-    const expectedRevision = version === "before" ? FINAL_BEFORE_REVISION : FINAL_AFTER_REVISION;
-    if (input.arm.sourceRevision !== expectedRevision ||
+    const expectedRevisions: readonly string[] = version === "before" ? [FINAL_BEFORE_REVISION] : [FINAL_AFTER_REVISION, AFTER_ONLY_AFTER_REVISION];
+    if (!expectedRevisions.includes(input.arm.sourceRevision) ||
         JSON.stringify(input.arm.activation) !== JSON.stringify(FINAL_ACTIVATION[version])) {
       throw new Error("m1_activation_source_identity_mismatch");
     }

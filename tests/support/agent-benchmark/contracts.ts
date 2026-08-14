@@ -10,7 +10,7 @@ export const AGENT_BENCHMARK_BASELINE_SHA =
   "549463fbe074fc25042f9302cd330699948dab50" as const;
 export const VISUAL_REVIEW_SCHEMA = "butler.agent-benchmark.visual-review.v1" as const;
 
-export type BenchmarkCampaign = "cross-agent-pilot" | "m1-v2" | "m1-v2-paired";
+export type BenchmarkCampaign = "cross-agent-pilot" | "m1-v2" | "m1-v2-paired" | "m1-v2-after-only";
 
 export type BenchmarkAgent = "butler" | "hermes" | "opencode";
 export type BenchmarkTrack = "controlled" | "recommended-default";
@@ -101,6 +101,7 @@ export interface BenchmarkPlan {
   provenance?: M1V2ProvenanceIdentity;
   preparedButlerResource?: import("./prepared-butler-resource.ts").PreparedButlerResourceIdentity;
   pairedCampaign?: import("./paired-contract.ts").PairedCampaignContract;
+  afterOnlyCampaign?: import("./after-only-contract.ts").AfterOnlyCampaignContract;
   tracks: readonly BenchmarkTrack[];
   fixtures: readonly BenchmarkFixtureSummary[];
   repositoryEvidence?: { relativeRoot: string; files: readonly string[]; sha256: string };

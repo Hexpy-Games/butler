@@ -21,6 +21,7 @@ import { sanitizeIdentifier } from "./identifiers.ts";
 import { effectiveAgentConfig } from "./track-config.ts";
 import { verifyM1V2AuthoritativeProvenance } from "./m1-v2-provenance.ts";
 import { validatePairedCampaignContract, type PairedCampaignContract } from "./paired-contract.ts";
+import { validateAfterOnlyCampaignContract, type AfterOnlyCampaignContract } from "./after-only-contract.ts";
 
 export const BENCHMARK_AGENTS: readonly BenchmarkAgent[] = ["butler", "hermes", "opencode"];
 /** Tracks that are materialized by the compact pilot. The recommended-default
@@ -55,6 +56,7 @@ export interface CreateBenchmarkPlanInput {
   preparedButlerResource?: BenchmarkPlan["preparedButlerResource"];
   pairedCampaign?: PairedCampaignContract;
   pairedRuntimeSources?: Readonly<Record<"before" | "after", string>>;
+  afterOnlyCampaign?: AfterOnlyCampaignContract;
 }
 
 export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkPlan {
@@ -69,27 +71,32 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
     );
   }
   if (!/^[a-f0-9]{40}$/u.test(baselineSha)) throw new Error("Benchmark source revision must be an exact Git SHA");
-  const repetitionsPerCache = input.repetitionsPerCache ?? (campaign === "m1-v2" || campaign === "m1-v2-paired" ? 3 : 1);
+  const m1Campaign = campaign === "m1-v2" || campaign === "m1-v2-paired" || campaign === "m1-v2-after-only";
+  const repetitionsPerCache = input.repetitionsPerCache ?? (m1Campaign ? 3 : 1);
   if (campaign === "cross-agent-pilot" && repetitionsPerCache !== 1) {
     throw new Error("The canonical pilot uses exactly one repetition per scenario");
   }
   const runRoot = resolve(input.runRoot);
   const sourceRoot = resolve(input.sourceRoot);
   const harnessRoot = resolve(input.harnessRoot ?? input.sourceRoot);
-  if ((campaign === "m1-v2" || campaign === "m1-v2-paired") && (repetitionsPerCache < 3 || repetitionsPerCache > 10)) {
+  if (m1Campaign && (repetitionsPerCache < 3 || repetitionsPerCache > 10)) {
     throw new Error("M1 v2 repetitions must be an integer between 3 and 10");
   }
-  if ((campaign === "m1-v2" || campaign === "m1-v2-paired") && !input.harnessRoot) {
+  if (m1Campaign && !input.harnessRoot) {
     throw new Error("M1 v2 requires an explicit harness authority root.");
   }
-  if ((campaign === "m1-v2" || campaign === "m1-v2-paired") && !input.provenanceJsonlPath) {
+  if (m1Campaign && !input.provenanceJsonlPath) {
     throw new Error("M1 v2 requires the authoritative provenance JSONL path.");
   }
   if (campaign === "m1-v2-paired" && (!input.pairedCampaign || !input.pairedRuntimeSources)) {
     throw new Error("M1 v2 paired requires its immutable campaign contract and both runtime sources.");
   }
   if (input.pairedCampaign) validatePairedCampaignContract(input.pairedCampaign);
-  const verifiedProvenance = campaign === "m1-v2" || campaign === "m1-v2-paired"
+  if (campaign === "m1-v2-after-only" && !input.afterOnlyCampaign) {
+    throw new Error("M1 v2 AFTER-only requires its frozen BEFORE campaign contract.");
+  }
+  if (input.afterOnlyCampaign) validateAfterOnlyCampaignContract(input.afterOnlyCampaign);
+  const verifiedProvenance = m1Campaign
     ? verifyM1V2AuthoritativeProvenance({
         repoRoot: harnessRoot,
         jsonlPath: resolve(input.provenanceJsonlPath!),
@@ -99,16 +106,21 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
       JSON.stringify(input.pairedCampaign.provenance) !== JSON.stringify(verifiedProvenance?.identity)) {
     throw new Error("Paired campaign provenance must equal the freshly verified top-level provenance authority.");
   }
-  const campaignFixtures = campaign === "m1-v2" || campaign === "m1-v2-paired"
+  if (input.afterOnlyCampaign &&
+      JSON.stringify(input.afterOnlyCampaign.provenance) !== JSON.stringify(verifiedProvenance?.identity)) {
+    throw new Error("AFTER-only campaign provenance must equal the freshly verified top-level provenance authority.");
+  }
+  const campaignFixtures = m1Campaign
     ? loadM1V2BenchmarkFixtures(harnessRoot)
     : AGENT_BENCHMARK_FIXTURES;
   const fixtures = campaignFixtures.map(summarizeBenchmarkFixture);
   const arms: BenchmarkArmPlan[] = [];
   let order = 0;
   const track: BenchmarkTrack = "controlled";
-  if (campaign === "m1-v2-paired") {
+  if (campaign === "m1-v2-paired" || campaign === "m1-v2-after-only") {
+    const steps = campaign === "m1-v2-paired" ? input.pairedCampaign!.steps : input.afterOnlyCampaign!.steps;
     const fixtureById = new Map(campaignFixtures.map((fixture) => [fixture.id, fixture]));
-    for (const step of input.pairedCampaign!.steps) {
+    for (const step of steps) {
       const fixture = fixtureById.get(step.fixture);
       if (!fixture || hashBenchmarkFixture(fixture) !== step.fixtureSha256) {
         throw new Error(`Paired fixture identity mismatch: ${step.fixture}`);
@@ -119,13 +131,13 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
         order: step.order, agent: "butler", track, cache: step.fixture === "direct-warm" ? "warm" : "cold",
         fixtureHash: step.fixtureSha256,
         effectiveConfig: effectiveAgentConfig("butler", track, input),
-        sourceRoot: resolve(input.pairedRuntimeSources![step.version]),
+        sourceRoot: campaign === "m1-v2-paired" ? resolve(input.pairedRuntimeSources![step.version]) : sourceRoot,
         outputRoot: join(armRoot, "output"), dataRoot: join(armRoot, "data"),
         evidenceRoot: join(armRoot, "evidence"), cacheRoot: join(runRoot, "cache", step.pairId, step.version),
         cachePairId: step.pairId, timeoutMs: DEFAULT_BENCHMARK_TIMEOUT_MS,
         sourceRevision: step.source.revision, version: step.version,
         pairId: step.pairId, block: step.block,
-        pairedExecution: input.pairedCampaign!.execution,
+        pairedExecution: campaign === "m1-v2-paired" ? input.pairedCampaign!.execution : input.afterOnlyCampaign!.execution,
         activation: step.source.activation,
       });
     }
@@ -197,15 +209,16 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
     runRoot,
     sourceRoot,
     harnessRoot,
-    ...((campaign === "m1-v2" || campaign === "m1-v2-paired") ? {
+    ...(m1Campaign ? {
       provenanceJsonlPath: resolve(input.provenanceJsonlPath!),
       provenance: verifiedProvenance!.identity,
     } : {}),
     ...(input.preparedButlerResource ? { preparedButlerResource: { ...input.preparedButlerResource } } : {}),
     ...(input.pairedCampaign ? { pairedCampaign: input.pairedCampaign } : {}),
+    ...(input.afterOnlyCampaign ? { afterOnlyCampaign: input.afterOnlyCampaign } : {}),
     tracks: BENCHMARK_TRACKS,
     fixtures,
-    ...((campaign === "m1-v2" || campaign === "m1-v2-paired") ? { policy: {
+    ...(m1Campaign ? { policy: {
       sequential: true as const,
       observerOnly: true as const,
       retryContaminatedAccepted: false as const,
@@ -223,7 +236,7 @@ export function createBenchmarkPlan(input: CreateBenchmarkPlanInput): BenchmarkP
 
 /** Stable identity for checkpoint resume; excludes only volatile createdAt. */
 export function benchmarkPlanIdentity(
-  plan: Pick<BenchmarkPlan, "campaign" | "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "harnessRoot" | "provenanceJsonlPath" | "provenance" | "preparedButlerResource" | "pairedCampaign" | "tracks" | "fixtures" | "arms" | "policy" | "planIdentity">,
+  plan: Pick<BenchmarkPlan, "campaign" | "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "harnessRoot" | "provenanceJsonlPath" | "provenance" | "preparedButlerResource" | "pairedCampaign" | "afterOnlyCampaign" | "tracks" | "fixtures" | "arms" | "policy" | "planIdentity">,
 ): string {
   const computed = computeBenchmarkPlanSemanticIdentity(plan);
   if (plan.planIdentity !== undefined && plan.planIdentity !== computed) {
@@ -237,7 +250,7 @@ export function benchmarkPlanIdentity(
 }
 
 function computeBenchmarkPlanSemanticIdentity(
-  plan: Pick<BenchmarkPlan, "campaign" | "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "harnessRoot" | "provenanceJsonlPath" | "provenance" | "preparedButlerResource" | "pairedCampaign" | "tracks" | "fixtures" | "arms" | "policy">,
+  plan: Pick<BenchmarkPlan, "campaign" | "runId" | "seed" | "baselineSha" | "runRoot" | "sourceRoot" | "harnessRoot" | "provenanceJsonlPath" | "provenance" | "preparedButlerResource" | "pairedCampaign" | "afterOnlyCampaign" | "tracks" | "fixtures" | "arms" | "policy">,
 ): string {
   const publicPath = (path: string) => (isAbsolute(path) ? relative(plan.runRoot, path) : path).replaceAll("\\", "/");
   const publicArm = (arm: BenchmarkArmPlan) => ({
@@ -276,6 +289,7 @@ function computeBenchmarkPlanSemanticIdentity(
     provenance: plan.provenance ?? null,
     preparedButlerResource: plan.preparedButlerResource ?? null,
     pairedCampaign: plan.pairedCampaign ?? null,
+    ...(plan.afterOnlyCampaign ? { afterOnlyCampaign: plan.afterOnlyCampaign } : {}),
     tracks: plan.tracks,
     fixtures: plan.fixtures,
     policy: plan.policy ?? null,

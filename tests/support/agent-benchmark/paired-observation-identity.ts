@@ -22,5 +22,6 @@ function publicIdentity(arm: BenchmarkArmPlan) {
     pairId: arm.pairId,
     block: arm.block,
     pairedExecution: arm.pairedExecution,
+    activation: arm.activation,
   };
 }
