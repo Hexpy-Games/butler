@@ -341,6 +341,15 @@ test("M1 v2 default-off path preserves legacy bytes and enabled policy reduces b
   expect(legacy.mode).toBe("legacy");
   expect(legacy.stableInstructionPrefix).toContain("The Work stage is process guidance");
   expect(enabled.mode).toBe("phase_minimal");
+  expect(enabled.stableInstructionPrefix).toContain(
+    "settle the bound Work atomically with record_work_disposition",
+  );
+  expect(enabled.stableInstructionPrefix).toContain(
+    "Reviews and completion Validation are optional quality records",
+  );
+  expect(enabled.stableInstructionPrefix).not.toContain(
+    "required accepted Plan Review",
+  );
   expect(enabled.stableInstructionPrefix.length).toBeLessThan(legacy.stableInstructionPrefix.length);
   expect(enabledSchemas.length).toBeLessThan(legacySchemas.length);
 });
@@ -403,7 +412,7 @@ test("exact replay reduces actual Codex serializer bytes in every typed phase", 
     outcome: { status: "completed", success: true, verification: "stored_exact_available" },
     availability: { status: "exact_read_available", capability: "read_operation_results", scope: "same_turn" },
   });
-  const expectedBytes = [[33_656, 17_237], [36_789, 20_370], [44_932, 28_513]];
+  const expectedBytes = [[33_656, 17_237], [36_789, 20_370], [46_502, 30_083]];
   for (const [index, turn] of turns.entries()) {
     const before = selectGuidedTurnPhasePolicy(turn, ENABLED);
     const after = selectGuidedTurnPhasePolicy(turn, {
@@ -455,7 +464,7 @@ test("bounded continuation reduces actual Codex serializer bytes in every typed 
   expect(actual).toEqual([
     [61_030, 11_629],
     [64_163, 14_762],
-    [72_306, 22_905],
+    [73_876, 24_475],
   ]);
 });
 

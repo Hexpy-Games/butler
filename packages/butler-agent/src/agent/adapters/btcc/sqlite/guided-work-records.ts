@@ -1,5 +1,6 @@
 import type {
   DurableWorkCheckpoint,
+  DurableWorkDisposition,
   DurableWorkReview,
   DurableWorkToolResultRef,
   DurableWorkView,
@@ -61,6 +62,24 @@ export type GuidedWorkReviewRow = {
   bound_result_sequence: number | null;
   bound_result_review_revision_id: string | null;
   bound_action_states_json: string | null;
+  origin_turn_id: string;
+  created_at: string;
+};
+
+export type GuidedWorkDispositionRow = {
+  disposition_revision_id: string;
+  work_id: string;
+  revision: number;
+  result_sequence: number;
+  material_fingerprint: string;
+  disposition: DurableWorkDisposition["disposition"];
+  summary: string;
+  action_updates_json: string;
+  remaining_actions_json: string;
+  next_condition: string | null;
+  evidence_refs_json: string;
+  evidence_snapshot_json: string;
+  followups_json: string;
   origin_turn_id: string;
   created_at: string;
 };

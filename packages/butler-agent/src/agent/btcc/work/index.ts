@@ -1,4 +1,5 @@
 export { createDurableWorkService } from "./work.ts";
+export { dispositionMaterialFingerprint } from "./disposition-freshness.ts";
 export {
   DURABLE_WORK_TOOL_NAMES,
   isDurableWorkTool,
@@ -11,6 +12,12 @@ export type {
 } from "./legacy-work-source.ts";
 export type {
   AttachToolResultInput,
+  RecordCloseoutMissingInput,
+  DurableWorkDispositionActionUpdate,
+  RecordWorkDispositionCommand,
+  RecordWorkDispositionInput,
+  DurableWorkDisposition,
+  DurableWorkDispositionStatus,
   DurableWorkActionProgress,
   DurableWorkActionStatus,
   DurableWorkActionUpdate,
