@@ -18,6 +18,8 @@ import { prepareTestHarnessAuthority } from "./support/m1-v2-provenance-authorit
 
 const root = mkdtempSync(join(process.cwd(), ".agent-benchmark-after-only-"));
 const authority = prepareTestHarnessAuthority(root);
+const OFF_ACTIVATION = { ...FINAL_ACTIVATION.before, mode: "off" as const,
+  toolInstructionSurface: false, exactOnceReplay: false, boundedStatelessContext: false };
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 describe("M1 v2 AFTER-only public entrypoint", () => {
@@ -127,9 +129,9 @@ describe("M1 v2 AFTER-only public entrypoint", () => {
 
     const activationTamper = mutateFrozen(frozen, (manifest, result) => {
       const arm = manifest.arms.find((row) => row.version === "before")!;
-      arm.activation = FINAL_ACTIVATION.after;
+      arm.activation = OFF_ACTIVATION;
       result.plan = structuredClone(manifest);
-      result.observations.find((row) => row.arm.key === arm.key)!.arm.activation = FINAL_ACTIVATION.after;
+      result.observations.find((row) => row.arm.key === arm.key)!.arm.activation = OFF_ACTIVATION;
     });
     await expect(runAgentBenchmarkCli(afterOnlyArgs(join(root, "activation-tamper-run"), join(root, "absent-after"),
       writeResourcePin(), activationTamper), { preflightExecutor: authExecutor(), createAdapters: () => { throw new Error("adapter entered"); } }))

@@ -8,6 +8,9 @@ import { FINAL_ACTIVATION, FINAL_AFTER_REVISION, FINAL_BEFORE_REVISION } from ".
 import { AFTER_ONLY_AFTER_REVISION } from "../support/agent-benchmark/after-only-contract.ts";
 import type { ProviderRequestObservation } from "../e2e/btcc-r3-electron/provider-observation-proxy.ts";
 
+const OFF_ACTIVATION = { ...FINAL_ACTIVATION.before, mode: "off" as const,
+  toolInstructionSurface: false, exactOnceReplay: false, boundedStatelessContext: false };
+
 test("runtime receipt combines final serializer and admitted canonical after state", () => {
   withRoot((root) => {
     seed(root, true);
@@ -42,9 +45,9 @@ test("runtime receipt accepts exact AFTER-only ON identity and rejects OFF or ve
       declaredActivation: { mode: "on", toolInstructionSurface: true, exactOnceReplay: true,
         boundedStatelessContext: true }, policyMode: "phase_minimal" });
     expect(() => materializeM1V2RuntimeActivationReceipt({ ...base, evidenceRoot: join(root, "off-drift"),
-      declaredActivation: FINAL_ACTIVATION.before })).toThrow("declared_identity_mismatch");
+      declaredActivation: OFF_ACTIVATION })).toThrow("declared_identity_mismatch");
     expect(() => materializeM1V2RuntimeActivationReceipt({ ...base, evidenceRoot: join(root, "version-drift"),
-      version: "before", declaredActivation: FINAL_ACTIVATION.before })).toThrow("declared_identity_mismatch");
+      version: "before", declaredActivation: OFF_ACTIVATION })).toThrow("declared_identity_mismatch");
   });
 });
 
@@ -70,17 +73,24 @@ test("runtime receipt rejects temp conflicts, declaration drift, mixed after sch
   });
 });
 
-test("runtime receipt rejects flags-only legacy after and accepts explicit before legacy", () => {
+test("runtime receipt requires the admitted canonical M1 path for both paired sources", () => {
   withRoot((root) => {
     seed(root, false);
     expect(() => materializeM1V2RuntimeActivationReceipt({ runRoot: root, dataRoot: join(root, "data"), evidenceRoot: join(root, "after"),
       turnId: "turn-1", version: "after", sourceRevision: FINAL_AFTER_REVISION,
       declaredActivation: FINAL_ACTIVATION.after, providerRequests: [request(false)] }))
       .toThrow("m1_activation_flags_enabled_but_runtime_path_legacy");
+    expect(() => materializeM1V2RuntimeActivationReceipt({ runRoot: root, dataRoot: join(root, "data"), evidenceRoot: join(root, "before"),
+      turnId: "turn-1", version: "before", sourceRevision: FINAL_BEFORE_REVISION,
+      declaredActivation: FINAL_ACTIVATION.before, providerRequests: [request(false)] }))
+      .toThrow("m1_activation_flags_enabled_but_runtime_path_legacy");
+  });
+  withRoot((root) => {
+    seed(root, true);
     const receipt = materializeM1V2RuntimeActivationReceipt({ runRoot: root, dataRoot: join(root, "data"), evidenceRoot: join(root, "before"),
       turnId: "turn-1", version: "before", sourceRevision: FINAL_BEFORE_REVISION,
-      declaredActivation: FINAL_ACTIVATION.before, providerRequests: [request(false)] });
-    expect(receipt).toMatchObject({ policyMode: "legacy", continuation: { admitted: false }, exactReplay: { enabled: false } });
+      declaredActivation: FINAL_ACTIVATION.before, providerRequests: [request(true)] });
+    expect(receipt).toMatchObject({ policyMode: "phase_minimal", continuation: { admitted: true }, exactReplay: { enabled: true } });
   });
 });
 

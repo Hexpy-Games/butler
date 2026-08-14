@@ -129,7 +129,7 @@ export async function withButlerM1V2Environment<T>(
     ["BUTLER_MODEL_API_RETRY_ATTEMPTS", process.env.BUTLER_MODEL_API_RETRY_ATTEMPTS],
   ]);
   process.env.BUTLER_M1_V2_SEGMENT_ATTRIBUTION = "1";
-  const enabled = version === "after";
+  const enabled = input.arm.activation?.mode === "on";
   process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE = enabled ? "1" : "0";
   process.env.BUTLER_M1_V2_EXACT_ONCE_REPLAY = enabled ? "1" : "0";
   process.env.BUTLER_M1_V2_BOUNDED_STATELESS_CONTEXT = enabled ? "1" : "0";

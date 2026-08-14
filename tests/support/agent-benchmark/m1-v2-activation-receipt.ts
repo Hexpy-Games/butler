@@ -52,9 +52,9 @@ export function materializeM1V2RuntimeActivationReceipt(input: {
     throw new Error("m1_activation_final_serializer_unverified");
   }
   const db = readRuntimeState(input.dataRoot, input.turnId);
-  const after = input.version === "after";
+  const enabled = input.declaredActivation.mode === "on";
   const exactReplay = agentRequests.every((row) => row.exactResultReadSchemaObserved);
-  if (after) {
+  if (enabled) {
     if (!exactReplay || !db.continuation || !sameLimits(db.continuation.limits, DEFAULT_LIMITS) ||
         !db.routeIdentity || db.routeIdentity.toolProfileRevision !== "butler.btcc-tool-instruction-policy.v1" ||
         db.routeIdentity.stablePrefixRevision !== "butler.btcc-stable-provider-prefix.v1" ||
@@ -62,14 +62,14 @@ export function materializeM1V2RuntimeActivationReceipt(input: {
       throw new Error("m1_activation_flags_enabled_but_runtime_path_legacy");
     }
   } else if (exactReplay || db.continuation || db.routeIdentity) {
-    throw new Error("m1_before_activation_not_legacy");
+    throw new Error("m1_activation_flags_disabled_but_runtime_path_enabled");
   }
   const stable = {
     schema: "butler.m1-v2-runtime-activation-receipt.v1" as const,
     version: input.version, sourceRevision: input.sourceRevision,
     declaredActivation: input.declaredActivation,
-    policyMode: after ? "phase_minimal" as const : "legacy" as const,
-    policyRevision: after ? "butler.btcc-tool-instruction-policy.v1" as const : "legacy" as const,
+    policyMode: enabled ? "phase_minimal" as const : "legacy" as const,
+    policyRevision: enabled ? "butler.btcc-tool-instruction-policy.v1" as const : "legacy" as const,
     exactReplay: { enabled: exactReplay, referenceSchemaOwner: exactReplay ? "butler.operation-result-reference.v1" as const : null },
     continuation: db.continuation ? { admitted: true, schema: "butler.turn-continuation-budget.v2" as const, limits: DEFAULT_LIMITS } : { admitted: false, schema: null, limits: null },
     stablePrefixRevision: db.routeIdentity ? "butler.btcc-stable-provider-prefix.v1" as const : null,

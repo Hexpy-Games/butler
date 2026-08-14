@@ -3,8 +3,8 @@ import type { M1V2ArmId } from "./m1-v2-types.ts";
 import type { PreparedButlerResourceIdentity } from "./prepared-butler-resource.ts";
 import type { M1V2ProvenanceIdentity } from "./m1-v2-types.ts";
 
-export const FINAL_BEFORE_REVISION = "c46aae1af1b78a6f81ea40c3099edde0ba35ebd5" as const;
-export const FINAL_AFTER_REVISION = "394c98a97428b741f8ea54273a226cb062455ab0" as const;
+export const FINAL_BEFORE_REVISION = "251f529af72e611096e6ca80a58b85c3e32a7903" as const;
+export const FINAL_AFTER_REVISION = "761f8de091193a1a587894bf142e7d4a5ce05a73" as const;
 export const FINAL_MODEL = "openai/gpt-5.6-sol" as const;
 export const FINAL_REASONING = "medium" as const;
 export const FINAL_AUTH_MODE = "managed" as const;
@@ -31,13 +31,14 @@ export interface M1V2ActivationIdentity {
   continuationLimits: "product_default";
 }
 
+export const M1_V2_ON_ACTIVATION: M1V2ActivationIdentity = {
+  schema: "butler.m1-v2-activation-identity.v1", mode: "on", segmentAttribution: true,
+  toolInstructionSurface: true, exactOnceReplay: true, boundedStatelessContext: true,
+  continuationLimits: "product_default",
+} as const;
 export const FINAL_ACTIVATION: Readonly<Record<BenchmarkVersion, M1V2ActivationIdentity>> = {
-  before: { schema: "butler.m1-v2-activation-identity.v1", mode: "off", segmentAttribution: true,
-    toolInstructionSurface: false, exactOnceReplay: false, boundedStatelessContext: false,
-    continuationLimits: "product_default" },
-  after: { schema: "butler.m1-v2-activation-identity.v1", mode: "on", segmentAttribution: true,
-    toolInstructionSurface: true, exactOnceReplay: true, boundedStatelessContext: true,
-    continuationLimits: "product_default" },
+  before: M1_V2_ON_ACTIVATION,
+  after: M1_V2_ON_ACTIVATION,
 } as const;
 
 export interface PairedSourcePin {
