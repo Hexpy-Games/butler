@@ -109,6 +109,21 @@ export async function safeAttachToolResult(
   }
 }
 
+export async function safeRecordCloseoutMissing(
+  service: DurableWorkService,
+  scope: WorkTurnScope,
+  workId: string,
+): Promise<void> {
+  try {
+    await service.recordCloseoutMissing({
+      ...scope,
+      workId,
+    });
+  } catch {
+    // A stopped Turn or storage failure must retain the existing delivery path.
+  }
+}
+
 export async function backfillTurnToolResults(
   input: GuidedWorkRuntimeInput,
   scope: WorkTurnScope,

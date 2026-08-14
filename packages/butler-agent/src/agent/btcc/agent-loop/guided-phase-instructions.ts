@@ -41,7 +41,7 @@ export function phaseMinimalStableInstructions(
       : []),
     ...(phase === "execution"
       ? [
-          "For substantial work, use the admitted native tools to create or reuse one Work, record a concise Plan, obtain the required accepted Plan Review before persistent effects, execute the effect, review its actual result, validate completion, and only then close out the Work and report.",
+          "For substantial work, use the admitted native tools to create or reuse one Work, record a concise Plan when useful, execute effects through the existing guard, inspect the actual result, then settle the bound Work atomically with record_work_disposition before reporting. Reviews and completion Validation are optional quality records and never replace disposition.",
           "Reconcile uncertain effects before another mutation. Prefer edit_file for a small exact edit and write_file for complete file content.",
           ...(policy.trackingMode === "ledger"
             ? ["Keep one concise Project Ledger Work record for substantial project work; reuse related open Work and complete it only after validation."]

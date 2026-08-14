@@ -389,10 +389,10 @@ test("direct read-only and execution policy fixtures preserve final serializer p
     expect(metrics).toEqual([
       { transport: "official", phase: "direct", prefixBytes: 6321, firstBytes: 6518, secondBytes: 6518, changedAt: 6337 },
       { transport: "official", phase: "read_only", prefixBytes: 9454, firstBytes: 9651, secondBytes: 9651, changedAt: 9470 },
-      { transport: "official", phase: "execution", prefixBytes: 17597, firstBytes: 17794, secondBytes: 17794, changedAt: 17613 },
+      { transport: "official", phase: "execution", prefixBytes: 19167, firstBytes: 19364, secondBytes: 19364, changedAt: 19183 },
       { transport: "codex", phase: "direct", prefixBytes: 6321, firstBytes: 6532, secondBytes: 6532, changedAt: 6337 },
       { transport: "codex", phase: "read_only", prefixBytes: 9454, firstBytes: 9665, secondBytes: 9665, changedAt: 9470 },
-      { transport: "codex", phase: "execution", prefixBytes: 17597, firstBytes: 17808, secondBytes: 17808, changedAt: 17613 },
+      { transport: "codex", phase: "execution", prefixBytes: 19167, firstBytes: 19378, secondBytes: 19378, changedAt: 19183 },
     ]);
   } finally {
     globalThis.fetch = originalFetch;
@@ -499,12 +499,12 @@ test("all-off versus cumulative all-on measures complete final bodies through bo
       }
     }
     expect(measurements).toEqual([
-      { transport: "official", phase: "direct", allOffBytes: 48591, allOnBytes: 10763, stableInstructionBytes: 829, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
-      { transport: "official", phase: "read_only", allOffBytes: 54320, allOnBytes: 13896, stableInstructionBytes: 849, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
-      { transport: "official", phase: "execution", allOffBytes: 60261, allOnBytes: 22039, stableInstructionBytes: 1279, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
-      { transport: "codex", phase: "direct", allOffBytes: 84899, allOnBytes: 10777, stableInstructionBytes: 829, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
-      { transport: "codex", phase: "read_only", allOffBytes: 90628, allOnBytes: 13910, stableInstructionBytes: 849, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
-      { transport: "codex", phase: "execution", allOffBytes: 96569, allOnBytes: 22053, stableInstructionBytes: 1279, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+      { transport: "official", phase: "direct", allOffBytes: 48942, allOnBytes: 10763, stableInstructionBytes: 829, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+      { transport: "official", phase: "read_only", allOffBytes: 56211, allOnBytes: 13896, stableInstructionBytes: 849, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+      { transport: "official", phase: "execution", allOffBytes: 62152, allOnBytes: 23609, stableInstructionBytes: 1361, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+      { transport: "codex", phase: "direct", allOffBytes: 85250, allOnBytes: 10777, stableInstructionBytes: 829, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+      { transport: "codex", phase: "read_only", allOffBytes: 92519, allOnBytes: 13910, stableInstructionBytes: 849, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
+      { transport: "codex", phase: "execution", allOffBytes: 98460, allOnBytes: 23623, stableInstructionBytes: 1361, boundedCarrierBytes: 4000, crossVariantCommonPrefixBytes: 24 },
     ]);
   } finally {
     globalThis.fetch = originalFetch;
