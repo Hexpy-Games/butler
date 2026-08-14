@@ -326,10 +326,10 @@ export interface AdapterRunResult {
 
 export interface AdapterRunFailure {
   schema: "butler.adapter-run-failure.v1";
-  stage: "bundled_agent_preparation" | "electron_launch_preflight" | "renderer_ready";
+  stage: "bundled_agent_preparation" | "electron_launch_preflight" | "renderer_ready" | null;
   cause: "disk_space_exhausted" | "resource_inspection_failed" | "port_conflict" |
-    "electron_exited" | "renderer_ready_timeout";
-  owner: "electron_harness" | "electron_process";
+    "electron_exited" | "renderer_ready_timeout" | null;
+  owner: "electron_harness" | "electron_process" | null;
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   sanitizedElectronLogTail: readonly string[];

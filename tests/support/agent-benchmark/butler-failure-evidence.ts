@@ -20,19 +20,20 @@ export function projectButlerAdapterFailure(
   evidence: Record<string, unknown>,
 ): AdapterRunFailure | null {
   const failure = asRecord(evidence.failure);
-  if (!failure || !isCanonicalFailureTuple(failure) ||
-      !(failure.exitCode === null || Number.isSafeInteger(failure.exitCode)) ||
-      !(failure.signal === null || isFailureSignal(failure.signal))) {
-    return null;
-  }
+  const canonicalFailure = failure && isCanonicalFailureTuple(failure) &&
+    (failure.exitCode === null || Number.isSafeInteger(failure.exitCode)) &&
+    (failure.signal === null || isFailureSignal(failure.signal))
+    ? failure
+    : null;
+  if (evidence.ok !== false && evidence.error === undefined && !canonicalFailure) return null;
   const dispatch = providerDispatchEvidence(evidence);
   return {
     schema: "butler.adapter-run-failure.v1",
-    stage: failure.stage,
-    cause: failure.cause,
-    owner: failure.owner,
-    exitCode: failure.exitCode as number | null,
-    signal: failure.signal,
+    stage: canonicalFailure?.stage ?? null,
+    cause: canonicalFailure?.cause ?? null,
+    owner: canonicalFailure?.owner ?? null,
+    exitCode: canonicalFailure ? canonicalFailure.exitCode as number | null : null,
+    signal: canonicalFailure ? canonicalFailure.signal as NodeJS.Signals | null : null,
     sanitizedElectronLogTail: projectPublicFailureTail(evidence.sanitizedElectronLogTail),
     sanitizedExecutorLogTail: projectPublicFailureTail(evidence.sanitizedExecutorLogTail),
     providerDispatchState: dispatch.state,
