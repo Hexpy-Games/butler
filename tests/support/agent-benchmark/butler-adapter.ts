@@ -31,6 +31,7 @@ import {
   electronReasoning,
   promptCacheKeyPrefixForPair,
 } from "./electron-runner-config.ts";
+import { projectButlerAdapterFailure } from "./butler-failure-evidence.ts";
 export { promptCacheKeyPrefixForPair } from "./electron-runner-config.ts";
 
 export type ButlerBenchmarkRunner = (input: AdapterRunInput) => Promise<Record<string, unknown>>;
@@ -128,6 +129,16 @@ export function createButlerAdapter(
                 stderr: boundedDiagnostic(adapterResult.stderr, "sc01_durable_evidence_export_failed"), m1V2Evidence: undefined };
             }
           }
+        }
+        const failure = projectButlerAdapterFailure(evidence);
+        if (adapterResult && failure) {
+          adapterResult = {
+            ...adapterResult,
+            failure,
+            ...(failure.providerDispatchState
+              ? { providerDispatchState: failure.providerDispatchState }
+              : {}),
+          };
         }
       } finally {
         const rawEvidenceRemoved = !input.fixture.m1V2 ||

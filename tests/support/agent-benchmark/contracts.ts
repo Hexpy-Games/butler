@@ -305,6 +305,7 @@ export interface AdapterRunResult {
   changedPaths: readonly string[];
   evidenceRefs: readonly string[];
   providerDispatchState?: "adapter_entered" | "provider_dispatched" | "provider_output_observed";
+  failure?: AdapterRunFailure;
   m1V2Evidence?: {
     evidence: Record<string, unknown>;
     metrics: import("../../../packages/butler-agent/src/operations/metrics/operational-metrics.ts").OperationalMetricEvent[];
@@ -321,6 +322,20 @@ export interface AdapterRunResult {
     activationReceipt?: import("./m1-v2-activation-receipt.ts").M1V2RuntimeActivationReceipt;
     activationReceiptHandle?: string;
   };
+}
+
+export interface AdapterRunFailure {
+  schema: "butler.adapter-run-failure.v1";
+  stage: "bundled_agent_preparation" | "electron_launch_preflight" | "renderer_ready";
+  cause: "disk_space_exhausted" | "resource_inspection_failed" | "port_conflict" |
+    "electron_exited" | "renderer_ready_timeout";
+  owner: "electron_harness" | "electron_process";
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  sanitizedElectronLogTail: readonly string[];
+  sanitizedExecutorLogTail: readonly string[];
+  providerDispatchState: "adapter_entered" | "provider_dispatched" | "provider_output_observed" | null;
+  providerDispatchCount: number | null;
 }
 
 export interface LandingValidation {
