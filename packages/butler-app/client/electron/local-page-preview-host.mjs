@@ -25,6 +25,7 @@ const DEFAULT_VIEWPORTS = [
 const MAX_REQUEST_BYTES = 32_000;
 const MAX_CONTENT_BYTES = 20 * 1024 * 1024;
 const MAX_SCREENSHOT_HEIGHT = 12_000;
+const MAX_MODEL_PREVIEW_BYTES = 20 * 1024;
 
 export function createLocalPagePreviewHost({
   BrowserWindow,
@@ -423,13 +424,31 @@ async function capturePageSamples(win, viewport, scrollHeight) {
         : capture;
     const jpeg = viewportCapture.toJPEG(68);
     if (!jpeg?.length) throw new Error("Electron did not return screenshot bytes");
+    const modelJpeg = position.name === "top"
+      ? boundedModelPreviewJpeg(capture, viewport)
+      : null;
     screenshots.push({
       position: position.name,
       media_type: "image/jpeg",
       base64: jpeg.toString("base64"),
+      ...(modelJpeg ? { model_base64: modelJpeg.toString("base64") } : {}),
     });
   }
   return screenshots;
+}
+
+function boundedModelPreviewJpeg(capture, viewport) {
+  const widths = [Math.min(480, viewport.width), Math.min(360, viewport.width), 280]
+    .filter((width, index, values) => width > 0 && values.indexOf(width) === index);
+  const qualities = [48, 38, 28];
+  for (let index = 0; index < widths.length; index += 1) {
+    const width = widths[index];
+    const height = Math.max(1, Math.round(viewport.height * (width / viewport.width)));
+    const jpeg = capture.resize({ width, height, quality: "good" })
+      .toJPEG(qualities[Math.min(index, qualities.length - 1)]);
+    if (jpeg?.length && jpeg.length <= MAX_MODEL_PREVIEW_BYTES) return jpeg;
+  }
+  return null;
 }
 
 function workspaceContentUrl(serverUrl, jobId, entryRelativePath) {

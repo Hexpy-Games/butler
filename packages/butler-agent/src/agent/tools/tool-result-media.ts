@@ -9,8 +9,8 @@ export type AgentLoopImageAttachment = {
 };
 
 const FIELD = "model_image_attachments";
-const MAX_IMAGES = 4;
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_IMAGES = 2;
+const MAX_IMAGE_BYTES = 20 * 1024;
 
 export function extractAgentLoopImageAttachments(
   output: unknown,
@@ -75,7 +75,7 @@ function relativeArtifactPath(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim() || isAbsolute(value)) return null;
   const normalized = value.trim().replaceAll("\\", "/");
   if (
-    !/^artifacts\/generated\/page-preview-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(?:desktop|mobile)-(?:top|bottom)\.jpg$/iu
+    !/^artifacts\/generated\/page-preview-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(?:desktop|mobile)-top-model\.jpg$/iu
       .test(normalized) ||
     normalized.split("/").includes("..")
   ) return null;

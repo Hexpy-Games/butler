@@ -55,7 +55,7 @@ test("Electron local page preview host authenticates and serves only workspace c
           loaded: true,
           blocked_external_requests: 1,
           screenshots: [
-            { position: "top", media_type: "image/jpeg" },
+            { position: "top", media_type: "image/jpeg", model_base64: expect.any(String) },
             { position: "bottom", media_type: "image/jpeg" },
           ],
         },
@@ -64,7 +64,7 @@ test("Electron local page preview host authenticates and serves only workspace c
           loaded: true,
           blocked_external_requests: 1,
           screenshots: [
-            { position: "top", media_type: "image/jpeg" },
+            { position: "top", media_type: "image/jpeg", model_base64: expect.any(String) },
             { position: "bottom", media_type: "image/jpeg" },
           ],
         },
@@ -91,8 +91,8 @@ test("Electron local page preview host authenticates and serves only workspace c
     expect(imageEncodingObservations).toEqual([
       {
         sourceSize: { width: 2_880, height: 1_800 },
-        resizedTo: { width: 1_440, height: 900, quality: "best" },
-        jpegQuality: 68,
+        resizedTo: { width: 480, height: 300, quality: "good" },
+        jpegQuality: 48,
       },
       {
         sourceSize: { width: 2_880, height: 1_800 },
@@ -101,8 +101,8 @@ test("Electron local page preview host authenticates and serves only workspace c
       },
       {
         sourceSize: { width: 780, height: 1_688 },
-        resizedTo: { width: 390, height: 844, quality: "best" },
-        jpegQuality: 68,
+        resizedTo: { width: 390, height: 844, quality: "good" },
+        jpegQuality: 48,
       },
       {
         sourceSize: { width: 780, height: 1_688 },
