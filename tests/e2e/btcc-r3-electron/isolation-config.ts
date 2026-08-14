@@ -65,6 +65,19 @@ function writeJson(path: string, value: unknown): void {
 const FIXTURE_PROVIDER_CREDENTIAL_ID = "btcc-r3-fixture-provider";
 const FIXTURE_PROVIDER_SECRET = "fixture-local-provider-key";
 
+export function refreshLaunchSmokeConsolidationSchedulerState(
+  run: Pick<PreparedRun, "dataRoot">,
+  now = new Date(),
+): void {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  writeJson(
+    join(run.dataRoot, "state", "scheduler", "consolidation-cycle.json"),
+    { lastRunDate: `${year}-${month}-${day}` },
+  );
+}
+
 function fixtureModelRefs(
   run: Pick<PreparedRun, "model">,
   modelFallback?: ElectronScenario["modelFallback"],
