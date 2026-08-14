@@ -6,7 +6,9 @@ import type {
   DurableWorkView,
   LegacyOpenWorkImportResult,
   LegacyProjectWorkSource,
+  RecordCloseoutMissingInput,
   RecordWorkCheckpointCommand,
+  RecordWorkDispositionCommand,
   RecordWorkReviewCommand,
   ReplaceWorkPlanCommand,
   WorkTurnScope,
@@ -19,24 +21,24 @@ import {
 } from "./guided-work-mutation-journal.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
 import { GuidedWorkProgressWriter } from "./guided-work-progress-writer.ts";
+import { GuidedWorkDispositionWriter } from "./guided-work-disposition-writer.ts";
 import { preserveBlockedStatus } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkLegacyImporter } from "./guided-work-legacy-importer.ts";
 import { GuidedWorkLegacyProjectImporter } from
   "./guided-work-legacy-project-importer.ts";
 import { GuidedWorkReviewWriter } from "./guided-work-review-writer.ts";
 import { GuidedWorkSessionWriter } from "./guided-work-session-writer.ts";
-import { GuidedWorkStatusWriter } from "./guided-work-status-writer.ts";
 import { GuidedWorkToolResultWriter } from "./guided-work-tool-result-writer.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
 
 export class SqliteGuidedWorkStore implements DurableWorkStore {
   private readonly reader: GuidedWorkViewReader;
   private readonly sessions: GuidedWorkSessionWriter;
-  private readonly statuses: GuidedWorkStatusWriter;
   private readonly mutations: GuidedWorkMutationJournal;
   private readonly progress: GuidedWorkProgressWriter;
   private readonly reviews: GuidedWorkReviewWriter;
   private readonly toolResults: GuidedWorkToolResultWriter;
+  private readonly dispositions: GuidedWorkDispositionWriter;
   private readonly legacyImporter: GuidedWorkLegacyImporter;
   private readonly legacyProjectImporter: GuidedWorkLegacyProjectImporter;
 
@@ -46,18 +48,23 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   ) {
     this.reader = new GuidedWorkViewReader(db);
     this.sessions = new GuidedWorkSessionWriter(db, this.reader);
-    this.statuses = new GuidedWorkStatusWriter(db, this.reader);
     this.mutations = new GuidedWorkMutationJournal(db);
     this.progress = new GuidedWorkProgressWriter(db);
     this.reviews = new GuidedWorkReviewWriter(
       db,
       this.reader,
       this.sessions,
-      this.statuses,
       this.mutations,
       this.progress,
     );
     this.toolResults = new GuidedWorkToolResultWriter(db);
+    this.dispositions = new GuidedWorkDispositionWriter(
+      db,
+      this.reader,
+      this.sessions,
+      this.progress,
+      this.toolResults,
+    );
     this.legacyImporter = new GuidedWorkLegacyImporter(db, this.reader);
     this.legacyProjectImporter = new GuidedWorkLegacyProjectImporter(
       db,
@@ -232,6 +239,16 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     return this.reviews.record(input);
   }
 
+  async recordDisposition(
+    input: RecordWorkDispositionCommand,
+  ): Promise<DurableWorkView> {
+    return this.dispositions.record(input);
+  }
+
+  async recordCloseoutMissing(input: RecordCloseoutMissingInput): Promise<void> {
+    this.dispositions.recordCloseoutMissing(input);
+  }
+
   async attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView> {
     const requestSha256 = guidedWorkMutationFingerprint("attach_tool_result", input);
     return this.writeTransaction(() => {
@@ -245,7 +262,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
       const resultRef = this.toolResults.attach(work.work_id, input);
       const now = new Date().toISOString();
       if (work.status === "completed") {
-        this.statuses.reopen(work.work_id, now);
+        this.reopen(work.work_id, now);
       } else {
         this.touch(work.work_id, now);
       }
@@ -290,6 +307,16 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   private touch(workId: string, now: string): void {
     this.db.query("UPDATE btcc_guided_works SET updated_at = ? WHERE work_id = ?")
       .run(now, workId);
+  }
+
+  private reopen(workId: string, now: string): void {
+    const updated = this.db.query(`
+      UPDATE btcc_guided_works SET status = 'open', updated_at = ?
+      WHERE work_id = ? AND status = 'completed'
+    `).run(now, workId);
+    if (updated.changes !== 1) {
+      throw new Error(`Durable Work could not reopen: ${workId}`);
+    }
   }
 
   private writeTransaction<T>(operation: () => T): T {

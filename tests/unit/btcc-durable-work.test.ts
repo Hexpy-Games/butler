@@ -500,7 +500,99 @@ test("one Plan Review call enters Review and advances to Execution idempotently"
   }
 });
 
-test("result Review stays open until completion Validation reports and completes Work", async () => {
+test("record_work_disposition is atomic, idempotent, and the sole closeout authority", async () => {
+  const fixture = durableWorkFixture();
+  try {
+    const scope = fixture.turn(
+      "turn-atomic-disposition",
+      "session-atomic-disposition",
+      "작업을 완료하고 닫아 주세요.",
+    );
+    const opened = await fixture.service.replacePlan(
+      planInput(scope, "atomic-disposition-plan"),
+    );
+    await expect(fixture.service.recordDisposition({
+      ...scope,
+      mutationCallId: "invalid-disposition",
+      workId: opened.workId,
+      disposition: "completed",
+      summary: "잘못된 근거로 완료합니다.",
+      actionUpdates: [{ actionKey: "write-report", status: "done" }],
+      evidenceRefs: ["missing-evidence"],
+    })).rejects.toThrow("evidence reference is not eligible");
+    expect(fixture.count("btcc_guided_work_disposition_revisions")).toBe(0);
+    expect((await fixture.service.boundWorkForTurn(scope.turnId))?.status).toBe("open");
+
+    const input = {
+      ...scope,
+      mutationCallId: "completed-disposition",
+      workId: opened.workId,
+      disposition: "completed" as const,
+      summary: "요청한 작업을 완료했습니다.",
+      actionUpdates: [{ actionKey: "write-report", status: "done" as const }],
+    };
+    const completed = await fixture.service.recordDisposition(input);
+    expect(completed).toMatchObject({
+      status: "completed",
+      actionProgress: [{ actionKey: "write-report", status: "done" }],
+      latestDisposition: {
+        disposition: "completed",
+        originTurnId: scope.turnId,
+      },
+    });
+    expect((await fixture.service.recordDisposition(input)).status).toBe("completed");
+    expect(fixture.count("btcc_guided_work_disposition_revisions")).toBe(1);
+    expect(fixture.count("btcc_guided_work_disposition_commands")).toBe(1);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("disposition replay is idempotent across a SQLite restart", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-r3-disposition-replay-"));
+  const dbPath = join(root, "butler.sqlite");
+  let db: Database | null = new Database(dbPath);
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const scope = insertGuidedTurn(
+      db,
+      "turn-disposition-restart",
+      "session-disposition-restart",
+      "재시작 후에도 닫아 주세요.",
+    );
+    const first = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const work = await first.replacePlan({
+      ...planInput(scope, "disposition-restart-plan"),
+      startNew: true,
+    });
+    const input = {
+      ...scope,
+      mutationCallId: "disposition-restart-call",
+      workId: work.workId,
+      disposition: "completed" as const,
+      summary: "재시작 전 완료",
+      actionUpdates: [{ actionKey: "write-report", status: "done" as const }],
+    };
+    const completed = await first.recordDisposition(input);
+    db.close();
+    db = null;
+    db = new Database(dbPath);
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const replay = await resumed.recordDisposition(input);
+    expect(replay.workId).toBe(completed.workId);
+    expect(replay.latestDisposition?.dispositionRevisionId)
+      .toBe(completed.latestDisposition?.dispositionRevisionId);
+    expect(db.query<{ count: number }, []>(`
+      SELECT COUNT(*) AS count FROM btcc_guided_work_disposition_revisions
+    `).get()?.count).toBe(1);
+  } finally {
+    db?.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("result Review and completion Validation stay open until disposition closes Work", async () => {
   const fixture = durableWorkFixture();
   try {
     const scope = fixture.turn(
@@ -566,9 +658,9 @@ test("result Review stays open until completion Validation reports and completes
       corrections: [],
       nextStage: "reporting" as const,
     };
-    const completed = await fixture.service.recordReview(completionInput);
-    expect(completed).toMatchObject({
-      status: "completed",
+    const validated = await fixture.service.recordReview(completionInput);
+    expect(validated).toMatchObject({
+      status: "open",
       currentStage: "reporting",
       latestCheckpoint: { revision: 7, stage: "reporting" },
       latestCompletionValidation: {
@@ -577,8 +669,19 @@ test("result Review stays open until completion Validation reports and completes
           reviewedResult.latestResultReview?.reviewRevisionId,
       },
     });
+    const completed = await fixture.service.recordDisposition({
+      ...scope,
+      mutationCallId: "fused-completed-disposition",
+      workId: validated.workId,
+      disposition: "completed",
+      summary: "전체 Work를 완료했습니다.",
+    });
+    expect(completed).toMatchObject({
+      status: "completed",
+      latestDisposition: { disposition: "completed" },
+    });
     expect(fixture.count("btcc_guided_work_review_revisions")).toBe(3);
-    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(7);
+    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(8);
     const persistedStages = fixture.db.query<{ stage: string }, [string]>(`
       SELECT stage FROM btcc_guided_work_checkpoint_revisions
       WHERE work_id = ? ORDER BY revision ASC
@@ -591,11 +694,18 @@ test("result Review stays open until completion Validation reports and completes
       "review",
       "validation",
       "reporting",
+      "reporting",
     ]);
-    expect((await fixture.service.recordReview(completionInput)).status)
+    expect((await fixture.service.recordDisposition({
+      ...scope,
+      mutationCallId: "fused-completed-disposition",
+      workId: validated.workId,
+      disposition: "completed",
+      summary: "전체 Work를 완료했습니다.",
+    })).status)
       .toBe("completed");
     expect(fixture.count("btcc_guided_work_review_revisions")).toBe(3);
-    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(7);
+    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(8);
   } finally {
     fixture.close();
   }
@@ -678,7 +788,7 @@ test("a Review transaction rolls back its progress when Review persistence fails
   }
 });
 
-test("Reviews bind runtime revisions and completion Validation completes Work", async () => {
+test("Reviews bind runtime revisions while disposition remains the closeout authority", async () => {
   const fixture = durableWorkFixture();
   try {
     const scope = fixture.turn("turn-review", "session-review", "산출물을 작성해 주세요.");
@@ -805,7 +915,7 @@ test("Reviews bind runtime revisions and completion Validation completes Work", 
       corrections: [],
     });
     expect(acceptedResult.status).toBe("open");
-    const completed = await fixture.service.recordReview({
+    const validated = await fixture.service.recordReview({
       ...scope,
       mutationCallId: "completion-validation-accept",
       subject: "completion",
@@ -814,13 +924,21 @@ test("Reviews bind runtime revisions and completion Validation completes Work", 
       corrections: [],
       nextStage: "reporting",
     });
-    expect(completed.status).toBe("completed");
-    expect(completed.latestCompletionValidation).toMatchObject({
+    expect(validated.status).toBe("open");
+    expect(validated.latestCompletionValidation).toMatchObject({
       subject: "completion",
       verdict: "accept",
       boundResultReviewRevisionId:
         acceptedResult.latestResultReview?.reviewRevisionId,
     });
+    const completed = await fixture.service.recordDisposition({
+      ...scope,
+      mutationCallId: "completion-disposition-accept",
+      workId: validated.workId,
+      disposition: "completed",
+      summary: "전체 Work를 완료했습니다.",
+    });
+    expect(completed.status).toBe("completed");
     const later = fixture.turn("turn-after-complete", "session-review", "다음 요청");
     expect(await fixture.service.loadContext(later)).toBeNull();
 
@@ -962,7 +1080,6 @@ test("Reviews reject stale Plan, progress, and result snapshots", async () => {
       entryStage: "review",
       actionProgress: first.actionProgress,
       progressChanged: false,
-      completeWork: false,
     })).rejects.toThrow("Plan changed before its Review");
 
     await fixture.service.recordCheckpoint({
@@ -985,7 +1102,6 @@ test("Reviews reject stale Plan, progress, and result snapshots", async () => {
       entryStage: "review",
       actionProgress: second.actionProgress,
       progressChanged: false,
-      completeWork: false,
     })).rejects.toThrow("progress changed");
 
     const reviewed = await fixture.service.recordReview({
@@ -1017,7 +1133,6 @@ test("Reviews reject stale Plan, progress, and result snapshots", async () => {
       entryStage: "review",
       actionProgress: reviewed.actionProgress,
       progressChanged: false,
-      completeWork: false,
     })).rejects.toThrow("results changed");
     expect(fixture.count("btcc_guided_work_review_revisions")).toBe(1);
   } finally {
@@ -1049,7 +1164,7 @@ test("Stop changes Turn state without changing the bound Work", async () => {
   }
 });
 
-test("Work review waits for a concurrent shared SQLite writer", async () => {
+test("Work disposition waits for a concurrent shared SQLite writer", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-contention-"));
   const dbPath = join(root, "butler.sqlite");
   const db = new Database(dbPath, { create: true });
@@ -1113,14 +1228,12 @@ test("Work review waits for a concurrent shared SQLite writer", async () => {
     });
     await once(child.stdout!, "data");
 
-    const completed = await service.recordReview({
+    const completed = await service.recordDisposition({
       ...scope,
-      mutationCallId: "contention-completion-validation",
-      subject: "completion",
-      verdict: "accept",
-      summary: "전체 Work가 원래 요청과 현재 Plan을 충족합니다.",
-      corrections: [],
-      nextStage: "reporting",
+      mutationCallId: "contention-completed-disposition",
+      workId: acceptedResult.workId,
+      disposition: "completed",
+      summary: "전체 Work를 완료했습니다.",
     });
 
     expect(completed.status).toBe("completed");

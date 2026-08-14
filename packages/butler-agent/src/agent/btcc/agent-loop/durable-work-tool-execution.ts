@@ -1,6 +1,7 @@
 import type {
   DurableWorkActionStatus,
   DurableWorkActionUpdate,
+  DurableWorkDispositionStatus,
   DurableWorkPlanAction,
   DurableWorkService,
   DurableWorkView,
@@ -30,7 +31,9 @@ export async function executeDurableWorkTool(
       ? await input.service.replacePlan(decodePlan(input))
       : input.name === "record_work_checkpoint"
         ? await input.service.recordCheckpoint(decodeCheckpoint(input))
-        : await input.service.recordReview(decodeReview(input));
+        : input.name === "record_work_review"
+          ? await input.service.recordReview(decodeReview(input))
+          : await input.service.recordDisposition(decodeDisposition(input));
     return { ok: true, work: workToolView(view) };
   } catch (error) {
     const current = await input.service.loadContext(input.scope).catch(() => null);
@@ -133,6 +136,51 @@ function decodeReview(input: WorkToolInput) {
   };
 }
 
+function decodeDisposition(input: WorkToolInput) {
+  const disposition = stringValue(input.args.disposition, "disposition");
+  if (disposition !== "completed" && disposition !== "open" &&
+    disposition !== "blocked") {
+    throw new Error(`Unsupported Work disposition: ${disposition}`);
+  }
+  return {
+    ...input.scope,
+    mutationCallId: input.mutationCallId,
+    workId: stringValue(input.args.work_id, "work_id"),
+    disposition: disposition as DurableWorkDispositionStatus,
+    summary: stringValue(input.args.summary, "summary"),
+    actionUpdates: decodeDispositionActionUpdates(input.args.action_updates),
+    remainingActions: optionalStringArray(
+      input.args.remaining_actions,
+      "remaining_actions",
+    ),
+    ...(optionalStringValue(input.args.next_condition)
+      ? { nextCondition: optionalStringValue(input.args.next_condition)! }
+      : {}),
+    evidenceRefs: optionalStringArray(input.args.evidence_refs, "evidence_refs"),
+    followups: optionalStringArray(input.args.followups, "followups"),
+  };
+}
+
+function decodeDispositionActionUpdates(value: unknown) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error("Work disposition requires action_updates to be an array");
+  }
+  return value.map((item, index) => {
+    const update = recordValue(item, `action_updates[${index}]`);
+    const status = stringValue(update.status, `action_updates[${index}].status`);
+    if (status !== "done" && status !== "skipped" && status !== "blocked") {
+      throw new Error(`Unsupported Work disposition action status: ${status}`);
+    }
+    const note = optionalStringValue(update.note);
+    return {
+      actionKey: stringValue(update.action_key, `action_updates[${index}].action_key`),
+      status: status as "done" | "skipped" | "blocked",
+      ...(note ? { note } : {}),
+    };
+  });
+}
+
 function decodeEffect(
   effect: Record<string, unknown>,
   actionIndex: number,
@@ -145,23 +193,7 @@ function decodeEffect(
 
 function workToolView(work: DurableWorkView): Record<string, unknown> {
   const unresolved = unresolvedWorkActionKeys(work.actionProgress);
-  const currentPlanAccepted = work.latestPlanReview?.verdict === "accept" &&
-    work.latestPlanReview.boundPlanRevisionId === work.currentPlan?.planRevisionId;
-  const currentResultReview = currentAcceptedResultReview(work);
-  const completionAccepted = work.latestCompletionValidation?.verdict === "accept" &&
-    work.latestCompletionValidation.boundPlanRevisionId ===
-      work.currentPlan?.planRevisionId &&
-    work.latestCompletionValidation.boundResultReviewRevisionId ===
-      currentResultReview?.reviewRevisionId &&
-    sameActionProgress(
-      work.latestCompletionValidation.boundActionProgress,
-      work.actionProgress,
-    ) &&
-    sameResultRefs(work.latestCompletionValidation.boundResultRefs, work);
   const completionBlockers = [
-    ...(currentPlanAccepted ? [] : ["current_plan_review_required"]),
-    ...(currentResultReview ? [] : ["current_result_review_required"]),
-    ...(completionAccepted ? [] : ["completion_validation_required"]),
     ...(unresolved.length > 0 ? ["unresolved_actions"] : []),
     ...((work.effectBlockers?.length ?? 0) > 0
       ? ["effect_reconciliation_required"]
@@ -185,35 +217,17 @@ function workToolView(work: DurableWorkView): Record<string, unknown> {
     latest_plan_review: work.latestPlanReview?.verdict ?? null,
     latest_result_review: work.latestResultReview?.verdict ?? null,
     latest_completion_validation: work.latestCompletionValidation?.verdict ?? null,
+    ...(work.latestDisposition
+      ? {
+          latest_disposition: {
+            disposition: work.latestDisposition.disposition,
+            summary: work.latestDisposition.summary,
+            remaining_actions: work.latestDisposition.remainingActions,
+            next_condition: work.latestDisposition.nextCondition ?? null,
+          },
+        }
+      : {}),
   };
-}
-
-function currentAcceptedResultReview(work: DurableWorkView) {
-  const review = work.latestResultReview;
-  return review?.verdict === "accept" && sameResultRefs(review.boundResultRefs, work)
-    ? review
-    : undefined;
-}
-
-function sameResultRefs(
-  boundResultRefs: string[],
-  work: Pick<DurableWorkView, "resultRefs">,
-): boolean {
-  return boundResultRefs.length === work.resultRefs.length &&
-    boundResultRefs.every((resultRef, index) =>
-      resultRef === work.resultRefs[index]?.resultRef,
-    );
-}
-
-function sameActionProgress(
-  bound: DurableWorkView["actionProgress"] | undefined,
-  current: DurableWorkView["actionProgress"],
-): boolean {
-  return bound?.length === current.length && bound.every((action, index) => {
-    const candidate = current[index];
-    return candidate?.actionKey === action.actionKey &&
-      candidate.status === action.status && candidate.note === action.note;
-  });
 }
 
 function decodeActionUpdates(value: unknown): DurableWorkActionUpdate[] {
