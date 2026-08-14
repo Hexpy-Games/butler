@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import { selectGuidedTurnPhasePolicy } from
@@ -126,6 +129,77 @@ test("M1 v2 execution keeps an admitted exact required tool in final provider sc
   const selection = selectGuidedTurnPhasePolicy(turn, ENABLED);
   expect(selection.providerTools.map((tool) => tool.name))
     .toContain("transform_public_data_table");
+});
+
+test("M1 v2 exposes available authorized page preview only during execution", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-m1-preview-policy-"));
+  const authFile = join(root, "local-agent-auth.json");
+  writeFileSync(authFile, JSON.stringify({ token: "p".repeat(43) }));
+  const available = {
+    ...ENABLED,
+    BUTLER_APP_LOCAL_PAGE_PREVIEW_URL: "http://127.0.0.1:29991/v1/preview",
+    BUTLER_APP_LOCAL_AUTH_FILE: authFile,
+  };
+  try {
+    const executionTurn = turnRecord({
+      accessMode: "full_access",
+      trackingMode: "local",
+      workspacePath: "/tmp/workspace",
+      originalMessage: "Build and inspect the responsive landing page preview",
+    });
+    executionTurn.context.executionPolicy!.requiredNativeToolProfiles = [
+      "workspace",
+    ];
+    const execution = selectGuidedTurnPhasePolicy(executionTurn, available);
+    const canonical = BUTLER_TOOLS.find((tool) =>
+      tool.name === "inspect_workspace_page",
+    );
+    expect(execution.phase).toBe("execution");
+    expect(execution.authorizedTools.find((tool) => tool.name === canonical?.name))
+      .toBe(canonical);
+    expect(execution.providerTools.map((tool) => tool.name))
+      .toContain("inspect_workspace_page");
+
+    const direct = selectGuidedTurnPhasePolicy(turnRecord({
+      accessMode: "full_access",
+      trackingMode: "none",
+      workspacePath: "",
+    }), available);
+    expect(direct.phase).toBe("direct");
+    expect(direct.authorizedTools.map((tool) => tool.name))
+      .not.toContain("inspect_workspace_page");
+    expect(direct.providerTools.map((tool) => tool.name))
+      .not.toContain("inspect_workspace_page");
+
+    const readOnly = selectGuidedTurnPhasePolicy(turnRecord({
+      accessMode: "read_only",
+      trackingMode: "ledger",
+      projectRef: "butler",
+    }), available);
+    expect(readOnly.phase).toBe("read_only");
+    expect(readOnly.authorizedTools.map((tool) => tool.name))
+      .not.toContain("inspect_workspace_page");
+    expect(readOnly.providerTools.map((tool) => tool.name))
+      .not.toContain("inspect_workspace_page");
+
+    const unavailableTurn = turnRecord({
+      accessMode: "full_access",
+      trackingMode: "local",
+      workspacePath: "/tmp/workspace",
+      originalMessage: "Build and inspect the responsive landing page preview",
+    });
+    unavailableTurn.context.executionPolicy!.requiredNativeToolProfiles = [
+      "workspace",
+    ];
+    const unavailable = selectGuidedTurnPhasePolicy(unavailableTurn, ENABLED);
+    expect(unavailable.phase).toBe("execution");
+    expect(unavailable.authorizedTools.map((tool) => tool.name))
+      .not.toContain("inspect_workspace_page");
+    expect(unavailable.providerTools.map((tool) => tool.name))
+      .not.toContain("inspect_workspace_page");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("M1 v2 execution keeps admitted MCP profile reads in final provider schemas", () => {
@@ -476,6 +550,7 @@ function turnRecord(options: {
   trackingMode?: "ledger" | "local" | "none";
   projectRef?: string;
   workspacePath?: string;
+  originalMessage?: string;
 } = {}): TurnRecord {
   const accessMode = options.accessMode ?? "read_only";
   const trackingMode = options.trackingMode ?? "local";
@@ -486,7 +561,7 @@ function turnRecord(options: {
     inboxId: "inbox-m1-tool-surface",
     triggerKey: "trigger-m1-tool-surface",
     originalMessageId: "message-m1-tool-surface",
-    originalMessage: "Please help",
+    originalMessage: options.originalMessage ?? "Please help",
     modelSelection: {
       provider: "openai",
       model: "gpt-5.6-sol",
