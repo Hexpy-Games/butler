@@ -68,16 +68,15 @@ test("workspace page preview publishes bounded desktop and mobile image evidence
       ],
       model_image_attachments: [
         { media_type: "image/jpeg", name: "desktop top workspace page preview" },
-        { media_type: "image/jpeg", name: "desktop bottom workspace page preview" },
         { media_type: "image/jpeg", name: "mobile top workspace page preview" },
-        { media_type: "image/jpeg", name: "mobile bottom workspace page preview" },
       ],
     });
     expect(JSON.stringify(result)).not.toContain("/9j/2Q==");
     for (const attachment of result.model_image_attachments as Array<{ path: string }>) {
       const path = join(butlerData, attachment.path);
       expect(existsSync(path)).toBe(true);
-      expect(readFileSync(path)).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+      expect(attachment.path).toEndWith("-top-model.jpg");
+      expect(readFileSync(path)).toEqual(Buffer.from([0xff, 0xd8, 0x01, 0xff, 0xd9]));
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -136,7 +135,12 @@ function viewport(name: "desktop" | "mobile", width: number, height: number) {
     blocked_external_requests: 0,
     screenshot_truncated: true,
     screenshots: [
-      { position: "top", media_type: "image/jpeg", base64: "/9j/2Q==" },
+      {
+        position: "top",
+        media_type: "image/jpeg",
+        base64: "/9j/2Q==",
+        model_base64: "/9gB/9k=",
+      },
       { position: "bottom", media_type: "image/jpeg", base64: "/9j/2Q==" },
     ],
     error: null,

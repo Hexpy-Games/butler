@@ -13,6 +13,7 @@ import { resolveWorkspacePathGuard } from
 import type { WorkspaceReference } from "../../../session-workspaces/index.ts";
 
 const MAX_SCREENSHOT_BYTES = 2 * 1024 * 1024;
+const MAX_MODEL_SCREENSHOT_BYTES = 20 * 1024;
 const PREVIEW_TIMEOUT_MS = 90_000;
 
 type PreviewToolCall = {
@@ -167,11 +168,18 @@ function publishPreviewResult(input: {
         const artifactPath = relative(input.butlerData, absolutePath)
           .split("\\").join("/");
         screenshotPaths.push(artifactPath);
-        modelAttachments.push({
-          path: artifactPath,
-          media_type: "image/jpeg",
-          name: `${name} ${position} workspace page preview`,
-        });
+        if (position === "top" && screenshot.modelBase64) {
+          const modelBytes = Buffer.from(screenshot.modelBase64, "base64");
+          if (modelBytes.length >= 4 && modelBytes.length <= MAX_MODEL_SCREENSHOT_BYTES) {
+            const modelAbsolutePath = join(outputRoot, `${name}-${position}-model.jpg`);
+            writeFileSync(modelAbsolutePath, modelBytes, { mode: 0o600 });
+            modelAttachments.push({
+              path: relative(input.butlerData, modelAbsolutePath).split("\\").join("/"),
+              media_type: "image/jpeg",
+              name: `${name} ${position} workspace page preview`,
+            });
+          }
+        }
       }
     }
     views.push({
@@ -264,12 +272,17 @@ function localPreviewEndpoint(value: unknown): string | null {
 function imagePayload(value: unknown): {
   mediaType: "image/jpeg";
   base64: string;
+  modelBase64: string | null;
 } | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   if (record.media_type !== "image/jpeg" || typeof record.base64 !== "string") return null;
   if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(record.base64)) return null;
-  return { mediaType: "image/jpeg", base64: record.base64 };
+  const modelBase64 = typeof record.model_base64 === "string" &&
+      /^[A-Za-z0-9+/]+={0,2}$/u.test(record.model_base64)
+    ? record.model_base64
+    : null;
+  return { mediaType: "image/jpeg", base64: record.base64, modelBase64 };
 }
 
 function screenshotPosition(value: unknown): "top" | "bottom" | null {

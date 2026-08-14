@@ -80,7 +80,7 @@ function previewOutput(relativePath: string): Record<string, unknown> {
 test("BTCC-created preview messages reach the actual OpenAI model-round boundary as image input", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-tool-image-"));
   const relativePath =
-    "artifacts/generated/page-preview-11111111-1111-4111-8111-111111111111/desktop-top.jpg";
+    "artifacts/generated/page-preview-11111111-1111-4111-8111-111111111111/desktop-top-model.jpg";
   const artifactPath = join(butlerData, relativePath);
   mkdirSync(join(artifactPath, ".."), { recursive: true });
   writeFileSync(artifactPath, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
@@ -145,7 +145,7 @@ test("BTCC-created preview messages reach the actual OpenAI model-round boundary
 test("non-preview BTCC tool results cannot smuggle image attachments through the OpenAI round", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-tool-image-non-preview-"));
   const relativePath =
-    "artifacts/generated/page-preview-11111111-1111-4111-8111-111111111111/desktop-top.jpg";
+    "artifacts/generated/page-preview-11111111-1111-4111-8111-111111111111/desktop-top-model.jpg";
   const artifactPath = join(butlerData, relativePath);
   mkdirSync(join(artifactPath, ".."), { recursive: true });
   writeFileSync(artifactPath, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
@@ -197,7 +197,7 @@ test("non-preview BTCC tool results cannot smuggle image attachments through the
 test("preview image attachments cannot cross the generated-artifact symlink boundary through OpenAI", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-tool-image-link-"));
   const relativePath =
-    "artifacts/generated/page-preview-11111111-1111-4111-8111-111111111111/desktop-top.jpg";
+    "artifacts/generated/page-preview-11111111-1111-4111-8111-111111111111/desktop-top-model.jpg";
   const artifactPath = join(butlerData, relativePath);
   const outsidePath = join(butlerData, "outside.jpg");
   mkdirSync(join(artifactPath, ".."), { recursive: true });
