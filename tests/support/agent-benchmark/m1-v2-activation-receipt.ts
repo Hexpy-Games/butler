@@ -58,7 +58,7 @@ export function materializeM1V2RuntimeActivationReceipt(input: {
     if (!exactReplay || !db.continuation || !sameLimits(db.continuation.limits, DEFAULT_LIMITS) ||
         !db.routeIdentity || db.routeIdentity.toolProfileRevision !== "butler.btcc-tool-instruction-policy.v1" ||
         db.routeIdentity.stablePrefixRevision !== "butler.btcc-stable-provider-prefix.v1" ||
-        !validRouteIdentity(db.routeIdentity, agentRequests)) {
+        !validRouteIdentity(db.routeIdentity, agentRequests, input.version)) {
       throw new Error("m1_activation_flags_enabled_but_runtime_path_legacy");
     }
   } else if (exactReplay || db.continuation || db.routeIdentity) {
@@ -73,7 +73,7 @@ export function materializeM1V2RuntimeActivationReceipt(input: {
     exactReplay: { enabled: exactReplay, referenceSchemaOwner: exactReplay ? "butler.operation-result-reference.v1" as const : null },
     continuation: db.continuation ? { admitted: true, schema: "butler.turn-continuation-budget.v2" as const, limits: DEFAULT_LIMITS } : { admitted: false, schema: null, limits: null },
     stablePrefixRevision: db.routeIdentity ? "butler.btcc-stable-provider-prefix.v1" as const : null,
-    routeCacheIdentity: db.routeIdentity ? projectRouteIdentity(db.routeIdentity) : null,
+    routeCacheIdentity: db.routeIdentity ? projectRouteIdentity(db.routeIdentity, input.version) : null,
     finalSerializer: "butler.openai-codex-final-json.v1" as const, rawTextStored: false as const,
   };
   const receipt = { ...stable, identitySha256: digest(stable) };
@@ -105,14 +105,18 @@ type ProviderRouteCacheReceipt = {
   toolProfileRevision: "butler.btcc-tool-instruction-policy.v1";
   stablePrefixRevision: "butler.btcc-stable-provider-prefix.v1";
   serializedStablePrefixSha256: string; serializedStablePrefixBytes: number;
+  toolSurfaceDigest?: string;
 };
 
-const ROUTE_KEYS = ["schemaVersion", "routeDigest", "routeCursor", "providerId", "modelRef", "authMode",
+const BASE_ROUTE_KEYS = ["schemaVersion", "routeDigest", "routeCursor", "providerId", "modelRef", "authMode",
   "capabilityDigest", "serializerContract", "toolProfileRevision", "stablePrefixRevision",
   "serializedStablePrefixSha256", "serializedStablePrefixBytes"].sort();
-function validRouteIdentity(value: Record<string, unknown>, requests: readonly ProviderRequestObservation[]): boolean {
+function routeKeys(version: BenchmarkVersion): string[] {
+  return version === "after" ? [...BASE_ROUTE_KEYS, "toolSurfaceDigest"].sort() : BASE_ROUTE_KEYS;
+}
+function validRouteIdentity(value: Record<string, unknown>, requests: readonly ProviderRequestObservation[], version: BenchmarkVersion): boolean {
   const modelRef = value.modelRef;
-  return JSON.stringify(Object.keys(value).sort()) === JSON.stringify(ROUTE_KEYS) &&
+  return JSON.stringify(Object.keys(value).sort()) === JSON.stringify(routeKeys(version)) &&
     value.schemaVersion === "butler.provider-route-cache-identity.v1" && sha(value.routeDigest) &&
     Number.isSafeInteger(value.routeCursor) && Number(value.routeCursor) >= 0 && value.providerId === "openai-codex" &&
     typeof modelRef === "string" && requests.every((request) => modelMatches(modelRef, request.requestedModel)) &&
@@ -120,10 +124,11 @@ function validRouteIdentity(value: Record<string, unknown>, requests: readonly P
     value.serializerContract === "butler.openai-codex-final-json.v1" &&
     value.toolProfileRevision === "butler.btcc-tool-instruction-policy.v1" &&
     value.stablePrefixRevision === "butler.btcc-stable-provider-prefix.v1" && sha(value.serializedStablePrefixSha256) &&
-    Number.isSafeInteger(value.serializedStablePrefixBytes) && Number(value.serializedStablePrefixBytes) > 0;
+    Number.isSafeInteger(value.serializedStablePrefixBytes) && Number(value.serializedStablePrefixBytes) > 0 &&
+    (version === "before" || sha(value.toolSurfaceDigest));
 }
-function projectRouteIdentity(value: Record<string, unknown>): ProviderRouteCacheReceipt {
-  return Object.fromEntries(ROUTE_KEYS.map((key) => [key, value[key]])) as ProviderRouteCacheReceipt;
+function projectRouteIdentity(value: Record<string, unknown>, version: BenchmarkVersion): ProviderRouteCacheReceipt {
+  return Object.fromEntries(routeKeys(version).map((key) => [key, value[key]])) as ProviderRouteCacheReceipt;
 }
 function modelMatches(actual: string, observed: string | null): boolean {
   if (!observed) return false; const normalize = (value: string) => value.includes("/") ? value.slice(value.indexOf("/") + 1) : value;

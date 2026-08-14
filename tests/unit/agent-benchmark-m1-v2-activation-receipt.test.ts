@@ -21,6 +21,7 @@ test("runtime receipt combines final serializer and admitted canonical after sta
       exactReplay: { enabled: true, referenceSchemaOwner: "butler.operation-result-reference.v1" },
       continuation: { admitted: true, schema: "butler.turn-continuation-budget.v2",
         limits: { maxModelFacingBytes: 196_608 } }, stablePrefixRevision: "butler.btcc-stable-provider-prefix.v1",
+      routeCacheIdentity: { toolSurfaceDigest: "f".repeat(64) },
       finalSerializer: "butler.openai-codex-final-json.v1", rawTextStored: false });
     expect(existsSync(join(root, "evidence", "m1-v2-runtime-activation-receipt.json"))).toBe(true);
     expect(materializeM1V2RuntimeActivationReceipt({ runRoot: root, dataRoot: join(root, "data"), evidenceRoot: join(root, "evidence"),
@@ -86,7 +87,7 @@ test("runtime receipt requires the admitted canonical M1 path for both paired so
       .toThrow("m1_activation_flags_enabled_but_runtime_path_legacy");
   });
   withRoot((root) => {
-    seed(root, true);
+    seed(root, true, false);
     const receipt = materializeM1V2RuntimeActivationReceipt({ runRoot: root, dataRoot: join(root, "data"), evidenceRoot: join(root, "before"),
       turnId: "turn-1", version: "before", sourceRevision: FINAL_BEFORE_REVISION,
       declaredActivation: FINAL_ACTIVATION.before, providerRequests: [request(true)] });
@@ -106,6 +107,28 @@ test("runtime receipt rejects actual route/cache identity drift", () => {
   });
 });
 
+test("runtime receipt requires tool surface digest only for AFTER route identity", () => {
+  withRoot((root) => {
+    seed(root, true, false);
+    expect(() => materializeM1V2RuntimeActivationReceipt({ runRoot: root, dataRoot: join(root, "data"), evidenceRoot: join(root, "after"),
+      turnId: "turn-1", version: "after", sourceRevision: FINAL_AFTER_REVISION,
+      declaredActivation: FINAL_ACTIVATION.after, providerRequests: [request(true)] })).toThrow("runtime_path_legacy");
+  });
+  withRoot((root) => {
+    seed(root, true, false);
+    expect(materializeM1V2RuntimeActivationReceipt({ runRoot: root, dataRoot: join(root, "data"), evidenceRoot: join(root, "before"),
+      turnId: "turn-1", version: "before", sourceRevision: FINAL_BEFORE_REVISION,
+      declaredActivation: FINAL_ACTIVATION.before, providerRequests: [request(true)] }).routeCacheIdentity)
+      .not.toHaveProperty("toolSurfaceDigest");
+  });
+  withRoot((root) => {
+    seed(root, true, true);
+    expect(() => materializeM1V2RuntimeActivationReceipt({ runRoot: root, dataRoot: join(root, "data"), evidenceRoot: join(root, "before"),
+      turnId: "turn-1", version: "before", sourceRevision: FINAL_BEFORE_REVISION,
+      declaredActivation: FINAL_ACTIVATION.before, providerRequests: [request(true)] })).toThrow("runtime_path_legacy");
+  });
+});
+
 test("runtime receipt rejects an ancestor symlink and out-of-run evidence root", () => {
   withRoot((root) => {
     seed(root, true); const external = mkdtempSync(join(tmpdir(), "activation-external-"));
@@ -120,7 +143,7 @@ test("runtime receipt rejects an ancestor symlink and out-of-run evidence root",
   });
 });
 
-function seed(root: string, after: boolean): void {
+function seed(root: string, after: boolean, toolSurfaceDigest = true): void {
   const data = join(root, "data", "runtime"); mkdirSync(data, { recursive: true });
   const db = new Database(join(data, "conversation.sqlite"));
   db.run("CREATE TABLE btcc_turns (turn_id TEXT PRIMARY KEY, continuation_budget_json TEXT)");
@@ -132,7 +155,8 @@ function seed(root: string, after: boolean): void {
     providerRouteIdentity: { schemaVersion: "butler.provider-route-cache-identity.v1", routeDigest: "d".repeat(64), routeCursor: 0,
       providerId: "openai-codex", modelRef: "openai/gpt-5.6-sol", authMode: "codex_oauth", capabilityDigest: "c".repeat(64),
       toolProfileRevision: "butler.btcc-tool-instruction-policy.v1", stablePrefixRevision: "butler.btcc-stable-provider-prefix.v1",
-      serializerContract: "butler.openai-codex-final-json.v1", serializedStablePrefixSha256: "e".repeat(64), serializedStablePrefixBytes: 100 } } }), "2026-08-13T00:00:00.000Z");
+      serializerContract: "butler.openai-codex-final-json.v1", serializedStablePrefixSha256: "e".repeat(64), serializedStablePrefixBytes: 100,
+      ...(toolSurfaceDigest ? { toolSurfaceDigest: "f".repeat(64) } : {}) } } }), "2026-08-13T00:00:00.000Z");
   db.close();
 }
 function request(exact: boolean): ProviderRequestObservation { return { ordinal: 1, attemptDigest: null, requestKind: "agent",

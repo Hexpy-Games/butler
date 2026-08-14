@@ -354,7 +354,8 @@ describe("final paired M1 campaign contract", () => {
         providerRouteIdentity: { schemaVersion: "butler.provider-route-cache-identity.v1", routeDigest: "d".repeat(64), routeCursor: 0,
           providerId: "openai-codex", modelRef: "openai/gpt-5.6-sol", authMode: "codex_oauth", capabilityDigest: "c".repeat(64),
           toolProfileRevision: "butler.btcc-tool-instruction-policy.v1", stablePrefixRevision: "butler.btcc-stable-provider-prefix.v1",
-          serializerContract: "butler.openai-codex-final-json.v1", serializedStablePrefixSha256: "e".repeat(64), serializedStablePrefixBytes: 100 } } }), "2026-08-13T00:00:00.000Z");
+          serializerContract: "butler.openai-codex-final-json.v1", serializedStablePrefixSha256: "e".repeat(64), serializedStablePrefixBytes: 100,
+          ...(input.arm.version === "after" ? { toolSurfaceDigest: "f".repeat(64) } : {}) } } }), "2026-08-13T00:00:00.000Z");
       db.close();
       const proxy = await startProviderObservationProxy({
         fixture: { responses: [
