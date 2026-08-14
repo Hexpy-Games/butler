@@ -15,6 +15,7 @@ import {
 import {
   bindingWorkspace,
   prepareElectronRun,
+  refreshLaunchSmokeConsolidationSchedulerState,
 } from "./isolation-config.ts";
 import {
   bridgeCall,
@@ -95,6 +96,9 @@ export async function runBtccR3ElectronHarness(
       fixture: scenario.providerFixture,
       execution: options.pairedExecution,
     });
+    if (options.smoke && run.providerFixtureEnabled) {
+      refreshLaunchSmokeConsolidationSchedulerState(run);
+    }
     launch = await launchProduct(run, providerProxy.endpoint);
     launches.push({
       electronPid: launch.child.pid ?? null,
@@ -118,6 +122,9 @@ export async function runBtccR3ElectronHarness(
       await launch.page.reload();
       await openSession(run, launch.page);
       await stopCurrent();
+      if (run.providerFixtureEnabled) {
+        refreshLaunchSmokeConsolidationSchedulerState(run);
+      }
       launch = await launchProduct(run, providerProxy.endpoint);
       launches.push({
         electronPid: launch.child.pid ?? null,
