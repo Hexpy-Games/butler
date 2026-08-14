@@ -108,6 +108,22 @@ export function validateElectronScenario(value: unknown): ElectronScenario {
       );
     }
   }
+  if (scenario.cacheBoundaryEvidence !== undefined) {
+    assert(
+      typeof scenario.cacheBoundaryEvidence.expectedRevision === "string" &&
+        Boolean(scenario.cacheBoundaryEvidence.expectedRevision.trim()) &&
+        typeof scenario.cacheBoundaryEvidence.observedRevision === "string" &&
+        Boolean(scenario.cacheBoundaryEvidence.observedRevision.trim()),
+      "Scenario cacheBoundaryEvidence revisions must be non-empty strings.",
+    );
+  }
+  if (scenario.attributionArmId !== undefined) {
+    assert(
+      typeof scenario.attributionArmId === "string" &&
+        Boolean(scenario.attributionArmId.trim()),
+      "Scenario attributionArmId must be a non-empty string.",
+    );
+  }
   if (scenario.providerFixture !== undefined) {
     assert(
       Array.isArray(scenario.providerFixture.responses),

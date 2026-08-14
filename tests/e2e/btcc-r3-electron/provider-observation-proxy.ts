@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from "node:crypto";
 import {
   createServer,
   request as httpRequest,
@@ -13,6 +14,7 @@ import { pipeline, Transform } from "node:stream";
 import type {
   ElectronProviderFixture,
   ElectronProviderFixtureResponse,
+  ProviderRequestSerializerContract,
 } from "./contracts.ts";
 
 const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
@@ -29,6 +31,8 @@ const HOP_BY_HOP_HEADERS = new Set([
   "transfer-encoding",
   "upgrade",
 ]);
+const M1_PHYSICAL_ATTEMPT_HEADER = "x-butler-m1-physical-attempt";
+const M1_ATTEMPT_DIGEST = /^[A-Za-z0-9_-]{43}$/u;
 
 export type ProviderRequestKind =
   | "agent"
@@ -42,10 +46,20 @@ export type ProviderRequestTermination =
 
 export interface ProviderRequestObservation {
   ordinal: number;
+  attemptDigest: string | null;
   requestKind: ProviderRequestKind;
   requestedModel: string | null;
+  requestedReasoning?: string | null;
+  requestedServiceTier?: string | null;
+  requestedServiceTierMode: "auto_by_omission" | "explicit" | null;
+  authorizationScheme?: string | null;
+  routeId?: string | null;
   requestStartedAtMs: number;
   serializedRequestBytes: number;
+  serializedRequestDigest: string | null;
+  serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1" | null;
+  serializerContract: ProviderRequestSerializerContract | null;
+  exactResultReadSchemaObserved: boolean;
   firstContentBearingDeltaAtMs: number | null;
   completedAtMs: number | null;
   terminatedAtMs: number | null;
@@ -57,6 +71,9 @@ export interface ProviderRequestObservation {
   streamedTextChars: number;
   finalTextChars: number;
   providerReportedModel: string | null;
+  providerReportedServiceTier?: string | null;
+  effectiveServiceTierAvailability: "reported" | "unavailable";
+  effectiveServiceTierReason: "provider_response_reported" | "provider_response_omitted";
 }
 
 interface MutableProviderRequestObservation extends ProviderRequestObservation {}
@@ -71,6 +88,11 @@ export interface ProviderObservationProxyOptions {
   upstreamBaseUrl?: string;
   now?: () => number;
   fixture?: ElectronProviderFixture;
+  execution?: {
+    model: string;
+    reasoning: string;
+    serviceTier: "default";
+  };
 }
 
 interface ContentObservation {
@@ -85,8 +107,23 @@ interface ContentObservation {
 function codexResponsesUrl(baseUrl: string | undefined): URL {
   const base = (baseUrl?.trim() || DEFAULT_CODEX_BASE_URL).replace(/\/+$/u, "");
   if (base.endsWith(CODEX_RESPONSES_PATH)) return new URL(base);
+  if (base.endsWith("/v1/responses") || base.endsWith("/responses")) return new URL(base);
   if (base.endsWith("/codex")) return new URL(`${base}/responses`);
   return new URL(`${base}${CODEX_RESPONSES_PATH}`);
+}
+
+function providerRouteIdentity(
+  upstream: URL | null,
+  fixture: boolean,
+): { routeId: "openai-codex-responses" | "openai-responses"; serializerContract: ProviderRequestSerializerContract } {
+  const path = fixture ? CODEX_RESPONSES_PATH : upstream?.pathname.replace(/\/+$/u, "");
+  if (path === CODEX_RESPONSES_PATH || path?.endsWith(CODEX_RESPONSES_PATH)) {
+    return { routeId: "openai-codex-responses", serializerContract: "butler.openai-codex-final-json.v1" };
+  }
+  if (path === "/v1/responses" || path === "/responses") {
+    return { routeId: "openai-responses", serializerContract: "butler.openai-responses-final-json.v1" };
+  }
+  throw new Error("provider_serializer_route_unavailable_or_ambiguous");
 }
 
 function providerRequestKind(body: Buffer): ProviderRequestKind {
@@ -127,15 +164,53 @@ function requestedModel(body: Buffer): string | null {
   }
 }
 
+function exactResultReadSchemaObserved(body: Buffer): boolean {
+  try {
+    const parsed = JSON.parse(body.toString("utf8")) as { tools?: unknown };
+    if (!Array.isArray(parsed.tools)) return false;
+    return parsed.tools.some((value) => {
+      if (!value || typeof value !== "object") return false;
+      const tool = value as Record<string, unknown>;
+      const parameters = tool.parameters;
+      if (tool.type !== "function" || tool.name !== "read_operation_results" ||
+          !parameters || typeof parameters !== "object" || Array.isArray(parameters)) return false;
+      return JSON.stringify(parameters) === JSON.stringify({
+        type: "object", additionalProperties: false,
+        properties: {
+          result_ref: { type: "string", minLength: 1, maxLength: 256 },
+          sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          revision: { anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }] },
+          work_id: { anyOf: [{ type: "string", minLength: 1, maxLength: 256 }, { type: "null" }] },
+          offset: { type: "integer", minimum: 0 },
+          length: { type: "integer", minimum: 1, maximum: 4096 },
+        },
+        required: ["result_ref", "sha256", "revision", "work_id", "offset", "length"],
+      });
+    });
+  } catch {
+    return false;
+  }
+}
+
 function safeObservation(
   observation: MutableProviderRequestObservation,
 ): ProviderRequestObservation {
   return {
     ordinal: observation.ordinal,
+    attemptDigest: observation.attemptDigest,
     requestKind: observation.requestKind,
     requestedModel: observation.requestedModel,
+    requestedReasoning: observation.requestedReasoning,
+    requestedServiceTier: observation.requestedServiceTier,
+    requestedServiceTierMode: observation.requestedServiceTierMode,
+    authorizationScheme: observation.authorizationScheme,
+    routeId: observation.routeId,
     requestStartedAtMs: observation.requestStartedAtMs,
     serializedRequestBytes: observation.serializedRequestBytes,
+    serializedRequestDigest: observation.serializedRequestDigest,
+    serializedRequestDigestAlgorithm: observation.serializedRequestDigestAlgorithm,
+    serializerContract: observation.serializerContract,
+    exactResultReadSchemaObserved: observation.exactResultReadSchemaObserved,
     firstContentBearingDeltaAtMs:
       observation.firstContentBearingDeltaAtMs,
     completedAtMs: observation.completedAtMs,
@@ -148,6 +223,9 @@ function safeObservation(
     streamedTextChars: observation.streamedTextChars,
     finalTextChars: observation.finalTextChars,
     providerReportedModel: observation.providerReportedModel,
+    providerReportedServiceTier: observation.providerReportedServiceTier,
+    effectiveServiceTierAvailability: observation.effectiveServiceTierAvailability,
+    effectiveServiceTierReason: observation.effectiveServiceTierReason,
   };
 }
 
@@ -156,7 +234,8 @@ function forwardedRequestHeaders(
 ): IncomingHttpHeaders {
   const forwarded: IncomingHttpHeaders = {};
   for (const [name, value] of Object.entries(headers)) {
-    if (HOP_BY_HOP_HEADERS.has(name.toLowerCase()) || value === undefined) {
+    if (HOP_BY_HOP_HEADERS.has(name.toLowerCase()) ||
+      name.toLowerCase() === M1_PHYSICAL_ATTEMPT_HEADER || value === undefined) {
       continue;
     }
     forwarded[name] = value;
@@ -426,15 +505,13 @@ class SseObservationTransform extends Transform {
       this.#providerFailed = true;
     }
     const content = contentObservation(event);
-    if (
-      event.type === "response.completed" &&
-      event.response &&
-      typeof event.response === "object" &&
-      typeof (event.response as Record<string, unknown>).model === "string"
-    ) {
-      this.observation.providerReportedModel = String(
-        (event.response as Record<string, unknown>).model,
-      );
+    if (event.type === "response.completed" && event.response && typeof event.response === "object") {
+      const response = event.response as Record<string, unknown>;
+      if (typeof response.model === "string") this.observation.providerReportedModel = response.model;
+      const serviceTier = response.service_tier;
+      this.observation.providerReportedServiceTier = typeof serviceTier === "string" ? serviceTier : null;
+      this.observation.effectiveServiceTierAvailability = typeof serviceTier === "string" ? "reported" : "unavailable";
+      this.observation.effectiveServiceTierReason = typeof serviceTier === "string" ? "provider_response_reported" : "provider_response_omitted";
     }
     this.observation.hasTextContent ||= content.text;
     this.observation.hasToolArgumentContent ||= content.toolArguments;
@@ -562,6 +639,9 @@ async function serveFixtureResponse(input: {
     return;
   }
   input.observation.providerReportedModel = responseModel;
+  input.observation.providerReportedServiceTier = "default";
+  input.observation.effectiveServiceTierAvailability = "reported";
+  input.observation.effectiveServiceTierReason = "provider_response_reported";
   const text = input.fixtureResponse.text ?? "fixture response";
   const output = {
     type: "message",
@@ -595,6 +675,8 @@ async function forwardRequest(input: {
   activeUpstreamRequests: Set<ClientRequest>;
   activeUpstreamResponses: Set<IncomingMessage>;
   isClosing: () => boolean;
+  execution?: ProviderObservationProxyOptions["execution"];
+  observationDigestKey: Buffer;
 }): Promise<void> {
   const {
     request,
@@ -606,10 +688,31 @@ async function forwardRequest(input: {
     activeUpstreamResponses,
     isClosing,
   } = input;
-  const body = await readRequestBody(request);
+  const originalBody = await readRequestBody(request);
+  const body = enforceExecutionRequest(originalBody, input.execution);
+  const attemptHeader = request.headers[M1_PHYSICAL_ATTEMPT_HEADER];
+  const attemptDigest = Array.isArray(attemptHeader) ? attemptHeader[0] : attemptHeader;
+  observation.attemptDigest = typeof attemptDigest === "string" &&
+      M1_ATTEMPT_DIGEST.test(attemptDigest)
+    ? attemptDigest
+    : null;
   observation.serializedRequestBytes = body.byteLength;
+  observation.serializedRequestDigest = createHmac("sha256", input.observationDigestKey).update(body).digest("hex");
+  observation.serializedRequestDigestAlgorithm = "hmac-sha256-observer-private-v1";
   observation.requestKind = providerRequestKind(body);
   observation.requestedModel = requestedModel(body);
+  observation.exactResultReadSchemaObserved = exactResultReadSchemaObserved(body);
+  const requestIdentity = executionRequestIdentity(body);
+  observation.requestedReasoning = requestIdentity.reasoning;
+  observation.requestedServiceTier = requestIdentity.serviceTier;
+  observation.requestedServiceTierMode = requestIdentity.serviceTier === null ? "auto_by_omission" : "explicit";
+  const authorization = request.headers.authorization;
+  observation.authorizationScheme = typeof authorization === "string"
+    ? authorization.split(/\s+/u, 1)[0]?.toLowerCase() ?? null
+    : null;
+  const route = providerRouteIdentity(upstream, Boolean(input.fixture));
+  observation.routeId = route.routeId;
+  observation.serializerContract = route.serializerContract;
   if (isClosing() || response.destroyed) {
     terminateObservation(observation, "cancelled", now);
     response.destroy();
@@ -761,6 +864,7 @@ export async function startProviderObservationProxy(
   const upstream = options.fixture ? null : codexResponsesUrl(options.upstreamBaseUrl);
   const now = options.now ?? Date.now;
   const observed: MutableProviderRequestObservation[] = [];
+  const observationDigestKey = randomBytes(32);
   const usedFixtureResponses = new Set<number>();
   const activeInboundRequests = new Set<IncomingMessage>();
   const activeDownstreamResponses = new Set<ServerResponse>();
@@ -789,10 +893,20 @@ export async function startProviderObservationProxy(
     }
     const observation: MutableProviderRequestObservation = {
       ordinal: nextOrdinal,
+      attemptDigest: null,
       requestKind: "auxiliary",
       requestedModel: null,
+      requestedReasoning: null,
+      requestedServiceTier: null,
+      requestedServiceTierMode: null,
+      authorizationScheme: null,
+      routeId: null,
       requestStartedAtMs: now(),
       serializedRequestBytes: 0,
+      serializedRequestDigest: null,
+      serializedRequestDigestAlgorithm: null,
+      serializerContract: null,
+      exactResultReadSchemaObserved: false,
       firstContentBearingDeltaAtMs: null,
       completedAtMs: null,
       terminatedAtMs: null,
@@ -804,6 +918,9 @@ export async function startProviderObservationProxy(
       streamedTextChars: 0,
       finalTextChars: 0,
       providerReportedModel: null,
+      providerReportedServiceTier: null,
+      effectiveServiceTierAvailability: "unavailable",
+      effectiveServiceTierReason: "provider_response_omitted",
     };
     nextOrdinal += 1;
     observed.push(observation);
@@ -826,6 +943,8 @@ export async function startProviderObservationProxy(
       activeUpstreamRequests,
       activeUpstreamResponses,
       isClosing: () => closing,
+      execution: options.execution,
+      observationDigestKey,
     }).catch(() => {
       terminateObservation(
         observation,
@@ -886,4 +1005,39 @@ export async function startProviderObservationProxy(
       return observed.map(safeObservation);
     },
   };
+}
+
+function executionRequestIdentity(body: Buffer): { reasoning: string | null; serviceTier: string | null } {
+  try {
+    const parsed = JSON.parse(body.toString("utf8")) as Record<string, unknown>;
+    const reasoning = parsed.reasoning && typeof parsed.reasoning === "object"
+      ? (parsed.reasoning as Record<string, unknown>).effort
+      : null;
+    return {
+      reasoning: typeof reasoning === "string" ? reasoning : null,
+      serviceTier: typeof parsed.service_tier === "string" ? parsed.service_tier : null,
+    };
+  } catch {
+    return { reasoning: null, serviceTier: null };
+  }
+}
+
+function enforceExecutionRequest(
+  body: Buffer,
+  execution: ProviderObservationProxyOptions["execution"],
+): Buffer {
+  if (!execution) return body;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(body.toString("utf8")) as Record<string, unknown>;
+  } catch {
+    throw new Error("paired_execution_request_invalid");
+  }
+  const identity = executionRequestIdentity(body);
+  if (!modelMatches(execution.model, typeof parsed.model === "string" ? parsed.model : null) ||
+      identity.reasoning !== execution.reasoning ||
+      identity.serviceTier !== null) {
+    throw new Error("paired_execution_request_identity_mismatch");
+  }
+  return body;
 }

@@ -26,6 +26,12 @@ import type {
   ReasoningEffort,
 } from "./contracts.ts";
 import {
+  bundledAgentPreparationError,
+  preflightBundledAgentDiskCapacity,
+  type ElectronRunResourceError,
+} from "./electron-run-resource.ts";
+import { failureEvidence, writeEvidence } from "./evidence.ts";
+import {
   assert,
   isInside,
   isRecord,
@@ -58,6 +64,19 @@ function writeJson(path: string, value: unknown): void {
 
 const FIXTURE_PROVIDER_CREDENTIAL_ID = "btcc-r3-fixture-provider";
 const FIXTURE_PROVIDER_SECRET = "fixture-local-provider-key";
+
+export function refreshLaunchSmokeConsolidationSchedulerState(
+  run: Pick<PreparedRun, "dataRoot">,
+  now = new Date(),
+): void {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  writeJson(
+    join(run.dataRoot, "state", "scheduler", "consolidation-cycle.json"),
+    { lastRunDate: `${year}-${month}-${day}` },
+  );
+}
 
 function fixtureModelRefs(
   run: Pick<PreparedRun, "model">,
@@ -235,6 +254,7 @@ function prepareConfig(
   run: Pick<PreparedRun, "dataRoot" | "model" | "reasoningEffort" | "repoRoot" | "runId" | "workspaceRoot">,
   modelFallback?: ElectronScenario["modelFallback"],
   providerFixture?: ElectronScenario["providerFixture"],
+  promptCacheKeyPrefix?: string,
 ): void {
   const config = structuredClone(sourceConfig);
   if (providerFixture) {
@@ -249,7 +269,9 @@ function prepareConfig(
     defaultModel: run.model,
     devRoot: run.workspaceRoot,
     openaiModel: run.model.split("/").slice(1).join("/"),
-    openaiPromptCacheKeyPrefix: `btcc-r3-e2e-${run.runId}`,
+    openaiPromptCacheKeyPrefix: promptCacheKeyPrefix === undefined
+      ? `btcc-r3-e2e-${run.runId}`
+      : validatedPromptCacheKeyPrefix(promptCacheKeyPrefix),
     openaiReasoningEffort: run.reasoningEffort,
   };
   if (modelFallback) {
@@ -282,6 +304,15 @@ function prepareConfig(
   writeJson(join(run.dataRoot, "butler.config.json"), config);
 }
 
+function validatedPromptCacheKeyPrefix(value: string): string {
+  const candidate = value.trim();
+  assert(
+    /^[a-z0-9][a-z0-9._-]{0,95}$/u.test(candidate),
+    "Prompt cache key prefix must be a bounded lowercase identifier.",
+  );
+  return candidate;
+}
+
 function writeFixtures(
   workspaceRoot: string,
   fixtures: readonly ElectronFixtureFile[],
@@ -308,7 +339,13 @@ function bindPreparedSession(run: PreparedRun): void {
       modelProviderId: run.model.split("/", 1)[0] || "openai",
       modelRef: run.model as `${string}/${string}`,
       transportBindings: [],
-      metadata: { source: "btcc-r3-electron-e2e-fixture" },
+      metadata: {
+        source: "btcc-r3-electron-e2e-fixture",
+        ...(run.attributionArmId ? { m1AttributionArmId: run.attributionArmId } : {}),
+        ...(run.cacheBoundaryEvidence
+          ? { m1CacheBoundaryEvidence: run.cacheBoundaryEvidence }
+          : {}),
+      },
     });
   } finally {
     bindingStore.close();
@@ -358,6 +395,9 @@ export async function prepareElectronRun(
   options: ElectronHarnessOptions,
 ): Promise<PreparedRun> {
   const repoRoot = resolve(options.repoRoot ?? process.cwd());
+  const promptCacheKeyPrefix = options.promptCacheKeyPrefix === undefined
+    ? undefined
+    : validatedPromptCacheKeyPrefix(options.promptCacheKeyPrefix);
   const sourceData = resolve(
     options.sourceData ?? process.env.BUTLER_E2E_SOURCE_DATA ?? join(homedir(), ".butler"),
   );
@@ -414,6 +454,10 @@ export async function prepareElectronRun(
   const sessionId = `chat-btcc-r3-e2e-${sessionSuffix}`;
   const run: PreparedRun = {
     accessMode,
+    ...(scenario.attributionArmId ? { attributionArmId: scenario.attributionArmId } : {}),
+    ...(scenario.cacheBoundaryEvidence
+      ? { cacheBoundaryEvidence: scenario.cacheBoundaryEvidence }
+      : {}),
     agentOwnership,
     bundledAgentResourceDir: agentOwnership === "electron"
       ? providedBundledAgentResourceDir
@@ -447,8 +491,21 @@ export async function prepareElectronRun(
 
   mkdirSync(dataRoot, { recursive: true, mode: 0o700 });
   mkdirSync(electronProfile, { recursive: true, mode: 0o700 });
+  if (agentOwnership === "electron") {
+    try {
+      preflightBundledAgentDiskCapacity(
+        runRoot,
+        providedBundledAgentResourceDir === null,
+      );
+    } catch (error) {
+      const resourceError = bundledAgentPreparationError(error);
+      if (!resourceError) throw error;
+      writePreparationFailureEvidence(run, options, resourceError);
+      throw resourceError;
+    }
+  }
   if (sessionKind === "chat") mkdirSync(workspaceRoot, { recursive: true });
-  prepareConfig(sourceConfig, run, scenario.modelFallback, scenario.providerFixture);
+  prepareConfig(sourceConfig, run, scenario.modelFallback, scenario.providerFixture, promptCacheKeyPrefix);
   if (scenario.providerFixture) {
     writeFixtureProviderCredential(dataRoot);
   } else {
@@ -469,10 +526,17 @@ export async function prepareElectronRun(
         `Prepared bundled Agent resource is unavailable: ${providedBundledAgentResourceDir}`,
       );
     } else {
-      run.bundledAgentResourceDir = prepareBundledAgentResource(
-        repoRoot,
-        join(runRoot, "bundled-agent-resource"),
-      ).resourceDir;
+      try {
+        run.bundledAgentResourceDir = prepareBundledAgentResource(
+          repoRoot,
+          join(runRoot, "bundled-agent-resource"),
+        ).resourceDir;
+      } catch (error) {
+        const resourceError = bundledAgentPreparationError(error);
+        if (!resourceError) throw error;
+        writePreparationFailureEvidence(run, options, resourceError);
+        throw resourceError;
+      }
     }
   }
   if (sessionKind === "chat") {
@@ -480,6 +544,21 @@ export async function prepareElectronRun(
     bindPreparedSession(run);
   }
   return run;
+}
+
+function writePreparationFailureEvidence(
+  run: PreparedRun,
+  options: ElectronHarnessOptions,
+  error: ElectronRunResourceError,
+): void {
+  writeEvidence(run.evidencePath, failureEvidence({
+    error,
+    launches: [],
+    observations: [],
+    options,
+    providerRequests: [],
+    run,
+  }));
 }
 
 export function bindingWorkspace(run: PreparedRun): string | null {

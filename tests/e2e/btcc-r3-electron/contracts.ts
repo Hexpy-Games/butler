@@ -88,6 +88,8 @@ export interface ElectronScenario {
   model?: string;
   reasoningEffort?: ReasoningEffort;
   accessMode?: AccessMode;
+  attributionArmId?: string;
+  cacheBoundaryEvidence?: { expectedRevision: string; observedRevision: string };
   modelFallback?: {
     enabled: boolean;
     models: string[];
@@ -115,16 +117,36 @@ export interface ElectronHarnessOptions {
   runRoot?: string;
   sourceData?: string;
   bundledAgentResourceDir?: string;
+  bundledAgentResourceIdentity?: {
+    sourceRevision: string;
+    sourceCompatibilitySha256: string;
+    manifestSha256: string;
+    dependencyClosureSha256: string;
+    resourceSha256: string;
+    resourceBytes: number;
+    archiveSha256: string;
+    archiveBytes: number;
+  };
   model?: string;
   reasoningEffort?: ReasoningEffort;
   accessMode?: AccessMode;
   smoke?: boolean;
   dryRun?: boolean;
   keepLogs?: boolean;
+  /** Optional stable provider prompt-cache namespace for paired benchmark arms. */
+  promptCacheKeyPrefix?: string;
+  pairedExecution?: {
+    model: string;
+    reasoning: string;
+    serviceTier: "default";
+    authMode: "oauth" | "api_key" | "managed";
+  };
 }
 
 export interface PreparedRun {
   accessMode: AccessMode;
+  attributionArmId?: string;
+  cacheBoundaryEvidence?: { expectedRevision: string; observedRevision: string };
   agentOwnership: AgentOwnership;
   bundledAgentResourceDir: string | null;
   dataRoot: string;
@@ -211,7 +233,9 @@ export interface GuidedWorkObservation {
 export interface StepObservation {
   stepId: string;
   promptSha256: string;
+  sessionId: string;
   turnId: string;
+  providerRequestIdentities: ProviderRequestTurnIdentity[];
   terminalState: string;
   finalText: string;
   rendererFinalText: string;
@@ -242,3 +266,15 @@ export interface StepObservation {
   };
   screenshots: string[];
 }
+
+export type ProviderRequestTurnIdentity = {
+  ordinal: number;
+  sessionId: string;
+  turnId: string;
+  physicalAttemptDigest: string;
+} & ({ requestKind: "agent" } | { requestKind: "auxiliary" } |
+  { requestKind: "tool_provider" } | { requestKind: "title" });
+
+export type ProviderRequestSerializerContract =
+  | "butler.openai-codex-final-json.v1"
+  | "butler.openai-responses-final-json.v1";

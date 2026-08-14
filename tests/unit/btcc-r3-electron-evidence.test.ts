@@ -5,7 +5,9 @@ function observation() {
   return {
     stepId: "step-1",
     promptSha256: "prompt-hash",
+    sessionId: "chat-1",
     turnId: "turn-1",
+    providerRequestIdentities: [],
     terminalState: "delivered",
     finalText: "done",
     rendererFinalText: "done",
@@ -57,6 +59,7 @@ function evidenceRun(providerFixtureEnabled: boolean) {
 
 test("deterministic fixture evidence does not claim a real provider path", () => {
   const evidence = successEvidence({
+    bindingWorkspace: "/tmp/run/workspace",
     launches: [],
     observations: [observation()],
     options: { smoke: false },
@@ -69,6 +72,7 @@ test("deterministic fixture evidence does not claim a real provider path", () =>
 
 test("non-fixture evidence keeps the real provider path", () => {
   const evidence = successEvidence({
+    bindingWorkspace: "/tmp/run/workspace",
     launches: [],
     observations: [observation()],
     options: { smoke: false },

@@ -62,10 +62,20 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
     model: "gpt-test",
     input: "한글 request body",
     prompt_cache_key: "benchmark:btcc-agent-loop",
+    tools: [{ type: "function", name: "read_operation_results", parameters: {
+      type: "object", additionalProperties: false, properties: {
+        result_ref: { type: "string", minLength: 1, maxLength: 256 }, sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+        revision: { anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }] }, work_id: { anyOf: [{ type: "string", minLength: 1, maxLength: 256 }, { type: "null" }] },
+        offset: { type: "integer", minimum: 0 }, length: { type: "integer", minimum: 1, maximum: 4096 },
+      },
+      required: ["result_ref", "sha256", "revision", "work_id", "offset", "length"],
+    } }],
   }));
   let capturedBody: Buffer = Buffer.alloc(0);
   let capturedAuthorization = "";
   let capturedAcceptEncoding = "";
+  let capturedAttemptDigest = "";
+  const attemptDigest = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
   let upstreamCompleted = false;
   let releaseUpstream: (() => void) | undefined;
   const upstreamGate = new Promise<void>((resolve) => {
@@ -76,6 +86,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       capturedBody = await bodyOf(request);
       capturedAuthorization = String(request.headers.authorization ?? "");
       capturedAcceptEncoding = String(request.headers["accept-encoding"] ?? "");
+      capturedAttemptDigest = String(request.headers["x-butler-m1-physical-attempt"] ?? "");
       response.writeHead(202, {
         "content-type": "application/octet-stream",
         "x-upstream-header": "preserved",
@@ -102,6 +113,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
   const proxy = await startProviderObservationProxy({
     upstreamBaseUrl: upstream.baseUrl,
     now: () => clockValues.shift() ?? 999,
+
   });
 
   try {
@@ -113,6 +125,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
         authorization,
         "content-type": "application/json",
         "x-forwarded-fixture": "yes",
+        "x-butler-m1-physical-attempt": attemptDigest,
       },
       body: requestBody,
     });
@@ -135,12 +148,23 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
     expect(capturedBody.equals(requestBody)).toBe(true);
     expect(capturedAuthorization).toBe(authorization);
     expect(capturedAcceptEncoding).toBe("identity");
+    expect(capturedAttemptDigest).toBe("");
     expect(proxy.observations()).toEqual([{
       ordinal: 1,
+      attemptDigest,
       requestKind: "agent",
       requestedModel: "gpt-test",
+      requestedReasoning: null,
+      requestedServiceTier: null,
+      requestedServiceTierMode: "auto_by_omission",
+      routeId: "openai-codex-responses",
+      authorizationScheme: "bearer",
       requestStartedAtMs: 100,
       serializedRequestBytes: requestBody.byteLength,
+      serializedRequestDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1",
+      serializerContract: "butler.openai-codex-final-json.v1",
+      exactResultReadSchemaObserved: true,
       firstContentBearingDeltaAtMs: 200,
       completedAtMs: 300,
       terminatedAtMs: 300,
@@ -152,12 +176,78 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       streamedTextChars: 5,
       finalTextChars: 0,
       providerReportedModel: null,
+      providerReportedServiceTier: null,
+      effectiveServiceTierAvailability: "unavailable",
+      effectiveServiceTierReason: "provider_response_omitted",
     }]);
   } finally {
     releaseUpstream?.();
     await proxy.close();
     await upstream.close();
   }
+});
+
+test("paired proxy preserves service-tier omission and rejects an explicit tier", async () => {
+  let body: Record<string, unknown> = {}; let rawBody: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+  const upstream = await listen((request, response) => { void (async () => {
+    rawBody = await bodyOf(request); body = JSON.parse(rawBody.toString("utf8")) as Record<string, unknown>;
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.end('data: {"type":"response.completed","response":{"status":"completed","service_tier":"default"}}\n\ndata: [DONE]\n\n');
+  })(); });
+  const proxy = await startProviderObservationProxy({ upstreamBaseUrl: upstream.baseUrl,
+    execution: { model: "openai/gpt-5.6-sol", reasoning: "medium", serviceTier: "default" } });
+  try {
+    const valid = await fetch(proxy.endpoint, { method: "POST", headers: { authorization: "Bearer redacted", "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.6-sol", reasoning: { effort: "medium" } }) });
+    await valid.text();
+    expect(body.service_tier).toBeUndefined();
+    expect(proxy.observations()[0]!.serializedRequestBytes).toBe(rawBody.byteLength);
+    expect(Buffer.byteLength(JSON.stringify({ ...body, service_tier: "default" })) - rawBody.byteLength).toBe(25);
+    expect(proxy.observations()[0]).toMatchObject({ requestedServiceTier: null, requestedServiceTierMode: "auto_by_omission", requestedReasoning: "medium", authorizationScheme: "bearer",
+      serializedRequestDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      serializedRequestDigestAlgorithm: "hmac-sha256-observer-private-v1",
+      serializerContract: "butler.openai-codex-final-json.v1", providerReportedServiceTier: "default",
+      effectiveServiceTierAvailability: "reported", effectiveServiceTierReason: "provider_response_reported" });
+    const same = await fetch(proxy.endpoint, { method: "POST", headers: { authorization: "Bearer redacted", "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.6-sol", reasoning: { effort: "medium" } }) }); await same.text();
+    expect(proxy.observations()[1]!.serializedRequestDigest).toBe(proxy.observations()[0]!.serializedRequestDigest);
+    const conflict = await fetch(proxy.endpoint, { method: "POST", headers: { authorization: "Bearer redacted", "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.6-sol", reasoning: { effort: "medium" }, service_tier: "priority" }) });
+    expect(conflict.status).toBeGreaterThanOrEqual(500);
+    expect(proxy.observations()[2]!.serializedRequestDigest).not.toBe(proxy.observations()[0]!.serializedRequestDigest);
+  } finally { await proxy.close(); await upstream.close(); }
+});
+
+test("exact-result schema observation rejects a near-miss byte ceiling", async () => {
+  const proxy = await startProviderObservationProxy({ fixture: { responses: [{ requestKind: "agent", text: "ok" }] } });
+  try {
+    const response = await fetch(proxy.endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+      model: "gpt-test", prompt_cache_key: "benchmark:btcc-agent-loop", tools: [{ type: "function", name: "read_operation_results", parameters: {
+        type: "object", additionalProperties: false, properties: {
+          result_ref: { type: "string", minLength: 1, maxLength: 256 }, sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          revision: { anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }] }, work_id: { anyOf: [{ type: "string", minLength: 1, maxLength: 256 }, { type: "null" }] },
+          offset: { type: "integer", minimum: 0 }, length: { type: "integer", minimum: 1, maximum: 4095 },
+        }, required: ["result_ref", "sha256", "revision", "work_id", "offset", "length"],
+      } }],
+    }) });
+    await response.text();
+    expect(proxy.observations()[0]?.exactResultReadSchemaObserved).toBe(false);
+  } finally { await proxy.close(); }
+});
+
+test("provider observation binds the direct Responses route to its exact final serializer", async () => {
+  const upstream = await listen((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end("{}");
+  });
+  const proxy = await startProviderObservationProxy({ upstreamBaseUrl: `${upstream.baseUrl}/v1/responses` });
+  try {
+    await (await fetch(proxy.endpoint, { method: "POST", body: JSON.stringify({ model: "gpt-test" }) })).text();
+    expect(proxy.observations()[0]).toMatchObject({
+      routeId: "openai-responses",
+      serializerContract: "butler.openai-responses-final-json.v1",
+    });
+  } finally { await proxy.close(); await upstream.close(); }
 });
 
 test("deterministic provider fixture fails the primary once and reports the backup model", async () => {
@@ -225,6 +315,11 @@ test("deterministic provider fixture fails the primary once and reports the back
         termination: "completed",
       },
     ]);
+    expect(proxy.observations()[1]).toMatchObject({
+      providerReportedServiceTier: "default",
+      effectiveServiceTierAvailability: "reported",
+      effectiveServiceTierReason: "provider_response_reported",
+    });
   } finally {
     await proxy.close();
   }

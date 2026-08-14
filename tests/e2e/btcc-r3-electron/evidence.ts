@@ -8,7 +8,6 @@ import {
   type PreparedRun,
   type StepObservation,
 } from "./contracts.ts";
-import { bindingWorkspace } from "./isolation-config.ts";
 import type { ProviderRequestObservation } from
   "./provider-observation-proxy.ts";
 import { isInside } from "./scenario-preflight.ts";
@@ -41,13 +40,14 @@ export function safeOutputTail(output: string[]): string[] {
 }
 
 export function successEvidence(input: {
+  bindingWorkspace: string | null;
   launches: LaunchObservation[];
   observations: StepObservation[];
   options: ElectronHarnessOptions;
   providerRequests: ProviderRequestObservation[];
   run: PreparedRun;
 }): Record<string, unknown> {
-  const { launches, observations, options, providerRequests, run } = input;
+  const { bindingWorkspace, launches, observations, options, providerRequests, run } = input;
   const normalizeModel = (value: string): string => {
     const trimmed = value.trim();
     return trimmed.includes("/")
@@ -103,7 +103,7 @@ export function successEvidence(input: {
       workspaceRoot: run.workspaceRoot,
     },
     isolation: {
-      bindingWorkspace: bindingWorkspace(run),
+      bindingWorkspace,
       sourceDataReadOnly: run.sourceData,
       sourceDataIsRunData: run.sourceData === run.dataRoot,
       workspaceInsideRunRoot: isInside(run.runRoot, run.workspaceRoot),
@@ -119,6 +119,9 @@ export function successEvidence(input: {
     observations,
     providerRequests,
     generatedAt: new Date().toISOString(),
+    ...(options.bundledAgentResourceIdentity
+      ? { bundledAgentResource: { ...options.bundledAgentResourceIdentity } }
+      : {}),
   };
 }
 
@@ -133,11 +136,13 @@ export function failureEvidence(input: {
   run: PreparedRun;
 }): Record<string, unknown> {
   const { error, observations, options, run } = input;
+  const typedFailure = harnessFailureDetails(error);
   return {
     schema: BTCC_R3_ELECTRON_EVIDENCE_SCHEMA,
     kind: options.smoke ? "launch_smoke" : "scenario_run",
     ok: false,
     error: error instanceof Error ? error.message : String(error),
+    ...(typedFailure ? { failure: typedFailure } : {}),
     run: {
       agentOwnership: run.agentOwnership,
       dataRoot: run.dataRoot,
@@ -152,6 +157,9 @@ export function failureEvidence(input: {
     observations,
     providerRequests: input.providerRequests,
     generatedAt: new Date().toISOString(),
+    ...(options.bundledAgentResourceIdentity
+      ? { bundledAgentResource: { ...options.bundledAgentResourceIdentity } }
+      : {}),
     ...(options.keepLogs && input.electronOutput
       ? { sanitizedElectronLogTail: safeOutputTail(input.electronOutput) }
       : {}),
@@ -159,4 +167,35 @@ export function failureEvidence(input: {
       ? { sanitizedExecutorLogTail: safeOutputTail(input.executorOutput) }
       : {}),
   };
+}
+
+function harnessFailureDetails(error: unknown): Record<string, unknown> | null {
+  if (!error || typeof error !== "object") return null;
+  const failure = (error as { failure?: unknown }).failure;
+  if (!failure || typeof failure !== "object" || Array.isArray(failure)) return null;
+  const candidate = failure as Record<string, unknown>;
+  if (
+    typeof candidate.stage !== "string" ||
+    typeof candidate.cause !== "string" ||
+    typeof candidate.owner !== "string" ||
+    !(candidate.exitCode === null || typeof candidate.exitCode === "number") ||
+    !(candidate.signal === null || typeof candidate.signal === "string")
+  ) return null;
+  const details: Record<string, unknown> = {
+    stage: candidate.stage,
+    cause: candidate.cause,
+    owner: candidate.owner,
+    exitCode: candidate.exitCode,
+    signal: candidate.signal,
+  };
+  for (const key of ["availableBytes", "requiredBytes"] as const) {
+    if (candidate[key] === null ||
+        typeof candidate[key] === "number" && Number.isSafeInteger(candidate[key])) {
+      details[key] = candidate[key];
+    }
+  }
+  if (candidate.portRole === "app_server" || candidate.portRole === "electron_debug") {
+    details.portRole = candidate.portRole;
+  }
+  return details;
 }
