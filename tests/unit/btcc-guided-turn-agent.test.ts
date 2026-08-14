@@ -175,6 +175,70 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
   }
 });
 
+test("M1 Guided Turn restores the existing bounded Work closeout opportunity", async () => {
+  const fixture = createFixture("guided-m1-closeout-restoration");
+  try {
+    const turnId = "guided-m1-closeout-restoration-turn";
+    let modelCalls = 0;
+    const modelRound: ModelRoundPort = {
+      async runRound(request) {
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          return toolResponse([toolCall("closeout-plan", "replace_work_plan", {
+            start_new: true,
+            objective: "현재 Turn의 작업을 완료한다",
+            actions: [{ action_key: "finish", dependency_keys: [] }],
+            checks: [],
+          })]);
+        }
+        if (modelCalls === 2) {
+          return { text: "첫 번째 최종 후보", toolCalls: [] };
+        }
+        if (modelCalls === 3) {
+          expect(request.tools.map((tool) => tool.name)).toContain(
+            "record_work_disposition",
+          );
+          const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+          expect(bound).not.toBeNull();
+          return toolResponse([toolCall(
+            "closeout-disposition",
+            "record_work_disposition",
+            {
+              work_id: bound!.workId,
+              disposition: "completed",
+              summary: "현재 Turn의 작업을 완료했습니다.",
+              action_updates: [{ action_key: "finish", status: "done" }],
+            },
+          )]);
+        }
+        return { text: "최종 답변", toolCalls: [] };
+      },
+    };
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent: fixture.agent(modelRound),
+    });
+
+    const result = await runtime.runTurn(localRunCommand(fixture.root, turnId));
+
+    expect(result).toMatchObject({ kind: "delivered", content: "최종 답변" });
+    expect(modelCalls).toBe(4);
+    await expect(fixture.stores.durableWork.boundWorkForTurn(turnId)).resolves
+      .toMatchObject({
+        status: "completed",
+        latestDisposition: {
+          originTurnId: turnId,
+          disposition: "completed",
+        },
+      });
+  } finally {
+    fixture.close();
+  }
+});
+
 test("production Guided Turn sends the admitted M1 v2 direct surface and stable prefix", async () => {
   const fixture = createFixture("guided-m1-v2-direct-surface");
   const previousFlag = process.env.BUTLER_M1_V2_TOOL_INSTRUCTION_SURFACE;
