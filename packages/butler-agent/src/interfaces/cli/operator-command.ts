@@ -146,13 +146,6 @@ import {
   updateTelegramCompatibilityConfig,
   writeAppGatewayPid,
 } from "../../operations/gateway/registry.ts";
-import {
-  executeSandyCorrectionCli,
-  parseSandyCorrectionCli,
-  prepareSandyOwnerStop,
-  redactSandyOwnerStopManifest,
-  redactSandyCorrectionResult,
-} from "../../operations/correction/index.ts";
 
 type JsonRecord = Record<string, any>;
 
@@ -2367,50 +2360,6 @@ async function web(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
   fail(parsed, "unknown_command", `unknown web command: ${args[0] ?? ""}`);
 }
 
-function correction(parsed: ParsedCommonOptions, args: string[]): void {
-  if (args[0] !== "sandy") {
-    fail(parsed, "unknown_command", `unknown correction command: ${args[0] ?? ""}`);
-  }
-  try {
-    const correctionInput = parseSandyCorrectionCli(args.slice(1));
-    if (correctionInput.prepareLive) {
-      if (correctionInput.apply) throw new Error("prepare-live cannot be combined with --apply");
-      if (!correctionInput.backupDir) throw new Error("prepare-live requires --backup-dir");
-      if (!correctionInput.manifestPath) throw new Error("prepare-live requires --manifest PATH");
-      const manifest = prepareSandyOwnerStop({
-        dbPath: correctionInput.target.dbPath,
-        backupDir: correctionInput.backupDir,
-        manifestPath: correctionInput.manifestPath,
-      });
-      print(
-        parsed,
-        "butler correction sandy prepare-live",
-        redactSandyOwnerStopManifest(manifest),
-        "Owner-stop manifest written. Run the explicit dry-run, then apply with the generated --owner-manifest.",
-      );
-      return;
-    }
-    const result = executeSandyCorrectionCli(correctionInput);
-    const safe = redactSandyCorrectionResult(result);
-    print(
-      parsed,
-      "butler correction sandy",
-      safe,
-      [
-        `Sandy correction ${result.status}.`,
-        `Source Work: ${result.read.target.sourceWorkId}`,
-        `Observed source bindings/results: ${result.read.sourceBindingCount}/${result.read.sourceResultCount}`,
-        `Observed capture results: ${result.read.captureResultCount}`,
-        result.after
-          ? `After monitoring/capture bindings: ${result.after.monitoringBindingCount}/${result.after.captureBindingCount}`
-          : "No rows changed (dry run).",
-      ].join("\n"),
-    );
-  } catch (error) {
-    fail(parsed, "correction_rejected", error instanceof Error ? error.message : String(error));
-  }
-}
-
 async function main(): Promise<void> {
   const parsed = parseCommonOptions(Bun.argv.slice(2));
   if (parsed.errors.length > 0) fail(parsed, "invalid_arguments", parsed.errors.join("; "));
@@ -2446,7 +2395,6 @@ async function main(): Promise<void> {
   }
   if (command === "search") return await search(parsed, args);
   if (command === "web") return await web(parsed, args);
-  if (command === "correction") return correction(parsed, args);
   fail(parsed, "unknown_command", `unknown Butler operator command: ${parsed.args.join(" ")}`);
 }
 

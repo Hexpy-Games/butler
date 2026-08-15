@@ -37,6 +37,11 @@ export function initializeTerminalTurnRetention(
     },
     recordFailure: (error) => recordRetentionFailure(kernel, error),
   });
+  // Restart recovery must discover terminal turns that were persisted before
+  // the previous process exited. The queue remains bounded (32-row pages and
+  // one maintenance compaction per timer tick), so startup does not perform an
+  // unbounded synchronous sweep on the app critical path.
+  kernel.terminalTurnRetentionQueue.sweep();
   return ({ turnId, eventId }) => {
     kernel.terminalTurnRetentionQueue.advanceEventCursor(eventId);
     if (!kernel.closed && turnId && kernel.isTerminalTurn(turnId)) {

@@ -1,9 +1,7 @@
-import { isDurableWorkTool, type DurableWorkService } from "../work/index.ts";
+import { isDurableWorkTool } from "../work/index.ts";
 import type { BtccAgentLoop, BtccAgentLoopInput, BtccAgentLoopResult } from "./contracts.ts";
-import type { ModelRoundPort } from "../ports/model-round.ts";
 import { createGuidedEffectService } from "../effects/index.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
-import type { SqliteGuidedEffectJournal, SqliteGuidedToolJournal } from "../../adapters/index.ts";
 import { ActiveProjectLedgerResolver } from "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { createProviderModelRoundPort } from "../../../integrations/providers/runtime.ts";
 import { createFileStoreVerifiedImagePayloadPort } from
@@ -32,8 +30,7 @@ import { executeGuidedCommandCall } from "./guided-command-execution.ts";
 import { renderGuidedEffectContext } from "./guided-effect-context.ts";
 import { renderDurableWorkContext } from "./durable-work-tools.ts";
 import {
-  backfillTurnToolResults,
-  safeImportOpenLegacyWork,
+  loadInitialGuidedWork,
   safeBoundWork,
   safeLoadWorkContext,
   workScopeForTurn,
@@ -58,29 +55,26 @@ import {
 } from "./guided-turn-route-events.ts";
 import { createGuidedOperationalProgressCapture } from
   "./guided-operational-progress.ts";
-import { throwIfExecutionWindowAborted } from "./execution-window.ts";
 import {
   guidedOperationalFallbackAfterInternalId,
   loadGuidedOperationalFacts,
 } from "./guided-operational-facts.ts";
 import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
-export function createProductionGuidedTurnAgent(input: {
-  butlerHome: string;
-  butlerData: string;
-  appMessageDbPath: string;
-  contextDocuments: { resolve(contextRef: string): string };
-  toolJournal: SqliteGuidedToolJournal;
-  effectJournal: SqliteGuidedEffectJournal;
-  durableWork: DurableWorkService;
-  modelRound?: ModelRoundPort;
-  /** Test seam for exercising more than one internal execution window. */
-  executionWindowSize?: number;
-}): BtccAgentLoop {
+import { createGuidedSessionWorkspaceRuntime } from "./guided-session-workspace-recovery.ts";
+import type { ProductionGuidedTurnAgentInput } from
+  "./guided-turn-agent-contracts.ts";
+import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
+import { throwGuidedAbort } from "./guided-abort.ts";
+export function createProductionGuidedTurnAgent(
+  input: ProductionGuidedTurnAgentInput,
+): BtccAgentLoop {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
+  const sessionWorkspace = createGuidedSessionWorkspaceRuntime({ butlerData: input.butlerData, bindingStore: input.sessionBindingStore });
   return {
     async run({
       turn, recoveryAttempt,
       signal,
+      memoryAttribution,
       progress,
       recordModelRouteEvent,
       loadModelRouteAttemptHistory,
@@ -91,23 +85,13 @@ export function createProductionGuidedTurnAgent(input: {
       const progressCapture = createGuidedOperationalProgressCapture(progress);
       const observedProgress = progressCapture.observer;
       const policy = guidedPolicy(turn);
+      const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
       const workScope = workScopeForTurn(turn, policy.trackingMode);
-      let initialWork = policy.trackingMode === "none"
-        ? null
-        : await safeLoadWorkContext(input.durableWork, workScope);
-      if (!initialWork && policy.trackingMode !== "none") {
-        await safeImportOpenLegacyWork(input.durableWork, workScope);
-        initialWork = await safeLoadWorkContext(input.durableWork, workScope);
-      }
-      let initialWorkBound = false;
-      if (initialWork) {
-        const boundWork = await safeBoundWork(input.durableWork, turn.turnId);
-        initialWorkBound = boundWork?.workId === initialWork.work.workId;
-        if (initialWorkBound) {
-          await backfillTurnToolResults(input, workScope);
-          initialWork = await safeLoadWorkContext(input.durableWork, workScope);
-        }
-      }
+      const initial = policy.trackingMode === "none"
+        ? { context: null, bound: false }
+        : await loadInitialGuidedWork(input, workScope);
+      const initialWork = initial.context;
+      const initialWorkBound = initial.bound;
       const authorizedTools = authorizedToolDefinitions(turn);
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
       const visibleTools = visibleToolDefinitions(authorizedTools, policy, isZaiMcpVisionTurn(turn));
@@ -122,6 +106,9 @@ export function createProductionGuidedTurnAgent(input: {
         sessionId: turn.sessionId,
         originChatId: turn.sessionId,
         projectId: policy.projectId ?? turn.context.projectRef,
+        workspaceReference,
+        sessionBindingStore: sessionWorkspace.bindingStore,
+        memoryAttribution,
         turnId: turn.turnId,
         imageManifests: providerImageAttachments(turn).flatMap((a) => a.visualManifest ? [a.visualManifest] : []),
         ...(turn.context.imageAdmission ? { imageCarrier: turn.context.imageAdmission.tuple, imageCapability: turn.context.imageAdmission.capability } : {}),
@@ -153,7 +140,7 @@ export function createProductionGuidedTurnAgent(input: {
             call,
             accessMode: policy.accessMode,
             butlerData: input.butlerData,
-            workspacePath: policy.workspacePath,
+            workspacePath: workspaceReference.get(),
             originalRequest: turn.originalMessage,
             signal,
           }),
@@ -162,11 +149,15 @@ export function createProductionGuidedTurnAgent(input: {
             butlerData: input.butlerData,
             appMessageDbPath: input.appMessageDbPath,
             workspacePath: policy.workspacePath,
+            workspaceReference,
+            sessionId: turn.sessionId,
+            sessionBindingStore: sessionWorkspace.bindingStore,
             projectId: policy.projectId,
             trackingMode: policy.trackingMode,
             projectLedgerResolver,
             effectJournal: input.effectJournal,
             originalRequest: turn.originalMessage,
+            memoryAttribution,
           }),
         }),
       });
@@ -274,8 +265,9 @@ export function createProductionGuidedTurnAgent(input: {
         // active across windows until the model reaches a final answer.
         maxIterations: Math.max(1, input.executionWindowSize ?? 60),
         modelRound,
+        onEvent: (event) => recordRuntimeMemoryEvent(memoryAttribution, event),
         onExecutionWindowBoundary: async ({ windowIndex }) => {
-          throwIfExecutionWindowAborted(signal);
+          if (signal.aborted) throwGuidedAbort(signal);
           const refreshedContext = policy.trackingMode === "none"
             ? null
             : await safeLoadWorkContext(input.durableWork, workScope);

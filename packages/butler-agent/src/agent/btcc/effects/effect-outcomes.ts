@@ -34,11 +34,13 @@ export function dispatchError(error: EffectAdapterError): GuidedEffectError {
 export function reconciliationError(
   error?: EffectAdapterError,
 ): GuidedEffectError {
-  return effectError(
+  const diagnostic = effectError(
     "effect_reconciliation_required",
-    error ? `${error.code}: ${error.message}` :
-      "The target cannot yet prove whether this effect was applied.",
+    error
+      ? `${error.code}: ${error.message}`
+      : "The target cannot yet prove whether this effect was applied.",
   );
+  return error ? { ...diagnostic, sourceCode: error.code } : diagnostic;
 }
 
 export function journalConflict<TResult>(): GuidedEffectOutcome<TResult> {

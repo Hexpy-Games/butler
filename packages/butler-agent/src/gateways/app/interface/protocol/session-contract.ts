@@ -87,6 +87,14 @@ export type SessionViewTurnDeliveryState =
 export interface SessionViewMessageWindow {
   next_cursor: number;
   complete: boolean;
+  previous_cursor?: number;
+  previous_cursor_token?: string;
+  requested_cursor?: number;
+  requested_cursor_token?: string;
+  requested_before_cursor?: number;
+  requested_before_cursor_token?: string;
+  next_cursor_token?: string;
+  has_more?: boolean;
 }
 
 export interface SafeSessionError {
@@ -133,6 +141,10 @@ export interface SessionSummaryView {
     branch_name?: string;
     safe_status: string;
     safe_error_code?: string;
+    workspace_binding?: "project" | "session_worktree";
+    workspace_label?: string;
+    workspace_status?: "available" | "unavailable";
+    dirty?: boolean;
   };
   artifacts: SessionArtifactSummary[];
   skills_used: string[];
@@ -155,4 +167,21 @@ export interface TranscriptExportView {
   content: string;
   message_count: number;
   generated_at: string;
+}
+
+/**
+ * Bounded producer for the public transcript-export response. Chunks contain
+ * only content fragments; message_count is incremented by the HTTP writer as
+ * terminal message fragments are observed, so no full transcript array is
+ * retained in the gateway.
+ */
+export interface TranscriptExportStream {
+  session_id: string;
+  format: "markdown";
+  filename: string;
+  generated_at: string;
+  chunks: Iterable<{
+    text: string;
+    message_count?: number;
+  }>;
 }

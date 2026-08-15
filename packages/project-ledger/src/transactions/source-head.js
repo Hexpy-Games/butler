@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { closeSync, openSync, readdirSync, readSync } from "node:fs";
 import { relative } from "node:path";
 import { ledgerRoot } from "../fs.js";
 import { readRecordBody, readRecordData, recordFiles } from "../records.js";
@@ -9,31 +9,57 @@ const NON_SEMANTIC_FIELDS = new Set([
   "createdAt", "updatedAt", "generatedAt", "sourceMtimeMs",
   "path", "codeCommits", "ledgerCommits",
 ]);
+const STORAGE_HASH_BUFFER_BYTES = 64 * 1024;
 
 export function observeProjectLedgerSourceHead(project) {
   const root = ledgerRoot(project);
-  const semanticRecords = recordFiles(root).map((file) => semanticRecord(root, file))
+  const descriptors = recordFiles(root).map((file) => semanticDescriptor(root, file))
     .sort((left, right) => `${left.kind}\0${left.id}`.localeCompare(`${right.kind}\0${right.id}`));
-  const logicalBytes = canonicalJson(semanticRecords);
+  const logicalHash = createIncrementalSemanticHash(root, descriptors);
   const entries = rootEntries(root);
   const storage = createHash("sha256");
+  const storageBuffer = Buffer.alloc(STORAGE_HASH_BUFFER_BYTES);
   for (const entry of entries) {
     storage.update(entry.kind);
     storage.update("\0");
     storage.update(normalizedRelative(root, entry.path).normalize("NFC"));
     storage.update("\0");
-    if (entry.kind === "file") storage.update(readFileSync(entry.path));
+    if (entry.kind === "file") updateHashFromFile(storage, entry.path, storageBuffer);
     storage.update("\0");
   }
   return {
     schema: "project-ledger.source-head.v1",
     storageAuthority: "project-ledger-authoritative-v2",
     projectRoot: root,
-    sourceSha256: digest(logicalBytes),
-    sourceFileCount: semanticRecords.length,
+    sourceSha256: logicalHash,
+    sourceFileCount: descriptors.length,
     storageSha256: storage.digest("hex"),
     storageEntryCount: entries.length,
   };
+}
+
+function updateHashFromFile(hash, path, buffer) {
+  const fileDescriptor = openSync(path, "r");
+  try {
+    let bytesRead;
+    do {
+      bytesRead = readSync(fileDescriptor, buffer, 0, buffer.length, null);
+      if (bytesRead > 0) hash.update(buffer.subarray(0, bytesRead));
+    } while (bytesRead > 0);
+  } finally {
+    closeSync(fileDescriptor);
+  }
+}
+
+function createIncrementalSemanticHash(root, descriptors) {
+  const hash = createHash("sha256");
+  hash.update("[");
+  descriptors.forEach((descriptor, index) => {
+    hash.update(canonicalJson(semanticRecord(root, descriptor.file)));
+    if (index < descriptors.length - 1) hash.update(",");
+  });
+  hash.update("]");
+  return hash.digest("hex");
 }
 
 export function canonicalProjectLedgerSemantics(project) {
@@ -55,6 +81,18 @@ function semanticRecord(root, file) {
     metadata,
     ...(file.endsWith(".md") ? { body: readRecordBody(file) ?? "" } : {}),
   });
+}
+
+function semanticDescriptor(root, file) {
+  const data = readRecordData(file) ?? {};
+  const relativePath = normalizedRelative(root, file);
+  return {
+    file,
+    kind: typeof data.kind === "string"
+      ? data.kind
+      : relativePath === "project.json" ? "project" : "record",
+    id: typeof data.id === "string" ? data.id : "project",
+  };
 }
 
 function rootEntries(root) {
@@ -100,8 +138,4 @@ function normalize(value) {
 
 function normalizedRelative(root, file) {
   return relative(root, file).split("\\").join("/");
-}
-
-function digest(value) {
-  return createHash("sha256").update(value).digest("hex");
 }

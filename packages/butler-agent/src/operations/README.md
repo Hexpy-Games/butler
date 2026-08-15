@@ -13,6 +13,9 @@ release/install helpers used by the runtime, CLI, gateway, and maintenance jobs.
 - `gateway/`: agent-owned gateway registry, settings, and safe status helpers.
 - `install/`: installer and upgrade helpers.
 - `release/`: release manifest and packaging gates.
+- `tunnel/`: repository-owned bounded HTTP/HTTPS tunnel proxy and lifecycle
+  entrypoint. It receives credentials and upstream targets through typed
+  configuration or environment variables rather than private files.
 
 ## Boundaries
 

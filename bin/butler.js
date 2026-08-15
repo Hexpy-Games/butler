@@ -623,7 +623,6 @@ switch (command) {
   case "mcp":
   case "skills":
   case "work":
-  case "correction":
   case "context":
   case "search":
   case "web":

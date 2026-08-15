@@ -1402,6 +1402,7 @@ function turnProgressSnapshotEqual(
 ): boolean {
   return (
     left.turn_id === right.turn_id &&
+    left.started_at === right.started_at &&
     left.summary === right.summary &&
     left.updated_at === right.updated_at &&
     left.state === right.state &&

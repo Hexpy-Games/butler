@@ -37,6 +37,7 @@ import {
   windowsAppForegroundCommand,
   windowsRuntimeSignatureIssue,
 } from "../../packages/butler-app/client/electron/app-managed-runtime.mjs";
+import { prepareAppManagedEmbedHealthPort } from "../../packages/butler-app/client/electron/app-managed-embed-endpoint.mjs";
 
 const repoRoot = process.cwd();
 
@@ -1404,7 +1405,7 @@ test("App-managed foreground command uses the platform owner with a parent lease
     expect(command.env).toMatchObject({
       BUTLER_APP_MANAGED_RUNTIME_HOME: command.cwd,
       BUTLER_DATA: butlerData,
-      EMBED_HEALTH_PORT: "0",
+      EMBED_HEALTH_PORT: String(prepareAppManagedEmbedHealthPort({ butlerData })),
     });
     if (process.platform === "win32") {
       expect(command.env.EMBED_SOCKET).toContain("app\\runtime\\embed\\embed.sock");

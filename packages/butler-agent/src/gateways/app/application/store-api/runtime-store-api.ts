@@ -37,11 +37,11 @@ export interface AppStoreRuntimeApi {
   getUsageMonitor(options?: {
     sessionId?: string;
     sinceTs?: number | null;
-  }): UsageMonitorView;
+  }): Promise<UsageMonitorView>;
   syncNextAppTransportBatch(): boolean;
   waitForAppTransportProjection(): Promise<void>;
   latestEventCursor(): number;
-  replayEvents(cursor?: number): AppEventEnvelope[];
+  replayEvents(cursor?: number, limit?: number): AppEventEnvelope[];
   subscribeEvents(listener: (event: AppEventEnvelope) => void): () => void;
   appendSafeServerEvent(
     type: string,
@@ -103,8 +103,8 @@ export function createRuntimeStoreApi(
         raw_text_included: true,
       };
     },
-    getUsageMonitor(options = {}) {
-      return kernel.systemMonitor.getUsageMonitor(options);
+    async getUsageMonitor(options = {}) {
+      return await kernel.systemMonitor.getUsageMonitor(options);
     },
     syncNextAppTransportBatch() {
       return kernel.transportProjection.syncNextBatch();
@@ -115,8 +115,8 @@ export function createRuntimeStoreApi(
     latestEventCursor() {
       return kernel.events.latestCursor();
     },
-    replayEvents(cursor = 0) {
-      return kernel.events.replay(cursor);
+    replayEvents(cursor = 0, limit = 200) {
+      return kernel.events.replay(cursor, limit);
     },
     subscribeEvents(listener) {
       return kernel.events.subscribe(listener);

@@ -53,20 +53,6 @@
     "spec": "docs/specs/cli/core-commands.md"
   },
   {
-    "id": "correction.sandy",
-    "path": [
-      "correction",
-      "sandy"
-    ],
-    "usage": "butler correction sandy [prepare-live --db PATH --backup-dir PATH --manifest PATH] [--expected-* IDENTITY] [--apply --owner-stopped --owner-manifest PATH --backup-dir PATH --operator-id ID --reason TEXT] [--json]",
-    "priority": "operator",
-    "status": "implemented",
-    "implemented": true,
-    "supportsJson": true,
-    "summary": "Dry-run by default; audit and atomically correct an audited Sandy Turn-Work split without deleting raw journals or transcripts.",
-    "spec": "specs/spec-btcc-r3-turn-work-relationship-integrity.md"
-  },
-  {
     "id": "install",
     "path": [
       "install"

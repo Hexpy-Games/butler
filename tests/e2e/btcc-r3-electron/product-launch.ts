@@ -2,7 +2,6 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type {
-  AppSessionView,
   ElectronFixtureFile,
   PreparedRun,
   RendererVisibleActivity,
@@ -22,13 +21,13 @@ import {
 } from "./native-executor.ts";
 import { activateProjectSessionWorkspace } from "./isolation-config.ts";
 import { assert, isRecord, parseJsonFile } from "./scenario-preflight.ts";
+import { sessionViewCall } from "./packaged-memory-campaign-read-path.ts";
 
 const FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
 
 type BridgeMethod =
   | "createProject"
   | "createSession"
-  | "getSessionView"
   | "getSettings"
   | "health"
   | "listSessions"
@@ -364,7 +363,7 @@ export async function openSession(
     `document.querySelector(${JSON.stringify("[data-test-class=\"composer-card\"] textarea")}) !== null`,
     "composer",
   );
-  const view = await bridgeCall<AppSessionView>(page, "getSessionView", {
+  const view = await sessionViewCall(page, {
     sessionId: run.sessionId,
   });
   assert(view.session_id === run.sessionId, "Renderer opened an unexpected session.");

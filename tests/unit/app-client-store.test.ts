@@ -1556,6 +1556,9 @@ test("session view hydration preserves live turn progress rows", () => {
   expect(
     useButlerStore.getState().turnProgress["turn-a"]?.safe_progress_rows,
   ).toContainEqual(expect.objectContaining({ id: "row-live" }));
+  expect(useButlerStore.getState().turnProgress["turn-a"]?.started_at).toBe(
+    "2026-05-05T00:00:00.000Z",
+  );
 });
 
 test("session view hydration reuses frozen assistant message references", () => {

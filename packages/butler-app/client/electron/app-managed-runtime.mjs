@@ -25,7 +25,10 @@ import {
   removeStaleRuntimeSiblingsSync,
   renameWithRetrySync,
 } from "./runtime-filesystem.mjs";
-import { prepareAppManagedEmbedSocket } from "./app-managed-embed-endpoint.mjs";
+import {
+  prepareAppManagedEmbedHealthPort,
+  prepareAppManagedEmbedSocket,
+} from "./app-managed-embed-endpoint.mjs";
 
 export const APP_MANAGED_RUNTIME_SCHEMA = "butler.app-managed-agent-runtime.v1";
 export const APP_MANAGED_RUNTIME_POINTER_SCHEMA =
@@ -833,6 +836,8 @@ export function resolveAppManagedForegroundCommand({
     platform,
   );
   const embedSocket = prepareAppManagedEmbedSocket({ butlerData, platform });
+  const embedHealthPort = prepareAppManagedEmbedHealthPort({ butlerData });
+  const embedIdleRecycleMs = safeString(env.EMBED_IDLE_RECYCLE_MS);
   const daemon = join(
     activation.runtimeHome,
     "packages",
@@ -881,7 +886,8 @@ export function resolveAppManagedForegroundCommand({
         BUTLER_APP_MANAGED_RUNTIME_POINTER: activation.pointerPath,
         BUTLER_APP_MANAGED_RUNTIME_HOME: activation.runtimeHome,
         EMBED_SOCKET: embedSocket,
-        EMBED_HEALTH_PORT: "0",
+        EMBED_HEALTH_PORT: String(embedHealthPort),
+        ...(embedIdleRecycleMs ? { EMBED_IDLE_RECYCLE_MS: embedIdleRecycleMs } : {}),
       },
       commitActivation: activation.commitActivation,
       invalidateRuntimeReceipt: activation.invalidateRuntimeReceipt,
@@ -917,7 +923,8 @@ export function resolveAppManagedForegroundCommand({
       BUTLER_APP_MANAGED_RUNTIME_HOME: activation.runtimeHome,
       BUTLER_APP_FOREGROUND_LEASE: "1",
       EMBED_SOCKET: embedSocket,
-      EMBED_HEALTH_PORT: "0",
+      EMBED_HEALTH_PORT: String(embedHealthPort),
+      ...(embedIdleRecycleMs ? { EMBED_IDLE_RECYCLE_MS: embedIdleRecycleMs } : {}),
     },
     commitActivation: activation.commitActivation,
     invalidateRuntimeReceipt: activation.invalidateRuntimeReceipt,

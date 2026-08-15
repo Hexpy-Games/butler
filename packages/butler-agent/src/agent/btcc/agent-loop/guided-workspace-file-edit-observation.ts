@@ -15,6 +15,8 @@ export type GuidedWorkspaceEditObservation = {
   bytes: number;
   bytesValue: Buffer;
   sha256: string;
+  /** Internal identity used only to reject aliases of one actual target. */
+  identityPath: string;
 };
 
 export async function observeGuidedWorkspaceEditTarget(
@@ -57,6 +59,7 @@ export async function observeGuidedWorkspaceEditTarget(
         bytes: bytesValue.length,
         bytesValue,
         sha256: guidedWorkspaceBytesSha256(bytesValue),
+        identityPath: guard.realPath ?? guard.absolutePath!,
       },
     };
   } catch {
@@ -67,9 +70,9 @@ export async function observeGuidedWorkspaceEditTarget(
   }
 }
 
-export function decodeGuidedWorkspaceUtf8(bytes: Buffer):
-  | { ok: true; text: string }
-  | { ok: false; error: EffectAdapterError } {
+export function decodeGuidedWorkspaceUtf8(
+  bytes: Buffer,
+): { ok: true; text: string } | { ok: false; error: EffectAdapterError } {
   if (bytes.subarray(0, Math.min(bytes.length, 4_096)).includes(0)) {
     return rejected(
       "binary_file_not_supported",

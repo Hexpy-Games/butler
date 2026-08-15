@@ -315,12 +315,18 @@ export async function connectElectronPage(
     try {
       const response = await fetch(`http://127.0.0.1:${debugPort}/json/list`);
       const targets = await response.json() as CdpTarget[];
-      const target = targets.find((candidate) =>
+      const pages = targets.filter((candidate) =>
         candidate.type === "page" &&
         candidate.webSocketDebuggerUrl &&
         candidate.url !== "about:blank" &&
         !candidate.url?.startsWith("devtools://"),
       );
+      // Electron-owned local page previews may appear before the main UI in
+      // `/json/list`; prefer the real renderer document so the preload bridge
+      // is present on the connected target.
+      const target = pages.find((candidate) =>
+        candidate.url?.includes("index.html"),
+      ) ?? pages[0];
       if (target?.webSocketDebuggerUrl) {
         const client = await connectCdp(target.webSocketDebuggerUrl);
         await client.send("Runtime.enable");

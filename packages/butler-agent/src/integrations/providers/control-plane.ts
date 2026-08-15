@@ -5,8 +5,7 @@ import {
   type RuntimeControlPlaneSummary,
 } from "./provider.ts";
 import {
-  readPromptCacheMetrics,
-  summarizePromptCacheMetrics,
+  summarizePromptCacheMetricsFromDisk,
   type PromptCacheMetricSummary,
 } from "./prompt-cache-metrics.ts";
 
@@ -64,9 +63,10 @@ export function getModelProviderControlStatus(options: {
       };
     }
   }
-  const telemetry = summarizePromptCacheMetrics(readPromptCacheMetrics({
+  const telemetry = summarizePromptCacheMetricsFromDisk({
+    butlerData: process.env.BUTLER_DATA,
     sinceTs: options.sinceTs,
-  }));
+  }).summary;
   return {
     runtime: control.runtime,
     provider: control.providerId,

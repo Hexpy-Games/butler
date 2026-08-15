@@ -46,6 +46,14 @@ export function SummaryPanel({
           value={branchValue(summary?.branch_info)}
         />
         <KeyValueRow
+          label="Workspace"
+          value={workspaceValue(summary?.branch_info)}
+        />
+        <KeyValueRow
+          label="Changes"
+          value={dirtyValue(summary?.branch_info)}
+        />
+        <KeyValueRow
           label="Context"
           value={contextTooltip(summary?.context_details)}
         />
@@ -73,6 +81,40 @@ function branchValue(
   if (branch.safe_error_code === "git_not_installed") {
     return "Git is not installed";
   }
+  return "Unavailable";
+}
+
+function workspaceValue(
+  branch: SessionSummaryView["branch_info"] | undefined,
+): string {
+  if (!branch) return "Unavailable";
+  if (
+    branch.workspace_binding === "session_worktree" &&
+    branch.workspace_status === "unavailable"
+  ) {
+    return "Session worktree unavailable";
+  }
+  if (branch.workspace_binding === "session_worktree") {
+    return `Linked worktree · ${branch.workspace_label?.trim() || "Session worktree"}`;
+  }
+  if (branch.workspace_binding === "project") {
+    return `Project · ${branch.workspace_label?.trim() || "Project workspace"}`;
+  }
+  if (branch.workspace_mode === "none") return "No project workspace";
+  if (branch.workspace_mode === "folder") return "Project folder";
+  if (branch.workspace_mode === "git") return "Project workspace";
+  if (branch.safe_error_code === "git_not_installed") {
+    return "Project workspace (Git unavailable)";
+  }
+  return "Unavailable";
+}
+
+function dirtyValue(
+  branch: SessionSummaryView["branch_info"] | undefined,
+): string {
+  if (branch?.workspace_status === "unavailable") return "Unavailable";
+  if (branch?.dirty === true) return "Dirty";
+  if (branch?.dirty === false) return "Clean";
   return "Unavailable";
 }
 

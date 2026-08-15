@@ -49,3 +49,8 @@ export function prepareAppManagedEmbedSocket(input: {
   socketRoot?: string;
   uid?: number | null;
 }): string;
+
+export function prepareAppManagedEmbedHealthPort(input: {
+  butlerData: string;
+  gatewayPort?: number | null;
+}): number;

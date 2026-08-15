@@ -2,6 +2,7 @@ import { mkdirSync, watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
 
 const PROJECTION_SETTLE_MS = 25;
+const MAX_PROJECTION_RETRY_DELAY_MS = 1_000;
 
 export class AppTransportProjectionOwner {
   private readonly watchers: FSWatcher[] = [];
@@ -11,7 +12,7 @@ export class AppTransportProjectionOwner {
   private cycleActive = false;
   private syncRequested = false;
   private terminalSyncRequested = false;
-  private recoveryAvailable = false;
+  private retryAttempt = 0;
   private readonly idleWaiters: Array<() => void> = [];
 
   constructor(
@@ -74,7 +75,7 @@ export class AppTransportProjectionOwner {
     this.syncRequested = false;
     this.terminalSyncRequested = false;
     this.changedTranscripts.clear();
-    this.recoveryAvailable = false;
+    this.retryAttempt = 0;
     for (const watcher of this.watchers.splice(0)) watcher.close();
     this.input.terminalSettlementWakeOwner.close();
     this.input.maintenanceOwner?.close();
@@ -92,25 +93,22 @@ export class AppTransportProjectionOwner {
     if (this.closed) return;
     this.input.reopenCompletedLiveLanes();
     this.syncRequested = true;
-    this.recoveryAvailable = true;
     this.scheduleDrain();
   }
 
   private requestTranscriptSync(fileName: string): void {
     if (this.closed) return;
     this.changedTranscripts.add(fileName);
-    this.recoveryAvailable = true;
     this.scheduleDrain();
   }
 
   private requestTerminalSync(): void {
     if (this.closed) return;
     this.terminalSyncRequested = true;
-    this.recoveryAvailable = true;
     this.scheduleDrain();
   }
 
-  private scheduleDrain(): void {
+  private scheduleDrain(delayMs = PROJECTION_SETTLE_MS): void {
     if (this.closed || this.scheduled) return;
     this.scheduled = setTimeout(() => {
       this.scheduled = null;
@@ -143,22 +141,29 @@ export class AppTransportProjectionOwner {
           return;
         }
         this.cycleActive = false;
+        this.retryAttempt = 0;
         this.input.terminalSettlementWakeOwner.request();
-        this.recoveryAvailable = false;
         this.resolveIdleWaiters();
       } catch (error) {
         this.cycleActive = false;
         this.input.recordFailure(error);
-        if (this.recoveryAvailable) {
-          this.recoveryAvailable = false;
-          if (changedTranscript) this.changedTranscripts.add(changedTranscript);
-          else if (terminalSync) this.terminalSyncRequested = true;
-          else this.syncRequested = true;
-        }
-        if (this.hasPendingWork()) this.scheduleDrain();
-        else this.resolveIdleWaiters();
+        // Projection lanes are durable work. Preserve the lane after every
+        // failure (including repeated RangeError/SQLite failures) and retry
+        // with a bounded backoff instead of silently dropping it or spinning.
+        if (changedTranscript) this.changedTranscripts.add(changedTranscript);
+        else if (terminalSync) this.terminalSyncRequested = true;
+        else this.syncRequested = true;
+        this.retryAttempt = Math.min(this.retryAttempt + 1, 16);
+        this.scheduleDrain(this.projectionRetryDelayMs());
       }
-    }, PROJECTION_SETTLE_MS);
+    }, delayMs);
+  }
+
+  private projectionRetryDelayMs(): number {
+    return Math.min(
+      MAX_PROJECTION_RETRY_DELAY_MS,
+      PROJECTION_SETTLE_MS * 2 ** Math.max(0, this.retryAttempt - 1),
+    );
   }
 
   private hasPendingWork(): boolean {

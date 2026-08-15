@@ -4,6 +4,7 @@ import {
   BTCC_GUIDED_WORK_DISPOSITION_TABLE_SCHEMA,
   BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA,
 } from "./guided-work-schema.ts";
+import { BTCC_GUIDED_EFFECT_RECOVERY_PAYLOAD_TABLE_SCHEMA } from "./guided-effect-schema.ts";
 
 type ColumnRow = { name: string };
 
@@ -13,6 +14,7 @@ export function migrateBtccSchema(db: Database): void {
     ensureGuidedToolJournalOrder(db);
     ensureGuidedWorkResultOrder(db);
     ensureGuidedWorkDispositionSchema(db);
+    ensureGuidedEffectRecoveryPayloadTable(db);
     ensureGuidedWorkProgressColumns(db);
     ensureTurnProgressDestination(db);
     ensureTurnRouteState(db);
@@ -120,6 +122,12 @@ function ensureGuidedToolJournalOrder(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_btcc_guided_tool_calls_turn_sequence
     ON ${table}(turn_id, turn_sequence)
   `);
+}
+
+function ensureGuidedEffectRecoveryPayloadTable(db: Database): void {
+  // Older databases have only the fixed-column single-edit hint table. Keep
+  // that table untouched and add one bounded JSON payload table for batches.
+  db.exec(BTCC_GUIDED_EFFECT_RECOVERY_PAYLOAD_TABLE_SCHEMA);
 }
 
 function ensureModelRouteFailureDisposition(db: Database): void {

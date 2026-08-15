@@ -136,6 +136,12 @@ export interface WorkerActivitySummary {
 
 export interface WorkerActivityListView {
   workers: WorkerActivitySummary[];
+  pagination?: {
+    limit: number;
+    offset: number;
+    has_more: boolean;
+    next_cursor?: string;
+  };
 }
 
 export interface WorkerActivityControlRequest {
