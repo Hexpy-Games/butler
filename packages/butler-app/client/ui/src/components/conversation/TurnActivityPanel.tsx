@@ -28,7 +28,7 @@ export function TurnActivityPanel({
     readModels,
     semanticState,
     workBlocks,
-  } = projectTurnActivity(rows);
+  } = projectTurnActivity(rows, turnId);
   const showDecision = decisions.length > 0 &&
     !publicActivity &&
     !modelRoundWait &&

@@ -66,30 +66,25 @@ export async function safeBoundWork(
   }
 }
 
-export async function safeBindOpenWork(
-  service: DurableWorkService,
-  scope: WorkTurnScope,
-  expectedWorkId?: string,
-): Promise<DurableWorkView | null> {
-  try {
-    return await service.bindOpenWork(scope, expectedWorkId);
-  } catch {
-    return null;
-  }
-}
-
-export async function bindPresentedWorkForToolDispatch(
+export async function loadInitialGuidedWork(
   input: GuidedWorkRuntimeInput,
   scope: WorkTurnScope,
-  presentedWorkId: string,
-): Promise<boolean> {
-  const current = await safeBoundWork(input.durableWork, scope.turnId);
-  if (current && current.workId !== presentedWorkId) return false;
-  const bound = current ??
-    await safeBindOpenWork(input.durableWork, scope, presentedWorkId);
-  if (bound?.workId !== presentedWorkId) return false;
+): Promise<{ context: DurableWorkContext | null; bound: boolean }> {
+  let context = await safeLoadWorkContext(input.durableWork, scope);
+  if (!context) {
+    await safeImportOpenLegacyWork(input.durableWork, scope);
+    context = await safeLoadWorkContext(input.durableWork, scope);
+  }
+  if (!context) return { context: null, bound: false };
+  const bound = await safeBoundWork(input.durableWork, scope.turnId);
+  if (bound?.workId !== context.work.workId) {
+    return { context, bound: false };
+  }
   await backfillTurnToolResults(input, scope);
-  return true;
+  return {
+    context: await safeLoadWorkContext(input.durableWork, scope),
+    bound: true,
+  };
 }
 
 export async function safeAttachToolResult(
@@ -106,6 +101,21 @@ export async function safeAttachToolResult(
     });
   } catch {
     // Work bookkeeping cannot veto an otherwise valid tool result.
+  }
+}
+
+export async function safeRecordCloseoutMissing(
+  service: DurableWorkService,
+  scope: WorkTurnScope,
+  workId: string,
+): Promise<void> {
+  try {
+    await service.recordCloseoutMissing({
+      ...scope,
+      workId,
+    });
+  } catch {
+    // A stopped Turn or storage failure must retain the existing delivery path.
   }
 }
 
@@ -130,6 +140,14 @@ export async function publishWorkProgress(
   const work = await safeBoundWork(service, turnId);
   const plan = work?.currentPlan;
   if (!work || !plan) return;
+  const currentMaterial = [
+    work.latestDisposition,
+    work.latestCompletionValidation,
+    work.latestResultReview,
+    work.latestPlanReview,
+    work.latestCheckpoint,
+    work.currentPlan,
+  ].find((entry) => entry?.originTurnId === turnId);
   const progressByKey = new Map(
     work.actionProgress.map((action) => [action.actionKey, action]),
   );
@@ -158,6 +176,12 @@ export async function publishWorkProgress(
     await progress.workProgressChanged({
       turnId,
       turnRevision,
+      ...(currentMaterial?.originTurnId
+        ? { originTurnId: currentMaterial.originTurnId }
+        : {}),
+      ...(currentMaterial?.revision !== undefined
+        ? { sourceRevision: currentMaterial.revision }
+        : {}),
       programId: work.workId,
       ...(modelRef ? { modelRef } : {}),
       tasks,

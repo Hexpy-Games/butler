@@ -121,8 +121,7 @@ async function loadEffectWork(
   scope: WorkTurnScope,
 ) {
   try {
-    return await service.boundWorkForTurn(scope.turnId) ??
-      await service.bindOpenWork(scope);
+    return await service.boundWorkForTurn(scope.turnId);
   } catch {
     return null;
   }

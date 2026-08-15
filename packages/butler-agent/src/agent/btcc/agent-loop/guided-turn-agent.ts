@@ -1,15 +1,11 @@
-import type { DurableWorkService } from "../work/index.ts";
-import type { BtccAgentLoopInput } from "./contracts.ts";
-import type { ModelRoundPort } from "../ports/model-round.ts";
+import { isDurableWorkTool } from "../work/index.ts";
+import type { BtccAgentLoop, BtccAgentLoopInput, BtccAgentLoopResult } from "./contracts.ts";
 import { createGuidedEffectService } from "../effects/index.ts";
-import type { BtccAgentLoop, BtccAgentLoopResult } from "./contracts.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
-import type { SqliteGuidedEffectJournal, SqliteGuidedToolJournal } from
-  "../../adapters/index.ts";
-import { ActiveProjectLedgerResolver } from
-  "../../../integrations/project-ledger/active-project-ledger-reference.ts";
-import { createProviderModelRoundPort } from
-  "../../../integrations/providers/runtime.ts";
+import { ActiveProjectLedgerResolver } from "../../../integrations/project-ledger/active-project-ledger-reference.ts";
+import { createProviderModelRoundPort } from "../../../integrations/providers/runtime.ts";
+import { createFileStoreVerifiedImagePayloadPort } from
+  "../../image-attachment/index.ts";
 import {
   guidedInstructions,
   providerImageAttachments,
@@ -23,6 +19,7 @@ import {
   guidedNativeToolDefinitions,
   guidedPolicy,
   hiddenNativeToolNamesForGuidedTurn,
+  isZaiMcpVisionTurn,
   routeForUsedTools,
   selectedModelRef,
   visibleToolDefinitions,
@@ -32,10 +29,8 @@ import { createGuidedToolExecutionBoundary } from
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
 import { renderGuidedEffectContext } from "./guided-effect-context.ts";
 import { renderDurableWorkContext } from "./durable-work-tools.ts";
-import { isDurableWorkTool } from "../work/index.ts";
 import {
-  backfillTurnToolResults,
-  safeImportOpenLegacyWork,
+  loadInitialGuidedWork,
   safeBoundWork,
   safeLoadWorkContext,
   workScopeForTurn,
@@ -51,30 +46,33 @@ import { createGuidedPersistentEffectResolver } from
 import {
   createModelRoutePort,
   currentModelRouteCandidate,
-  type ModelRouteEvent,
 } from "../model-route/index.ts";
 import { renderExecutionWindowObservation } from "./execution-window-observation.ts";
-import { createGuidedSessionWorkspaceRuntime, type GuidedSessionWorkspaceBindingStore } from "./guided-session-workspace-recovery.ts";
+import { createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
+import {
+  createGuidedRouteEventHandler,
+  createGuidedRouteRecoveryHandler,
+} from "./guided-turn-route-events.ts";
+import { createGuidedOperationalProgressCapture } from
+  "./guided-operational-progress.ts";
+import {
+  guidedOperationalFallbackAfterInternalId,
+  loadGuidedOperationalFacts,
+} from "./guided-operational-facts.ts";
+import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
+import { createGuidedSessionWorkspaceRuntime } from "./guided-session-workspace-recovery.ts";
+import type { ProductionGuidedTurnAgentInput } from
+  "./guided-turn-agent-contracts.ts";
 import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
 import { throwGuidedAbort } from "./guided-abort.ts";
-export function createProductionGuidedTurnAgent(input: {
-  butlerHome: string;
-  butlerData: string;
-  appMessageDbPath: string;
-  contextDocuments: { resolve(contextRef: string): string };
-  toolJournal: SqliteGuidedToolJournal;
-  effectJournal: SqliteGuidedEffectJournal;
-  durableWork: DurableWorkService;
-  modelRound?: ModelRoundPort;
-  sessionBindingStore?: GuidedSessionWorkspaceBindingStore;
-  /** Test seam for exercising more than one internal execution window. */
-  executionWindowSize?: number;
-}): BtccAgentLoop {
+export function createProductionGuidedTurnAgent(
+  input: ProductionGuidedTurnAgentInput,
+): BtccAgentLoop {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   const sessionWorkspace = createGuidedSessionWorkspaceRuntime({ butlerData: input.butlerData, bindingStore: input.sessionBindingStore });
   return {
     async run({
-      turn,
+      turn, recoveryAttempt,
       signal,
       memoryAttribution,
       progress,
@@ -84,29 +82,19 @@ export function createProductionGuidedTurnAgent(input: {
       recordModelRoundAcceptance,
       onProviderResponseIdentity,
     }): Promise<BtccAgentLoopResult> {
+      const progressCapture = createGuidedOperationalProgressCapture(progress);
+      const observedProgress = progressCapture.observer;
       const policy = guidedPolicy(turn);
       const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
       const workScope = workScopeForTurn(turn, policy.trackingMode);
-      let initialWork = policy.trackingMode === "none"
-        ? null
-        : await safeLoadWorkContext(input.durableWork, workScope);
-      if (!initialWork && policy.trackingMode !== "none") {
-        await safeImportOpenLegacyWork(input.durableWork, workScope);
-        initialWork = await safeLoadWorkContext(input.durableWork, workScope);
-      }
-      let initialWorkBound = false;
-      if (initialWork) {
-        const boundWork = await safeBoundWork(input.durableWork, turn.turnId);
-        initialWorkBound = boundWork?.workId === initialWork.work.workId;
-        if (initialWorkBound) {
-          await backfillTurnToolResults(input, workScope);
-          initialWork = await safeLoadWorkContext(input.durableWork, workScope);
-        }
-      }
-      const presentedWorkId = initialWork?.work.workId;
+      const initial = policy.trackingMode === "none"
+        ? { context: null, bound: false }
+        : await loadInitialGuidedWork(input, workScope);
+      const initialWork = initial.context;
+      const initialWorkBound = initial.bound;
       const authorizedTools = authorizedToolDefinitions(turn);
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
-      const visibleTools = visibleToolDefinitions(authorizedTools, policy);
+      const visibleTools = visibleToolDefinitions(authorizedTools, policy, isZaiMcpVisionTurn(turn));
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
       const describedToolIds = new Set<string>();
       const effectService = createGuidedEffectService(input.effectJournal);
@@ -122,6 +110,9 @@ export function createProductionGuidedTurnAgent(input: {
         sessionBindingStore: sessionWorkspace.bindingStore,
         memoryAttribution,
         turnId: turn.turnId,
+        imageManifests: providerImageAttachments(turn).flatMap((a) => a.visualManifest ? [a.visualManifest] : []),
+        ...(turn.context.imageAdmission ? { imageCarrier: turn.context.imageAdmission.tuple, imageCapability: turn.context.imageAdmission.capability } : {}),
+        verifiedImagePayloadPort: createFileStoreVerifiedImagePayloadPort(input.butlerData),
         turnContext: turn.originalMessage,
         searchPlanner: async () => ({
           plan: null,
@@ -170,20 +161,22 @@ export function createProductionGuidedTurnAgent(input: {
           }),
         }),
       });
+      let progressSourceRevision = 0;
+      const nextSourceRevision = () => ++progressSourceRevision;
       const activity = createGuidedActivityProjection({
         turnId: turn.turnId,
-        progress,
+        progress: observedProgress,
         managedInitially: initialWorkBound,
+        nextSourceRevision,
       });
       let activeModelRef = selectedModelRef(turn);
       const toolCalls = createGuidedToolCallExecutor({
         turn,
         signal,
         resolveModelRef: () => activeModelRef,
-        progress,
+        progress: observedProgress,
         activity,
         workScope,
-        presentedWorkId,
         authorizedNames,
         visibleNames,
         describedToolIds,
@@ -197,47 +190,16 @@ export function createProductionGuidedTurnAgent(input: {
         : undefined;
       const selectedReasoningEffort = routedCandidate?.reasoningEffort ??
         turn.modelSelection.reasoningEffort;
-      let pendingFallbackProjection: { roundId: string; modelRef: string } | undefined;
-      const onRouteEvent = async (event: ModelRouteEvent) => {
-        const persisted = await recordModelRouteEvent?.(event);
-        if (
-          event.type === "model.attempt.started" &&
-          pendingFallbackProjection?.roundId === event.roundId &&
-          pendingFallbackProjection.modelRef === event.modelRef
-        ) {
-          pendingFallbackProjection = undefined;
-          try {
-            await progress?.modelRoundWaitingChanged?.({
-              turnId: turn.turnId,
-              requestId: event.roundId,
-              status: "started",
-              modelRef: event.modelRef,
-            });
-          } catch {
-            // Public model identity cannot veto the provider dispatch.
-          }
-        }
-        if (event.type === "model.fallback.selected") {
-          activeModelRef = event.modelRef;
-          pendingFallbackProjection = {
-            roundId: event.roundId,
-            modelRef: event.modelRef,
-          };
-          try {
-            await progress?.phaseActivityChanged?.({
-              turnId: turn.turnId,
-              semanticState: turn.semanticState,
-              activityId: `${turn.turnId}:model-fallback:${event.roundId}:${event.candidateIndex}`,
-              title: "대체 모델 경로 선택",
-              summary: `${event.modelRef} 모델로 계속 진행합니다.`,
-              modelRef: event.modelRef,
-            });
-          } catch {
-            // Public fallback notice cannot veto the next provider dispatch.
-          }
-        }
-        return persisted;
-      };
+      const onRouteEvent = createGuidedRouteEventHandler({
+        turnId: turn.turnId,
+        semanticState: turn.semanticState,
+        progress: observedProgress,
+        nextSourceRevision,
+        setActiveModelRef: (modelRef) => {
+          activeModelRef = modelRef;
+        },
+        recordModelRouteEvent,
+      });
       const modelRound = turn.modelRoute
         ? createModelRoutePort({
             base: baseModelRound,
@@ -247,12 +209,23 @@ export function createProductionGuidedTurnAgent(input: {
             loadAttemptHistory: loadModelRouteAttemptHistory,
             loadAcceptedResponse: loadModelRoundAcceptance,
             recordAcceptedResponse: recordModelRoundAcceptance,
+            onRecoveryChanged: createGuidedRouteRecoveryHandler({
+              turnId: turn.turnId,
+              semanticState: turn.semanticState,
+              progress: observedProgress,
+            }),
           })
         : baseModelRound;
       const responseLanguage = renderGuidedResponseLanguage(
         turn,
         input.contextDocuments,
       );
+      const closeout = createGuidedTurnCloseout({
+        durableWork: input.durableWork,
+        workScope,
+        turnId: turn.turnId,
+        trackingMode: policy.trackingMode,
+      });
       const loopOptions: BtccAgentLoopInput = {
         prompt: renderGuidedPrompt(turn, {
           ...input,
@@ -264,12 +237,13 @@ export function createProductionGuidedTurnAgent(input: {
             : "",
         }),
         turnId: turn.turnId,
+        recoveryAttempt,
         instructions: guidedInstructions(
           policy,
           renderGuidedPersonaInstructions(turn, input.contextDocuments),
           responseLanguage,
         ),
-        progress,
+        progress: observedProgress,
         model: activeModelRef,
         resolveModelRef: () => activeModelRef,
         reasoningEffort: selectedReasoningEffort,
@@ -282,6 +256,9 @@ export function createProductionGuidedTurnAgent(input: {
         signal,
         butlerData: input.butlerData,
         attachments: providerImageAttachments(turn),
+        ...(turn.context.imageAdmission ? { imageCarrier: turn.context.imageAdmission.tuple, imageCapability: turn.context.imageAdmission.capability } : {}),
+        imageManifests: providerImageAttachments(turn).flatMap((a) => a.visualManifest ? [a.visualManifest] : []),
+        verifiedImagePayloadPort: createFileStoreVerifiedImagePayloadPort(input.butlerData),
         onProviderResponseIdentity,
         tools: visibleTools,
         // This is an internal execution-window size. The same Turn remains
@@ -303,42 +280,57 @@ export function createProductionGuidedTurnAgent(input: {
             boundWork: refreshedBoundWork,
           });
         },
-        onAssistantTextBeforeTools: ({ text, toolCalls: calls }) => activity.observeToolBatch({
-          text,
-          toolCalls: calls.map((call) => ({
+        onAssistantTextBeforeTools: ({ text, toolCalls: calls }) =>
+          activity.observeToolBatch({
+            text,
+            toolCalls: calls.map((call) => ({ name: call.name, args: call.arguments })),
+          }),
+        reviewFinalCandidate: closeout.reviewFinalCandidate,
+        executeTool: async (call) => {
+          return toolCalls.executeTool({
             name: call.name,
             args: call.arguments,
-          })),
-        }),
-        executeTool: async (call) => await toolCalls.executeTool({
-          name: call.name,
-          args: call.arguments,
-          rawArguments: call.rawArguments,
-          providerCallId: call.id,
-          signal: call.signal,
-        }),
+            rawArguments: call.rawArguments,
+            providerCallId: call.id,
+            signal: call.signal,
+          });
+        },
       };
       const text = await runGuidedAgentLoopWithOperationalReport({
         options: loopOptions,
         parentSignal: signal,
         originalRequest: turn.originalMessage,
-        async loadFacts() {
-          const currentWork = await safeLoadWorkContext(input.durableWork, workScope) ??
-            await safeBoundWork(input.durableWork, turn.turnId) ?? initialWork;
-          const workId = currentWork && "work" in currentWork
-            ? currentWork.work.workId
-            : currentWork?.workId;
-          return {
-            work: currentWork,
-            toolCalls: input.toolJournal.list(turn.turnId),
-            effects: workId ? input.effectJournal.listForWork(workId) : [],
-            responseLanguage,
-          };
-        },
+        loadFacts: () => loadGuidedOperationalFacts({
+          turnId: turn.turnId,
+          readBoundWork: () => safeBoundWork(input.durableWork, turn.turnId),
+          listToolCalls: () => input.toolJournal.list(turn.turnId),
+          listEffectsForWork: (workId) => input.effectJournal.listForWork(workId),
+          readProgress: () => progressCapture.facts(),
+          responseLanguage,
+        }),
       });
+      await closeout.recordMissingDiagnostic();
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
+      const internalWorkIds = [initialWork?.work.workId, finalWork?.workId]
+        .filter((workId): workId is string => Boolean(workId));
+      const content = internalWorkIds.some((workId) => text.includes(workId))
+        ? await guidedOperationalFallbackAfterInternalId({
+            originalRequest: turn.originalMessage,
+            turnId: turn.turnId,
+            responseLanguage,
+            finalWork,
+            internalWorkIds,
+            listToolCalls: () => input.toolJournal.list(turn.turnId),
+            listEffectsForWork: (workId) => input.effectJournal.listForWork(workId),
+            readProgress: () => progressCapture.facts(),
+          })
+        : text;
+      const artifacts = collectGuidedFinalArtifacts(
+        input.toolJournal.list(turn.turnId),
+      );
       return {
-        content: text,
+        content,
+        ...(artifacts.length > 0 ? { artifacts } : {}),
         route: routeForUsedTools(
           toolCalls.usedTools,
           Boolean(finalWork) ||

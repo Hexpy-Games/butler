@@ -31,6 +31,7 @@ import type {
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
+import type { VisualImageAdmissionResult } from "../../../../agent/image-attachment/contracts.ts";
 import {
   verifyTurnExecutionControls,
   type TurnExecutionControlsV1,
@@ -79,6 +80,7 @@ export class AppTransportQueueStore {
     message: MessageRecord;
     text: string;
     executionControls: TurnExecutionControlsV1;
+    visualAdmission?: VisualImageAdmissionResult;
   }): TurnRecord {
     try {
       const executionControls = verifyTurnExecutionControls(
@@ -108,6 +110,7 @@ export class AppTransportQueueStore {
           chatId: input.chatId,
           messageId: input.message.id,
           turnId: input.turnId,
+          turnAttempt: this.getTurn(input.turnId).attempt,
           text: input.text,
           timestamp: input.message.created_at,
           sessionId,
@@ -119,7 +122,9 @@ export class AppTransportQueueStore {
           executionControls,
           attachments: this.messageFiles.attachmentsForTransport(
             input.message.id,
+            input.visualAdmission,
           ),
+          imageAdmission: input.visualAdmission,
           rawSource: "app-server",
         },
         {

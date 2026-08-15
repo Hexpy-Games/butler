@@ -11,6 +11,7 @@ import {
   createAppSessionInteractionModuleGraph,
   type AppSessionInteractionModuleGraph,
 } from "./session-interaction-module-graph.ts";
+import { resolveProviderVisualCapability } from "../../../../integrations/providers/registry.ts";
 import type { SessionMessagePageOptions } from "./session-message-page.ts";
 
 export interface AppSessionModuleGraph {
@@ -40,8 +41,11 @@ export function createAppSessionModuleGraph(input: {
   host: any;
 }): AppSessionModuleGraph {
   const { db, butlerData, defaultChatId, defaultChatTitle, host } = input;
-  const messageFiles = new AppMessageFileStore(db, butlerData, (sessionId) =>
-    host.ensureChat(sessionId),
+  const messageFiles = new AppMessageFileStore(
+    db,
+    butlerData,
+    (sessionId) => host.ensureChat(sessionId),
+    { resolve: resolveProviderVisualCapability },
   );
   const sessionRecords = new AppSessionRecordStore(
     db,
@@ -113,10 +117,17 @@ export function createAppSessionModuleGraph(input: {
     defaultChatId,
     ensureChat: (chatId) => host.ensureChat(chatId),
     sessionHasActiveTurn: (chatId) => host.sessionHasActiveTurn(chatId),
-    createQueuedMessage: (queueInput) => host.createQueuedMessage(queueInput),
+    createQueuedMessage: (queueInput, visualAdmission) =>
+      host.sessionQueue.createQueuedMessage(queueInput, visualAdmission),
     listMessages: (chatId) => host.listMessages(chatId),
     validateAttachable: (chatId, attachments) =>
       messageFiles.validateAttachable(chatId, attachments ?? []),
+    admitVisualAttachments: async (files, model) =>
+      await messageFiles.admitVisualAttachments(
+        files,
+        model,
+        host.registeredModelMetadata(),
+      ),
     resolveControlsForMessageSend: (chatId, request) =>
       host.resolveControlsForMessageSend(chatId, request),
     insertTurn: (chatId, state, safeStatusLabel, controlResolution) =>

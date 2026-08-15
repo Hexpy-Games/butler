@@ -11,6 +11,10 @@ export function resolveExecutionWindowSize(input: BtccAgentLoopInput): number {
   return Math.max(1, input.maxIterations ?? DEFAULT_EXECUTION_WINDOW_SIZE);
 }
 
+export function modelRoundRequestId(index: number, recoveryAttempt = 1): string {
+  return `btcc-model-round-${index}${recoveryAttempt > 1 ? `:retry:${recoveryAttempt}` : ""}`;
+}
+
 export function throwIfExecutionWindowAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) return;
   if (signal.reason instanceof Error) throw signal.reason;

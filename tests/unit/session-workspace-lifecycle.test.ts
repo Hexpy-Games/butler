@@ -627,7 +627,6 @@ describe("session-owned Git worktree lifecycle", () => {
         }],
         checks: ["The session binding and active workspace reference agree."],
       });
-      await stores.durableWork.bindOpenWork(scope);
       const reviewed = await stores.durableWork.recordReview({
         ...scope,
         mutationCallId: "bind-replay-plan-review",

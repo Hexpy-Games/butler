@@ -35,7 +35,6 @@ export function useAppBootstrap() {
   const activeSessionView = useButlerStore(selectActiveSessionView);
   const rightAvailable = useButlerStore(selectRightAvailable);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
-  const setNavigation = useButlerStore((state) => state.setNavigation);
   const setModelCatalog = useButlerStore((state) => state.setModelCatalog);
   const setModelCatalogState = useButlerStore(
     (state) => state.setModelCatalogState,
@@ -112,17 +111,20 @@ export function useAppBootstrap() {
 
   useEffect(() => {
     const abortController = new AbortController();
+    const requestGeneration = useButlerStore.getState().navigationGeneration;
     void recoverBootstrapResource({
       load: () => api<NavigationView>("/navigation"),
-      onReady: setNavigation,
-      onUnavailable: () => setNavigation(EMPTY_NAVIGATION),
+      onReady: (navigation) =>
+        useButlerStore.getState().setNavigation(navigation, { requestGeneration }),
+      onUnavailable: () =>
+        useButlerStore.getState().setNavigation(EMPTY_NAVIGATION, { requestGeneration }),
       isCancelled: () => abortController.signal.aborted,
       signal: abortController.signal,
     });
     return () => {
       abortController.abort();
     };
-  }, [setNavigation]);
+  }, []);
 
   useEffect(() => {
     const abortController = new AbortController();

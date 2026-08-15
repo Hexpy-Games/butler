@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { ArtifactRef } from "../../../core/contracts.ts";
 import type { AppMessageResponderFile } from "../../domain/sessions/message-responder-contract.ts";
@@ -85,11 +90,28 @@ function firstReadableArtifactPath(
   allowedRoots: string[],
   seen: Set<string>,
 ): string | null {
+  const canonicalRoots = allowedRoots.map(canonicalPath);
   for (const path of artifactCandidatePaths(artifact, allowedRoots)) {
     if (seen.has(path)) continue;
     if (!allowedRoots.some((root) => isPathInside(root, path))) continue;
     if (!existsSync(path)) continue;
-    return path;
+    try {
+      const candidate = lstatSync(path);
+      if (!candidate.isFile() || candidate.isSymbolicLink()) continue;
+      const real = realpathSync.native(path);
+      if (!canonicalRoots.some((root) => isPathInside(root, real))) continue;
+      return real;
+    } catch {
+      continue;
+    }
   }
   return null;
+}
+
+function canonicalPath(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return resolve(path);
+  }
 }

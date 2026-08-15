@@ -12,6 +12,7 @@ export {
   type ModelRouteEventResult,
   type ModelRouteFailureDisposition,
   type ModelRouteFailureRecord,
+  type ModelRouteRecoveryUpdate,
   type ModelRouteState,
   ModelRouteDurabilityError,
   ModelRouteDispatchLimitError,

@@ -94,11 +94,11 @@ export interface AppStoreSessionApi {
     bytes: Buffer;
   };
   listSessionQueue(sessionId?: string): SessionQueueView;
-  createQueuedMessage(input: QueueMessageRequest): SessionQueueView;
+  createQueuedMessage(input: QueueMessageRequest): Promise<SessionQueueView>;
   updateQueuedMessage(
     queuedMessageId: string,
     input: UpdateQueuedMessageRequest,
-  ): SessionQueueView;
+  ): Promise<SessionQueueView>;
   deleteQueuedMessage(queuedMessageId: string): SessionQueueView;
   sendMessage(
     input: MessageSendRequest,
@@ -219,11 +219,11 @@ export function createSessionStoreApi(
     listSessionQueue(sessionId = DEFAULT_CHAT_ID) {
       return kernel.sessionQueue.listSessionQueue(sessionId);
     },
-    createQueuedMessage(input) {
-      return kernel.sessionQueue.createQueuedMessage(input);
+    async createQueuedMessage(input) {
+      return await kernel.sessionQueue.createQueuedMessage(input);
     },
-    updateQueuedMessage(queuedMessageId, input) {
-      return kernel.sessionQueue.updateQueuedMessage(queuedMessageId, input);
+    async updateQueuedMessage(queuedMessageId, input) {
+      return await kernel.sessionQueue.updateQueuedMessage(queuedMessageId, input);
     },
     deleteQueuedMessage(queuedMessageId) {
       return kernel.sessionQueue.deleteQueuedMessage(queuedMessageId);

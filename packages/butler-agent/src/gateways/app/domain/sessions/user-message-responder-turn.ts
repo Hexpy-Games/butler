@@ -10,6 +10,8 @@ import type {
   UserMessageTurnStoreInput,
   UserResponderTurnInput,
 } from "./user-message-turn-contract.ts";
+import { runtimeFaultFailureMessage } from
+  "../../infrastructure/transport/runtime-fault-failure.ts";
 
 export class AppUserMessageResponderTurn {
   constructor(private readonly input: UserMessageTurnStoreInput) {}
@@ -91,14 +93,15 @@ export class AppUserMessageResponderTurn {
     const runtimeFault = this.input.runtimeFaultRecordForTurn(turnId);
     const isRuntimeFault = Boolean(runtimeFault);
     const isRetryableRuntimeFault = runtimeFault?.retryable === true;
-    this.input.upsertAssistantTurnFailure(chatId, turnId, safeError, {
+    const projectedError = runtimeFaultFailureMessage(runtimeFault, safeError);
+    this.input.upsertAssistantTurnFailure(chatId, turnId, projectedError, {
       retryable: isRetryableRuntimeFault,
     });
     const failureKind = isRuntimeFault ? "runtime.fault" : "turn.failed";
     if (!this.input.hasTurnEventKind(turnId, failureKind)) {
       this.input.appendTurnEvent(chatId, turnId, {
         kind: failureKind,
-        payload: runtimeFault ?? safeTurnFailureEventPayload(safeError),
+          payload: runtimeFault ?? safeTurnFailureEventPayload(projectedError),
       });
     }
     const failedTurn = this.input.updateTurnState(
@@ -108,7 +111,7 @@ export class AppUserMessageResponderTurn {
         safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
         retryable: isRetryableRuntimeFault,
         cancellable: false,
-        safeErrorCode: safeError.code,
+        safeErrorCode: projectedError.code,
       },
     );
     this.input.appendTerminalTurnStateChanged(failedTurn);

@@ -25,7 +25,7 @@ export function createBtccGatewayHandlers(
       handledBy: "btcc/turn",
       metadata: {
         text: result.text,
-        artifacts: [],
+        artifacts: result.artifacts,
         generatedSessionTitle,
         loadedSkillNames: [],
         durableFinalRecorded: true,
@@ -52,6 +52,7 @@ function toBtccRequest(
   }
   return {
     turnId,
+    recoveryAttempt: envelope.routingHints?.turnAttempt,
     sessionId: route.sessionId,
     eventId: envelope.eventId,
     transport: envelope.transport,
@@ -71,8 +72,13 @@ function toBtccRequest(
             ...(Number.isFinite(attachment.sizeBytes)
               ? { sizeBytes: attachment.sizeBytes } : {}),
             ...(attachment.url ? { url: attachment.url } : {}),
-            ...(attachment.localPath ? { localPath: attachment.localPath } : {}),
+            ...(attachment.kind !== "image" && attachment.localPath
+              ? { localPath: attachment.localPath }
+              : {}),
           })) }
+        : {}),
+      ...(envelope.message.imageAdmission
+        ? { imageAdmission: envelope.message.imageAdmission }
         : {}),
     },
     trigger: { kind: "user_message" },

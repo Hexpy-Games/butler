@@ -87,6 +87,7 @@ export type TurnOutcome = typeof TURN_OUTCOMES[number];
 
 export const RECOVERY_KINDS = [
   "runtime_process_crash",
+  "provider_transport_exhausted",
   "provider_stream_corruption",
   "storage_invariant_violation",
   "api_protocol_invariant_violation",

@@ -2,6 +2,7 @@ import { projectSharedWorkBlocks } from "../../../../../../butler-progress-proje
 import type { ProgressRow, WorkBlockView } from "../types.ts";
 import { visibleProgressRows } from "./progress-rows.ts";
 import { compactLegacyDisplayTitle } from "./compact-display-title.ts";
+import { fallbackOrdinaryActivity } from "./ordinary-activity-fallback.ts";
 
 export type PhaseActivity = {
   id: string;
@@ -35,19 +36,25 @@ export interface TurnActivityProjection {
   operation?: ProgressRow;
 }
 
-export function projectTurnActivity(rows: ProgressRow[]): TurnActivityProjection {
+export function projectTurnActivity(
+  rows: ProgressRow[],
+  turnId?: string,
+): TurnActivityProjection {
   const visibleRows = orderedProgressRows(visibleProgressRows(rows));
   const readModels = projectActivityReadModels(visibleRows);
   const activityRows = visibleRows.filter((row) => row.kind !== "todo");
   const phaseActivities = phaseActivityRows(activityRows);
+  const projectedActivities = phaseActivities.length > 0
+    ? phaseActivities
+    : fallbackOrdinaryActivity(activityRows, turnId);
   return {
     visibleRows,
     readModels,
     decisions: readModels.filter(isDecisionReadModel),
     workBlocks: projectWorkBlocks(activityRows),
-    phaseActivities,
-    publicActivity: latestPublicActivity(activityRows, phaseActivities.length > 0),
-    semanticState: currentSemanticState(activityRows, phaseActivities),
+    phaseActivities: projectedActivities,
+    publicActivity: latestPublicActivity(activityRows, projectedActivities.length > 0),
+    semanticState: currentSemanticState(activityRows, projectedActivities),
     modelRoundWait: currentModelRoundWait(activityRows),
     operation: currentOperationActivity(activityRows),
   };
@@ -143,7 +150,7 @@ function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
     if (isPhaseActivityRow(row)) {
       const activity: PhaseActivity = {
         id: row.id,
-        phase: row.activity_stage ?? row.semantic_block_id,
+        phase: row.activity_stage,
         title: row.work_decision_title ??
           compactLegacyDisplayTitle(row.work_decision_summary),
         summary: row.work_decision_summary,
@@ -206,10 +213,8 @@ function currentSemanticState(
       (row.kind === "message" &&
         row.bridge_phase !== "btcc_operation" &&
         row.bridge_phase !== "model_round_waiting" &&
-        Boolean(row.semantic_block_id))) &&
-    Boolean(row.activity_stage || row.semantic_block_id));
+        Boolean(row.semantic_block_id))));
   if (latestModelActivity?.activity_stage) return latestModelActivity.activity_stage;
-  if (latestModelActivity?.semantic_block_id) return latestModelActivity.semantic_block_id;
   return activities.at(-1)?.phase;
 }
 

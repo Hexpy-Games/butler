@@ -12,8 +12,29 @@ import type {
   SessionQueueView,
   UpdateQueuedMessageRequest,
 } from "../../interface/protocol/app-protocol.ts";
+import type { VisualImageAdmissionResult } from "../../../../agent/image-attachment/contracts.ts";
 
 const DEFAULT_CHAT_ID = "general";
+
+function queueAttachmentPayload(
+  files: readonly import("../message-files/message-file-store.ts").MessageFileRow[],
+  admission?: VisualImageAdmissionResult,
+): Array<string | {
+  file_id: string;
+  image_admission: VisualImageAdmissionResult;
+}> {
+  return files.map((file) => {
+    const manifest = admission?.manifests.find((item) => item.fileId === file.id);
+    if (!manifest || !admission) return file.id;
+    return {
+      file_id: file.id,
+      image_admission: {
+        ...admission,
+        manifests: [manifest],
+      },
+    };
+  });
+}
 
 export class AppSessionQueueStore {
   constructor(
@@ -24,6 +45,10 @@ export class AppSessionQueueStore {
       sessionId: string,
       input: Partial<SessionControlState>,
     ) => SessionControlState,
+    private readonly admitVisualAttachments: (
+      files: readonly import("../message-files/message-file-store.ts").MessageFileRow[],
+      model: string,
+    ) => Promise<VisualImageAdmissionResult | undefined>,
     private readonly getSessionControls: (
       sessionId: string,
     ) => SessionControlState,
@@ -53,7 +78,10 @@ export class AppSessionQueueStore {
     };
   }
 
-  createQueuedMessage(input: QueueMessageRequest): SessionQueueView {
+  async createQueuedMessage(
+    input: QueueMessageRequest,
+    admittedVisual?: VisualImageAdmissionResult,
+  ): Promise<SessionQueueView> {
     const chatId = input.chat_id?.trim() || DEFAULT_CHAT_ID;
     this.ensureChat(chatId);
     const text = (input.text ?? "").trim();
@@ -69,6 +97,10 @@ export class AppSessionQueueStore {
       );
     }
     const controls = this.controlsForMessageSend(chatId, input);
+    const visualAdmission = admittedVisual ?? await this.admitVisualAttachments(
+      attachableFiles,
+      controls.model,
+    );
     const now = new Date().toISOString();
     const queuedId = `queued-${crypto.randomUUID()}`;
     this.db
@@ -86,7 +118,7 @@ export class AppSessionQueueStore {
         chatId,
         text,
         JSON.stringify(controls),
-        JSON.stringify(attachableFiles.map((file) => file.id)),
+        JSON.stringify(queueAttachmentPayload(attachableFiles, visualAdmission)),
         now,
         now,
       );
@@ -98,10 +130,10 @@ export class AppSessionQueueStore {
     return this.listSessionQueue(chatId);
   }
 
-  updateQueuedMessage(
+  async updateQueuedMessage(
     queuedMessageId: string,
     input: UpdateQueuedMessageRequest,
-  ): SessionQueueView {
+  ): Promise<SessionQueueView> {
     const current = this.getQueuedMessageRow(queuedMessageId);
     if (!current || current.state !== "queued") {
       throw new AppStoreOperationError(
@@ -136,6 +168,7 @@ export class AppSessionQueueStore {
       },
       this.registeredModelMetadata(),
     );
+    const visualAdmission = await this.admitVisualAttachments(attachableFiles, controls.model);
     const now = new Date().toISOString();
     this.db
       .query(
@@ -148,7 +181,7 @@ export class AppSessionQueueStore {
       .run(
         text,
         JSON.stringify(controls),
-        JSON.stringify(attachableFiles.map((file) => file.id)),
+        JSON.stringify(queueAttachmentPayload(attachableFiles, visualAdmission)),
         now,
         queuedMessageId,
       );

@@ -148,7 +148,7 @@ export function insertTurn(db: Database, input: {
       context_json, managed_state_json, semantic_state, revision,
       execution_fence, route
     ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', '{}', '{}', ?, 'admitted',
-      1, 1, ?)
+      1, 0, ?)
   `).run(
     input.turnId,
     input.sessionId,

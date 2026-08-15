@@ -3,7 +3,7 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const runCommandToolDefinition = {
   type: "function",
   name: "run_command",
-  description: "Run a non-interactive command in the active workspace through Butler's platform-neutral command executor. Required summary is the model-authored compact action label shown to the user, not a purpose sentence: read the requested command and write labels such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'. It never authorizes execution. Set validation_suite for validation receipts. Generated artifacts go under $BUTLER_ARTIFACTS_DIR unless intentional workspace paths are listed in output_paths. Prefer cross-platform executables with explicit arguments and JSON-safe command text.",
+  description: "Run a non-interactive command in the active workspace through Butler's platform-neutral command executor. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated artifacts under $BUTLER_ARTIFACTS_DIR, and list intentional existing workspace deliverables in output_paths. Prefer cross-platform executables and JSON-safe command text.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -33,7 +33,7 @@ export const runCommandToolDefinition = {
       },
       output_paths: {
         type: "array",
-        description: "Intentional workspace paths or artifact labels; required for durable deliverables. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR files.",
+        description: "Existing workspace paths or artifact labels to publish after success. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR. If none can be published, the tool returns a recoverable failure.",
         items: {
           type: "string",
         },

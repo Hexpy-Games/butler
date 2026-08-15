@@ -11,7 +11,7 @@ export const CompletedTurnActivity = memo(function CompletedTurnActivity({
   turnId?: string;
   turnState?: string;
 }) {
-  const activities = projectTurnActivity(rows ?? []).phaseActivities;
+  const activities = projectTurnActivity(rows ?? [], turnId).phaseActivities;
   if (activities.length === 0) return null;
   return <TurnActivityTimeline activities={activities} turnId={turnId} />;
 });

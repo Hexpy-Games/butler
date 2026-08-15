@@ -8,7 +8,6 @@ import { GuidedWorkMutationJournal } from "./guided-work-mutation-journal.ts";
 import { GuidedWorkProgressWriter } from "./guided-work-progress-writer.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
 import { GuidedWorkSessionWriter } from "./guided-work-session-writer.ts";
-import { GuidedWorkStatusWriter } from "./guided-work-status-writer.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
 import { stableJson } from "./identity.ts";
 
@@ -17,7 +16,6 @@ export class GuidedWorkReviewWriter {
     private readonly db: Database,
     private readonly reader: GuidedWorkViewReader,
     private readonly sessions: GuidedWorkSessionWriter,
-    private readonly statuses: GuidedWorkStatusWriter,
     private readonly mutations: GuidedWorkMutationJournal,
     private readonly progress: GuidedWorkProgressWriter,
   ) {}
@@ -34,9 +32,6 @@ export class GuidedWorkReviewWriter {
       const work = this.sessions.requireBoundHead(input);
       if (input.subject === "plan" && !work.current_plan_revision_id) {
         throw new Error("Durable Work Plan Review requires a current Plan");
-      }
-      if (input.completeWork && input.subject !== "completion") {
-        throw new Error("Durable Work completion requires completion Validation");
       }
       if (work.current_plan_revision_id !== input.expectedPlanRevisionId) {
         throw new Error("Durable Work Plan changed before its Review");
@@ -122,19 +117,10 @@ export class GuidedWorkReviewWriter {
         UPDATE btcc_guided_works SET status = ?, updated_at = ? WHERE work_id = ?
       `).run(progressWorkStatus(input), now, work.work_id);
       preserveBlockedStatus(this.db, work.work_id);
-      if (input.completeWork && input.subject === "completion") {
-        if (
-          !this.statuses.tryComplete(
-            work.work_id,
-            input.expectedPlanRevisionId,
-            now,
-          )
-        ) {
-          this.touch(work.work_id, now);
-        }
-      } else {
-        this.touch(work.work_id, now);
-      }
+      // Review/Validation is optional quality evidence.  It must not be a
+      // second closeout authority: Work status changes to `completed` only
+      // inside the atomic record_work_disposition transaction.
+      this.touch(work.work_id, now);
 
       this.mutations.record({
         mutationCallId: input.mutationCallId,

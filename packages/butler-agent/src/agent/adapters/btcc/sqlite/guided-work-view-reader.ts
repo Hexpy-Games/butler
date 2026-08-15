@@ -2,26 +2,33 @@ import type { Database } from "bun:sqlite";
 import {
   allowedNextWorkStages,
   progressForReplacementPlan,
-  type DurableWorkActionProgress,
-  type DurableWorkCheckpoint,
   type DurableWorkContext,
-  type DurableWorkPlan,
   type DurableWorkReview,
-  type DurableWorkToolResultRef,
   type DurableWorkView,
   type WorkTurnScope,
 } from "../../../btcc/work/index.ts";
 import type {
   GuidedWorkCheckpointRow,
+  GuidedWorkDispositionRow,
   GuidedWorkPlanRow,
   GuidedWorkResultRow,
   GuidedWorkReviewRow,
+  GuidedWorkRelationTurn,
   GuidedWorkRow,
   GuidedWorkTurn,
 } from "./guided-work-records.ts";
 import { unresolvedEffectBlockersForWork } from
   "./guided-work-effect-blockers.ts";
 import { guidedWorkMatchesScope } from "./guided-work-scope.ts";
+import { digest, stableJson } from "./identity.ts";
+import {
+  WORK_RESULT_ORDER,
+  hydrateCheckpoint,
+  hydrateDisposition,
+  hydratePlan,
+  hydrateResultRef,
+  hydrateReview,
+} from "./guided-work-view-hydrators.ts";
 
 const MAX_CONTEXT_RESULT_FACTS = 50;
 
@@ -33,14 +40,30 @@ type GuidedWorkContextResultRow = Pick<
 export class GuidedWorkViewReader {
   constructor(private readonly db: Database) {}
 
-  turn(scope: WorkTurnScope): GuidedWorkTurn {
-    const turn = this.db.query<GuidedWorkTurn, [string]>(`
-      SELECT turn_id, session_id, original_message_id, original_message
+  turn(scope: WorkTurnScope): GuidedWorkRelationTurn {
+    const turn = this.db.query<GuidedWorkRelationTurn, [string]>(`
+      SELECT turn_id, session_id, original_message_id, original_message,
+        semantic_state, execution_fence
       FROM btcc_turns WHERE turn_id = ?
     `).get(scope.turnId);
     if (!turn) throw new Error(`Durable Work Turn is not admitted: ${scope.turnId}`);
     if (turn.session_id !== scope.sessionId) {
       throw new Error(`Durable Work Turn Session does not match: ${scope.turnId}`);
+    }
+    return turn;
+  }
+
+  /**
+   * Read a Turn immediately before creating or changing the sole Work
+   * relation.  A cancelled Turn or a Turn whose execution fence moved is no
+   * longer allowed to produce relation rows.
+   */
+  relationTurn(scope: WorkTurnScope): GuidedWorkRelationTurn {
+    const turn = this.turn(scope);
+    if (turn.semantic_state !== "admitted" || turn.execution_fence !== 0) {
+      throw new Error(
+        `Durable Work Turn is stopped or fenced (cancelled or execution fence changed): ${scope.turnId}`,
+      );
     }
     return turn;
   }
@@ -140,7 +163,8 @@ export class GuidedWorkViewReader {
           work.status === "completed" ? { ...action, status: "done" as const } : action)
       : [];
     const hydratedCheckpoint = checkpoint
-      ? this.hydrateCheckpoint(
+      ? hydrateCheckpoint(
+          this.db,
           work.work_id,
           checkpoint,
           inferredCheckpointPlanId,
@@ -160,7 +184,9 @@ export class GuidedWorkViewReader {
     const planReview = this.latestReview(work.work_id, "plan");
     const resultReview = this.latestReview(work.work_id, "result");
     const completionValidation = this.latestReview(work.work_id, "completion");
+    const disposition = this.latestDisposition(work.work_id);
     const effectBlockers = unresolvedEffectBlockersForWork(this.db, work.work_id);
+    const effectWatermark = this.effectWatermark(work.work_id);
     return {
       workId: work.work_id,
       sessionId: work.session_id,
@@ -178,19 +204,24 @@ export class GuidedWorkViewReader {
         ? { latestCheckpoint: hydratedCheckpoint }
         : {}),
       ...(planReview
-        ? { latestPlanReview: this.hydrateReview(work.work_id, planReview) }
+        ? { latestPlanReview: hydrateReview(this.db, work.work_id, planReview) }
         : {}),
       ...(resultReview
-        ? { latestResultReview: this.hydrateReview(work.work_id, resultReview) }
+        ? { latestResultReview: hydrateReview(this.db, work.work_id, resultReview) }
         : {}),
       ...(completionValidation
         ? {
-            latestCompletionValidation: this.hydrateReview(
+            latestCompletionValidation: hydrateReview(
+              this.db,
               work.work_id,
               completionValidation,
             ),
           }
         : {}),
+      ...(disposition
+        ? { latestDisposition: hydrateDisposition(disposition) }
+        : {}),
+      effectWatermark,
       ...(effectBlockers.length > 0 ? { effectBlockers } : {}),
       resultRefs: results.map(hydrateResultRef),
       createdAt: work.created_at,
@@ -215,131 +246,49 @@ export class GuidedWorkViewReader {
     `).get(workId, subject) ?? null;
   }
 
-  private hydrateCheckpoint(
-    workId: string,
-    checkpoint: GuidedWorkCheckpointRow,
-    inferredPlanRevisionId: string | undefined,
-    defaultProgress: DurableWorkActionProgress[],
-  ): DurableWorkCheckpoint {
-    const prior = this.db.query<{ result_sequence: number }, [string, number]>(`
-      SELECT result_sequence FROM btcc_guided_work_checkpoint_revisions
-      WHERE work_id = ? AND revision < ? ORDER BY revision DESC LIMIT 1
-    `).get(workId, checkpoint.revision)?.result_sequence ?? 0;
-    const refs = this.db.query<{ result_ref: string }, [string, number, number]>(`
-      SELECT result_ref FROM btcc_guided_work_results
-      WHERE work_id = ? AND sequence > ? AND sequence <= ? ORDER BY sequence
-    `).all(workId, prior, checkpoint.result_sequence).map((row) => row.result_ref);
-    return {
-      checkpointRevisionId: checkpoint.checkpoint_revision_id,
-      revision: checkpoint.revision,
-      planRevisionId: inferredPlanRevisionId ?? "legacy",
-      stage: checkpoint.stage,
-      actionProgress: hydrateActionProgress(
-        checkpoint.action_states_json,
-        defaultProgress,
-      ),
-      publicSummary: checkpoint.public_summary,
-      nextStep: checkpoint.next_step,
-      referencedResultRefs: refs,
-      originTurnId: checkpoint.origin_turn_id,
-      createdAt: checkpoint.created_at,
-    };
-  }
-
-  private hydrateReview(
-    workId: string,
-    review: GuidedWorkReviewRow,
-  ): DurableWorkReview {
-    const boundResultRefs = review.bound_result_sequence === null
-      ? []
-      : this.db.query<{ result_ref: string }, [string, number]>(`
-          SELECT result_ref FROM btcc_guided_work_results
-          WHERE work_id = ? AND sequence <= ? ORDER BY sequence
-        `).all(workId, review.bound_result_sequence).map((row) => row.result_ref);
-    return {
-      reviewRevisionId: review.review_revision_id,
-      revision: review.revision,
-      subject: review.subject,
-      verdict: review.verdict,
-      summary: review.summary,
-      corrections: parseJson<string[]>(review.corrections_json),
-      ...(review.bound_plan_revision_id
-        ? { boundPlanRevisionId: review.bound_plan_revision_id }
-        : {}),
-      ...(review.bound_result_review_revision_id
-        ? {
-            boundResultReviewRevisionId:
-              review.bound_result_review_revision_id,
-          }
-        : {}),
-      ...(review.bound_action_states_json
-        ? {
-            boundActionProgress: hydrateActionProgress(
-              review.bound_action_states_json,
-              [],
-            ),
-          }
-        : {}),
-      boundResultRefs,
-      originTurnId: review.origin_turn_id,
-      createdAt: review.created_at,
-    };
+  private latestDisposition(workId: string): GuidedWorkDispositionRow | null {
+    return this.db.query<GuidedWorkDispositionRow, [string]>(`
+      SELECT * FROM btcc_guided_work_disposition_revisions
+      WHERE work_id = ? ORDER BY revision DESC LIMIT 1
+    `).get(workId) ?? null;
   }
 
   private results(workId: string): GuidedWorkResultRow[] {
     return this.db.query<GuidedWorkResultRow, [string]>(`
       SELECT result.result_ref, result.sequence, result.tool_call_id,
         call.tool_name, call.status, NULL AS result_json, call.result_sha256,
-        call.error_code, result.origin_turn_id, result.attached_at
+        call.error_code, result.origin_turn_id, result.source_turn_rowid,
+        result.source_turn_sequence, result.attached_at
       FROM btcc_guided_work_results result
       JOIN btcc_guided_tool_calls call ON call.call_id = result.tool_call_id
-      WHERE result.work_id = ? ORDER BY result.sequence
+      WHERE result.work_id = ? ORDER BY ${WORK_RESULT_ORDER}
     `).all(workId);
   }
 
   private contextResults(workId: string): GuidedWorkContextResultRow[] {
-    return this.db.query<GuidedWorkContextResultRow, [string, number]>(`
+    const rows = this.db.query<GuidedWorkContextResultRow, [string]>(`
       SELECT call.tool_name, call.status, call.result_json, call.error_code
       FROM btcc_guided_work_results result
       JOIN btcc_guided_tool_calls call ON call.call_id = result.tool_call_id
       WHERE result.work_id = ?
-      ORDER BY result.sequence DESC LIMIT ?
-    `).all(workId, MAX_CONTEXT_RESULT_FACTS).reverse();
+      ORDER BY ${WORK_RESULT_ORDER}
+    `).all(workId);
+    return rows.slice(-MAX_CONTEXT_RESULT_FACTS);
   }
-}
 
-function hydratePlan(row: GuidedWorkPlanRow): DurableWorkPlan {
-  return {
-    planRevisionId: row.plan_revision_id,
-    revision: row.revision,
-    objective: row.objective,
-    governingRefs: parseJson(row.governing_refs_json),
-    actions: parseJson(row.actions_json),
-    checks: parseJson(row.checks_json),
-    originTurnId: row.origin_turn_id,
-    createdAt: row.created_at,
-  };
-}
-
-function hydrateActionProgress(
-  value: string,
-  fallback: DurableWorkActionProgress[],
-): DurableWorkActionProgress[] {
-  const parsed = parseJson<DurableWorkActionProgress[]>(value);
-  return parsed.length > 0 ? parsed : fallback;
-}
-
-function hydrateResultRef(row: GuidedWorkResultRow): DurableWorkToolResultRef {
-  return {
-    resultRef: row.result_ref,
-    toolCallId: row.tool_call_id,
-    toolName: row.tool_name,
-    status: row.status,
-    ...(row.result_sha256 ? { resultSha256: row.result_sha256 } : {}),
-    ...(row.error_code ? { errorCode: row.error_code } : {}),
-    originTurnId: row.origin_turn_id,
-    attachedAt: row.attached_at,
-  };
+  private effectWatermark(workId: string): string {
+    const rows = this.db.query<{
+      effect_id: string;
+      receipt_id: string;
+      status: string;
+      journal_revision: number;
+      updated_at: string;
+    }, [string]>(`
+      SELECT effect_id, receipt_id, status, journal_revision, updated_at
+      FROM btcc_guided_effects WHERE work_id = ? ORDER BY effect_id
+    `).all(workId);
+    return digest(stableJson(rows));
+  }
 }
 
 function parseJson<T>(value: string): T {

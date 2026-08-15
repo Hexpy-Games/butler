@@ -259,6 +259,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
   };
   let planReviewed = false;
   let resultReviewed = false;
+  let dispositionRecorded = false;
   let rereadRequested = false;
   let listPageCount = 0;
   let listContinuationCount = 0;
@@ -431,6 +432,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
             }));
           }
           return toolResponse(toolCall("plan", "replace_work_plan", {
+            start_new: true,
             objective: "Review and apply the requested two-file workspace edit.",
             actions: [{
               action_key: "edit-native-files",
@@ -470,11 +472,26 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
               summary: "The reviewed edit and reread satisfy the whole Work.",
             }));
           }
+          if (!dispositionRecorded) {
+            dispositionRecorded = true;
+            const bound = await stores.durableWork.boundWorkForTurn("native-file-agent-loop-turn");
+            expect(bound).not.toBeNull();
+            return toolResponse(toolCall("complete-work", "record_work_disposition", {
+              work_id: bound!.workId,
+              disposition: "completed",
+              summary: "The reviewed native workspace edit is complete.",
+            }));
+          }
           return {
             text: "Native workspace files were reviewed, edited, reread, and delivered.",
             toolCalls: [],
           };
         }
+        case "record_work_disposition":
+          return {
+            text: "Native workspace files were reviewed, edited, reread, and delivered.",
+            toolCalls: [],
+          };
         case "edit_file": {
           expectNoWorkspaceRoot(lastOutput, workspace);
           expectRedactedCapabilityReceipts(lastOutput, workspace, ["needle", "edited"], false);
