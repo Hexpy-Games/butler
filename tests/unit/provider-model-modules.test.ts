@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 import {
   listModelMetadata,
+  modelCatalogView,
   modelCatalogGeneration,
   modelSupportsJsonSchemaResponseFormat,
   modelStructuredDecisionTransport,
@@ -62,10 +63,31 @@ test("model catalog generation is stable across timestamps and input order", () 
 });
 
 test("namespaced hosted model metadata resolves duplicate model ids by provider", () => {
+  const zaiGlm53 = resolveModelMetadata("zai/glm-5.3");
   const zaiGlm = resolveModelMetadata("zai/glm-5.2");
   const zaiApiGlm = resolveModelMetadata("zai-api/glm-5.2");
   const openCodeGoGlm = resolveModelMetadata("opencode-go/glm-5.2");
 
+  expect(zaiGlm53).toMatchObject({
+    provider_id: "zai",
+    provider_label: "Z.AI Coding Plan",
+    model_id: "glm-5.3",
+    model_ref: "zai/glm-5.3",
+    display_name: "GLM-5.3",
+    status: "latest",
+    context_window_tokens: 1_000_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "max",
+    reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+    runtime_supported: true,
+    hosted_api_shape: "openai_chat_completions",
+    source_url: "https://docs.z.ai/guides/llm/glm-5.3",
+  });
+  expect(
+    modelCatalogView().providers.find((provider) => provider.provider_id === "zai")
+      ?.latest_model_ref,
+  ).toBe("zai/glm-5.3");
+  expect(ZAI_API_MODELS.some((model) => model.model_id === "glm-5.3")).toBe(false);
   expect(zaiGlm.provider_id).toBe("zai");
   expect(zaiGlm.hosted_api_shape).toBe("openai_chat_completions");
   expect(zaiGlm.provider_label).toBe("Z.AI Coding Plan");
@@ -131,7 +153,7 @@ test("frozen hosted provider matrix exposes only current runtime-supported refs"
     ["xai", ["grok-4.5"]],
     ["kimi", ["kimi-k3", "kimi-k2.7-code", "kimi-k2.6"]],
     ["qwen", ["qwen3.7-max", "qwen3.7-plus", "qwen3.6-flash"]],
-    ["zai", ["glm-5.2", "glm-5.1", "glm-5"]],
+    ["zai", ["glm-5.3", "glm-5.2", "glm-5.1", "glm-5"]],
     ["zai-api", ["glm-5.2", "glm-5.1", "glm-5"]],
     ["opencode-go", [
       "grok-4.5", "glm-5.2", "glm-5.1", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6",
