@@ -29,12 +29,17 @@ import {
 import { ModelProviderRequestError } from
   "../../../integrations/providers/provider-errors.ts";
 import { createModelRouteRuntimeHooks } from "./model-route-runtime-hooks.ts";
+import {
+  createNoopRuntimeMemoryAttributionPort,
+  type RuntimeMemoryAttributionPort,
+} from "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
 
 export type TurnRuntimeDependencies = {
   admission: TurnAdmissionRepository;
   turns: TurnStateRepository;
   messages: CanonicalMessageStore;
   agent: BtccAgentLoop;
+  memoryAttribution?: RuntimeMemoryAttributionPort;
   progress?: BtccTurnProgressObserver;
   committedSuccessorReadiness?: CommittedSuccessorReadiness;
 };
@@ -49,8 +54,11 @@ export type TurnRuntimeDependencies = {
 class DefaultTurnRuntime implements BtccTurnRuntime {
   private readonly supervisor = createTurnExecutionSupervisor();
   private readonly activeTurns = new Map<string, Promise<BtccTurnOutcome>>();
+  private readonly memoryAttribution: RuntimeMemoryAttributionPort;
 
-  constructor(private readonly dependencies: TurnRuntimeDependencies) {}
+  constructor(private readonly dependencies: TurnRuntimeDependencies) {
+    this.memoryAttribution = dependencies.memoryAttribution ?? createNoopRuntimeMemoryAttributionPort();
+  }
 
   runTurn(
     command: BtccRunCommand,
@@ -74,6 +82,19 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
   }
 
   private async run(
+    command: BtccRunCommand,
+    progress: BtccTurnProgressObserver | undefined,
+    onAdmitted: ((isFresh: boolean) => void | Promise<void>) | undefined,
+  ): Promise<BtccTurnOutcome> {
+    this.memoryAttribution.checkpoint({ event: "turn_start", operation: "turn" });
+    try {
+      return await this.runTurnLifecycle(command, progress, onAdmitted);
+    } finally {
+      this.memoryAttribution.checkpoint({ event: "turn_end", operation: "turn" });
+    }
+  }
+
+  private async runTurnLifecycle(
     command: BtccRunCommand,
     progress: BtccTurnProgressObserver | undefined,
     onAdmitted: ((isFresh: boolean) => void | Promise<void>) | undefined,
@@ -121,6 +142,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
         result = await this.dependencies.agent.run({
           turn,
           signal: permit.signal,
+          memoryAttribution: this.memoryAttribution,
           progress,
           ...createModelRouteRuntimeHooks({
             turn,
@@ -230,6 +252,9 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
     turn: TurnRecord,
   ): Promise<void> {
     if (!isTerminal(turn)) return;
+    this.memoryAttribution.terminal(
+      turn.semanticState === "cancelled" ? "cancelled" : "delivered",
+    );
     await publishState(progress, turn);
   }
 }

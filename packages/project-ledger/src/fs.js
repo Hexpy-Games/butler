@@ -1,5 +1,6 @@
 import {
   appendFileSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -251,7 +252,7 @@ export function copyDirectory(source, target) {
     if (entry.isDirectory()) {
       copyDirectory(sourcePath, targetPath);
     } else if (entry.isFile()) {
-      writeFileSync(targetPath, readFileSync(sourcePath));
+      copyFileSync(sourcePath, targetPath);
     }
   }
 }

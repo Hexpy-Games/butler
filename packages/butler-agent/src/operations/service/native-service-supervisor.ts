@@ -29,6 +29,10 @@ import {
 } from "../tunnel/tunnel-service-config.ts";
 
 export const NATIVE_SUPERVISOR_ID = "native-supervisor";
+export const BUTLER_MAIN_MEMORY_DIAGNOSTIC_ENV_KEYS = [
+  "BUTLER_AGENT_MEMORY_DIAGNOSTICS",
+  "BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE",
+] as const;
 
 export type NativeServiceId =
   | "embed-server"
@@ -373,6 +377,7 @@ function nativeServiceSpecsForRuntime(
       : {}),
     TELEGRAM_SILENCE_LOG: logPath(paths.butlerData, "telegram-silence.log"),
   };
+  const butlerMainDiagnosticEnv = butlerMainMemoryDiagnosticEnvironment();
   const runtimeMetadata = appManaged.runtimePointerPath && appManaged.runtimeHome
     ? {
         managedBy: "butler-app" as const,
@@ -440,6 +445,7 @@ function nativeServiceSpecsForRuntime(
         ...commonEnv,
         BUTLER_SERVICE_CHILD: "butler-main",
         ENABLE_NATIVE_MCP_SERVERS: "true",
+        ...butlerMainDiagnosticEnv,
       },
       stdoutFile: logPath(paths.butlerData, "butler-out.log"),
       stderrFile: logPath(paths.butlerData, "butler-err.log"),
@@ -556,6 +562,9 @@ export function startService(
     ...process.env,
     ...(spec.env ?? {}),
   } as Record<string, string>;
+  if (spec.id !== "butler-main") {
+    for (const key of BUTLER_MAIN_MEMORY_DIAGNOSTIC_ENV_KEYS) delete env[key];
+  }
   const started = (options.spawnDetached ?? defaultSpawnDetached)(spec, env);
   const state: NativeServiceState = {
     version: 1,
@@ -576,6 +585,16 @@ export function startService(
   };
   atomicWriteJson(serviceStatePath(butlerData, spec.id), state);
   return projectService(spec, state, "online");
+}
+
+export function butlerMainMemoryDiagnosticEnvironment(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string> {
+  const output: Record<string, string> = {};
+  for (const key of BUTLER_MAIN_MEMORY_DIAGNOSTIC_ENV_KEYS) {
+    if (env[key] === "1") output[key] = "1";
+  }
+  return output;
 }
 
 export function startServices(
