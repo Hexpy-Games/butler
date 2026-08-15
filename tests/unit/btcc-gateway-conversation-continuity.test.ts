@@ -12,10 +12,17 @@ import type { BtccTurnOutcome } from
   "../../packages/butler-agent/src/agent/btcc/index.ts";
 import { DefaultBtccTurnPreparation } from
   "../../packages/butler-agent/src/agent/btcc/turn/prepare-turn.ts";
-import { AgentConversationStore } from
+import {
+  AgentConversationStore,
+  conversationMessagesSourceHash,
+} from
   "../../packages/butler-agent/src/agent/conversation/store.ts";
+import type { ContextAssembly } from
+  "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import { PromptAssembler } from
   "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
+import { includeRecentContext } from
+  "../../packages/butler-agent/src/agent/btcc/turn/recent-conversation-context.ts";
 import type { GatewayRoute, InboundEnvelope } from
   "../../packages/butler-agent/src/gateways/core/contracts.ts";
 import { createBtccGatewayHandlers } from
@@ -52,6 +59,12 @@ test("BTCC facade commits each Turn and gives the next Turn recent conversation"
     transportBindings: [],
   });
   const conversationStore = new AgentConversationStore({ butlerData });
+  const promptMaterialInputs: Array<{ tailLimit?: number }> = [];
+  const readPromptMaterial = conversationStore.readPromptMaterial.bind(conversationStore);
+  conversationStore.readPromptMaterial = (input) => {
+    promptMaterialInputs.push(input);
+    return readPromptMaterial(input);
+  };
   const runtime = new ScriptedBtccGatewayRuntime((command) =>
     command.kind === "run" && command.turnId === "turn-1"
       ? "첫 번째 점검 결과"
@@ -96,6 +109,10 @@ test("BTCC facade commits each Turn and gives the next Turn recent conversation"
     const recent = runtime.persistedContextDocuments.get(recentRef!);
     expect(recent?.content).toContain("정적 import 경로를 점검해 주세요.");
     expect(recent?.content).toContain("첫 번째 점검 결과");
+    expect(promptMaterialInputs).toHaveLength(1);
+    expect(promptMaterialInputs[0]?.tailLimit).toBeDefined();
+    expect(promptMaterialInputs[0]?.tailLimit).toBeGreaterThan(0);
+    expect(promptMaterialInputs[0]?.tailLimit).toBeLessThanOrEqual(200);
 
     const session = conversationStore.getSessionByGatewayBinding(
       "app",
@@ -166,6 +183,99 @@ test("BTCC facade keeps delivery when optional title generation fails", async ()
     expect(conversationStore.readTurn("turn-title-failure")?.status).toBe("complete");
   } finally {
     await host.close();
+    conversationStore.close();
+    bindingStore.close();
+  }
+});
+
+test("recent context admission bounds large canonical history while retaining summary and latest context", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "btcc-bounded-recent-context-"));
+  roots.push(butlerData);
+  const bindingStore = new SessionBindingStore(
+    join(butlerData, "runtime", "session-store.sqlite"),
+  );
+  const binding = bindingStore.upsert({
+    sessionId: "butler/app-bounded-recent-context",
+    role: "butler",
+    workspacePath: butlerData,
+    runtimeAdapterId: "btcc-turn-runtime",
+    modelProviderId: "openai",
+    modelRef: "openai/gpt-5.6-sol",
+    transportBindings: [],
+  });
+  const conversationStore = new AgentConversationStore({ butlerData });
+  const turn = conversationStore.beginTurn({
+    gateway: "app",
+    externalSessionId: binding.sessionId,
+    sessionId: binding.sessionId,
+    actor: "user",
+    turnId: "turn-bounded-history",
+  });
+  const first = conversationStore.appendAssistantMessage({
+    sessionId: binding.sessionId,
+    turnId: turn.id,
+    text: "history-0",
+  });
+  conversationStore.writeSummary({
+    sessionId: binding.sessionId,
+    coversFromSeq: first.seq,
+    coversToSeq: first.seq,
+    sourceHash: conversationMessagesSourceHash([first]),
+    summaryText: "historical decision must remain available",
+  });
+  for (let index = 1; index < 1_200; index += 1) {
+    conversationStore.appendAssistantMessage({
+      sessionId: binding.sessionId,
+      turnId: turn.id,
+      text: `history-${index}`,
+    });
+  }
+
+  const promptMaterialInputs: Array<{ tailLimit?: number }> = [];
+  const readPromptMaterial = conversationStore.readPromptMaterial.bind(conversationStore);
+  conversationStore.readPromptMaterial = (input) => {
+    promptMaterialInputs.push(input);
+    const material = readPromptMaterial(input);
+    expect(material.semantic_tail.length).toBeLessThanOrEqual(input.tailLimit ?? 0);
+    return material;
+  };
+  const emptyAssembly: ContextAssembly = {
+    staticContext: [],
+    liveConfiguration: [],
+    runtimeState: [],
+    workingContext: [],
+    retrievedContext: [],
+    currentInput: [],
+    references: [],
+    liveConfigHash: "bounded-history-test",
+  };
+
+  try {
+    const assembly = includeRecentContext(
+      conversationStore,
+      binding,
+      {
+        eventId: "event-bounded-history",
+        transport: "app",
+        accountId: "local",
+        peer: { kind: "dm", id: binding.sessionId },
+        sender: { id: "local-principal" },
+        message: {
+          id: "message-bounded-history",
+          text: "continue",
+          timestamp: "2026-07-28T00:00:00.000Z",
+        },
+      },
+      emptyAssembly,
+    );
+    const recent = assembly.workingContext[0]?.content ?? "";
+    expect(promptMaterialInputs).toHaveLength(1);
+    expect(promptMaterialInputs[0]?.tailLimit).toBeDefined();
+    expect(promptMaterialInputs[0]?.tailLimit).toBeLessThan(1_200);
+    expect(recent).toContain("historical decision must remain available");
+    expect(recent).toContain("history-1199");
+    expect(recent).not.toContain("history-0");
+  } finally {
     conversationStore.close();
     bindingStore.close();
   }

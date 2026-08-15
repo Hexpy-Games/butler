@@ -45,6 +45,8 @@ import type {
   ButlerToolDefinition,
   NativeToolAvailabilityOverrides,
 } from "./types.ts";
+import type { RuntimeMemoryAttributionPort } from
+  "../../operations/diagnostics/runtime-memory-attribution/index.ts";
 export { BUTLER_TOOLS, CORE_BUTLER_TOOLS } from "./registry.ts";
 export type {
   ButlerToolCall,
@@ -164,6 +166,7 @@ export function createButlerToolExecutor(input: {
   executionBoundary?: ButlerToolExecutionBoundary;
   workspaceReference?: WorkspaceReference;
   sessionBindingStore?: SessionWorkspaceBindingStore;
+  memoryAttribution?: RuntimeMemoryAttributionPort;
 }): ContextualButlerToolExecutor {
   const workspaceReference = input.workspaceReference ?? (input.sessionId && input.sessionBindingStore
     ? createUnavailableWorkspaceReference()
@@ -216,6 +219,7 @@ export function createButlerToolExecutor(input: {
       workspacePath: input.workspacePath,
       workspaceReference: projectLedgerWorkspaceReference,
       sessionId: input.sessionId, projectId: input.projectId,
+      memoryAttribution: input.memoryAttribution,
     }),
     ...createMonitoringToolHandlers({
       butlerData: input.butlerData,

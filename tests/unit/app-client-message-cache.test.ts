@@ -186,6 +186,27 @@ test("message cache merge keeps unchanged cached row identities", () => {
   );
 });
 
+test("message cache merge refreshes an opaque cursor at the same row", () => {
+  const cachedMessage = message("assistant-a", "assistant", 2, "turn-a");
+  const cached: MessageListView = {
+    chat_id: "session-a",
+    messages: [cachedMessage],
+    turn_progress: {},
+    next_cursor: 2,
+    next_cursor_token: "expiring-token",
+  };
+
+  const merged = mergeMessageListViews(cached, {
+    chat_id: "session-a",
+    messages: [{ ...cachedMessage }],
+    turn_progress: {},
+    next_cursor: 2,
+    next_cursor_token: "refreshed-token",
+  });
+
+  expect(merged.next_cursor_token).toBe("refreshed-token");
+});
+
 test("message cache paints cached messages even when assistant turn progress is incomplete", () => {
   const complete: MessageListView = {
     chat_id: "session-a",

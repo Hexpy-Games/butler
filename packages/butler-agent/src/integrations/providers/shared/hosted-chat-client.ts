@@ -332,7 +332,7 @@ async function createHostedChatCompletionOnce(
   }
   if (response.ok && requestBody.stream === true && isHostedChatSseResponse(response)) {
     try {
-      return await readHostedChatSseResponse(response, recordProgress);
+      return await readHostedChatSseResponse(response, recordProgress, signal);
     } catch (error) {
       if (signal?.aborted) throw error;
       if (error instanceof HostedChatStreamProviderError) {

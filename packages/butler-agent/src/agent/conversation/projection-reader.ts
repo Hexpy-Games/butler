@@ -1,5 +1,5 @@
-import { AgentConversationStore } from "./store.ts";
 import type { ConversationProjectionReader } from "./types.ts";
+import { createLazyConversationProjectionReader } from "./projection-reader-store.ts";
 
 export interface ManagedConversationProjectionReader {
   reader: ConversationProjectionReader;
@@ -9,7 +9,7 @@ export interface ManagedConversationProjectionReader {
 export function createConversationProjectionReader(input: {
   butlerData: string;
 }): ManagedConversationProjectionReader {
-  const store = new AgentConversationStore({ butlerData: input.butlerData });
+  const store = createLazyConversationProjectionReader({ butlerData: input.butlerData });
   return {
     reader: store,
     close() {

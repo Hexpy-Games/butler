@@ -22,6 +22,8 @@ import {
 } from "./support/fake-btcc-gateway-runtime.ts";
 import { buildTaskOriginContext } from
   "../../packages/butler-agent/src/agent/work/task-origin.ts";
+import { NativeInboundQueue } from
+  "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 
 let tempDir = "";
 let originalFetch: typeof fetch;
@@ -214,6 +216,49 @@ test("native butler-main leaves Telegram idle when gateway is not enabled", asyn
 
   expect(result.shutdownReason).toBe("bootstrap-only");
   expect(deliveries).toEqual([]);
+});
+
+test("native butler-main exits for watchdog replacement after a preserved runtime interruption", async () => {
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue({
+    eventId: "app:runtime-replacement",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "main" },
+    sender: { id: "app-user" },
+    message: {
+      id: "runtime-replacement",
+      text: "preserve and resume after process replacement",
+      timestamp: "2026-08-14T00:00:00.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/main",
+      turnId: "turn-runtime-replacement",
+    },
+  });
+  const runtime = new ScriptedBtccGatewayRuntime(() => {
+    throw new Error("execution-integrity interruption");
+  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1_000);
+
+  try {
+    const result = await runNativeButlerMain({
+      butlerHome: tempDir,
+      butlerData: tempDir,
+      btcc: runtime,
+      btccHost: createBtccTestHost(runtime),
+      provider: fakeProvider,
+      shutdownSignal: controller.signal,
+      shutdownPollMs: 10,
+      enableTelegramPolling: false,
+    });
+
+    expect(result.shutdownReason).toBe("runtime-replacement");
+    expect(queue.claim(1)).toEqual([]);
+  } finally {
+    clearTimeout(timeout);
+  }
 });
 
 test("native Butler publishes Telegram progress without sending a progress message", async () => {

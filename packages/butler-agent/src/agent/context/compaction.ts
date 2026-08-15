@@ -30,6 +30,7 @@ import { createCompactionSnapshot } from "./compaction-snapshot-builder.ts";
 export {
   compactionMetricsPath,
   compactionPath,
+  compactionSnapshotRevision,
   readCompactionMetrics,
   readCompactionSnapshots,
   readLatestCompactionSnapshot,

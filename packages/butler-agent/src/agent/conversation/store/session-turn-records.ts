@@ -108,6 +108,15 @@ export class ConversationSessionTurnRecords {
     return this.turnOutcomeSourceHash(capsule) === capsule.source_hash ? capsule : null;
   }
 
+  readTurnOutcomeById(outcomeId: string): TurnOutcomeCapsule | null {
+    const row = this.dependencies.db.query<TurnOutcomeRow, [string]>(`
+      SELECT * FROM conversation_turn_outcomes WHERE id = ?
+    `).get(outcomeId);
+    if (!row) return null;
+    const capsule = hydrateTurnOutcome(row);
+    return this.turnOutcomeSourceHash(capsule) === capsule.source_hash ? capsule : null;
+  }
+
   writeTurnOutcome(input: TurnOutcomeCapsuleInput): TurnOutcomeCapsule {
     const tx = this.dependencies.db.transaction(() => this.writeTurnOutcomeInTransaction(input));
     return tx() as TurnOutcomeCapsule;

@@ -5,11 +5,17 @@ import {
 import {
   isActiveSessionTurnState,
   maxMessageCursor,
-  safeLocalSessionId,
   sessionHintForRow,
   sessionViewStatus,
 } from "./session-read-model.ts";
+import { createTranscriptExportStream } from "./session-transcript-export.ts";
 import { isActiveWorkerActivity } from "../workers/worker-activity-read-model.ts";
+import {
+  encodeSessionCursor,
+  type SessionMessagePageOptions,
+  type SessionMessagePage,
+  type TranscriptMessagePage,
+} from "./session-message-page.ts";
 import type {
   AutomationTargetSummary,
   ContextDetailsView,
@@ -19,6 +25,7 @@ import type {
   SessionSummaryView,
   SessionView,
   SessionViewTurn,
+  TranscriptExportStream,
   TranscriptExportView,
   TurnRecord,
   WorkerActivityListView,
@@ -29,9 +36,17 @@ export class AppSessionViewStore {
     private readonly getSession: (sessionId: string) => SessionSummary,
     private readonly latestTurn: (sessionId: string) => TurnRecord | null,
     private readonly listMessages: (sessionId: string) => MessageRecord[],
+    private readonly listArtifactSummaries: (
+      sessionId: string,
+    ) => SessionArtifactSummary[],
     private readonly sessionViewMessages: (
       sessionId: string,
-    ) => MessageRecord[],
+      options?: SessionMessagePageOptions,
+    ) => SessionMessagePage<MessageRecord>,
+    private readonly transcriptMessagePage: (
+      sessionId: string,
+      options?: SessionMessagePageOptions,
+    ) => TranscriptMessagePage,
     private readonly sessionViewTurn: (
       turn: TurnRecord,
       options?: { suppressProgressRows?: boolean },
@@ -59,7 +74,6 @@ export class AppSessionViewStore {
       currentTurnId?: string,
     ) => SessionView["work_streams"],
     private readonly latestEventCursor: () => AppEventEnvelope["id"],
-    private readonly ensureChat: (sessionId: string) => void,
   ) {}
 
   getSessionSummary(sessionId: string): SessionSummaryView {
@@ -109,10 +123,14 @@ export class AppSessionViewStore {
     };
   }
 
-  getSessionView(sessionId: string): SessionView {
+  getSessionView(
+    sessionId: string,
+    options: SessionMessagePageOptions = {},
+  ): SessionView {
     const session = this.getSession(sessionId);
     const latestTurn = this.latestTurn(sessionId);
-    const messages = this.sessionViewMessages(sessionId);
+    const messagePage = this.sessionViewMessages(sessionId, options);
+    const messages = messagePage.items;
     const latestMessage = messages.at(-1);
     const latestTurnHasOutOfBandReport = Boolean(
       latestTurn &&
@@ -138,8 +156,15 @@ export class AppSessionViewStore {
       runtimeSessionId,
       activeWorkStreamTurnId,
     );
+    // Artifact history is independent from the message window: a caller may
+    // request a 64-row page while the latest artifact lives just outside that
+    // page. Keep the canonical bounded artifact query here rather than
+    // silently shrinking the public artifact contract to the current page.
     const artifacts = this.listArtifacts(sessionId);
-    const nextCursor = maxMessageCursor(messages);
+    const requestedAfterCursor = Number(options.afterCursor ?? 0);
+    const nextCursor = maxMessageCursor(messages) || requestedAfterCursor;
+    const firstCursor = Number(messages[0]?.cursor ?? 0);
+    const afterCursor = requestedAfterCursor;
     return {
       protocol_version: APP_PROTOCOL_VERSION,
       session_id: session.id,
@@ -151,7 +176,25 @@ export class AppSessionViewStore {
       messages,
       message_window: {
         next_cursor: nextCursor,
-        complete: messages.length < 200,
+        complete: !messagePage.hasMore,
+        ...(firstCursor > 0 ? { previous_cursor: firstCursor } : {}),
+        ...(firstCursor > 0
+          ? { previous_cursor_token: encodeSessionCursor(session.id, firstCursor) }
+          : {}),
+        ...(options.beforeCursor !== undefined
+          ? { requested_before_cursor: options.beforeCursor }
+          : {}),
+        ...(options.beforeCursorToken
+          ? { requested_before_cursor_token: options.beforeCursorToken }
+          : {}),
+        ...(afterCursor > 0 ? { requested_cursor: afterCursor } : {}),
+        ...(options.afterCursorToken
+          ? { requested_cursor_token: options.afterCursorToken }
+          : {}),
+        ...(nextCursor > 0
+          ? { next_cursor_token: encodeSessionCursor(session.id, nextCursor) }
+          : {}),
+        ...(messagePage.hasMore ? { has_more: true } : {}),
       },
       workers: this.listWorkerActivity({
         sessionId,
@@ -177,42 +220,42 @@ export class AppSessionViewStore {
   }
 
   listArtifacts(sessionId: string): SessionArtifactSummary[] {
-    this.ensureChat(sessionId);
-    return this.listMessages(sessionId)
-      .flatMap((message) => message.artifacts ?? [])
-      .slice(-20);
+    return this.listArtifactSummaries(sessionId);
   }
 
   exportTranscript(sessionId: string): TranscriptExportView {
-    const session = this.getSession(sessionId);
-    const messages = this.listMessages(sessionId).filter(
-      (message) =>
-        message.role === "user" ||
-        message.role === "assistant" ||
-        message.role === "automation" ||
-        message.role === "system_event",
-    );
-    const lines = [
-      `# ${session.title}`,
-      "",
-      `Session: ${session.kind}`,
-      `Generated: ${new Date().toISOString()}`,
-      "",
-      ...messages.flatMap((message) => [
-        `## ${message.role}`,
-        "",
-        message.text,
-        "",
-      ]),
-    ];
+    const stream = this.exportTranscriptStream(sessionId);
+    const chunks: string[] = [];
+    let messageCount = 0;
+    for (const chunk of stream.chunks) {
+      chunks.push(chunk.text);
+      messageCount += chunk.message_count ?? 0;
+    }
     return {
-      session_id: sessionId,
-      format: "markdown",
-      filename: `${safeLocalSessionId(session.title)}.md`,
-      content: lines.join("\n"),
-      message_count: messages.length,
-      generated_at: new Date().toISOString(),
+      session_id: stream.session_id,
+      format: stream.format,
+      filename: stream.filename,
+      content: chunks.join(""),
+      message_count: messageCount,
+      generated_at: stream.generated_at,
     };
+  }
+
+  /**
+   * Produce a full-history export one canonical page at a time. The HTTP
+   * route consumes this iterable directly, keeping the gateway from retaining
+   * MessageRecord[], Markdown lines, and the serialized JSON body together.
+   */
+  exportTranscriptStream(sessionId: string): TranscriptExportStream {
+    const session = this.getSession(sessionId);
+    const generatedAt = new Date().toISOString();
+    return createTranscriptExportStream({
+      sessionId,
+      title: session.title,
+      kind: session.kind,
+      generatedAt,
+      listPage: this.transcriptMessagePage,
+    });
   }
 
   private safeErrors(messages: MessageRecord[]): SessionView["errors"] {

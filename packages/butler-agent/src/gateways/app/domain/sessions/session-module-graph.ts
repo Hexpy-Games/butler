@@ -11,6 +11,7 @@ import {
   createAppSessionInteractionModuleGraph,
   type AppSessionInteractionModuleGraph,
 } from "./session-interaction-module-graph.ts";
+import type { SessionMessagePageOptions } from "./session-message-page.ts";
 
 export interface AppSessionModuleGraph {
   messageFiles: AppMessageFileStore;
@@ -68,7 +69,10 @@ export function createAppSessionModuleGraph(input: {
     },
   });
   const sessionMessageProjection = new AppSessionMessageProjectionStore({
-    listMessages: (sessionId) => host.listMessages(sessionId),
+    listMessages: (sessionId, options?: SessionMessagePageOptions) =>
+      host.listMessages(sessionId, options),
+    listMessagePage: (sessionId, options?: SessionMessagePageOptions) =>
+      host.listMessagePage(sessionId, options),
     getTurnRow: (turnId) => host.getTurnRow(turnId),
     listProgressRowsForTurn: (turnId) => host.listProgressRowsForTurn(turnId),
     explicitDeliveryMetadataForTurn: (turnId) =>

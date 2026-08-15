@@ -181,6 +181,7 @@ export function migrateAppStoreSchema(
     CREATE TABLE IF NOT EXISTS app_conversation_projection_state (
       gateway TEXT PRIMARY KEY,
       last_outbox_id TEXT,
+      last_outcome_id TEXT,
       updated_at TEXT NOT NULL,
       pending_count INTEGER NOT NULL DEFAULT 0,
       safe_error_code TEXT
@@ -280,6 +281,7 @@ export function migrateAppStoreSchema(
   ensureColumn(db, "turns", "execution_controls_json", "TEXT");
   ensureColumn(db, "turns", "execution_model_json", "TEXT");
   ensureColumn(db, "events", "turn_id", "TEXT");
+  ensureColumn(db, "app_conversation_projection_state", "last_outcome_id", "TEXT");
   ensureColumn(
     db,
     "app_transcript_projection_checkpoints",

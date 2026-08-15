@@ -12,18 +12,32 @@ import {
   deliveryLimitationMetadataFromRecord,
   type DeliveryLimitationMetadata,
 } from "../transport/app-delivery-projection.ts";
+import {
+  compactAppEvents,
+  DEFAULT_EVENT_RETENTION_POLICY,
+  type EventCompactionResult,
+  type EventRetentionPolicy,
+} from "./event-retention.ts";
 
 export class AppEventStore {
   private readonly subscribers = new Set<(event: AppEventEnvelope) => void>();
   private readonly sessionTurnEventSequences = new Map<string, number>();
   private readonly turnEventSequences = new Map<string, number>();
+  private readonly retentionPolicy: EventRetentionPolicy;
+  private appendCountSinceCompaction = 0;
 
   constructor(
     private readonly db: Database,
     private readonly onEventAppended: (
       event: { turnId: string; eventId: number },
     ) => void = () => undefined,
-  ) {}
+    retentionPolicy: EventRetentionPolicy = {},
+  ) {
+    this.retentionPolicy = {
+      ...DEFAULT_EVENT_RETENTION_POLICY,
+      ...retentionPolicy,
+    };
+  }
 
   append(type: string, payload: Record<string, unknown>): AppEventEnvelope {
     const createdAt = new Date().toISOString();
@@ -58,6 +72,15 @@ export class AppEventStore {
       created_at: row.created_at,
       payload: JSON.parse(row.payload_json) as Record<string, unknown>,
     };
+    this.appendCountSinceCompaction += 1;
+    if (this.appendCountSinceCompaction >= 256) {
+      this.appendCountSinceCompaction = 0;
+      try {
+        this.compact();
+      } catch {
+        // Retention is maintenance; never mask the canonical append result.
+      }
+    }
     for (const listener of [...this.subscribers]) {
       try {
         listener(event);
@@ -68,18 +91,21 @@ export class AppEventStore {
     return event;
   }
 
-  replay(cursor = 0): AppEventEnvelope[] {
+  replay(cursor = 0, limit = 200): AppEventEnvelope[] {
+    const boundedLimit = Number.isFinite(limit)
+      ? Math.max(1, Math.min(200, Math.floor(limit)))
+      : 200;
     const rows = this.db
-      .query<EventRow, [number]>(
+      .query<EventRow, [number, number]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE id > ?
       ORDER BY id ASC
-      LIMIT 200
+      LIMIT ?
     `,
       )
-      .all(cursor);
+      .all(cursor, boundedLimit);
     return rows.map((row) => ({
       protocol_version: APP_PROTOCOL_VERSION,
       id: row.id,
@@ -97,6 +123,10 @@ export class AppEventStore {
       .query<{ id: number }, []>("SELECT COALESCE(MAX(id), 0) AS id FROM events")
       .get();
     return row?.id ?? 0;
+  }
+
+  compact(now = new Date()): EventCompactionResult {
+    return compactAppEvents(this.db, this.retentionPolicy, now);
   }
 
   subscribe(listener: (event: AppEventEnvelope) => void): () => void {

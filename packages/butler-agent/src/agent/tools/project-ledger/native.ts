@@ -22,6 +22,10 @@ import {
   GitEvidenceCollectionError,
   normalizeProjectLedgerCommitEvidenceInput,
 } from "./git-commit-evidence.ts";
+import type { RuntimeMemoryAttributionPort } from
+  "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
+import { runRuntimeMemoryAttributionPhase } from
+  "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type ProjectLedgerExecutorInput = {
@@ -32,6 +36,7 @@ type ProjectLedgerExecutorInput = {
   sessionId?: string;
   projectId?: string;
   workspaceReference?: WorkspaceReference;
+  memoryAttribution?: RuntimeMemoryAttributionPort;
 };
 
 type ToolSpec = {
@@ -250,6 +255,23 @@ export function createProjectLedgerNativeToolHandler(input: ProjectLedgerExecuto
 }
 
 function runProjectLedgerNativeTool(
+  input: ProjectLedgerExecutorInput,
+  toolName: string,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const phase = toolName === "project_ledger_work_update" ? "work_update" : null;
+  if (phase) {
+    return runRuntimeMemoryAttributionPhase({
+      attribution: input.memoryAttribution,
+      phase,
+      run: () => runProjectLedgerNativeToolInternal(input, toolName, args),
+      failed: (result) => result.ok !== true,
+    });
+  }
+  return runProjectLedgerNativeToolInternal(input, toolName, args);
+}
+
+function runProjectLedgerNativeToolInternal(
   input: ProjectLedgerExecutorInput,
   toolName: string,
   args: Record<string, unknown>,

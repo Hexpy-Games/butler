@@ -19,7 +19,10 @@ import {
 } from "./message-file-storage.ts";
 import {
   getMessageFileRow,
+  artifactRevisionForSession,
+  countSessionMessageFileRows,
   listMessageAttachmentRows,
+  listMessageAttachmentRowsForMessages,
   listQueuedMessageFileRows,
   listSessionMessageFileRows,
   type MessageFileRow,
@@ -102,6 +105,19 @@ export class AppMessageFileStore {
     return this.attachmentRows(messageId).map(messageFileRefFromRow);
   }
 
+  refsForMessages(messageIds: readonly string[]): Map<string, MessageFileRef[]> {
+    const rowsByMessage = listMessageAttachmentRowsForMessages(
+      this.db,
+      messageIds,
+    );
+    return new Map(
+      [...rowsByMessage].map(([messageId, rows]) => [
+        messageId,
+        rows.map(messageFileRefFromRow),
+      ]),
+    );
+  }
+
   attachmentsForTransport(messageId: string): AttachmentRef[] {
     return this.attachmentRows(messageId).map((row) => ({
       id: row.id,
@@ -123,6 +139,14 @@ export class AppMessageFileStore {
     return listSessionMessageFileRows(this.db, sessionId).map(
       messageFileRefFromRow,
     );
+  }
+
+  countForSession(sessionId: string): number {
+    return countSessionMessageFileRows(this.db, sessionId);
+  }
+
+  artifactRevision(sessionId: string): string {
+    return artifactRevisionForSession(this.db, sessionId);
   }
 
   validateAttachable(

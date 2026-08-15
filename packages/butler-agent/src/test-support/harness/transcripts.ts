@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { randomUUID } from "crypto";
 import { homedir } from "os";
 import { join } from "path";
+import { recordTranscriptActivityEvent } from "../../operations/metrics/transcript-activity-index.ts";
 
 export type TranscriptEventKind =
   | "inbound"
@@ -67,6 +68,16 @@ export function appendTranscriptEvent(event: TranscriptEvent, butlerData?: strin
   const path = transcriptPath(event.sessionId, butlerData);
   mkdirSync(transcriptsDir(butlerData), { recursive: true });
   appendFileSync(path, `${JSON.stringify(event)}\n`, "utf8");
+  try {
+    recordTranscriptActivityEvent({
+      butlerData: getButlerData(butlerData),
+      kind: event.kind,
+      timestamp: event.timestamp,
+      payload: event.payload,
+    });
+  } catch {
+    // Diagnostic indexing must never block canonical transcript durability.
+  }
 }
 
 export function readTranscript(sessionId: string, butlerData?: string): TranscriptEvent[] {

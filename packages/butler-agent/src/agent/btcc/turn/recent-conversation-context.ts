@@ -13,6 +13,29 @@ import type { InboundEnvelope } from
 import type { StoredSessionBinding } from
   "../../../test-support/harness/contracts.ts";
 
+/**
+ * The prompt compiler applies an exact token budget after materialization, but
+ * the conversation store must not hydrate the complete canonical tail before
+ * that compiler can bound it. Keep this estimate deliberately conservative:
+ * it is only a row-count guard, while the compiler remains the authority for
+ * rendered prompt capacity. The store also clamps the value to its 200-row
+ * maximum, so this path has a stable memory ceiling even without summaries.
+ */
+const RECENT_CONTEXT_ESTIMATED_TOKENS_PER_MESSAGE = 80;
+const MIN_RECENT_CONTEXT_TAIL_MESSAGES = 20;
+const MAX_RECENT_CONTEXT_TAIL_MESSAGES = 200;
+
+export function recentConversationTailLimit(modelRef?: string | null): number {
+  const tokenBudget = defaultRecentConversationTokenBudget(modelRef);
+  return Math.max(
+    MIN_RECENT_CONTEXT_TAIL_MESSAGES,
+    Math.min(
+      MAX_RECENT_CONTEXT_TAIL_MESSAGES,
+      Math.ceil(tokenBudget / RECENT_CONTEXT_ESTIMATED_TOKENS_PER_MESSAGE),
+    ),
+  );
+}
+
 export function includeRecentContext(
   store: ConversationContextStoreReader,
   binding: StoredSessionBinding,
@@ -24,7 +47,10 @@ export function includeRecentContext(
     binding.sessionId,
   );
   if (!session) return assembly;
-  const material = store.readPromptMaterial({ sessionId: session.id });
+  const material = store.readPromptMaterial({
+    sessionId: session.id,
+    tailLimit: recentConversationTailLimit(binding.modelRef),
+  });
   const plan = compilePromptMaterialContextPlan(material, {
     maxTokens: defaultRecentConversationTokenBudget(binding.modelRef),
     excludeSourceRef: envelope.eventId,

@@ -1,9 +1,14 @@
 import { runProjectLedgerTool } from "../../../integrations/project-ledger/client.ts";
 import { projectLedgerNativeNextHints } from "./recovery-hints.ts";
+import {
+  runRuntimeMemoryAttributionPhase,
+  type RuntimeMemoryAttributionPort,
+} from "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
 
 type ProjectLedgerCloseoutInput = {
   butlerHome: string;
   butlerData?: string;
+  memoryAttribution?: RuntimeMemoryAttributionPort;
 };
 
 type ProjectLedgerToolRunner = typeof runProjectLedgerTool;
@@ -39,7 +44,12 @@ export function runProjectLedgerLifecycleCloseout(input: {
 }): Record<string, unknown> {
   const runTool = input.runTool ?? runProjectLedgerTool;
   const project = ["--project", input.projectPath];
-  const indexResult = input.refreshedIndex ?? runTool(input.executor, ["index", ...project]);
+  const indexResult = runRuntimeMemoryAttributionPhase({
+    attribution: input.executor.memoryAttribution,
+    phase: "index",
+    run: () => input.refreshedIndex ?? runTool(input.executor, ["index", ...project]),
+    failed: (result) => result.ok !== true,
+  });
   const indexOk = indexResult.ok === true;
   if (!indexOk) {
     return {
@@ -56,14 +66,24 @@ export function runProjectLedgerLifecycleCloseout(input: {
     };
   }
   const renderedViews = GENERATED_VIEWS.map((view) =>
-    renderViewSummary(view, runTool(input.executor, [
-      "render",
-      ...project,
-      view,
-      "--write",
-    ])),
+    runRuntimeMemoryAttributionPhase({
+      attribution: input.executor.memoryAttribution,
+      phase: renderPhase(view),
+      run: () => renderViewSummary(view, runTool(input.executor, [
+        "render",
+        ...project,
+        view,
+        "--write",
+      ])),
+      failed: (result) => result.ok !== true,
+    }),
   );
-  const checkResult = runTool(input.executor, ["check", ...project]);
+  const checkResult = runRuntimeMemoryAttributionPhase({
+    attribution: input.executor.memoryAttribution,
+    phase: "check",
+    run: () => runTool(input.executor, ["check", ...project]),
+    failed: (result) => result.ok !== true,
+  });
   const renderOk = renderedViews.every((view) => view.ok === true);
   const checkOk = checkResult.ok === true;
   const failedStages = closeoutFailedStages({
@@ -83,6 +103,12 @@ export function runProjectLedgerLifecycleCloseout(input: {
     ...(renderOk ? {} : { render_error: renderErrorSummary(renderedViews) }),
     ...(checkOk ? {} : { check_error: projectLedgerErrorSummary(checkResult) }),
   };
+}
+
+function renderPhase(
+  view: ProjectLedgerViewName,
+): "render_dashboard" | "render_handoff" | "render_roadmap" {
+  return `render_${view}` as "render_dashboard" | "render_handoff" | "render_roadmap";
 }
 
 export function applyProjectLedgerLifecycleCloseout(

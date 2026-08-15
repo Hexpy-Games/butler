@@ -17,6 +17,8 @@ import {
   classifyLegacyProjectLedgerEffect,
   normalizeLegacyProjectLedgerUpdates,
 } from "./guided-project-ledger-legacy-effect.ts";
+import type { RuntimeMemoryAttributionPort } from
+  "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
 export {
   GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES,
   guidedProjectLedgerEffect,
@@ -29,12 +31,14 @@ export async function executeGuidedProjectLedgerEffect(input: {
   projectRoot: string;
   effectKey: string;
   effect: GuidedProjectLedgerEffect;
+  memoryAttribution?: RuntimeMemoryAttributionPort;
 }): Promise<Record<string, unknown>> {
   const result = await applyProjectLedgerRecordUpdates({
     butlerData: input.butlerData,
     projectRoot: input.projectRoot,
     effectKey: input.effectKey,
     updates: input.effect.updates,
+    memoryAttribution: input.memoryAttribution,
   });
   return {
     ok: true,
@@ -55,6 +59,7 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
   workspacePath?: string;
   resolveActiveProjectReference(): ActiveProjectLedgerReference;
   initializeForCreate?: () => void | Promise<void>;
+  memoryAttribution?: RuntimeMemoryAttributionPort;
 }): {
   target: string;
   normalizedInput: Record<string, unknown>;
@@ -111,6 +116,7 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
             projectRoot: input.projectRoot,
             effectKey: idempotencyKey,
             updates,
+            memoryAttribution: input.memoryAttribution,
           });
           return {
             status: "applied",
@@ -122,6 +128,7 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
             projectRoot: input.projectRoot,
             effectKey: idempotencyKey,
             updates,
+            memoryAttribution: input.memoryAttribution,
           });
           if (observed.status === "applied") {
             return {
@@ -159,6 +166,7 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
           projectRoot: input.projectRoot,
           effectKey: idempotencyKey,
           updates,
+          memoryAttribution: input.memoryAttribution,
         });
         if (reconciled.status === "not_applied") return reconciled;
         if (reconciled.status === "uncertain") {

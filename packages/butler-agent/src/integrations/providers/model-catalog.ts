@@ -158,6 +158,14 @@ function openAITextEncoding(): Tiktoken {
   return openAIEncoding;
 }
 
+function encodeOpenAITextAsLiteral(text: string): number[] {
+  // Request content can contain arbitrary user, web, or tool text. Treat
+  // tokenizer marker strings as ordinary text for estimation instead of
+  // interpreting them as control tokens (or throwing on a disallowed one).
+  // The request body itself is serialized separately and remains byte-exact.
+  return openAITextEncoding().encode(text, [], []);
+}
+
 export function listModelMetadata(extraModels: ProviderModelMetadata[] = []): ProviderModelMetadata[] {
   return [...MODELS, ...extraModels].map((model) => ({
     ...model,
@@ -442,7 +450,7 @@ export function estimateTokensForModel(
   if (!text) return { tokens: 0, source: "character_estimate" };
   const metadata = resolveModelMetadata(modelRef);
   if (metadata.provider_id === "openai") {
-    return { tokens: openAITextEncoding().encode(text).length, source: "openai_tiktoken_o200k" };
+    return { tokens: encodeOpenAITextAsLiteral(text).length, source: "openai_tiktoken_o200k" };
   }
   if (metadata.provider_id === "google") {
     return { tokens: Math.ceil(text.length / 4), source: "gemini_character_estimate" };

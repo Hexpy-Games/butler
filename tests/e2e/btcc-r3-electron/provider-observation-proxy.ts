@@ -563,14 +563,22 @@ async function serveFixtureResponse(input: {
   }
   input.observation.providerReportedModel = responseModel;
   const text = input.fixtureResponse.text ?? "fixture response";
-  const output = {
-    type: "message",
-    role: "assistant",
-    content: [{ type: "output_text", text }],
-  };
-  input.observation.hasTextContent = text.length > 0;
-  input.observation.streamedTextChars = characterCount(text);
-  input.observation.finalTextChars = characterCount(text);
+  const toolCall = input.fixtureResponse.toolCall;
+  const output = toolCall
+    ? {
+        type: "function_call",
+        call_id: toolCall.id ?? `fixture-call-${input.observation.ordinal}`,
+        name: toolCall.name,
+        arguments: JSON.stringify(toolCall.arguments ?? {}),
+      }
+    : {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text }],
+      };
+  input.observation.hasTextContent = !toolCall && text.length > 0;
+  input.observation.streamedTextChars = toolCall ? 0 : characterCount(text);
+  input.observation.finalTextChars = toolCall ? 0 : characterCount(text);
   input.observation.firstContentBearingDeltaAtMs = input.now();
   input.response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",

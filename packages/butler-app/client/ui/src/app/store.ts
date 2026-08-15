@@ -24,6 +24,7 @@ import {
   readCachedMessageList,
   writeCachedMessageList,
 } from "./messageCache.ts";
+import { APP_CACHE_BUDGET, cacheEntryBytes } from "./cacheBudget.ts";
 import {
   readCachedSettings,
   settingsWithDefaults,
@@ -371,6 +372,7 @@ function completeSessionView(
   messages: MessageRecord[],
   turnProgress: Record<string, TurnProgressSnapshot>,
   nextCursor?: number,
+  nextCursorToken?: string,
 ): MessageListView | null {
   if (isDraftChatId(chatId) || messages.length === 0) return null;
   const view = {
@@ -378,6 +380,7 @@ function completeSessionView(
     messages,
     turn_progress: turnProgress,
     next_cursor: nextCursor ?? messageListCursor({ messages }),
+    ...(nextCursorToken ? { next_cursor_token: nextCursorToken } : {}),
   };
   return messageListSyncCursor(view) > 0 ? view : null;
 }
@@ -385,18 +388,64 @@ function completeSessionView(
 function upsertCompleteSessionView(
   views: Record<string, MessageListView>,
   view: MessageListView | null,
+  protectedChatId?: string,
 ): Record<string, MessageListView> {
   if (!view?.chat_id || messageListSyncCursor(view) === 0) return views;
+  if (cacheEntryBytes(view) > APP_CACHE_BUDGET.maxSnapshotBytes) return views;
   const previous = views[view.chat_id];
   if (
     previous &&
     messageRecordsEqual(previous.messages, view.messages) &&
     structurallyEqual(previous.turn_progress ?? {}, view.turn_progress ?? {}) &&
-    previous.next_cursor === view.next_cursor
+    previous.next_cursor === view.next_cursor &&
+    previous.next_cursor_token === view.next_cursor_token
   ) {
-    return views;
+    const touched = { ...views };
+    delete touched[view.chat_id];
+    touched[view.chat_id] = previous;
+    return touched;
   }
-  return { ...views, [view.chat_id]: view };
+  // Object insertion order is the deterministic LRU order. Reinsert a
+  // touched session at the tail before evicting the oldest completed entry.
+  const next = { ...views };
+  delete next[view.chat_id];
+  next[view.chat_id] = view;
+  let totalBytes = Object.values(next).reduce(
+    (total, candidate) => total + cacheEntryBytes(candidate),
+    0,
+  );
+  for (const chatId of Object.keys(next)) {
+    if (
+      Object.keys(next).length <= APP_CACHE_BUDGET.maxEntries &&
+      totalBytes <= APP_CACHE_BUDGET.maxBytes
+    ) {
+      break;
+    }
+    if (chatId === protectedChatId || chatId === view.chat_id) continue;
+    totalBytes -= cacheEntryBytes(next[chatId]);
+    delete next[chatId];
+  }
+  return next;
+}
+
+function boundedSessionMessages(messages: MessageRecord[]): MessageRecord[] {
+  if (messages.length <= APP_CACHE_BUDGET.maxMessages) return messages;
+  const active = messages.filter((message) =>
+    typeof message.status === "string" &&
+    ["pending", "thinking", "streaming", "retrying"].includes(message.status),
+  );
+  const activeSet = new Set(active);
+  const activeTail = active.slice(-APP_CACHE_BUDGET.maxMessages);
+  const completedLimit = Math.max(
+    0,
+    APP_CACHE_BUDGET.maxMessages - activeTail.length,
+  );
+  const completed = messages
+    .filter((message) => !activeSet.has(message))
+    .slice(-completedLimit);
+  return [...completed, ...activeTail].sort(
+    (left, right) => Number(left.cursor ?? 0) - Number(right.cursor ?? 0),
+  );
 }
 
 function snapshotActiveSessionView(
@@ -405,6 +454,7 @@ function snapshotActiveSessionView(
   return upsertCompleteSessionView(
     state.sessionMessageViews,
     completeSessionView(state.activeChatId, state.messages, state.turnProgress),
+    state.activeChatId,
   );
 }
 
@@ -429,12 +479,13 @@ function applyMessageListView(
     sameSessionMessages.length > 0
       ? mergeMessages(sameSessionMessages, view.messages ?? [])
       : (view.messages ?? []);
+  const boundedMessages = boundedSessionMessages(sourceMessages);
   const prunedTurnProgress = pruneReplacedClientTurnProgress(
     mergedTurnProgress,
-    sourceMessages,
+    boundedMessages,
   );
   const messages = freezeMessageWorkBlocks(
-    sourceMessages.map((message) => {
+    boundedMessages.map((message) => {
       const previous = previousById.get(message.id);
       return retainFrozenTurnPresentation(previous, message);
     }),
@@ -442,7 +493,14 @@ function applyMessageListView(
   ).map((message) => reusePreviousMessageRecord(previousById, message));
   const sessionMessageViews = upsertCompleteSessionView(
     state.sessionMessageViews,
-    completeSessionView(chatId, messages, prunedTurnProgress, view.next_cursor),
+    completeSessionView(
+      chatId,
+      messages,
+      prunedTurnProgress,
+      view.next_cursor,
+      view.next_cursor_token,
+    ),
+    state.activeChatId,
   );
   if (
     messageRecordsEqual(state.messages, messages) &&
@@ -467,18 +525,27 @@ function applyMessageListView(
 function messageListViewFromSessionView(view: SessionView): MessageListView {
   const turnProgress =
     view.latest_turn?.id && view.latest_turn.progress
-      ? { [view.latest_turn.id]: view.latest_turn.progress }
+      ? { [view.latest_turn.id]: {
+          ...view.latest_turn.progress,
+          started_at: view.latest_turn.created_at,
+        } }
       : {};
   return {
     chat_id: view.session_id,
     messages: view.messages,
     turn_progress: turnProgress,
     next_cursor: view.message_window.next_cursor,
+    ...(view.message_window.next_cursor_token
+      ? { next_cursor_token: view.message_window.next_cursor_token }
+      : {}),
   };
 }
 
 function summaryFromSessionView(view: SessionView): SessionSummaryView {
-  const latestProgress = view.latest_turn?.progress ?? {
+  const latestProgress = view.latest_turn ? {
+    ...view.latest_turn.progress,
+    started_at: view.latest_turn.created_at,
+  } : {
     state: "idle",
     safe_progress_rows: [],
     updated_at: view.updated_at,
@@ -583,11 +650,12 @@ function applySessionView(
     sameSessionMessages.length > 0
       ? mergeMessages(sameSessionMessages, messageListView.messages ?? [])
       : (messageListView.messages ?? []);
+  const boundedMessages = boundedSessionMessages(sourceMessages);
   const turnProgress = pruneReplacedClientTurnProgress(
     mergedTurnProgress,
-    sourceMessages,
+    boundedMessages,
   );
-  const messages = sourceMessages.map((message) => {
+  const messages = boundedMessages.map((message) => {
     const previous = previousById.get(message.id);
     const retainedMessage = retainFrozenTurnPresentation(previous, message);
     const frozen = freezeMessageWorkBlocksForRecord(
@@ -605,7 +673,9 @@ function applySessionView(
       messages,
       turnProgress,
       view.message_window.next_cursor,
+      view.message_window.next_cursor_token,
     ),
+    state.activeChatId,
   );
   return {
     messages: messageRecordsEqual(state.messages, messages)
@@ -984,8 +1054,16 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     if (!isServerBackedSessionId(chatId)) return false;
     const isCurrentRequest = beginSessionViewRequest(chatId, get, options);
     try {
+      const currentCursorToken =
+        get().sessionView?.session_id === chatId
+          ? get().sessionView?.message_window.next_cursor_token
+          : undefined;
+      const query = new URLSearchParams({ session_id: chatId });
+      if (currentCursorToken) {
+        query.set("cursor_token", currentCursorToken);
+      }
       const data = await api<SessionView>(
-        `/session-view?session_id=${encodeURIComponent(chatId)}`,
+        `/session-view?${query.toString()}`,
       );
       if (!isCurrentRequest()) return false;
       set((state) => applySessionView(state, data));
@@ -1014,9 +1092,11 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           set((state) => applyMessageListView(state, cached!));
         }
       }
-      const snapshot = await api<SessionView>(
-        `/session-view?session_id=${encodeURIComponent(chatId)}`,
-      );
+      const query = new URLSearchParams({ session_id: chatId });
+      if (cached?.next_cursor_token) {
+        query.set("cursor_token", cached.next_cursor_token);
+      }
+      const snapshot = await api<SessionView>(`/session-view?${query.toString()}`);
       if (!isCurrentRequest()) return;
       set((state) => applySessionView(state, snapshot));
       void writeCachedMessageList(
@@ -1032,9 +1112,15 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     if (!isServerBackedSessionId(chatId)) return;
     const isCurrentRequest = beginSessionViewRequest(chatId, get);
     try {
-      const data = await api<SessionView>(
-        `/session-view?session_id=${encodeURIComponent(chatId)}`,
-      );
+      const cursorToken =
+        get().sessionView?.session_id === chatId
+          ? get().sessionView?.message_window.next_cursor_token
+          : undefined;
+      const query = new URLSearchParams({ session_id: chatId });
+      if (cursorToken) {
+        query.set("cursor_token", cursorToken);
+      }
+      const data = await api<SessionView>(`/session-view?${query.toString()}`);
       if (!isCurrentRequest()) return;
       set((state) => applySessionView(state, data));
       void writeCachedMessageList(chatId, messageListViewFromSessionView(data));
