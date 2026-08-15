@@ -97,6 +97,11 @@ not justify dropping behavior from a public path.
 - Full TypeScript typecheck passed.
 - Full ESLint passed with zero errors and 24 pre-existing warnings.
 - BTCC source-shape validation passed for 4 domains and 229 files.
+- The first hosted Windows run exposed the newly enforced
+  `GHSA-jmr9-qjv8-65gv` audit on `extract-zip`. Electron Packager was advanced
+  from 20.0.0 to 20.3.0, which replaces that unpatched dependency with
+  `@electron-internal/extract-zip`; clean `npm ci`, high-severity audit, Windows
+  workflow tests, and focused Windows release-packaging tests then passed.
 - Repository `check` reached 2,745 passes. Its remaining failures were classified
   against the byte-identical latest `origin/main` tree: five App projection tests,
   the native purge gate, and two Electron harness tests reproduce upstream. The
