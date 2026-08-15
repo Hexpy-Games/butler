@@ -1099,38 +1099,75 @@ test("getSessionView preload bridge returns a serializable resync envelope", () 
   });
 });
 
-test("renderer API unwraps the typed session-view bridge result without message parsing", async () => {
+test("renderer API resynchronizes an expired opaque session-view cursor once", async () => {
+  const calls: unknown[] = [];
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
       location: { origin: "http://butler.local" },
       butlerApp: {
-        getSessionView: async () => ({
-          ok: false,
-          error: {
-            schema: "butler.app.bridge-error.v1",
-            code: "session_cursor_resync_required",
-            status: 409,
-            resync: {
-              required: true,
-              resource: "session-view",
-              reason: "cursor-expired",
+        getSessionView: async (input: unknown) => {
+          calls.push(input);
+          if (calls.length === 1) {
+            return {
+              ok: false,
+              error: {
+                schema: "butler.app.bridge-error.v1",
+                code: "session_cursor_resync_required",
+                status: 409,
+                resync: {
+                  required: true,
+                  resource: "session-view",
+                  reason: "cursor-expired",
+                },
+              },
+            };
+          }
+          return {
+            ok: true,
+            data: {
+              protocol_version: "butler.app.v1",
+              session_id: "session-a",
+              status: "idle",
+              messages: [],
+              message_window: {
+                next_cursor: 0,
+                previous_cursor: null,
+                complete: true,
+              },
+              active_turn: null,
+              latest_turn: null,
+              branch: null,
+              context: null,
+              artifacts: [],
+              automations: [],
+              skills_used: [],
+              workers: [],
+              work_streams: [],
+              updated_at: "2026-08-15T00:00:00.000Z",
             },
-          },
-        }),
+          };
+        },
       },
     },
     writable: true,
   });
   await expect(api("/session-view?session_id=session-a&cursor_token=expired"))
-    .rejects.toMatchObject({
-      code: "session_cursor_resync_required",
-      status: 409,
-      resync: {
-        required: true,
-        resource: "session-view",
-      },
-    });
+    .resolves.toMatchObject({ session_id: "session-a" });
+  expect(calls).toEqual([
+    {
+      sessionId: "session-a",
+      cursorToken: "expired",
+      beforeCursorToken: undefined,
+      limit: undefined,
+    },
+    {
+      sessionId: "session-a",
+      cursorToken: undefined,
+      beforeCursorToken: undefined,
+      limit: undefined,
+    },
+  ]);
 });
 
 test("App session summaries delegate bounded Git inspection outside React", () => {
