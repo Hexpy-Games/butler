@@ -75,7 +75,9 @@ export function mergeMessageListViews(
     messages === cached.messages &&
     turnProgress === cached.turn_progress &&
     nextCursor === cached.next_cursor &&
-    (incoming.chat_id ?? cached.chat_id) === cached.chat_id
+    (incoming.chat_id ?? cached.chat_id) === cached.chat_id &&
+    (incoming.next_cursor_token ?? cached.next_cursor_token) ===
+      cached.next_cursor_token
   ) {
     return cached;
   }

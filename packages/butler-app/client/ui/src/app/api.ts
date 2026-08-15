@@ -45,8 +45,34 @@ type ApiOptions = RequestInit & { body?: BodyInit | Record<string, unknown> | nu
 
 export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
-  if (bridge) return await bridgeRequest<T>(bridge, path, options);
-  return await browserRequest<T>(path, options);
+  const request = (requestPath: string) => bridge
+    ? bridgeRequest<T>(bridge, requestPath, options)
+    : browserRequest<T>(requestPath, options);
+  try {
+    return await request(path);
+  } catch (error) {
+    const resyncPath = sessionViewResyncPath(path, options, error);
+    if (!resyncPath) throw error;
+    return await request(resyncPath);
+  }
+}
+
+function sessionViewResyncPath(
+  path: string,
+  options: ApiOptions,
+  error: unknown,
+): string | null {
+  if (String(options.method ?? "GET").toUpperCase() !== "GET") return null;
+  if (!error || typeof error !== "object" ||
+    (error as { code?: unknown }).code !== "session_cursor_resync_required") return null;
+  const url = new URL(path, "http://butler.local");
+  if (url.pathname !== "/session-view") return null;
+  const hasOpaqueCursor = url.searchParams.has("cursor_token") ||
+    url.searchParams.has("before_cursor_token");
+  if (!hasOpaqueCursor) return null;
+  url.searchParams.delete("cursor_token");
+  url.searchParams.delete("before_cursor_token");
+  return `${url.pathname}${url.search}`;
 }
 
 export async function uploadMessageFile(file: File, sessionId?: string): Promise<MessageFileRef> {
@@ -165,7 +191,14 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
     },
   }).then(async (response) => {
     const body = await response.json();
-    if (!response.ok) throw new Error(body.error?.message ?? "Request failed.");
+    if (!response.ok) {
+      const error = new Error(body.error?.message ?? "Request failed.");
+      Object.assign(error, {
+        ...(typeof body.error?.code === "string" ? { code: body.error.code } : {}),
+        status: response.status,
+      });
+      throw error;
+    }
     return body.data as T;
   });
 }
