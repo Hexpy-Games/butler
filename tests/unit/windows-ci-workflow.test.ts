@@ -64,13 +64,16 @@ const electronPackage = JSON.parse(readFileSync(
   join(root, "packages", "butler-app", "client", "electron", "package.json"),
   "utf8",
 )) as {
-  devDependencies?: { electron?: string };
+  devDependencies?: { electron?: string; "@electron/packager"?: string };
 };
 const electronLock = JSON.parse(readFileSync(
   join(root, "packages", "butler-app", "client", "electron", "package-lock.json"),
   "utf8",
 )) as {
-  packages?: Record<string, { version?: string; devDependencies?: { electron?: string } }>;
+  packages?: Record<string, {
+    version?: string;
+    devDependencies?: { electron?: string; "@electron/packager"?: string };
+  }>;
 };
 const bunLock = readFileSync(join(root, "bun.lock"), "utf8");
 
@@ -118,6 +121,17 @@ test("Windows setup locks Electron to the audit-fixed release", () => {
   expect(electronLock.packages?.["node_modules/electron"].version).toBe("41.10.4");
   expect(bunLock).toContain('"electron": "41.10.4"');
   expect(bunLock).not.toContain('"electron": "41.2.0"');
+});
+
+test("Windows setup excludes the unpatched extract-zip package", () => {
+  expect(electronPackage.devDependencies?.["@electron/packager"]).toBe("^20.3.0");
+  expect(electronLock.packages?.[""].devDependencies?.["@electron/packager"])
+    .toBe("^20.3.0");
+  expect(electronLock.packages?.["node_modules/@electron/packager"].version)
+    .toBe("20.3.0");
+  expect(electronLock.packages?.["node_modules/extract-zip"]).toBeUndefined();
+  expect(electronLock.packages?.["node_modules/@electron-internal/extract-zip"])
+    .toBeDefined();
 });
 
 test("Windows CI proves package structure and checksums without distribution", () => {
