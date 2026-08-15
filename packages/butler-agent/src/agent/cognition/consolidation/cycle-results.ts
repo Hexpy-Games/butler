@@ -1,5 +1,5 @@
 import { recordOperationalMetric } from "../../../operations/metrics/operational-metrics.ts";
-import { readPromptCacheMetrics } from "../../../integrations/providers/prompt-cache-metrics.ts";
+import { visitPromptCacheMetrics } from "../../../integrations/providers/prompt-cache-metrics.ts";
 import type {
   ConsolidationCheckpoint,
   ConsolidationCycleResult,
@@ -66,10 +66,20 @@ export function metricsWithPhaseUsage(
   metrics: Record<string, unknown>,
 ): Record<string, unknown> {
   const directUsage = modelUsageFromUnknown(metrics.model_usage);
-  const measuredUsage = usageFromPromptCacheMetricEvents(
-    readPromptCacheMetrics({ butlerData, sinceTs })
-      .filter((event) => event.scope.startsWith(`cognition:${runId}:${phase}:`)),
-  );
+  let measuredUsage = emptyModelUsageSummary();
+  visitPromptCacheMetrics({
+    butlerData,
+    sinceTs,
+    onEvent: (event) => {
+      if (!event.scope.startsWith(`cognition:${runId}:${phase}:`)) return;
+      // Reduce each row immediately so the production path never retains the
+      // historical JSONL array merely to produce a bounded phase summary.
+      measuredUsage = mergeModelUsage(
+        measuredUsage,
+        usageFromPromptCacheMetricEvents([event]),
+      );
+    },
+  });
   const usage = hasTokenTotals(directUsage)
     ? directUsage
     : measuredUsage.request_count > 0

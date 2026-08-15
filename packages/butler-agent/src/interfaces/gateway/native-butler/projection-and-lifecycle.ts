@@ -162,8 +162,10 @@ export async function waitForShutdown(input: {
   signal?: AbortSignal;
   pollMs: number;
   onPoll?: () => Promise<void>;
-}): Promise<"signal" | "flag"> {
+  shouldReplaceProcess?: () => boolean;
+}): Promise<"signal" | "flag" | "runtime-replacement"> {
   while (true) {
+    if (input.shouldReplaceProcess?.()) return "runtime-replacement";
     if (input.signal?.aborted) return "signal";
     if (existsSync(input.shutdownFlagPath)) return "flag";
     await input.onPoll?.();

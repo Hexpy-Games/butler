@@ -5,6 +5,12 @@ export interface ComposerDraftFileSnapshot {
   updated_at: string;
 }
 
+export interface ComposerDraftCacheOptions {
+  maxBytes?: number;
+  maxEntries?: number;
+  maxAggregateBytes?: number;
+}
+
 export function composerDraftFilePath(
   directory: string,
   sessionId: string,
@@ -13,9 +19,11 @@ export function composerDraftFilePath(
 export function readComposerDraftFile(
   directory: string,
   sessionId: string,
+  options?: ComposerDraftCacheOptions,
 ): ComposerDraftFileSnapshot | null;
 
 export function writeComposerDraftFile(
   directory: string,
   value: unknown,
+  options?: ComposerDraftCacheOptions,
 ): { ok: boolean };

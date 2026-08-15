@@ -103,7 +103,7 @@ function normalizeStringArray(value: unknown): string[] {
         (item): item is string => typeof item === "string" && item.trim() !== "",
       ),
     ),
-  );
+  ).slice(-64);
 }
 
 function readLocalAppUiState(): unknown {

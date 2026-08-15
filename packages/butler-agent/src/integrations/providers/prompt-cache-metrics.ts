@@ -1,8 +1,11 @@
-import { appendFileSync, mkdirSync } from "fs";
+import { appendFileSync, mkdirSync, statSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import type { PromptUsageAttribution } from "./runtime-contracts.ts";
-import { readIncrementalJsonlSnapshot } from "../../operations/metrics/incremental-jsonl-snapshot.ts";
+import {
+  readIncrementalJsonlSnapshot,
+} from "../../operations/metrics/incremental-jsonl-snapshot.ts";
+import { scanJsonlFile } from "../../operations/metrics/jsonl-file-scanner.ts";
 
 export type PromptCacheRetention = "in_memory" | "24h";
 
@@ -54,6 +57,13 @@ interface ReadPromptCacheMetricsOptions {
   butlerData?: string;
 }
 
+export interface PromptCacheMetricReadSummary {
+  summary: PromptCacheMetricSummary;
+  parseErrors: number;
+}
+
+const MAX_PROMPT_CACHE_SCOPE_KEYS = 512;
+
 function getButlerData(): string {
   return process.env.BUTLER_DATA || join(homedir(), ".butler");
 }
@@ -64,6 +74,23 @@ export function metricsDir(butlerData = getButlerData()): string {
 
 export function promptCacheMetricsPath(butlerData = getButlerData()): string {
   return join(metricsDir(butlerData), "prompt-cache-usage.jsonl");
+}
+
+/**
+ * Cheap source identity for hot context diagnostics. The full metric stream
+ * remains the authority for a cache miss; polling only needs size/mtime to
+ * know when a newly appended provider sample requires re-reading it.
+ */
+export function promptCacheMetricsRevision(
+  butlerData = getButlerData(),
+): string {
+  const path = promptCacheMetricsPath(butlerData);
+  try {
+    const stat = statSync(path);
+    return `${path}:${stat.size}:${stat.mtimeMs}`;
+  } catch {
+    return `${path}:missing`;
+  }
 }
 
 export function appendPromptCacheMetric(
@@ -149,6 +176,86 @@ export function readPromptCacheMetrics(
     : cached.values.filter((event) => event.ts >= options.sinceTs!);
 }
 
+/**
+ * Stream prompt-cache rows into a caller-owned aggregate. Unlike the legacy
+ * list reader this never retains one object per historical request, so usage
+ * status remains bounded as the telemetry log grows.
+ */
+export function visitPromptCacheMetrics(input: {
+  butlerData?: string;
+  sinceTs?: number;
+  onEvent: (event: PromptCacheMetricEvent) => void;
+}): { parseErrors: number } {
+  const path = promptCacheMetricsPath(input.butlerData);
+  try {
+    let parseErrors = 0;
+    scanJsonlFile(path, {
+      onLine: (line) => {
+        const event = parsePromptMetricLine(line);
+        if (!event) {
+          if (line.trim()) parseErrors += 1;
+          return;
+        }
+        if (input.sinceTs === undefined || event.ts >= input.sinceTs) {
+          input.onEvent(event);
+        }
+      },
+      onTrailing: (line) => {
+        const event = parsePromptMetricLine(line);
+        if (!event) {
+          if (line.trim()) parseErrors += 1;
+          return;
+        }
+        if (input.sinceTs === undefined || event.ts >= input.sinceTs) {
+          input.onEvent(event);
+        }
+      },
+    });
+    return { parseErrors };
+  } catch {
+    return { parseErrors: 0 };
+  }
+}
+
+/**
+ * Build the bounded prompt-cache projection directly from the JSONL source.
+ * Callers that only need totals must use this path instead of
+ * `readPromptCacheMetrics`, which is retained solely for compatibility with
+ * diagnostic/test readers that explicitly need a bounded recent list.
+ */
+export function summarizePromptCacheMetricsFromDisk(
+  options: ReadPromptCacheMetricsOptions = {},
+): PromptCacheMetricReadSummary {
+  const summary: PromptCacheMetricSummary = {
+    requestCount: 0,
+    promptTokens: 0,
+    cachedTokens: 0,
+    totalTokens: 0,
+    cacheHitRatio: 0,
+    byScope: {},
+  };
+  const result = visitPromptCacheMetrics({
+    butlerData: options.butlerData,
+    sinceTs: options.sinceTs,
+    onEvent: (event) => {
+      summary.requestCount += 1;
+      summary.promptTokens += event.promptTokens;
+      summary.cachedTokens += event.cachedTokens;
+      summary.totalTokens +=
+        typeof event.totalTokens === "number" ? event.totalTokens : 0;
+      const scope = Object.prototype.hasOwnProperty.call(summary.byScope, event.scope) ||
+        Object.keys(summary.byScope).length < MAX_PROMPT_CACHE_SCOPE_KEYS
+        ? event.scope
+        : "__other__";
+      summary.byScope[scope] = (summary.byScope[scope] || 0) + 1;
+    },
+  });
+  if (summary.promptTokens > 0) {
+    summary.cacheHitRatio = summary.cachedTokens / summary.promptTokens;
+  }
+  return { summary, parseErrors: result.parseErrors };
+}
+
 function parsePromptMetricLine(line: string): PromptCacheMetricEvent | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
@@ -184,7 +291,11 @@ export function summarizePromptCacheMetrics(
     summary.cachedTokens += event.cachedTokens;
     summary.totalTokens +=
       typeof event.totalTokens === "number" ? event.totalTokens : 0;
-    summary.byScope[event.scope] = (summary.byScope[event.scope] || 0) + 1;
+    const scope = Object.prototype.hasOwnProperty.call(summary.byScope, event.scope) ||
+      Object.keys(summary.byScope).length < MAX_PROMPT_CACHE_SCOPE_KEYS
+      ? event.scope
+      : "__other__";
+    summary.byScope[scope] = (summary.byScope[scope] || 0) + 1;
   }
 
   if (summary.promptTokens > 0) {

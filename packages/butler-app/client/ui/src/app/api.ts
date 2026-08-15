@@ -4,6 +4,9 @@ import type {
   SettingsView,
   SkillImportResult,
   TimelineEvent,
+  SessionView,
+  SessionViewBridgeInput,
+  SessionViewBridgeResult,
 } from "./types.ts";
 
 declare global {
@@ -20,6 +23,9 @@ interface ButlerAppBridge {
   showDesktopNotification?: (input?: unknown) => Promise<unknown>;
   getNativeNotificationStatus?: () => Promise<unknown>;
   testDesktopNotification?: () => Promise<unknown>;
+  getSessionView?: (
+    input?: SessionViewBridgeInput,
+  ) => Promise<SessionViewBridgeResult | SessionView>;
   openNativeNotificationSettings?: () => Promise<unknown>;
   setNativeShellPreferences?: (input?: unknown) => Promise<unknown>;
   subscribeLiveEvents?: (
@@ -39,8 +45,34 @@ type ApiOptions = RequestInit & { body?: BodyInit | Record<string, unknown> | nu
 
 export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
-  if (bridge) return await bridgeRequest<T>(bridge, path, options);
-  return await browserRequest<T>(path, options);
+  const request = (requestPath: string) => bridge
+    ? bridgeRequest<T>(bridge, requestPath, options)
+    : browserRequest<T>(requestPath, options);
+  try {
+    return await request(path);
+  } catch (error) {
+    const resyncPath = sessionViewResyncPath(path, options, error);
+    if (!resyncPath) throw error;
+    return await request(resyncPath);
+  }
+}
+
+function sessionViewResyncPath(
+  path: string,
+  options: ApiOptions,
+  error: unknown,
+): string | null {
+  if (String(options.method ?? "GET").toUpperCase() !== "GET") return null;
+  if (!error || typeof error !== "object" ||
+    (error as { code?: unknown }).code !== "session_cursor_resync_required") return null;
+  const url = new URL(path, "http://butler.local");
+  if (url.pathname !== "/session-view") return null;
+  const hasOpaqueCursor = url.searchParams.has("cursor_token") ||
+    url.searchParams.has("before_cursor_token");
+  if (!hasOpaqueCursor) return null;
+  url.searchParams.delete("cursor_token");
+  url.searchParams.delete("before_cursor_token");
+  return `${url.pathname}${url.search}`;
 }
 
 export async function uploadMessageFile(file: File, sessionId?: string): Promise<MessageFileRef> {
@@ -159,7 +191,14 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
     },
   }).then(async (response) => {
     const body = await response.json();
-    if (!response.ok) throw new Error(body.error?.message ?? "Request failed.");
+    if (!response.ok) {
+      const error = new Error(body.error?.message ?? "Request failed.");
+      Object.assign(error, {
+        ...(typeof body.error?.code === "string" ? { code: body.error.code } : {}),
+        status: response.status,
+      });
+      throw error;
+    }
     return body.data as T;
   });
 }
@@ -291,9 +330,27 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     });
   }
   if (method === "GET" && url.pathname === "/session-view") {
-    return await callBridge<T>(bridge, "getSessionView", {
+    if (["cursor", "after_cursor", "before_cursor", "beforeCursor"].some((key) =>
+      url.searchParams.has(key))) {
+      const error = new Error("Session view must be resynchronized.");
+      Object.assign(error, {
+        code: "session_cursor_resync_required",
+        status: 409,
+        resync: {
+          required: true,
+          resource: "session-view",
+          reason: "cursor-expired",
+        },
+      });
+      throw error;
+    }
+    const result = await callBridge<SessionViewBridgeResult | T>(bridge, "getSessionView", {
       sessionId: url.searchParams.get("session_id") ?? url.searchParams.get("sessionId"),
+      cursorToken: url.searchParams.get("cursor_token") ?? undefined,
+      beforeCursorToken: url.searchParams.get("before_cursor_token") ?? undefined,
+      limit: numericSearchParam(url.searchParams, "limit"),
     });
+    return unwrapSessionViewBridgeResult<T>(result);
   }
   if (method === "GET" && url.pathname === "/context-details") {
     return await callBridge<T>(bridge, "getContextDetails", {
@@ -532,13 +589,21 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (automationRunsMatch) return await callBridge<T>(bridge, "listAutomationRuns", { automationId: decodeURIComponent(automationRunsMatch[1]) });
   if (method === "POST" && url.pathname === "/automations/dispatch-due") return await callBridge<T>(bridge, "dispatchDueAutomations");
   if (method === "GET" && url.pathname === "/worker-activity") {
-    return await callBridge<T>(bridge, "listWorkerActivity", { includeHistory: url.searchParams.get("include_history") === "true" });
+    return await callBridge<T>(bridge, "listWorkerActivity", {
+      includeHistory: url.searchParams.get("include_history") === "true",
+      limit: numericSearchParam(url.searchParams, "limit"),
+      offset: numericSearchParam(url.searchParams, "offset"),
+      cursor: url.searchParams.get("cursor") ?? undefined,
+    });
   }
   const sessionWorkerMatch = method === "GET" ? url.pathname.match(/^\/sessions\/([^/]+)\/worker-activity(?:\/history)?$/) : null;
   if (sessionWorkerMatch) {
     return await callBridge<T>(bridge, "listWorkerActivity", {
       sessionId: decodeURIComponent(sessionWorkerMatch[1]),
       includeHistory: url.pathname.endsWith("/history"),
+      limit: numericSearchParam(url.searchParams, "limit"),
+      offset: numericSearchParam(url.searchParams, "offset"),
+      cursor: url.searchParams.get("cursor") ?? undefined,
     });
   }
   const workerMatch = url.pathname.match(/^\/worker-activity\/([^/]+)$/);
@@ -581,6 +646,39 @@ async function callBridge<T>(bridge: ButlerAppBridge, method: string, input?: un
   const fn = bridge[method];
   if (typeof fn !== "function") throw new Error(`Butler desktop bridge is missing ${method}.`);
   return await fn(input) as T;
+}
+
+/**
+ * Unwrap the serializable preload result for the canonical session-view path.
+ * The direct-value fallback keeps browser/test bridge doubles compatible while
+ * the production Electron preload always returns the discriminated envelope.
+ */
+function unwrapSessionViewBridgeResult<T>(value: SessionViewBridgeResult | T): T {
+  if (!value || typeof value !== "object" || !Object.prototype.hasOwnProperty.call(value, "ok")) {
+    return value as T;
+  }
+  const result = value as SessionViewBridgeResult;
+  if (result.ok) return result.data as T;
+  if (
+    !result.error ||
+    result.error.schema !== "butler.app.bridge-error.v1" ||
+    typeof result.error.code !== "string"
+  ) {
+    throw new Error("Butler desktop returned an invalid session-view result.");
+  }
+  const isResync = result.error.resync?.required === true ||
+    result.error.code === "session_cursor_resync_required";
+  const error = new Error(
+    isResync
+      ? "Session view must be resynchronized."
+      : "Butler desktop request failed.",
+  );
+  Object.assign(error, {
+    code: result.error.code,
+    ...(typeof result.error.status === "number" ? { status: result.error.status } : {}),
+    ...(result.error.resync ? { resync: result.error.resync } : {}),
+  });
+  throw error;
 }
 
 function parseBody(body: ApiOptions["body"]): Record<string, unknown> {

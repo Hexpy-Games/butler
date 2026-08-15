@@ -69,6 +69,29 @@ test("one failed pass receives one cooperative recovery pass", async () => {
   owner.close();
 });
 
+test("two consecutive projection failures keep the lane pending until a later success", async () => {
+  const root = createRoot();
+  let calls = 0;
+  const failures: unknown[] = [];
+  const owner = new AppTransportProjectionOwner({
+    butlerData: root,
+    syncNextBatch: () => {
+      calls += 1;
+      if (calls < 3) throw new RangeError("projection buffer exhausted");
+      return false;
+    },
+    reopenCompletedLiveLanes: () => undefined,
+    terminalSettlementWakeOwner: inertSettlementWakeOwner(),
+    recordFailure: (error) => failures.push(error),
+  });
+
+  owner.start();
+  void owner.syncAndWait();
+  await waitUntil(() => calls === 3);
+  expect(failures).toHaveLength(2);
+  owner.close();
+});
+
 test("a locked BTCC page reaches the owner recovery path once", async () => {
   const root = createRoot();
   const dbPath = join(root, "locked.sqlite");

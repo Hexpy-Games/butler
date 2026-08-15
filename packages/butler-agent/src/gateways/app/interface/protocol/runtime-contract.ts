@@ -169,6 +169,16 @@ export interface UsageMonitorView {
     rawToolArgumentsIncluded: false;
     rawToolResultsIncluded: false;
   };
+  availability: {
+    transcriptActivity: {
+      status: "available" | "degraded" | "unavailable";
+      reason: string | null;
+    };
+    tools: {
+      status: "available" | "unavailable";
+      reason: string | null;
+    };
+  };
   generated_at: string;
   raw_text_included: false;
 }

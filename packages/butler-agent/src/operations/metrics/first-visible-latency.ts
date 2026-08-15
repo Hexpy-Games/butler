@@ -1,6 +1,6 @@
 import {
-  readOperationalMetricEvents,
   recordOperationalMetric,
+  visitOperationalMetricEvents,
   type OperationalMetricEvent,
   type OperationalMetricStatus,
 } from "./operational-metrics.ts";
@@ -135,23 +135,39 @@ export function readFirstVisibleLatencySummary(input: {
   butlerData: string;
   sinceTs?: number;
 }): FirstVisibleLatencySummary {
-  const events = readOperationalMetricEvents({
+  const durations: number[] = [];
+  const bySignal: Partial<Record<FirstVisibleSignal, number>> = {};
+  let events = 0;
+  let latest: OperationalMetricEvent | null = null;
+  let durationTotal = 0;
+  let durationCount = 0;
+  visitOperationalMetricEvents({
     butlerData: input.butlerData,
     sinceTs: input.sinceTs,
-  }).filter((event) => event.category === "runtime" && event.name === FIRST_VISIBLE_LATENCY_METRIC_NAME);
-  const durations = events
-    .map((event) => event.durationMs)
-    .filter((duration): duration is number => typeof duration === "number");
-  const bySignal: Partial<Record<FirstVisibleSignal, number>> = {};
-  for (const event of events) {
-    const signal = signalFromMetric(event);
-    if (signal) bySignal[signal] = (bySignal[signal] ?? 0) + 1;
-  }
-  const sum = durations.reduce((total, duration) => total + duration, 0);
+    onEvent: (event) => {
+      if (event.category !== "runtime" || event.name !== FIRST_VISIBLE_LATENCY_METRIC_NAME) return;
+      events += 1;
+      latest = event;
+      const duration = event.durationMs;
+      if (typeof duration !== "number") return;
+      durationTotal += duration;
+      durationCount += 1;
+      if (durations.length < 4_096) {
+        durations.push(duration);
+      } else {
+        durations[events % 4_096] = duration;
+      }
+      const signal = signalFromMetric(event);
+      if (signal) bySignal[signal] = (bySignal[signal] ?? 0) + 1;
+    },
+  });
+  // `latest` and the bounded duration sample are the only retained rows. The
+  // historical metric log remains available through its canonical reader.
+  const sum = durationTotal;
   return {
-    events: events.length,
-    latest: events.at(-1) ?? null,
-    averageMs: durations.length ? Number((sum / durations.length).toFixed(2)) : null,
+    events,
+    latest,
+    averageMs: durationCount ? Number((sum / durationCount).toFixed(2)) : null,
     p50Ms: percentile(durations, 50),
     p95Ms: percentile(durations, 95),
     bySignal,

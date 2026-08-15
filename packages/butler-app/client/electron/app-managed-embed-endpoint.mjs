@@ -37,3 +37,28 @@ export function prepareAppManagedEmbedSocket({
     .slice(0, 20);
   return join(ownerDir, `embed-${socketId}.sock`);
 }
+
+/**
+ * Return a stable per-data-root health port for App-managed embed services.
+ *
+ * App-managed services used to receive `EMBED_HEALTH_PORT=0`, which disabled
+ * the HTTP endpoint entirely. A deterministic private port avoids collisions
+ * between separate Butler data roots while allowing supervisors and operators
+ * to probe the same endpoint after every restart.
+ */
+export function prepareAppManagedEmbedHealthPort({
+  butlerData,
+  gatewayPort = null,
+}) {
+  if (typeof butlerData !== "string" || !butlerData.trim()) {
+    throw new Error("missing Butler data root for App-managed embed health port");
+  }
+  const digest = createHash("sha256").update(butlerData).digest();
+  const rangeStart = 40_000;
+  const rangeSize = 10_000;
+  let port = rangeStart + digest.readUInt16BE(0) % rangeSize;
+  if (port === gatewayPort) {
+    port = rangeStart + ((port - rangeStart + 1) % rangeSize);
+  }
+  return port;
+}

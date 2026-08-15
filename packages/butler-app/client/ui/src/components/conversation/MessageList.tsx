@@ -30,6 +30,7 @@ function MessageListComponent({
     visibleMessages,
     progressRows,
     turnState,
+    turnStartedAt,
     turnId,
     showTurnActivity,
     itemCount,
@@ -74,6 +75,7 @@ function MessageListComponent({
                   topOffset={topOffset}
                   progressRows={progressRows}
                   turnState={turnState}
+                  startedAt={turnStartedAt}
                   turnId={turnId}
                   rowVirtualizer={rowVirtualizer}
                 />

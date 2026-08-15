@@ -106,12 +106,21 @@ import {
   WINDOWS_SQUIRREL_FIRST_RUN_UPDATE_DELAY_MS,
   windowsLoginItemSettings,
 } from "./windows-squirrel-lifecycle.mjs";
+import {
+  cacheBudgetAdditionalArgument,
+  readCacheBudgetArtifact,
+} from "./cache-budget-runtime.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
 const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
 const preloadPath = resolve(__dirname, "preload.cjs");
+const appCacheBudget = readCacheBudgetArtifact(
+  resolve(__dirname, "../shared/cache-budget.json"),
+  (path) => readFileSync(path, "utf8"),
+);
+const appCacheBudgetArgument = cacheBudgetAdditionalArgument(appCacheBudget);
 const packagePath = resolve(__dirname, "package.json");
 const appDisplayName = "Butler";
 const appIconPath = resolve(__dirname, "assets/icon.png");
@@ -1989,6 +1998,7 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      additionalArguments: [appCacheBudgetArgument],
     },
   });
   mainWindow = win;
@@ -2146,10 +2156,18 @@ function currentBundledAgentVersion() {
 ipcMain.handle("butler:get-app-info", () => appInfoView());
 
 ipcMain.handle("butler:composer-draft-read", (_event, input = {}) =>
-  readComposerDraftFile(composerDraftDirectory, input.sessionId));
+  readComposerDraftFile(composerDraftDirectory, input.sessionId, {
+    maxBytes: appCacheBudget.maxComposerDraftBytes,
+    maxEntries: appCacheBudget.maxComposerDraftEntries,
+    maxAggregateBytes: appCacheBudget.maxComposerDraftAggregateBytes,
+  }));
 
 ipcMain.handle("butler:composer-draft-write", (_event, input = {}) =>
-  writeComposerDraftFile(composerDraftDirectory, input.snapshot));
+  writeComposerDraftFile(composerDraftDirectory, input.snapshot, {
+    maxBytes: appCacheBudget.maxComposerDraftBytes,
+    maxEntries: appCacheBudget.maxComposerDraftEntries,
+    maxAggregateBytes: appCacheBudget.maxComposerDraftAggregateBytes,
+  }));
 
 ipcMain.handle("butler:set-developer-mode", async (_event, input) => {
   return await setDeveloperMode(input?.enabled === true);

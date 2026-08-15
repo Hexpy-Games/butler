@@ -253,11 +253,13 @@ test("decision-only activity keeps the Butler status as the bottom-most row", ()
     public_decision_rationale: "정확한 답변을 준비합니다.",
     public_decision_next_step: "응답을 생성합니다.",
     public_decision_source: "model-authored",
+    created_at: new Date(Date.now() - 3_000).toISOString(),
   }]);
 
   expect(html).toContain("turn-decision-row");
   expect(html).toContain("turn-current-status-slot");
   expect(html).toContain("응답 생성 중");
+  expect(html).toMatch(/응답 생성 중 · 0분 [23]초/u);
   expect(html.indexOf("turn-current-status-slot")).toBeGreaterThan(
     html.indexOf("turn-decision-row"),
   );

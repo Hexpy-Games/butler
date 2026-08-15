@@ -255,9 +255,14 @@ export interface ConversationWriter {
 }
 
 export interface ConversationProjectionReader {
+  /** False when the canonical Agent store is not available yet. */
+  isAvailable?(): boolean;
   readProjectionBatch(afterOutboxId: string | null, limit?: number): ConversationProjectionEvent[];
   getSession(sessionId: string): ConversationSession | null;
   getGatewayBindingForConversation(sessionId: string, gateway: string): ConversationBinding | null;
+  readTurnOutcomeById(outcomeId: string): TurnOutcomeCapsule | null;
+  readTurnOutcome(turnId: string): TurnOutcomeCapsule | null;
+  readTurnOutcomes(afterOutcomeId: string | null, limit?: number): TurnOutcomeCapsule[];
   readMessageById(messageId: string): ConversationMessageWithParts | null;
   readProjectionMessages(
     sessionId: string,

@@ -1,5 +1,5 @@
 import {
-  readPromptCacheMetrics,
+  visitPromptCacheMetrics,
   type PromptCacheMetricEvent,
 } from "../../../../integrations/providers/prompt-cache-metrics.ts";
 import { readContextMonitor } from "../../../../operations/metrics/context-monitor.ts";
@@ -91,13 +91,28 @@ export function latestLivePromptUsage(input: {
   latestTurnStartedAt?: string | number;
   currentModelRef?: string;
 }): { promptTokens: number; source: string; ts: number } | null {
-  const promptMetrics = readPromptCacheMetrics({
+  let exactProvider: { promptTokens: number; source: string; ts: number } | null = null;
+  let legacyProvider: { promptTokens: number; source: string; ts: number } | null = null;
+  visitPromptCacheMetrics({
     butlerData: input.butlerData,
-  });
-  const exactProvider = latestProviderPromptUsage({
-    events: promptMetrics,
-    turnId: input.turnId,
-    runtimeSessionId: input.runtimeSessionId,
+    onEvent: (event) => {
+      const exact = providerPromptUsageFromEvent({
+        event,
+        turnId: input.turnId,
+        runtimeSessionId: input.runtimeSessionId,
+      });
+      if (exact && (!exactProvider || exact.ts >= exactProvider.ts)) {
+        exactProvider = exact;
+      }
+      const legacy = legacyProviderPromptUsageFromEvent({
+        event,
+        runtimeSessionId: input.runtimeSessionId,
+        latestTurnStartedAt: input.latestTurnStartedAt,
+      });
+      if (legacy && (!legacyProvider || legacy.ts >= legacyProvider.ts)) {
+        legacyProvider = legacy;
+      }
+    },
   });
   // An exact Turn metric is authoritative even if another monitor event was
   // written later. It is the only provider sample that can be correlated to
@@ -106,87 +121,65 @@ export function latestLivePromptUsage(input: {
 
   const contextMonitor = latestContextMonitorPromptUsage(input);
 
-  const legacyProvider = latestLegacyProviderPromptUsage({
-    events: promptMetrics,
-    runtimeSessionId: input.runtimeSessionId,
-    latestTurnStartedAt: input.latestTurnStartedAt,
-  });
-  if (!legacyProvider) return contextMonitor;
-  if (!contextMonitor) return legacyProvider;
-  return contextMonitor.ts > legacyProvider.ts
+  const latestLegacyProvider = legacyProvider as {
+    promptTokens: number;
+    source: string;
+    ts: number;
+  } | null;
+  if (!latestLegacyProvider) return contextMonitor;
+  if (!contextMonitor) return latestLegacyProvider;
+  return contextMonitor.ts > latestLegacyProvider.ts
     ? contextMonitor
-    : legacyProvider;
+    : latestLegacyProvider;
 }
 
-function latestProviderPromptUsage(input: {
-  events: PromptCacheMetricEvent[];
+function providerPromptUsageFromEvent(input: {
+  event: PromptCacheMetricEvent;
   turnId?: string;
   runtimeSessionId: string;
 }): { promptTokens: number; source: string; ts: number } | null {
   const turnId = input.turnId?.trim();
   if (!turnId) return null;
-  let latest: { promptTokens: number; source: string; ts: number } | null =
-    null;
-  for (const event of input.events) {
-    if (
-      event.turnId !== turnId ||
-      event.scope !== `btcc-guided:${input.runtimeSessionId}`
-    )
-      continue;
-    if (
-      !Number.isFinite(event.ts) ||
-      !Number.isFinite(event.promptTokens) ||
-      event.promptTokens <= 0
-    ) {
-      continue;
-    }
-    if (!latest || event.ts >= latest.ts) {
-      latest = {
-        promptTokens: Math.max(0, Math.round(event.promptTokens)),
-        source: "provider_prompt_usage",
-        ts: event.ts,
-      };
-    }
-  }
-  return latest;
+  const event = input.event;
+  if (
+    event.turnId !== turnId ||
+    event.scope !== `btcc-guided:${input.runtimeSessionId}` ||
+    !Number.isFinite(event.ts) ||
+    !Number.isFinite(event.promptTokens) ||
+    event.promptTokens <= 0
+  ) return null;
+  return {
+    promptTokens: Math.max(0, Math.round(event.promptTokens)),
+    source: "provider_prompt_usage",
+    ts: event.ts,
+  };
 }
 
-function latestLegacyProviderPromptUsage(input: {
-  events: PromptCacheMetricEvent[];
+function legacyProviderPromptUsageFromEvent(input: {
+  event: PromptCacheMetricEvent;
   runtimeSessionId: string;
   latestTurnStartedAt?: string | number;
 }): { promptTokens: number; source: string; ts: number } | null {
   const latestTurnStart = timestampMs(input.latestTurnStartedAt);
   if (latestTurnStart === null) return null;
   const guidedScope = `btcc-guided:${input.runtimeSessionId}`;
-  let latest: { promptTokens: number; source: string; ts: number } | null =
-    null;
-  for (const event of input.events) {
-    // Compatibility is deliberately narrower than exact Turn attribution:
-    // only unattributed samples from this session's guided scope can qualify.
-    const hasTurnAttribution = Object.prototype.hasOwnProperty.call(
-      event,
-      "turnId",
-    );
-    if (
-      hasTurnAttribution ||
-      event.scope !== guidedScope ||
-      !Number.isFinite(event.ts) ||
-      event.ts < latestTurnStart ||
-      !Number.isFinite(event.promptTokens) ||
-      event.promptTokens <= 0
-    ) {
-      continue;
-    }
-    if (!latest || event.ts >= latest.ts) {
-      latest = {
-        promptTokens: Math.max(0, Math.round(event.promptTokens)),
-        source: "provider_prompt_usage",
-        ts: event.ts,
-      };
-    }
-  }
-  return latest;
+  const event = input.event;
+  // Compatibility is deliberately narrower than exact Turn attribution:
+  // only unattributed samples from this session's guided scope can qualify.
+  const hasTurnAttribution = Object.prototype.hasOwnProperty.call(event, "turnId");
+  if (
+    hasTurnAttribution ||
+    event.scope !== guidedScope ||
+    !Number.isFinite(event.ts) ||
+    event.ts < latestTurnStart ||
+    !Number.isFinite(event.promptTokens) ||
+    event.promptTokens <= 0
+  ) return null;
+  return {
+    promptTokens: Math.max(0, Math.round(event.promptTokens)),
+    source: "provider_prompt_usage",
+    ts: event.ts,
+  };
 }
 
 function timestampMs(value: string | number | undefined): number | null {

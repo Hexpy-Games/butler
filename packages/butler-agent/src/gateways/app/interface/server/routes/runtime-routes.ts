@@ -101,8 +101,10 @@ export async function handleRuntimeRoutes(
   }
   if (input.request.method === "GET" && url.pathname === "/events") {
     const cursor = Number(url.searchParams.get("cursor") ?? "0");
+    const limit = Number(url.searchParams.get("limit") ?? "200");
     const events = input.store.replayEvents(
       Number.isFinite(cursor) ? cursor : 0,
+      Number.isFinite(limit) ? limit : 200,
     );
     return json(
       apiEnvelope<EventReplayView>({

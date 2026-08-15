@@ -1,0 +1,10 @@
+{
+  "schema": "butler.app.cache-budget.v1",
+  "maxEntries": 8,
+  "maxBytes": 4194304,
+  "maxSnapshotBytes": 524288,
+  "maxMessages": 200,
+  "maxComposerDraftBytes": 65536,
+  "maxComposerDraftEntries": 8,
+  "maxComposerDraftAggregateBytes": 524288
+}

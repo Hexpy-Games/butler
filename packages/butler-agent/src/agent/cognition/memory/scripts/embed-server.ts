@@ -1,11 +1,55 @@
 import type { FeatureExtractionPipeline } from "@huggingface/transformers";
 import { createServer as netCreateServer } from "net";
-import { createServer as httpCreateServer } from "http";
 import { chmodSync, existsSync, unlinkSync } from "fs";
+import {
+  createLazyEmbeddingFunctions as createLazyEmbeddingFunctionsImpl,
+  type EmbeddingLifecycle,
+  type LazyEmbeddingFunctions,
+  type LazyEmbeddingOptions,
+} from "./embed-lifecycle.ts";
+import {
+  createHealthServer,
+  healthSnapshot,
+  type EmbedHealthServerHandle,
+} from "./embed-health.ts";
+import { createEmbedRequestQueue } from "./embed-request-queue.ts";
+
+export {
+  DEFAULT_EMBED_IDLE_RECYCLE_MS,
+  MAX_EMBED_IDLE_RECYCLE_MS,
+  parseIdleRecycleMs,
+} from "./embed-lifecycle.ts";
+export type {
+  EmbedHealthSnapshot,
+  EmbedHealthState,
+  EmbeddingLifecycle,
+  LazyEmbeddingFunctions,
+  LazyEmbeddingOptions,
+} from "./embed-lifecycle.ts";
+export { createHealthServer, healthPortDiscoveryPath, healthSnapshot } from "./embed-health.ts";
+export type { EmbedHealthServerHandle } from "./embed-health.ts";
 
 const DEFAULT_SOCKET = process.env.EMBED_SOCKET ?? "/tmp/butler-embed.sock";
+export const DEFAULT_EMBED_MAX_REQUEST_BYTES = 1 * 1024 * 1024;
+export {
+  DEFAULT_EMBED_MAX_QUEUE_REQUESTS,
+  DEFAULT_EMBED_MAX_QUEUE_BYTES,
+} from "./embed-request-queue.ts";
 
-type PipelineLoader = () => Promise<FeatureExtractionPipeline>;
+export interface EmbedServerOptions {
+  healthPort?: number;
+  lifecycle?: EmbeddingLifecycle;
+  healthPortProbeLimit?: number;
+  maxRequestBytes?: number;
+  maxQueueRequests?: number;
+  maxQueueBytes?: number;
+}
+
+export interface EmbedServerHandle {
+  stop(): void;
+  ready: Promise<void>;
+  healthPort: () => number | null;
+}
 
 async function loadDefaultPipeline(): Promise<FeatureExtractionPipeline> {
   const { pipeline } = await import("@huggingface/transformers");
@@ -17,186 +61,219 @@ async function loadDefaultPipeline(): Promise<FeatureExtractionPipeline> {
   return createPipeline("feature-extraction", "Xenova/bge-m3", { dtype: "q8" });
 }
 
-export function createLazyEmbeddingFunctions({
-  loadPipeline = loadDefaultPipeline,
-  log = (message: string) => console.log(message),
-}: {
-  loadPipeline?: PipelineLoader;
-  log?: (message: string) => void;
-} = {}) {
-  let pipePromise: Promise<FeatureExtractionPipeline> | null = null;
-  let loaded = false;
+export function createLazyEmbeddingFunctions(
+  options: Omit<LazyEmbeddingOptions, "loadPipeline"> & {
+    loadPipeline?: LazyEmbeddingOptions["loadPipeline"];
+  } = {},
+): LazyEmbeddingFunctions {
+  return createLazyEmbeddingFunctionsImpl({
+    loadPipeline: options.loadPipeline ?? loadDefaultPipeline,
+    ...options,
+  });
+}
 
-  async function getPipe(): Promise<FeatureExtractionPipeline> {
-    if (!pipePromise) {
-      log("Loading bge-m3 model on first embedding request...");
-      pipePromise = loadPipeline()
-        .then((pipe) => {
-          loaded = true;
-          log("bge-m3 model ready");
-          return pipe;
-        })
-        .catch((error) => {
-          pipePromise = null;
-          throw error;
-        });
-    }
-    return pipePromise;
+const processCleanupHandlers = new Set<() => void>();
+let processCleanupHooksInstalled = false;
+
+function runProcessCleanup(): void {
+  for (const cleanup of [...processCleanupHandlers]) cleanup();
+}
+
+function registerProcessCleanup(cleanup: () => void): () => void {
+  processCleanupHandlers.add(cleanup);
+  if (!processCleanupHooksInstalled) {
+    processCleanupHooksInstalled = true;
+    process.once("exit", runProcessCleanup);
+    process.once("SIGINT", () => { runProcessCleanup(); process.exit(0); });
+    process.once("SIGTERM", () => { runProcessCleanup(); process.exit(0); });
   }
-
-  async function embedText(text: string): Promise<number[]> {
-    const pipe = await getPipe();
-    const out = await pipe(text, { pooling: "mean", normalize: true });
-    return Array.from(out.data) as number[];
-  }
-
-  async function embedTexts(texts: string[]): Promise<number[][]> {
-    const pipe = await getPipe();
-    const out = await pipe(texts, { pooling: "mean", normalize: true });
-    const dims = out.data.length / texts.length;
-    const result: number[][] = [];
-    for (let i = 0; i < texts.length; i++) {
-      result.push(Array.from(out.data.slice(i * dims, (i + 1) * dims)) as number[]);
-    }
-    return result;
-  }
-
-  return {
-    embedText,
-    embedTexts,
-    isLoaded: () => loaded,
-  };
+  return () => processCleanupHandlers.delete(cleanup);
 }
 
 export function createServer(
   embedFn: (text: string) => Promise<number[]>,
   socketPath = DEFAULT_SOCKET,
   embedBatchFn?: (texts: string[]) => Promise<number[][]>,
-) {
+  options: EmbedServerOptions = {},
+): EmbedServerHandle {
   if (existsSync(socketPath)) {
     unlinkSync(socketPath);
   }
 
-  // Serialize all model inference via a promise chain to prevent concurrent forward passes
-  let queue: Promise<void> = Promise.resolve();
-  function enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const result = queue.then(fn);
-    queue = result.then(() => {}, () => {});
-    return result;
-  }
+  // Serialize all model inference through the bounded queue module to prevent
+  // concurrent forward passes and unbounded retention from slow clients.
+  const maxRequestBytes = boundedPositiveOption(
+    options.maxRequestBytes,
+    DEFAULT_EMBED_MAX_REQUEST_BYTES,
+  );
+  const requestQueue = createEmbedRequestQueue(options);
 
+  let healthServer: EmbedHealthServerHandle | null = null;
+  let boundHealthPort: number | null = null;
+  let resolveReady!: () => void;
+  let rejectReady!: (error: Error) => void;
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
   const server = netCreateServer((socket) => {
-    let buffer = "";
-
-    socket.on("data", (chunk) => {
-      buffer += chunk.toString();
-      const newlineIdx = buffer.indexOf("\n");
-      if (newlineIdx === -1) return;
-
-      const line = buffer.slice(0, newlineIdx);
-      buffer = buffer.slice(newlineIdx + 1);
-
-      let req: { text?: string; texts?: string[] };
+    let buffer = Buffer.alloc(0);
+    let closed = false;
+    const respond = (value: unknown): void => {
+      if (closed || socket.destroyed) return;
+      closed = true;
+      socket.write(`${JSON.stringify(value)}\n`);
+      socket.end();
+    };
+    const respondError = (error: unknown, fallbackCode = "embed_request_failed"): void => {
+      const code = typeof (error as { code?: unknown })?.code === "string"
+        ? (error as { code: string }).code
+        : fallbackCode;
+      respond({
+        error: error instanceof Error ? error.message : String(error),
+        code,
+        ...(code === "embed_queue_full" ? { retryable: true } : {}),
+      });
+    };
+    const handleLine = (line: Buffer): void => {
+      const requestBytes = line.byteLength + 1;
+      if (line.byteLength > maxRequestBytes) {
+        respondError(new Error(`Embedding request exceeds ${maxRequestBytes} bytes`), "embed_request_too_large");
+        return;
+      }
+      let req: { text?: string; texts?: string[]; health?: boolean };
       try {
-        req = JSON.parse(line);
+        req = JSON.parse(line.toString("utf8"));
       } catch {
-        socket.write(JSON.stringify({ error: "Invalid JSON" }) + "\n");
-        socket.end();
+        respondError(new Error("Invalid JSON"), "embed_invalid_json");
         return;
       }
 
-      // Batch request
+      if (req.health === true) {
+        respond({ health: healthSnapshot(socketPath, options.lifecycle, requestQueue.snapshot()) });
+        return;
+      }
+
       if (Array.isArray(req.texts)) {
         const texts = req.texts;
         if (texts.length === 0 || !texts.every((t) => typeof t === "string")) {
-          socket.write(JSON.stringify({ error: "Invalid 'texts' field" }) + "\n");
-          socket.end();
+          respondError(new Error("Invalid 'texts' field"), "embed_invalid_request");
           return;
         }
         const batchFn = embedBatchFn ?? ((ts: string[]) => Promise.all(ts.map(embedFn)));
-        enqueue(() => batchFn(texts))
-          .then((embeddings) => {
-            socket.write(JSON.stringify({ embeddings }) + "\n");
-            socket.end();
-          })
-          .catch((err) => {
-            socket.write(JSON.stringify({ error: String(err) }) + "\n");
-            socket.end();
-          });
+        requestQueue.enqueue(() => batchFn(texts), requestBytes)
+          .then((embeddings) => respond({ embeddings }))
+          .catch((err) => respondError(err));
         return;
       }
 
-      // Single request
       if (typeof req.text !== "string" || !req.text) {
-        socket.write(JSON.stringify({ error: "Missing 'text' or 'texts' field" }) + "\n");
-        socket.end();
+        respondError(new Error("Missing 'text' or 'texts' field"), "embed_invalid_request");
         return;
       }
 
-      const text = req.text;
-      enqueue(() => embedFn(text))
-        .then((embedding) => {
-          socket.write(JSON.stringify({ embedding }) + "\n");
-          socket.end();
-        })
-        .catch((err) => {
-          socket.write(JSON.stringify({ error: String(err) }) + "\n");
-          socket.end();
-        });
+      requestQueue.enqueue(() => embedFn(req.text!), requestBytes)
+        .then((embedding) => respond({ embedding }))
+        .catch((err) => respondError(err));
+    };
+    socket.on("data", (chunk) => {
+      if (closed) return;
+      buffer = Buffer.concat([buffer, chunk]);
+      let newlineIdx = buffer.indexOf(0x0a);
+      while (newlineIdx >= 0) {
+        const line = buffer.subarray(0, newlineIdx);
+        buffer = buffer.subarray(newlineIdx + 1);
+        handleLine(line);
+        if (closed) return;
+        newlineIdx = buffer.indexOf(0x0a);
+      }
+      if (buffer.byteLength > maxRequestBytes) {
+        respondError(new Error(`Embedding request exceeds ${maxRequestBytes} bytes`), "embed_request_too_large");
+      }
     });
 
     socket.on("error", () => {});
   });
+  server.once("error", (error) => {
+    options.lifecycle?.markUnavailable?.();
+    rejectReady(error instanceof Error ? error : new Error(String(error)));
+  });
 
   server.on("listening", () => {
     if (process.platform !== "win32") chmodSync(socketPath, 0o600);
+    if (options.healthPort !== undefined) {
+      healthServer = createHealthServer({
+        healthPort: options.healthPort,
+        socketPath,
+        lifecycle: options.lifecycle,
+        queue: requestQueue.snapshot,
+        portProbeLimit: options.healthPortProbeLimit,
+      });
+      healthServer.ready.then(() => {
+        boundHealthPort = healthServer?.port() ?? null;
+        options.lifecycle?.markReady();
+        resolveReady();
+      }).catch((error) => {
+        options.lifecycle?.markUnavailable?.();
+        rejectReady(error instanceof Error ? error : new Error(String(error)));
+      });
+    } else {
+      options.lifecycle?.markReady();
+      resolveReady();
+    }
   });
   server.listen(socketPath);
 
+  let cleanedUp = false;
   const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    healthServer?.stop();
     try {
       if (existsSync(socketPath)) unlinkSync(socketPath);
     } catch {}
   };
-  process.on("exit", cleanup);
-  process.on("SIGINT", () => { cleanup(); process.exit(0); });
-  process.on("SIGTERM", () => { cleanup(); process.exit(0); });
+  const unregisterProcessCleanup = registerProcessCleanup(cleanup);
 
   return {
     stop() {
+      unregisterProcessCleanup();
+      healthServer?.stop();
       server.close();
       cleanup();
     },
+    ready,
+    healthPort: () => boundHealthPort,
   };
 }
 
 if (import.meta.main) {
-  const embedding = createLazyEmbeddingFunctions();
-  createServer(embedding.embedText, DEFAULT_SOCKET, embedding.embedTexts);
+  const embedding = createLazyEmbeddingFunctions({
+    onIdleRecycle: () => {
+      console.log("embed-server idle boundary reached; recycling supervised process");
+      process.exit(0);
+    },
+  });
+  const healthPort = parseHealthPort(process.env.EMBED_HEALTH_PORT);
+  const server = createServer(embedding.embedText, DEFAULT_SOCKET, embedding.embedTexts, {
+    healthPort,
+    lifecycle: embedding.lifecycle,
+  });
   console.log(`embed-server ready on socket ${DEFAULT_SOCKET}; model loads on first request`);
+  server.ready.catch((error) => {
+    console.error(`embed-server health check failed: ${String(error)}`);
+    server.stop();
+    process.exit(1);
+  });
+}
 
-  // Health check HTTP endpoint for monitoring
-  const healthPort = Number.parseInt(process.env.EMBED_HEALTH_PORT ?? "9847", 10);
-  if (Number.isInteger(healthPort) && healthPort > 0) {
-    const healthServer = httpCreateServer((req, res) => {
-      if (req.url === "/health") {
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          status: "ok",
-          socket: DEFAULT_SOCKET,
-          model_loaded: embedding.isLoaded(),
-          uptime: process.uptime(),
-        }));
-      } else {
-        res.writeHead(404);
-        res.end();
-      }
-    });
-    healthServer.on("error", (err: NodeJS.ErrnoException) => {
-      console.warn(`embed-server health check failed to bind port ${healthPort}: ${err.message} — continuing without health endpoint`);
-    });
-    healthServer.listen(healthPort, "127.0.0.1", () => {
-      console.log(`embed-server health check on http://127.0.0.1:${healthPort}/health`);
-    });
-  }
+export function parseHealthPort(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === "") return 9847;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) return 9847;
+  return parsed;
+}
+
+function boundedPositiveOption(value: number | undefined, fallback: number): number {
+  return Number.isSafeInteger(value) && (value ?? 0) > 0 ? value! : fallback;
 }

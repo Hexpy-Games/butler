@@ -3,6 +3,7 @@ import {
   type AppEventEnvelope,
 } from "../protocol/app-protocol.ts";
 import type { AppServerStore } from "../../application/store/app-server-store.ts";
+import { createPushStreamProxy } from "./push-stream-proxy.ts";
 
 export function liveEventsResponse(
   store: AppServerStore,
@@ -13,11 +14,14 @@ export function liveEventsResponse(
   } = {},
 ): Response {
   const maxReplayEvents = 200;
+  const maxBufferedEvents = 128;
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | undefined;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
-  const detachCloseSignals: Array<() => void> = [];
   let closed = false;
+  let replaying = true;
+  let replayQueueOverflowed = false;
+  const replayQueue = new Map<number, AppEventEnvelope>();
 
   const cleanup = (): boolean => {
     if (closed) return false;
@@ -26,91 +30,101 @@ export function liveEventsResponse(
     heartbeat = undefined;
     unsubscribe?.();
     unsubscribe = undefined;
-    for (const detach of detachCloseSignals.splice(0)) detach();
+    replayQueue.clear();
+    replayQueueOverflowed = false;
     return true;
   };
 
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const closeStream = () => {
-        if (!cleanup()) return;
-        try {
-          controller.close();
-        } catch {
-          // The client may already have closed the stream.
-        }
-      };
-      for (const signal of [
-        options.clientDisconnectSignal,
-        options.serverShutdownSignal,
-      ]) {
-        if (!signal) continue;
-        if (signal.aborted) {
-          closeStream();
-          return;
-        }
-        signal.addEventListener("abort", closeStream, { once: true });
-        detachCloseSignals.push(() =>
-          signal.removeEventListener("abort", closeStream),
-        );
-      }
-      const writeText = (text: string) => {
-        if (closed) return;
-        try {
-          controller.enqueue(encoder.encode(text));
-        } catch {
-          closeStream();
-        }
-      };
-      const writeEvent = (event: AppEventEnvelope) =>
-        writeText(formatSseEvent(event));
-      let streamCursor = cursor;
-      let replaying = true;
-      const pendingLiveEvents: AppEventEnvelope[] = [];
-      unsubscribe = store.subscribeEvents((event) => {
-        if (replaying) {
-          pendingLiveEvents.push(event);
-          return;
-        }
-        if (event.id <= streamCursor) return;
-        writeEvent(event);
-        streamCursor = event.id;
-      });
-      const highWaterCursor = store.latestEventCursor();
-      if (highWaterCursor - streamCursor > maxReplayEvents) {
-        writeEvent(reconcileRequiredEvent(streamCursor, highWaterCursor));
-        streamCursor = highWaterCursor;
-      } else {
-        for (const event of store.replayEvents(streamCursor)) {
-          if (event.id > highWaterCursor) break;
-          writeEvent(event);
-          streamCursor = event.id;
-        }
-      }
-      replaying = false;
-      for (const event of pendingLiveEvents.sort(
-        (left, right) => left.id - right.id,
-      )) {
-        if (event.id <= streamCursor) continue;
-        writeEvent(event);
-        streamCursor = event.id;
-      }
-      if (!closed) {
-        heartbeat = setInterval(() => {
-          try {
-            writeText(": heartbeat\n\n");
-          } catch {
-            closeStream();
-          }
-        }, 15_000);
-      }
-    },
-    cancel() {
+  let streamCursor = cursor;
+  const proxy = createPushStreamProxy({
+    maxBufferedChunks: maxBufferedEvents,
+    overflowChunk: () =>
+      encoder.encode(
+        formatSseEvent(
+          reconcileRequiredEvent(streamCursor, store.latestEventCursor()),
+        ),
+      ),
+    clientDisconnectSignal: options.clientDisconnectSignal,
+    serverShutdownSignal: options.serverShutdownSignal,
+    onCancel: () => {
       cleanup();
     },
   });
 
-  return new Response(stream, {
+  const writeText = (text: string) => {
+    if (!closed) proxy.push(encoder.encode(text));
+  };
+  const writeEvent = (event: AppEventEnvelope) =>
+    writeText(formatSseEvent(event));
+  if (options.clientDisconnectSignal?.aborted ||
+    options.serverShutdownSignal?.aborted) {
+    return new Response(proxy.stream, {
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-store, no-transform",
+        connection: "keep-alive",
+        "x-accel-buffering": "no",
+      },
+    });
+  }
+  const emitEvent = (event: AppEventEnvelope) => {
+    if (closed || event.id <= streamCursor) return;
+    writeEvent(event);
+    streamCursor = event.id;
+  };
+  // Subscribe before taking the high-water mark so no event can be lost. A
+  // producer may synchronously invoke this callback; hold those events until
+  // replay is emitted to preserve cursor order and deduplicate overlap.
+  unsubscribe = store.subscribeEvents((event) => {
+    if (closed || event.id <= streamCursor) return;
+    if (replaying) {
+      if (replayQueue.size >= maxReplayEvents) {
+        replayQueueOverflowed = true;
+        replayQueue.clear();
+      } else if (!replayQueueOverflowed) {
+        replayQueue.set(event.id, event);
+      }
+      return;
+    }
+    emitEvent(event);
+  });
+  const highWaterCursor = store.latestEventCursor();
+  if (highWaterCursor - streamCursor > maxReplayEvents) {
+    writeEvent(reconcileRequiredEvent(streamCursor, highWaterCursor));
+    streamCursor = highWaterCursor;
+  } else {
+    const replayEvents = store.replayEvents(streamCursor);
+    if (replayEvents[0] && replayEvents[0].id > streamCursor + 1) {
+      writeEvent(reconcileRequiredEvent(streamCursor, highWaterCursor));
+      streamCursor = highWaterCursor;
+    } else {
+      for (const event of replayEvents) {
+        if (event.id > highWaterCursor) break;
+        emitEvent(event);
+      }
+    }
+  }
+  if (!closed) {
+    if (replayQueueOverflowed) {
+      const currentHighWater = store.latestEventCursor();
+      writeEvent(reconcileRequiredEvent(streamCursor, currentHighWater));
+      streamCursor = currentHighWater;
+    } else {
+      const queued = [...replayQueue.values()].sort((left, right) => left.id - right.id);
+      for (const event of queued) emitEvent(event);
+    }
+  }
+  replaying = false;
+  replayQueue.clear();
+  replayQueueOverflowed = false;
+  if (!closed) {
+    heartbeat = setInterval(() => {
+      if (!closed) writeText(": heartbeat\n\n");
+    }, 15_000);
+  }
+
+  return new Response(proxy.stream, {
     status: 200,
     headers: {
       "content-type": "text/event-stream; charset=utf-8",

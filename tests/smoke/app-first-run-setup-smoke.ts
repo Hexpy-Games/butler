@@ -429,6 +429,11 @@ async function main(): Promise<void> {
   ownedListenerPids = new Set(listenerPids(serverPort));
   await waitForExpression(
     cdp,
+    "typeof window.butlerApp === 'object' && window.butlerApp?.protocolVersion === 'butler.app.v1'",
+    "sandbox preload app bridge",
+  );
+  await waitForExpression(
+    cdp,
     `document.querySelector(${JSON.stringify(firstRunSelector)}) !== null`,
     "first-run setup root",
   );
@@ -505,6 +510,7 @@ async function main(): Promise<void> {
     ok: true,
     service: "butler-app-first-run-setup-smoke",
     checks: [
+      "sandbox-preload-app-bridge",
       "electron-first-run-visible",
       "first-run-drag-lane",
       "system-language-ko-preselected",

@@ -30,6 +30,8 @@ import {
   createGuidedSessionWorkspaceEffectAdapter,
   normalizeSessionWorkspaceEffectInput,
 } from "./guided-session-workspace-effect.ts";
+import type { RuntimeMemoryAttributionPort } from
+  "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
 
 type ExecuteRegisteredTool = (prepared?: {
   args: ButlerToolCall["args"];
@@ -49,6 +51,7 @@ export function createGuidedPersistentEffectResolver(input: {
   projectLedgerResolver: ActiveProjectLedgerResolver;
   effectJournal: Pick<SqliteGuidedEffectJournal, "find">;
   originalRequest: string;
+  memoryAttribution?: RuntimeMemoryAttributionPort;
 }): (
   call: ButlerToolCall,
   executeRegistered: ExecuteRegisteredTool,
@@ -184,6 +187,7 @@ export function createGuidedPersistentEffectResolver(input: {
               },
             }
           : {}),
+        memoryAttribution: input.memoryAttribution,
       });
     } catch (error) {
       if (!(error instanceof GitEvidenceCollectionError)) throw error;

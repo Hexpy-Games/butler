@@ -845,6 +845,7 @@ export interface OperationOutputView {
 
 export interface TurnProgressSnapshot {
   turn_id?: string;
+  started_at?: string;
   summary?: string;
   updated_at?: string;
   state?: string;
@@ -888,6 +889,14 @@ export interface SessionViewTurn {
 export interface SessionViewMessageWindow {
   next_cursor: number;
   complete: boolean;
+  previous_cursor?: number;
+  previous_cursor_token?: string;
+  requested_cursor?: number;
+  requested_cursor_token?: string;
+  requested_before_cursor?: number;
+  requested_before_cursor_token?: string;
+  next_cursor_token?: string;
+  has_more?: boolean;
 }
 
 export interface SafeSessionError {
@@ -924,11 +933,39 @@ export interface SessionView {
   updated_at: string;
 }
 
+/**
+ * Serializable Electron preload result for the canonical `/session-view`
+ * request. The preload must return this union rather than reject with a
+ * custom Error because contextBridge preserves only standard Error fields.
+ */
+export interface SessionViewBridgeInput {
+  sessionId?: string;
+  cursorToken?: string;
+  beforeCursorToken?: string;
+  limit?: number;
+}
+
+export interface SessionViewBridgeError {
+  schema: "butler.app.bridge-error.v1";
+  code: string;
+  status?: number;
+  resync?: {
+    required: true;
+    resource: "session-view";
+    reason: "cursor-expired";
+  };
+}
+
+export type SessionViewBridgeResult =
+  | { ok: true; data: SessionView }
+  | { ok: false; error: SessionViewBridgeError };
+
 export interface MessageListView {
   chat_id?: string;
   messages: MessageRecord[];
   turn_progress?: Record<string, TurnProgressSnapshot>;
   next_cursor?: number;
+  next_cursor_token?: string;
 }
 
 export interface WorkBlockView {

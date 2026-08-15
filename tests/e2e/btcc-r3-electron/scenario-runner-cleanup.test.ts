@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { ProductCallFailure } from "./packaged-memory-campaign-read-path.ts";
 import { isTransientSessionReadError } from "./scenario-step.ts";
 
 test("scenario evidence is built from the provider snapshot returned after cleanup", () => {
@@ -33,10 +34,12 @@ test("scenario evidence is built from the provider snapshot returned after clean
 });
 
 test("generic local session read failures are retryable while contract errors remain fatal", () => {
-  expect(isTransientSessionReadError(new Error("Error: Request failed.")))
+  expect(isTransientSessionReadError(new ProductCallFailure("request_failed")))
     .toBeTrue();
-  expect(isTransientSessionReadError(new Error("fetch failed: ECONNREFUSED")))
+  expect(isTransientSessionReadError(new ProductCallFailure("internal_error")))
     .toBeTrue();
-  expect(isTransientSessionReadError(new Error("Bridge method is unavailable")))
+  expect(isTransientSessionReadError(new ProductCallFailure("bridge_method_unavailable")))
+    .toBeFalse();
+  expect(isTransientSessionReadError(new Error("Request failed.")))
     .toBeFalse();
 });

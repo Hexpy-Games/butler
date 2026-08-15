@@ -49,6 +49,24 @@ The reported 30 GiB growth had several independent lifetime causes.
 
 This fast path trusts the existing unsigned, user-owned local runtime boundary. It does not claim protection from an adversarial process running as the same user. That stronger boundary requires a signed/read-only runtime or operating-system integrity enforcement, not another launch-time state machine.
 
+## Archived Electron-parent archive-stream regression guard
+
+The archive result above remains a release and Bun A/B eligibility guard. The
+reproduction runs the real POSIX archive worker as a child of Electron's launch
+process, with the same compressed Agent archive and extraction destination for
+each runtime. A run is successful only when the worker emits its completed JSON
+record, the launcher is present in the extracted tree, and the child exits
+cleanly; compressed-EOF timeout, truncated output, or a non-zero worker exit is
+a regression. Repeat the guard ten times per runtime. The historical Bun
+1.3.11 reproduction completed 7/10 attempts, while the streaming worker path
+completed 10/10; that archived 1.3.11 result is diagnostic evidence and is not
+silently treated as a candidate win. Any new candidate must reproduce the
+10/10 result before it can be eligible for the RMF-SC10 runtime decision.
+
+The guard is intentionally independent of the physical-memory comparison:
+cache-mismatched or otherwise incomparable A/B samples remain descriptive,
+and a lower memory snapshot never waives an archive-stream failure.
+
 ### Benchmark harness
 
 - Captured stdout and stderr are bounded.
