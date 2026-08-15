@@ -41,6 +41,15 @@ import type { AppStoreKernel } from "./app-store-kernel.ts";
 import { SqliteOperationOutputReader } from "../../infrastructure/operation-output/sqlite-operation-output-reader.ts";
 import { initializeTerminalTurnRetention } from
   "./app-terminal-retention-initializer.ts";
+import {
+  createProviderQuotaMonitor,
+} from "../../../../operations/metrics/provider-quota.ts";
+import { createOpenAIQuotaAdapter } from
+  "../../../../integrations/providers/openai/provider-quota.ts";
+import { createZaiQuotaAdapter } from
+  "../../../../integrations/providers/zai/provider-quota.ts";
+import { recordOperationalMetric } from
+  "../../../../operations/metrics/operational-metrics.ts";
 
 export function initializeAppStoreKernel(
   kernel: AppStoreKernel,
@@ -80,7 +89,15 @@ export function initializeAppStoreKernel(
     kernel.appUpdateManifest,
     () => kernel.preferences?.getSettings().diagnostics_enabled === true,
   );
-  kernel.systemMonitor = new AppSystemMonitorStore(kernel.butlerData);
+  kernel.systemMonitor = new AppSystemMonitorStore(
+    kernel.butlerData,
+    options.providerQuotaMonitor ?? createProviderQuotaMonitor({
+      adapters: [
+        createOpenAIQuotaAdapter(),
+        createZaiQuotaAdapter({ butlerData: kernel.butlerData }),
+      ],
+    }),
+  );
   kernel.developerLogs = new DeveloperLogStore({ butlerData: kernel.butlerData });
   kernel.dbConnection = openOwnedSqliteConnection(
     options.dbPath ?? ":memory:",
@@ -294,6 +311,18 @@ export function initializeAppStoreKernel(
   kernel.conversationProjection = new AppConversationProjectionStore({
     db: kernel.db,
     conversationReader: options.conversationProjectionReader,
+    projectTurnOutcome: (outcome) =>
+      kernel.transportProjection.projectConversationTurnOutcome(outcome),
+    recordProjectionFailure: (error) => {
+      recordOperationalMetric({
+        category: "runtime",
+        name: "app.conversation_projection",
+        status: "error",
+        dimensions: {
+          error_name: error instanceof Error ? error.name : "unknown",
+        },
+      }, { butlerData: kernel.butlerData });
+    },
   });
   kernel.projectWorkspaceRoot =
     kernel.settingsPersistence.readStoredProjectWorkspaceRoot() ??

@@ -31,16 +31,27 @@ import type {
   TurnOutcomeCapsuleInput,
 } from "./types.ts";
 import type { ConversationStoreDependencies } from "./store/dependencies.ts";
-import {
-  ConversationMessageRecords,
-  conversationMessagesSourceHash,
-} from "./store/message-records.ts";
+import { ConversationMessageRecords } from "./store/message-records.ts";
+import { conversationMessagesSourceHash } from "./source-hash.ts";
 import { ConversationProjectionRecords } from "./store/projection-records.ts";
 import { ConversationSessionTurnRecords } from "./store/session-turn-records.ts";
 import { ConversationSessionRecords } from "./store/session-records.ts";
-import { ConversationSummaryPromptRecords } from "./store/summary-prompt-records.ts";
+import {
+  ConversationSummaryPromptRecords,
+  type ConversationSummaryStats,
+} from "./store/summary-prompt-records.ts";
+import {
+  ConversationContextStatsRecords,
+  type ConversationMessageStats,
+} from "./store/context-stats.ts";
 
 export { conversationMessagesSourceHash };
+
+export interface ConversationContextStats {
+  messages: ConversationMessageStats;
+  summaries: ConversationSummaryStats;
+  semanticTail: ConversationMessageWithParts[];
+}
 
 export function conversationStorePath(butlerData: string): string {
   return join(butlerData, "runtime", "conversation-store.sqlite");
@@ -49,6 +60,7 @@ export function conversationStorePath(butlerData: string): string {
 export class AgentConversationStore {
   private readonly connection: OwnedSqliteConnection;
   private readonly messages: ConversationMessageRecords;
+  private readonly contextStats: ConversationContextStatsRecords;
   private readonly projections: ConversationProjectionRecords;
   private readonly sessionsAndTurns: ConversationSessionTurnRecords;
   private readonly sessions: ConversationSessionRecords;
@@ -64,11 +76,13 @@ export class AgentConversationStore {
     );
     configureConversationDatabase(dependencies);
     this.messages = new ConversationMessageRecords(dependencies);
+    this.contextStats = new ConversationContextStatsRecords(dependencies);
     this.sessionsAndTurns = new ConversationSessionTurnRecords(dependencies, this.messages);
     this.sessions = new ConversationSessionRecords(dependencies);
     this.summariesAndPrompts = new ConversationSummaryPromptRecords(
       dependencies,
       this.messages,
+      this.contextStats,
       this.sessionsAndTurns,
     );
     this.projections = new ConversationProjectionRecords(dependencies);
@@ -92,6 +106,14 @@ export class AgentConversationStore {
 
   readTurnOutcome(turnId: string): TurnOutcomeCapsule | null {
     return this.sessionsAndTurns.readTurnOutcome(turnId);
+  }
+
+  readTurnOutcomeById(outcomeId: string): TurnOutcomeCapsule | null {
+    return this.sessionsAndTurns.readTurnOutcomeById(outcomeId);
+  }
+
+  readTurnOutcomes(afterOutcomeId: string | null, limit = 100): TurnOutcomeCapsule[] {
+    return this.projections.readTurnOutcomes(afterOutcomeId, limit);
   }
 
   writeTurnOutcome(input: TurnOutcomeCapsuleInput): TurnOutcomeCapsule {
@@ -178,6 +200,20 @@ export class AgentConversationStore {
 
   readSemanticTail(sessionId: string, limit = 20): ConversationMessageWithParts[] {
     return this.messages.readSemanticTail(sessionId, limit);
+  }
+
+  /**
+   * Bounded read model for periodic context diagnostics. Counters and latest
+   * timestamps come from SQL aggregates; only the configured semantic tail is
+   * hydrated for prompt estimation.
+   */
+  readContextStats(sessionId: string, semanticTailLimit = 200): ConversationContextStats {
+    const summaries = this.summariesAndPrompts.readSummaryStats(sessionId);
+    return {
+      messages: this.contextStats.readMessageStats(sessionId),
+      summaries,
+      semanticTail: this.messages.readSemanticTail(sessionId, semanticTailLimit),
+    };
   }
 
   readMessagesAround(input: ReadAroundInput): ConversationMessageWithParts[] {

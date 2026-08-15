@@ -113,6 +113,7 @@ export function defaultDaemonServiceSpecs(
       platform,
       embedSocket: process.env.EMBED_SOCKET,
       embedHealthPort: process.env.EMBED_HEALTH_PORT,
+      embedIdleRecycleMs: process.env.EMBED_IDLE_RECYCLE_MS,
     });
   }
   return defaultNativeServiceSpecs(paths);

@@ -20,6 +20,7 @@ import type {
   SessionQueueView,
   SessionSummaryView,
   SessionView,
+  TranscriptExportStream,
   TranscriptExportView,
   TurnActionResult,
   TurnProgressSnapshotView,
@@ -33,6 +34,10 @@ import type {
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
 import { operationOutputIsLinked } from
   "../../domain/progress-summary/operation-output-reference.ts";
+import type {
+  SessionMessagePage,
+  SessionMessagePageOptions,
+} from "../../domain/sessions/session-message-page.ts";
 
 const DEFAULT_CHAT_ID = "general";
 
@@ -57,10 +62,15 @@ export interface AppStoreSessionApi {
   getConversationProjectionSessionView(conversationSessionId: string): SessionView | null;
   listConversationProjectionMessages(conversationSessionId: string, cursor?: number): MessageRecord[];
   getConversationProjectionActivityState(conversationSessionId: string): AppConversationProjectionActivityState;
-  getSessionView(sessionId: string): SessionView;
+  getSessionView(sessionId: string, options?: SessionMessagePageOptions): SessionView;
   listArtifacts(sessionId: string): SessionArtifactSummary[];
   exportTranscript(sessionId: string): TranscriptExportView;
+  exportTranscriptStream(sessionId: string): TranscriptExportStream;
   listMessages(chatId?: string, cursor?: number): MessageRecord[];
+  listMessagePage(
+    chatId: string,
+    options?: SessionMessagePageOptions,
+  ): SessionMessagePage<MessageRecord>;
   listTurns(chatId?: string, cursor?: number): TurnRecord[];
   listTurnProgressSnapshotsForMessages(
     messages: MessageRecord[],
@@ -161,10 +171,10 @@ export function createSessionStoreApi(
     getConversationProjectionActivityState(conversationSessionId) {
       return kernel.conversationProjection.readActivityState(conversationSessionId);
     },
-    getSessionView(sessionId) {
+    getSessionView(sessionId, options) {
       kernel.turnActions.reconcileCancellationSettlements(sessionId);
       kernel.turnActions.reconcileCancelledTurnActivityMessages(sessionId);
-      return kernel.sessionViews.getSessionView(sessionId);
+      return kernel.sessionViews.getSessionView(sessionId, options);
     },
     listArtifacts(sessionId) {
       return kernel.sessionViews.listArtifacts(sessionId);
@@ -172,8 +182,14 @@ export function createSessionStoreApi(
     exportTranscript(sessionId) {
       return kernel.sessionViews.exportTranscript(sessionId);
     },
+    exportTranscriptStream(sessionId) {
+      return kernel.sessionViews.exportTranscriptStream(sessionId);
+    },
     listMessages(chatId = DEFAULT_CHAT_ID, cursor = 0) {
       return kernel.sessionRecords.listMessages(chatId, cursor);
+    },
+    listMessagePage(chatId, options) {
+      return kernel.sessionRecords.listMessagePage(chatId, options);
     },
     listTurns(chatId = DEFAULT_CHAT_ID, cursor = 0) {
       return kernel.sessionRecords.listTurns(chatId, cursor);

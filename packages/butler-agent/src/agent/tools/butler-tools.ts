@@ -1,13 +1,10 @@
 import { TodoListStore } from "../work/todo-list.ts";
 import { WorkStreamStore } from "../work/work-stream.ts";
-import type { WebSearchProvider } from "../../integrations/search/provider.ts";
 import {
-  type SmartSearchPlanningInput,
-  type SmartSearchPlanningResult,
-} from "../../integrations/search/planning.ts";
-import { readPageConfigured } from "../../integrations/search/page-reader.ts";
+  createUnavailableWorkspaceReference,
+  createWorkspaceReference,
+} from "../session-workspaces/index.ts";
 import { AutomationStore } from "../../operations/service/automation-store.ts";
-import type { VectorEpisodeBackend } from "../cognition/memory/recall/vector.ts";
 import type { BtccAgentLoopToolDefinition } from "../btcc/agent-loop/index.ts";
 import type { PublicWorkObligationKind } from "./tool-support.ts";
 import {
@@ -27,29 +24,21 @@ import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
 import { createToolBridgeToolHandlers } from "./tool-bridge/index.ts";
 import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
-import { createRunCommandToolHandlers } from "./run-command/index.ts";
-import { createFileToolHandlers } from "./file-tools/index.ts";
 import { createSkillToolHandlers } from "./skills/index.ts";
 import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
-import {
-  createWorkspacePagePreviewToolHandlers,
-  workspacePagePreviewAvailabilityOverride,
-} from "./workspace-page-preview/index.ts";
+import { workspacePagePreviewAvailabilityOverride } from "./workspace-page-preview/index.ts";
+import { createWorkspaceToolHandlers } from "./workspace-tool-handlers.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
-import type { ExternalToolCatalogInput } from "./progressive-catalog.ts";
+import type { ButlerToolCall } from "./types.ts";
 import type {
-  ButlerToolCall,
-  ButlerToolDefinition,
-  NativeToolAvailabilityOverrides,
-} from "./types.ts";
-import type {
-  ImageCapabilityEvidence,
-  ImageCarrierTuple,
-  VerifiedImagePayloadPort,
-  VisualAdmittedManifest,
-} from "../image-attachment/contracts.ts";
+  ButlerToolExecutorInput,
+  ButlerToolExecutorRegistry,
+  ButlerToolHandler,
+  ButlerToolRuntimeContext,
+  ContextualButlerToolExecutor,
+} from "./butler-tool-executor-contracts.ts";
 export { BUTLER_TOOLS, CORE_BUTLER_TOOLS } from "./registry.ts";
 export type {
   ButlerToolCall,
@@ -58,26 +47,14 @@ export type {
   ToolCapabilityCategory,
   ToolCapabilityMetadata,
 } from "./types.ts";
+export type {
+  ButlerToolExecutionBoundary,
+  ButlerToolExecutorRegistry,
+  ButlerToolHandler,
+  ButlerToolRuntimeContext,
+  ContextualButlerToolExecutor,
+} from "./butler-tool-executor-contracts.ts";
 export type ButlerToolExecutor = (call: ButlerToolCall) => Promise<unknown>;
-export type ButlerToolRuntimeContext = { effectOccurrenceId?: string };
-export type ContextualButlerToolExecutor = (
-  call: ButlerToolCall,
-  context?: ButlerToolRuntimeContext,
-) => Promise<unknown>;
-export type ButlerToolHandler = (
-  call: ButlerToolCall,
-  context?: ButlerToolRuntimeContext,
-) => Promise<unknown> | unknown;
-export type ButlerToolExecutorRegistry = Record<string, ButlerToolHandler>;
-export type ButlerToolExecutionBoundary = (input: {
-  call: ButlerToolCall;
-  context: ButlerToolRuntimeContext;
-  definition: ButlerToolDefinition;
-  execute(prepared?: {
-    args: ButlerToolCall["args"];
-    rawArguments?: ButlerToolCall["rawArguments"];
-  }): Promise<unknown>;
-}) => Promise<unknown>;
 
 const BUTLER_TOOL_DEFINITIONS_BY_NAME = new Map(
   BUTLER_TOOLS.map((definition) => [definition.name, definition] as const),
@@ -139,36 +116,15 @@ function toolResultSucceeded(result: unknown): boolean {
   return true;
 }
 
-export function createButlerToolExecutor(input: {
-  butlerHome: string;
-  butlerData: string;
-  appMessageDbPath?: string;
-  workspacePath?: string;
-  sessionId?: string; originChatId?: string;
-  projectId?: string; turnId?: string;
-  imageManifests?: readonly VisualAdmittedManifest[];
-  imageCarrier?: ImageCarrierTuple;
-  imageCapability?: ImageCapabilityEvidence;
-  verifiedImagePayloadPort?: VerifiedImagePayloadPort;
-  turnContext?: string;
-  searchPlannerOriginalRequest?: string;
-  workerModel?: string;
-  searchPlannerModel?: string;
-  memoryVectorBackend?: VectorEpisodeBackend;
-  memoryVectorTimeoutMs?: number;
-  webSearchProvider?: WebSearchProvider;
-  searchPlanner?: (input: SmartSearchPlanningInput) => Promise<SmartSearchPlanningResult>;
-  pageReader?: typeof readPageConfigured;
-  currentToolNames?: readonly string[] | (() => readonly string[]);
-  nativeToolDefinitions?: readonly ButlerToolDefinition[];
-  hiddenNativeToolNames?: readonly string[];
-  nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
-  describedToolIds?: readonly string[] | (() => readonly string[]);
-  pluginToolCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
-  pluginToolDescriber?: (input: { id: string; namespace: string; name: string }) => Promise<ExternalToolCatalogInput | null | undefined>;
-  activeWorkStreamBinding?: () => { contractId: string; workStreamId: string } | null;
-  executionBoundary?: ButlerToolExecutionBoundary;
-}): ContextualButlerToolExecutor {
+export function createButlerToolExecutor(
+  input: ButlerToolExecutorInput,
+): ContextualButlerToolExecutor {
+  const workspaceReference = input.workspaceReference ?? (input.sessionId && input.sessionBindingStore
+    ? createUnavailableWorkspaceReference()
+    : createWorkspaceReference(input.workspacePath ?? input.butlerHome));
+  const projectLedgerWorkspaceReference = input.workspaceReference || input.sessionId
+    ? workspaceReference
+    : undefined;
   const todoListStore = new TodoListStore(input.butlerData);
   const workStreamStore = new WorkStreamStore(input.butlerData);
   const automationStore = new AutomationStore(input.butlerData);
@@ -212,7 +168,9 @@ export function createButlerToolExecutor(input: {
       butlerData: input.butlerData,
       appMessageDbPath: input.appMessageDbPath,
       workspacePath: input.workspacePath,
+      workspaceReference: projectLedgerWorkspaceReference,
       sessionId: input.sessionId, projectId: input.projectId,
+      memoryAttribution: input.memoryAttribution,
     }),
     ...createMonitoringToolHandlers({
       butlerData: input.butlerData,
@@ -282,16 +240,14 @@ export function createButlerToolExecutor(input: {
     ...createDataTableToolHandlers({
       butlerData: input.butlerData,
     }),
-    ...createRunCommandToolHandlers({
+    ...createWorkspaceToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
-      workspacePath: input.workspacePath ?? input.butlerHome,
+      workspacePath: input.workspacePath,
+      workspaceReference,
+      sessionId: input.sessionId,
+      sessionBindingStore: input.sessionBindingStore,
     }),
-    ...createWorkspacePagePreviewToolHandlers({
-      butlerData: input.butlerData,
-      workspacePath: input.workspacePath ?? input.butlerHome,
-    }),
-    ...createFileToolHandlers({ butlerData: input.butlerData, workspacePath: input.workspacePath ?? input.butlerHome }),
   });
   toolExecutorRef.current = toolExecutors;
   return executeActualTool;

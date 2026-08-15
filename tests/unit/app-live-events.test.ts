@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AppEventEnvelope } from
   "../../packages/butler-agent/src/gateways/app/interface/protocol/app-protocol.ts";
+import type { AppServerStore } from
+  "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
 import { handleRuntimeRoutes } from
   "../../packages/butler-agent/src/gateways/app/interface/server/routes/runtime-routes.ts";
 import { liveEventsResponse } from
@@ -163,10 +165,92 @@ test("client disconnect and server shutdown signals both remove listeners", asyn
   }
 });
 
+test("live replay queues a synchronous subscription race and emits each cursor once in order", async () => {
+  const first = event(1, "replay.first");
+  const raced = event(2, "live.raced");
+  let unsubscribed = false;
+  const store = {
+    latestEventCursor: () => 2,
+    replayEvents: () => [first],
+    subscribeEvents: (next: (value: AppEventEnvelope) => void) => {
+      // Real stores can publish synchronously while the replay query is being
+      // prepared. The route must hold this until the replay page is emitted.
+      next(raced);
+      return () => {
+        unsubscribed = true;
+      };
+    },
+  } as unknown as AppServerStore;
+  const response = liveEventsResponse(store, 0);
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Missing live event body.");
+  try {
+    expect((await readSseEvent(reader, "replay.first")).id).toBe(1);
+    expect((await readSseEvent(reader, "live.raced")).id).toBe(2);
+    await reader.cancel();
+    expect(unsubscribed).toBe(true);
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+});
+
+test("slow SSE consumers receive a bounded reconcile marker and release the reader", async () => {
+  const root = temporaryRoot();
+  const server = createTestAppServer({
+    dbPath: join(root, "app.sqlite"),
+    butlerData: root,
+    port: 0,
+    automationSchedulerIntervalMs: false,
+  });
+  const originalSubscribe = server.store.subscribeEvents.bind(server.store);
+  let activeSubscriptions = 0;
+  server.store.subscribeEvents = (listener) => {
+    activeSubscriptions += 1;
+    const unsubscribe = originalSubscribe(listener);
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      activeSubscriptions -= 1;
+      unsubscribe();
+    };
+  };
+  const response = liveEventsResponse(server.store, 0);
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Missing slow consumer body.");
+  try {
+    expect(activeSubscriptions).toBe(1);
+    // Hold the reader so the stream's desiredSize reaches zero. The live
+    // route must collapse the pending queue to a durable resync marker rather
+    // than retaining every event emitted by a slow renderer.
+    for (let index = 0; index < 200; index += 1) {
+      server.store.appendSafeServerEvent(`test.slow_consumer_${index}`, {});
+    }
+    await readSseEvent(reader, "test.slow_consumer_0");
+    const reconcile = await readSseEvent(reader, "stream.reconcile_required");
+    expect(reconcile.payload?.high_water_cursor).toBeGreaterThan(0);
+    await reader.cancel();
+    expect(activeSubscriptions).toBe(0);
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    server.stop();
+  }
+});
+
 function temporaryRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "butler-live-events-"));
   temporaryRoots.push(root);
   return root;
+}
+
+function event(id: number, type: string): AppEventEnvelope {
+  return {
+    protocol_version: "butler.app.v1",
+    id,
+    type,
+    created_at: "2026-08-12T00:00:00.000Z",
+    payload: {},
+  };
 }
 
 async function readSseEvent(

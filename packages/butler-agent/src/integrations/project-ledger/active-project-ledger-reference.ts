@@ -94,7 +94,9 @@ export class ActiveProjectLedgerResolver {
     const explicitWorkspacePath = input.explicitRef && path.isAbsolute(input.explicitRef)
       ? input.explicitRef
       : undefined;
-    const workspacePath = appLookup.row?.workspace_path ?? explicitWorkspacePath ?? input.workspacePath ?? input.fallbackWorkspacePath;
+    // A live session workspace is authoritative for workspace-scoped operations,
+    // while the App row still supplies the canonical Ledger identity below.
+    const workspacePath = explicitWorkspacePath ?? input.workspacePath ?? appLookup.row?.workspace_path ?? input.fallbackWorkspacePath;
     const candidateIds = orderedCandidateIds({
       row: appLookup.row,
       workspacePath,

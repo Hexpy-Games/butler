@@ -3,6 +3,7 @@ import { arch, platform, release } from "os";
 import { join } from "path";
 import { JSDOM } from "jsdom";
 import { accountIdFromAccessToken, resolveOpenAIAuth } from "../providers/openai/auth.ts";
+import { scanJsonlFile } from "../../operations/metrics/jsonl-file-scanner.ts";
 
 export interface WebSearchInput {
   query: string;
@@ -131,6 +132,45 @@ function usageEventsPath(butlerData: string): string {
   return join(butlerData, "metrics", "web-search-usage.jsonl");
 }
 
+export function visitWebSearchMetricEvents(input: {
+  butlerData: string;
+  sinceTs?: number;
+  onEvent: (event: WebSearchMetricEvent) => void;
+}): { parseErrors: number } {
+  const path = usageEventsPath(input.butlerData);
+  if (!existsSync(path)) return { parseErrors: 0 };
+  let parseErrors = 0;
+  const visit = (line: string): void => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    try {
+      const parsed = JSON.parse(trimmed) as WebSearchMetricEvent;
+      if (
+        typeof parsed.ts !== "number" ||
+        typeof parsed.provider !== "string" ||
+        !parsed.provider.trim()
+      ) {
+        parseErrors += 1;
+        return;
+      }
+      if (input.sinceTs !== undefined && parsed.ts < input.sinceTs) return;
+      input.onEvent({
+        ts: parsed.ts,
+        provider: parsed.provider,
+        error: typeof parsed.error === "string" ? parsed.error : null,
+      });
+    } catch {
+      parseErrors += 1;
+    }
+  };
+  try {
+    scanJsonlFile(path, { onLine: visit, onTrailing: visit });
+  } catch {
+    // A diagnostic log may rotate while status is being read.
+  }
+  return { parseErrors };
+}
+
 export function readWebSearchMetrics(butlerData: string): WebSearchMetrics {
   return readMetrics(metricsPath(butlerData));
 }
@@ -139,30 +179,8 @@ export function readWebSearchMetricEvents(input: {
   butlerData: string;
   sinceTs?: number;
 }): WebSearchMetricEvent[] {
-  const path = usageEventsPath(input.butlerData);
-  if (!existsSync(path)) return [];
   const events: WebSearchMetricEvent[] = [];
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      const parsed = JSON.parse(trimmed) as WebSearchMetricEvent;
-      if (
-        typeof parsed.ts === "number" &&
-        typeof parsed.provider === "string" &&
-        parsed.provider.trim()
-      ) {
-        if (input.sinceTs !== undefined && parsed.ts < input.sinceTs) continue;
-        events.push({
-          ts: parsed.ts,
-          provider: parsed.provider,
-          error: typeof parsed.error === "string" ? parsed.error : null,
-        });
-      }
-    } catch {
-      continue;
-    }
-  }
+  visitWebSearchMetricEvents({ ...input, onEvent: (event) => events.push(event) });
   return events;
 }
 

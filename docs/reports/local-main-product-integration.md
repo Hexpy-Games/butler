@@ -4,16 +4,18 @@ Status: Integration specification approved for execution on 2026-08-16.
 
 ## Accepted intent
 
-Preserve the 18 product commits developed directly on local `main` after
-`549463fb`, integrate them with the latest `origin/main`, and publish the result
-as a reviewable pull request. The local `main` ref must remain at `dd19567b`
-until a later explicit decision.
+Preserve the mergeable product behavior developed in the 18 commits directly on
+local `main` after `549463fb`, integrate it with the latest `origin/main`, and
+publish the result as a reviewable pull request. The local `main` ref must remain
+at `dd19567b` until a later explicit decision. Historical commits remain in the
+branch ancestry, while retired or private one-off operational material may be
+removed from the resulting product tree during integration review.
 
 The integration must preserve both lines of product behavior:
 
-- local line: explicit Turn/Work relations and disposition, audited correction,
-  live App reconciliation, multimodal image carriers, provider reconnect status,
-  and generated/workspace artifact delivery;
+- local line: explicit Turn/Work relations and disposition, live App
+  reconciliation, multimodal image carriers, provider reconnect status, and
+  generated/workspace artifact delivery;
 - upstream line: quota reporting, session worktrees, native workspace file
   operations, runtime-memory remediation, interrupted-Turn recovery, literal
   tokenizer handling, opaque session-view cursor recovery, bounded Ledger
@@ -34,7 +36,8 @@ not justify dropping behavior from a public path.
 ## Success criteria
 
 - SC01: all 18 local commits and all commits reachable from the latest
-  `origin/main` remain ancestors of the integration tip.
+  `origin/main` remain ancestors of the integration tip; integration review may
+  remove retired behavior from the final tree with an explicit decision record.
 - SC02: conflict resolutions preserve the local Turn/Work, App activity,
   multimodal, reconnect, and artifact-delivery contracts.
 - SC03: conflict resolutions preserve the upstream memory, recovery, cursor,
@@ -61,3 +64,55 @@ not justify dropping behavior from a public path.
 3. Trace and review each affected canonical path.
 4. Run focused and repository-wide validation.
 5. Commit, push, and open the integration PR.
+
+## Integration decisions
+
+- The latest `origin/main` provider catalog and quota path remain authoritative;
+  the local Z.AI image capability metadata is retained only for the exact GLM-5.2
+  MCP vision route, while GLM-5.3 remains available through the upstream catalog.
+- Workspace authorization and session-owned worktrees use the upstream binding
+  authority. The local image-analysis tool is added conditionally without
+  widening the ordinary workspace tool surface.
+- Explicit `start_work`/`continue_work` relation and
+  `record_work_disposition` closeout remain authoritative. The upstream native
+  workspace lifecycle regression was updated to exercise that public contract
+  instead of relying on implicit Work selection or review-as-completion.
+- The Sandy-specific correction command, its one-off implementation, its tests,
+  and its live-data report are excluded from the final tree. The canonical CLI
+  reference marks that command retired, the live correction is already complete,
+  and the report contains operational identifiers and local paths that must not
+  enter a portable pull request. Generic Turn/Work integrity fixes remain.
+- Merge-grown orchestration files were reduced by extracting cohesive contracts,
+  initial Work hydration, executor contracts, and provider-failure presentation;
+  the BTCC shape gate passes without raising thresholds.
+
+## Validation evidence
+
+- Conflicted-path focused suites: 382 tests passed after conflict resolution;
+  extracted guided/runtime paths added another 108 passing tests.
+- Native workspace public-path regression: 2 tests passed after adopting the
+  explicit Work relation/disposition contract.
+- Butler tool surface: 133 tests passed with the existing 33,000-byte cap; no cap
+  was raised.
+- Full TypeScript typecheck passed.
+- Full ESLint passed with zero errors and 24 pre-existing warnings.
+- BTCC source-shape validation passed for 4 domains and 229 files.
+- Repository `check` reached 2,745 passes. Its remaining failures were classified
+  against the byte-identical latest `origin/main` tree: five App projection tests,
+  the native purge gate, and two Electron harness tests reproduce upstream. The
+  CLI documentation mismatch and native workspace explicit-Work regression were
+  integration-owned and were fixed.
+
+## Residual baseline
+
+The integration does not claim to repair unrelated latest-main failures. The
+following remain visible for follow-up rather than being hidden or weakened:
+
+- five App projection/cancel-history assertions;
+- the generic OpenAI raw-token native purge gate;
+- two Electron harness bridge/Stop fixtures.
+
+These failures reproduce on the byte-identical `origin/main` tree and are not
+introduced by this integration. Focused tests for every changed canonical path,
+typecheck, lint, shape validation, and diff validation remain required before the
+merge commit is published.

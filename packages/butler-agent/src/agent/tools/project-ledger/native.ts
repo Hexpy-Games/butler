@@ -15,12 +15,17 @@ import { runProjectLedgerPlannedLifecycleMutation } from "./lifecycle-planner.ts
 import { projectLedgerNativeNextHints } from "./recovery-hints.ts";
 import { createEvidenceCapabilityReceipt } from "../../output/evidence/ledger.ts";
 import type { EvidenceCapabilityReceipt } from "../../output/evidence/types.ts";
+import type { WorkspaceReference } from "../../session-workspaces/index.ts";
 import { normalizeProjectLedgerAcceptanceInput } from "./acceptance-input.ts";
 import {
   GIT_INSTALL_URL,
   GitEvidenceCollectionError,
   normalizeProjectLedgerCommitEvidenceInput,
 } from "./git-commit-evidence.ts";
+import type { RuntimeMemoryAttributionPort } from
+  "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
+import { runRuntimeMemoryAttributionPhase } from
+  "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type ProjectLedgerExecutorInput = {
@@ -30,6 +35,8 @@ type ProjectLedgerExecutorInput = {
   workspacePath?: string;
   sessionId?: string;
   projectId?: string;
+  workspaceReference?: WorkspaceReference;
+  memoryAttribution?: RuntimeMemoryAttributionPort;
 };
 
 type ToolSpec = {
@@ -252,6 +259,23 @@ function runProjectLedgerNativeTool(
   toolName: string,
   args: Record<string, unknown>,
 ): Record<string, unknown> {
+  const phase = toolName === "project_ledger_work_update" ? "work_update" : null;
+  if (phase) {
+    return runRuntimeMemoryAttributionPhase({
+      attribution: input.memoryAttribution,
+      phase,
+      run: () => runProjectLedgerNativeToolInternal(input, toolName, args),
+      failed: (result) => result.ok !== true,
+    });
+  }
+  return runProjectLedgerNativeToolInternal(input, toolName, args);
+}
+
+function runProjectLedgerNativeToolInternal(
+  input: ProjectLedgerExecutorInput,
+  toolName: string,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
   let normalizedArgs: Record<string, unknown>;
   try {
     normalizedArgs = normalizeProjectLedgerCommitEvidence(
@@ -264,7 +288,10 @@ function runProjectLedgerNativeTool(
   }
   let projectPath: string;
   try {
-    projectPath = projectLedgerProjectPath(input, normalizedArgs);
+    projectPath = projectLedgerProjectPath({
+      ...input,
+      workspacePath: input.workspaceReference?.get() || input.workspacePath,
+    }, normalizedArgs);
   } catch (error) {
     if (error instanceof ProjectLedgerProjectScopeError) {
       return {
@@ -358,7 +385,7 @@ function normalizeProjectLedgerCommitEvidence(
   return normalizeProjectLedgerCommitEvidenceInput({
     toolName,
     args,
-    workspacePath: input.workspacePath || stringArg(args, "project_path") ||
+    workspacePath: input.workspaceReference?.get() || input.workspacePath || stringArg(args, "project_path") ||
       input.butlerHome,
   });
 }

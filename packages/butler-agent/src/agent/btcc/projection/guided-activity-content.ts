@@ -21,6 +21,7 @@ export function publicToolTitle(
   if (name === "web_search") return "웹 검색";
   if (name === "web_read") return "웹 문서 읽기";
   if (name === "read_file") return safeFileActionLabel(name, args) || "파일 읽기";
+  if (name === "list_files") return "작업공간 파일 찾기";
   if (name === "grep_files") return "작업공간 검색";
   if (name === "write_file" || name === "edit_file") {
     return safeFileActionLabel(name, args) || "파일 변경";

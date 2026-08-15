@@ -104,9 +104,24 @@ function workerActivityMatch(input: AppRouteContext): Response | null {
       input.store.listWorkerActivity({
         sessionId,
         includeHistory: input.url.pathname.endsWith("/history"),
+        limit: boundedPageParam(input.url.searchParams.get("limit"), 200),
+        offset: boundedPageParam(input.url.searchParams.get("offset"), 0, 0),
+        cursor: input.url.searchParams.get("cursor") ?? undefined,
       }),
     ),
   );
+}
+
+function boundedPageParam(
+  value: string | null,
+  fallback: number,
+  minimum = 1,
+): number {
+  if (!value) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed)
+    ? Math.max(minimum, Math.min(200, Math.floor(parsed)))
+    : fallback;
 }
 
 function messagesSinceCursor(input: AppRouteContext): Response {
@@ -116,16 +131,21 @@ function messagesSinceCursor(input: AppRouteContext): Response {
   input.store.refreshSessionProjection(sessionId);
 
   const cursorFloor = Number.isFinite(cursor) ? cursor : 0;
-  const messages = input.store
-    .getSessionView(sessionId)
-    .messages.filter((message) => Number(message.cursor ?? 0) > cursorFloor);
+  // `/messages?cursor=` is a delta contract, not a projection-window query.
+  // The session view is intentionally bounded to the latest page, so filtering
+  // it would silently drop deltas when a client has been offline for more than
+  // one page. Read from the canonical cursor-aware store instead.
+  const page = input.store.listMessagePage(sessionId, {
+    ...(cursorFloor > 0 ? { afterCursor: cursorFloor } : {}),
+  });
+  const messages = page.items;
 
   return json(
     apiEnvelope<MessageListView>({
       chat_id: sessionId,
       messages,
       turn_progress: input.store.listTurnProgressSnapshotsForMessages(messages),
-      next_cursor: maxCursor(
+      next_cursor: page.nextCursor || maxCursor(
         messages.map((message) => message.cursor),
         cursorFloor,
       ),

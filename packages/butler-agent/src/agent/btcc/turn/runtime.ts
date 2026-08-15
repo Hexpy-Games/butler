@@ -28,11 +28,18 @@ import {
 } from "../model-route/index.ts";
 import { ModelProviderRequestError, safeRuntimeFailure } from "../../../integrations/providers/provider-errors.ts";
 import { createModelRouteRuntimeHooks } from "./model-route-runtime-hooks.ts";
+import { operationalFailureMessage } from "./turn-runtime-failure.ts";
+import {
+  createNoopRuntimeMemoryAttributionPort,
+  type RuntimeMemoryAttributionPort,
+} from "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
+
 export type TurnRuntimeDependencies = {
   admission: TurnAdmissionRepository;
   turns: TurnStateRepository;
   messages: CanonicalMessageStore;
   agent: BtccAgentLoop;
+  memoryAttribution?: RuntimeMemoryAttributionPort;
   progress?: BtccTurnProgressObserver;
   committedSuccessorReadiness?: CommittedSuccessorReadiness;
 };
@@ -47,8 +54,11 @@ export type TurnRuntimeDependencies = {
 class DefaultTurnRuntime implements BtccTurnRuntime {
   private readonly supervisor = createTurnExecutionSupervisor();
   private readonly activeTurns = new Map<string, Promise<BtccTurnOutcome>>();
+  private readonly memoryAttribution: RuntimeMemoryAttributionPort;
 
-  constructor(private readonly dependencies: TurnRuntimeDependencies) {}
+  constructor(private readonly dependencies: TurnRuntimeDependencies) {
+    this.memoryAttribution = dependencies.memoryAttribution ?? createNoopRuntimeMemoryAttributionPort();
+  }
 
   runTurn(
     command: BtccRunCommand,
@@ -72,6 +82,19 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
   }
 
   private async run(
+    command: BtccRunCommand,
+    progress: BtccTurnProgressObserver | undefined,
+    onAdmitted: ((isFresh: boolean) => void | Promise<void>) | undefined,
+  ): Promise<BtccTurnOutcome> {
+    this.memoryAttribution.checkpoint({ event: "turn_start", operation: "turn" });
+    try {
+      return await this.runTurnLifecycle(command, progress, onAdmitted);
+    } finally {
+      this.memoryAttribution.checkpoint({ event: "turn_end", operation: "turn" });
+    }
+  }
+
+  private async runTurnLifecycle(
     command: BtccRunCommand,
     progress: BtccTurnProgressObserver | undefined,
     onAdmitted: ((isFresh: boolean) => void | Promise<void>) | undefined,
@@ -121,6 +144,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
           turn,
           recoveryAttempt,
           signal: permit.signal,
+          memoryAttribution: this.memoryAttribution,
           progress,
           ...createModelRouteRuntimeHooks({
             turn,
@@ -248,6 +272,9 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
     turn: TurnRecord,
   ): Promise<void> {
     if (!isTerminal(turn)) return;
+    this.memoryAttribution.terminal(
+      turn.semanticState === "cancelled" ? "cancelled" : "delivered",
+    );
     await publishState(progress, turn);
   }
 }
@@ -314,37 +341,4 @@ async function publishState(
 
 function isTerminal(turn: TurnRecord): boolean {
   return turn.semanticState === "delivered" || turn.semanticState === "cancelled";
-}
-
-function operationalFailureMessage(originalMessage: string, error?: unknown): string {
-  const korean = /[가-힣]/.test(originalMessage);
-  const kind = operationalFailureKind(error);
-  if (korean) {
-    if (kind === "transient_provider") {
-      return "모델 연결이 일시적으로 중단되어 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.";
-    }
-    if (kind === "permanent_provider") {
-      return "모델 제공자 설정 또는 요청이 승인되지 않아 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.";
-    }
-    return "내부 실행 오류로 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.";
-  }
-  if (kind === "transient_provider") {
-    return "A temporary model connection failure prevented this Turn from completing. Saved work and verified results were not changed.";
-  }
-  if (kind === "permanent_provider") {
-    return "The model provider rejected this Turn because of a configuration or request problem. Saved work and verified results were not changed.";
-  }
-  return "An internal execution error prevented this Turn from completing. Saved work and verified results were not changed.";
-}
-
-function operationalFailureKind(
-  error: unknown,
-): "transient_provider" | "permanent_provider" | "internal" {
-  if (error instanceof ModelProviderRequestError) {
-    return error.retryable ? "transient_provider" : "permanent_provider";
-  }
-  if (error instanceof ModelRouteRecoveredFailureError) {
-    return error.disposition === "retry" ? "transient_provider" : "permanent_provider";
-  }
-  return "internal";
 }

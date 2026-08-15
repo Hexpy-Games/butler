@@ -6,6 +6,9 @@ import {
 import { createEvidenceCapabilityReceipt } from "../../output/evidence/ledger.ts";
 import { createWorkDashboard } from "../../work/work-dashboard.ts";
 import { createProjectLedgerNativeToolHandler } from "./native.ts";
+import type { WorkspaceReference } from "../../session-workspaces/index.ts";
+import type { RuntimeMemoryAttributionPort } from
+  "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type ProjectLedgerExecutorInput = {
@@ -15,7 +18,13 @@ type ProjectLedgerExecutorInput = {
   workspacePath?: string;
   sessionId?: string;
   projectId?: string;
+  workspaceReference?: WorkspaceReference;
+  memoryAttribution?: RuntimeMemoryAttributionPort;
 };
+
+function activeWorkspacePath(input: ProjectLedgerExecutorInput): string | undefined {
+  return input.workspaceReference?.get() ?? input.workspacePath;
+}
 
 export function createProjectLedgerToolHandlers(input: ProjectLedgerExecutorInput) {
   return {
@@ -33,7 +42,7 @@ export function createProjectLedgerToolHandlers(input: ProjectLedgerExecutorInpu
       }),
     }),
     "inspect_project_status": async (call: ToolCall) => {
-      const projectPath = projectLedgerProjectPath(input, call.args);
+      const projectPath = projectLedgerProjectPath({ ...input, workspacePath: activeWorkspacePath(input) }, call.args);
       const result = runProjectLedgerTool(input, [
         "status",
         "--project",
@@ -48,7 +57,7 @@ export function createProjectLedgerToolHandlers(input: ProjectLedgerExecutorInpu
     "query_project_work": async (call: ToolCall) => {
       const kind = typeof call.args.kind === "string" ? call.args.kind.trim() : "";
       if (!kind) throw new Error("query_project_work requires kind");
-      const projectPath = projectLedgerProjectPath(input, call.args);
+      const projectPath = projectLedgerProjectPath({ ...input, workspacePath: activeWorkspacePath(input) }, call.args);
       const result = runProjectLedgerTool(input, [
         "query",
         "--project",
@@ -65,7 +74,7 @@ export function createProjectLedgerToolHandlers(input: ProjectLedgerExecutorInpu
     "render_project_dashboard": async (call: ToolCall) => {
       const view = typeof call.args.view === "string" ? call.args.view.trim() : "";
       if (!view) throw new Error("render_project_dashboard requires view");
-      const projectPath = projectLedgerProjectPath(input, call.args);
+      const projectPath = projectLedgerProjectPath({ ...input, workspacePath: activeWorkspacePath(input) }, call.args);
       const args = [
         "render",
         "--project",

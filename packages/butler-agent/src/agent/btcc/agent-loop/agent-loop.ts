@@ -1,6 +1,4 @@
 import { createToolResultModelPreviewContext } from "../../tools/tool-result-serialization.ts";
-import type { ToolResultModelPreviewContext } from
-  "../../tools/tool-result-model-preview.ts";
 import { emptyResponseRecoveryObservation } from
   "./empty-response-recovery.ts";
 import type {
@@ -101,6 +99,7 @@ export async function runBtccAgentLoop(
       await publishWaiting("completed");
       return response;
     } catch (error) {
+      emit(events, input.onEvent, { type: "model_failure", iteration: request.iteration });
       await publishWaiting(input.signal?.aborted ? "cancelled" : "failed");
       throw error;
     }

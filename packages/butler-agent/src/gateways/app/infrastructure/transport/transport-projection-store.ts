@@ -40,6 +40,8 @@ import { AppTransportHistoricalReconciliationStore } from
   "./historical-reconciliation-store.ts";
 import { StagedTransportOutboundStore } from
   "./staged-transport-outbound-store.ts";
+import type { AppConversationTurnOutcomeProjection } from
+  "../../domain/projections/app-conversation-projection-types.ts";
 
 export class AppTransportProjectionStore {
   private readonly transcriptSync: AppTransportTranscriptSyncStore;
@@ -112,6 +114,81 @@ export class AppTransportProjectionStore {
     if (this.deferredCycleComplete) this.deferredFinalCursor = "";
     this.transcriptCycleComplete = false;
     this.deferredCycleComplete = false;
+  }
+
+  /**
+   * Reconciles a durable Agent conversation outcome through the same terminal
+   * authority used by live App transport events. The action receipt is stable
+   * on the canonical outcome id, so replay after a missed live event cannot
+   * duplicate final messages or terminal events.
+   */
+  projectConversationTurnOutcome(
+    input: AppConversationTurnOutcomeProjection,
+  ): boolean {
+    const actionId = `conversation-outcome:${input.outcome_id}`;
+    if (this.hasProjectedTransportEvent(actionId)) return false;
+    const turn = this.options.getTurnRow(input.app_turn_id);
+    if (!turn) throw new Error(`App turn not found: ${input.app_turn_id}`);
+    const event: TranscriptEvent = {
+      eventId: actionId,
+      sessionId: input.app_chat_id,
+      kind: "outbound",
+      timestamp: input.created_at,
+      transport: "app",
+      payload: {
+        actionId,
+        message: { text: input.assistant_text ?? "" },
+        metadata: {
+          source: "conversation.turn_outcome_written",
+          kind: "final_result",
+          turnId: input.app_turn_id,
+          canonicalMessageId: input.assistant_message_id,
+        },
+      },
+    };
+    if (input.outcome === "delivered") {
+      return projectAppFinalResult({
+        options: this.options,
+        markProjectedTransportEvent: (id, eventId, chatId) =>
+          this.markProjectedTransportEvent(id, eventId, chatId),
+        chatId: input.app_chat_id,
+        turnId: input.app_turn_id,
+        actionId,
+        event,
+        message: event.payload.message as Record<string, unknown>,
+        metadata: event.payload.metadata as Record<string, unknown>,
+        terminalRecoverableCorrection: false,
+        queuedFinalProjection: "accept",
+      });
+    }
+    if (input.outcome === "cancelled") {
+      if (!isTerminalTurnStateForProjection(turn.state)) {
+        this.options.finalizeCancelledTurn(input.app_chat_id, input.app_turn_id);
+      }
+      this.markProjectedTransportEvent(actionId, event.eventId, input.app_chat_id);
+      return true;
+    }
+    if (input.outcome === "failed" || input.outcome === "recoverable") {
+      if (!isTerminalTurnStateForProjection(turn.state)) {
+        projectAppTurnFailure({
+          options: this.options,
+          chatId: input.app_chat_id,
+          turnId: input.app_turn_id,
+          message: { text: "Butler could not complete this turn." },
+          metadata: {
+            safeErrorCode: input.safe_code ??
+              (input.outcome === "recoverable"
+                ? "conversation_turn_recoverable"
+                : "conversation_turn_failed"),
+          },
+          eventTimestamp: input.created_at,
+        });
+      }
+      this.markProjectedTransportEvent(actionId, event.eventId, input.app_chat_id);
+      return true;
+    }
+    this.markProjectedTransportEvent(actionId, event.eventId, input.app_chat_id);
+    return false;
   }
 
   reconcileNextHistoricalPage(): boolean {

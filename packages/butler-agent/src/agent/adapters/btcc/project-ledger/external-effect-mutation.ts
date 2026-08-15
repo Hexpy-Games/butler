@@ -13,6 +13,11 @@ import {
   applyProjectLedgerRecordUpdate,
   type ProjectLedgerRecordUpdate,
 } from "./external-effect-record-update.ts";
+import {
+  runRuntimeMemoryAttributionAsyncPhase,
+  runRuntimeMemoryAttributionPhase,
+  type RuntimeMemoryAttributionPort,
+} from "../../../../operations/diagnostics/runtime-memory-attribution/index.ts";
 export type { ProjectLedgerRecordUpdate } from "./external-effect-record-update.ts";
 
 export type ProjectLedgerEffectResult = {
@@ -54,6 +59,21 @@ export async function applyProjectLedgerRecordUpdates(input: {
   projectRoot: string;
   effectKey: string;
   updates: ProjectLedgerRecordUpdate[];
+  memoryAttribution?: RuntimeMemoryAttributionPort;
+}): Promise<ProjectLedgerEffectResult> {
+  return runRuntimeMemoryAttributionAsyncPhase({
+    attribution: input.memoryAttribution,
+    phase: "work_update",
+    run: () => applyProjectLedgerRecordUpdatesInternal(input),
+  });
+}
+
+async function applyProjectLedgerRecordUpdatesInternal(input: {
+  butlerData: string;
+  projectRoot: string;
+  effectKey: string;
+  updates: ProjectLedgerRecordUpdate[];
+  memoryAttribution?: RuntimeMemoryAttributionPort;
 }): Promise<ProjectLedgerEffectResult> {
   if (input.updates.length === 0) {
     throw new Error("Project Ledger effect requires at least one record update");
@@ -74,7 +94,15 @@ export async function applyProjectLedgerRecordUpdates(input: {
   const candidateRoot = join(root, "candidates", publicationId);
   const journalPath = join(root, "journals", `${publicationId}.json`);
   const existing = loadJournal(journalPath);
-  const expectedBase = existing?.base ?? await observeProjectLedgerHead(input.projectRoot);
+  const expectedBase = existing?.base ?? await runRuntimeMemoryAttributionAsyncPhase({
+    attribution: input.memoryAttribution,
+    phase: "observe_base",
+    run: () => runRuntimeMemoryAttributionAsyncPhase({
+      attribution: input.memoryAttribution,
+      phase: "source_head",
+      run: () => observeProjectLedgerHead(input.projectRoot),
+    }),
+  });
   const transaction = {
     publicationId,
     canonicalRoot: input.projectRoot,
@@ -82,20 +110,38 @@ export async function applyProjectLedgerRecordUpdates(input: {
     journalPath,
     expectedBase,
   };
-  const prepared = preparedPublication(existing)
-    ? core.loadPreparedProjectLedgerPublication(transaction) as ProjectLedgerCorePublication
-    : core.prepareProjectLedgerPublication({
-        ...transaction,
-        materialize(projectRoot: string) {
-          for (const update of input.updates) {
-            applyProjectLedgerRecordUpdate(core, projectRoot, update);
-          }
-          for (const view of ["dashboard", "handoff", "roadmap"]) {
-            core.render(projectRoot, view, { write: true });
-          }
-          core.writeIndex(projectRoot);
-        },
-      }) as ProjectLedgerCorePublication;
+  const prepared = runRuntimeMemoryAttributionPhase({
+    attribution: input.memoryAttribution,
+    phase: "prepare",
+    run: () => preparedPublication(existing)
+      ? core.loadPreparedProjectLedgerPublication(transaction) as ProjectLedgerCorePublication
+      : core.prepareProjectLedgerPublication({
+          ...transaction,
+          materialize(projectRoot: string) {
+            runRuntimeMemoryAttributionPhase({
+              attribution: input.memoryAttribution,
+              phase: "materialize",
+              run: () => {
+                for (const update of input.updates) {
+                  applyProjectLedgerRecordUpdate(core, projectRoot, update);
+                }
+              },
+            });
+            for (const view of ["dashboard", "handoff", "roadmap"] as const) {
+              runRuntimeMemoryAttributionPhase({
+                attribution: input.memoryAttribution,
+                phase: `render_${view}`,
+                run: () => core.render(projectRoot, view, { write: true }),
+              });
+            }
+            runRuntimeMemoryAttributionPhase({
+              attribution: input.memoryAttribution,
+              phase: "write_index",
+              run: () => core.writeIndex(projectRoot),
+            });
+          },
+        }) as ProjectLedgerCorePublication,
+  });
   writeJsonFileAtomic(occurrencePath, {
     schema: "butler.btcc-project-ledger-effect-occurrence.v1",
     effectKey: input.effectKey,
@@ -103,15 +149,31 @@ export async function applyProjectLedgerRecordUpdates(input: {
     publicationId,
     status: "pending",
   } satisfies EffectOccurrence);
-  const promotion = core.promoteProjectLedgerPublication(prepared, exchangeCompleteRoots);
-  const observation = core.observeProjectLedgerPromotion(prepared);
+  const promotion = runRuntimeMemoryAttributionPhase({
+    attribution: input.memoryAttribution,
+    phase: "promote",
+    run: () => core.promoteProjectLedgerPublication(prepared, exchangeCompleteRoots),
+  });
+  const observation = runRuntimeMemoryAttributionPhase({
+    attribution: input.memoryAttribution,
+    phase: "observe_promotion",
+    run: () => core.observeProjectLedgerPromotion(prepared),
+  });
   const result: ProjectLedgerEffectResult = {
     schema: "butler.btcc-project-ledger-effect-result.v1",
     publicationId,
     effectKey: input.effectKey,
     updatedRecords: input.updates.map(({ id, kind }) => ({ id, ...(kind ? { kind } : {}) })),
     baseHead: prepared.base,
-    currentHead: await observeProjectLedgerHead(input.projectRoot),
+    currentHead: await runRuntimeMemoryAttributionAsyncPhase({
+      attribution: input.memoryAttribution,
+      phase: "observe_current_head",
+      run: () => runRuntimeMemoryAttributionAsyncPhase({
+        attribution: input.memoryAttribution,
+        phase: "source_head",
+        run: () => observeProjectLedgerHead(input.projectRoot),
+      }),
+    }),
     promotion,
     observation,
   };
@@ -131,6 +193,7 @@ export async function reconcileProjectLedgerRecordUpdates(input: {
   projectRoot: string;
   effectKey: string;
   updates: ProjectLedgerRecordUpdate[];
+  memoryAttribution?: RuntimeMemoryAttributionPort;
 }): Promise<ProjectLedgerEffectReconciliation> {
   const { occurrencePath } = effectPaths(input);
   const occurrence = loadOccurrence(occurrencePath);

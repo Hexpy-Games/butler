@@ -1,5 +1,10 @@
 import { closeSync, openSync, readSync, readFileSync, statSync } from "fs";
 
+// Compatibility entrypoint for callers that historically imported the scanner
+// beside the incremental snapshot helper. New production readers import the
+// cohesive scanner module directly.
+export { scanJsonlFile } from "./jsonl-file-scanner.ts";
+
 export interface IncrementalJsonlSnapshot<T> {
   values: T[];
   parseErrors: number;

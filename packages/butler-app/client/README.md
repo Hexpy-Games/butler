@@ -20,6 +20,12 @@ renderer code; use the app ID helpers so message sending, attachment queues, and
 settings rows keep working when a browser exposes only `getRandomValues` or no
 Web Crypto object.
 
+An active Turn status must keep a locally ticking elapsed time even when the
+latest durable activity is between model rounds, failed tool operations, or a
+runtime-recovery handoff. The canonical Turn creation time is authoritative for
+that fallback; model-round waiting may continue to show the narrower round
+duration.
+
 ## Related Specs
 
 - `SPEC-BUTLER-DEDICATED-CLIENT` - Butler Dedicated Client

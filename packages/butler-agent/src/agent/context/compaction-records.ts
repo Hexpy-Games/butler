@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "fs";
 import { createHash } from "crypto";
 import { dirname, join } from "path";
 import { conversationSessionIdForDurableSession } from "../conversation/session-admission.ts";
@@ -188,6 +188,24 @@ export function readCompactionSnapshots(input: {
     }
   }
   return snapshots;
+}
+
+/**
+ * Return a cheap identity for the durable snapshot source. Context polling
+ * uses this to invalidate its bounded diagnostic cache without parsing the
+ * complete JSONL history on every request.
+ */
+export function compactionSnapshotRevision(input: {
+  butlerData: string;
+  sessionId: string;
+}): string {
+  const path = existingCompactionPath(input.butlerData, input.sessionId);
+  try {
+    const stat = statSync(path);
+    return `${path}:${stat.size}:${stat.mtimeMs}`;
+  } catch {
+    return `${path}:missing`;
+  }
 }
 
 export function readLatestCompactionSnapshot(input: {

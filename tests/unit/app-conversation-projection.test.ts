@@ -168,6 +168,132 @@ test("app conversation projection replays canonical messages with refs idempoten
   appStore.db.close();
 });
 
+test("app conversation projection repairs a missed live terminal outcome from the durable outbox", () => {
+  const conversationStore = createConversationStore();
+  const appStore = new AppServerStore({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    conversationProjectionReader: conversationStore,
+  });
+  const turn = conversationStore.beginTurn({
+    gateway: "app",
+    externalSessionId: "general",
+    sessionId: "cs_missed_terminal",
+    actor: "user",
+    turnId: "turn-missed-terminal",
+    now: "2026-07-02T00:00:00.000Z",
+  });
+  const appUser = appStore.insertMessage("general", "user", "finish this", "sent", {
+    turnId: turn.id,
+  });
+  appStore.db.query(`
+    INSERT INTO turns (
+      id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
+      retryable, cancellable, attempt, created_at, updated_at
+    )
+    VALUES (?, 'general', ?, 'thinking', 'Working', NULL, 0, 1, 1, ?, ?)
+  `).run(
+    turn.id,
+    appUser.id,
+    "2026-07-02T00:00:00.000Z",
+    "2026-07-02T00:00:00.000Z",
+  );
+  const user = conversationStore.appendUserMessage({
+    sessionId: turn.session_id,
+    turnId: turn.id,
+    text: "finish this",
+    now: "2026-07-02T00:00:01.000Z",
+  });
+  const assistant = conversationStore.appendAssistantMessage({
+    sessionId: turn.session_id,
+    turnId: turn.id,
+    text: "finished",
+    now: "2026-07-02T00:00:02.000Z",
+  });
+  conversationStore.finalizeTurn({
+    turnId: turn.id,
+    status: "complete",
+    completedAt: "2026-07-02T00:00:03.000Z",
+    outcomeCapsule: {
+      sessionId: turn.session_id,
+      turnId: turn.id,
+      generation: 1,
+      outcome: "delivered",
+      requestMessageId: user.id,
+      publicAssistantMessageId: assistant.id,
+      modelRef: "openai/gpt-5.6-sol",
+      createdAt: "2026-07-02T00:00:03.000Z",
+    },
+  });
+
+  const outcomeOutbox = conversationStore.readProjectionBatch(null, 20)
+    .find((event) => event.kind === "conversation.turn_outcome_written");
+  expect(outcomeOutbox).toBeDefined();
+  // The canonical message was already projected, but the live terminal event
+  // was lost. Leave the App turn in its pre-terminal state and move only the
+  // durable conversation checkpoint past the outcome row.
+  appStore.replayConversationProjection();
+  appStore.db.query(`
+    UPDATE turns
+    SET state = 'thinking', safe_status_label = 'Working', cancellable = 1,
+      retryable = 0, safe_error_code = NULL
+    WHERE id = ?
+  `).run(turn.id);
+  appStore.db.query("DELETE FROM events WHERE turn_id = ?").run(turn.id);
+  appStore.db.query(
+    "DELETE FROM app_transport_projection_receipts WHERE action_id = ?",
+  ).run(`conversation-outcome:${conversationStore.readTurnOutcome(turn.id)?.id}`);
+  appStore.db.query(`
+    UPDATE app_conversation_projection_state
+    SET last_outbox_id = ?, last_outcome_id = NULL, updated_at = ?,
+      pending_count = 0, safe_error_code = NULL
+    WHERE gateway = 'app'
+  `).run(outcomeOutbox!.outbox_id, new Date().toISOString());
+
+  const firstReplay = appStore.replayConversationProjection();
+  const secondReplay = appStore.replayConversationProjection();
+  const projectedTurn = appStore.db.query<{
+    state: string;
+    safe_error_code: string | null;
+  }, [string]>("SELECT state, safe_error_code FROM turns WHERE id = ?").get(turn.id);
+  const projectedAssistantMessages = appStore.db.query<{
+    id: string;
+    conversation_message_id: string | null;
+    text: string;
+  }, [string]>(`
+    SELECT id, conversation_message_id, text
+    FROM messages
+    WHERE turn_id = ? AND role = 'assistant'
+    ORDER BY rowid ASC
+  `).all(turn.id);
+  const terminalEvents = appStore.db.query<{ count: number }, [string, string]>(`
+    SELECT COUNT(*) AS count
+    FROM events
+    WHERE turn_id = ? AND type = ?
+  `).get(turn.id, "turn.state_changed");
+
+  expect(firstReplay).toMatchObject({
+    ok: true,
+    processed: 0,
+    pending_count: 0,
+  });
+  expect(secondReplay).toMatchObject({
+    ok: true,
+    processed: 0,
+    pending_count: 0,
+  });
+  expect(projectedTurn).toEqual({ state: "delivered", safe_error_code: null });
+  expect(projectedAssistantMessages).toEqual([{
+    id: expect.any(String),
+    conversation_message_id: assistant.id,
+    text: "finished",
+  }]);
+  expect(terminalEvents?.count).toBe(1);
+
+  conversationStore.close();
+  appStore.db.close();
+});
+
 test("app conversation projection resolves app runtime session hints to existing chats", () => {
   const conversationStore = createConversationStore();
   const appStore = new AppServerStore({
@@ -462,6 +588,9 @@ test("app conversation projection failure leaves replay cursor retryable", () =>
     readProjectionBatch: () => [failedEvent],
     getSession: () => null,
     getGatewayBindingForConversation: () => null,
+    readTurnOutcomeById: () => null,
+    readTurnOutcome: () => null,
+    readTurnOutcomes: () => [],
     readMessageById: () => null,
     readProjectionMessages: () => [],
   };
@@ -539,6 +668,9 @@ test("app conversation projection keeps message event pending when app binding i
       schema_version: 1,
     }),
     getGatewayBindingForConversation: () => null,
+    readTurnOutcomeById: () => null,
+    readTurnOutcome: () => null,
+    readTurnOutcomes: () => [],
     readMessageById: () => message,
     readProjectionMessages: () => [message],
   };
@@ -660,6 +792,9 @@ test("app conversation projection rebuild paginates canonical material and prese
       conversation_session_id: "cs_many",
       created_at: "2026-07-02T00:00:00.000Z",
     }),
+    readTurnOutcomeById: () => null,
+    readTurnOutcome: () => null,
+    readTurnOutcomes: () => [],
     readMessageById: (messageId) =>
       messages.find((message) => message.id === messageId) ?? null,
     readProjectionMessages: (_sessionId, input = {}) =>

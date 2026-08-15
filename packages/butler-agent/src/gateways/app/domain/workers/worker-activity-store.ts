@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { TaskStore } from "../../../../agent/work/task-store.ts";
 import {
   workStreamTerminal,
@@ -27,8 +28,16 @@ export class AppWorkerActivityStore {
   ) {}
 
   listWorkerActivity(
-    options: { sessionId?: string; includeHistory?: boolean } = {},
+    options: {
+      sessionId?: string;
+      includeHistory?: boolean;
+      limit?: number;
+      offset?: number;
+      cursor?: string;
+    } = {},
   ): WorkerActivityListView {
+    const limit = boundedPageNumber(options.limit, 200);
+    const offset = boundedPageNumber(options.offset, 0, 0);
     const linkedWorkerTaskIds = options.sessionId
       ? this.linkedWorkerTaskIdsForSession(options.sessionId)
       : new Set<string>();
@@ -97,7 +106,21 @@ export class AppWorkerActivityStore {
             isActiveWorkerActivity(worker) ||
             keepInactiveLinkedReportingWorker(worker),
         );
-    return { workers };
+    const cursorOffset = decodeActivityCursor(options.cursor, workers);
+    const pageOffset = cursorOffset ?? offset;
+    const page = workers.slice(pageOffset, pageOffset + limit);
+    const hasMore = pageOffset + page.length < workers.length;
+    return {
+      workers: page,
+      pagination: {
+        limit,
+        offset: pageOffset,
+        has_more: hasMore,
+        ...(hasMore && page.at(-1)
+          ? { next_cursor: encodeActivityCursor(page.at(-1)!.worker_id) }
+          : {}),
+      },
+    };
   }
 
   getWorkerActivity(workerId: string): WorkerActivitySummary {
@@ -183,4 +206,40 @@ export class AppWorkerActivityStore {
     }
     return workerTaskIds;
   }
+}
+
+function encodeActivityCursor(workerId: string): string {
+  return Buffer.from(
+    JSON.stringify({ v: 1, worker_id: workerId }),
+    "utf8",
+  ).toString("base64url");
+}
+
+function decodeActivityCursor(
+  cursor: string | undefined,
+  workers: WorkerActivitySummary[],
+): number | undefined {
+  if (!cursor) return undefined;
+  try {
+    const value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
+      v?: unknown;
+      worker_id?: unknown;
+    };
+    if (value.v !== 1 || typeof value.worker_id !== "string") return undefined;
+    const index = workers.findIndex((worker) => worker.worker_id === value.worker_id);
+    return index >= 0 ? index + 1 : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function boundedPageNumber(
+  value: number | undefined,
+  fallback: number,
+  minimum = 1,
+): number {
+  const candidate = Number(value);
+  return Number.isFinite(candidate)
+    ? Math.max(minimum, Math.min(200, Math.floor(candidate)))
+    : fallback;
 }

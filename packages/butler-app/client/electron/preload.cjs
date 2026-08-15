@@ -9,6 +9,113 @@ const messageCacheSchema = "butler.message-cache.v1";
 const messageCachePrefix = "butler:message-cache:v1:";
 const appUiStateSchema = "butler.app-ui-state.v1";
 const appUiStateKey = "butler:app-ui-state:v1";
+// Sandboxed preloads cannot load arbitrary Node modules or JSON files. The
+// main process validates the shared JSON artifact and passes this typed,
+// bounded value through BrowserWindow.additionalArguments instead.
+const cacheBudgetArgumentPrefix = "--butler-cache-budget=";
+const disabledCacheBudget = Object.freeze({
+  schema: "butler.app.cache-budget.v1",
+  maxEntries: 0,
+  maxBytes: 0,
+  maxSnapshotBytes: 0,
+  maxMessages: 0,
+  maxComposerDraftBytes: 0,
+  maxComposerDraftEntries: 0,
+  maxComposerDraftAggregateBytes: 0,
+});
+const bridgeErrorSchema = "butler.app.bridge-error.v1";
+const safeBridgeCodePattern = /^[a-z][a-z0-9_]{1,63}$/u;
+
+function safeBridgeCode(value) {
+  return typeof value === "string" && safeBridgeCodePattern.test(value)
+    ? value
+    : "request_failed";
+}
+
+function safeBridgeStatus(value) {
+  const status = Number(value);
+  return Number.isSafeInteger(status) && status >= 100 && status <= 599
+    ? status
+    : undefined;
+}
+
+/**
+ * A rejected preload promise crosses Electron's contextBridge as a plain
+ * Error, which drops custom fields such as `code` and `status`. Public
+ * session-view calls therefore return this bounded, serializable envelope
+ * instead of throwing. Do not include response text, paths, or credentials.
+ */
+function bridgeErrorEnvelope(error) {
+  const code = safeBridgeCode(error && error.code);
+  const status = safeBridgeStatus(error && error.status);
+  return {
+    schema: bridgeErrorSchema,
+    code,
+    ...(status === undefined ? {} : { status }),
+    ...(code === "session_cursor_resync_required"
+      ? {
+          resync: {
+            required: true,
+            resource: "session-view",
+            reason: "cursor-expired",
+          },
+        }
+      : {}),
+  };
+}
+
+async function requestBridgeResult(path, options = {}) {
+  try {
+    return { ok: true, data: await requestJson(path, options) };
+  } catch (error) {
+    return { ok: false, error: bridgeErrorEnvelope(error) };
+  }
+}
+
+function isBoundedCacheInteger(value, maximum) {
+  return Number.isInteger(value) && value > 0 && value <= maximum;
+}
+function normalizeMessageCacheBudget(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      value.schema !== disabledCacheBudget.schema) return disabledCacheBudget;
+  if (value.maxEntries === 0 && value.maxBytes === 0 &&
+      value.maxSnapshotBytes === 0 && value.maxMessages === 0 &&
+      value.maxComposerDraftBytes === 0 && value.maxComposerDraftEntries === 0 &&
+      value.maxComposerDraftAggregateBytes === 0) {
+    return disabledCacheBudget;
+  }
+  if (!isBoundedCacheInteger(value.maxEntries, 64) ||
+      !isBoundedCacheInteger(value.maxBytes, 128 * 1024 * 1024) ||
+      !isBoundedCacheInteger(value.maxSnapshotBytes, 8 * 1024 * 1024) ||
+      !isBoundedCacheInteger(value.maxMessages, 10_000) ||
+      !isBoundedCacheInteger(value.maxComposerDraftBytes, 256 * 1024) ||
+      !isBoundedCacheInteger(value.maxComposerDraftEntries, 64) ||
+      !isBoundedCacheInteger(value.maxComposerDraftAggregateBytes, 16 * 1024 * 1024) ||
+      value.maxSnapshotBytes > value.maxBytes) return disabledCacheBudget;
+  return Object.freeze({
+    schema: disabledCacheBudget.schema,
+    maxEntries: value.maxEntries,
+    maxBytes: value.maxBytes,
+    maxSnapshotBytes: value.maxSnapshotBytes,
+    maxMessages: value.maxMessages,
+    maxComposerDraftBytes: value.maxComposerDraftBytes,
+    maxComposerDraftEntries: value.maxComposerDraftEntries,
+    maxComposerDraftAggregateBytes: value.maxComposerDraftAggregateBytes,
+  });
+}
+function cacheBudgetFromArguments(argv) {
+  const argument = argv.find((candidate) =>
+    typeof candidate === "string" && candidate.startsWith(cacheBudgetArgumentPrefix));
+  if (!argument) return disabledCacheBudget;
+  try {
+    return normalizeMessageCacheBudget(JSON.parse(decodeURIComponent(
+      argument.slice(cacheBudgetArgumentPrefix.length),
+    )));
+  } catch {
+    return disabledCacheBudget;
+  }
+}
+const messageCacheBudget = cacheBudgetFromArguments(process.argv);
 const messageCacheMemory = hydrateMessageCacheFromLocalStorage();
 
 function normalizeLocalServerUrl(value) {
@@ -135,6 +242,7 @@ function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
     : () => {};
   const abortController = new AbortController();
   let closed = false;
+  let reader;
 
   async function run() {
     try {
@@ -156,7 +264,7 @@ function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
       if (!response.body) {
         throw new Error("Live event stream response did not include a body.");
       }
-      const reader = response.body.getReader();
+      reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       while (!closed) {
@@ -175,6 +283,22 @@ function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
       if (!closed && error?.name !== "AbortError") {
         onError(liveEventErrorPayload(error));
       }
+    } finally {
+      try {
+        const activeReader = reader;
+        try {
+          await activeReader?.cancel();
+        } finally {
+          // cancel() settles the body but does not release the stream lock.
+          // Always release after the pending read has settled so reconnects
+          // cannot retain a reader/listener on the old response.
+          activeReader?.releaseLock();
+          if (reader === activeReader) reader = undefined;
+        }
+      } catch {
+        // The response may already have completed or been aborted.
+      }
+      reader = undefined;
     }
   }
 
@@ -182,6 +306,7 @@ function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
   return () => {
     closed = true;
     abortController.abort();
+    void reader?.cancel().catch(() => undefined);
   };
 }
 
@@ -191,6 +316,7 @@ function messageCacheKey(chatId) {
 
 function hydrateMessageCacheFromLocalStorage() {
   const cache = new Map();
+  const candidates = [];
   try {
     const storage = globalThis.localStorage;
     if (!storage) return cache;
@@ -199,8 +325,25 @@ function hydrateMessageCacheFromLocalStorage() {
       if (!key?.startsWith(messageCachePrefix)) continue;
       const snapshot = JSON.parse(storage.getItem(key) ?? "null");
       if (snapshot?.schema !== messageCacheSchema || !snapshot?.chat_id) continue;
-      cache.set(snapshot.chat_id, snapshot);
+      const bounded = boundedMessageCacheSnapshot(snapshot);
+      if (!bounded) {
+        storage.removeItem(key);
+        continue;
+      }
+      const bytes = cacheEntryBytes(bounded);
+      if (!Number.isFinite(bytes) || bytes > messageCacheBudget.maxSnapshotBytes) {
+        storage.removeItem(key);
+        continue;
+      }
+      candidates.push({ chatId: bounded.chat_id, snapshot: bounded, bytes });
     }
+    candidates
+      .sort((left, right) => {
+        const timestamp = Date.parse(left.snapshot.cached_at) - Date.parse(right.snapshot.cached_at);
+        return timestamp || left.chatId.localeCompare(right.chatId);
+      })
+      .forEach(({ chatId, snapshot, bytes }) => cache.set(chatId, { snapshot, bytes }));
+    evictMessageCache(cache);
   } catch {
     // Cache hydration is opportunistic and must not block app startup.
   }
@@ -208,19 +351,105 @@ function hydrateMessageCacheFromLocalStorage() {
 }
 
 function readMessageCache(chatId) {
-  return messageCacheMemory.get(chatId) ?? null;
+  const record = messageCacheMemory.get(chatId);
+  if (!record) return null;
+  messageCacheMemory.delete(chatId);
+  messageCacheMemory.set(chatId, record);
+  return record.snapshot;
 }
 
 function writeMessageCache(chatId, snapshot) {
-  if (!snapshot || snapshot.schema !== messageCacheSchema || snapshot.chat_id !== chatId) {
+  const bounded = boundedMessageCacheSnapshot(snapshot);
+  if (!bounded || bounded.chat_id !== chatId) {
     return { ok: false };
   }
-  messageCacheMemory.set(chatId, snapshot);
+  const bytes = cacheEntryBytes(bounded);
+  if (!Number.isFinite(bytes) || bytes > messageCacheBudget.maxSnapshotBytes) {
+    return { ok: false };
+  }
+  messageCacheMemory.delete(chatId);
+  messageCacheMemory.set(chatId, { snapshot: bounded, bytes });
+  evictMessageCache(messageCacheMemory, chatId);
   try {
-    globalThis.localStorage?.setItem(messageCacheKey(chatId), JSON.stringify(snapshot));
+    if (messageCacheMemory.has(chatId)) {
+      globalThis.localStorage?.setItem(messageCacheKey(chatId), JSON.stringify(bounded));
+    } else {
+      globalThis.localStorage?.removeItem(messageCacheKey(chatId));
+    }
     return { ok: true };
   } catch {
     return { ok: false };
+  }
+}
+
+function cacheEntryBytes(value) {
+  try {
+    return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function boundedMessageCacheSnapshot(snapshot) {
+  if (!snapshot || snapshot.schema !== messageCacheSchema ||
+      typeof snapshot.chat_id !== "string" || !snapshot.chat_id ||
+      !Array.isArray(snapshot.messages) ||
+      !Number.isInteger(messageCacheBudget.maxMessages) ||
+      messageCacheBudget.maxMessages <= 0) {
+    return null;
+  }
+  // Durable cache is a completed rehydration window. Active/retry rows remain
+  // in the live store but are never serialized into localStorage/preload Map.
+  const messages = snapshot.messages.filter((message) => {
+    const status = message && typeof message === "object" ? message.status : undefined;
+    return status !== "pending" && status !== "thinking" &&
+      status !== "streaming" && status !== "retrying";
+  }).slice(-messageCacheBudget.maxMessages);
+  if (messages.length === 0) return null;
+  const retainedIds = new Set(messages.map((message) =>
+    message && typeof message === "object" && typeof message.turn_id === "string"
+      ? message.turn_id
+      : null,
+  ).filter(Boolean));
+  const progress = snapshot.turn_progress && typeof snapshot.turn_progress === "object" &&
+      !Array.isArray(snapshot.turn_progress)
+    ? Object.fromEntries(Object.entries(snapshot.turn_progress).filter(([turnId, value]) => {
+      const state = value && typeof value === "object" ? value.state : undefined;
+      return retainedIds.has(turnId) && state !== "thinking" && state !== "running" &&
+        state !== "streaming" && state !== "retrying";
+    }))
+    : {};
+  return {
+    schema: messageCacheSchema,
+    chat_id: snapshot.chat_id,
+    messages,
+    turn_progress: progress,
+    ...(Number.isFinite(Number(snapshot.next_cursor))
+      ? { next_cursor: Number(snapshot.next_cursor) }
+      : {}),
+    ...(typeof snapshot.next_cursor_token === "string"
+      ? { next_cursor_token: snapshot.next_cursor_token }
+      : {}),
+    cached_at: typeof snapshot.cached_at === "string"
+      ? snapshot.cached_at
+      : new Date().toISOString(),
+  };
+}
+
+function evictMessageCache(cache, protectedChatId) {
+  let totalBytes = [...cache.values()].reduce((total, record) => total + record.bytes, 0);
+  while (cache.size > messageCacheBudget.maxEntries || totalBytes > messageCacheBudget.maxBytes) {
+    const candidate = [...cache.keys()].find((chatId) => chatId !== protectedChatId);
+    if (!candidate) break;
+    const record = cache.get(candidate);
+    if (!record) break;
+    totalBytes -= record.bytes;
+    cache.delete(candidate);
+    try {
+      globalThis.localStorage?.removeItem(messageCacheKey(candidate));
+    } catch {
+      // localStorage cleanup is best effort.
+    }
   }
 }
 
@@ -657,9 +886,18 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/session-summary?${params.toString()}`);
   },
-  getSessionView: ({ sessionId }) => {
+  getSessionView: ({ sessionId, cursorToken, beforeCursorToken, limit } = {}) => {
     const params = new URLSearchParams({ session_id: sessionId });
-    return requestJson(`/session-view?${params.toString()}`);
+    if (typeof cursorToken === "string" && cursorToken) {
+      params.set("cursor_token", cursorToken);
+    }
+    if (typeof beforeCursorToken === "string" && beforeCursorToken) {
+      params.set("before_cursor_token", beforeCursorToken);
+    }
+    if (limit !== undefined && Number.isFinite(Number(limit))) {
+      params.set("limit", String(Math.max(1, Math.floor(Number(limit)))));
+    }
+    return requestBridgeResult(`/session-view?${params.toString()}`);
   },
   saveMessageFile: ({ fileId, suggestedName } = {}) =>
     ipcRenderer.invoke("butler:save-message-file", { fileId, suggestedName }),
@@ -722,12 +960,20 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({}),
   }),
-  listWorkerActivity: ({ sessionId, includeHistory = false } = {}) => {
+  listWorkerActivity: ({ sessionId, includeHistory = false, limit, offset, cursor } = {}) => {
     if (sessionId) {
       const suffix = includeHistory ? "/history" : "";
-      return requestJson(`/sessions/${encodeURIComponent(sessionId)}/worker-activity${suffix}`);
+      const params = new URLSearchParams();
+      if (limit !== undefined) params.set("limit", String(limit));
+      if (offset !== undefined) params.set("offset", String(offset));
+      if (cursor) params.set("cursor", String(cursor));
+      const query = params.toString();
+      return requestJson(`/sessions/${encodeURIComponent(sessionId)}/worker-activity${suffix}${query ? `?${query}` : ""}`);
     }
     const params = new URLSearchParams({ include_history: includeHistory ? "true" : "false" });
+    if (limit !== undefined) params.set("limit", String(limit));
+    if (offset !== undefined) params.set("offset", String(offset));
+    if (cursor) params.set("cursor", String(cursor));
     return requestJson(`/worker-activity?${params.toString()}`);
   },
   getWorkerActivity: ({ workerId }) => requestJson(`/worker-activity/${encodeURIComponent(workerId)}`),
@@ -735,10 +981,13 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({ action }),
   }),
-  replayEvents: ({ cursor = 0 } = {}) => {
+  replayEvents: ({ cursor = 0, limit } = {}) => {
     const params = new URLSearchParams({
       cursor: String(Number.isFinite(Number(cursor)) ? Number(cursor) : 0),
     });
+    if (limit !== undefined && Number.isFinite(Number(limit))) {
+      params.set("limit", String(Math.max(1, Math.floor(Number(limit)))));
+    }
     return requestJson(`/events?${params.toString()}`);
   },
   liveEventsUrl: ({ cursor = 0 } = {}) => {

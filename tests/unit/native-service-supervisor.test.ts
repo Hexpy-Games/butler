@@ -5,6 +5,7 @@ import { join } from "path";
 import {
   appManagedNativeServiceSpecs,
   appManagedRuntimePointerPath,
+  butlerMainMemoryDiagnosticEnvironment,
   defaultNativeServiceSpecs,
   listServices,
   projectFolderTokenSecretPath,
@@ -13,6 +14,7 @@ import {
   startService,
   startServices,
   stopServiceBounded,
+  stopServicesBounded,
   stopServices,
 } from "../../packages/butler-agent/src/operations/service/native-service-supervisor.ts";
 import { APP_BACKGROUND_SERVICE_RUNTIME_FIELDS } from "../../packages/butler-app/scripts/background-service-contract.ts";
@@ -21,6 +23,10 @@ import {
   writeAppGatewayPid,
   writeGatewaySettings,
 } from "../../packages/butler-agent/src/operations/gateway/registry.ts";
+import {
+  removeTunnelProxyServiceConfig,
+  writeTunnelProxyServiceConfigFromEnv,
+} from "../../packages/butler-agent/src/operations/tunnel/tunnel-service-config.ts";
 
 function tempRoot(): string {
   const dir = join(tmpdir(), `butler-native-services-${Date.now()}-${Math.random()}`);
@@ -76,6 +82,61 @@ test("native service manifest defines Butler-owned default services", () => {
   }
 });
 
+test("memory diagnostic environment is allowlisted to butler-main and stripped from sidecars", () => {
+  expect(butlerMainMemoryDiagnosticEnvironment({
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS: "1",
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE: "1",
+    PRIVATE_UNRELATED_FLAG: "1",
+  })).toEqual({
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS: "1",
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE: "1",
+  });
+  expect(butlerMainMemoryDiagnosticEnvironment({
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS: "0",
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE: "true",
+  })).toEqual({});
+
+  const butlerData = tempRoot();
+  const previousEnabled = process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS;
+  const previousGc = process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE;
+  let captured: Record<string, string> = {};
+  try {
+    process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS = "1";
+    process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE = "1";
+    const specs = defaultNativeServiceSpecs({ butlerHome: "/opt/butler", butlerData });
+    const sidecar = specs.find((spec) => spec.id === "embed-server");
+    const main = specs.find((spec) => spec.id === "butler-main");
+    if (!sidecar || !main) throw new Error("required service specs missing");
+    startService(butlerData, sidecar, {
+      spawnDetached: (_spec, env) => {
+        captured = env;
+        return { pid: 91_001 };
+      },
+      isPidRunning: () => false,
+    });
+    expect(captured.BUTLER_AGENT_MEMORY_DIAGNOSTICS).toBeUndefined();
+    expect(captured.BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE).toBeUndefined();
+
+    startService(butlerData, main, {
+      spawnDetached: (_spec, env) => {
+        captured = env;
+        return { pid: 91_002 };
+      },
+      isPidRunning: () => false,
+    });
+    expect(captured).toMatchObject({
+      BUTLER_AGENT_MEMORY_DIAGNOSTICS: "1",
+      BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE: "1",
+    });
+  } finally {
+    if (previousEnabled === undefined) delete process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS;
+    else process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS = previousEnabled;
+    if (previousGc === undefined) delete process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE;
+    else process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE = previousGc;
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("native service manifest follows app gateway enabled settings", () => {
   const butlerHome = "/opt/butler";
   const butlerData = tempRoot();
@@ -111,6 +172,146 @@ test("native service manifest follows app gateway enabled settings", () => {
 
     const disabledSpecs = defaultNativeServiceSpecs({ butlerHome, butlerData });
     expect(disabledSpecs.map((spec) => spec.id)).not.toContain("app-gateway");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("configured tunnel proxy is a native supervisor service with bounded teardown", async () => {
+  const butlerHome = "/opt/butler";
+  const butlerData = tempRoot();
+  const killed: Array<{ pid: number; signal: string }> = [];
+  let aliveChecks = 0;
+  let portChecks = 0;
+  try {
+    writeTunnelProxyServiceConfigFromEnv({
+      butlerData,
+      env: {
+        BUTLER_TUNNEL_PROXY_UPSTREAM: "http://127.0.0.1:18765",
+        BUTLER_TUNNEL_PROXY_PORT: "19000",
+      },
+    });
+    const spec = defaultNativeServiceSpecs({ butlerHome, butlerData })
+      .find((candidate) => candidate.id === "tunnel-proxy");
+    expect(spec).toBeDefined();
+    if (!spec) throw new Error("missing tunnel proxy spec");
+    expect(spec.args).toEqual([
+      "run",
+      "/opt/butler/packages/butler-agent/src/operations/tunnel/tunnel-proxy-cli.ts",
+    ]);
+    expect(spec.env).toMatchObject({
+      BUTLER_TUNNEL_PROXY_HOST: "127.0.0.1",
+      BUTLER_TUNNEL_PROXY_PORT: "19000",
+      BUTLER_TUNNEL_PROXY_UPSTREAM: "http://127.0.0.1:18765/",
+    });
+
+    startService(butlerData, spec, {
+      spawnDetached: () => ({ pid: 52_000 }),
+      isPidRunning: () => false,
+    });
+    const stopped = await stopServiceBounded(butlerData, spec, {
+      isPidRunning: (pid) => pid === 52_000 && aliveChecks++ === 0,
+      isPortAvailable: (port) => {
+        expect(port).toBe(19_000);
+        portChecks += 1;
+        return portChecks >= 2;
+      },
+      killPid: (pid, signal) => killed.push({ pid, signal }),
+      sleepMs: async () => {},
+      waitIntervalMs: 1,
+      terminateTimeoutMs: 10,
+      killTimeoutMs: 5,
+    });
+    expect(stopped).toMatchObject({ serviceId: "tunnel-proxy", status: "offline", pid: 52_000 });
+    expect(killed).toEqual([{ pid: -52_000, signal: "SIGTERM" }]);
+    expect(portChecks).toBe(2);
+    expect(existsSync(serviceStatePath(butlerData, "tunnel-proxy"))).toBe(false);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("bounded stop recovers a tunnel after its config is removed", async () => {
+  const butlerData = tempRoot();
+  const killed: number[] = [];
+  let running = true;
+  try {
+    writeTunnelProxyServiceConfigFromEnv({
+      butlerData,
+      env: {
+        BUTLER_TUNNEL_PROXY_UPSTREAM: "http://127.0.0.1:18765",
+        BUTLER_TUNNEL_PROXY_PORT: "19001",
+      },
+    });
+    const spec = defaultNativeServiceSpecs({ butlerHome: "/opt/butler", butlerData })
+      .find((candidate) => candidate.id === "tunnel-proxy");
+    if (!spec) throw new Error("missing tunnel proxy spec");
+    startService(butlerData, spec, {
+      spawnDetached: () => ({ pid: 52_001 }),
+      isPidRunning: () => false,
+    });
+    removeTunnelProxyServiceConfig(butlerData);
+    const stopped = await stopServicesBounded(
+      { butlerHome: "/opt/butler", butlerData },
+      {
+        isPidRunning: (pid) => pid === 52_001 && running,
+        isProcessGroupRunning: (pid) => pid === 52_001 && running,
+        killPid: (pid) => {
+          killed.push(pid);
+          running = false;
+        },
+        isPortAvailable: () => true,
+        findProcessIdsForPort: () => [],
+        sleepMs: async () => {},
+        waitIntervalMs: 1,
+        terminateTimeoutMs: 10,
+        killTimeoutMs: 5,
+      },
+    );
+    expect(stopped.find((service) => service.serviceId === "tunnel-proxy"))
+      .toMatchObject({ status: "offline", pid: 52_001 });
+    expect(killed).toEqual([-52_001]);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("bounded stop finds and terminates an occupied tunnel port without state", async () => {
+  const butlerData = tempRoot();
+  const killed: number[] = [];
+  let running = true;
+  try {
+    writeTunnelProxyServiceConfigFromEnv({
+      butlerData,
+      env: {
+        BUTLER_TUNNEL_PROXY_UPSTREAM: "http://127.0.0.1:18765",
+        BUTLER_TUNNEL_PROXY_PORT: "19002",
+      },
+    });
+    const stopped = await stopServicesBounded(
+      { butlerHome: "/opt/butler", butlerData },
+      {
+        isPidRunning: (pid) => pid === 62_000 && running,
+        isProcessGroupRunning: (pid) => pid === 62_000 && running,
+        findProcessIdsForPort: (port, host) => {
+          expect(port).toBe(19_002);
+          expect(host).toBe("127.0.0.1");
+          return [62_000];
+        },
+        killPid: (pid) => {
+          killed.push(pid);
+          running = false;
+        },
+        isPortAvailable: () => true,
+        sleepMs: async () => {},
+        waitIntervalMs: 1,
+        terminateTimeoutMs: 10,
+        killTimeoutMs: 5,
+      },
+    );
+    expect(stopped.find((service) => service.serviceId === "tunnel-proxy"))
+      .toMatchObject({ status: "offline", pid: null });
+    expect(killed).toEqual([-62_000]);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

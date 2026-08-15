@@ -24,6 +24,8 @@ import type {
 } from "../../../integrations/providers/runtime-contracts.ts";
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
 import type { BtccFinalArtifact } from "../contracts.ts";
+import type { RuntimeMemoryAttributionPort } from
+  "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
 
 export type BtccAgentLoopMessage = ModelRoundMessage;
 export type BtccAgentLoopToolDefinition = ModelRoundTool;
@@ -40,6 +42,7 @@ export interface BtccAgentLoop {
     turn: TurnRecord;
     recoveryAttempt?: number;
     signal: AbortSignal;
+    memoryAttribution?: RuntimeMemoryAttributionPort;
     progress?: BtccTurnProgressObserver;
     onProviderResponseIdentity?: (identity: {
       provider: string;
@@ -199,6 +202,7 @@ export interface BtccAgentLoopEvent {
   type:
     | "model_call"
     | "model_response"
+    | "model_failure"
     | "tool_call"
     | "tool_result"
     | "execution_window_boundary";

@@ -6,18 +6,29 @@ import {
   resolveGitWorkspaceSummary,
   sessionHintForRow,
 } from "../../domain/sessions/index.ts";
+import {
+  resolveSessionWorkspaceAuthority,
+  safeWorkspaceBasename,
+} from "../../../../agent/session-workspaces/index.ts";
 import type {
   MessageRecord,
   ProgressSummaryRow,
+  SessionArtifactSummary,
   SessionControlState,
   SessionSummaryView,
   SessionView,
   SessionViewTurn,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
+import type {
+  SessionMessagePage,
+  SessionMessagePageOptions,
+  TranscriptMessagePage,
+} from "../../domain/sessions/session-message-page.ts";
 import type { TerminalTurnProjection } from "../../infrastructure/retention/terminal-turn-retention.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
 import type { TurnControlResolution } from "../../../core/turn-execution-controls.ts";
+import { buildContextDetailsRevision } from "./context-details-revision.ts";
 
 export interface AppStoreKernelSessionContextHost {
   localModelMetadata(): ProviderModelMetadata[];
@@ -41,7 +52,20 @@ export interface AppStoreKernelSessionContextHost {
     turn: TurnRecord,
     options?: { suppressProgressRows?: boolean },
   ): SessionViewTurn;
-  sessionViewMessages(sessionId: string): MessageRecord[];
+  sessionViewMessages(
+    sessionId: string,
+    options?: SessionMessagePageOptions,
+  ): MessageRecord[];
+  sessionViewMessagePage(
+    sessionId: string,
+    options?: SessionMessagePageOptions,
+  ): SessionMessagePage<MessageRecord>;
+  listArtifactSummaries(sessionId: string): SessionArtifactSummary[];
+  contextDetailsRevision(sessionId: string): string;
+  transcriptMessagePage(
+    sessionId: string,
+    options?: SessionMessagePageOptions,
+  ): TranscriptMessagePage;
   latestTurn(sessionId: string): TurnRecord | null;
   countTurns(sessionId: string): number;
   deliveryMetadataForTurnRecord(turn: TurnRecord): DeliveryLimitationMetadata;
@@ -102,8 +126,20 @@ export function createSessionContextHost(
     sessionViewTurn(turn, options = {}) {
       return kernel.turnProgressView.sessionViewTurn(turn, options);
     },
-    sessionViewMessages(sessionId) {
-      return kernel.sessionMessageProjection.sessionViewMessages(sessionId);
+    sessionViewMessages(sessionId, options) {
+      return kernel.sessionMessageProjection.sessionViewMessages(sessionId, options);
+    },
+    sessionViewMessagePage(sessionId, options) {
+      return kernel.sessionMessageProjection.sessionViewMessagePage(sessionId, options);
+    },
+    listArtifactSummaries(sessionId) {
+      return kernel.sessionRecords.listArtifactSummaries(sessionId);
+    },
+    contextDetailsRevision(sessionId) {
+      return buildContextDetailsRevision(kernel, sessionId);
+    },
+    transcriptMessagePage(sessionId, options) {
+      return kernel.sessionRecords.listTranscriptMessagePage(sessionId, options);
     },
     latestTurn(sessionId) {
       return kernel.sessionRecords.latestTurn(sessionId);
@@ -175,14 +211,88 @@ export function createSessionContextHost(
     },
     branchInfoForSession(sessionId) {
       const project = kernel.getProjectForSession(sessionId);
-      if (!project) {
+      const binding = kernel.sessionBindingStore.getBySessionId(
+        sessionHintForRow(sessionId),
+      );
+      const authority = resolveSessionWorkspaceAuthority({
+        binding,
+        projectWorkspacePath: project?.workspace_path,
+      });
+      if (authority.kind === "unavailable") {
+        return {
+          available: false,
+          workspace_mode: "unknown",
+          safe_status: "Session worktree unavailable",
+          safe_error_code: authority.safeErrorCode,
+          workspace_binding: "session_worktree",
+          workspace_label: authority.workspaceLabel,
+          workspace_status: "unavailable",
+        };
+      }
+      if (authority.kind === "session_worktree") {
+        if (!authority.workspacePath) {
+          return {
+            available: false,
+            workspace_mode: "unknown",
+            safe_status: "Session worktree unavailable",
+            safe_error_code: "session_workspace_unavailable",
+            workspace_binding: "session_worktree",
+            workspace_label: authority.workspaceLabel,
+            workspace_status: "unavailable",
+          };
+        }
+        const summary = resolveGitWorkspaceSummary(
+          authority.workspacePath,
+          undefined,
+          {
+            includeDirty: true,
+            expectedBranch: authority.branch,
+            expectedRepositoryAnchorPath: authority.marker.repositoryAnchorPath,
+          },
+        );
+        const summaryErrorCode = "safe_error_code" in summary
+          ? summary.safe_error_code
+          : undefined;
+        return {
+          ...summary,
+          ...(summary.available
+            ? {}
+            : {
+                safe_status:
+                  summaryErrorCode === "git_not_installed"
+                    ? summary.safe_status
+                    : "Session worktree unavailable",
+                safe_error_code:
+                  summaryErrorCode === "git_not_installed"
+                    ? summaryErrorCode
+                    : "session_workspace_unavailable",
+              }),
+          workspace_binding: "session_worktree",
+          workspace_label: authority.workspaceLabel,
+          workspace_status: summary.available ? "available" : "unavailable",
+        };
+      }
+      if (!project && authority.kind === "project") {
         return {
           available: false,
           workspace_mode: "none",
           safe_status: "No project workspace",
         };
       }
-      return resolveGitWorkspaceSummary(project.workspace_path);
+      const summary = resolveGitWorkspaceSummary(
+        authority.workspacePath ?? project?.workspace_path ?? "",
+        undefined,
+        { includeDirty: true },
+      );
+      return {
+        ...summary,
+        workspace_binding: "project",
+        workspace_label: safeWorkspaceBasename(
+          authority.workspacePath ?? project?.workspace_path,
+        ),
+        workspace_status:
+          summary.workspace_mode === "unknown" ? "unavailable" : "available",
+      };
     },
   };
 }

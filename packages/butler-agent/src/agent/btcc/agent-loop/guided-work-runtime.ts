@@ -66,6 +66,27 @@ export async function safeBoundWork(
   }
 }
 
+export async function loadInitialGuidedWork(
+  input: GuidedWorkRuntimeInput,
+  scope: WorkTurnScope,
+): Promise<{ context: DurableWorkContext | null; bound: boolean }> {
+  let context = await safeLoadWorkContext(input.durableWork, scope);
+  if (!context) {
+    await safeImportOpenLegacyWork(input.durableWork, scope);
+    context = await safeLoadWorkContext(input.durableWork, scope);
+  }
+  if (!context) return { context: null, bound: false };
+  const bound = await safeBoundWork(input.durableWork, scope.turnId);
+  if (bound?.workId !== context.work.workId) {
+    return { context, bound: false };
+  }
+  await backfillTurnToolResults(input, scope);
+  return {
+    context: await safeLoadWorkContext(input.durableWork, scope),
+    bound: true,
+  };
+}
+
 export async function safeAttachToolResult(
   input: GuidedWorkRuntimeInput,
   scope: WorkTurnScope,
