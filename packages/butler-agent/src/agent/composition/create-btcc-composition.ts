@@ -15,6 +15,10 @@ import { ActiveProjectLedgerResolver } from
 import { AgentConversationStore } from "../conversation/index.ts";
 import { PromptAssembler } from "../prompt/prompt-assembler.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
+import {
+  createRuntimeMemoryAttributionPort,
+  type RuntimeMemoryAttributionPort,
+} from "../../operations/diagnostics/runtime-memory-attribution/index.ts";
 
 type BtccStores = ReturnType<typeof openBtccSqliteStores>;
 
@@ -29,6 +33,7 @@ export function createProductionBtccComposition(input: {
   ownerId: string;
   /** Test-only one-round provider seam; production callers omit it. */
   modelRound?: ModelRoundPort;
+  memoryAttribution?: RuntimeMemoryAttributionPort;
   sessionBindings?: SessionBindingStore;
   conversationStore?: AgentConversationStore;
 }) {
@@ -53,11 +58,15 @@ export function createProductionBtccComposition(input: {
     butlerHome: input.butlerHome,
     butlerData: input.butlerData,
   });
+  const memoryAttribution = input.memoryAttribution ?? createRuntimeMemoryAttributionPort({
+    butlerData: input.butlerData,
+  });
   const runtime = createTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
     messages: stores.messages,
     committedSuccessorReadiness: stores.committedSuccessorReadiness,
+    memoryAttribution,
     agent: createProductionGuidedTurnAgent({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
@@ -85,6 +94,7 @@ export function createProductionBtccComposition(input: {
     progressEvents: stores.progressEvents,
     turns: stores.turns,
     close: async () => {
+      memoryAttribution.close();
       stores.close();
       if (!input.conversationStore) conversations.close();
       if (!input.sessionBindings) bindings.close();

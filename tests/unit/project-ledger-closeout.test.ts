@@ -5,6 +5,68 @@ import {
 } from "../../packages/butler-agent/src/agent/tools/project-ledger/closeout.ts";
 import { satisfiedCompletionObligationsForToolResult } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { projectLedgerRenderedViewEvidence } from "../../packages/butler-agent/src/integrations/project-ledger/client.ts";
+import type { RuntimeMemoryAttributionPort } from
+  "../../packages/butler-agent/src/operations/diagnostics/runtime-memory-attribution/index.ts";
+
+test("Project Ledger closeout emits bounded phase start/end samples in causal order", () => {
+  const phases: Array<{ phase: string; status: string; durationMs?: number }> = [];
+  const attribution: RuntimeMemoryAttributionPort = {
+    checkpoint() {},
+    projectLedgerPhase(input) {
+      phases.push(input);
+    },
+    terminal() {},
+    close() {},
+  };
+  const closeout = runProjectLedgerLifecycleCloseout({
+    executor: { butlerHome: "/tmp/butler", memoryAttribution: attribution },
+    projectPath: "/tmp/butler/project-ledger/projects/demo",
+    runTool: (_executor, args) => {
+      if (args[0] === "render") {
+        return { ok: true, data: { path: "safe-view.md", written: true } };
+      }
+      return { ok: true, data: { index: { path: "safe-index.json" }, issueCount: 0, issues: [] } };
+    },
+  });
+
+  expect(closeout.ok).toBe(true);
+  expect(phases.map(({ phase, status }) => `${phase}:${status}`)).toEqual([
+    "index:start",
+    "index:end",
+    "render_dashboard:start",
+    "render_dashboard:end",
+    "render_handoff:start",
+    "render_handoff:end",
+    "render_roadmap:start",
+    "render_roadmap:end",
+    "check:start",
+    "check:end",
+  ]);
+  expect(phases.filter(({ status }) => status === "end").every(({ durationMs }) =>
+    typeof durationMs === "number" && durationMs >= 0)).toBe(true);
+});
+
+test("Project Ledger closeout emits a failure phase and stops subsequent stages", () => {
+  const phases: string[] = [];
+  const attribution: RuntimeMemoryAttributionPort = {
+    checkpoint() {},
+    projectLedgerPhase(input) {
+      phases.push(`${input.phase}:${input.status}`);
+    },
+    terminal() {},
+    close() {},
+  };
+  const closeout = runProjectLedgerLifecycleCloseout({
+    executor: { butlerHome: "/tmp/butler", memoryAttribution: attribution },
+    projectPath: "/tmp/butler/project-ledger/projects/demo",
+    runTool: (_executor, args) => args[0] === "index"
+      ? { ok: false, error: { code: "index_failed", message: "safe failure" } }
+      : { ok: true },
+  });
+
+  expect(closeout.ok).toBe(false);
+  expect(phases).toEqual(["index:start", "index:failure"]);
+});
 
 test("Project Ledger lifecycle closeout promotes closeout failure to recoverable validation failure", () => {
   const result = applyProjectLedgerLifecycleCloseout(

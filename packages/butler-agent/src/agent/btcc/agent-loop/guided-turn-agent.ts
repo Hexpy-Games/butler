@@ -55,7 +55,8 @@ import {
 } from "../model-route/index.ts";
 import { renderExecutionWindowObservation } from "./execution-window-observation.ts";
 import { createGuidedSessionWorkspaceRuntime, type GuidedSessionWorkspaceBindingStore } from "./guided-session-workspace-recovery.ts";
-
+import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
+import { throwGuidedAbort } from "./guided-abort.ts";
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
   butlerData: string;
@@ -75,6 +76,7 @@ export function createProductionGuidedTurnAgent(input: {
     async run({
       turn,
       signal,
+      memoryAttribution,
       progress,
       recordModelRouteEvent,
       loadModelRouteAttemptHistory,
@@ -118,6 +120,7 @@ export function createProductionGuidedTurnAgent(input: {
         projectId: policy.projectId ?? turn.context.projectRef,
         workspaceReference,
         sessionBindingStore: sessionWorkspace.bindingStore,
+        memoryAttribution,
         turnId: turn.turnId,
         turnContext: turn.originalMessage,
         searchPlanner: async () => ({
@@ -163,6 +166,7 @@ export function createProductionGuidedTurnAgent(input: {
             projectLedgerResolver,
             effectJournal: input.effectJournal,
             originalRequest: turn.originalMessage,
+            memoryAttribution,
           }),
         }),
       });
@@ -284,6 +288,7 @@ export function createProductionGuidedTurnAgent(input: {
         // active across windows until the model reaches a final answer.
         maxIterations: Math.max(1, input.executionWindowSize ?? 60),
         modelRound,
+        onEvent: (event) => recordRuntimeMemoryEvent(memoryAttribution, event),
         onExecutionWindowBoundary: async ({ windowIndex }) => {
           if (signal.aborted) throwGuidedAbort(signal);
           const refreshedContext = policy.trackingMode === "none"
@@ -342,9 +347,4 @@ export function createProductionGuidedTurnAgent(input: {
       };
     },
   };
-}
-
-function throwGuidedAbort(signal: AbortSignal): never {
-  if (signal.reason instanceof Error) throw signal.reason;
-  throw new Error("Guided Turn was aborted");
 }

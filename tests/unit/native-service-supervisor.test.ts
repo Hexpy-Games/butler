@@ -5,6 +5,7 @@ import { join } from "path";
 import {
   appManagedNativeServiceSpecs,
   appManagedRuntimePointerPath,
+  butlerMainMemoryDiagnosticEnvironment,
   defaultNativeServiceSpecs,
   listServices,
   projectFolderTokenSecretPath,
@@ -77,6 +78,61 @@ test("native service manifest defines Butler-owned default services", () => {
     expect(specs.every((spec) => spec.stdoutFile.startsWith(`${butlerData}/logs/`))).toBe(true);
     expect(specs.every((spec) => spec.env?.BUTLER_DATA === butlerData)).toBe(true);
   } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("memory diagnostic environment is allowlisted to butler-main and stripped from sidecars", () => {
+  expect(butlerMainMemoryDiagnosticEnvironment({
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS: "1",
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE: "1",
+    PRIVATE_UNRELATED_FLAG: "1",
+  })).toEqual({
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS: "1",
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE: "1",
+  });
+  expect(butlerMainMemoryDiagnosticEnvironment({
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS: "0",
+    BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE: "true",
+  })).toEqual({});
+
+  const butlerData = tempRoot();
+  const previousEnabled = process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS;
+  const previousGc = process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE;
+  let captured: Record<string, string> = {};
+  try {
+    process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS = "1";
+    process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE = "1";
+    const specs = defaultNativeServiceSpecs({ butlerHome: "/opt/butler", butlerData });
+    const sidecar = specs.find((spec) => spec.id === "embed-server");
+    const main = specs.find((spec) => spec.id === "butler-main");
+    if (!sidecar || !main) throw new Error("required service specs missing");
+    startService(butlerData, sidecar, {
+      spawnDetached: (_spec, env) => {
+        captured = env;
+        return { pid: 91_001 };
+      },
+      isPidRunning: () => false,
+    });
+    expect(captured.BUTLER_AGENT_MEMORY_DIAGNOSTICS).toBeUndefined();
+    expect(captured.BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE).toBeUndefined();
+
+    startService(butlerData, main, {
+      spawnDetached: (_spec, env) => {
+        captured = env;
+        return { pid: 91_002 };
+      },
+      isPidRunning: () => false,
+    });
+    expect(captured).toMatchObject({
+      BUTLER_AGENT_MEMORY_DIAGNOSTICS: "1",
+      BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE: "1",
+    });
+  } finally {
+    if (previousEnabled === undefined) delete process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS;
+    else process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS = previousEnabled;
+    if (previousGc === undefined) delete process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE;
+    else process.env.BUTLER_AGENT_MEMORY_DIAGNOSTICS_GC_PROBE = previousGc;
     rmSync(butlerData, { recursive: true, force: true });
   }
 });

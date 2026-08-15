@@ -121,6 +121,57 @@ describe("R3 guided Project Ledger effect", () => {
     expect(observedOccurrences(fixture.butlerData)).toHaveLength(2);
   });
 
+  test("reviewed guided Project Ledger work update emits phase attribution without raw effect data", async () => {
+    const fixture = await projectLedgerFixture();
+    fixture.core.createWork(fixture.projectRoot, {
+      project: fixture.projectRoot,
+      id: "W-ATTRIBUTION",
+      title: "Attribution work",
+      status: "in_progress",
+      acceptance: "The reviewed update is published",
+    });
+    const phases: Array<{ phase: string; status: string }> = [];
+    const attribution = {
+      checkpoint() {},
+      projectLedgerPhase(input: { phase: string; status: string }) {
+        phases.push({ phase: input.phase, status: input.status });
+      },
+      terminal() {},
+      close() {},
+    };
+    const update = createGuidedProjectLedgerEffectAdapter({
+      name: "project_ledger_work_update",
+      args: {
+        id: "W-ATTRIBUTION",
+        status: "review",
+        body: "Private reviewed body must never enter diagnostics",
+      },
+      butlerData: fixture.butlerData,
+      projectRoot: fixture.projectRoot,
+      projectRef: "fixture",
+      resolveActiveProjectReference: exactAppBinding(fixture.projectRoot),
+      memoryAttribution: attribution,
+    });
+
+    expect(await update.adapter.dispatch(effectDispatch("attribution-work-update")))
+      .toMatchObject({ status: "applied" });
+    expect(phases.map(({ phase, status }) => `${phase}:${status}`)).toEqual(expect.arrayContaining([
+      "work_update:start",
+      "observe_base:start",
+      "prepare:start",
+      "materialize:start",
+      "render_dashboard:start",
+      "render_handoff:start",
+      "render_roadmap:start",
+      "write_index:start",
+      "promote:start",
+      "observe_promotion:start",
+      "observe_current_head:start",
+      "work_update:end",
+    ]));
+    expect(JSON.stringify(phases)).not.toContain("Private reviewed body");
+  });
+
   test("initializes the Ledger only when the reviewed adapter execution begins", async () => {
     const root = mkdtempSync(join(tmpdir(), "btcc-r3-project-ledger-init-"));
     roots.push(root);

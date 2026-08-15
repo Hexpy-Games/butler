@@ -98,6 +98,7 @@ export async function runBtccAgentLoop(
       await publishWaiting("completed");
       return response;
     } catch (error) {
+      emit(events, input.onEvent, { type: "model_failure", iteration: request.iteration });
       await publishWaiting(input.signal?.aborted ? "cancelled" : "failed");
       throw error;
     }
