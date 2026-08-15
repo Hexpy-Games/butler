@@ -22,7 +22,7 @@ const hostedProviders = [
   { label: "xAI / Grok", model: "Grok 4.5" },
   { label: "Qwen Cloud", model: "Qwen3.7 Max" },
   { label: "Moonshot / Kimi", model: "Kimi K2.6" },
-  { label: "Z.AI Coding Plan", model: "GLM-5.2" },
+  { label: "Z.AI Coding Plan", model: "GLM-5.3" },
   { label: "Z.AI API", model: "GLM-5.2" },
   { label: "OpenCode Go", model: "GLM-5.2" },
 ] as const;
