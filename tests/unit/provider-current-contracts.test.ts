@@ -151,7 +151,7 @@ test("xAI and OpenCode Go Responses models use their explicit Responses endpoint
 });
 
 test("Z.AI Coding Plan and general API keep independent credentials and endpoints", async () => {
-  register("zai", "glm-5.2");
+  register("zai", "glm-5.3");
   register("zai-api", "glm-5.2");
   const calls: Array<{ url: string; authorization: string; body: Record<string, unknown> }> = [];
   globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -163,7 +163,11 @@ test("Z.AI Coding Plan and general API keep independent credentials and endpoint
     return new Response(JSON.stringify({ choices: [{ message: { content: "zai" } }] }), { status: 200 });
   }) as unknown as typeof fetch;
 
-  await expect(runPromptText({ model: "zai/glm-5.2", prompt: "coding" })).resolves.toBe("zai");
+  await expect(runPromptText({
+    model: "zai/glm-5.3",
+    reasoningEffort: "max",
+    prompt: "coding",
+  })).resolves.toBe("zai");
   await expect(runPromptText({ model: "zai-api/glm-5.2", prompt: "platform" })).resolves.toBe("zai");
 
   expect(calls.map((call) => call.url)).toEqual([
@@ -174,7 +178,8 @@ test("Z.AI Coding Plan and general API keep independent credentials and endpoint
     "Bearer zai-contract-secret",
     "Bearer zai-api-contract-secret",
   ]);
-  expect(calls.map((call) => call.body.model)).toEqual(["glm-5.2", "glm-5.2"]);
+  expect(calls.map((call) => call.body.model)).toEqual(["glm-5.3", "glm-5.2"]);
+  expect(calls[0]?.body.reasoning_effort).toBe("max");
 });
 
 test("Z.AI endpoint environment keys remain distinct", () => {
