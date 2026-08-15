@@ -132,6 +132,14 @@ done
 [[ ! -f ecosystem.config.js ]] || fail "ecosystem.config.js must not exist because package.json type=module treats it as ESM"
 
 for removed_root_dir in docs artifacts ops gateway harness runtime transport memory prompts skills personas templates scripts test mcp-server plugins butler-skills; do
+  if [[ "$removed_root_dir" == "docs" && -d docs/reports ]]; then
+    # Audited product reports are the only supported top-level docs surface;
+    # all other legacy docs remain prohibited by this gate.
+    if find docs -mindepth 1 -maxdepth 1 ! -name reports -print -quit | grep -q .; then
+      fail "legacy top-level docs entries must not exist outside docs/reports"
+    fi
+    continue
+  fi
   [[ ! -e "$removed_root_dir" ]] || fail "legacy top-level directory must not exist: $removed_root_dir"
 done
 

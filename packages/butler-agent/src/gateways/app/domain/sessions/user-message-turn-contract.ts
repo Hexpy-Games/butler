@@ -23,18 +23,26 @@ import type {
   TurnControlResolution,
   TurnExecutionControlsV1,
 } from "../../../core/turn-execution-controls.ts";
+import type { VisualImageAdmissionResult } from "../../../../agent/image-attachment/contracts.ts";
 
 export interface UserMessageTurnStoreInput {
   butlerData: string;
   defaultChatId: string;
   ensureChat: (chatId: string) => void;
   sessionHasActiveTurn: (chatId: string) => boolean;
-  createQueuedMessage: (input: QueueMessageRequest) => SessionQueueView;
+  createQueuedMessage: (
+    input: QueueMessageRequest,
+    visualAdmission?: VisualImageAdmissionResult,
+  ) => Promise<SessionQueueView>;
   listMessages: (chatId: string) => MessageRecord[];
   validateAttachable: (
     chatId: string,
     attachments: MessageSendRequest["attachments"],
   ) => MessageFileRow[];
+  admitVisualAttachments: (
+    files: readonly MessageFileRow[],
+    model: string,
+  ) => Promise<VisualImageAdmissionResult | undefined>;
   resolveControlsForMessageSend: (
     chatId: string,
     input: Partial<SessionControlState>,
@@ -76,6 +84,7 @@ export interface UserMessageTurnStoreInput {
     message: MessageRecord;
     text: string;
     executionControls: TurnExecutionControlsV1;
+    visualAdmission?: VisualImageAdmissionResult;
   }) => TurnRecord;
   appendProgressSummaryEvent: (
     chatId: string,

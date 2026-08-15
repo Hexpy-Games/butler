@@ -75,6 +75,9 @@ export function commandFor(
     return {
       kind: "wake",
       turnId: request.turnId,
+      ...(request.recoveryAttempt
+        ? { recoveryAttempt: request.recoveryAttempt }
+        : {}),
       sessionId: request.sessionId,
       triggerKey: request.eventId,
       trigger: {
@@ -104,6 +107,7 @@ export function commandFor(
   return {
     kind: "run",
     turnId: request.turnId,
+    ...(request.recoveryAttempt ? { recoveryAttempt: request.recoveryAttempt } : {}),
     sessionId: request.sessionId,
     triggerKey: request.eventId,
     message: {

@@ -26,6 +26,12 @@ import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
+import {
+  isFreshCurrentDisposition,
+} from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-closeout.ts";
+import { dispositionMaterialFingerprint } from
+  "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import type {
   ModelRoundMessage,
   ModelRoundPort,
@@ -35,10 +41,16 @@ import type {
   "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 import {
   guidedOperationalFallback,
-  guidedOperationalReportPrompt,
   runGuidedAgentLoopWithOperationalReport,
 } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-report.ts";
+import {
+  currentTurnEffectRecords,
+  operationalWorkFacts,
+} from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-facts.ts";
+import { createGuidedOperationalProgressCapture } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-progress.ts";
 import { createGuidedToolCallExecutor } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-call-execution.ts";
 import { guidedToolOccurrence } from
@@ -150,6 +162,402 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
   }
 });
 
+test("bound Work receives exactly one closeout opportunity and can reconcile with record_work_disposition", async () => {
+  const fixture = createFixture("guided-closeout-reconcile");
+  try {
+    const turnId = "guided-closeout-reconcile-turn";
+    let modelCalls = 0;
+    const modelRound: ModelRoundPort = {
+      async runRound(request) {
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          return toolResponse([toolCall("closeout-start", "start_work", {
+            objective: "바인딩한 작업을 완료한다",
+          })]);
+        }
+        if (modelCalls === 2) {
+          return { text: "첫 번째 최종 답변", toolCalls: [] };
+        }
+        if (modelCalls === 3) {
+          const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+          expect(bound).not.toBeNull();
+          return toolResponse([toolCall("closeout-disposition", "record_work_disposition", {
+            work_id: bound!.workId,
+            disposition: "completed",
+            summary: "현재 Turn의 Work를 완료했습니다.",
+          })]);
+        }
+        return { text: "최종 답변", toolCalls: [] };
+      },
+    };
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent: fixture.agent(modelRound),
+    });
+    const result = await runtime.runTurn(localRunCommand(fixture.root, turnId));
+    expect(result).toMatchObject({ kind: "delivered", content: "최종 답변" });
+    expect(modelCalls).toBe(4);
+    await expect(fixture.stores.durableWork.boundWorkForTurn(turnId)).resolves.toMatchObject({
+      status: "completed",
+      latestDisposition: { originTurnId: turnId, disposition: "completed" },
+    });
+    const db = new Database(fixture.dbPath);
+    try {
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_work_closeout_diagnostics
+      `).get()?.count).toBe(0);
+    } finally {
+      db.close(false);
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
+test("failed closeout correction delivers the candidate and records one idempotent diagnostic", async () => {
+  const fixture = createFixture("guided-closeout-missing");
+  try {
+    const turnId = "guided-closeout-missing-turn";
+    let modelCalls = 0;
+    const modelRound: ModelRoundPort = {
+      async runRound() {
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          return toolResponse([toolCall("missing-closeout-start", "start_work", {
+            objective: "닫히지 않은 작업",
+          })]);
+        }
+        if (modelCalls === 2) return { text: "첫 후보", toolCalls: [] };
+        if (modelCalls === 3) {
+          const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+          return toolResponse([toolCall("missing-closeout-disposition", "record_work_disposition", {
+            work_id: bound!.workId,
+            disposition: "completed",
+            summary: "없는 근거로 잘못 닫기",
+            evidence_refs: ["missing-current-turn-evidence"],
+          })]);
+        }
+        return { text: "실패 후에도 전달할 최종 답변", toolCalls: [] };
+      },
+    };
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent: fixture.agent(modelRound),
+    });
+    const result = await runtime.runTurn(localRunCommand(fixture.root, turnId));
+    expect(result).toMatchObject({
+      kind: "delivered",
+      content: "실패 후에도 전달할 최종 답변",
+    });
+    expect(modelCalls).toBe(4);
+    const db = new Database(fixture.dbPath);
+    try {
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_work_closeout_diagnostics
+        WHERE code = 'closeout_missing' AND turn_id = ?
+      `).get(turnId)?.count).toBe(1);
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_work_disposition_revisions
+      `).get()?.count).toBe(0);
+      expect(db.query<{ status: string }, [string]>(`
+        SELECT status FROM btcc_guided_works WHERE origin_turn_id = ?
+      `).get(turnId)?.status).toBe("open");
+    } finally {
+      db.close(false);
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
+test("legacy completion Review cannot suppress the single disposition correction or diagnostic", async () => {
+  const fixture = createFixture("guided-legacy-completion-closeout");
+  try {
+    const turnId = "guided-legacy-completion-closeout-turn";
+    let modelCalls = 0;
+    const modelRound: ModelRoundPort = {
+      async runRound() {
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          return toolResponse([toolCall("legacy-closeout-start", "start_work", {
+            objective: "레거시 검토로 닫힌 작업",
+          })]);
+        }
+        if (modelCalls === 2) {
+          const db = new Database(fixture.dbPath);
+          try {
+            const work = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+            expect(work).not.toBeNull();
+            db.query(`
+              UPDATE btcc_guided_works SET status = 'completed'
+              WHERE work_id = ?
+            `).run(work!.workId);
+            db.query(`
+              INSERT INTO btcc_guided_work_review_revisions (
+                review_revision_id, work_id, revision, subject, verdict, summary,
+                corrections_json, bound_plan_revision_id, bound_result_sequence,
+                bound_result_review_revision_id, bound_action_states_json,
+                origin_turn_id, created_at
+              ) VALUES (?, ?, 1, 'completion', 'accept', ?, '[]', ?, 0, ?, '[]', ?, ?)
+            `).run(
+              "legacy-completion-review",
+              work!.workId,
+              "legacy completion review",
+              "legacy-plan",
+              "legacy-result-review",
+              turnId,
+              new Date().toISOString(),
+            );
+          } finally {
+            db.close(false);
+          }
+          return { text: "레거시 검토만으로 끝난 첫 답변", toolCalls: [] };
+        }
+        return { text: "처리 결과를 전달합니다.", toolCalls: [] };
+      },
+    };
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent: fixture.agent(modelRound),
+    });
+    const result = await runtime.runTurn(localRunCommand(fixture.root, turnId));
+    expect(result).toMatchObject({ kind: "delivered", content: "처리 결과를 전달합니다." });
+    expect(modelCalls).toBe(3);
+    const db = new Database(fixture.dbPath);
+    try {
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_work_closeout_diagnostics
+        WHERE code = 'closeout_missing' AND turn_id = ?
+      `).get(turnId)?.count).toBe(1);
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_work_disposition_revisions
+        WHERE origin_turn_id = ?
+      `).get(turnId)?.count).toBe(0);
+      expect(db.query<{ status: string }, [string]>(`
+        SELECT status FROM btcc_guided_works WHERE origin_turn_id = ?
+      `).get(turnId)?.status).toBe("completed");
+    } finally {
+      db.close(false);
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
+test("direct or unbound Guided Turns do not pay a closeout correction round", async () => {
+  const fixture = createFixture("guided-closeout-direct");
+  try {
+    let modelCalls = 0;
+    const agent = fixture.agent({
+      async runRound() {
+        modelCalls += 1;
+        return { text: "직접 답변", toolCalls: [] };
+      },
+    });
+    const result = await agent.run({
+      turn: turnRecord(fixture.root, {
+        turnId: "guided-closeout-direct-turn",
+        trackingMode: "none",
+      }),
+      signal: new AbortController().signal,
+    });
+    expect(result.content).toBe("직접 답변");
+    expect(modelCalls).toBe(1);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("closeout freshness accepts only an unbound/abandoned Work or a current matching disposition", () => {
+  const turnId = "freshness-turn";
+  const base = (status: DurableWorkView["status"] = "open"): DurableWorkView => ({
+    workId: "freshness-work",
+    sessionId: "freshness-session",
+    scope: { kind: "session", sessionId: "freshness-session" },
+    origin: { turnId, messageId: "freshness-message" },
+    objective: "Check closeout freshness",
+    status,
+    allowedNextStages: [],
+    actionProgress: [],
+    resultRefs: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const fresh = (status: "open" | "blocked" | "completed"): DurableWorkView => {
+    const work = base(status);
+    work.latestDisposition = {
+      dispositionRevisionId: `fresh-${status}`,
+      revision: 1,
+      resultSequence: 0,
+      materialFingerprint: dispositionMaterialFingerprint(work),
+      disposition: status,
+      summary: "fresh disposition",
+      actionUpdates: [],
+      remainingActions: status === "completed" ? [] : ["follow-up"],
+      ...(status === "blocked" ? { nextCondition: "unblock" } : {}),
+      evidenceRefs: [],
+      evidenceSnapshot: [],
+      followups: [],
+      originTurnId: turnId,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    return work;
+  };
+  const stale = fresh("open");
+  stale.resultRefs = [{
+    resultRef: "late-result",
+    toolCallId: "late-call",
+    toolName: "read_file",
+    status: "completed",
+    originTurnId: turnId,
+    attachedAt: "2026-01-01T00:00:01.000Z",
+  }];
+  const lateCheckpoint = fresh("open");
+  lateCheckpoint.latestCheckpoint = {
+    checkpointRevisionId: "late-checkpoint",
+    revision: 1,
+    planRevisionId: "legacy",
+    stage: "planning",
+    actionProgress: [],
+    publicSummary: "새 진행",
+    nextStep: "다음 단계",
+    referencedResultRefs: [],
+    originTurnId: turnId,
+    createdAt: "2026-01-01T00:00:02.000Z",
+  };
+  const lateReview = fresh("open");
+  lateReview.latestResultReview = {
+    reviewRevisionId: "late-review",
+    revision: 1,
+    subject: "result",
+    verdict: "partial",
+    summary: "추가 확인",
+    corrections: ["확인 필요"],
+    boundResultRefs: [],
+    originTurnId: turnId,
+    createdAt: "2026-01-01T00:00:03.000Z",
+  };
+  const lateEffectReceipt = fresh("open");
+  lateEffectReceipt.effectWatermark = "effect-receipt-v2";
+  const lateEffectBlocker = fresh("open");
+  lateEffectBlocker.effectBlockers = [{
+    blockerId: "late-blocker",
+    sourceTurnId: turnId,
+    capability: "workspace.file",
+    target: "workspace:report.md",
+    detail: "재조정 필요",
+    createdAt: "2026-01-01T00:00:04.000Z",
+  }];
+  const lateAction = fresh("open");
+  lateAction.actionProgress = [{ actionKey: "follow-up", status: "done" }];
+  const lateStatus = fresh("open");
+  lateStatus.status = "blocked";
+  const foreign = fresh("open");
+  foreign.latestDisposition!.originTurnId = "another-turn";
+  const mismatched = fresh("open");
+  mismatched.status = "blocked";
+  const cases: Array<[string, DurableWorkView | null, boolean]> = [
+    ["unbound", null, true],
+    ["abandoned", base("abandoned"), true],
+    ["missing", base(), false],
+    ["fresh open", fresh("open"), true],
+    ["fresh blocked", fresh("blocked"), true],
+    ["fresh completed", fresh("completed"), true],
+    ["foreign turn", foreign, false],
+    ["status mismatch", mismatched, false],
+    ["late material result", stale, false],
+    ["late checkpoint", lateCheckpoint, false],
+    ["late review", lateReview, false],
+    ["late effect receipt", lateEffectReceipt, false],
+    ["late effect blocker", lateEffectBlocker, false],
+    ["late action", lateAction, false],
+    ["late status", lateStatus, false],
+  ];
+  for (const [name, work, expected] of cases) {
+    expect(isFreshCurrentDisposition(work, turnId), name).toBe(expected);
+  }
+});
+
+test("a late same-Turn result invalidates a completed disposition and records the bounded diagnostic", async () => {
+  const fixture = createFixture("guided-stale-disposition-closeout");
+  try {
+    writeFileSync(join(fixture.root, "late.txt"), "late evidence\n");
+    const turnId = "guided-stale-disposition-turn";
+    let modelCalls = 0;
+    const steps: readonly ScriptedModelRoundStep[] = [
+      toolResponse([toolCall("stale-start", "start_work", {
+        objective: "완료 선언 뒤 늦은 결과를 검증한다",
+      })]),
+      { text: "첫 번째 최종 후보", toolCalls: [] },
+      async () => {
+        const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+        return toolResponse([
+          toolCall("stale-disposition", "record_work_disposition", {
+            work_id: bound!.workId,
+            disposition: "completed",
+            summary: "현재까지의 Work를 완료했습니다.",
+          }),
+          toolCall("stale-late-read", "read_file", { path: "late.txt" }),
+        ]);
+      },
+      () => {
+        return { text: "늦은 결과까지 전달했습니다.", toolCalls: [] };
+      },
+    ];
+    let stepIndex = 0;
+    const agent = fixture.agent({
+      async runRound(request) {
+        modelCalls += 1;
+        const step = steps[stepIndex++];
+        if (!step) throw new Error("stale_disposition_script_exhausted");
+        return typeof step === "function" ? await step(request, stepIndex - 1) : step;
+      },
+    });
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    const result = await runtime.runTurn(localRunCommand(fixture.root, turnId));
+    expect(result).toMatchObject({
+      kind: "delivered",
+      content: "늦은 결과까지 전달했습니다.",
+    });
+    expect(modelCalls).toBe(4);
+    const work = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+    expect(work).toMatchObject({
+      status: "open",
+      latestDisposition: {
+        disposition: "completed",
+        originTurnId: turnId,
+      },
+    });
+    const db = new Database(fixture.dbPath);
+    try {
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count
+        FROM btcc_guided_work_closeout_diagnostics
+        WHERE code = 'closeout_missing' AND turn_id = ?
+      `).get(turnId)?.count).toBe(1);
+    } finally {
+      db.close(false);
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
 test("production Guided Turn rereads Work across execution windows in one agent run", async () => {
   const fixture = createFixture("guided-production-window-continuation");
   try {
@@ -194,6 +602,17 @@ test("production Guided Turn rereads Work across execution windows in one agent 
             next_step: "Use the evidence in the final answer.",
           })]);
         }
+        if (modelCalls === 3) {
+          const bound = await durableWork.boundWorkForTurn(
+            "guided-production-window-turn",
+          );
+          return toolResponse([toolCall("window-disposition", "record_work_disposition", {
+            work_id: bound!.workId,
+            disposition: "open",
+            summary: "수집한 근거를 유지하며 답변을 준비합니다.",
+            remaining_actions: ["최종 답변을 전달한다"],
+          })]);
+        }
         return { text: "확인된 근거를 바탕으로 답변을 완료했습니다.", toolCalls: [] };
       },
     };
@@ -221,10 +640,10 @@ test("production Guided Turn rereads Work across execution windows in one agent 
       kind: "delivered",
       content: "확인된 근거를 바탕으로 답변을 완료했습니다.",
     });
-    expect(modelCalls).toBe(3);
-    expect(loadContextCalls).toBeGreaterThanOrEqual(3);
-    expect(boundWorkCalls).toBeGreaterThanOrEqual(3);
-    expect(requests).toHaveLength(3);
+    expect(modelCalls).toBe(4);
+    expect(loadContextCalls).toBeGreaterThanOrEqual(4);
+    expect(boundWorkCalls).toBeGreaterThanOrEqual(4);
+    expect(requests).toHaveLength(4);
     expect(requests[0]?.messages.filter((message) => message.role === "user"))
       .toHaveLength(1);
     expect(requests[1]?.messages.filter((message) => message.role === "user"))
@@ -236,6 +655,8 @@ test("production Guided Turn rereads Work across execution windows in one agent 
     expect(requests[2]?.messages.at(-1)?.content).toContain("Execution checkpoint 2");
     expect(requests[2]?.messages.at(-1)?.content)
       .toContain("The collected evidence remains available.");
+    expect(requests[3]?.messages.filter((message) => message.role === "user"))
+      .toHaveLength(4);
   } finally {
     fixture.close();
   }
@@ -247,6 +668,11 @@ test("Guided fallback projects the cursor model into public iteration and fallba
     const requests: string[] = [];
     const iterationModels: string[] = [];
     const fallbackModels: string[] = [];
+    const fallbackActivities: Array<{
+      originTurnId?: string;
+      sourceRevision?: number;
+      summary: string;
+    }> = [];
     const agent = fixture.agent({
       async runRound(request) {
         requests.push(String(request.model));
@@ -287,6 +713,7 @@ test("Guided fallback projects the cursor model into public iteration and fallba
         },
         phaseActivityChanged(update) {
           if (update.modelRef) fallbackModels.push(update.modelRef);
+          if (update.modelRef) fallbackActivities.push(update);
         },
       },
     });
@@ -302,6 +729,66 @@ test("Guided fallback projects the cursor model into public iteration and fallba
       "zai/glm-5.2",
     ]);
     expect(fallbackModels).toEqual(["zai/glm-5.2"]);
+    expect(fallbackActivities).toEqual([expect.objectContaining({
+      originTurnId: "guided-model-route-projection",
+      sourceRevision: expect.any(Number),
+      summary: "대체 모델 경로로 계속 진행합니다.",
+    })]);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("unbound ordinary activity survives failure without stale Work progress", async () => {
+  const fixture = createFixture("guided-unbound-ordinary-progress");
+  try {
+    writeFileSync(join(fixture.root, "ordinary.txt"), "ordinary evidence\n");
+    const turnId = "guided-unbound-ordinary-progress";
+    const activities: Array<{
+      originTurnId?: string;
+      sourceRevision?: number;
+      summary: string;
+    }> = [];
+    let calls = 0;
+    const agent = fixture.agent({
+      async runRound() {
+        calls += 1;
+        if (calls === 1) {
+          return toolResponse([
+            toolCall("unbound-review", "record_work_review", {
+              subject: "result",
+              verdict: "partial",
+              summary: "관계 없는 검토 요청",
+              corrections: [],
+            }),
+            toolCall("unbound-read", "read_file", { path: "ordinary.txt" }),
+          ]);
+        }
+        throw knownProviderFailure("unbound ordinary provider disconnected");
+      },
+    });
+    const outcome = await agent.run({
+      turn: turnRecord(fixture.root, { turnId, trackingMode: "local" }),
+      signal: new AbortController().signal,
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged(update) {
+          activities.push(update);
+        },
+      },
+    });
+
+    expect(calls).toBe(2);
+    expect(outcome.content).toContain("현재 진행 내용: 읽기: ordinary.txt 작업을 진행하고 있습니다.");
+    expect(outcome.content).not.toContain("관계 없는 검토 요청");
+    expect(activities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        originTurnId: turnId,
+        sourceRevision: expect.any(Number),
+        summary: "읽기: ordinary.txt 작업을 진행하고 있습니다.",
+      }),
+    ]));
+    expect(await fixture.stores.durableWork.boundWorkForTurn(turnId)).toBeNull();
   } finally {
     fixture.close();
   }
@@ -744,6 +1231,15 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
         expect(request.messages.some((message) => message.role === "tool")).toBe(true);
         return { text: "프로젝트 작업과 기록을 완료했습니다.", toolCalls: [] };
       },
+      async () => {
+        const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+        return toolResponse([toolCall("disposition-1", "record_work_disposition", {
+          work_id: bound!.workId,
+          disposition: "completed",
+          summary: "Project Ledger 효과와 검토 결과를 확인했습니다.",
+        })]);
+      },
+      { text: "프로젝트 작업과 기록을 완료했습니다.", toolCalls: [] },
     ]), { butlerHome: process.cwd() });
     const runtime = createGuidedTurnRuntime({
       admission: fixture.stores.admission,
@@ -1353,6 +1849,16 @@ test("Guided catalog and tool_call execute the same simple write_file contract",
         expect(messagesWithToolResults(request)).toHaveLength(calls.length);
         return { text: "브리지 경로로 파일을 작성했습니다.", toolCalls: [] };
       },
+      async () => {
+        const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+        return toolResponse([toolCall("bridge-disposition", "record_work_disposition", {
+          work_id: bound!.workId,
+          disposition: "open",
+          summary: "파일을 작성했고 후속 확인이 남았습니다.",
+          remaining_actions: ["사용자에게 파일 결과를 전달한다"],
+        })]);
+      },
+      { text: "브리지 경로로 파일을 작성했습니다.", toolCalls: [] },
     ]));
     const runtime = createGuidedTurnRuntime({
       admission: fixture.stores.admission,
@@ -1460,6 +1966,15 @@ test("Guided agent applies a small edit through the reviewed durable effect", as
         expect(messages).toHaveLength(calls.length);
         return { text: "가로 넘침 수정을 완료했습니다.", toolCalls: [] };
       },
+      async () => {
+        const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+        return toolResponse([toolCall("edit-disposition", "record_work_disposition", {
+          work_id: bound!.workId,
+          disposition: "completed",
+          summary: "가로 넘침 수정과 검증을 완료했습니다.",
+        })]);
+      },
+      { text: "가로 넘침 수정을 완료했습니다.", toolCalls: [] },
     ]));
     const runtime = createGuidedTurnRuntime({
       admission: fixture.stores.admission,
@@ -1659,8 +2174,10 @@ test("Guided agent renders CSV text once and passes image attachments to the pro
     expect(prompt.match(/name,pork_percent/g)?.length).toBe(1);
     expect(attachments).toHaveLength(1);
     expect(attachments[0]).toMatchObject({
-      id: "guided-image:image-1",
+      id: "image-1",
       kind: "image",
+      mimeType: "image/png",
+      fileName: "photo.png",
       localPath: imagePath,
     });
   } finally {
@@ -1668,7 +2185,7 @@ test("Guided agent renders CSV text once and passes image attachments to the pro
   }
 });
 
-test("Guided agent offers only the three optional R3 Work tools and keeps direct turns free of Work", async () => {
+test("Guided agent offers explicit relation and optional R3 Work tools while keeping direct turns free of Work", async () => {
   const fixture = createFixture("guided-work-surface");
   try {
     let visibleNames: string[] = [];
@@ -1691,6 +2208,8 @@ test("Guided agent offers only the three optional R3 Work tools and keeps direct
     expect(visibleNames).toContain("replace_work_plan");
     expect(visibleNames).toContain("record_work_checkpoint");
     expect(visibleNames).toContain("record_work_review");
+    expect(visibleNames).toContain("start_work");
+    expect(visibleNames).toContain("continue_work");
     expect(visibleNames).not.toContain("update_todo_list");
     expect(visibleNames).not.toContain("list_todo_list");
     expect(visibleNames).not.toContain("list_work_streams");
@@ -1925,6 +2444,130 @@ test("Guided tool restart reuses a prestarted occurrence after call order change
     expect(fixture.stores.guidedToolJournal.find(reorderedCallId)).toBeNull();
     expect(fixture.stores.guidedToolJournal.find(newOccurrenceCallId)?.status)
       .toBe("completed");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("completed relation replay repairs a missing prior result without duplicate authority", async () => {
+  const fixture = createFixture("guided-relation-replay-repair");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "turn-relation-replay-repair",
+    });
+    const db = new Database(fixture.dbPath);
+    try {
+      db.query(`
+        INSERT INTO btcc_turns (
+          turn_id, session_id, inbox_id, trigger_key, original_message_id,
+          original_message, admission_snapshot_ref, model_selection_json,
+          context_json, semantic_state, revision, execution_fence
+        ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', '{}', '{}', 'admitted', 1, 0)
+      `).run(
+        turn.turnId,
+        turn.sessionId,
+        `inbox:${turn.turnId}`,
+        `trigger:${turn.turnId}`,
+        turn.originalMessageId,
+        turn.originalMessage,
+      );
+    } finally {
+      db.close();
+    }
+
+    const firstRead = "relation-replay-read-first";
+    const secondRead = "relation-replay-read-second";
+    for (const [callId, content] of [
+      [firstRead, "first"],
+      [secondRead, "second"],
+    ] as const) {
+      fixture.stores.guidedToolJournal.start({
+        turnId: turn.turnId,
+        callId,
+        toolName: "read_file",
+        rawArguments: "{}",
+        arguments: {},
+      });
+      fixture.stores.guidedToolJournal.finish({
+        callId,
+        status: "completed",
+        result: { content },
+      });
+    }
+
+    const relationArgs = { objective: "재생 시 누락 결과를 복구한다" };
+    const createExecutor = () => createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["start_work"]),
+      visibleNames: new Set(["start_work"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool: async () => {
+        throw new Error("relation replay should stay in the durable Work handler");
+      },
+    });
+    const executeRelation = (executor: ReturnType<typeof createExecutor>) =>
+      executor.executeTool({
+        name: "start_work",
+        args: relationArgs,
+        rawArguments: JSON.stringify(relationArgs),
+      });
+
+    const firstResult = await executeRelation(createExecutor());
+    expect(firstResult).toMatchObject({ ok: true, work: { status: "open" } });
+    const firstWork = await fixture.stores.durableWork.boundWorkForTurn(turn.turnId);
+    expect(firstWork?.resultRefs.map((result) => result.toolCallId)).toEqual([
+      firstRead,
+      secondRead,
+    ]);
+
+    const missingDb = new Database(fixture.dbPath);
+    try {
+      missingDb.query(`
+        DELETE FROM btcc_guided_work_results WHERE tool_call_id = ?
+      `).run(secondRead);
+    } finally {
+      missingDb.close();
+    }
+    expect((await fixture.stores.durableWork.boundWorkForTurn(turn.turnId))
+      ?.resultRefs.map((result) => result.toolCallId)).toEqual([firstRead]);
+
+    const replayed = await executeRelation(createExecutor());
+    expect(replayed).toMatchObject({ ok: true, work: { status: "open" } });
+    const repaired = await fixture.stores.durableWork.boundWorkForTurn(turn.turnId);
+    expect(repaired?.resultRefs.map((result) => result.toolCallId)).toEqual([
+      firstRead,
+      secondRead,
+    ]);
+    expect(fixture.stores.guidedToolJournal.list(turn.turnId)).toHaveLength(3);
+    expect((await fixture.stores.durableWork.loadContext({
+      turnId: turn.turnId,
+      sessionId: turn.sessionId,
+    }))?.resultFacts.map((fact) => fact.resultJson)).toEqual([
+      { content: "first" },
+      { content: "second" },
+    ]);
+    const countsDb = new Database(fixture.dbPath);
+    try {
+      expect(countsDb.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_works
+      `).get()?.count).toBe(1);
+      expect(countsDb.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_turn_work_bindings
+        WHERE turn_id = ? AND is_current = 1
+      `).get(turn.turnId)?.count).toBe(1);
+      expect(countsDb.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_work_relation_commands
+      `).get()?.count).toBe(1);
+      expect(countsDb.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_work_results
+      `).get()?.count).toBe(2);
+    } finally {
+      countsDb.close();
+    }
   } finally {
     fixture.close();
   }
@@ -2749,7 +3392,7 @@ test("Guided agent turns provider failure into one fact-based final report", asy
     });
     expect(outcome).toEqual({
       route: "assisted",
-      content: "작업을 진행했지만 답변 생성을 마치지 못했습니다.\n완료되지 않은 작업을 완료로 처리하지 않았습니다.",
+      content: "현재 요청을 처리했지만 답변 생성을 마치지 못했습니다.\n현재 Turn에서 확인된 내용: 검증된 소스 근거를 확인했습니다.\n완료되지 않은 작업을 완료로 처리하지 않았습니다.",
     });
     expect(calls).toBe(2);
 
@@ -2768,6 +3411,481 @@ test("Guided agent turns provider failure into one fact-based final report", asy
   } finally {
     fixture.close();
   }
+});
+
+test("unbound capture fallback never inherits an unrelated candidate Work", async () => {
+  const fixture = createFixture("guided-fallback-candidate-isolation");
+  try {
+    writeFileSync(join(fixture.root, "capture.txt"), "current capture evidence\n");
+    const candidateTurnId = "candidate-monitoring-turn";
+    let candidateWorkId = "";
+    let candidateCalls = 0;
+    const candidateRuntime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent: fixture.agent({
+        async runRound(request) {
+          candidateCalls += 1;
+          if (candidateCalls === 1) {
+            return toolResponse([toolCall("candidate-start", "start_work", {
+              objective: "오래된 모니터링 Work 목표",
+            })]);
+          }
+          if (candidateCalls === 2) {
+            const output = toolMessageOutput(
+              messagesWithToolResults(request).at(-1),
+            ) as { work?: { work_id?: string } };
+            candidateWorkId = output.work?.work_id ?? "";
+            return toolResponse([toolCall("candidate-plan", "replace_work_plan", {
+              objective: "오래된 모니터링 Work 목표",
+              actions: [{
+                action_key: "monitor",
+                description: "오래된 모니터링을 수행합니다",
+                dependency_keys: [],
+              }],
+              checks: ["오래된 모니터링을 확인합니다"],
+            })]);
+          }
+          if (candidateCalls === 3) {
+            return toolResponse([toolCall("candidate-checkpoint", "record_work_checkpoint", {
+              next_stage: "execution",
+              action_updates: [{ action_key: "monitor", status: "active" }],
+              public_summary: "오래된 모니터링 체크포인트가 남아 있습니다.",
+              next_step: "오래된 모니터링 다음 단계를 수행합니다.",
+            })]);
+          }
+          if (candidateCalls === 4) {
+            return toolResponse([toolCall("candidate-disposition", "record_work_disposition", {
+              work_id: candidateWorkId,
+              disposition: "open",
+              summary: "오래된 모니터링을 계속합니다.",
+              remaining_actions: ["오래된 모니터링을 계속합니다"],
+            })]);
+          }
+          return { text: "모니터링 기록을 저장했습니다.", toolCalls: [] };
+        },
+      }),
+    });
+    await candidateRuntime.runTurn(localRunCommand(fixture.root, candidateTurnId));
+    const candidate = await fixture.stores.durableWork.boundWorkForTurn(candidateTurnId);
+    expect(candidate).toMatchObject({
+      status: "open",
+      latestCheckpoint: {
+        publicSummary: "오래된 모니터링을 계속합니다.",
+        nextStep: "오래된 모니터링을 계속합니다",
+      },
+    });
+
+    const captureTurnId = "unbound-capture-turn";
+    const captureRuntime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent: fixture.agent(scriptedModelRound([
+        toolResponse([toolCall("capture-read", "read_file", {
+          path: "capture.txt",
+        })]),
+        () => { throw knownProviderFailure("capture model disconnected"); },
+      ])),
+    });
+
+    const outcome = await captureRuntime.runTurn(localRunCommand(fixture.root, captureTurnId));
+
+    expect(outcome.kind).toBe("delivered");
+    if (outcome.kind === "delivered") {
+      expect(outcome.content).not.toContain("오래된 모니터링");
+      expect(outcome.content).not.toContain("오래된 모니터링 체크포인트");
+      expect(outcome.content).not.toContain(candidateWorkId);
+    }
+    expect(await fixture.stores.durableWork.boundWorkForTurn(captureTurnId)).toBeNull();
+  } finally {
+    fixture.close();
+  }
+});
+
+test("whole-goal sequence preserves explicit relation across restart and exhaustion", async () => {
+  const fixture = createFixture("guided-whole-goal-sequence");
+  let currentStores = fixture.stores;
+  const createAgent = (modelRound: ModelRoundPort) => createProductionGuidedTurnAgent({
+    butlerHome: fixture.root,
+    butlerData: fixture.root,
+    appMessageDbPath: fixture.dbPath,
+    contextDocuments: currentStores.contextDocuments,
+    toolJournal: currentStores.guidedToolJournal,
+    effectJournal: currentStores.guidedEffectJournal,
+    durableWork: currentStores.durableWork,
+    modelRound,
+  });
+  const createRuntime = (turnId: string, modelRound: ModelRoundPort) =>
+    createGuidedTurnRuntime({
+      admission: currentStores.admission,
+      turns: currentStores.turns,
+      messages: currentStores.messages,
+      committedSuccessorReadiness: currentStores.committedSuccessorReadiness,
+      agent: createAgent(modelRound),
+    }).runTurn(localRunCommand(fixture.root, turnId));
+  const restart = () => {
+    currentStores.close();
+    currentStores = openBtccSqliteStores({
+      dbPath: fixture.dbPath,
+      ownerId: "guided-whole-goal-sequence",
+      storageProfile: "ephemeral",
+    });
+  };
+
+  try {
+    let monitoringWorkId = "";
+    let monitoringCalls = 0;
+    const monitoringResult = await createRuntime(
+      "whole-goal-monitoring-start",
+      {
+        async runRound(request) {
+          monitoringCalls += 1;
+          if (monitoringCalls === 1) {
+            return toolResponse([toolCall("monitor-start", "start_work", {
+              objective: "안전한 모니터링 기준선을 확인합니다",
+            })]);
+          }
+          if (monitoringCalls === 2) {
+            const output = toolMessageOutput(
+              messagesWithToolResults(request).at(-1),
+            ) as { work?: { work_id?: string } };
+            monitoringWorkId = output.work?.work_id ?? "";
+            return toolResponse([toolCall("monitor-plan", "replace_work_plan", {
+              objective: "안전한 모니터링 기준선을 확인합니다",
+              actions: [{
+                action_key: "monitor-baseline",
+                description: "안전한 기준선을 확인합니다",
+                dependency_keys: [],
+              }],
+              checks: ["기준선 근거를 확인합니다"],
+            })]);
+          }
+          if (monitoringCalls === 3) {
+            return toolResponse([toolCall("monitor-checkpoint", "record_work_checkpoint", {
+              next_stage: "execution",
+              action_updates: [{ action_key: "monitor-baseline", status: "active" }],
+              public_summary: "기준선 확인을 진행합니다.",
+              next_step: "기준선 확인을 마칩니다.",
+            })]);
+          }
+          if (monitoringCalls === 4) {
+            return toolResponse([toolCall("monitor-open", "record_work_disposition", {
+              work_id: monitoringWorkId,
+              disposition: "open",
+              summary: "기준선 확인을 계속합니다.",
+              remaining_actions: ["기준선 확인을 마칩니다"],
+            })]);
+          }
+          return { text: "모니터링 기준선을 계속 확인합니다.", toolCalls: [] };
+        },
+      },
+    );
+    expect(monitoringResult).toMatchObject({
+      kind: "delivered",
+      content: "모니터링 기준선을 계속 확인합니다.",
+    });
+    expect(monitoringWorkId).toMatch(/^guided-work-/);
+    expect(await currentStores.durableWork.boundWorkForTurn(
+      "whole-goal-monitoring-start",
+    )).toMatchObject({
+      workId: monitoringWorkId,
+      status: "open",
+      latestDisposition: { disposition: "open" },
+    });
+
+    restart();
+    let monitoringContinuationCalls = 0;
+    const completedMonitoring = await createRuntime(
+      "whole-goal-monitoring-complete",
+      {
+        async runRound(_request) {
+          monitoringContinuationCalls += 1;
+          if (monitoringContinuationCalls === 1) {
+            return toolResponse([toolCall("monitor-continue", "continue_work", {
+              work_id: monitoringWorkId,
+            })]);
+          }
+          if (monitoringContinuationCalls === 2) {
+            return toolResponse([toolCall("monitor-complete", "record_work_disposition", {
+              work_id: monitoringWorkId,
+              disposition: "completed",
+              summary: "기준선 확인을 완료했습니다.",
+              action_updates: [{
+                action_key: "monitor-baseline",
+                status: "done",
+                note: "기준선 근거를 확인했습니다.",
+              }],
+            })]);
+          }
+          return { text: "모니터링 기준선 확인을 마쳤습니다.", toolCalls: [] };
+        },
+      },
+    );
+    expect(completedMonitoring).toMatchObject({
+      kind: "delivered",
+      content: "모니터링 기준선 확인을 마쳤습니다.",
+    });
+    expect(await currentStores.durableWork.boundWorkForTurn(
+      "whole-goal-monitoring-complete",
+    )).toMatchObject({
+      workId: monitoringWorkId,
+      status: "completed",
+      latestDisposition: {
+        disposition: "completed",
+        originTurnId: "whole-goal-monitoring-complete",
+      },
+    });
+
+    writeFileSync(join(fixture.root, "capture-evidence.txt"), "capture evidence");
+    restart();
+    let captureWorkId = "";
+    let captureCalls = 0;
+    const exhaustedCapture = await createRuntime(
+      "whole-goal-capture-start",
+      {
+        async runRound(_request) {
+          captureCalls += 1;
+          if (captureCalls === 1) {
+            return toolResponse([toolCall("capture-read", "read_file", {
+              path: "capture-evidence.txt",
+            })]);
+          }
+          if (captureCalls === 2) {
+            return toolResponse([toolCall("capture-start", "start_work", {
+              objective: "캡처 하드닝 근거를 정리합니다",
+            })]);
+          }
+          throw knownProviderFailure("capture provider exhausted after Work selection");
+        },
+      },
+    );
+    expect(exhaustedCapture.kind).toBe("delivered");
+    if (exhaustedCapture.kind === "delivered") {
+      expect(exhaustedCapture.content).not.toContain("안전한 모니터링 기준선");
+      expect(exhaustedCapture.content).not.toContain(monitoringWorkId);
+      expect(exhaustedCapture.content).toContain("현재 요청을 처리했지만 답변 생성을 마치지 못했습니다.");
+    }
+    captureWorkId = (await currentStores.durableWork.boundWorkForTurn(
+      "whole-goal-capture-start",
+    ))?.workId ?? "";
+    expect(captureWorkId).toMatch(/^guided-work-/);
+    expect(captureWorkId).not.toBe(monitoringWorkId);
+
+    restart();
+    let captureContinuationCalls = 0;
+    const captureFollowup = await createRuntime(
+      "whole-goal-capture-followup",
+      {
+        async runRound(_request) {
+          captureContinuationCalls += 1;
+          if (captureContinuationCalls === 1) {
+            return toolResponse([toolCall("capture-continue", "continue_work", {
+              work_id: captureWorkId,
+            })]);
+          }
+          if (captureContinuationCalls === 2) {
+            return toolResponse([toolCall("capture-plan", "replace_work_plan", {
+              objective: "캡처 하드닝 근거를 정리합니다",
+              actions: [{
+                action_key: "capture-hardening",
+                description: "캡처 하드닝 근거를 정리합니다",
+                dependency_keys: [],
+              }],
+              checks: ["현재 변경 근거를 확인합니다"],
+            })]);
+          }
+          if (captureContinuationCalls === 3) {
+            return toolResponse([toolCall("capture-checkpoint", "record_work_checkpoint", {
+              next_stage: "execution",
+              action_updates: [{ action_key: "capture-hardening", status: "active" }],
+              public_summary: "캡처 하드닝 근거를 정리하는 중입니다.",
+              next_step: "현재 변경 근거를 확인합니다.",
+            })]);
+          }
+          if (captureContinuationCalls === 4) {
+            return toolResponse([toolCall("capture-open", "record_work_disposition", {
+              work_id: captureWorkId,
+              disposition: "open",
+              summary: "캡처 하드닝 근거를 계속 정리합니다.",
+              remaining_actions: ["현재 변경 근거를 확인합니다"],
+            })]);
+          }
+          return { text: "캡처 하드닝 근거를 계속 정리합니다.", toolCalls: [] };
+        },
+      },
+    );
+    expect(captureFollowup).toMatchObject({
+      kind: "delivered",
+      content: "캡처 하드닝 근거를 계속 정리합니다.",
+    });
+    expect(await currentStores.durableWork.boundWorkForTurn(
+      "whole-goal-capture-followup",
+    )).toMatchObject({
+      workId: captureWorkId,
+      status: "open",
+      latestDisposition: {
+        disposition: "open",
+        originTurnId: "whole-goal-capture-followup",
+      },
+    });
+    expect(await currentStores.durableWork.boundWorkForTurn(
+      "whole-goal-monitoring-complete",
+    )).toMatchObject({
+      workId: monitoringWorkId,
+      status: "completed",
+    });
+  } finally {
+    currentStores.close();
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("continue_work does not republish an old Plan into fallback progress", async () => {
+  const fixture = createFixture("guided-fallback-continue-old-plan");
+  try {
+    const originTurnId = "old-plan-origin-turn";
+    let workId = "";
+    let originCalls = 0;
+    const originRuntime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent: fixture.agent({
+        async runRound(request) {
+          originCalls += 1;
+          if (originCalls === 1) {
+            return toolResponse([toolCall("old-start", "start_work", {
+              objective: "오래된 Plan 목표",
+            })]);
+          }
+          if (originCalls === 2) {
+            const output = toolMessageOutput(
+              messagesWithToolResults(request).at(-1),
+            ) as { work?: { work_id?: string } };
+            workId = output.work?.work_id ?? "";
+            return toolResponse([toolCall("old-plan", "replace_work_plan", {
+              objective: "오래된 Plan 목표",
+              actions: [{
+                action_key: "old-action",
+                description: "오래된 Plan 결과",
+                dependency_keys: [],
+              }],
+              checks: ["오래된 Plan 검증"],
+            })]);
+          }
+          if (originCalls === 3) {
+            return toolResponse([toolCall("old-checkpoint", "record_work_checkpoint", {
+              next_stage: "execution",
+              action_updates: [{ action_key: "old-action", status: "active" }],
+              public_summary: "오래된 Plan 체크포인트",
+              next_step: "오래된 Plan 다음 단계",
+            })]);
+          }
+          if (originCalls === 4) {
+            return toolResponse([toolCall("old-open", "record_work_disposition", {
+              work_id: workId,
+              disposition: "open",
+              summary: "오래된 Plan을 저장했습니다.",
+              remaining_actions: ["오래된 Plan 결과"],
+            })]);
+          }
+          return { text: "오래된 Plan을 저장했습니다.", toolCalls: [] };
+        },
+      }),
+    });
+    await originRuntime.runTurn(localRunCommand(fixture.root, originTurnId));
+    expect(workId).toMatch(/^guided-work-/);
+
+    const continuationTurnId = "new-continue-fallback-turn";
+    const continuationRuntime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent: fixture.agent(scriptedModelRound([
+        toolResponse([toolCall("continue-old", "continue_work", {
+          work_id: workId,
+        })]),
+        () => { throw knownProviderFailure("continuation model disconnected"); },
+      ])),
+    });
+
+    const outcome = await continuationRuntime.runTurn(
+      localRunCommand(fixture.root, continuationTurnId),
+    );
+    expect(outcome.kind).toBe("delivered");
+    if (outcome.kind === "delivered") {
+      expect(outcome.content).not.toContain("오래된 Plan");
+      expect(outcome.content).not.toContain(workId);
+      expect(outcome.content).toContain("현재 요청을 완료하지 못했고 답변 생성을 마치지 못했습니다.");
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
+test("operational progress capture requires current origin and revision", async () => {
+  const forwarded: string[] = [];
+  const capture = createGuidedOperationalProgressCapture({
+    stateChanged() {},
+    workProgressChanged(update) {
+      forwarded.push(update.tasks[0]?.taskOutcome ?? "");
+    },
+  });
+  await capture.observer?.workProgressChanged?.({
+    turnId: "turn-progress-current",
+    turnRevision: 3,
+    originTurnId: "turn-progress-old",
+    sourceRevision: 9,
+    programId: "old-work",
+    tasks: [{
+      taskId: "old-task",
+      taskTitle: "old Plan title",
+      taskDescription: "old Plan description",
+      taskOutcome: "old Plan outcome",
+      taskOrder: 0,
+      taskState: "active",
+      workId: "old-work",
+      workTitle: "old Work",
+      workState: "active",
+    }],
+  });
+  await capture.observer?.workProgressChanged?.({
+    turnId: "turn-progress-current",
+    turnRevision: 3,
+    originTurnId: "turn-progress-current",
+    sourceRevision: 2,
+    programId: "current-work",
+    tasks: [{
+      taskId: "current-task",
+      taskTitle: "current Plan title",
+      taskDescription: "current Plan description",
+      taskOutcome: "current Plan outcome",
+      taskOrder: 0,
+      taskState: "active",
+      workId: "current-work",
+      workTitle: "current Work",
+      workState: "active",
+    }],
+  });
+  await capture.observer?.phaseActivityChanged?.({
+    turnId: "turn-progress-current",
+    semanticState: "running",
+    activityId: "activity-old",
+    originTurnId: "turn-progress-old",
+    sourceRevision: 1,
+    title: "old phase",
+    summary: "old phase summary",
+    nextStep: "old phase next",
+  });
+
+  expect(forwarded).toEqual(["old Plan outcome", "current Plan outcome"]);
+  expect(capture.facts()).toEqual(["current Plan outcome"]);
 });
 
 test("Guided agent preserves the caller signal without a whole-turn deadline", async () => {
@@ -2886,66 +4004,332 @@ test("Managed Work remains in the semantic loop while a model round is still run
   }
 });
 
-test("Guided operational reporting preserves current and outdated saved result reviews", () => {
+test("operational fallback uses only current-Turn safe facts before updated Work", () => {
+  const turnId = "turn-operational-facts";
+  const staleWork: DurableWorkView = {
+    workId: "guided-work-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    sessionId: "session-operational-facts",
+    scope: { kind: "session", sessionId: "session-operational-facts" },
+    origin: { turnId: "turn-older", messageId: "message-older" },
+    objective: "오래된 작업 목표",
+    status: "open",
+    currentStage: "execution",
+    allowedNextStages: ["review"],
+    actionProgress: [],
+    latestCheckpoint: {
+      checkpointRevisionId: "checkpoint-older",
+      revision: 1,
+      planRevisionId: "plan-older",
+      stage: "execution",
+      actionProgress: [],
+      publicSummary: "오래된 체크포인트 내용",
+      nextStep: "오래된 다음 단계",
+      referencedResultRefs: [],
+      originTurnId: "turn-older",
+      createdAt: "2026-08-01T00:00:00.000Z",
+    },
+    effectBlockers: [{
+      blockerId: "blocker-older",
+      sourceTurnId: "turn-older",
+      capability: "workspace.file",
+      target: "workspace:old.txt",
+      detail: "old blocker",
+      createdAt: "2026-08-01T00:00:00.000Z",
+    }],
+    resultRefs: [],
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  };
+  expect(operationalWorkFacts(staleWork, turnId)).toBeUndefined();
+
+  const currentTool = {
+    callId: "safe-fact-call",
+    toolName: "read_file",
+    rawArguments: "{\"path\":\"secret.txt\"}",
+    arguments: { path: "secret.txt" },
+    status: "completed" as const,
+    result: {
+      ok: true,
+      evidence_capability_receipts: [{
+        receipt_id: "evidence-current",
+        schema_version: "evidence-capability.v1",
+        producer: { kind: "tool", name: "read_file" },
+        capability: "source_verified",
+        evidence_kind: "source_page",
+        maturity: "verified",
+        confidence: 1,
+        verified: true,
+        summary: "현재 파일 상태를 확인했습니다.",
+        references: [],
+        limitations: [],
+        created_at: "2026-08-01T00:00:00.000Z",
+      }],
+      content: "RAW PRIVATE TOOL OUTPUT",
+      evidence_receipts: [{ summary: "현재 공개 증거를 확인했습니다." }],
+      effect_receipt: { receipt_id: "receipt-current" },
+    },
+  };
+  const appliedEffect = {
+    effectId: "effect-current",
+    receiptId: "receipt-current",
+    status: "applied",
+    receipt: { receiptId: "receipt-current" },
+  } as unknown as import(
+    "../../packages/butler-agent/src/agent/btcc/effects/index.ts"
+  ).GuidedEffectJournalRecord;
+  const oldEffect = {
+    effectId: "effect-old",
+    receiptId: "receipt-old",
+    status: "applied",
+  } as unknown as import(
+    "../../packages/butler-agent/src/agent/btcc/effects/index.ts"
+  ).GuidedEffectJournalRecord;
+  const secondAppliedEffect = {
+    effectId: "effect-current-2",
+    receiptId: "receipt-current-2",
+    status: "applied",
+    receipt: { receiptId: "receipt-current-2" },
+  } as unknown as import(
+    "../../packages/butler-agent/src/agent/btcc/effects/index.ts"
+  ).GuidedEffectJournalRecord;
+  const pendingEffect = {
+    effectId: "effect-pending",
+    receiptId: "receipt-pending",
+    status: "pending",
+  } as unknown as import(
+    "../../packages/butler-agent/src/agent/btcc/effects/index.ts"
+  ).GuidedEffectJournalRecord;
+  expect(currentTurnEffectRecords([currentTool], [appliedEffect, oldEffect]))
+    .toEqual([appliedEffect]);
+
+  const fallback = guidedOperationalFallback({
+    originalRequest: "현재 상태를 확인해 주세요.",
+    responseLanguage: "ko",
+    work: staleWork,
+    toolCalls: [currentTool],
+    effects: [appliedEffect, secondAppliedEffect, pendingEffect],
+    currentTurnProgress: ["현재 공개 진행을 확인했습니다.", "Steward 내부 상태"],
+  });
+  expect(fallback).toContain("검증된 소스 근거를 확인했습니다.");
+  expect(fallback).not.toContain("현재 파일 상태를 확인했습니다.");
+  expect(fallback).not.toContain("현재 공개 증거를 확인했습니다.");
+  expect(fallback).toContain("현재 Turn의 변경 결과를 확인했습니다.");
+  expect(fallback.match(/현재 Turn의 변경 결과를 확인했습니다\./gu)).toHaveLength(1);
+  expect(fallback).toContain("현재 진행 내용: 현재 공개 진행을 확인했습니다.");
+  expect(fallback).not.toContain("RAW PRIVATE TOOL OUTPUT");
+  expect(fallback).not.toContain("오래된 체크포인트 내용");
+  expect(fallback).not.toContain("오래된 다음 단계");
+  expect(fallback).not.toContain(staleWork.workId);
+  expect(fallback).not.toContain("Steward");
+});
+
+test("bound Work becomes fallback-eligible only after a current-Turn material update", () => {
+  const turnId = "turn-current-work-facts";
+  const staleCheckpoint = {
+    checkpointRevisionId: "checkpoint-stale",
+    revision: 1,
+    planRevisionId: "plan-stale",
+    stage: "execution" as const,
+    actionProgress: [],
+    publicSummary: "저장된 이전 진행 내용",
+    nextStep: "이전 다음 단계",
+    referencedResultRefs: [],
+    originTurnId: "turn-before",
+    createdAt: "2026-08-01T00:00:00.000Z",
+  };
   const work: DurableWorkView = {
-    workId: "work-completed",
-    sessionId: "session-completed",
-    scope: { kind: "session", sessionId: "session-completed" },
-    origin: { turnId: "turn-completed", messageId: "message-completed" },
-    objective: "Build and verify the requested page",
+    workId: "guided-work-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    sessionId: "session-current-work-facts",
+    scope: { kind: "session", sessionId: "session-current-work-facts" },
+    origin: { turnId: "turn-before", messageId: "message-before" },
+    objective: "현재 작업 목표",
+    status: "open",
+    currentStage: "execution",
+    allowedNextStages: ["review"],
+    actionProgress: [],
+    latestCheckpoint: staleCheckpoint,
+    resultRefs: [],
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  };
+  expect(operationalWorkFacts(work, turnId)).toBeUndefined();
+  const current = {
+    ...work,
+    latestCheckpoint: {
+      ...staleCheckpoint,
+      checkpointRevisionId: "checkpoint-current",
+      revision: 2,
+      publicSummary: "현재 Turn에서 저장한 진행 내용",
+      nextStep: "현재 Turn의 다음 단계",
+      originTurnId: turnId,
+    },
+  };
+  expect(operationalWorkFacts(current, turnId)).toMatchObject({
+    checkpointSummary: "현재 Turn에서 저장한 진행 내용",
+    checkpointNextStep: "현재 Turn의 다음 단계",
+  });
+
+  const fallback = guidedOperationalFallback({
+    originalRequest: "작업을 이어서 진행해 주세요.",
+    work: current,
+    workFacts: operationalWorkFacts(current, turnId),
+    toolCalls: [],
+    effects: [],
+  });
+  expect(fallback).toContain("현재 Turn에서 저장한 진행 내용");
+  expect(fallback).toContain("현재 Turn의 다음 단계");
+  expect(guidedOperationalFallback({
+    originalRequest: "작업을 이어서 진행해 주세요.",
+    work,
+    toolCalls: [],
+    effects: [],
+  })).not.toContain("저장된 이전 진행 내용");
+});
+
+test("fallback keeps Work fields isolated by their own current-Turn provenance", () => {
+  const turnId = "turn-field-provenance";
+  const work: DurableWorkView = {
+    workId: "guided-work-field-provenance",
+    sessionId: "session-field-provenance",
+    scope: { kind: "session", sessionId: "session-field-provenance" },
+    origin: { turnId: "turn-old", messageId: "message-old" },
+    objective: "오래된 목표",
     status: "completed",
     currentStage: "reporting",
     allowedNextStages: ["review"],
     actionProgress: [],
-    latestResultReview: {
-      reviewRevisionId: "review-completed",
+    latestCheckpoint: {
+      checkpointRevisionId: "checkpoint-old",
       revision: 1,
+      planRevisionId: "plan-old",
+      stage: "execution",
+      actionProgress: [],
+      publicSummary: "오래된 체크포인트 요약",
+      nextStep: "오래된 체크포인트 다음 단계",
+      referencedResultRefs: [],
+      originTurnId: "turn-old",
+      createdAt: "2026-08-01T00:00:00.000Z",
+    },
+    latestResultReview: {
+      reviewRevisionId: "review-current",
+      revision: 2,
       subject: "result",
-      verdict: "accept",
-      summary: "The requested page was built and desktop and mobile rendering passed.",
+      verdict: "partial",
+      summary: "현재 결과 검토를 확인했습니다.",
       corrections: [],
       boundResultRefs: [],
-      originTurnId: "turn-completed",
+      originTurnId: turnId,
+      createdAt: "2026-08-01T00:01:00.000Z",
+    },
+    latestDisposition: {
+      dispositionRevisionId: "disposition-current",
+      revision: 3,
+      resultSequence: 1,
+      materialFingerprint: "fingerprint-current",
+      disposition: "completed",
+      summary: "현재 처리 결과를 확인했습니다.",
+      actionUpdates: [],
+      remainingActions: [],
+      evidenceRefs: [],
+      evidenceSnapshot: [],
+      followups: [],
+      originTurnId: turnId,
+      createdAt: "2026-08-01T00:02:00.000Z",
+    },
+    effectBlockers: [{
+      blockerId: "blocker-current",
+      sourceTurnId: turnId,
+      capability: "workspace.file",
+      target: "workspace:current.txt",
+      detail: "현재 Turn에서 확인이 필요한 제한입니다.",
+      createdAt: "2026-08-01T00:02:00.000Z",
+    }],
+    resultRefs: [],
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:02:00.000Z",
+  };
+  const facts = operationalWorkFacts(work, turnId);
+  expect(facts).toMatchObject({
+    status: "completed",
+    resultSummary: "현재 결과 검토를 확인했습니다.",
+    dispositionSummary: "현재 처리 결과를 확인했습니다.",
+    blockers: ["현재 Turn에서 확인이 필요한 제한입니다."],
+  });
+  expect(facts).not.toHaveProperty("checkpointSummary");
+  expect(facts).not.toHaveProperty("checkpointNextStep");
+
+  const fallback = guidedOperationalFallback({
+    originalRequest: "현재 결과를 알려 주세요.",
+    responseLanguage: "ko",
+    work,
+    workFacts: facts,
+    toolCalls: [],
+    effects: [],
+  });
+  expect(fallback).toContain("요청한 작업은 완료됐습니다");
+  expect(fallback).toContain("현재 결과 검토: 현재 결과 검토를 확인했습니다.");
+  expect(fallback).toContain("현재 처리 결과: 현재 처리 결과를 확인했습니다.");
+  expect(fallback).toContain("현재 제한: 현재 Turn에서 확인이 필요한 제한입니다.");
+  expect(fallback).not.toContain("오래된 체크포인트");
+  expect(fallback).not.toContain("오래된 체크포인트 다음 단계");
+});
+
+test("Work-derived fallback facts fail closed for internal names and paths", () => {
+  const turnId = "turn-work-fact-safety";
+  const work: DurableWorkView = {
+    workId: "guided-work-safety-id",
+    sessionId: "session-work-fact-safety",
+    scope: { kind: "session", sessionId: "session-work-fact-safety" },
+    origin: { turnId, messageId: "message-work-fact-safety" },
+    objective: "현재 안전한 목표",
+    status: "open",
+    allowedNextStages: ["review"],
+    actionProgress: [],
+    latestCheckpoint: {
+      checkpointRevisionId: "checkpoint-safety",
+      revision: 1,
+      planRevisionId: "plan-safety",
+      stage: "execution",
+      actionProgress: [],
+      publicSummary: "Worker가 guided-work-safety-id를 /Users/test-user/Project Files에서 확인했습니다.",
+      nextStep: "C:\\Users\\test-user\\Project Files\\next.md를 확인합니다.",
+      referencedResultRefs: [],
+      originTurnId: turnId,
+      createdAt: "2026-08-01T00:00:00.000Z",
+    },
+    latestResultReview: {
+      reviewRevisionId: "review-safety",
+      revision: 2,
+      subject: "result",
+      verdict: "partial",
+      summary: "docs/read me.md에서 결과를 확인했습니다.",
+      corrections: [],
+      boundResultRefs: [],
+      originTurnId: turnId,
       createdAt: "2026-08-01T00:00:00.000Z",
     },
     resultRefs: [],
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
   };
-  const facts = {
-    originalRequest: "페이지를 만들어 주세요.",
+  const facts = operationalWorkFacts(work, turnId);
+  expect(facts).toMatchObject({ objective: "현재 안전한 목표" });
+  expect(facts).not.toHaveProperty("checkpointSummary");
+  expect(facts).not.toHaveProperty("checkpointNextStep");
+  expect(facts).not.toHaveProperty("resultSummary");
+  const fallback = guidedOperationalFallback({
+    originalRequest: "안전하게 결과를 알려 주세요.",
+    responseLanguage: "ko",
     work,
+    workFacts: facts,
     toolCalls: [],
     effects: [],
-  };
-
-  expect(guidedOperationalReportPrompt(facts)).toContain(
-    "The requested page was built and desktop and mobile rendering passed.",
-  );
-  const fallback = guidedOperationalFallback(facts);
-  expect(fallback).toContain("요청한 작업은 완료됐습니다");
-  expect(fallback).toContain("desktop and mobile rendering passed");
-  expect(fallback).not.toContain("Saved model result review");
-
-  const outdated = {
-    ...facts,
-    work: {
-      ...work,
-      status: "open" as const,
-      resultRefs: [{
-        resultRef: "result-after-review",
-        toolCallId: "call-after-review",
-        toolName: "read_file",
-        status: "completed" as const,
-        originTurnId: "turn-completed",
-        attachedAt: "2026-08-01T00:01:00.000Z",
-      }],
-    },
-  };
-  expect(guidedOperationalReportPrompt(outdated))
-    .toContain("Outdated result summary");
-  expect(guidedOperationalFallback(outdated))
-    .not.toContain("Saved model result review");
+  });
+  expect(fallback).not.toContain("Worker");
+  expect(fallback).not.toContain("guided-work-safety-id");
+  expect(fallback).not.toContain("/Users/test-user");
+  expect(fallback).not.toContain("Project Files");
+  expect(fallback).not.toContain("docs/read me.md");
 });
 
 test("Guided operational fallback does not count returned tool failures as success", () => {
@@ -3116,6 +4500,47 @@ test("Guided empty main response returns a deterministic fact-based fallback", a
   expect(answer).not.toMatch(/다시 요청|retry|continue/iu);
   expect(calls).toBe(1);
   expect(factLoads).toBe(1);
+});
+
+test("Guided model exhaustion uses the deterministic fallback without another model round", async () => {
+  let calls = 0;
+  let factLoads = 0;
+  const answer = await runGuidedAgentLoopWithOperationalReport({
+    options: {
+      prompt: "도구 실행이 끝나지 않은 요청입니다.",
+      tools: [{
+        name: "echo",
+        description: "Echo a safe message.",
+        parameters: {
+          type: "object",
+          properties: { message: { type: "string" } },
+          required: ["message"],
+        },
+      }],
+      modelRound: scriptedModelRound([
+        () => {
+          calls += 1;
+          return toolResponse([toolCall("exhaustion-call", "echo", {
+            message: "still working",
+          })]);
+        },
+      ]),
+      maxIterations: 1,
+      executeTool: async () => ({ ok: true }),
+    },
+    parentSignal: new AbortController().signal,
+    originalRequest: "도구 실행이 끝나지 않은 요청입니다.",
+    loadFacts: async () => {
+      factLoads += 1;
+      return { work: null, toolCalls: [], effects: [] };
+    },
+  });
+
+  expect(calls).toBe(1);
+  expect(factLoads).toBe(1);
+  expect(answer).toContain("답변 생성을 마치지 못했습니다");
+  expect(answer).not.toContain("available tool budget");
+  expect(answer).not.toContain("echo: ok");
 });
 
 test("Guided unexpected local failure does not start an operational report request", async () => {

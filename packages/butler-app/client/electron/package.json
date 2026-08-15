@@ -18,7 +18,7 @@
     "serverMode": "agent-gateway"
   },
   "devDependencies": {
-    "@electron/packager": "^20.0.0",
+    "@electron/packager": "^20.3.0",
     "@electron/windows-sign": "^1.2.2",
     "electron": "41.10.4",
     "electron-devtools-installer": "^4.0.0",

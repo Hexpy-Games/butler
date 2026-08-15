@@ -37,7 +37,7 @@ test("opening an existing R3 database migrates Work columns and anchors idempote
         original_message, admission_snapshot_ref, model_selection_json,
         context_json, semantic_state, revision, execution_fence
       ) VALUES (?, 'session-migration', ?, ?, ?, ?, 'snapshot', '{}', '{}',
-        'admitted', 1, 1)
+        'admitted', 1, 0)
     `).run(
       turnId,
       `inbox-${turnId}`,
@@ -87,9 +87,11 @@ test("opening an existing R3 database migrates Work columns and anchors idempote
   legacy.close();
 
   const first = openBtccSqliteStores({ dbPath, ownerId: "migration-owner-1" });
-  expect(await first.durableWork.bindOpenWork({
+  expect(await first.durableWork.continueWork({
     turnId: "turn-migration-resume",
     sessionId: "session-migration",
+    mutationCallId: "migration-explicit-continue",
+    workId: "work-migration",
   })).toMatchObject({
     objective: "original stable objective",
     currentStage: "planning",
@@ -127,6 +129,65 @@ test("opening an existing R3 database migrates Work columns and anchors idempote
     .toMatchObject({ notnull: 0, dflt_value: null });
   expect(checkpointColumns.find((column) => column.name === "action_states_json"))
     .toMatchObject({ notnull: 1, dflt_value: "'[]'" });
+  expect(migrated.query<{ name: string }, []>(
+    "PRAGMA table_info(btcc_guided_tool_calls)",
+  ).all().map((column) => column.name)).toContain("turn_sequence");
+  expect(migrated.query<{ name: string }, []>(
+    "PRAGMA table_info(btcc_guided_work_results)",
+  ).all().map((column) => column.name)).toEqual(expect.arrayContaining([
+    "source_turn_rowid",
+    "source_turn_sequence",
+  ]));
+  migrated.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("tool journal migration seeds deterministic per-Turn order for legacy rows", () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-tool-journal-order-migration-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const legacy = new Database(dbPath);
+  const legacySchema = BTCC_SUCCESSOR_SCHEMA
+    .replace("  turn_sequence INTEGER,\n", "")
+    .replace(
+      "CREATE INDEX IF NOT EXISTS idx_btcc_guided_tool_calls_turn_sequence\n" +
+        "ON btcc_guided_tool_calls(turn_id, turn_sequence);\n",
+      "",
+    );
+  legacy.exec(legacySchema);
+  legacy.query(`
+    INSERT INTO btcc_guided_tool_calls (
+      call_id, turn_id, tool_name, raw_arguments, arguments_json,
+      status, started_at
+    ) VALUES (?, ?, 'read_file', '{}', '{}', 'completed', ?)
+  `).run("z-legacy-first", "legacy-order-turn", "2026-08-08T00:00:00.000Z");
+  legacy.query(`
+    INSERT INTO btcc_guided_tool_calls (
+      call_id, turn_id, tool_name, raw_arguments, arguments_json,
+      status, started_at
+    ) VALUES (?, ?, 'read_file', '{}', '{}', 'completed', ?)
+  `).run("a-legacy-second", "legacy-order-turn", "2026-08-08T00:00:00.000Z");
+  legacy.close();
+
+  const first = openBtccSqliteStores({
+    dbPath,
+    ownerId: "tool-journal-order-first",
+  });
+  expect(first.guidedToolJournal.list("legacy-order-turn").map((row) => row.callId))
+    .toEqual(["z-legacy-first", "a-legacy-second"]);
+  first.close();
+
+  const second = openBtccSqliteStores({
+    dbPath,
+    ownerId: "tool-journal-order-second",
+  });
+  expect(second.guidedToolJournal.list("legacy-order-turn").map((row) => row.callId))
+    .toEqual(["z-legacy-first", "a-legacy-second"]);
+  second.close();
+  const migrated = new Database(dbPath);
+  expect(migrated.query<{ turn_sequence: number }, []>(`
+    SELECT turn_sequence FROM btcc_guided_tool_calls
+    WHERE turn_id = 'legacy-order-turn' ORDER BY turn_sequence
+  `).all().map((row) => row.turn_sequence)).toEqual([1, 2]);
   migrated.close();
   rmSync(root, { recursive: true, force: true });
 });

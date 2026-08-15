@@ -96,6 +96,81 @@ test("Guided Turn answers directly through only durable admission and delivery s
   }
 });
 
+test("Guided Turn persists final artifacts and returns them unchanged on replay", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-artifact-replay-"));
+  const dbPath = join(root, "btcc.sqlite");
+  let stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-artifact-replay",
+    storageProfile: "ephemeral",
+  });
+  const artifacts = [{
+    id: "artifact-page",
+    kind: "chart_file" as const,
+    title: "page.png",
+    safePathLabel: "artifacts/generated/capture/page.png",
+    mimeType: "image/png",
+    sizeBytes: 128,
+    createdAt: "2026-08-09T00:00:00.000Z",
+  }];
+  let calls = 0;
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns: stores.turns,
+    messages: stores.messages,
+    agent: {
+      async run() {
+        calls += 1;
+        return { route: "assisted", content: "캡처 결과입니다.", artifacts };
+      },
+    },
+  });
+  const command = runCommand("guided-artifact-replay-turn");
+  try {
+    const first = await runtime.runTurn(command);
+    const replay = await runtime.runTurn(command);
+    expect(first).toMatchObject({
+      kind: "delivered",
+      content: "캡처 결과입니다.",
+      artifacts,
+    });
+    expect(replay).toEqual(first);
+    expect(calls).toBe(1);
+    const stored = await stores.turns.findTurn(command.turnId);
+    expect(stored?.finalPayload?.artifacts).toEqual(artifacts);
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(JSON.parse(db.query<{
+        final_payload_json: string;
+      }, [string]>(
+        "SELECT final_payload_json FROM btcc_turns WHERE turn_id = ?",
+      ).get(command.turnId)!.final_payload_json).artifacts).toEqual(artifacts);
+    } finally {
+      db.close(false);
+    }
+    stores.close();
+    stores = openBtccSqliteStores({
+      dbPath,
+      ownerId: "guided-artifact-replay-reopened",
+      storageProfile: "ephemeral",
+    });
+    const restartedRuntime = createGuidedTurnRuntime({
+      admission: stores.admission,
+      turns: stores.turns,
+      messages: stores.messages,
+      agent: {
+        async run() {
+          throw new Error("A delivered Turn must not rerun after restart");
+        },
+      },
+    });
+    expect(await restartedRuntime.runTurn(command)).toEqual(first);
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("Guided execution windows stay in one Turn and commit one canonical answer", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-same-turn-window-"));
   const dbPath = join(root, "btcc.sqlite");
@@ -280,17 +355,22 @@ test("Guided Turn does not retry a non-contention final commit failure", async (
   }
 });
 
-test("Guided Turn delivers an explicit operational failure when the model produces no final answer", async () => {
+test("Guided Turn surfaces exhausted provider recovery as a retryable runtime fault", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-provider-failure-"));
   const stores = openBtccSqliteStores({
     dbPath: join(root, "btcc.sqlite"),
     ownerId: "guided-provider-failure",
     storageProfile: "ephemeral",
   });
+  const faults: Array<{ kind: string; retryable: boolean; safeErrorCode: string }> = [];
   const runtime = createGuidedTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
     messages: stores.messages,
+    progress: {
+      stateChanged() {},
+      runtimeFaulted(update) { faults.push(update); },
+    },
     agent: {
       async run() {
         throw new ModelProviderRequestError({
@@ -303,11 +383,14 @@ test("Guided Turn delivers an explicit operational failure when the model produc
     },
   });
   try {
-    expect(await runtime.runTurn(runCommand("guided-provider-failure-turn")))
-      .toMatchObject({
-        kind: "delivered",
-        content: "모델 연결이 일시적으로 중단되어 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.",
-      });
+    await expect(runtime.runTurn(runCommand("guided-provider-failure-turn")))
+      .rejects.toMatchObject({ code: "provider_network_error" });
+    expect(faults).toHaveLength(1);
+    expect(faults[0]).toMatchObject({
+      kind: "provider_transport_exhausted",
+      retryable: true,
+      safeErrorCode: "provider_network_error",
+    });
   } finally {
     stores.close();
     rmSync(root, { recursive: true, force: true });

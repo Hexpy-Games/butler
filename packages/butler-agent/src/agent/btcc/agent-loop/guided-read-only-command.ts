@@ -1,6 +1,14 @@
 import { readFileSync } from "node:fs";
 import { budgetToolOutput } from "../../context/tool-output-budgeter.ts";
 import { executeGuidedCommand } from "./guided-command/execute-command.ts";
+import {
+  commandEvidenceCapabilityReceipts,
+  commandEvidenceReceipts,
+} from "../../tools/run-command/run_command/evidence.ts";
+import {
+  guidedCommandArtifacts,
+  type GuidedCommandArtifactSnapshot,
+} from "./guided-command-artifacts.ts";
 
 export type GuidedSpooledCommandResult = {
   summary: {
@@ -43,6 +51,7 @@ export async function executeGuidedReadOnlyCommand(input: {
     return guidedCommandPublicResult({
       spooled,
       butlerData: input.butlerData,
+      workspacePath: input.workspacePath,
       args: input.args,
       sandbox: "read_only_no_network",
     });
@@ -57,12 +66,23 @@ export async function executeGuidedReadOnlyCommand(input: {
   }
 }
 
-export function guidedCommandPublicResult(input: {
+type GuidedCommandPublicResultInput = {
   spooled: GuidedSpooledCommandResult;
   butlerData: string;
+  workspacePath: string;
   args: Record<string, unknown>;
-  sandbox: "read_only_no_network" | "full_access_contained";
-}): Record<string, unknown> {
+} & (
+  | { sandbox: "read_only_no_network" }
+  | {
+      sandbox: "full_access_contained";
+      startedAtMs: number;
+      artifactSnapshot: GuidedCommandArtifactSnapshot;
+    }
+);
+
+export function guidedCommandPublicResult(
+  input: GuidedCommandPublicResultInput,
+): Record<string, unknown> {
   const streams = readSpooledStreams(input.spooled.payloadSource.path);
   const budgeted = budgetToolOutput({
     result: {
@@ -76,8 +96,26 @@ export function guidedCommandPublicResult(input: {
     cwd: input.spooled.summary.cwd,
     maxModelTokens: boundedInteger(input.args.max_output_tokens, 1_200, 200, 8_000),
   });
+  const success = budgeted.exit_code === 0 && !budgeted.timed_out;
+  const publication = success
+    ? guidedCommandArtifacts({
+        outputPaths: input.args.output_paths,
+        butlerData: input.butlerData,
+        workspacePath: input.workspacePath,
+        cwd: input.spooled.summary.cwd,
+        ...(input.sandbox === "full_access_contained"
+          ? {
+              startedAtMs: input.startedAtMs,
+              before: input.artifactSnapshot,
+            }
+          : {}),
+      })
+    : { requested: declaredOutputCount(input.args.output_paths), artifacts: [] };
+  const publicationFailed = success && publication.requested > 0 &&
+    publication.artifacts.length === 0;
+  const ok = success && !publicationFailed;
   return {
-    ok: budgeted.exit_code === 0 && !budgeted.timed_out,
+    ok,
     command: input.spooled.summary.command,
     cwd: input.spooled.summary.cwd,
     exit_code: budgeted.exit_code,
@@ -85,10 +123,55 @@ export function guidedCommandPublicResult(input: {
     stdout: budgeted.stdout,
     stderr: budgeted.stderr,
     sandbox: input.sandbox,
+    ...(publication.requested > 0
+      ? {
+          artifact_publication: {
+            requested: publication.requested,
+            published: publication.artifacts.length,
+            unpublished: Math.max(
+              0,
+              publication.requested - publication.artifacts.length,
+            ),
+          },
+        }
+      : {}),
+    ...(publicationFailed
+      ? {
+          error: {
+            code: "declared_output_files_unavailable",
+            message: "None of the declared output files could be published as attachments.",
+            recoverable: true,
+            next_action: "Declare existing regular files inside the active workspace or Butler artifact directory.",
+          },
+        }
+      : {}),
     ...(budgeted.butler_tool_artifact
       ? { butler_tool_artifact: budgeted.butler_tool_artifact }
       : {}),
+    ...(publication.artifacts.length > 0
+      ? {
+          artifacts: publication.artifacts,
+          verified_output_files: publication.artifacts,
+          evidence_receipts: commandEvidenceReceipts({
+            success: ok,
+            artifacts: publication.artifacts,
+          }),
+          evidence_capability_receipts: commandEvidenceCapabilityReceipts({
+            exitCode: budgeted.exit_code,
+            timedOut: budgeted.timed_out,
+            outputSuppressed: false,
+            outputBudgeted: Boolean(budgeted.butler_tool_artifact),
+            artifacts: publication.artifacts,
+          }),
+        }
+      : {}),
   };
+}
+
+function declaredOutputCount(value: unknown): number {
+  return Array.isArray(value)
+    ? value.filter((item) => typeof item === "string" && Boolean(item.trim())).length
+    : 0;
 }
 
 function readSpooledStreams(path: string): { stdout: string; stderr: string } {

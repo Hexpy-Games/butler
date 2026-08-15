@@ -13,6 +13,10 @@ import { OPENAI_PROVIDER_ADAPTER } from "./openai/adapter.ts";
 import { OPENCODE_GO_PROVIDER_ADAPTER } from "./opencode-go/adapter.ts";
 import { QWEN_PROVIDER_ADAPTER } from "./qwen/adapter.ts";
 import type { ProviderAdapterDefinition } from "./shared/adapter-definition.ts";
+import type {
+  ImageCapabilityCatalogEntry,
+  VisualCapabilityResolverInput,
+} from "../../agent/image-attachment/contracts.ts";
 import { XAI_PROVIDER_ADAPTER } from "./xai/adapter.ts";
 import { ZAI_PROVIDER_ADAPTER } from "./zai/adapter.ts";
 import { ZAI_API_PROVIDER_ADAPTER } from "./zai-api/adapter.ts";
@@ -44,6 +48,15 @@ export function resolveProviderAdapterDefinition(modelRef: string): ProviderAdap
 export function providerCapabilitiesForModel(modelRef: string): ProviderCapabilities {
   const effectiveModelRef = modelRef.trim() || DEFAULT_MODEL_REF;
   return resolveProviderAdapterDefinition(effectiveModelRef).capabilitiesFor(effectiveModelRef);
+}
+
+export async function resolveProviderVisualCapability(
+  input: VisualCapabilityResolverInput,
+): Promise<ImageCapabilityCatalogEntry | undefined> {
+  const adapter = resolveProviderAdapterDefinition(input.modelRef);
+  return adapter.resolveVisualCapability
+    ? await adapter.resolveVisualCapability(input)
+    : input.entry;
 }
 
 export function bindProviderToModel(

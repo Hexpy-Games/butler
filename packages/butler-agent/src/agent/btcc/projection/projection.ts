@@ -15,7 +15,7 @@ import { normalizeGuidedToolCall } from "../../tools/tool-support.ts";
 
 export type GuidedActivityBinding = {
   activityId: string;
-  displayStage: WorkStage;
+  displayStage?: WorkStage;
   deferredUntilAccepted: boolean;
 };
 
@@ -53,9 +53,13 @@ export function createGuidedActivityProjection(input: {
   turnId: string;
   progress?: BtccTurnProgressObserver;
   managedInitially?: boolean;
+  /** Canonical monotonic revision shared by all public Turn activity emitters. */
+  nextSourceRevision?: () => number;
 }): GuidedActivityProjection {
   let pendingTools: PendingTool[] = [];
   let managed = input.managedInitially === true;
+  let localSourceRevision = 0;
+  const nextSourceRevision = input.nextSourceRevision ?? (() => ++localSourceRevision);
   const groupsById = new Map<string, ActivityGroup>();
   let currentActivity: ActivityGroup | undefined;
   let fallbackOrdinaryActivity: ActivityGroup | undefined;
@@ -97,14 +101,18 @@ export function createGuidedActivityProjection(input: {
       });
       if (pending) pending.claimed = true;
       if (kind !== "ordinary") managed = true;
-      if (managed && !group.deferredUntilAccepted) await publishGroup(input, group);
+      if (managed && !group.deferredUntilAccepted) {
+        await publishGroup({ ...input, nextSourceRevision }, group);
+      }
       return bindingFromGroup(group);
     },
 
     async markManaged(binding) {
       managed = true;
       const group = binding && groupsById.get(binding.activityId);
-      if (group && !group.deferredUntilAccepted) await publishGroup(input, group);
+      if (group && !group.deferredUntilAccepted) {
+        await publishGroup({ ...input, nextSourceRevision }, group);
+      }
     },
 
     async publishAccepted(binding) {
@@ -120,7 +128,7 @@ export function createGuidedActivityProjection(input: {
           }
           fallbackOrdinaryActivity = undefined;
         }
-        await publishGroup(input, group);
+        await publishGroup({ ...input, nextSourceRevision }, group);
       }
     },
   };
@@ -185,7 +193,7 @@ export function createGuidedActivityProjection(input: {
       groupInput.calls.every((call) => call.name === "run_command");
     const group: ActivityGroup = {
       activityId: activityId(input.turnId),
-      displayStage: content.displayStage,
+      ...(content.displayStage ? { displayStage: content.displayStage } : {}),
       deferredUntilAccepted: first ? activityKind(first.name) !== "ordinary" : false,
       title: boundedTitle(
         groupInput.title ||
@@ -249,7 +257,11 @@ export function createGuidedActivityProjection(input: {
 }
 
 async function publishGroup(
-  input: { turnId: string; progress?: BtccTurnProgressObserver },
+  input: {
+    turnId: string;
+    progress?: BtccTurnProgressObserver;
+    nextSourceRevision: () => number;
+  },
   group: ActivityGroup,
 ): Promise<void> {
   if (group.published) return;
@@ -262,6 +274,8 @@ async function publishGroup(
     await input.progress.phaseActivityChanged({
       turnId: input.turnId,
       semanticState: "admitted",
+      originTurnId: input.turnId,
+      sourceRevision: input.nextSourceRevision(),
       activityId: group.activityId,
       displayStage: group.displayStage,
       title: group.title,

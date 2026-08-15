@@ -9,6 +9,12 @@ import type {
   ModelRoundTool,
   ModelRoundToolCall,
 } from "../ports/model-round.ts";
+import type {
+  ImageCapabilityEvidence,
+  ImageCarrierTuple,
+  VerifiedImagePayloadPort,
+  VisualAdmittedManifest,
+} from "../../image-attachment/index.ts";
 import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
 import type {
@@ -17,6 +23,7 @@ import type {
   ReasoningEffort,
 } from "../../../integrations/providers/runtime-contracts.ts";
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
+import type { BtccFinalArtifact } from "../contracts.ts";
 import type { RuntimeMemoryAttributionPort } from
   "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
 
@@ -27,11 +34,13 @@ export type BtccAgentLoopToolCall = ModelRoundToolCall;
 export type BtccAgentLoopResult = {
   content: string;
   route: "direct" | "assisted" | "managed";
+  artifacts?: BtccFinalArtifact[];
 };
 
 export interface BtccAgentLoop {
   run(input: {
     turn: TurnRecord;
+    recoveryAttempt?: number;
     signal: AbortSignal;
     memoryAttribution?: RuntimeMemoryAttributionPort;
     progress?: BtccTurnProgressObserver;
@@ -109,6 +118,7 @@ export interface BtccFinalSynthesisOptions {
 export interface BtccAgentLoopInput {
   prompt: string;
   turnId?: string;
+  recoveryAttempt?: number;
   model?: string;
   resolveModelRef?: () => string;
   instructions?: string;
@@ -116,6 +126,10 @@ export interface BtccAgentLoopInput {
   cacheScope?: string;
   signal?: AbortSignal;
   attachments?: readonly AttachmentRef[];
+  imageCarrier?: ImageCarrierTuple;
+  imageCapability?: ImageCapabilityEvidence;
+  imageManifests?: readonly VisualAdmittedManifest[];
+  verifiedImagePayloadPort?: VerifiedImagePayloadPort;
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
   onProviderStreamEvent?: ProviderStreamProjectionHandler;

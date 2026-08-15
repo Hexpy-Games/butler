@@ -1,5 +1,6 @@
 import type {
   DurableWorkCheckpoint,
+  DurableWorkDisposition,
   DurableWorkReview,
   DurableWorkToolResultRef,
   DurableWorkView,
@@ -24,6 +25,19 @@ export type GuidedWorkTurn = {
   session_id: string;
   original_message_id: string;
   original_message: string;
+};
+
+/**
+ * The turn fields required when a Work relation is about to be mutated.
+ *
+ * Keep these control fields on a relation-specific type so legacy readers
+ * which only hydrate the original-message projection do not have to invent
+ * execution state.  GuidedWorkViewReader.turn is the authoritative source
+ * for this richer row.
+ */
+export type GuidedWorkRelationTurn = GuidedWorkTurn & {
+  semantic_state: string;
+  execution_fence: number;
 };
 
 export type GuidedWorkPlanRow = {
@@ -65,6 +79,24 @@ export type GuidedWorkReviewRow = {
   created_at: string;
 };
 
+export type GuidedWorkDispositionRow = {
+  disposition_revision_id: string;
+  work_id: string;
+  revision: number;
+  result_sequence: number;
+  material_fingerprint: string;
+  disposition: DurableWorkDisposition["disposition"];
+  summary: string;
+  action_updates_json: string;
+  remaining_actions_json: string;
+  next_condition: string | null;
+  evidence_refs_json: string;
+  evidence_snapshot_json: string;
+  followups_json: string;
+  origin_turn_id: string;
+  created_at: string;
+};
+
 export type GuidedWorkResultRow = {
   result_ref: string;
   sequence: number;
@@ -75,5 +107,7 @@ export type GuidedWorkResultRow = {
   result_sha256: string | null;
   error_code: string | null;
   origin_turn_id: string;
+  source_turn_rowid: number | null;
+  source_turn_sequence: number | null;
   attached_at: string;
 };

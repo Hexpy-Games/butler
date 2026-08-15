@@ -66,4 +66,3 @@ function boundedNumber(value: string | undefined, fallback: number, maximum: num
   if (!Number.isFinite(parsed) || parsed < 0) return fallback;
   return Math.min(Math.trunc(parsed), maximum);
 }
-

@@ -173,7 +173,12 @@ function attachmentIdsFromJson(value: string): string[] {
     const parsed = JSON.parse(value) as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .map((item) => (typeof item === "string" ? item : ""))
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "file_id" in item &&
+            typeof item.file_id === "string") return item.file_id;
+        return "";
+      })
       .filter(Boolean);
   } catch {
     return [];

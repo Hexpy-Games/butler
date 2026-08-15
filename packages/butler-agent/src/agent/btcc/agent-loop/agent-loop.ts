@@ -1,7 +1,4 @@
-import { createToolResultModelPreviewContext } from
-  "../../tools/tool-result-serialization.ts";
-import type { ToolResultModelPreviewContext } from
-  "../../tools/tool-result-model-preview.ts";
+import { createToolResultModelPreviewContext } from "../../tools/tool-result-serialization.ts";
 import { emptyResponseRecoveryObservation } from
   "./empty-response-recovery.ts";
 import type {
@@ -23,10 +20,10 @@ import { renderPartialLimitResponse } from "./partial-limit-response.ts";
 import { toolResultToMessage } from "./tool-result-message.ts";
 import {
   emitExecutionWindowBoundary,
+  modelRoundRequestId,
   resolveExecutionWindowSize,
   throwIfExecutionWindowAborted,
 } from "./execution-window.ts";
-
 function emit(
   events: BtccAgentLoopEvent[],
   onEvent: BtccAgentLoopInput["onEvent"],
@@ -58,7 +55,7 @@ export async function runBtccAgentLoop(
   }): Promise<ModelRoundResult> => {
     const roundIndex = (input.usageAttribution?.roundIndex ?? 0) + modelRoundIndex;
     modelRoundIndex += 1;
-    const requestId = `btcc-model-round-${roundIndex}`;
+    const requestId = modelRoundRequestId(roundIndex, input.recoveryAttempt);
     const resolveModelRef = () => input.resolveModelRef?.() ?? input.model ?? "";
     const publishWaiting = async (
       status: "started" | "completed" | "failed" | "cancelled",
@@ -84,6 +81,10 @@ export async function runBtccAgentLoop(
         reasoningEffort: input.reasoningEffort,
         signal: input.signal,
         attachments: input.attachments,
+        imageCarrier: input.imageCarrier,
+        imageCapability: input.imageCapability,
+        imageManifests: input.imageManifests,
+        verifiedImagePayloadPort: input.verifiedImagePayloadPort,
         butlerData: input.butlerData,
         usageAttribution: input.usageAttribution
           ? { ...input.usageAttribution, roundIndex }

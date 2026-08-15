@@ -49,6 +49,37 @@ test("turn activity panel replaces an opening decision with the latest work", ()
   expect(html).not.toContain("Request received. Preparing the work.");
 });
 
+test("turn activity panel keeps an unbound ordinary tool turn visible as 작업 중", () => {
+  const html = renderPanel([
+    {
+      id: "orphan-operation-started",
+      kind: "ran_command",
+      state: "completed",
+      safe_label: "Bun 실행 완료",
+      safe_tool_name: "Bun",
+      safe_input_label: "bun test activity",
+      tool_call_id: "tool-ordinary-1",
+      bridge_phase: "btcc_operation",
+      semantic_block_id: "turn-unbound-ordinary",
+    },
+    {
+      id: "orphan-operation-result",
+      kind: "used_tool",
+      state: "completed",
+      safe_label: "결과 확인",
+      safe_tool_name: "Bun",
+      safe_input_label: "activity test output",
+      tool_call_id: "tool-ordinary-1",
+      bridge_phase: "btcc_operation",
+      semantic_block_id: "turn-unbound-ordinary",
+    },
+  ], "running", "turn-unbound-ordinary");
+
+  expect(html).toContain("현재 · 작업 중");
+  expect(html).toContain("Bun 실행 완료");
+  expect(html).not.toContain("data-work-stage");
+});
+
 test("turn activity panel keeps the latest phase activity visible after Opening", () => {
   const html = renderPanel([
     {
@@ -95,6 +126,7 @@ test("turn activity panel shows only the latest model-authored phase intent", ()
       work_decision_rationale: "사용자의 원래 목표를 보존하기 위해 필요합니다.",
       work_decision_next_step: "목표 계약을 작성합니다.",
       work_decision_source: "model-authored",
+      activity_stage: "conception",
     },
     {
       id: "planning-activity",
@@ -107,6 +139,7 @@ test("turn activity panel shows only the latest model-authored phase intent", ()
       work_decision_rationale: "완결된 작업 단위로 나누기 위해 필요합니다.",
       work_decision_next_step: "계획 후보를 검토합니다.",
       work_decision_source: "model-authored",
+      activity_stage: "planning",
     },
   ]);
 
@@ -129,7 +162,7 @@ test("turn activity panel keeps the handoff under the canonical successor phase"
     },
   ]);
 
-  expect(html).toContain("현재 · 구상 검토 · 1개 기록");
+  expect(html).toContain("현재 · 구상 · 1개 기록");
   expect(html).not.toContain("구상 결과를 독립적으로 검토하고 있습니다");
 });
 
@@ -324,8 +357,10 @@ test("turn activity panel leaves the canonical Work and Task list to the compose
   expect(html).not.toContain("Exercise the real SSE reducer");
 });
 
-function renderPanel(rows: ProgressRow[], state = "running"): string {
-  return renderToStaticMarkup(<TurnActivityPanel rows={rows} state={state} />);
+function renderPanel(rows: ProgressRow[], state = "running", turnId?: string): string {
+  return renderToStaticMarkup(
+    <TurnActivityPanel rows={rows} state={state} turnId={turnId} />,
+  );
 }
 
 function acknowledgedRow(): ProgressRow {
@@ -352,5 +387,6 @@ function phaseActivityRow(): ProgressRow {
     work_decision_rationale: "사용자의 원래 목표를 보존하기 위해 필요합니다.",
     work_decision_next_step: "목표 계약을 작성합니다.",
     work_decision_source: "model-authored",
+    activity_stage: "conception",
   };
 }

@@ -122,6 +122,8 @@ export function authorizedToolDefinitions(
     policy,
     projectRef: turn.context.projectRef,
   });
+  if (isZaiMcpVisionTurn(turn)) names.add("analyze_attached_image");
+  else names.delete("analyze_attached_image");
   if (workspacePagePreviewAvailabilityOverride(env)) {
     names.delete("inspect_workspace_page");
   }
@@ -154,13 +156,7 @@ export function hiddenNativeToolNamesForGuidedTurn(
   ];
 }
 
-export function visibleToolDefinitions(
-  authorized: readonly FunctionToolDefinition[],
-  policy: Pick<
-    ButlerExecutionPolicy,
-    "accessMode" | "trackingMode" | "projectId"
-  >,
-): FunctionToolDefinition[] {
+export function visibleToolDefinitions(authorized: readonly FunctionToolDefinition[], policy: Pick<ButlerExecutionPolicy, "accessMode" | "trackingMode" | "projectId">, includeAttachedImageTool = false): FunctionToolDefinition[] {
   const projectLedgerWork =
     policy.trackingMode === "ledger" && Boolean(policy.projectId);
   const visible = new Set([
@@ -177,6 +173,7 @@ export function visibleToolDefinitions(
     "read_conversation_session",
     ...DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name),
     "project_ledger_status",
+    ...(includeAttachedImageTool ? ["analyze_attached_image"] : []),
     ...(projectLedgerWork
       ? ["project_ledger_list"]
       : []),
@@ -189,6 +186,14 @@ export function visibleToolDefinitions(
     ...guidedWorkspaceVisibleToolNames(policy),
   ]);
   return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
+}
+
+export function isZaiMcpVisionTurn(turn: TurnRecord): boolean {
+  const a = turn.context.imageAdmission;
+  return a?.tuple.providerId === "zai" && a.tuple.modelId === "glm-5.2" &&
+    a.tuple.carrierProtocol === "zai_mcp_vision" && a.capability.toolServerId === "zai-vision" &&
+    a.capability.toolName === "analyze_image" &&
+    a.capability.toolCapabilityDigest === a.tuple.catalogCapabilityDigest;
 }
 
 export function guidedNativeToolDefinitions(): ButlerToolDefinition[] {

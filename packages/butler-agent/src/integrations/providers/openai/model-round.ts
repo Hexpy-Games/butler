@@ -13,6 +13,7 @@ import {
   openAIInputWithAttachments,
   parseToolArguments,
 } from "../shared/runtime-support.ts";
+import { serializeOpenAIVisualInput } from "../../../agent/image-attachment/index.ts";
 import {
   buildReasoningConfig,
   resolveOpenAIModel,
@@ -59,10 +60,22 @@ export async function runOpenAIModelRound(
     ? request.continuation
     : null;
   const firstUser = request.messages.find((message) => message.role === "user");
-  const initialInput = openAIInputWithAttachments(
-    firstUser?.content ?? "",
-    request.attachments ? [...request.attachments] : undefined,
-  );
+  const imageManifests = request.imageManifests ?? request.attachments
+    ?.flatMap((attachment) => attachment.visualManifest ? [attachment.visualManifest] : []) ?? [];
+  const initialInput = imageManifests.length > 0
+    ? await serializeOpenAIVisualInput({
+        text: firstUser?.content ?? "",
+        manifests: imageManifests,
+        payloadPort: request.verifiedImagePayloadPort ?? {
+          read: async () => {
+            throw new Error("verified_image_payload_port_missing");
+          },
+        },
+      })
+    : openAIInputWithAttachments(
+        firstUser?.content ?? "",
+        request.attachments ? [...request.attachments] : undefined,
+      );
   const initialStatelessInput = toCodexStatelessInput(initialInput);
   const continuationMessages = previous
     ? newOpenAIContinuationMessages(

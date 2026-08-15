@@ -188,6 +188,56 @@ test("BTCC facade keeps delivery when optional title generation fails", async ()
   }
 });
 
+test("BTCC gateway handler exposes committed artifacts to outbound projection", async () => {
+  const handlers = createBtccGatewayHandlers({
+    btcc: {
+      async runTurn() {
+        return {
+          kind: "delivered",
+          turnId: "turn-artifact-gateway",
+          messageId: "message-artifact-gateway",
+          content: "캡처 결과입니다.",
+          artifacts: [{
+            id: "artifact-page",
+            kind: "chart_file",
+            title: "page.png",
+            safePathLabel: "artifacts/generated/capture/page.png",
+            mimeType: "image/png",
+            sizeBytes: 128,
+          }],
+        } as const;
+      },
+      async stopTurn(request) {
+        return { kind: "cancelled", turnId: request.turnId } as const;
+      },
+    },
+  });
+  const route: GatewayRoute = {
+    sessionId: "butler/app-chat-artifacts",
+    role: "butler",
+    reason: "session-hint",
+    workspacePath: process.cwd(),
+  };
+
+  const result = await handlers.butler!({
+    envelope: envelope(
+      "turn-artifact-gateway",
+      "message-artifact-gateway",
+      "캡처를 첨부해 주세요.",
+    ),
+    route,
+  });
+
+  expect(result.metadata?.artifacts).toEqual([{
+    id: "artifact-page",
+    kind: "chart_file",
+    title: "page.png",
+    safePathLabel: "artifacts/generated/capture/page.png",
+    mimeType: "image/png",
+    sizeBytes: 128,
+  }]);
+});
+
 test("recent context admission bounds large canonical history while retaining summary and latest context", () => {
   const butlerData = mkdtempSync(join(tmpdir(), "btcc-bounded-recent-context-"));
   roots.push(butlerData);

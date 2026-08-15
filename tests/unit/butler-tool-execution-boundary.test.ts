@@ -67,7 +67,6 @@ describe("Butler actual tool execution boundary", () => {
     const boundary = createGuidedToolExecutionBoundary({
       durableWork: {
         boundWorkForTurn: async () => work,
-        bindOpenWork: async () => work,
       } as unknown as DurableWorkService,
       workScope: { turnId: "turn", sessionId: "session" },
       effectService,

@@ -109,11 +109,11 @@ function attachmentContent(attachment: AttachmentRef, butlerData: string, maxCha
 
 export function attachmentImageDataUrl(attachment: AttachmentRef, butlerData = getButlerData()): string | null {
   if (attachment.kind !== "image") return null;
-  const mime = attachment.mimeType?.trim() || "";
-  if (!/^image\/(?:png|jpeg|webp|gif)$/iu.test(mime)) return null;
-  const bytes = readAttachmentBytes(attachment, butlerData);
-  if (!bytes) return null;
-  return `data:${mime};base64,${bytes.toString("base64")}`;
+  // Image pixels are admitted and resolved through VerifiedImagePayloadPort
+  // immediately before native provider serialization.  This legacy helper
+  // must never read an original localPath or message-file blob as a bypass.
+  void butlerData;
+  throw new Error("verified_image_payload_port_required");
 }
 
 export function renderAttachmentContext(attachments?: AttachmentRef[], options: {

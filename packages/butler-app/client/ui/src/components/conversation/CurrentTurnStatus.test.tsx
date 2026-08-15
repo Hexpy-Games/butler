@@ -46,6 +46,21 @@ test("model waiting and operation status share typography while waiting keeps lo
   expect(waitingStyle).toBe(operationStyle);
 });
 
+test("provider recovery replaces model waiting in the Butler status slot", () => {
+  const html = renderToStaticMarkup(
+    <CurrentTurnStatus
+      modelRoundWait={progressRow("응답 생성 중")}
+      publicActivity={{
+        ...progressRow("재연결 중 (1/5)"),
+        id: "provider-recovery",
+        bridge_phase: "operational_recovery",
+      }}
+    />,
+  );
+  expect(html).toContain("재연결 중 (1/5)");
+  expect(html).not.toContain("응답 생성 중");
+});
+
 function progressRow(label: string): ProgressRow {
   return {
     id: "operation-current-status",

@@ -244,6 +244,16 @@ export class AppTransportProjectionStore {
         this.options.hasTurnEventKind(turnId, turnEvent.kind);
       if (!alreadyProjectedReceipt)
         this.options.appendTurnEvent(chatId, turnId, turnEvent);
+      const runtimeFaultProjected = turnEvent.kind === "runtime.fault"
+        ? projectAppTurnFailure({
+            options: this.options,
+            chatId,
+            turnId,
+            message: { text: turnEvent.payload?.publicSummary },
+            metadata: { safeErrorCode: "runtime_fault" },
+            eventTimestamp: event.timestamp,
+          })
+        : false;
       this.markProjectedTransportEvent(actionId, event.eventId, chatId);
       if (!alreadyProjectedReceipt) this.options.touchChat(chatId);
       const terminalProjected =
@@ -257,7 +267,7 @@ export class AppTransportProjectionStore {
             turnId,
           }) > 0
           : false;
-      return !alreadyProjectedReceipt || terminalProjected;
+      return !alreadyProjectedReceipt || terminalProjected || runtimeFaultProjected;
     }
 
     let terminalRecoverableCorrection = false;

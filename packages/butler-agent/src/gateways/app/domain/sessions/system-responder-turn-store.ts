@@ -20,6 +20,8 @@ import type {
   SystemResponderCompletionInput,
   SystemResponderTurnStoreInput,
 } from "./system-responder-turn-contract.ts";
+import { runtimeFaultFailureMessage } from
+  "../../infrastructure/transport/runtime-fault-failure.ts";
 
 export class AppSystemResponderTurnStore {
   private readonly pendingTurns = new Set<string>();
@@ -133,7 +135,8 @@ export class AppSystemResponderTurnStore {
     const runtimeFault = this.input.runtimeFaultRecordForTurn(turn.id);
     const isRuntimeFault = Boolean(runtimeFault);
     const isRetryableRuntimeFault = runtimeFault?.retryable === true;
-    this.input.upsertAssistantTurnFailure(chatId, turn.id, safeError, {
+    const projectedError = runtimeFaultFailureMessage(runtimeFault, safeError);
+    this.input.upsertAssistantTurnFailure(chatId, turn.id, projectedError, {
       retryable: isRetryableRuntimeFault,
     });
     const failureKind = isRuntimeFault ? "runtime.fault" : "turn.failed";
@@ -141,8 +144,8 @@ export class AppSystemResponderTurnStore {
       this.input.appendTurnEvent(chatId, turn.id, {
         kind: failureKind,
         payload: runtimeFault ?? {
-          safeLabel: safeError.message,
-          safeErrorCode: safeError.code,
+          safeLabel: projectedError.message,
+          safeErrorCode: projectedError.code,
         },
       });
     }
@@ -153,7 +156,7 @@ export class AppSystemResponderTurnStore {
         safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
         retryable: isRetryableRuntimeFault,
         cancellable: false,
-        safeErrorCode: safeError.code,
+        safeErrorCode: projectedError.code,
       },
     );
     this.input.appendTerminalTurnStateChanged(failedTurn);

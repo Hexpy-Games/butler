@@ -157,6 +157,7 @@ export function hydrateFinalPayload(
     ref?: { id?: unknown; sha256?: unknown };
     content?: unknown;
     contentSha256?: unknown;
+    artifacts?: unknown;
   };
   if (
     typeof payload.ref?.id !== "string" ||
@@ -166,7 +167,57 @@ export function hydrateFinalPayload(
   ) {
     throw new Error("BTCC R3 final payload is invalid");
   }
-  return payload as TurnRecord["finalPayload"];
+  return {
+    ...payload,
+    artifacts: hydrateFinalArtifacts(payload.artifacts),
+  } as TurnRecord["finalPayload"];
+}
+
+function hydrateFinalArtifacts(
+  value: unknown,
+): NonNullable<TurnRecord["finalPayload"]>["artifacts"] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 12) {
+    throw new Error("BTCC R3 final payload artifacts are invalid");
+  }
+  return value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("BTCC R3 final payload artifact is invalid");
+    }
+    const artifact = item as Record<string, unknown>;
+    if (
+      typeof artifact.id !== "string" ||
+      !isFinalArtifactKind(artifact.kind) ||
+      typeof artifact.title !== "string" ||
+      !isSafeFinalArtifactPath(artifact.safePathLabel) ||
+      (artifact.mimeType !== undefined && typeof artifact.mimeType !== "string") ||
+      (artifact.sizeBytes !== undefined &&
+        (typeof artifact.sizeBytes !== "number" ||
+          !Number.isFinite(artifact.sizeBytes) ||
+          artifact.sizeBytes <= 0 ||
+          artifact.sizeBytes > 10 * 1024 * 1024)) ||
+      (artifact.createdAt !== undefined && typeof artifact.createdAt !== "string")
+    ) {
+      throw new Error("BTCC R3 final payload artifact is invalid");
+    }
+    return artifact as NonNullable<
+      NonNullable<TurnRecord["finalPayload"]>["artifacts"]
+    >[number];
+  });
+}
+
+function isFinalArtifactKind(value: unknown): boolean {
+  return value === "csv_file" || value === "table_file" ||
+    value === "chart_file" || value === "image" ||
+    value === "document" || value === "code" || value === "report" ||
+    value === "file" || value === "unknown";
+}
+
+function isSafeFinalArtifactPath(value: unknown): boolean {
+  if (typeof value !== "string" || !value || value.includes("\\")) return false;
+  const parts = value.split("/");
+  return parts[0] === "artifacts" &&
+    parts.every((part) => Boolean(part) && part !== "." && part !== "..");
 }
 
 export function hydrateRoute(value: string | null): TurnRecord["route"] | undefined {

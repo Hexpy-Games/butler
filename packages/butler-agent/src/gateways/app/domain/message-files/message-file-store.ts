@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import type { AppMessageResponderFile } from "../sessions/message-responder-contract.ts";
 import type {
@@ -29,6 +29,21 @@ import {
 } from "./message-file-records.ts";
 import { messageFileRefFromRow } from "../sessions/message-read-model.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
+import {
+  admitVisualImageRequest,
+  assertVisualCarrierMatchesCatalog,
+  defaultImageSanitizer,
+  imageAdmissionForCatalogEntry,
+  sha256,
+  verifyVisualManifestSource,
+  visualDerivativeStorageName,
+  type VisualImageAdmissionResult,
+  ImageAdmissionError,
+  type ImageCapabilityCatalogEntry,
+  type VerifiedImagePayloadPort,
+  type VisualCapabilityResolver,
+  type VisualAdmittedManifest,
+} from "../../../../agent/image-attachment/index.ts";
 
 export type { MessageFileRow } from "./message-file-records.ts";
 
@@ -37,6 +52,9 @@ export class AppMessageFileStore {
     private readonly db: Database,
     private readonly butlerData: string,
     private readonly ensureOwnerSession: (sessionId: string) => void,
+    private readonly visualCapabilityResolver: VisualCapabilityResolver = {
+      resolve: async ({ entry }) => entry,
+    },
   ) {}
 
   create(input: {
@@ -118,21 +136,160 @@ export class AppMessageFileStore {
     );
   }
 
-  attachmentsForTransport(messageId: string): AttachmentRef[] {
-    return this.attachmentRows(messageId).map((row) => ({
-      id: row.id,
-      kind:
-        row.kind === "image" ? "image" : row.kind === "text" ? "document" : "binary",
-      mimeType: row.mime_type,
-      fileName: row.safe_name,
-      sizeBytes: row.size_bytes,
-      localPath: resolve(this.root(), row.storage_name),
-      url: `/message-files/${encodeURIComponent(row.id)}`,
-      metadata: {
-        source: "message-file-store",
-        createdAt: row.created_at,
+  attachmentsForTransport(
+    messageId: string,
+    admission?: VisualImageAdmissionResult,
+  ): AttachmentRef[] {
+    return this.attachmentRows(messageId).map((row) => {
+      const visual = row.kind === "image"
+        ? admission?.manifests.find((manifest) => manifest.fileId === row.id)
+        : undefined;
+      if (row.kind === "image" && !visual) {
+        throw new AppStoreOperationError(
+          409,
+          "image_admission_missing",
+          "Image attachment admission is missing.",
+        );
+      }
+      return {
+        id: row.id,
+        kind:
+          row.kind === "image" ? "image" : row.kind === "text" ? "document" : "binary",
+        mimeType: row.mime_type,
+        fileName: row.safe_name,
+        sizeBytes: row.size_bytes,
+        ...(row.kind === "image"
+          ? { visualManifest: visual }
+          : { localPath: resolve(this.root(), row.storage_name) }),
+        url: `/message-files/${encodeURIComponent(row.id)}`,
+        metadata: {
+          source: "message-file-store",
+          createdAt: row.created_at,
+        },
+      };
+    });
+  }
+
+  /**
+   * Admission runs before either the durable session queue or message/Turn
+   * insert. It validates the selected exact catalog tuple and writes only the
+   * sanitized derivative after the tuple has passed.
+   */
+  admitVisualAttachments(
+    files: readonly MessageFileRow[],
+    model: string,
+    catalog: readonly ImageCapabilityCatalogEntry[],
+  ): Promise<VisualImageAdmissionResult | undefined> {
+    const images = files.filter((file) => file.kind === "image");
+    if (images.length === 0) return Promise.resolve(undefined);
+    const entry = catalog.find((candidate) =>
+      candidate.model_ref === model || candidate.model_id === model,
+    );
+    return this.visualCapabilityResolver.resolve({
+      entry,
+      modelRef: model,
+      butlerData: this.butlerData,
+    }).then((resolvedEntry) => Promise.all(images.map((file, position) =>
+      this.prepareVisualDerivative(file, position),
+    )).then((prepared) => {
+      let result: VisualImageAdmissionResult;
+      try {
+        result = imageAdmissionForCatalogEntry(
+          resolvedEntry,
+          prepared.map((item) => item.manifest),
+        );
+      } catch (error) {
+        throw imageAdmissionErrorToAppError(error);
+      }
+      prepared.forEach((item) => this.persistVisualDerivative(item.manifest, item.bytes));
+      return result;
+    })).catch((error) => {
+      if (error instanceof AppStoreOperationError) throw error;
+      throw imageAdmissionErrorToAppError(error);
+    });
+  }
+
+  async validateVisualAdmission(
+    admission: VisualImageAdmissionResult,
+    model: string,
+    catalog: readonly ImageCapabilityCatalogEntry[],
+  ): Promise<VisualImageAdmissionResult> {
+    const entry = catalog.find((candidate) =>
+      candidate.model_ref === model || candidate.model_id === model,
+    );
+    return this.visualCapabilityResolver.resolve({
+      entry,
+      modelRef: model,
+      butlerData: this.butlerData,
+    }).then((resolvedEntry) => {
+      try {
+      const route = {
+        providerId: resolvedEntry?.provider_id ?? "",
+        modelId: resolvedEntry?.model_id ?? "",
+        carrierProtocol: resolvedEntry?.image_carrier_protocol ??
+          (resolvedEntry?.hosted_api_shape === "openai_responses"
+            ? "openai_responses"
+            : resolvedEntry?.hosted_api_shape === "openai_chat_completions"
+              ? "openai_chat_completions"
+              : "fake_vision"),
+        endpointProfileId: resolvedEntry?.image_endpoint_profile_id ?? "",
+        catalogCapabilityRevision: resolvedEntry?.image_capability_revision ?? "",
+        catalogCapabilityDigest: resolvedEntry?.image_capability_digest ?? "",
+      } as const;
+      assertVisualCarrierMatchesCatalog({
+        catalogEntry: resolvedEntry,
+        tuple: admission.tuple,
+        capability: admission.capability,
+        resolvedRoute: route,
+      });
+      const checked = admitVisualImageRequest({
+        tuple: admission.tuple,
+        capability: admission.capability,
+        manifests: admission.manifests,
+      });
+      for (const manifest of checked.manifests) {
+        const row = this.row(manifest.fileId);
+        if (!row || row.kind !== "image") {
+          throw new ImageAdmissionError("image_payload_invalid", "source_row_missing");
+        }
+        const sourceBytes = Uint8Array.from(readFileSync(resolve(this.root(), row.storage_name)));
+        verifyVisualManifestSource({
+          manifest,
+          sourceBytes,
+          sourceRecord: {
+            sizeBytes: row.size_bytes,
+            sha256: row.sha256,
+            storageRevision: `${row.created_at}:${row.sha256}`,
+          },
+        });
+        const derivativeBytes = Uint8Array.from(readFileSync(this.visualPath(manifest)));
+        if (derivativeBytes.byteLength !== manifest.derivativeSizeBytes ||
+            sha256(derivativeBytes) !== manifest.derivativeDigest) {
+          throw new ImageAdmissionError("image_payload_invalid", "derivative_digest_mismatch");
+        }
+      }
+      return checked;
+      } catch (error) {
+        throw imageAdmissionErrorToAppError(error);
+      }
+    });
+  }
+
+  verifiedImagePayloadPort(): VerifiedImagePayloadPort {
+    return {
+      read: async (manifest) => {
+        const bytes = readFileSync(this.visualPath(manifest));
+        const digest = createHash("sha256").update(bytes).digest("hex");
+        if (digest !== manifest.derivativeDigest) {
+          throw new AppStoreOperationError(
+            409,
+            "image_payload_tampered",
+            "Image attachment could not be verified.",
+          );
+        }
+        return { bytes: Uint8Array.from(bytes), mimeType: manifest.derivativeMimeType };
       },
-    }));
+    };
   }
 
   refsForSession(sessionId: string): MessageFileRef[] {
@@ -220,6 +377,56 @@ export class AppMessageFileStore {
     return resolve(this.butlerData, "app-server", "message-files");
   }
 
+  private visualPath(manifest: Pick<VisualAdmittedManifest, "fileId" | "derivativeDigest">): string {
+    return join(this.root(), visualDerivativeStorageName(manifest));
+  }
+
+  private async prepareVisualDerivative(
+    row: MessageFileRow,
+    position: number,
+  ): Promise<{ manifest: VisualAdmittedManifest; bytes: Uint8Array }> {
+    const bytes = Uint8Array.from(readFileSync(resolve(this.root(), row.storage_name)));
+    if (bytes.byteLength !== row.size_bytes || sha256(bytes) !== row.sha256) {
+      throw new AppStoreOperationError(409, "image_source_tampered", "Image attachment could not be verified.");
+    }
+    const storageRevision = `${row.created_at}:${row.sha256}`;
+    try {
+      const prepared = await defaultImageSanitizer.sanitize({
+        fileId: row.id,
+        safeName: row.safe_name,
+        mimeType: row.mime_type,
+        sourceBytes: bytes,
+        storageRevision,
+        position,
+      });
+      verifyVisualManifestSource({
+        manifest: prepared.manifest,
+        sourceBytes: bytes,
+        sourceRecord: {
+          sizeBytes: row.size_bytes,
+          sha256: row.sha256,
+          storageRevision,
+        },
+      });
+      return prepared;
+    } catch (error) {
+      throw imageAdmissionErrorToAppError(error);
+    }
+  }
+
+  private persistVisualDerivative(manifest: VisualAdmittedManifest, bytes: Uint8Array): void {
+    mkdirSync(this.root(), { recursive: true });
+    const path = this.visualPath(manifest);
+    if (existsSync(path)) {
+      const existing = Uint8Array.from(readFileSync(path));
+      if (existing.byteLength !== bytes.byteLength || sha256(existing) !== manifest.derivativeDigest) {
+        throw new AppStoreOperationError(409, "image_derivative_conflict", "Image derivative identity conflict.");
+      }
+      return;
+    }
+    writeFileSync(path, bytes, { flag: "wx" });
+  }
+
   private attachmentRows(messageId: string): MessageFileRow[] {
     return listMessageAttachmentRows(this.db, messageId);
   }
@@ -291,4 +498,30 @@ export class AppMessageFileStore {
     }
   }
 
+}
+
+function imageAdmissionErrorToAppError(
+  error: unknown,
+): AppStoreOperationError {
+  if (error instanceof AppStoreOperationError) return error;
+  if (error instanceof ImageAdmissionError) {
+    const status = error.code === "image_payload_invalid"
+      ? 413
+      : error.code === "image_manifest_invalid"
+        ? 422
+        : 409;
+    const message = error.code === "image_model_unsupported"
+      ? "현재 모델은 이미지를 읽을 수 없습니다. 이미지 지원 모델을 선택하거나 이미지를 제거하세요."
+      : error.code === "image_capability_unknown"
+        ? "현재 모델의 이미지 지원 여부를 확인할 수 없습니다. 모델 설정을 확인하거나 이미지를 제거하세요."
+      : error.code === "image_carrier_unavailable"
+        ? "현재 모델로 이미지를 전송할 수 있는 어댑터가 없습니다. 모델 연결 설정을 확인하세요."
+      : error.code === "image_route_incompatible"
+        ? "현재 모델 연결 경로는 이미지 입력과 호환되지 않습니다. 연결 설정을 확인하세요."
+      : error.code === "image_carrier_unverified"
+        ? "이미지 전송 경로를 확인할 수 없습니다."
+        : "이미지 첨부를 확인할 수 없습니다.";
+    return new AppStoreOperationError(status, error.code, message);
+  }
+  return new AppStoreOperationError(422, "image_payload_invalid", "이미지 첨부를 처리할 수 없습니다.");
 }

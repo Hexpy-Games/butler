@@ -91,6 +91,34 @@ export type DurableWorkReview = {
   createdAt: string;
 };
 
+export type DurableWorkDispositionStatus = "completed" | "open" | "blocked";
+
+export type DurableWorkDispositionActionUpdate = {
+  actionKey: string;
+  status: "done" | "skipped" | "blocked";
+  note?: string;
+};
+
+export type DurableWorkDisposition = {
+  dispositionRevisionId: string;
+  revision: number;
+  /** Work-result sequence observed by the atomic closeout. */
+  resultSequence: number;
+  /** Internal immutable snapshot used to reject stale closeout candidates. */
+  materialFingerprint: string;
+  disposition: DurableWorkDispositionStatus;
+  summary: string;
+  actionUpdates: DurableWorkDispositionActionUpdate[];
+  remainingActions: string[];
+  nextCondition?: string;
+  evidenceRefs: string[];
+  /** Durable result refs captured after current-Turn backfill. */
+  evidenceSnapshot: string[];
+  followups: string[];
+  originTurnId: string;
+  createdAt: string;
+};
+
 export type DurableWorkEffectBlocker = {
   blockerId: string;
   sourceTurnId: string;
@@ -118,6 +146,9 @@ export type DurableWorkView = {
   latestPlanReview?: DurableWorkReview;
   latestResultReview?: DurableWorkReview;
   latestCompletionValidation?: DurableWorkReview;
+  latestDisposition?: DurableWorkDisposition;
+  /** Internal freshness watermark for closeout reconciliation. */
+  effectWatermark?: string;
   effectBlockers?: DurableWorkEffectBlocker[];
   resultRefs: DurableWorkToolResultRef[];
   createdAt: string;
@@ -142,10 +173,26 @@ export type DurableWorkContext = {
 export type ReplaceWorkPlanInput = WorkTurnScope & {
   mutationCallId: string;
   startNew?: boolean;
+  /** Runtime-only IDs of completed Turn-local results to attach atomically. */
+  backfillToolCallIds?: string[];
   objective: string;
   governingRefs?: string[];
   actions: DurableWorkPlanAction[];
   checks: string[];
+};
+
+export type StartWorkInput = WorkTurnScope & {
+  mutationCallId: string;
+  objective: string;
+  /** Runtime-only IDs of completed Turn-local results to attach atomically. */
+  backfillToolCallIds?: string[];
+};
+
+export type ContinueWorkInput = WorkTurnScope & {
+  mutationCallId: string;
+  workId: string;
+  /** Runtime-only IDs of completed Turn-local results to attach atomically. */
+  backfillToolCallIds?: string[];
 };
 
 export type RecordWorkCheckpointInput = WorkTurnScope & {
@@ -171,6 +218,24 @@ export type AttachToolResultInput = WorkTurnScope & {
   toolCallId: string;
 };
 
+export type RecordWorkDispositionInput = WorkTurnScope & {
+  mutationCallId: string;
+  workId: string;
+  disposition: DurableWorkDispositionStatus;
+  summary: string;
+  actionUpdates?: DurableWorkDispositionActionUpdate[];
+  remainingActions?: string[];
+  nextCondition?: string;
+  evidenceRefs?: string[];
+  followups?: string[];
+  /** Runtime-only current-Turn completed calls to attach atomically. */
+  backfillToolCallIds?: string[];
+};
+
+export type RecordCloseoutMissingInput = WorkTurnScope & {
+  workId: string;
+};
+
 export type LegacyOpenWorkImportResult = {
   sourceProgramId: string;
   imported: boolean;
@@ -187,6 +252,15 @@ export type ReplaceWorkPlanCommand = Omit<
   expectedWorkId?: string;
   expectedProgressRevision?: number;
   actionProgress: DurableWorkActionProgress[];
+  openingPlan: boolean;
+};
+
+export type StartWorkCommand = StartWorkInput & {
+  requestSha256: string;
+};
+
+export type ContinueWorkCommand = ContinueWorkInput & {
+  requestSha256: string;
 };
 
 export type RecordWorkCheckpointCommand = Omit<
@@ -212,7 +286,10 @@ export type RecordWorkReviewCommand = RecordWorkReviewInput & {
   entryStage: "review" | "validation";
   actionProgress: DurableWorkActionProgress[];
   progressChanged: boolean;
-  completeWork: boolean;
+};
+
+export type RecordWorkDispositionCommand = RecordWorkDispositionInput & {
+  requestSha256: string;
 };
 
 export interface DurableWorkService {
@@ -220,13 +297,13 @@ export interface DurableWorkService {
   importOpenLegacyWork(
     scope: WorkTurnScope,
   ): Promise<LegacyOpenWorkImportResult | null>;
-  bindOpenWork(
-    scope: WorkTurnScope,
-    expectedWorkId?: string,
-  ): Promise<DurableWorkView | null>;
+  startWork(input: StartWorkInput): Promise<DurableWorkView>;
+  continueWork(input: ContinueWorkInput): Promise<DurableWorkView>;
   replacePlan(input: ReplaceWorkPlanInput): Promise<DurableWorkView>;
   recordCheckpoint(input: RecordWorkCheckpointInput): Promise<DurableWorkView>;
   recordReview(input: RecordWorkReviewInput): Promise<DurableWorkView>;
+  recordDisposition(input: RecordWorkDispositionInput): Promise<DurableWorkView>;
+  recordCloseoutMissing(input: RecordCloseoutMissingInput): Promise<void>;
   attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView>;
   boundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
 }
@@ -236,13 +313,13 @@ export interface DurableWorkStore {
   importOpenLegacyWork(
     scope: WorkTurnScope,
   ): Promise<LegacyOpenWorkImportResult | null>;
-  bindOpenWork(
-    scope: WorkTurnScope,
-    expectedWorkId?: string,
-  ): Promise<DurableWorkView | null>;
+  startWork(input: StartWorkCommand): Promise<DurableWorkView>;
+  continueWork(input: ContinueWorkCommand): Promise<DurableWorkView>;
   replacePlan(input: ReplaceWorkPlanCommand): Promise<DurableWorkView>;
   recordCheckpoint(input: RecordWorkCheckpointCommand): Promise<DurableWorkView>;
   recordReview(input: RecordWorkReviewCommand): Promise<DurableWorkView>;
+  recordDisposition(input: RecordWorkDispositionCommand): Promise<DurableWorkView>;
+  recordCloseoutMissing(input: RecordCloseoutMissingInput): Promise<void>;
   attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView>;
   boundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
 }

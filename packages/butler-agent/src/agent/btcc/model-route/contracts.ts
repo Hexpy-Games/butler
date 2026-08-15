@@ -61,6 +61,14 @@ export type ModelRouteEventHandler = (
   event: ModelRouteEvent,
 ) => ModelRouteEventResult | void | Promise<ModelRouteEventResult | void>;
 
+export type ModelRouteRecoveryUpdate = {
+  status: "recovering" | "cleared" | "interrupted";
+  attempt: number;
+  maxAttempts: number;
+  modelRef: string;
+  errorCode?: string;
+};
+
 export type ModelRouteAcceptance = {
   roundId: string;
   candidateIndex: number;

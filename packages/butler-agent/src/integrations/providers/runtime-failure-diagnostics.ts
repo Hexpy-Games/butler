@@ -79,6 +79,28 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
   );
 }
 
+/**
+ * Upgrades the bounded set of legacy provider error strings that predate the
+ * typed provider contract. Unknown runtime errors remain unknown and must not
+ * enter transport recovery.
+ */
+export function normalizeLegacyProviderRequestError(
+  error: unknown,
+): ModelProviderRequestError | undefined {
+  if (error instanceof ModelProviderRequestError) return error;
+  const message = errorMessage(error);
+  const status = statusCodeFromLegacyError(error);
+  const diagnostic = status && (status === 408 || status === 429 || status >= 500)
+    ? providerHttpError({
+        provider: "model-provider",
+        api: "model-api",
+        statusCode: status,
+        detail: message,
+      }).diagnostic()
+    : normalizeLegacyProviderFailure(message);
+  return diagnostic ? new ModelProviderRequestError(diagnostic) : undefined;
+}
+
 export function diagnosticDetails(error: unknown): Record<string, unknown> {
   const diagnostic = safeRuntimeFailure(error);
   return Object.fromEntries(
@@ -160,6 +182,18 @@ function statusCodeFromMessage(message: string): number | undefined {
   const match = message.match(/\((\d{3})\)|HTTP\s+(\d{3})|status\s+(\d{3})/iu);
   const value = Number(match?.[1] ?? match?.[2] ?? match?.[3]);
   return Number.isFinite(value) ? value : undefined;
+}
+
+function statusCodeFromLegacyError(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const record = error as Record<string, unknown>;
+  const response = record.response && typeof record.response === "object"
+    ? record.response as Record<string, unknown>
+    : undefined;
+  const value = Number(record.statusCode ?? record.status ?? response?.status);
+  return Number.isInteger(value) && value >= 100 && value <= 599
+    ? value
+    : undefined;
 }
 
 function errorMessage(error: unknown): string {

@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { subscribeLiveEvents } from "@/app/api.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
-import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { TimelineEvent } from "@/app/types.ts";
 import {
@@ -13,15 +12,17 @@ import {
   eventSessionId,
   isSessionViewRefreshEvent,
 } from "./liveSessionReconciliation.ts";
+import {
+  applyLiveNavigationEvent,
+  createLiveNavigationReconciliation,
+  isProjectNavigationEvent,
+} from "./liveNavigationReconciliation.ts";
 
 const DESKTOP_NOTIFICATION_RECENT_WINDOW_MS = 60_000;
 const TERMINAL_TURN_STATES = new Set(["delivered", "failed", "cancelled"]);
 
 export function useLiveSessionEvents(): void {
   const activeChatId = useButlerStore((state) => state.activeChatId);
-  const projectedSessionId = useButlerStore(
-    (state) => state.sessionView?.session_id ?? "",
-  );
   const projectedEventCursor = useButlerStore(
     (state) => state.sessionView?.cursors.events ?? 0,
   );
@@ -29,9 +30,6 @@ export function useLiveSessionEvents(): void {
   const activeChatIdRef = useRef(activeChatId);
   const notifiedMessageIdsRef = useRef(new Set<string>());
   const notifiedTurnIdsRef = useRef(new Set<string>());
-  const shouldFollow =
-    isServerBackedSessionId(activeChatId) &&
-    projectedSessionId === activeChatId;
 
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
@@ -45,7 +43,6 @@ export function useLiveSessionEvents(): void {
   }, [projectedEventCursor]);
 
   useEffect(() => {
-    if (!shouldFollow) return;
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
@@ -54,6 +51,9 @@ export function useLiveSessionEvents(): void {
     const reconciliation = createLiveSessionReconciliation(
       useButlerStore,
       () => activeChatIdRef.current,
+    );
+    const navigationReconciliation = createLiveNavigationReconciliation(
+      useButlerStore,
     );
 
     const markStreamHealthy = () => {
@@ -66,11 +66,47 @@ export function useLiveSessionEvents(): void {
       if (cancelled) return;
       markStreamHealthy();
       if (event.type === "stream.reconcile_required") {
+        useButlerStore.getState().noteNavigationEvent();
+        navigationReconciliation.noteLiveNavigationEvent();
         advanceEventCursor(eventCursorRef, event.id);
+        navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
         return;
       }
       const state = useButlerStore.getState();
+      if (isProjectNavigationEvent(event)) {
+        navigationReconciliation.noteLiveNavigationEvent();
+        const nextNavigation = applyLiveNavigationEvent(state.navigation, event);
+        if (nextNavigation !== state.navigation) {
+          state.noteNavigationEvent();
+          state.setNavigation(nextNavigation, { preserveOptimisticSession: false });
+        } else {
+          // A valid/stale/no-op live event still fences an in-flight bootstrap.
+          // An absent project or absent updated row converges through the
+          // bounded canonical load; stale updates for visible rows do not.
+          state.noteNavigationEvent();
+          const session = event.payload?.session;
+          const projectId = session && typeof session === "object" && session !== null
+            ? (session as { project_id?: unknown }).project_id
+            : undefined;
+          const sessionId = session && typeof session === "object" && session !== null
+            ? (session as { id?: unknown }).id
+            : undefined;
+          const project = typeof projectId === "string"
+            ? state.navigation.projects.find((item) => item.id === projectId)
+            : undefined;
+          const sessionKnown = typeof sessionId === "string" &&
+            Boolean(project?.sessions?.some((item) => item.id === sessionId));
+          const shouldRefresh =
+            (event.type === "session.created" && !project) ||
+            (event.type === "session.updated" && (!project || !sessionKnown));
+          if (shouldRefresh) {
+            // The bootstrap may still be empty; converge through the bounded canonical load.
+            navigationReconciliation.requestRefresh();
+          }
+        }
+      }
+      navigationReconciliation.noteLiveEvent();
       state.applyTimelineEvents([event]);
       advanceEventCursor(eventCursorRef, event.id);
       notifyDesktopEvent(event, notifiedMessageIdsRef, notifiedTurnIdsRef);
@@ -89,7 +125,10 @@ export function useLiveSessionEvents(): void {
         stableConnectionTimer = undefined;
         consecutiveFailures = 0;
       }, LIVE_EVENT_STABLE_CONNECTION_MS);
-      if (reconnect) reconciliation.requestRefresh();
+      if (reconnect) {
+        navigationReconciliation.requestRefresh();
+        reconciliation.requestRefresh();
+      }
       const nextUnsubscribe = subscribeLiveEvents(
         eventCursorRef.current,
         applyEvent,
@@ -118,8 +157,9 @@ export function useLiveSessionEvents(): void {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconciliation.dispose();
       if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
+      navigationReconciliation.dispose();
     };
-  }, [activeChatId, shouldFollow]);
+  }, []);
 }
 
 function advanceEventCursor(cursorRef: { current: number }, id?: number): void {

@@ -95,18 +95,33 @@ test("six-stage Work persists Validation bindings and replay without duplicate r
       corrections: [],
       nextStage: "reporting" as const,
     };
-    const completed = await service.recordReview(completionInput);
-    expect(completed).toMatchObject({
-      status: "completed",
+    const validated = await service.recordReview(completionInput);
+    expect(validated).toMatchObject({
+      status: "open",
       currentStage: "reporting",
       latestCompletionValidation: {
         subject: "completion",
         verdict: "accept",
-        boundPlanRevisionId: completed.currentPlan?.planRevisionId,
+        boundPlanRevisionId: validated.currentPlan?.planRevisionId,
         boundResultReviewRevisionId:
           resultReviewed.latestResultReview?.reviewRevisionId,
         boundActionProgress: [{ actionKey: "publish-result", status: "done" }],
-        boundResultRefs: completed.resultRefs.map((result) => result.resultRef),
+        boundResultRefs: validated.resultRefs.map((result) => result.resultRef),
+      },
+    });
+    const dispositionInput = {
+      ...scope,
+      mutationCallId: "six-stage-disposition",
+      workId: validated.workId,
+      disposition: "completed" as const,
+      summary: "검증 기록과 실제 결과를 명시적으로 닫았습니다.",
+    };
+    const completed = await service.recordDisposition(dispositionInput);
+    expect(completed).toMatchObject({
+      status: "completed",
+      latestDisposition: {
+        disposition: "completed",
+        originTurnId: scope.turnId,
       },
     });
     expect(stages(db, completed.workId)).toEqual([
@@ -116,6 +131,7 @@ test("six-stage Work persists Validation bindings and replay without duplicate r
       "execution",
       "review",
       "validation",
+      "reporting",
       "reporting",
     ]);
     expect(reviewBinding(db, completed.workId)).toEqual({
@@ -129,6 +145,7 @@ test("six-stage Work persists Validation bindings and replay without duplicate r
 
     const beforeReplay = counts(db);
     expect((await service.recordReview(completionInput)).status).toBe("completed");
+    expect((await service.recordDisposition(dispositionInput)).status).toBe("completed");
     expect(counts(db)).toEqual(beforeReplay);
   } finally {
     db.close();
@@ -249,7 +266,7 @@ function insertTurn(db: Database, turnId: string, sessionId: string): WorkTurnSc
       original_message, admission_snapshot_ref, model_selection_json,
       context_json, semantic_state, revision, execution_fence
     ) VALUES (?, ?, ?, ?, ?, '결과를 만들고 검증해 주세요.', 'snapshot', '{}', '{}',
-      'admitted', 1, 1)
+      'admitted', 1, 0)
   `).run(turnId, sessionId, `inbox-${turnId}`, `trigger-${turnId}`, `message-${turnId}`);
   return { turnId, sessionId };
 }

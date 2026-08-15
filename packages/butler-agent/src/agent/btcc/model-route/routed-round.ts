@@ -1,6 +1,4 @@
-import {
-  ModelProviderRequestError,
-} from "../../../integrations/providers/provider-errors.ts";
+import { ImageAdmissionError } from "../../image-attachment/index.ts";
 import type {
   ModelRoundPort,
   ModelRoundRequest,
@@ -11,7 +9,12 @@ import {
   currentModelRouteCandidate,
   routeAttemptKey,
 } from "./identity.ts";
-import { classifyModelRouteFailure } from "./failure-policy.ts";
+import {
+  emptyAttemptHistory,
+  latestFailureAtCurrentAttempt,
+  maxAttempt,
+  recoveredFailure,
+} from "./history.ts";
 import type {
   ModelRouteAttemptHistory,
   ModelRouteEventHandler,
@@ -22,13 +25,17 @@ import {
   MODEL_ROUTE_MAX_DISPATCHES,
   MODEL_ROUTE_MAX_RETRY_ATTEMPTS,
   ModelRouteDispatchLimitError,
-  ModelRouteRecoveredFailureError,
 } from "./contracts.ts";
+import {
+  createModelRouteRecovery,
+  normalizeModelRouteFailure,
+} from "./recovery.ts";
 
 export function createModelRoutePort(input: {
   base: ModelRoundPort;
   turnId: string;
   route: ModelRouteState;
+  retryDelayMs?: (retryIndex: number) => number;
   onRouteEvent?: ModelRouteEventHandler;
   loadAcceptedResponse?: (input: {
     roundId: string;
@@ -47,6 +54,7 @@ export function createModelRoutePort(input: {
     modelRef: string;
     result: ModelRoundResult;
   }) => Promise<void>;
+  onRecoveryChanged?: Parameters<typeof createModelRouteRecovery>[0]["onChanged"];
 }): ModelRoundPort {
   let route = input.route;
   let generatedRoundSequence = 0;
@@ -61,9 +69,21 @@ export function createModelRoutePort(input: {
       let attemptHistory: ModelRouteAttemptHistory = emptyAttemptHistory();
       let lastProviderError: unknown;
       const dispatchBudget = modelRouteDispatchBudget(route);
+      const recovery = createModelRouteRecovery({
+        maxAttempts: route.retryCeiling,
+        signal: request.signal,
+        retryDelayMs: input.retryDelayMs,
+        onChanged: input.onRecoveryChanged,
+      });
+      const frozenVisualModelRef = request.imageCarrier
+        ? `${request.imageCarrier.providerId}/${request.imageCarrier.modelId}`
+        : undefined;
       while (true) {
         const candidate = currentModelRouteCandidate(route);
         if (!candidate) throw new Error("model_route_exhausted");
+        if (frozenVisualModelRef && candidate.modelRef !== frozenVisualModelRef) {
+          throw new ImageAdmissionError("image_model_unsupported", "visual_fallback_disabled");
+        }
         const attemptKey = routeAttemptKey(input.turnId, roundId, route);
         const accepted = await input.loadAcceptedResponse?.({
           roundId,
@@ -105,7 +125,7 @@ export function createModelRoutePort(input: {
             throw recoveredFailure(latestFailure);
           }
           if (latestFailure?.disposition === "advance") {
-            const next = advanceModelRoute(route, attemptKey);
+            const next = request.imageCarrier ? undefined : advanceModelRoute(route, attemptKey);
             route = await selectFallback(
               input,
               route,
@@ -113,19 +133,42 @@ export function createModelRoutePort(input: {
               roundId,
               next,
               recoveredFailure(latestFailure),
+              request.imageCarrier,
             );
             continuation = undefined;
             loadedAttemptKey = undefined;
             continue;
           }
+          if (
+            latestFailure?.disposition === "retry" &&
+            transportAttempt <= route.retryCeiling
+          ) {
+            await recovery.wait(
+              transportAttempt - 1,
+              candidate.modelRef,
+              latestFailure.errorCode,
+            );
+          }
           if (transportAttempt > route.retryCeiling) {
+            const exhaustion = latestFailure
+              ? recoveredFailure(latestFailure)
+              : lastProviderError;
+            const next = advanceModelRoute(route, attemptKey);
+            if (latestFailure?.disposition === "retry" && !next) {
+              await recovery.interrupt(
+                route.retryCeiling,
+                candidate.modelRef,
+                latestFailure.errorCode,
+              );
+            }
             route = await selectFallback(
               input,
               route,
               attemptKey,
               roundId,
-              undefined,
-              lastProviderError,
+              next,
+              exhaustion,
+              request.imageCarrier,
             );
             continuation = undefined;
             loadedAttemptKey = undefined;
@@ -165,6 +208,7 @@ export function createModelRoutePort(input: {
             roundId,
             undefined,
             lastProviderError,
+            request.imageCarrier,
           );
           continuation = undefined;
           loadedAttemptKey = undefined;
@@ -197,12 +241,8 @@ export function createModelRoutePort(input: {
             continuation,
           });
         } catch (error) {
-          const disposition = classifyModelRouteFailure(error);
-          const errorCode = error instanceof ModelProviderRequestError
-            ? error.code
-            : error instanceof ModelRouteDispatchLimitError
-              ? error.code
-              : "provider_unknown_error";
+          const failure = normalizeModelRouteFailure(error);
+          const { disposition, errorCode } = failure;
           await input.onRouteEvent?.({
             type: "model.attempt.failed",
             roundId,
@@ -212,8 +252,8 @@ export function createModelRoutePort(input: {
             errorCode,
             failureDisposition: disposition,
           });
-          if (disposition === "surface") throw error;
-          lastProviderError = error;
+          if (disposition === "surface") throw failure.error;
+          lastProviderError = failure.error;
           attemptHistory = {
             ...attemptHistory,
             failed: [...attemptHistory.failed, transportAttempt],
@@ -223,12 +263,19 @@ export function createModelRoutePort(input: {
             ],
           };
           if (disposition === "retry" && transportAttempt < route.retryCeiling) {
+            await recovery.wait(transportAttempt, candidate.modelRef, errorCode);
             transportAttempt += 1;
             continue;
           }
-          const next = advanceModelRoute(route, attemptKey);
-          if (!next) throw error;
-          route = await selectFallback(input, route, attemptKey, roundId, next);
+          const next = request.imageCarrier ? undefined : advanceModelRoute(route, attemptKey);
+          if (!next) {
+            if (disposition === "retry") {
+              await recovery.interrupt(transportAttempt, candidate.modelRef, errorCode);
+            }
+            throw failure.error;
+          }
+          await recovery.clear(transportAttempt, candidate.modelRef, errorCode);
+          route = await selectFallback(input, route, attemptKey, roundId, next, undefined, request.imageCarrier);
           continuation = undefined;
           loadedAttemptKey = undefined;
           continue;
@@ -252,12 +299,10 @@ export function createModelRoutePort(input: {
             modelRef: candidate.modelRef,
           });
         }
+        await recovery.clear(transportAttempt, candidate.modelRef);
         return result;
       }
 
-      // The loop either returns a provider result or throws a typed failure.
-      // This guard only documents the impossible fallthrough for type narrowing.
-      throw lastProviderError ?? new Error("model_route_exhausted");
     },
   };
 }
@@ -269,11 +314,18 @@ async function selectFallback(
   roundId: string,
   next = advanceModelRoute(route, attemptKey),
   exhaustionError?: unknown,
+  imageCarrier?: ModelRoundRequest["imageCarrier"],
 ): Promise<ModelRouteState> {
   if (!next) {
     throw exhaustionError instanceof Error
       ? exhaustionError
       : new Error("model_route_exhausted_after_restart");
+  }
+  if (imageCarrier) {
+    const candidate = currentModelRouteCandidate(next);
+    if (!candidate || candidate.modelRef !== `${imageCarrier.providerId}/${imageCarrier.modelId}`) {
+      throw new ImageAdmissionError("image_model_unsupported", "visual_fallback_disabled");
+    }
   }
   await input.onRouteEvent?.({
     type: "model.fallback.selected",
@@ -283,30 +335,6 @@ async function selectFallback(
     route: next,
   });
   return next;
-}
-
-function emptyAttemptHistory(): ModelRouteAttemptHistory {
-  return { started: [], failed: [], succeeded: [], abandoned: [] };
-}
-
-function latestFailureAtCurrentAttempt(
-  history: ModelRouteAttemptHistory,
-): NonNullable<ModelRouteAttemptHistory["failedDetails"]>[number] | undefined {
-  const details = [...(history.failedDetails ?? [])]
-    .filter((detail) => history.failed.includes(detail.transportAttempt))
-    .sort((a, b) => a.transportAttempt - b.transportAttempt);
-  const latest = details.at(-1);
-  if (!latest || latest.transportAttempt !== maxAttempt(history)) return undefined;
-  return latest;
-}
-
-function recoveredFailure(
-  detail: NonNullable<ModelRouteAttemptHistory["failedDetails"]>[number],
-): ModelRouteRecoveredFailureError {
-  return new ModelRouteRecoveredFailureError(
-    detail.errorCode,
-    detail.disposition,
-  );
 }
 
 function modelRouteDispatchBudget(route: ModelRouteState): number {
@@ -319,15 +347,4 @@ function modelRouteDispatchBudget(route: ModelRouteState): number {
     Math.max(0, route.candidates.length),
   );
   return Math.min(MODEL_ROUTE_MAX_DISPATCHES, retryCeiling * candidateCount);
-}
-
-function maxAttempt(history: ModelRouteAttemptHistory): number {
-  return Math.max(
-    0,
-    ...history.started,
-    ...history.failed,
-    ...(history.failedDetails ?? []).map((detail) => detail.transportAttempt),
-    ...history.succeeded,
-    ...history.abandoned,
-  );
 }

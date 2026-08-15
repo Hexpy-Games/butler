@@ -371,6 +371,9 @@ function sanitizePublicPayloadValue(
   if (key === "retryable" && typeof value === "boolean") return value;
   if (key === "firstVisible" && typeof value === "boolean") return value;
   if (key === "latencyMs") return optionalNonNegativeInteger(value) ?? null;
+  if (key === "sourceRevision") {
+    return optionalNonNegativeInteger(value) ?? null;
+  }
   if (preserveProviderStreamNumbers && (
     key === "sequence" ||
     key === "charCount" ||

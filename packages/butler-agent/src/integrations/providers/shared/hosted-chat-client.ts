@@ -41,7 +41,7 @@ export interface HostedChatToolCall {
 
 export interface HostedChatMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
+  content: string | null | Array<Record<string, unknown>>;
   tool_calls?: HostedChatToolCall[];
   tool_call_id?: string;
   name?: string;

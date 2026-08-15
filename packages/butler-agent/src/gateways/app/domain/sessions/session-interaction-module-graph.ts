@@ -118,6 +118,11 @@ export function createAppSessionInteractionModuleGraph(input: {
     messageFiles,
     (sessionId) => host.ensureChat(sessionId),
     (sessionId, request) => host.controlsForMessageSend(sessionId, request),
+    async (files, model) => await messageFiles.admitVisualAttachments(
+      files,
+      model,
+      host.registeredModelMetadata(),
+    ),
     (sessionId) => host.getSessionControls(sessionId),
     () => host.registeredModelMetadata(),
     (type, payload) => {
@@ -129,8 +134,14 @@ export function createAppSessionInteractionModuleGraph(input: {
     messageFiles,
     sessionHasActiveTurn: (sessionId) => host.sessionHasActiveTurn(sessionId),
     queuedControlsFromRow: (row) => host.queuedControlsFromRow(row),
-    sendMessage: (request, responder, options) =>
-      host.sendMessage(request, responder, options),
+    sendMessage: (request, responder, options, visualAdmission) =>
+      host.userMessageTurns.sendMessage(request, responder, options, visualAdmission),
+    validateVisualAdmission: (admission, model) =>
+      messageFiles.validateVisualAdmission(
+        admission,
+        model,
+        host.registeredModelMetadata(),
+      ),
     appendEvent: (type, payload) => {
       host.appendEvent(type, payload);
     },

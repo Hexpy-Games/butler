@@ -12,6 +12,7 @@ import {
   guidedCommandPublicResult,
   type GuidedSpooledCommandResult,
 } from "./guided-read-only-command.ts";
+import { snapshotGuidedCommandArtifacts } from "./guided-command-artifacts.ts";
 
 export const GUIDED_COMMAND_EFFECT_CAPABILITY = "run_command";
 export const GUIDED_REMOTE_OBSERVATION_EFFECT_CAPABILITY =
@@ -118,6 +119,10 @@ function createGuidedCommandEffectAdapter(input: {
           "The approved command workspace or directory changed before dispatch.",
         );
       }
+      const artifactSnapshot = snapshotGuidedCommandArtifacts({
+        butlerData: input.butlerData,
+      });
+      const startedAtMs = Date.now();
       const spooled = await executeGuidedCommand({
         ...effect.normalizedInput,
         cwd: input.canonicalCwd,
@@ -132,8 +137,11 @@ function createGuidedCommandEffectAdapter(input: {
       const outcome = guidedCommandPublicResult({
         spooled,
         butlerData: input.butlerData,
+        workspacePath: input.canonicalWorkspacePath,
         args: effect.normalizedInput,
         sandbox: "full_access_contained",
+        startedAtMs,
+        artifactSnapshot,
       });
       return {
         status: "applied",

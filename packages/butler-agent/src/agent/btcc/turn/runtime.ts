@@ -26,9 +26,9 @@ import {
   isModelRouteDurabilityError,
   ModelRouteRecoveredFailureError,
 } from "../model-route/index.ts";
-import { ModelProviderRequestError } from
-  "../../../integrations/providers/provider-errors.ts";
+import { ModelProviderRequestError, safeRuntimeFailure } from "../../../integrations/providers/provider-errors.ts";
 import { createModelRouteRuntimeHooks } from "./model-route-runtime-hooks.ts";
+import { operationalFailureMessage } from "./turn-runtime-failure.ts";
 import {
   createNoopRuntimeMemoryAttributionPort,
   type RuntimeMemoryAttributionPort,
@@ -112,7 +112,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
       await publishState(progress, turn);
     }
     if (turn.semanticState !== "delivery_committed") {
-      turn = await this.runAgentAndCommit(turn, progress);
+      turn = await this.runAgentAndCommit(turn, progress, command.recoveryAttempt);
     }
     if (turn.semanticState === "cancelled") {
       await this.publishTerminal(progress, turn);
@@ -125,6 +125,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
   private async runAgentAndCommit(
     turn: TurnRecord,
     progress: BtccTurnProgressObserver | undefined,
+    recoveryAttempt?: number,
   ): Promise<TurnRecord> {
     const permit = this.supervisor.enter({
       turnId: turn.turnId,
@@ -141,6 +142,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
       try {
         result = await this.dependencies.agent.run({
           turn,
+          recoveryAttempt,
           signal: permit.signal,
           memoryAttribution: this.memoryAttribution,
           progress,
@@ -152,6 +154,24 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
         });
       } catch (error) {
         if (isModelRouteDurabilityError(error)) throw error;
+        if (isRetryableProviderExhaustion(error)) {
+          const failure = safeRuntimeFailure(error);
+          const failureCode = error instanceof ModelRouteRecoveredFailureError
+            ? error.failureCode
+            : failure.code;
+          await progress?.runtimeFaulted?.({
+            turnId: turn.turnId,
+            sessionId: turn.sessionId,
+            faultId: `${turn.turnId}:provider-transport-exhausted`,
+            kind: "provider_transport_exhausted",
+            retryable: true,
+            publicSummary: operationalFailureMessage(turn.originalMessage, error),
+            operatorSummary: `Provider recovery exhausted (${failureCode}).`,
+            safeErrorCode: failureCode,
+            createdAt: new Date().toISOString(),
+          });
+          throw error;
+        }
         permit.assertActive();
         result = {
           route: "assisted",
@@ -259,6 +279,12 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
   }
 }
 
+function isRetryableProviderExhaustion(error: unknown): boolean {
+  if (error instanceof ModelProviderRequestError) return error.retryable;
+  return error instanceof ModelRouteRecoveredFailureError &&
+    error.disposition === "retry";
+}
+
 export function createTurnRuntime(dependencies: TurnRuntimeDependencies): BtccTurnRuntime {
   return new DefaultTurnRuntime(dependencies);
 }
@@ -271,6 +297,7 @@ function guidedFinalTransition(turn: TurnRecord, result: BtccAgentLoopResult) {
     route: result.route,
     disposition: "completed" as const,
     content,
+    ...(result.artifacts?.length ? { artifacts: result.artifacts } : {}),
   };
   const finalPayload = {
     ref: contentRef("payload", finalPayloadBody),
@@ -314,37 +341,4 @@ async function publishState(
 
 function isTerminal(turn: TurnRecord): boolean {
   return turn.semanticState === "delivered" || turn.semanticState === "cancelled";
-}
-
-function operationalFailureMessage(originalMessage: string, error?: unknown): string {
-  const korean = /[가-힣]/.test(originalMessage);
-  const kind = operationalFailureKind(error);
-  if (korean) {
-    if (kind === "transient_provider") {
-      return "모델 연결이 일시적으로 중단되어 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.";
-    }
-    if (kind === "permanent_provider") {
-      return "모델 제공자 설정 또는 요청이 승인되지 않아 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.";
-    }
-    return "내부 실행 오류로 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.";
-  }
-  if (kind === "transient_provider") {
-    return "A temporary model connection failure prevented this Turn from completing. Saved work and verified results were not changed.";
-  }
-  if (kind === "permanent_provider") {
-    return "The model provider rejected this Turn because of a configuration or request problem. Saved work and verified results were not changed.";
-  }
-  return "An internal execution error prevented this Turn from completing. Saved work and verified results were not changed.";
-}
-
-function operationalFailureKind(
-  error: unknown,
-): "transient_provider" | "permanent_provider" | "internal" {
-  if (error instanceof ModelProviderRequestError) {
-    return error.retryable ? "transient_provider" : "permanent_provider";
-  }
-  if (error instanceof ModelRouteRecoveredFailureError) {
-    return error.disposition === "retry" ? "transient_provider" : "permanent_provider";
-  }
-  return "internal";
 }

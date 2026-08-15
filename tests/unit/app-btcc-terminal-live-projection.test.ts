@@ -1,8 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import type { RuntimeTurnEventInput } from
   "../../packages/butler-agent/src/agent/events/turn-events.ts";
-import type { MessageRow, TurnRow } from
+import type { ChatRow, MessageRow, TurnRow } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/core/records.ts";
 import type { TranscriptEvent } from
   "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
@@ -12,6 +14,12 @@ import {
   createTranscriptProjectionHarness as createHarness,
   writeTranscript,
 } from "./support/transcript-projection-harness.ts";
+import { AppMessageFileStore } from
+  "../../packages/butler-agent/src/gateways/app/domain/message-files/message-file-store.ts";
+import { executeGuidedReadOnlyCommand } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-read-only-command.ts";
+import { collectGuidedFinalArtifacts } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
 
 afterEach(() => cleanupTranscriptProjectionHarnesses());
 
@@ -66,6 +74,120 @@ test("delivered turn event directly projects the canonical BTCC answer", () => {
   expect(state.generatedTitles).toEqual(["Useful title"]);
   expect(state.assistant?.text).toBe("Canonical answer");
   expect(state.assistantWrites).toBe(1);
+  harness.close();
+});
+
+test("guided read-only workspace outputs create real App attachments", async () => {
+  const harness = createHarness();
+  seedBtccTerminalSchema(harness.db);
+  seedAppTurn(harness.db, harness.chatId, "live-artifact-turn");
+  const workspace = join(harness.root, "workspace");
+  const sourceDir = join(workspace, ".sandy-data", "poc", "vision-crop");
+  mkdirSync(sourceDir, { recursive: true });
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+3f4AAAAASUVORK5CYII=",
+    "base64",
+  );
+  writeFileSync(join(sourceDir, "page.png"), png);
+  writeFileSync(join(sourceDir, "crop.png"), png);
+  const guidedResult = await executeGuidedReadOnlyCommand({
+    args: {
+      command: "test -f .sandy-data/poc/vision-crop/page.png && test -f .sandy-data/poc/vision-crop/crop.png",
+      cwd: workspace,
+      state_effect: "read_only",
+      output_paths: [
+        ".sandy-data/poc/vision-crop/page.png",
+        ".sandy-data/poc/vision-crop/crop.png",
+      ],
+    },
+    butlerData: harness.root,
+    workspacePath: workspace,
+    originalRequest: "이미지가 안보였어 한번만 다시 첨부해줄래?",
+  });
+  if (process.platform !== "darwin") {
+    harness.close();
+    return;
+  }
+  expect(guidedResult).toMatchObject({
+    ok: true,
+    artifact_publication: { requested: 2, published: 2 },
+  });
+  const finalArtifacts = collectGuidedFinalArtifacts([{
+    callId: "sandy-read-only-attachment",
+    toolName: "run_command",
+    rawArguments: "{}",
+    arguments: {},
+    status: "completed",
+    result: guidedResult,
+  }]);
+  expect(finalArtifacts.map((artifact) => artifact.title)).toEqual([
+    "page.png",
+    "crop.png",
+  ]);
+  const messageFiles = new AppMessageFileStore(
+    harness.db,
+    harness.root,
+    () => undefined,
+  );
+  let assistant: MessageRow | null = null;
+  let writes = 0;
+  const state = projectionState(harness.db);
+  const projection = harness.createProjectionStore({
+    ...state.options,
+    messageFiles,
+    getChatRow: (chatId) => harness.db.query<ChatRow, [string]>(
+      "SELECT rowid, * FROM chats WHERE id = ?",
+    ).get(chatId),
+    getProjectRow: () => null,
+    getLatestAssistantMessageForTurn: () => assistant,
+    insertOrReplaceAssistantReplies: (chatId, turnId, texts, files) => {
+      writes += 1;
+      const now = new Date().toISOString();
+      const id = assistant?.id ?? "assistant-artifact-message";
+      if (!assistant) {
+        harness.db.query(`
+          INSERT INTO messages (
+            id, chat_id, turn_id, role, text, status, created_at, updated_at,
+            safe_error_code, retryable
+          ) VALUES (?, ?, ?, 'assistant', ?, 'delivered', ?, ?, NULL, 0)
+        `).run(id, chatId, turnId, texts.at(-1) ?? "", now, now);
+      }
+      messageFiles.attachToMessage(chatId, id, files ?? []);
+      assistant = harness.db.query<MessageRow, [string]>(
+        "SELECT rowid, * FROM messages WHERE id = ?",
+      ).get(id);
+      return [];
+    },
+  });
+  const event = finalResultEvent({
+    actionId: "artifact-final",
+    turnId: "live-artifact-turn",
+    text: "생성한 보고서입니다.",
+    generatedSessionTitle: "Artifact result",
+    artifacts: finalArtifacts,
+  });
+  writeTranscript(harness, [event]);
+
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(harness.db.query<{ count: number }, []>(
+    "SELECT COUNT(*) AS count FROM message_files",
+  ).get()?.count).toBe(2);
+  expect(harness.db.query<{ count: number }, []>(
+    "SELECT COUNT(*) AS count FROM message_attachments",
+  ).get()?.count).toBe(2);
+  expect(messageFiles.refsForMessage("assistant-artifact-message")).toHaveLength(2);
+  expect(writes).toBe(1);
+
+  appendTranscript(harness, {
+    ...event,
+    eventId: "event-artifact-final-replay",
+    payload: { ...event.payload, actionId: "artifact-final-replay" },
+  });
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(harness.db.query<{ count: number }, []>(
+    "SELECT COUNT(*) AS count FROM message_attachments",
+  ).get()?.count).toBe(2);
+  expect(writes).toBe(1);
   harness.close();
 });
 
@@ -421,6 +543,7 @@ function finalResultEvent(input: {
   turnId: string;
   text: string;
   generatedSessionTitle: string;
+  artifacts?: Array<Record<string, unknown>>;
 }): TranscriptEvent {
   return {
     eventId: `event-${input.actionId}`,
@@ -430,7 +553,10 @@ function finalResultEvent(input: {
     transport: "app",
     payload: {
       actionId: input.actionId,
-      message: { text: input.text },
+      message: {
+        text: input.text,
+        ...(input.artifacts ? { artifacts: input.artifacts } : {}),
+      },
       metadata: {
         kind: "final_result",
         turnId: input.turnId,

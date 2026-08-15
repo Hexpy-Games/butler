@@ -27,6 +27,12 @@ import { runCommandToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/run-command/run_command/definition.ts";
 import { prepareBtccToolCall } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-execution.ts";
+import {
+  createAgentTurnEvent,
+  normalizeAgentTurnEvent,
+  type AgentTurnEventKind,
+} from
+  "../../packages/butler-agent/src/agent/events/turn-events.ts";
 
 test("a freshly admitted Turn publishes an honest visible progress block", async () => {
   const events: SharedTurnEvent[] = [];
@@ -258,6 +264,58 @@ test("run_command operation projects the model-authored action label without par
   );
   expect(activity.title).toBe("커밋 후 푸시");
   expect(activity.summary).toBe("커밋 후 푸시");
+});
+
+test("ordinary tool activity has public content without a stage authority", () => {
+  const activity = activityContent(
+    { name: "read_file", args: { path: "src/index.ts" } },
+    [{ name: "read_file", args: { path: "src/index.ts" } }],
+    "",
+  );
+
+  expect(activity.title).toBe("읽기: index.ts");
+  expect(activity.displayStage).toBeUndefined();
+});
+
+test("current phase provenance survives event serialization and replay", async () => {
+  const events: SharedTurnEvent[] = [];
+  const progress = projectTurnProgressToEvents(async (event) => {
+    events.push({
+      id: "event-phase-provenance",
+      turnSequence: 1,
+      kind: event.kind,
+      visibility: event.visibility,
+      payload: event.payload,
+    });
+  });
+
+  await progress.phaseActivityChanged?.({
+    turnId: "turn-phase-provenance",
+    semanticState: "admitted",
+    activityId: "activity-phase-provenance",
+    originTurnId: "turn-phase-provenance",
+    sourceRevision: 7,
+    title: "작업 중",
+    summary: "현재 공개 진행입니다.",
+  });
+
+  expect(events[0]?.payload).toMatchObject({
+    originTurnId: "turn-phase-provenance",
+    sourceRevision: 7,
+  });
+  const stored = createAgentTurnEvent({
+    sessionId: "session-phase-provenance",
+    turnId: "turn-phase-provenance",
+    sessionSequence: 1,
+    turnSequence: 1,
+    kind: events[0]!.kind as AgentTurnEventKind,
+    payload: events[0]!.payload,
+  });
+  const replayed = normalizeAgentTurnEvent(JSON.parse(JSON.stringify(stored)));
+  expect(replayed?.payload).toMatchObject({
+    originTurnId: "turn-phase-provenance",
+    sourceRevision: 7,
+  });
 });
 
 test("run_command public summaries use canonical public-text sanitization", async () => {
@@ -526,6 +584,43 @@ test("structured action updates preserve prior completion and compact work title
     },
   ]);
   expect(stageRows.semanticState).toBe("execution");
+
+  const ordinaryRows = projectTurnActivity([{
+    id: "ordinary-without-stage",
+    kind: "message",
+    state: "running",
+    safe_label: "작업공간을 확인하는 중",
+    semantic_block_id: "guided-activity:internal-only",
+    work_decision_source: "model-authored",
+    work_decision_summary: "작업공간을 확인하는 중",
+  }]);
+  expect(ordinaryRows.semanticState).toBeUndefined();
+  expect(ordinaryRows.phaseActivities[0]?.phase).toBeUndefined();
+
+  const latestOrdinaryRows = projectTurnActivity([
+    {
+      id: "prior-plan",
+      kind: "message",
+      state: "running",
+      safe_label: "계획을 확인하는 중",
+      semantic_block_id: "guided-activity:plan",
+      work_decision_source: "model-authored",
+      work_decision_summary: "계획을 확인하는 중",
+      activity_stage: "execution",
+      turn_event_sequence: 1,
+    },
+    {
+      id: "latest-ordinary",
+      kind: "message",
+      state: "running",
+      safe_label: "파일을 읽는 중",
+      semantic_block_id: "guided-activity:ordinary",
+      work_decision_source: "model-authored",
+      work_decision_summary: "파일을 읽는 중",
+      turn_event_sequence: 2,
+    },
+  ]);
+  expect(latestOrdinaryRows.semanticState).toBeUndefined();
 
   const mixedRows = projectTurnActivity([
     {

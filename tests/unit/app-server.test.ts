@@ -10984,6 +10984,65 @@ test("navigation sync tolerates replayed model stream sequence strings", async (
   }
 });
 
+test("delivered BTCC runtime fault progress makes an active App Turn retryable", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    port: 0,
+    responder: () => new Promise(() => undefined),
+  });
+  const accepted = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "provider reconnect exhaustion",
+  });
+  const turnId = accepted.data.turn.id as string;
+  const userMessageId = accepted.data.accepted.id as string;
+  server.stop();
+
+  appendAppTurnEventOutboundForTest({
+    sessionId: "butler/app-general",
+    actionId: `app-turn-event:${turnId}:runtime-fault`,
+    turnId,
+    replyToMessageId: userMessageId,
+    event: {
+      kind: "runtime.fault",
+      payload: createRuntimeFaultPayload({
+        faultId: `${turnId}:provider-transport-exhausted`,
+        sessionId: "general",
+        turnId,
+        kind: "provider_transport_exhausted",
+        retryable: true,
+        publicSummary: "모델 연결 복구 한도를 초과했습니다.",
+        operatorSummary: "Provider retry ceiling exhausted.",
+        safeErrorCode: "provider_rate_limited",
+        createdAt: "2026-08-09T00:00:00.000Z",
+      }),
+    },
+  });
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    await server.store.waitForAppTransportProjection();
+    const messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
+    expect(server.store.getTurn(turnId)).toMatchObject({
+      id: turnId,
+      state: "runtime_fault",
+      retryable: true,
+      safe_error_code: "runtime_fault",
+    });
+    expect(messages.data.messages).toContainEqual(expect.objectContaining({
+      turn_id: turnId,
+      status: "failed",
+      retryable: true,
+      safe_error_code: "runtime_fault",
+      text: "모델 연결 복구 한도를 초과했습니다.",
+    }));
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport sync skips unchanged transcript snapshots", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
@@ -11655,9 +11714,10 @@ test("message replay includes automatic compaction markers at the snapshot point
 });
 
 test("message files are uploaded, served safely, and attached by file id only", async () => {
-  const pngBytes = new Uint8Array([
-    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13,
-  ]);
+  const pngBytes = Uint8Array.from(Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64",
+  ));
   const responderInputs: Array<{ attachments?: unknown[] }> = [];
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -11678,6 +11738,13 @@ test("message files are uploaded, served safely, and attached by file id only", 
     },
   });
   try {
+    server.store.registerHostedModel({
+      provider_id: "openai",
+      model_id: "gpt-5.6-sol",
+      auth_type: "api_key",
+      api_key: "message-file-fixture-key",
+      api_base_url: "http://message-file-fixture.test/v1",
+    });
     const uploadForm = new FormData();
     uploadForm.set("session_id", "general");
     uploadForm.set(
@@ -11719,6 +11786,7 @@ test("message files are uploaded, served safely, and attached by file id only", 
 
     const sent = await postJson(`${server.url}messages`, {
       chat_id: "general",
+      model: "openai/gpt-5.6-sol",
       text: "please inspect attachment",
       attachments: [{ file_id: uploaded.data.file.file_id }],
     });
@@ -14291,7 +14359,9 @@ async function postJson(url: string, body: unknown) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  expect(response.ok).toBe(true);
+  if (!response.ok) {
+    throw new Error(`POST ${url} failed (${response.status}): ${await response.text()}`);
+  }
   return await response.json();
 }
 
