@@ -140,21 +140,197 @@ test("legacy BTCC state migrates exactly into a create-only Agent database", asy
     .toBe("split-v1");
 });
 
-test("unknown legacy btcc tables fail closed without publishing a target", async () => {
+test("source tables outside Agent ownership remain only in the legacy App database", async () => {
   const { paths, butlerData } = fixture();
   const source = new Database(paths.legacyAppDbPath);
-  source.exec("CREATE TABLE btcc_unknown_authority (id TEXT PRIMARY KEY)");
+  source.exec(`
+    CREATE TABLE btcc_app_owned_state (id TEXT PRIMARY KEY, value TEXT NOT NULL);
+    INSERT INTO btcc_app_owned_state (id, value) VALUES ('app-state-1', 'preserved');
+  `);
   source.close();
+  const sourceBefore = sha256(paths.legacyAppDbPath);
 
-  await expect(prepareAgentBtccStorage({
+  const result = await prepareAgentBtccStorage({
     butlerData,
     quiesceLegacyWriter: async () => ({
-      fenceId: "legacy-fence-unknown",
+      fenceId: "legacy-fence-mixed-ownership",
       reconciledClaims: 0,
       parkedClaims: 0,
     }),
-  })).rejects.toThrow("agent_btcc_migration_unknown_source_table:btcc_unknown_authority");
+  });
+
+  expect(result.kind).toBe("migrated");
+  expect(sha256(paths.legacyAppDbPath)).toBe(sourceBefore);
+  const legacy = new Database(paths.legacyAppDbPath, { readonly: true });
+  const target = new Database(paths.agentBtccDbPath, { readonly: true });
+  try {
+    expect(legacy.query("SELECT value FROM btcc_app_owned_state").get())
+      .toEqual({ value: "preserved" });
+    expect(target.query(`
+      SELECT name FROM sqlite_schema
+      WHERE type = 'table' AND name = 'btcc_app_owned_state'
+    `).get()).toBeNull();
+  } finally {
+    legacy.close();
+    target.close();
+  }
+});
+
+test("retired source columns remain only in the legacy App database", async () => {
+  const { paths, butlerData } = fixture();
+  const source = new Database(paths.legacyAppDbPath);
+  source.exec("ALTER TABLE btcc_checkpoints ADD COLUMN app_projection_cache TEXT");
+  source.close();
+  const sourceBefore = sha256(paths.legacyAppDbPath);
+
+  const result = await prepareAgentBtccStorage({
+    butlerData,
+    quiesceLegacyWriter: async () => ({
+      fenceId: "legacy-fence-retired-column",
+      reconciledClaims: 0,
+      parkedClaims: 0,
+    }),
+  });
+
+  expect(result.kind).toBe("migrated");
+  expect(sha256(paths.legacyAppDbPath)).toBe(sourceBefore);
+  const legacy = new Database(paths.legacyAppDbPath, { readonly: true });
+  const target = new Database(paths.agentBtccDbPath, { readonly: true });
+  try {
+    expect(legacy.query(`
+      SELECT name FROM pragma_table_info('btcc_checkpoints')
+      WHERE name = 'app_projection_cache'
+    `).get()).toEqual({ name: "app_projection_cache" });
+    expect(target.query(`
+      SELECT name FROM pragma_table_info('btcc_checkpoints')
+      WHERE name = 'app_projection_cache'
+    `).get()).toBeNull();
+  } finally {
+    legacy.close();
+    target.close();
+  }
+});
+
+test("incompatible Agent table identity fails closed before publish", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-agent-storage-incompatible-"));
+  roots.push(root);
+  const paths = agentBtccStoragePaths(root);
+  mkdirSync(join(root, "app-server"), { recursive: true });
+  const source = new Database(paths.legacyAppDbPath, { create: true });
+  source.exec("CREATE TABLE btcc_messages (legacy_id TEXT PRIMARY KEY)");
+  source.close();
+
+  await expect(prepareAgentBtccStorage({
+    butlerData: root,
+    quiesceLegacyWriter: async () => ({
+      fenceId: "legacy-fence-incompatible-identity",
+      reconciledClaims: 0,
+      parkedClaims: 0,
+    }),
+  })).rejects.toThrow("agent_btcc_migration_primary_key_mismatch:btcc_messages");
   expect(Bun.file(paths.agentBtccDbPath).size).toBe(0);
+});
+
+test("inactive legacy checkpoints remain in App storage while runtime claims migrate", async () => {
+  const { paths, butlerData } = fixture();
+  const source = new Database(paths.legacyAppDbPath);
+  source.exec("PRAGMA ignore_check_constraints = ON");
+  source.exec(`
+    INSERT INTO btcc_inbound_inbox (
+      inbox_id, session_id, trigger_key, turn_id, admission_input_hash,
+      command_json, status
+    ) VALUES ('inbox-runtime', 'session-1', 'trigger-runtime',
+      'runtime-turn', 'hash-runtime', '{}', 'constructed');
+    INSERT INTO btcc_turns (
+      turn_id, session_id, inbox_id, trigger_key, original_message_id,
+      original_message, admission_snapshot_ref, model_selection_json,
+      context_json, semantic_state, final_disposition, revision, execution_fence
+    ) VALUES ('runtime-turn', 'session-1', 'inbox-runtime', 'trigger-runtime',
+      'message-runtime', 'runtime request', 'snapshot', '{}', '{}',
+      'delivered', 'completed', 1, 1);
+    INSERT INTO btcc_checkpoints (
+      checkpoint_id, turn_id, turn_revision, semantic_state, kind,
+      checkpoint_revision, is_active
+    ) VALUES
+      ('phase-checkpoint', 'phase-turn', 1, 'execution', 'phase', 1, 0),
+      ('runtime-checkpoint', 'runtime-turn', 1, 'admitted', 'runtime', 1, 0);
+    INSERT INTO btcc_runtime_owners (
+      owner_id, host_id, process_id, process_started_at_ms, owner_generation,
+      status, registered_at
+    ) VALUES ('owner-legacy', 'host', 1, 1, 1, 'closed', 'now');
+    INSERT INTO btcc_state_claims (
+      claim_id, turn_id, turn_revision, semantic_state, checkpoint_id,
+      checkpoint_revision, execution_fence, owner_id, owner_generation,
+      lease_generation, status
+    ) VALUES
+      ('phase-claim', 'phase-turn', 1, 'execution', 'phase-checkpoint',
+        1, 1, 'owner-legacy', 1, 1, 'consumed'),
+      ('runtime-claim', 'runtime-turn', 1, 'admitted', 'runtime-checkpoint',
+        1, 1, 'owner-legacy', 1, 1, 'consumed');
+  `);
+  source.exec("PRAGMA ignore_check_constraints = OFF");
+  source.close();
+  const sourceBefore = sha256(paths.legacyAppDbPath);
+
+  await prepareAgentBtccStorage({
+    butlerData,
+    quiesceLegacyWriter: async () => ({
+      fenceId: "legacy-fence-checkpoint-projection",
+      reconciledClaims: 0,
+      parkedClaims: 0,
+    }),
+  });
+
+  expect(sha256(paths.legacyAppDbPath)).toBe(sourceBefore);
+  const target = new Database(paths.agentBtccDbPath, { readonly: true });
+  try {
+    expect(target.query("SELECT checkpoint_id FROM btcc_checkpoints ORDER BY checkpoint_id").all())
+      .toEqual([{ checkpoint_id: "runtime-checkpoint" }]);
+    expect(target.query("SELECT claim_id FROM btcc_state_claims ORDER BY claim_id").all())
+      .toEqual([{ claim_id: "runtime-claim" }]);
+  } finally {
+    target.close();
+  }
+});
+
+test("delivered legacy deferred Turns normalize to the canonical completed disposition", async () => {
+  const { paths, butlerData } = fixture();
+  const source = new Database(paths.legacyAppDbPath);
+  source.exec("PRAGMA ignore_check_constraints = ON");
+  source.exec(`
+    INSERT INTO btcc_inbound_inbox (
+      inbox_id, session_id, trigger_key, turn_id, admission_input_hash,
+      command_json, status
+    ) VALUES ('inbox-deferred', 'session-1', 'trigger-deferred',
+      'turn-deferred', 'hash-deferred', '{}', 'constructed');
+    INSERT INTO btcc_turns (
+      turn_id, session_id, inbox_id, trigger_key, original_message_id,
+      original_message, admission_snapshot_ref, model_selection_json,
+      context_json, semantic_state, final_disposition, revision, execution_fence
+    ) VALUES ('turn-deferred', 'session-1', 'inbox-deferred',
+      'trigger-deferred', 'message-deferred', 'legacy request', 'snapshot',
+      '{}', '{}', 'delivered', 'deferred', 1, 1);
+  `);
+  source.exec("PRAGMA ignore_check_constraints = OFF");
+  source.close();
+
+  await prepareAgentBtccStorage({
+    butlerData,
+    quiesceLegacyWriter: async () => ({
+      fenceId: "legacy-fence-deferred-turn",
+      reconciledClaims: 0,
+      parkedClaims: 0,
+    }),
+  });
+
+  const target = new Database(paths.agentBtccDbPath, { readonly: true });
+  try {
+    expect(target.query(`
+      SELECT final_disposition FROM btcc_turns WHERE turn_id = 'turn-deferred'
+    `).get()).toEqual({ final_disposition: "completed" });
+  } finally {
+    target.close();
+  }
 });
 
 test("orphaned durable Turn references fail closed before publish", async () => {
