@@ -11,7 +11,6 @@ import { registerRuntimeSession } from
   "../../../test-support/harness/session-runtime.ts";
 import { SessionBindingStore } from
   "../../../test-support/harness/session-store.ts";
-import { resolveAppGatewayRuntimeConfig } from "../../../operations/gateway/registry.ts";
 import { runPromptText } from "../../../integrations/providers/provider.ts";
 import {
   providerCapabilitiesForModel,
@@ -23,9 +22,6 @@ export type ButlerConfig = {
     runtime?: string;
     butlerModel?: string;
     defaultModel?: string;
-  };
-  telegram?: {
-    groupId?: string;
   };
 };
 
@@ -145,11 +141,6 @@ export function persistButlerSessionPointer(
   const path = sessionPointerPath(butlerData);
   mkdirSync(join(butlerData, "config"), { recursive: true });
   writeFileSync(path, `${sessionId}\n`, "utf8");
-}
-
-export function appTurnStateDbPath(butlerData: string): string {
-  const config = resolveAppGatewayRuntimeConfig({ butlerData });
-  return config.dbPath ?? join(butlerData, "app-server", "butler-client.sqlite");
 }
 
 function sessionPointerPath(butlerData: string): string {

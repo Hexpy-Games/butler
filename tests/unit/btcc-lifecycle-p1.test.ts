@@ -6,8 +6,6 @@ import { DeliveryGuard } from
   "../../packages/butler-agent/src/interfaces/transport/delivery-guard.ts";
 import { createAppTransportAdapter } from
   "../../packages/butler-agent/src/interfaces/transport/app/adapter.ts";
-import { createTelegramTransportAdapter } from
-  "../../packages/butler-agent/src/interfaces/transport/telegram/adapter.ts";
 import { createNativeButlerProgressPublisher } from
   "../../packages/butler-agent/src/interfaces/gateway/native-butler/projection-and-lifecycle.ts";
 import { createBtccTrustedWakeProjectionHost } from
@@ -90,7 +88,7 @@ test("progress outbox reopens all Turns with stable identity and retries after f
     ownerId: "progress-reconcile-1",
     storageProfile: "ephemeral",
   });
-  let snapshot: Array<{ eventId: string; actionId: string; sessionSequence: number; turnSequence: number }> = [];
+  let snapshot: Array<{ eventId: string; actionId: string; sessionSequence: number; turnSequence: number }>;
   try {
     const events = [
       first.progressEvents.append({
@@ -145,10 +143,9 @@ test("progress outbox reopens all Turns with stable identity and retries after f
   }
 });
 
-test("native progress policy publishes App and Telegram while unknown stays pending", async () => {
+test("native progress policy publishes App while unknown stays pending", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-progress-policy-"));
   const dbPath = join(root, "btcc.sqlite");
-  const telegramMessages: string[] = [];
   const stores = openBtccSqliteStores({
     dbPath,
     ownerId: "progress-policy",
@@ -161,15 +158,7 @@ test("native progress policy publishes App and Telegram while unknown stays pend
     replyToMessageId: "message-progress-policy",
   });
   const deliveryGuard = new DeliveryGuard({
-    adapters: [
-      createAppTransportAdapter(),
-      createTelegramTransportAdapter({
-        sendTelegram: async (input) => {
-          telegramMessages.push(input.text);
-          return { ok: true, transportMessageId: "telegram-progress" };
-        },
-      }),
-    ],
+    adapters: [createAppTransportAdapter()],
     butlerData: root,
   });
   try {
@@ -177,12 +166,6 @@ test("native progress policy publishes App and Telegram while unknown stays pend
       sessionId: "session-app-progress",
       turnId: "turn-app-progress",
       destination: destination("app"),
-      event: { kind: "turn.started" },
-    });
-    stores.progressEvents.append({
-      sessionId: "session-telegram-progress",
-      turnId: "turn-telegram-progress",
-      destination: destination("telegram"),
       event: { kind: "turn.started" },
     });
     stores.progressEvents.append({
@@ -200,13 +183,11 @@ test("native progress policy publishes App and Telegram while unknown stays pend
       }).publish,
     });
 
-    expect(summary).toMatchObject({ attempted: 3, published: 2, pending: 1 });
+    expect(summary).toMatchObject({ attempted: 2, published: 1, pending: 1 });
     expect(stores.progressEvents.forTurn("turn-app-progress")[0]?.status).toBe("published");
-    expect(stores.progressEvents.forTurn("turn-telegram-progress")[0]?.status).toBe("published");
     expect(stores.progressEvents.pending().map((event) => event.turnId)).toEqual([
       "turn-unknown-progress",
     ]);
-    expect(telegramMessages).toEqual([]);
   } finally {
     stores.close();
     rmSync(root, { recursive: true, force: true });

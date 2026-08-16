@@ -15,6 +15,23 @@ import type {
   VisualAdmittedManifest,
 } from "../../image-attachment/index.ts";
 
+export type ModelContextSegmentKind =
+  | "stable_safety_and_role_instructions"
+  | "stable_btcc_protocol"
+  | "current_user_request"
+  | "accepted_corrections_and_unresolved_obligations"
+  | "project_ledger_and_work_authority"
+  | "memory_recall_context"
+  | "phase_continuity"
+  | "tool_schema"
+  | "latest_tool_result_delivery"
+  | "older_tool_result_projection"
+  | "exact_result_view"
+  | "work_recovery_receipt"
+  | "source_reference"
+  | "provider_carrier_overhead"
+  | "other_typed_context";
+
 export type ModelRoundRole = "system" | "user" | "assistant" | "tool";
 
 export interface ModelRoundToolCall {
@@ -41,6 +58,73 @@ export interface ModelRoundMessage {
   imageAttachments?: readonly ModelRoundImageAttachment[];
   /** Provider-owned protocol data. BTCC stores and returns it without interpreting it. */
   providerData?: unknown;
+  /** Source kind used by bounded context projection. */
+  requestSegmentKind?: ModelContextSegmentKind;
+  /** BTCC-owned compact replay projection; providers may only translate it. */
+  operationResultReference?: OperationResultReferenceCarrier;
+  /** BTCC journal identity; never serialized as provider content. */
+  operationResultCallId?: string;
+  /** Turn-local stable identity; never serialized as provider content. */
+  continuationItemId?: string;
+}
+
+export interface PhaseContinuityPrivateDigester {
+  digest(fieldDomain: "assistant_text" | "tool_arguments" | "unit", exactUtf8Bytes: string): string;
+}
+
+export type PhaseContinuityProjectionErrorCode =
+  | "phase_continuity_projection_dependency_missing"
+  | "phase_continuity_projection_private_digest_failed"
+  | "phase_continuity_projection_keyed_digest_invalid"
+  | "phase_continuity_projection_too_large"
+  | "phase_continuity_projection_invalid_state"
+  | "phase_continuity_projection_serializer_failed"
+  | "phase_continuity_projection_rebase_identity_invalid";
+
+export class PhaseContinuityProjectionError extends Error {
+  constructor(
+    readonly code: PhaseContinuityProjectionErrorCode,
+    options?: { cause?: unknown },
+  ) {
+    super(code, options);
+    this.name = "PhaseContinuityProjectionError";
+  }
+}
+
+export function isPhaseContinuityProjectionError(
+  error: unknown,
+): error is PhaseContinuityProjectionError {
+  return error instanceof PhaseContinuityProjectionError;
+}
+
+export interface ContextProjectionRebaseIdentity {
+  schemaVersion: "butler.context-projection-rebase.v1";
+  projectionRevision: "butler.phase-continuity-projection.v1";
+  projectionDigest: string;
+  projectedThroughOrdinal: number;
+}
+
+export interface OperationResultReferenceCarrier {
+  version: "butler.operation-result-reference.v1";
+  kind: "operation_result";
+  identity: {
+    kind: "direct" | "work";
+    result_ref: string;
+    tool_name: string;
+    work_id?: string;
+  };
+  integrity: { sha256: string; revision: number | null };
+  outcome: {
+    status: "completed";
+    success: boolean;
+    verification: "stored_exact_available";
+    error_code?: string;
+  };
+  availability: {
+    status: "exact_read_available" | "reference_only";
+    capability: "read_operation_results";
+    scope: "same_turn" | "work_scope";
+  };
 }
 
 export interface ModelRoundTool {
@@ -50,12 +134,95 @@ export interface ModelRoundTool {
   concurrencySafe?: boolean;
 }
 
+export type RoundToolSurfaceErrorCode =
+  | "round_tool_surface_invalid_snapshot"
+  | "round_tool_surface_snapshot_mismatch"
+  | "round_tool_surface_invalid_tool"
+  | "round_tool_surface_duplicate_name"
+  | "round_tool_surface_required_tool_missing"
+  | "round_tool_surface_continuation_invalid";
+
+export class RoundToolSurfaceError extends Error {
+  constructor(readonly code: RoundToolSurfaceErrorCode) {
+    super(code);
+    this.name = "RoundToolSurfaceError";
+  }
+}
+
+export function isRoundToolSurfaceError(error: unknown): error is RoundToolSurfaceError {
+  return error instanceof RoundToolSurfaceError;
+}
+
+export interface StableProviderCachePrefixContract {
+  schemaVersion: "butler.stable-provider-cache-prefix.v1";
+  stablePrefixRevision: string;
+  toolProfileRevision: string;
+  /** Existing Tool Instruction Surface owner; never rebuilt by the provider. */
+  instructionPrefix: string;
+}
+
+export interface ProviderRouteCacheIdentity {
+  schemaVersion: "butler.provider-route-cache-identity.v1";
+  routeDigest: string;
+  routeCursor: number;
+  providerId: "openai" | "openai-codex";
+  modelRef: string;
+  authMode: "api_key" | "codex_subscription" | "codex_oauth";
+  capabilityDigest: string;
+  toolSurfaceDigest?: string;
+  serializerContract:
+    | "butler.openai-responses-final-json.v1"
+    | "butler.openai-codex-final-json.v1";
+  toolProfileRevision: string;
+  stablePrefixRevision: string;
+  serializedStablePrefixSha256: string;
+  serializedStablePrefixBytes: number;
+}
+
+export type StableProviderPrefixInvariantCode =
+  | "stable_provider_prefix_contract_invalid"
+  | "stable_provider_prefix_instruction_mismatch"
+  | "stable_provider_prefix_dynamic_collision"
+  | "stable_provider_prefix_route_context_missing"
+  | "stable_provider_prefix_route_context_invalid"
+  | "stable_provider_prefix_route_model_mismatch"
+  | "stable_provider_prefix_previous_identity_missing"
+  | "stable_provider_prefix_serializer_order_invalid"
+  | "stable_provider_prefix_final_bytes_mismatch"
+  | "stable_provider_prefix_route_identity_mismatch"
+  | "stable_provider_prefix_retry_identity_changed";
+
+/** Provider-neutral invariant: adapters construct it; route authority surfaces it. */
+export class StableProviderPrefixInvariantError extends Error {
+  constructor(readonly code: StableProviderPrefixInvariantCode) {
+    super(code);
+    this.name = "StableProviderPrefixInvariantError";
+  }
+}
+
+export function stableProviderPrefixInvariant(
+  code: StableProviderPrefixInvariantCode,
+): StableProviderPrefixInvariantError {
+  return new StableProviderPrefixInvariantError(code);
+}
+
+/** Route-owned, bounded compatibility facts attached by createModelRoutePort. */
+export interface ModelRouteRequestContext {
+  schemaVersion: "butler.model-route-request.v1";
+  routeDigest: string;
+  cursor: number;
+  modelRef: string;
+  toolSurfaceDigest?: string;
+}
+
 export interface ModelRoundRequest {
   roundId?: string;
   model: ModelRef | string;
   messages: readonly ModelRoundMessage[];
   instructions?: string;
   tools: readonly ModelRoundTool[];
+  /** BTCC-owned exact per-round provider and execution surface identity. */
+  toolSurfaceDigest?: string;
   toolChoice?: "auto" | "required";
   reasoningEffort?: ReasoningEffort;
   signal?: AbortSignal;
@@ -68,9 +235,24 @@ export interface ModelRoundRequest {
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
   cacheScope?: string;
+  /** Present only on the existing default-off phase-minimal selection path. */
+  stableProviderCachePrefix?: StableProviderCachePrefixContract;
+  /** Set only by createModelRoutePort; adapters must fail closed if required and absent. */
+  routeContext?: ModelRouteRequestContext;
   providerRetryAttempts?: number;
+  routeTransportAttemptOrdinal?: number;
   /** Opaque provider continuation returned by the preceding round. */
   continuation?: unknown;
+  /** Turn-owned bounded carrier selection; provider adapters may only translate it. */
+  boundedContinuation?: {
+    schemaVersion: "butler.turn-context-envelope.v1";
+    modelFacingBytes: number;
+    requestDigest: string;
+    responseItemId: string;
+    contextProjection?: ContextProjectionRebaseIdentity;
+    /** Required exact serialized-body admission owned by the durable Turn. */
+    admitProviderBody(serializedBytes: number): Promise<void>;
+  };
   onProviderStreamEvent?: ProviderStreamProjectionHandler;
   onProviderResponseIdentity?: (identity: {
     provider: string;
@@ -95,9 +277,23 @@ export interface ModelRoundResult {
     reportedModel: string;
   };
   raw?: unknown;
+  /** Durable route acceptance checkpoint. Only the routed-round authority sets this. */
+  acceptedCheckpoint?: {
+    roundId: string;
+    candidateIndex: number;
+    transportAttempt: number;
+    modelRef: string;
+  };
 }
 
 export interface ModelRoundPort {
   /** Performs exactly one provider model request and returns its normalized response. */
   runRound(request: ModelRoundRequest): Promise<ModelRoundResult>;
+  /** Exact initial prompt/instructions serializer economics for projection admission. */
+  initialRequestBytes?(input: {
+    prompt: string;
+    instructions: string;
+  }, butlerData?: string): number;
+  /** Exact bounded stateless serializer economics; production OpenAI owns the translation. */
+  statelessMessageBytes?(messages: readonly ModelRoundMessage[], butlerData?: string): number;
 }

@@ -65,7 +65,6 @@ test("supervisor env binds bundled Agent to localhost and keeps auth token out o
     rendererOrigin: "http://127.0.0.1:18888",
     explicitUiUrl: null,
     projectFolderTokenSecret: "folder-secret",
-    localPagePreviewUrl: "http://127.0.0.1:29991/v1/preview",
     localAuth: {
       filePath: "/data/app/runtime/auth/local-agent-auth.json",
       token: "super-secret-local-auth-token",
@@ -84,8 +83,6 @@ test("supervisor env binds bundled Agent to localhost and keeps auth token out o
     BUTLER_APP_LOCAL_AUTH_REQUIRED: "1",
     BUTLER_APP_LOCAL_AUTH_FILE: "/data/app/runtime/auth/local-agent-auth.json",
     BUTLER_PROJECT_FOLDER_TOKEN_SECRET: "folder-secret",
-    BUTLER_APP_LOCAL_PAGE_PREVIEW_URL:
-      "http://127.0.0.1:29991/v1/preview",
   });
   expect(JSON.stringify(env)).not.toContain("super-secret-local-auth-token");
 });
@@ -102,7 +99,6 @@ test("supervisor env carries the injected Windows manifest source", () => {
     appVersion: "1.2.3",
     rendererOrigin: "http://127.0.0.1:18888",
     projectFolderTokenSecret: null,
-    localPagePreviewUrl: null,
     localAuth: {
       filePath: "/data/app/runtime/auth/local-agent-auth.json",
       token: "super-secret-local-auth-token",
@@ -330,6 +326,332 @@ test("bundled Agent supervisor shares one startup operation across concurrent en
     await supervisor.stop({ wait: true });
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("bundled Agent supervisor adopts its live child after transient readiness without respawning or moving ports", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-app-supervisor-adopt-"));
+  try {
+    const spawned: FakeChildProcess[] = [];
+    let readinessChecks = 0;
+    let portUpdates = 0;
+    let commits = 0;
+    let releaseAdoption: (() => void) | undefined;
+    let adoptionProbeEntered: (() => void) | undefined;
+    const adoptionProbe = new Promise<void>((resolve) => {
+      adoptionProbeEntered = resolve;
+    });
+    const adoptionRelease = new Promise<void>((resolve) => {
+      releaseAdoption = resolve;
+    });
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: root,
+      resolveGateway: () => ({
+        command: "/runtime/bun",
+        args: ["gateway"],
+        env: {},
+        commitActivation: () => {
+          commits += 1;
+        },
+      }),
+      spawnProcess: () => {
+        const child = new FakeChildProcess(9060 + spawned.length, []);
+        spawned.push(child);
+        return child;
+      },
+      healthCheck: () => spawned.length > 0,
+      readinessCheck: async () => {
+        readinessChecks += 1;
+        if (readinessChecks === 1) return true;
+        if (readinessChecks === 2) return false;
+        adoptionProbeEntered?.();
+        await adoptionRelease;
+        return true;
+      },
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => {
+        portUpdates += 1;
+      },
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => undefined,
+      startupAttempts: 3,
+    });
+
+    await supervisor.ensureReady();
+    const firstPid = supervisor.diagnostics().pid;
+    const firstAdoption = supervisor.ensureReady();
+    await adoptionProbe;
+    const concurrentAdoption = supervisor.ensureReady();
+    releaseAdoption?.();
+    await Promise.all([firstAdoption, concurrentAdoption]);
+
+    expect(spawned).toHaveLength(1);
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "running",
+      pid: firstPid,
+      last_error_code: null,
+    });
+    expect(commits).toBe(1);
+    expect(portUpdates).toBe(0);
+    expect(readinessChecks).toBe(3);
+    await supervisor.stop({ wait: true });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bundled Agent supervisor commits an uncommitted adopted child once and reuses its ready gateway", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-app-supervisor-adopt-commit-"));
+  try {
+    const spawned: FakeChildProcess[] = [];
+    let live = false;
+    let ready = false;
+    let rejectFirstWait = true;
+    let resolved = 0;
+    let commits = 0;
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: root,
+      resolveGateway: () => {
+        resolved += 1;
+        return {
+          command: "/runtime/bun",
+          args: ["gateway"],
+          env: {},
+          commitActivation: () => {
+            commits += 1;
+          },
+        };
+      },
+      spawnProcess: () => {
+        live = true;
+        const child = new FakeChildProcess(9065 + spawned.length, []);
+        child.once("exit", () => {
+          live = false;
+        });
+        spawned.push(child);
+        return child;
+      },
+      healthCheck: () => live,
+      readinessCheck: () => ready,
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => {
+        if (!rejectFirstWait) return;
+        rejectFirstWait = false;
+        throw new Error("startup wait interrupted");
+      },
+      startupAttempts: 2,
+    });
+
+    await expect(supervisor.ensureReady()).rejects.toThrow("startup wait interrupted");
+    expect(supervisor.diagnostics()).toMatchObject({ phase: "starting", pid: 9065 });
+    expect(commits).toBe(0);
+
+    ready = true;
+    await supervisor.ensureReady();
+    expect(commits).toBe(1);
+    expect(resolved).toBe(1);
+    expect(spawned).toHaveLength(1);
+
+    await supervisor.restart();
+    expect(commits).toBe(2);
+    expect(resolved).toBe(1);
+    expect(spawned).toHaveLength(2);
+    await supervisor.stop({ wait: true });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bundled Agent supervisor preserves early-exit failure while adopting a live child", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-app-supervisor-adopt-exit-"));
+  try {
+    const spawned: FakeChildProcess[] = [];
+    let ready = true;
+    let adopting = false;
+    let rolledBack = 0;
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: root,
+      resolveGateway: () => ({
+        command: "/runtime/bun",
+        args: ["gateway"],
+        env: {},
+        commitActivation: () => undefined,
+        rollbackActivation: () => {
+          rolledBack += 1;
+        },
+      }),
+      spawnProcess: () => {
+        const child = new FakeChildProcess(9070 + spawned.length, []);
+        spawned.push(child);
+        return child;
+      },
+      healthCheck: () => true,
+      readinessCheck: () => ready,
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => {
+        if (adopting) spawned[0]?.emit("exit", 19, null);
+      },
+      startupAttempts: 2,
+    });
+
+    await supervisor.ensureReady();
+    ready = false;
+    adopting = true;
+    await expect(supervisor.ensureReady()).rejects.toThrow(
+      "exited before becoming healthy: code=19 signal=null",
+    );
+
+    expect(spawned).toHaveLength(1);
+    expect(rolledBack).toBe(1);
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "failed",
+      pid: null,
+      last_error_code: "early_exit",
+      last_exit: { code: 19, signal: null },
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bundled Agent supervisor preserves spawn failure while adopting a live child", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-app-supervisor-adopt-error-"));
+  try {
+    const spawned: FakeChildProcess[] = [];
+    let ready = true;
+    let adopting = false;
+    let rolledBack = 0;
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: root,
+      resolveGateway: () => ({
+        command: "/runtime/bun",
+        args: ["gateway"],
+        env: {},
+        commitActivation: () => undefined,
+        rollbackActivation: () => {
+          rolledBack += 1;
+        },
+      }),
+      spawnProcess: () => {
+        const child = new FakeChildProcess(9075 + spawned.length, []);
+        spawned.push(child);
+        return child;
+      },
+      healthCheck: () => true,
+      readinessCheck: () => ready,
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => {
+        if (!adopting) return;
+        const error = new Error("candidate spawn failed") as Error & { code: string };
+        error.code = "EIO";
+        spawned[0]?.emit("error", error);
+      },
+      startupAttempts: 2,
+    });
+
+    await supervisor.ensureReady();
+    ready = false;
+    adopting = true;
+    await expect(supervisor.ensureReady()).rejects.toThrow(
+      "Failed to start Butler app server: candidate spawn failed",
+    );
+
+    expect(spawned).toHaveLength(1);
+    expect(rolledBack).toBe(1);
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "failed",
+      pid: 9075,
+      last_error_code: "spawn_failed",
+      last_error: {
+        details: { reason: "process_start_failed", error_code: "EIO" },
+      },
+    });
+    await supervisor.stop({ wait: true });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bundled Agent supervisor cleans up an adopted child at the existing deadline and only a later call starts again", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-app-supervisor-adopt-timeout-"));
+  try {
+    const spawned: FakeChildProcess[] = [];
+    const killed: string[] = [];
+    let ready = true;
+    let rolledBack = 0;
+    let now = 0;
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: root,
+      resolveGateway: () => ({
+        command: "/runtime/bun",
+        args: ["gateway"],
+        env: {},
+        commitActivation: () => undefined,
+        rollbackActivation: () => {
+          rolledBack += 1;
+        },
+      }),
+      spawnProcess: () => {
+        const child = new FakeChildProcess(9080 + spawned.length, killed);
+        spawned.push(child);
+        return child;
+      },
+      healthCheck: () => spawned.length > 0,
+      readinessCheck: () => ready,
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      nowMs: () => now,
+      sleepMs: async (ms) => {
+        now += ms;
+      },
+      startupAttempts: 1,
+      startupDelayMs: 100,
+      startupTimeoutMs: 250,
+    });
+
+    await supervisor.ensureReady();
+    ready = false;
+    await expect(supervisor.ensureReady()).rejects.toThrow("Timed out waiting");
+
+    expect(spawned).toHaveLength(1);
+    expect(killed).toContain("SIGTERM");
+    expect(rolledBack).toBe(1);
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "failed",
+      pid: null,
+      last_error_code: "readiness_timeout",
+      last_error: { details: { attempts: 3 } },
+    });
+
+    ready = true;
+    await supervisor.ensureReady();
+    expect(spawned).toHaveLength(2);
+    expect(supervisor.diagnostics()).toMatchObject({ phase: "running", pid: 9081 });
+    await supervisor.stop({ wait: true });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

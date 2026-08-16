@@ -9,8 +9,11 @@ import {
   classifyModelRouteFailure,
   createModelRoutePort as createProductionModelRoutePort,
   MODEL_ROUTE_MAX_DISPATCHES,
+  ModelRouteDurabilityError,
 } from "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { runBtccAgentLoop } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import { createTurnRuntime } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import { openBtccSqliteStores } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import type { ImageCarrierTuple } from "../../packages/butler-agent/src/agent/image-attachment/index.ts";
@@ -802,4 +805,363 @@ test("accepted model response is linked to the active checkpoint and replays aft
     stores.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("SQLite restart retains projected continuation and route rebases only an admitted identity", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-projected-acceptance-restart-"));
+  const dbPath = join(root, "btcc.sqlite");
+  let stores = openBtccSqliteStores({
+    dbPath, ownerId: "projected-acceptance", storageProfile: "ephemeral",
+  });
+  const route = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.5", reasoningEffort: "medium",
+    retryCeiling: 2, catalogGeneration: "catalog-projected-acceptance",
+  });
+  const identity = {
+    schemaVersion: "butler.context-projection-rebase.v1" as const,
+    projectionRevision: "butler.phase-continuity-projection.v1" as const,
+    projectionDigest: "d".repeat(64),
+    projectedThroughOrdinal: 8,
+  };
+  const toolSurfaceDigest = "f".repeat(64);
+  const command = {
+    kind: "run" as const,
+    turnId: "projected-acceptance-turn",
+    sessionId: "projected-acceptance-session",
+    triggerKey: "message:projected-acceptance-turn",
+    message: { messageId: "message:projected-acceptance-turn", content: "hello" },
+    modelSelection: {
+      provider: "openai", model: "gpt-5.5", reasoningEffort: "medium" as const,
+      controls: {}, controlsHash: "projected-acceptance-controls", modelRoute: route,
+    },
+    context: {
+      userRef: "local-user", profileRefs: [], recentFeedbackRefs: [],
+      mandatoryHotCacheRefs: [], optionalHotCacheRefs: [], baselineObservationScopeRefs: [],
+    },
+  };
+  const runtime = createTurnRuntime({
+    admission: stores.admission, turns: stores.turns, messages: stores.messages,
+    agent: {
+      async run({ recordModelRoundAcceptance }) {
+        await recordModelRoundAcceptance?.({
+          roundId: "accepted-round", candidateIndex: 0, transportAttempt: 1,
+          modelRef: "openai/gpt-5.5", result: {
+            text: "accepted", toolCalls: [],
+            continuation: {
+              provider: "openai", responseId: "accepted-response",
+              deliveredThroughOrdinal: 9, contextProjection: identity,
+              toolSurfaceDigest,
+            },
+          },
+        });
+        throw new ModelRouteDurabilityError(
+          "attempt_event_write", new Error("preserve active checkpoint"),
+        );
+      },
+    },
+  });
+  try {
+    await expect(runtime.runTurn(command)).rejects.toBeInstanceOf(ModelRouteDurabilityError);
+    const checkpoint = new Database(dbPath, { readonly: true });
+    const checkpointIdentity = checkpoint.query<{
+      checkpoint_id: string; checkpoint_revision: number;
+      active_checkpoint_id: string | null; is_active: number;
+      claim_id: string; revision: number; execution_fence: number;
+    }, [string]>(`
+      SELECT acceptance.checkpoint_id, acceptance.checkpoint_revision,
+        turn.active_checkpoint_id, checkpoint.is_active, claim.claim_id,
+        turn.revision, turn.execution_fence
+      FROM btcc_model_round_acceptances AS acceptance
+      JOIN btcc_turns AS turn ON turn.turn_id = acceptance.turn_id
+      JOIN btcc_checkpoints AS checkpoint ON checkpoint.checkpoint_id = acceptance.checkpoint_id
+      JOIN btcc_state_claims AS claim ON claim.checkpoint_id = checkpoint.checkpoint_id
+        AND claim.status = 'active'
+      WHERE acceptance.turn_id = ?
+    `).get(command.turnId)!;
+    checkpoint.close();
+    expect(checkpointIdentity).toMatchObject({
+      active_checkpoint_id: checkpointIdentity.checkpoint_id, is_active: 1,
+    });
+    stores.close();
+    stores = openBtccSqliteStores({
+      dbPath, ownerId: "projected-acceptance", storageProfile: "ephemeral",
+    });
+    const accepted = await stores.turns.loadModelRoundAcceptance({
+      turnId: command.turnId, roundId: "accepted-round", routeDigest: route.routeDigest,
+      candidateIndex: 0, modelRef: "openai/gpt-5.5",
+      checkpointId: checkpointIdentity.checkpoint_id,
+      checkpointRevision: checkpointIdentity.checkpoint_revision,
+    });
+    expect(accepted?.continuation).toMatchObject({
+      contextProjection: identity,
+      toolSurfaceDigest,
+    });
+    await stores.turns.recordModelRoundAcceptance({
+      turnId: command.turnId,
+      expectedRevision: checkpointIdentity.revision,
+      executionFence: checkpointIdentity.execution_fence,
+      claimId: checkpointIdentity.claim_id,
+      checkpointId: checkpointIdentity.checkpoint_id,
+      checkpointRevision: checkpointIdentity.checkpoint_revision,
+      roundId: "accepted-round-without-surface",
+      routeDigest: route.routeDigest,
+      candidateIndex: 0,
+      transportAttempt: 1,
+      modelRef: "openai/gpt-5.5",
+      result: {
+        text: "accepted without surface",
+        toolCalls: [],
+        continuation: {
+          provider: "openai",
+          responseId: "accepted-response-without-surface",
+          deliveredThroughOrdinal: 10,
+          contextProjection: identity,
+        },
+      },
+    });
+    await stores.turns.recordModelRoundAcceptance({
+      turnId: command.turnId,
+      expectedRevision: checkpointIdentity.revision,
+      executionFence: checkpointIdentity.execution_fence,
+      claimId: checkpointIdentity.claim_id,
+      checkpointId: checkpointIdentity.checkpoint_id,
+      checkpointRevision: checkpointIdentity.checkpoint_revision,
+      roundId: "btcc-model-round-0",
+      routeDigest: route.routeDigest,
+      candidateIndex: 0,
+      transportAttempt: 1,
+      modelRef: "openai/gpt-5.5",
+      result: {
+        toolCalls: [{
+          id: "accepted-tool-call",
+          name: "run_command",
+          arguments: { command: "echo should-not-run" },
+          rawArguments: JSON.stringify({ command: "echo should-not-run" }),
+        }],
+        continuation: {
+          provider: "openai",
+          responseId: "accepted-response-with-surface",
+          deliveredThroughOrdinal: 11,
+          contextProjection: identity,
+          toolSurfaceDigest,
+        },
+      },
+    });
+    stores.close();
+    stores = openBtccSqliteStores({
+      dbPath, ownerId: "projected-acceptance", storageProfile: "ephemeral",
+    });
+
+    let replayDispatches = 0;
+    const replayPersisted = (roundId: string, currentDigest: string) =>
+      createModelRoutePort({
+        turnId: command.turnId,
+        route,
+        base: { async runRound() {
+          replayDispatches += 1;
+          return { text: "unexpected dispatch", toolCalls: [] };
+        } },
+        loadAcceptedResponse: (lookup) => stores.turns.loadModelRoundAcceptance({
+          turnId: command.turnId,
+          roundId: lookup.roundId,
+          routeDigest: route.routeDigest,
+          candidateIndex: lookup.candidateIndex,
+          modelRef: lookup.modelRef,
+          checkpointId: checkpointIdentity.checkpoint_id,
+          checkpointRevision: checkpointIdentity.checkpoint_revision,
+        }),
+      }).runRound({
+        roundId,
+        model: "openai/gpt-5.5",
+        messages: [],
+        tools: [],
+        toolSurfaceDigest: currentDigest,
+      });
+
+    await expect(replayPersisted("accepted-round", toolSurfaceDigest)).resolves
+      .toMatchObject({ text: "accepted" });
+    await expect(replayPersisted("accepted-round", "a".repeat(64))).rejects
+      .toMatchObject({
+        name: "RoundToolSurfaceError",
+        code: "round_tool_surface_continuation_invalid",
+      });
+    await expect(replayPersisted(
+      "accepted-round-without-surface",
+      toolSurfaceDigest,
+    )).rejects.toMatchObject({
+      name: "RoundToolSurfaceError",
+      code: "round_tool_surface_continuation_invalid",
+    });
+    let replayToolExecutions = 0;
+    await expect(runBtccAgentLoop({
+      prompt: "do not run the persisted tool",
+      model: "openai/gpt-5.5",
+      tools: [{
+        name: "run_command",
+        description: "Run a command.",
+        parameters: { type: "object", properties: {} },
+      }],
+      modelRound: createModelRoutePort({
+        turnId: command.turnId,
+        route,
+        base: { async runRound() {
+          replayDispatches += 1;
+          return { text: "unexpected dispatch", toolCalls: [] };
+        } },
+        loadAcceptedResponse: (lookup) => stores.turns.loadModelRoundAcceptance({
+          turnId: command.turnId,
+          roundId: lookup.roundId,
+          routeDigest: route.routeDigest,
+          candidateIndex: lookup.candidateIndex,
+          modelRef: lookup.modelRef,
+          checkpointId: checkpointIdentity.checkpoint_id,
+          checkpointRevision: checkpointIdentity.checkpoint_revision,
+        }),
+      }),
+      executeTool: async () => {
+        replayToolExecutions += 1;
+        throw new Error("unexpected tool execution");
+      },
+    })).rejects.toMatchObject({
+      name: "RoundToolSurfaceError",
+      code: "round_tool_surface_continuation_invalid",
+    });
+    expect(replayDispatches).toBe(0);
+    expect(replayToolExecutions).toBe(0);
+
+    const runNextRound = async (
+      current: typeof identity | undefined,
+      retry: boolean,
+    ): Promise<unknown[]> => {
+      const seen: unknown[] = [];
+      let calls = 0;
+      const port = createModelRoutePort({
+        turnId: command.turnId, route,
+        base: { async runRound(request) {
+          seen.push(request.continuation);
+          calls += 1;
+          if (retry && calls === 1) {
+            throw new ModelProviderRequestError({
+              code: "provider_rate_limited", message: "retry",
+              provider: "openai", retryable: true,
+            });
+          }
+          return { text: "next", toolCalls: [] };
+        } },
+      });
+      await port.runRound({
+        roundId: `next-${current?.projectionDigest ?? "absent"}-${retry}`,
+        model: "openai/gpt-5.5", messages: [], tools: [],
+        continuation: accepted!.continuation,
+        toolSurfaceDigest,
+        boundedContinuation: {
+          schemaVersion: "butler.turn-context-envelope.v1",
+          modelFacingBytes: 100, requestDigest: "e".repeat(64),
+          responseItemId: "turn-item-10", ...(current ? { contextProjection: current } : {}),
+          admitProviderBody: async () => {},
+        },
+      });
+      return seen;
+    };
+
+    expect(await runNextRound(identity, false)).toEqual([accepted!.continuation]);
+    expect(await runNextRound({ ...identity, projectionDigest: "e".repeat(64) }, true))
+      .toEqual([undefined, undefined]);
+    expect(await runNextRound(undefined, false)).toEqual([accepted!.continuation]);
+    expect(await runNextRound(undefined, true))
+      .toEqual([accepted!.continuation, accepted!.continuation]);
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("model route resets one same-candidate continuation when the tool surface changes", async () => {
+  const route = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.6-sol",
+    reasoningEffort: "medium",
+    retryCeiling: 2,
+    catalogGeneration: "round-tool-surface",
+  });
+  const oldDigest = "a".repeat(64);
+  const nextDigest = "b".repeat(64);
+  const priorContinuation = {
+    provider: "openai",
+    responseId: "response-old-surface",
+    deliveredThroughOrdinal: 3,
+    toolSurfaceDigest: oldDigest,
+  };
+  const seen: Array<{
+    continuation: unknown;
+    cursor: number | undefined;
+    digest: string | undefined;
+  }> = [];
+  let calls = 0;
+  const port = createModelRoutePort({
+    turnId: "tool-surface-turn",
+    route,
+    base: {
+      async runRound(request) {
+        seen.push({
+          continuation: request.continuation,
+          cursor: request.routeContext?.cursor,
+          digest: request.toolSurfaceDigest,
+        });
+        calls += 1;
+        if (calls === 1) {
+          throw new ModelProviderRequestError({
+            code: "provider_rate_limited",
+            message: "retry",
+            provider: "openai",
+            retryable: true,
+          });
+        }
+        return {
+          text: "accepted",
+          toolCalls: [],
+          continuation: {
+            provider: "openai",
+            responseId: "response-new-surface",
+            deliveredThroughOrdinal: 4,
+          },
+        };
+      },
+    },
+  });
+
+  const changed = await port.runRound({
+    roundId: "tool-surface-round",
+    model: "openai/gpt-5.6-sol",
+    messages: [],
+    tools: [],
+    continuation: priorContinuation,
+    toolSurfaceDigest: nextDigest,
+  });
+
+  expect(seen).toEqual([
+    { continuation: undefined, cursor: 0, digest: nextDigest },
+    { continuation: undefined, cursor: 0, digest: nextDigest },
+  ]);
+  expect(changed.continuation).toMatchObject({ toolSurfaceDigest: nextDigest });
+
+  const stableSeen: unknown[] = [];
+  const stable = createModelRoutePort({
+    turnId: "tool-surface-turn",
+    route,
+    base: {
+      async runRound(request) {
+        stableSeen.push(request.continuation);
+        return { text: "stable", toolCalls: [], continuation: request.continuation };
+      },
+    },
+  });
+  await stable.runRound({
+    roundId: "tool-surface-stable-round",
+    model: "openai/gpt-5.6-sol",
+    messages: [],
+    tools: [],
+    continuation: changed.continuation,
+    toolSurfaceDigest: nextDigest,
+  });
+  expect(stableSeen).toEqual([changed.continuation]);
 });

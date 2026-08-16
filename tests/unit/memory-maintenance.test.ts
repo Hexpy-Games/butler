@@ -358,10 +358,6 @@ test("consolidation cycle runs project capsule maintenance during health phase",
     lockPath: join(consolidationDir, "locks", "consolidation.lock"),
     logsDir,
     summaryPath,
-    alerts: {
-      telegram: false,
-      notifyOnSubPhaseFailure: false,
-    },
   };
   const calls: string[] = [];
 

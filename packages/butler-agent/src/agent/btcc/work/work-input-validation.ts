@@ -91,6 +91,15 @@ export function validateDisposition(input: RecordWorkDispositionInput): void {
   ) {
     throw new Error(`Unsupported Work disposition: ${input.disposition}`);
   }
+  if (input.expectedMaterialFingerprint !== undefined &&
+      !/^[a-f0-9]{64}$/u.test(input.expectedMaterialFingerprint)) {
+    throw new Error("Durable Work expected material fingerprint is invalid");
+  }
+  if (input.runtimeOwnedOpenGeneration &&
+      (input.runtimeOwnedOpenGeneration.version !== 1 ||
+        input.disposition !== "open" || !input.expectedMaterialFingerprint)) {
+    throw new Error("Runtime-owned open requires its material generation");
+  }
   validateDispositionActionUpdates(input.actionUpdates ?? []);
   validateTextList(input.remainingActions ?? [], "remainingActions");
   validateTextList(input.evidenceRefs ?? [], "evidenceRefs");

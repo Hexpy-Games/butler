@@ -12,11 +12,10 @@ export type MemoryQuerySpeaker = "any" | "user" | "butler";
 export type MemoryQueryEventKind = "any" | "inbound" | "outbound";
 export type MemoryQueryOrder = "earliest" | "latest";
 export type MemoryQueryMatchMode = "any" | "all" | "phrase";
-export type ExactQuerySource = "conversation-store" | "app-projection-compat" | "transcript-recovery-index";
+export type ExactQuerySource = "conversation-store" | "transcript-recovery-index";
 
 export interface QueryMemoryInput {
   butlerData: string;
-  appMessageDbPath?: string;
   query?: string;
   scope?: MemoryQueryScope;
   sessionId?: string;
@@ -100,51 +99,10 @@ const MAX_LIMIT = 50;
 const MAX_TEXT_CHARS = 900;
 const CONVERSATION_STORE_SCAN_PAGE_SIZE = 1000;
 const MAX_CONVERSATION_STORE_SCAN_MESSAGES = 50000;
-const APP_MESSAGE_DB_RELATIVE = ["app-server", "butler-client.sqlite"];
 const TRANSCRIPT_QUERY_DB_RELATIVE = ["cognition", "memory", "query", "messages.sqlite"];
-
-export function appMessageDbPath(butlerData: string): string {
-  return join(butlerData, ...APP_MESSAGE_DB_RELATIVE);
-}
 
 export function transcriptQueryDbPath(butlerData: string): string {
   return join(butlerData, ...TRANSCRIPT_QUERY_DB_RELATIVE);
-}
-
-export function ensureAppMessageQuerySchema(db: Database): void {
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS messages_role_created_idx
-    ON messages(role, created_at, id);
-
-    CREATE INDEX IF NOT EXISTS messages_chat_role_created_idx
-    ON messages(chat_id, role, created_at, id);
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts
-    USING fts5(text, tokenize = 'unicode61');
-
-    INSERT INTO messages_fts(rowid, text)
-    SELECT m.rowid, m.text
-    FROM messages m
-    WHERE NOT EXISTS (
-      SELECT 1 FROM messages_fts f WHERE f.rowid = m.rowid
-    );
-
-    CREATE TRIGGER IF NOT EXISTS messages_fts_ai
-    AFTER INSERT ON messages BEGIN
-      INSERT INTO messages_fts(rowid, text) VALUES (new.rowid, new.text);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS messages_fts_ad
-    AFTER DELETE ON messages BEGIN
-      DELETE FROM messages_fts WHERE rowid = old.rowid;
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS messages_fts_au
-    AFTER UPDATE OF text ON messages BEGIN
-      DELETE FROM messages_fts WHERE rowid = old.rowid;
-      INSERT INTO messages_fts(rowid, text) VALUES (new.rowid, new.text);
-    END;
-  `);
 }
 
 export function ensureTranscriptQueryIndexSchema(db: Database): void {
@@ -397,23 +355,8 @@ function observationRoleFilter(
   return roleFilter(speaker, eventKind) as ConversationObservationRole[];
 }
 
-function appSessionId(chatId: string): string {
-  return chatId === "general" ? "butler/app-general" : `butler/app-${safeSessionSegment(chatId)}`;
-}
-
 function isAppSessionId(sessionId: string): boolean {
   return sessionId.startsWith("butler/app-");
-}
-
-function chatIdFromSessionId(sessionId: string): string {
-  if (sessionId === "butler/app-general") return "general";
-  if (sessionId.startsWith("butler/app-")) return sessionId.slice("butler/app-".length);
-  return sessionId;
-}
-
-function safeSessionSegment(value: string): string {
-  const normalized = value.trim().toLocaleLowerCase("en-US").replace(/[^a-z0-9._-]+/gu, "-");
-  return normalized || "session";
 }
 
 function hasTable(db: Database, table: string): boolean {
@@ -429,133 +372,8 @@ function hasIndex(db: Database, table: string, index: string): boolean {
     .some((row) => row.name === index);
 }
 
-function hasColumn(db: Database, table: string, column: string): boolean {
-  return db.query<{ name: string }, []>(`PRAGMA table_info(${table})`)
-    .all()
-    .some((row) => row.name === column);
-}
-
 function placeholders(count: number): string {
   return Array.from({ length: count }, (_, index) => `$role${index}`).join(", ");
-}
-
-function queryAppMessages(input: {
-  dbPath: string;
-  query: string;
-  scope: MemoryQueryScope;
-  sessionId: string;
-  speaker: MemoryQuerySpeaker;
-  eventKind: MemoryQueryEventKind;
-  order: MemoryQueryOrder;
-  matchMode: MemoryQueryMatchMode;
-  limit: number;
-  dateFrom: string | null;
-  dateTo: string | null;
-  excludeConversationMessageIds?: Set<string>;
-}): SourceQueryResult {
-  if (!existsSync(input.dbPath)) {
-    return { source: "app-projection-compat", skipped: "app message db missing", total: 0, rows: [], diagnostics: [] };
-  }
-  const db = new Database(input.dbPath, { readonly: true });
-  try {
-    if (!hasTable(db, "messages")) {
-      return { source: "app-projection-compat", skipped: "messages table missing", total: 0, rows: [], diagnostics: [] };
-    }
-    const needsSessionIndex = input.scope === "session";
-    const requiredIndex = needsSessionIndex ? "messages_chat_role_created_idx" : "messages_role_created_idx";
-    if (!hasIndex(db, "messages", requiredIndex)) {
-      return {
-        source: "app-projection-compat",
-        skipped: `${requiredIndex} missing; refusing full message scan`,
-        total: 0,
-        rows: [],
-        diagnostics: [],
-      };
-    }
-    const fts = input.query ? ftsQuery(input.query, input.matchMode) : null;
-    if (input.query && (!fts || !hasTable(db, "messages_fts"))) {
-      return { source: "app-projection-compat", skipped: "messages_fts missing; refusing LIKE scan", total: 0, rows: [], diagnostics: [] };
-    }
-    const roles = roleFilter(input.speaker, input.eventKind);
-    const params: Record<string, string | number> = {
-      $limit: input.limit,
-    };
-    const clauses = [`m.role IN (${placeholders(roles.length)})`];
-    roles.forEach((role, index) => {
-      params[`$role${index}`] = role;
-    });
-    if (input.scope === "session" && input.sessionId) {
-      clauses.push("m.chat_id = $chat_id");
-      params.$chat_id = chatIdFromSessionId(input.sessionId);
-    }
-    if (input.dateFrom) {
-      clauses.push("m.created_at >= $date_from");
-      params.$date_from = input.dateFrom;
-    }
-    if (input.dateTo) {
-      clauses.push("m.created_at < $date_to");
-      params.$date_to = input.dateTo;
-    }
-    const hasConversationMessageId = hasColumn(db, "messages", "conversation_message_id");
-    const excludedConversationIds = [...(input.excludeConversationMessageIds ?? [])]
-      .filter((id) => id.trim());
-    if (hasConversationMessageId && excludedConversationIds.length > 0) {
-      const exclusionPlaceholders = excludedConversationIds
-        .map((_, index) => `$excluded_cm_${index}`)
-        .join(", ");
-      clauses.push(`(m.conversation_message_id IS NULL OR m.conversation_message_id NOT IN (${exclusionPlaceholders}))`);
-      excludedConversationIds.forEach((id, index) => {
-        params[`$excluded_cm_${index}`] = id;
-      });
-    }
-    if (fts) {
-      clauses.push("m.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH $fts)");
-      params.$fts = fts;
-    }
-    const where = clauses.join(" AND ");
-    const order = input.order === "latest" ? "DESC" : "ASC";
-    const conversationMessageIdColumn = hasConversationMessageId ? "m.conversation_message_id" : "NULL";
-    const count = db.query<{ count: number }, Record<string, string | number>>(
-      `SELECT COUNT(*) AS count FROM messages m WHERE ${where}`,
-    ).get(params)?.count ?? 0;
-    const rows = db.query<{
-      event_id: string;
-      chat_id: string;
-      role: "user" | "assistant";
-      text: string;
-      created_at: string;
-      conversation_message_id: string | null;
-    }, Record<string, string | number>>(`
-      SELECT
-        m.id AS event_id,
-        m.chat_id,
-        m.role,
-        m.text,
-        m.created_at,
-        ${conversationMessageIdColumn} AS conversation_message_id
-      FROM messages m
-      WHERE ${where}
-      ORDER BY m.created_at ${order}, m.id ${order}
-      LIMIT $limit
-    `).all(params);
-    return {
-      source: "app-projection-compat",
-      total: Number(count),
-      rows: rows.map((row) => ({
-        event_id: row.event_id,
-        session_id: appSessionId(row.chat_id),
-        role: row.role,
-        text: row.text,
-        created_at: row.created_at,
-        source: "app-projection-compat" as const,
-        conversation_message_id: row.conversation_message_id ?? null,
-        transcript_file: null,
-      })),
-      diagnostics: [],
-    };
-  } finally {
-    db.close();
-  }
 }
 
 function queryConversationStore(input: {
@@ -764,7 +582,6 @@ export function queryMemory(input: QueryMemoryInput): QueryMemoryResult {
       inspected_sources: [],
       skipped_sources: [
         "conversation-store: session scope missing session_id",
-        "app-projection-compat: session scope missing session_id",
         "transcript-recovery-index: session scope missing session_id",
       ],
       results: [],
@@ -785,30 +602,6 @@ export function queryMemory(input: QueryMemoryInput): QueryMemoryResult {
     dateFrom,
     dateTo,
   });
-  const app = scope === "session" && conversation.total > 0
-    ? {
-        source: "app-projection-compat",
-        skipped: "conversation store covers session",
-        total: 0,
-        rows: [],
-        diagnostics: [],
-      }
-    : queryAppMessages({
-        dbPath: input.appMessageDbPath ?? appMessageDbPath(input.butlerData),
-        query,
-        scope,
-        sessionId,
-        speaker,
-        eventKind,
-        order,
-        matchMode,
-        limit,
-        dateFrom,
-        dateTo,
-        excludeConversationMessageIds: new Set(
-          conversation.rows.flatMap((row) => row.conversation_message_id ? [row.conversation_message_id] : []),
-        ),
-      });
   const transcript = input.includeTranscriptRecovery
     ? queryTranscriptIndex({
         dbPath: transcriptQueryDbPath(input.butlerData),
@@ -824,7 +617,7 @@ export function queryMemory(input: QueryMemoryInput): QueryMemoryResult {
         dateTo,
         includeInternal: input.includeInternal === true,
         includePlaceholders: input.includePlaceholders === true,
-        excludeAppSessions: !app.skipped,
+        excludeAppSessions: false,
       })
     : {
         source: "transcript-recovery-index",
@@ -834,7 +627,7 @@ export function queryMemory(input: QueryMemoryInput): QueryMemoryResult {
         diagnostics: [],
       };
 
-  const sourceResults = [conversation, app, transcript];
+  const sourceResults = [conversation, transcript];
   const inspectedSources = sourceResults.filter((item) => !item.skipped).map((item) => item.source);
   const skippedSources = sourceResults.flatMap((item) => item.skipped ? [`${item.source}: ${item.skipped}`] : []);
   diagnostics.push(...sourceResults.flatMap((item) => item.diagnostics));

@@ -28,7 +28,6 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   createBundledAgentSupervisor,
-  prepareAppLocalAuth,
 } from "./app-agent-supervisor.mjs";
 import { createAppForegroundDoctorView } from "./app-foreground-doctor.mjs";
 import { drainAppForegroundActiveWork } from "./app-foreground-drain.mjs";
@@ -70,7 +69,6 @@ import { migrateLegacyAppService } from "./app-legacy-service-migration.mjs";
 import { resolveOpenAIOAuthLoginHelper } from "./openai-oauth-login-helper.mjs";
 import { createAgentServiceControl } from "./service-control.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
-import { createLocalPagePreviewHost } from "./local-page-preview-host.mjs";
 import {
   readComposerDraftFile,
   writeComposerDraftFile,
@@ -278,11 +276,6 @@ autoUpdater.on("before-quit-for-update", () => {
 });
 const explicitElectronUserDataDir = process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR?.trim();
 let openAIOAuthLoginSession = null;
-const localPagePreviewAuth = prepareAppLocalAuth({ butlerData: butlerDataRoot });
-const localPagePreviewHost = createLocalPagePreviewHost({
-  BrowserWindow,
-  token: localPagePreviewAuth.token,
-});
 const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
   resolveGateway: managedGatewayCommand,
@@ -296,7 +289,6 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   getServerUrl: () => serverUrl,
   getAppVersion: () => appInfoView().version,
   getRendererOrigin: () => rendererOrigin,
-  getLocalPagePreviewUrl: () => localPagePreviewHost.endpoint(),
   explicitServerUrl,
   explicitUiUrl,
   baseEnv: bundledAgentSupervisorBaseEnv,
@@ -2523,11 +2515,6 @@ if (appSingleInstanceLock) {
         await runMenuBarHelper();
         return;
       }
-      try {
-        await localPagePreviewHost.start();
-      } catch (error) {
-        console.error("Local page preview is unavailable", error);
-      }
       await installDevtools();
       await createWindow();
       flushPendingNativeNavigation();
@@ -2544,7 +2531,6 @@ app.on("activate", activateButlerApp);
 
 app.on("before-quit", (event) => {
   if (finalQuitAllowed) {
-    void localPagePreviewHost.stop();
     if (tray) {
       tray.destroy();
       tray = null;
@@ -2567,7 +2553,6 @@ app.on("before-quit", (event) => {
     });
   }).then(async (stopped) => {
     if (stopped === undefined && !isQuitting) return stopped;
-    await localPagePreviewHost.stop();
     return stopped;
   }).then((stopped) => {
     if (stopped === undefined && !isQuitting) return;

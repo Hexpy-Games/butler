@@ -47,7 +47,6 @@ export type ButlerToolExecutionBoundary = (input: {
 export type ButlerToolExecutorInput = {
   butlerHome: string;
   butlerData: string;
-  appMessageDbPath?: string;
   workspacePath?: string;
   sessionId?: string;
   originChatId?: string;
@@ -78,4 +77,5 @@ export type ButlerToolExecutorInput = {
   workspaceReference?: WorkspaceReference;
   sessionBindingStore?: SessionWorkspaceBindingStore;
   memoryAttribution?: RuntimeMemoryAttributionPort;
+  operationResultExactReader?: (args: Record<string, unknown>) => unknown;
 };

@@ -166,7 +166,7 @@ test("explicit rule updates are written with provenance and recallable", () => {
     update: {
       kind: "rule",
       text: "Always cite sources for web-backed claims.",
-      source: "telegram:message:43",
+      source: "app:message:43",
     },
   });
 

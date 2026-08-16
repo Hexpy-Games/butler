@@ -140,28 +140,15 @@ const RECORD_WORK_CHECKPOINT: FunctionToolDefinition = {
   type: "function",
   name: "record_work_checkpoint",
   description: [
-    "Update the current Managed Work stage or action checklist when no Review is being recorded.",
+    "Update the current Managed Work action checklist or concise progress summary when no Review is being recorded.",
     "Use it at a meaningful boundary, not to narrate every tool call.",
     "When execution starts or the current action changes, include action_updates that mark the current action active and any completed prior action done; the runtime records exactly the action keys you name.",
-    "The runtime checks only the small legal stage transition and known action keys.",
-    "If a transition is rejected, use the returned allowed next stages; useful work and final delivery remain valid.",
+    "The runtime checks only known action keys and durable binding; this tool does not choose a Work stage.",
   ].join(" "),
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
-      next_stage: {
-        type: "string",
-        enum: [
-          "conception",
-          "planning",
-          "execution",
-          "review",
-          "validation",
-          "reporting",
-        ],
-        description: "The stage to enter. Omit when only updating action progress.",
-      },
       action_updates: {
         type: "array",
         items: {
@@ -199,9 +186,10 @@ const RECORD_WORK_REVIEW: FunctionToolDefinition = {
   description: [
     "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress.",
     "Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful.",
-    "Include action_updates known at that point and next_stage only when taking one legal next step after the entered stage.",
+    "The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage.",
+    "For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution.",
     "When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates.",
-    "The runtime validates only fixed stage transitions, known action keys, and durable bindings; it does not judge the Review or Validation meaning.",
+    "The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning.",
     "Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority.",
     "Disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished.",
     "A review records judgment but never replaces real tool evidence.",
@@ -212,12 +200,12 @@ const RECORD_WORK_REVIEW: FunctionToolDefinition = {
     properties: {
       subject: { type: "string", enum: ["plan", "result", "completion"] },
       verdict: { type: "string", enum: ["accept", "revise", "partial"] },
-      next_stage: {
+      correction_scope: {
         type: "string",
-        enum: ["planning", "execution", "review", "validation", "reporting"],
+        enum: ["planning", "execution"],
         description: [
-          "The legal stage to enter after Review or Validation.",
-          "Omit to remain in the stage entered by this call.",
+          "For a revised or partial result/completion, state where correction belongs.",
+          "Omit for accepted reviews and for Plan review, whose graph edge is deterministic.",
         ].join(" "),
       },
       action_updates: {
@@ -297,11 +285,6 @@ const RECORD_WORK_DISPOSITION: FunctionToolDefinition = {
       next_condition: {
         type: "string",
         minLength: 1,
-      },
-      evidence_refs: {
-        type: "array",
-        items: { type: "string", minLength: 1 },
-        default: [],
       },
       followups: {
         type: "array",

@@ -14,8 +14,6 @@ import {
   toContextMessage,
   type ConversationContextMessage,
 } from "./conversation-context-format.ts";
-import { readAppConversationSessionCatalog } from
-  "./conversation-session-catalog-compat.ts";
 
 export type ConversationSessionReferenceScope = "current_project" | "all_sessions";
 
@@ -40,7 +38,6 @@ export interface ConversationSessionReferenceReader {
 
 export interface ListConversationSessionsInput {
   butlerData: string;
-  appMessageDbPath?: string;
   currentSessionId: string;
   projectId?: string | null;
   scope?: ConversationSessionReferenceScope;
@@ -136,16 +133,11 @@ export function listConversationSessions(
       includeArchived: input.includeArchived,
       limit: limit + 1,
     });
-    const catalog = readAppConversationSessionCatalog(
-      input.appMessageDbPath,
-      candidates.map((item) => item.id),
-    );
     const sessions = candidates.slice(0, limit).map((session) => {
       const binding = reader.getGatewayBindingForConversation(
         session.id,
         session.gateway_origin,
       );
-      const app = catalog.sessions.get(session.id);
       const recentMessages = reader.readMessagesAround({
         sessionId: session.id,
         direction: "before",
@@ -160,8 +152,8 @@ export function listConversationSessions(
       return {
         conversation_session_id: session.id,
         external_session_id: binding?.external_session_id ?? null,
-        title: app?.title ?? null,
-        catalog_source: app ? "app-catalog-compat" as const : null,
+        title: null,
+        catalog_source: null,
         workspace_id: session.workspace_id,
         project_id: session.project_id,
         gateway_origin: session.gateway_origin,
@@ -180,7 +172,7 @@ export function listConversationSessions(
       returned: sessions.length,
       truncated: candidates.length > limit,
       sessions,
-      diagnostics: catalog.diagnostic ? [catalog.diagnostic] : [],
+      diagnostics: [],
     };
   });
 }

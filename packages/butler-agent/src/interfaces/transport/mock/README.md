@@ -1,7 +1,7 @@
 # mock transport
 
 `packages/butler-agent/src/interfaces/transport/mock/` contains the in-memory transport adapter used by tests to
-exercise Butler without Telegram.
+exercise Butler without an external transport.
 
 ## Key Files
 

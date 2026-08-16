@@ -383,12 +383,6 @@ test("app release manifest exposes app package files only", () => {
     "packages/butler-app/client/electron/package.json",
   );
   expect(appReleasePaths).toContain(
-    "packages/butler-app/client/electron/local-page-preview-host.mjs",
-  );
-  expect(appReleasePaths).toContain(
-    "packages/butler-app/client/electron/local-page-preview-path-policy.mjs",
-  );
-  expect(appReleasePaths).toContain(
     "packages/butler-app/client/electron/scripts",
   );
   expect(appReleasePaths).toContain(
@@ -855,10 +849,6 @@ test("agent release packager creates an installable artifact with app web client
     expect(entries).toContain(
       "./node_modules/@csstools/css-parser-algorithms/package.json",
     );
-    expect(entries).toContain("./node_modules/micromark-extension-gfm/package.json");
-    expect(entries).toContain(
-      "./node_modules/micromark-extension-gfm-autolink-literal/package.json",
-    );
 
     const extractDir = mkdtempSync(join(tmpdir(), "butler-agent-release-extract-"));
     try {
@@ -874,7 +864,6 @@ test("agent release packager creates an installable artifact with app web client
         "packages/butler-progress-projection",
         "packages/project-ledger",
         "packages/butler-agent/src/interfaces/mcp-server",
-        "packages/butler-agent/src/integrations/telegram",
       ]);
       expect(JSON.stringify(packagedRootPackage)).not.toContain("packages/butler-app");
       expect(entries.some((entry) =>
@@ -893,7 +882,6 @@ test("agent release packager creates an installable artifact with app web client
         const { pathToFileURL } = require("url");
         const { join } = require("path");
         await import(pathToFileURL(join(process.cwd(), "node_modules/@asamuzakjp/css-color/dist/esm/index.js")).href);
-        await import(pathToFileURL(join(process.cwd(), "node_modules/micromark-extension-gfm/index.js")).href);
       `], {
         cwd: extractDir,
         encoding: "utf8",
@@ -1509,20 +1497,6 @@ test("app package smoke uses real bundled Agent release resources", () => {
       "app-managed-runtime-home",
       "bundled-payload-repair-source",
     ]);
-    expect(
-      dependencyClosure.appOwnedDependencies.find(
-        (item: any) => item.id === "electron-shell",
-      )?.paths,
-    ).toContain(
-      "packages/butler-app/client/electron/local-page-preview-host.mjs",
-    );
-    expect(
-      dependencyClosure.appOwnedDependencies.find(
-        (item: any) => item.id === "electron-shell",
-      )?.paths,
-    ).toContain(
-      "packages/butler-app/client/electron/local-page-preview-path-policy.mjs",
-    );
     expect(
       dependencyClosure.appOwnedDependencies.find(
         (item: any) => item.id === "background-service-registration-metadata",

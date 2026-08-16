@@ -169,7 +169,7 @@ describe("lightweight page reader", () => {
     expect(result.renderRecommended).toBe(true);
   });
 
-  test("exports small text helpers for benchmark compatibility", () => {
+  test("exports small text helpers for callers", () => {
     expect(stripHtmlToText("<p>A&nbsp;&amp;&nbsp;B</p>")).toBe("A & B");
     expect(shouldRecommendRender({
       text: "tiny",

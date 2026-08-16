@@ -1,6 +1,10 @@
 import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type { RuntimeTurnEventInput } from "../../events/turn-events.ts";
 import { publicOperationTitle } from "../../events/progress-projection.ts";
+import {
+  operationOutputChunkPayloads,
+  OPERATION_OUTPUT_CHUNK_EVENT_KIND,
+} from "../../events/operation-output-event.ts";
 
 export async function publishOperationalNotice(
   observer: BtccTurnProgressObserver | undefined,
@@ -135,6 +139,17 @@ export function projectTurnProgressToEvents(
             : {}),
         },
       });
+      if (update.status !== "completed" || update.resultJson === undefined || !update.resultRef) {
+        return;
+      }
+      for (const payload of operationOutputChunkPayloads({
+        requestId: update.requestId,
+        resultId: update.resultRef.id,
+        resultSha256: update.resultRef.sha256,
+        resultJson: update.resultJson,
+      })) {
+        await publish({ kind: OPERATION_OUTPUT_CHUNK_EVENT_KIND, payload });
+      }
     },
     async modelRoundWaitingChanged(update) {
       if (update.status === "started" && update.modelRef) {

@@ -20,16 +20,16 @@ import type {
   ModelRouteEventHandler,
   ModelRouteState,
 } from "./contracts.ts";
-import {
-  MODEL_ROUTE_MAX_CANDIDATES,
-  MODEL_ROUTE_MAX_DISPATCHES,
-  MODEL_ROUTE_MAX_RETRY_ATTEMPTS,
-  ModelRouteDispatchLimitError,
-} from "./contracts.ts";
+import { attachAcceptedToolSurface, continuationForRoundContext, replayAcceptedToolSurface } from "./tool-surface-continuation.ts";
+import { ModelRouteDispatchLimitError } from "./contracts.ts";
 import {
   createModelRouteRecovery,
   normalizeModelRouteFailure,
 } from "./recovery.ts";
+import {
+  modelRouteDispatchBudget,
+  selectModelRouteFallback,
+} from "./fallback-selection.ts";
 
 export function createModelRoutePort(input: {
   base: ModelRoundPort;
@@ -59,12 +59,16 @@ export function createModelRoutePort(input: {
   let route = input.route;
   let generatedRoundSequence = 0;
   return {
+    ...(input.base.initialRequestBytes
+      ? { initialRequestBytes: input.base.initialRequestBytes.bind(input.base) } : {}),
+    ...(input.base.statelessMessageBytes ? {
+      statelessMessageBytes: input.base.statelessMessageBytes.bind(input.base),
+    } : {}),
     async runRound(request: ModelRoundRequest): Promise<ModelRoundResult> {
-      const roundId = request.roundId ??
-        `${input.turnId}:round:${generatedRoundSequence++}`;
+      const roundId = request.roundId ?? `${input.turnId}:round:${generatedRoundSequence++}`;
       let dispatchCount = 0;
       let transportAttempt = 1;
-      let continuation = request.continuation;
+      let continuation = continuationForRoundContext(request);
       let loadedAttemptKey: string | undefined;
       let attemptHistory: ModelRouteAttemptHistory = emptyAttemptHistory();
       let lastProviderError: unknown;
@@ -90,7 +94,11 @@ export function createModelRoutePort(input: {
           candidateIndex: route.activeCursor,
           modelRef: candidate.modelRef,
         });
-        if (accepted) return accepted;
+        if (accepted) return replayAcceptedToolSurface(
+          accepted, request.toolSurfaceDigest, {
+            roundId, candidateIndex: route.activeCursor,
+            transportAttempt: 0, modelRef: candidate.modelRef,
+          });
 
         if (loadedAttemptKey !== attemptKey) {
           loadedAttemptKey = attemptKey;
@@ -126,15 +134,15 @@ export function createModelRoutePort(input: {
           }
           if (latestFailure?.disposition === "advance") {
             const next = request.imageCarrier ? undefined : advanceModelRoute(route, attemptKey);
-            route = await selectFallback(
-              input,
+            route = await selectModelRouteFallback({
+              onRouteEvent: input.onRouteEvent,
               route,
               attemptKey,
               roundId,
               next,
-              recoveredFailure(latestFailure),
-              request.imageCarrier,
-            );
+              exhaustionError: recoveredFailure(latestFailure),
+              imageCarrier: request.imageCarrier,
+            });
             continuation = undefined;
             loadedAttemptKey = undefined;
             continue;
@@ -161,21 +169,20 @@ export function createModelRoutePort(input: {
                 latestFailure.errorCode,
               );
             }
-            route = await selectFallback(
-              input,
+            route = await selectModelRouteFallback({
+              onRouteEvent: input.onRouteEvent,
               route,
               attemptKey,
               roundId,
               next,
-              exhaustion,
-              request.imageCarrier,
-            );
+              exhaustionError: exhaustion,
+              imageCarrier: request.imageCarrier,
+            });
             continuation = undefined;
             loadedAttemptKey = undefined;
             continue;
           }
         }
-
         const startedResult = await input.onRouteEvent?.({
           type: "model.attempt.started",
           roundId,
@@ -201,15 +208,14 @@ export function createModelRoutePort(input: {
             transportAttempt += 1;
             continue;
           }
-          route = await selectFallback(
-            input,
+          route = await selectModelRouteFallback({
+            onRouteEvent: input.onRouteEvent,
             route,
             attemptKey,
             roundId,
-            undefined,
-            lastProviderError,
-            request.imageCarrier,
-          );
+            exhaustionError: lastProviderError,
+            imageCarrier: request.imageCarrier,
+          });
           continuation = undefined;
           loadedAttemptKey = undefined;
           continue;
@@ -239,6 +245,12 @@ export function createModelRoutePort(input: {
               : {}),
             providerRetryAttempts: 1,
             continuation,
+            routeContext: {
+              schemaVersion: "butler.model-route-request.v1",
+              routeDigest: route.routeDigest,
+              cursor: route.activeCursor, modelRef: candidate.modelRef,
+              ...(request.toolSurfaceDigest ? { toolSurfaceDigest: request.toolSurfaceDigest } : {}),
+            },
           });
         } catch (error) {
           const failure = normalizeModelRouteFailure(error);
@@ -275,12 +287,19 @@ export function createModelRoutePort(input: {
             throw failure.error;
           }
           await recovery.clear(transportAttempt, candidate.modelRef, errorCode);
-          route = await selectFallback(input, route, attemptKey, roundId, next, undefined, request.imageCarrier);
+          route = await selectModelRouteFallback({
+            onRouteEvent: input.onRouteEvent,
+            route,
+            attemptKey,
+            roundId,
+            next,
+            imageCarrier: request.imageCarrier,
+          });
           continuation = undefined;
           loadedAttemptKey = undefined;
           continue;
         }
-
+        result = attachAcceptedToolSurface(result, request.toolSurfaceDigest);
         // Acceptance durability is intentionally outside the provider catch:
         // a storage fault never becomes a provider failure or fallback.
         await input.recordAcceptedResponse?.({
@@ -299,52 +318,16 @@ export function createModelRoutePort(input: {
             modelRef: candidate.modelRef,
           });
         }
-        await recovery.clear(transportAttempt, candidate.modelRef);
-        return result;
+        return input.recordAcceptedResponse ? {
+          ...result,
+          acceptedCheckpoint: {
+            roundId, candidateIndex: route.activeCursor,
+            transportAttempt, modelRef: candidate.modelRef,
+          },
+        } : result;
       }
 
+      throw lastProviderError ?? new Error("model_route_exhausted");
     },
   };
-}
-
-async function selectFallback(
-  input: Parameters<typeof createModelRoutePort>[0],
-  route: ModelRouteState,
-  attemptKey: string,
-  roundId: string,
-  next = advanceModelRoute(route, attemptKey),
-  exhaustionError?: unknown,
-  imageCarrier?: ModelRoundRequest["imageCarrier"],
-): Promise<ModelRouteState> {
-  if (!next) {
-    throw exhaustionError instanceof Error
-      ? exhaustionError
-      : new Error("model_route_exhausted_after_restart");
-  }
-  if (imageCarrier) {
-    const candidate = currentModelRouteCandidate(next);
-    if (!candidate || candidate.modelRef !== `${imageCarrier.providerId}/${imageCarrier.modelId}`) {
-      throw new ImageAdmissionError("image_model_unsupported", "visual_fallback_disabled");
-    }
-  }
-  await input.onRouteEvent?.({
-    type: "model.fallback.selected",
-    roundId,
-    candidateIndex: next.activeCursor,
-    modelRef: currentModelRouteCandidate(next)!.modelRef,
-    route: next,
-  });
-  return next;
-}
-
-function modelRouteDispatchBudget(route: ModelRouteState): number {
-  const retryCeiling = Math.min(
-    MODEL_ROUTE_MAX_RETRY_ATTEMPTS,
-    Math.max(1, Math.trunc(route.retryCeiling)),
-  );
-  const candidateCount = Math.min(
-    MODEL_ROUTE_MAX_CANDIDATES,
-    Math.max(0, route.candidates.length),
-  );
-  return Math.min(MODEL_ROUTE_MAX_DISPATCHES, retryCeiling * candidateCount);
 }

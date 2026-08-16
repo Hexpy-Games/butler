@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
   existsSync,
-  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -36,6 +35,8 @@ import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { runCommandToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/run-command/run_command/definition.ts";
+import { createButlerToolExecutor } from
+  "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { artifactFilesFromOutbound } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/transport/outbound-artifact-files.ts";
 import { reviewedWork } from "./support/guided-effect-test-fixture.ts";
@@ -46,7 +47,154 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
+function registeredCommand(
+  input: { butlerData: string; workspacePath: string },
+  args: Record<string, unknown>,
+) {
+  const execute = createButlerToolExecutor({
+    butlerHome: input.workspacePath,
+    butlerData: input.butlerData,
+    workspacePath: input.workspacePath,
+  });
+  return async () => await execute({
+    name: "run_command",
+    rawArguments: JSON.stringify(args),
+    args,
+  });
+}
+
 describe("R3 read-only command boundary", () => {
+  test("full access runs validation on the host and uses validation_suite only as evidence", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-host-validation-"));
+    roots.push(root);
+    const data = join(root, "data");
+    const workspace = join(root, "workspace");
+    const home = join(root, "home");
+    mkdirSync(workspace, { recursive: true });
+    mkdirSync(home, { recursive: true });
+    const priorHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      const result = await executeGuidedCommandCall({
+        call: {
+          name: "run_command",
+          rawArguments: "{}",
+          args: {
+            command: "printf workspace > host-validation.txt && printf profile > \"$HOME/app-profile.txt\"",
+            state_effect: "validation",
+            validation_suite: "host-dependent-app",
+          },
+        },
+        accessMode: "full_access",
+        butlerData: data,
+        workspacePath: workspace,
+        originalRequest: "run the host-dependent validation",
+        signal: new AbortController().signal,
+        executeRegistered: registeredCommand({
+          butlerData: data,
+          workspacePath: workspace,
+        }, {
+          command: "printf workspace > host-validation.txt && printf profile > \"$HOME/app-profile.txt\"",
+          state_effect: "validation",
+          validation_suite: "host-dependent-app",
+        }),
+      });
+
+      expect(result).toMatchObject({
+        ok: true,
+        exit_code: 0,
+      });
+      expect(result).not.toHaveProperty("sandbox");
+      expect(readFileSync(join(workspace, "host-validation.txt"), "utf8"))
+        .toBe("workspace");
+      expect(readFileSync(join(home, "app-profile.txt"), "utf8"))
+        .toBe("profile");
+      expect(result).toMatchObject({
+        evidence_capability_receipts: [
+          expect.objectContaining({
+            capability: "command_executed",
+          }),
+          expect.objectContaining({
+            capability: "validation_passed",
+            scope: expect.objectContaining({
+              suite: "host-dependent-app",
+              result: "passed",
+            }),
+          }),
+        ],
+      });
+    } finally {
+      if (priorHome === undefined) delete process.env.HOME;
+      else process.env.HOME = priorHome;
+    }
+  });
+
+  test("full access uses the same host boundary when validation_suite is absent", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-host-observation-"));
+    roots.push(root);
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace, { recursive: true });
+    const result = await executeGuidedCommandCall({
+      call: {
+        name: "run_command",
+        rawArguments: "{}",
+        args: {
+          command: "printf host > ordinary-host.txt",
+          state_effect: "read_only",
+        },
+      },
+      accessMode: "full_access",
+      butlerData: join(root, "data"),
+      workspacePath: workspace,
+      originalRequest: "run the enabled application",
+      signal: new AbortController().signal,
+      executeRegistered: registeredCommand({
+        butlerData: join(root, "data"),
+        workspacePath: workspace,
+      }, {
+        command: "printf host > ordinary-host.txt",
+        state_effect: "read_only",
+      }),
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+    });
+    expect(result).not.toHaveProperty("sandbox");
+    expect(readFileSync(join(workspace, "ordinary-host.txt"), "utf8"))
+      .toBe("host");
+  });
+
+  test("full access host execution retains the registered command protections", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-host-protected-"));
+    roots.push(root);
+    const workspace = join(root, "workspace");
+    const protectedRoot = join(workspace, ".project-ledger");
+    const protectedFile = join(protectedRoot, "records.json");
+    mkdirSync(protectedRoot, { recursive: true });
+    writeFileSync(protectedFile, "authority");
+    const args = {
+      command: "printf bypass > .project-ledger/records.json",
+      state_effect: "validation",
+      validation_suite: "protected-authority",
+    };
+    const result = await executeGuidedCommandCall({
+      call: { name: "run_command", rawArguments: "{}", args },
+      accessMode: "full_access",
+      butlerData: join(root, "data"),
+      workspacePath: workspace,
+      originalRequest: "validate without bypassing Butler authority",
+      signal: new AbortController().signal,
+      executeRegistered: registeredCommand({
+        butlerData: join(root, "data"),
+        workspacePath: workspace,
+      }, args),
+    });
+
+    expect(result).toMatchObject({ ok: false, error: "protected_path" });
+    expect(readFileSync(protectedFile, "utf8")).toBe("authority");
+  });
+
   test("observes the workspace through a no-write, no-network host boundary", async () => {
     const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-"));
     roots.push(root);
@@ -278,197 +426,90 @@ describe("R3 read-only command boundary", () => {
     expect(existsSync(target)).toBe(false);
   });
 
-  test("runs declared validation in a disposable workspace and preserves only declared artifacts", async () => {
+  test("host validation mutates the active workspace and records validation evidence", async () => {
     const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-validation-"));
     roots.push(root);
     const data = join(root, "data");
     const workspace = join(root, "workspace");
-    const artifactBase = join(data, "artifacts", "generated");
     mkdirSync(workspace, { recursive: true });
-    mkdirSync(artifactBase, { recursive: true });
     writeFileSync(join(workspace, "source.txt"), "original");
-    writeFileSync(join(artifactBase, "result.txt"), "prior");
+    const args = {
+      command: "printf evidence > validation-only.txt",
+      state_effect: "validation",
+      validation_suite: "unit-tests",
+    };
     const result = await executeGuidedCommandCall({
       call: {
         name: "run_command",
         rawArguments: "{}",
-        args: {
-          command: [
-            "printf temporary > validation-only.txt",
-            "mkdir -p \"$BUTLER_ARTIFACTS_DIR\"",
-            "printf evidence > \"$BUTLER_ARTIFACTS_DIR/result.txt\"",
-          ].join(" && "),
-          state_effect: "validation",
-          validation_suite: "unit-tests",
-          output_paths: ["$BUTLER_ARTIFACTS_DIR/result.txt"],
-        },
+        args,
       },
       accessMode: "full_access",
       butlerData: data,
       workspacePath: workspace,
       originalRequest: "validate the project",
       signal: new AbortController().signal,
+      executeRegistered: registeredCommand({
+        butlerData: data,
+        workspacePath: workspace,
+      }, args),
     });
 
-    if (process.platform !== "darwin") {
-      expect(result).toMatchObject({
-        ok: false,
-        error: { code: "command_validation_isolation_unavailable" },
-      });
-      return;
-    }
     expect(result).toMatchObject({
       ok: true,
       exit_code: 0,
-      sandbox: "isolated_validation_no_network",
     });
-    const artifacts = (result as { artifacts?: Array<{ path: string }> }).artifacts ?? [];
-    expect(artifacts).toHaveLength(1);
-    expect(artifacts[0]?.path).toMatch(
-      /^artifacts\/generated\/validation-[^/]+\/result\.txt$/,
-    );
-    expect(existsSync(join(workspace, "validation-only.txt"))).toBe(false);
-    expect(readFileSync(join(artifactBase, "result.txt"), "utf8")).toBe("prior");
-    expect(readFileSync(join(data, artifacts[0]!.path), "utf8")).toBe("evidence");
+    expect(result).not.toHaveProperty("sandbox");
+    expect(readFileSync(join(workspace, "validation-only.txt"), "utf8"))
+      .toBe("evidence");
+    expect(result).toMatchObject({
+      evidence_capability_receipts: expect.arrayContaining([
+        expect.objectContaining({
+          capability: "validation_passed",
+          scope: expect.objectContaining({ suite: "unit-tests" }),
+        }),
+      ]),
+    });
   });
 
-  test("maps a displayed absolute workspace cwd into the disposable validation copy", async () => {
+  test("accepts a displayed absolute workspace cwd for host validation", async () => {
     const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-validation-cwd-"));
     roots.push(root);
     const data = join(root, "data");
     const workspace = join(root, "workspace");
     mkdirSync(workspace, { recursive: true });
     writeFileSync(join(workspace, "package.json"), "{}\n");
+    const args = {
+      command: "test -f package.json",
+      cwd: workspace,
+      state_effect: "validation",
+      validation_suite: "absolute-workspace-cwd",
+    };
     const result = await executeGuidedCommandCall({
       call: {
         name: "run_command",
         rawArguments: "{}",
-        args: {
-          command: "test -f package.json",
-          cwd: workspace,
-          state_effect: "validation",
-          validation_suite: "absolute-workspace-cwd",
-        },
+        args,
       },
       accessMode: "full_access",
       butlerData: data,
       workspacePath: workspace,
       originalRequest: "validate the project",
       signal: new AbortController().signal,
+      executeRegistered: registeredCommand({
+        butlerData: data,
+        workspacePath: workspace,
+      }, args),
     });
 
-    if (process.platform !== "darwin") return;
     expect(result).toMatchObject({
       ok: true,
       cwd: workspace,
-      sandbox: "isolated_validation_no_network",
     });
+    expect(result).not.toHaveProperty("sandbox");
   });
 
-  test("isolated validation removes artifact symlinks instead of verifying them", async () => {
-    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-validation-link-"));
-    roots.push(root);
-    const data = join(root, "data");
-    const workspace = join(root, "workspace");
-    const authority = join(workspace, "secret.txt");
-    mkdirSync(workspace, { recursive: true });
-    writeFileSync(authority, "authority");
-    const result = await executeGuidedCommandCall({
-      call: {
-        name: "run_command",
-        rawArguments: "{}",
-        args: {
-          command: `ln -s ${JSON.stringify(authority)} "$BUTLER_ARTIFACTS_DIR/leak.txt"`,
-          state_effect: "validation",
-          validation_suite: "artifact-boundary",
-          output_paths: ["$BUTLER_ARTIFACTS_DIR/leak.txt"],
-        },
-      },
-      accessMode: "full_access",
-      butlerData: data,
-      workspacePath: workspace,
-      originalRequest: "validate without publishing links",
-      signal: new AbortController().signal,
-    });
-
-    if (process.platform !== "darwin") return;
-    expect(result).toMatchObject({ ok: true });
-    expect(result).not.toHaveProperty("artifacts");
-    const artifactBase = join(data, "artifacts", "generated");
-    for (const directory of readdirSync(artifactBase)) {
-      const candidate = join(artifactBase, directory, "leak.txt");
-      expect(existsSync(candidate)).toBe(false);
-      if (existsSync(candidate)) expect(lstatSync(candidate).isSymbolicLink()).toBe(false);
-    }
-  });
-
-  test("published validation artifacts cannot be changed by background descendants", async () => {
-    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-validation-background-"));
-    roots.push(root);
-    const data = join(root, "data");
-    const workspace = join(root, "workspace");
-    mkdirSync(workspace, { recursive: true });
-    const result = await executeGuidedCommandCall({
-      call: {
-        name: "run_command",
-        rawArguments: "{}",
-        args: {
-          command: [
-            "printf good > \"$BUTLER_ARTIFACTS_DIR/result.txt\"",
-            "(sleep 0.2; printf bad > \"$BUTLER_ARTIFACTS_DIR/result.txt\") >/dev/null 2>&1 &",
-          ].join("; "),
-          state_effect: "validation",
-          validation_suite: "background-boundary",
-          output_paths: ["$BUTLER_ARTIFACTS_DIR/result.txt"],
-        },
-      },
-      accessMode: "full_access",
-      butlerData: data,
-      workspacePath: workspace,
-      originalRequest: "publish stable validation evidence",
-      signal: new AbortController().signal,
-    });
-
-    if (process.platform !== "darwin") return;
-    expect(result).toMatchObject({ ok: true });
-    const [artifact] = (result as { artifacts?: Array<{ path: string }> }).artifacts ?? [];
-    expect(artifact?.path).toBeString();
-    const publishedPath = join(data, artifact!.path);
-    expect(readFileSync(publishedPath, "utf8")).toBe("good");
-    await Bun.sleep(500);
-    expect(readFileSync(publishedPath, "utf8")).toBe("good");
-    expect(lstatSync(publishedPath).isFile()).toBe(true);
-  });
-
-  test("isolated validation cannot mutate the authoritative workspace", async () => {
-    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-validation-source-"));
-    roots.push(root);
-    const workspace = join(root, "workspace");
-    const target = join(workspace, "source.txt");
-    mkdirSync(workspace, { recursive: true });
-    writeFileSync(target, "original");
-    const result = await executeGuidedCommandCall({
-      call: {
-        name: "run_command",
-        rawArguments: "{}",
-        args: {
-          command: `printf compromised > ${JSON.stringify(target)}`,
-          state_effect: "validation",
-          validation_suite: "source-boundary",
-        },
-      },
-      accessMode: "full_access",
-      butlerData: join(root, "data"),
-      workspacePath: workspace,
-      originalRequest: "validate without changing source",
-      signal: new AbortController().signal,
-    });
-
-    expect(result).toMatchObject({ ok: false });
-    expect(String(await Bun.file(target).text())).toBe("original");
-  });
-
-  test("falls back to the read-only boundary when writable validation is not admitted", async () => {
+  test("read-only access remains isolated while full access does not require validation_suite", async () => {
     const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-validation-denied-"));
     roots.push(root);
     const execute = async (
@@ -482,6 +523,10 @@ describe("R3 read-only command boundary", () => {
         workspacePath: root,
         originalRequest: "validate the project",
         signal: new AbortController().signal,
+        executeRegistered: registeredCommand({
+          butlerData: join(root, "data"),
+          workspacePath: root,
+        }, args),
       });
 
     const readOnlyTarget = join(root, "read-only-forbidden.txt");
@@ -494,10 +539,12 @@ describe("R3 read-only command boundary", () => {
 
     const missingSuiteTarget = join(root, "missing-suite-forbidden.txt");
     expect((await execute({
-      command: "printf blocked > missing-suite-forbidden.txt",
+      command: "printf allowed > missing-suite-forbidden.txt",
       state_effect: "validation",
-    }, "full_access")) as Record<string, unknown>).toMatchObject({ ok: false });
-    expect(existsSync(missingSuiteTarget)).toBe(false);
+    }, "full_access")) as Record<string, unknown>).toMatchObject({
+      ok: true,
+    });
+    expect(readFileSync(missingSuiteTarget, "utf8")).toBe("allowed");
   });
 
   test("rejects mutation declarations before launching a command", async () => {

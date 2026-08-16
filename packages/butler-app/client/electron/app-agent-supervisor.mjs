@@ -60,7 +60,6 @@ export function buildBundledAgentSupervisorEnv({
   rendererOrigin,
   explicitUiUrl = null,
   projectFolderTokenSecret,
-  localPagePreviewUrl = null,
   localAuth,
 }) {
   return {
@@ -78,9 +77,6 @@ export function buildBundledAgentSupervisorEnv({
     ...(projectFolderTokenSecret
       ? { BUTLER_PROJECT_FOLDER_TOKEN_SECRET: projectFolderTokenSecret }
       : {}),
-    ...(safeString(localPagePreviewUrl)
-      ? { BUTLER_APP_LOCAL_PAGE_PREVIEW_URL: safeString(localPagePreviewUrl) }
-      : {}),
   };
 }
 
@@ -97,7 +93,6 @@ export function createBundledAgentSupervisor({
   getServerUrl,
   getAppVersion = () => null,
   getRendererOrigin,
-  getLocalPagePreviewUrl = () => null,
   explicitServerUrl = null,
   explicitUiUrl = null,
   projectFolderTokenSecret = null,
@@ -116,6 +111,7 @@ export function createBundledAgentSupervisor({
   onGatewayStarting = () => {},
 }) {
   let child = null;
+  let childSpawnError = null;
   let startupPromise = null;
   let shutdownKillTimer = null;
   let phase = "idle";
@@ -143,8 +139,8 @@ export function createBundledAgentSupervisor({
       await waitForExplicitServerReady();
       return;
     }
-    if (child && (await checkGatewayReadiness()).ready) {
-      phase = "running";
+    if (child) {
+      await adoptOwnedChild(child, activeGateway ?? readyGateway);
       return;
     }
     let gateway;
@@ -197,6 +193,94 @@ export function createBundledAgentSupervisor({
     throw new Error(`Butler app server is not healthy: ${explicitServerUrl}`);
   }
 
+  async function adoptOwnedChild(candidate, gateway) {
+    let observedHealthy = false;
+    const startupWindow = createStartupWindow();
+    while (startupWindow.canAttempt()) {
+      throwIfCandidateFailed(
+        gateway,
+        childSpawnError,
+        child === candidate ? null : lastExit ?? { code: null, signal: null },
+      );
+      startupWindow.recordAttempt();
+      const state = await checkGatewayReadiness();
+      observedHealthy = observedHealthy || state.healthy;
+      throwIfCandidateFailed(
+        gateway,
+        childSpawnError,
+        child === candidate ? null : lastExit ?? { code: null, signal: null },
+      );
+      if (state.ready) {
+        await acceptReadyCandidate(gateway, {
+          commitActivation: readyGateway !== gateway,
+        });
+        return;
+      }
+      await startupWindow.waitBeforeRetry();
+    }
+    await throwCandidateStartupTimeout(gateway, observedHealthy, startupWindow);
+  }
+
+  function throwIfCandidateFailed(gateway, spawnError, exit) {
+    if (spawnError) {
+      recordError("spawn_failed", {
+        reason: "process_start_failed",
+        error_code: typeof spawnError.code === "string" ? spawnError.code : null,
+      });
+      rollbackGatewayActivation(gateway, spawnError);
+      throw new Error(`Failed to start Butler app server: ${spawnError.message}`);
+    }
+    if (!exit) return;
+    const error = new Error(
+      `Butler app server exited before becoming healthy: code=${exit.code ?? "null"} signal=${exit.signal ?? "null"}.`,
+    );
+    recordError("early_exit", {
+      exit_code: exit.code,
+      signal: exit.signal,
+    });
+    rollbackGatewayActivation(gateway, error);
+    throw error;
+  }
+
+  async function throwCandidateStartupTimeout(gateway, observedHealthy, startupWindow) {
+    const errorCode = observedHealthy ? "readiness_timeout" : "health_timeout";
+    const timeoutError = new Error(
+      `Timed out waiting for Butler app server at ${getServerUrl()}.`,
+    );
+    await stopCandidateAfterStartupFailure();
+    rollbackGatewayActivation(gateway, timeoutError);
+    recordError(errorCode, {
+      attempts: startupWindow.attempts(),
+      host: "127.0.0.1",
+      port: getPort(),
+    });
+    throw timeoutError;
+  }
+
+  async function acceptReadyCandidate(gateway, { commitActivation }) {
+    if (commitActivation) {
+      try {
+        gateway.commitActivation?.();
+      } catch (error) {
+        const activationError = normalizeError(error, "App-managed Agent activation commit failed");
+        await stopCandidateAfterStartupFailure();
+        rollbackGatewayActivation(gateway, activationError);
+        recordError("activation_commit_failed", {
+          reason: "commit_activation_failed",
+          error_code:
+            error && typeof error === "object" && typeof error.code === "string"
+              ? error.code
+              : null,
+        });
+        throw activationError;
+      }
+    }
+    phase = "running";
+    readyGateway = gateway;
+    lastErrorCode = null;
+    lastErrorDetails = null;
+  }
+
   async function start(gateway = resolveGateway()) {
     if (child) {
       recordError("already_starting");
@@ -206,6 +290,7 @@ export function createBundledAgentSupervisor({
     activeGateway = gateway;
     lastErrorCode = null;
     lastExit = null;
+    childSpawnError = null;
     localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
     onGatewayStarting(gateway);
     const env = buildBundledAgentSupervisorEnv({
@@ -217,7 +302,6 @@ export function createBundledAgentSupervisor({
       rendererOrigin: getRendererOrigin(),
       explicitUiUrl,
       projectFolderTokenSecret,
-      localPagePreviewUrl: getLocalPagePreviewUrl(),
       localAuth,
     });
     try {
@@ -241,10 +325,9 @@ export function createBundledAgentSupervisor({
       });
       throw error;
     }
-    let spawnError = null;
     let earlyExit = null;
     child.once("error", (error) => {
-      spawnError = error;
+      childSpawnError = error;
     });
     child.once("exit", (code, signal) => {
       const wasRunning = phase === "running";
@@ -267,63 +350,14 @@ export function createBundledAgentSupervisor({
       startupWindow.recordAttempt();
       const state = await checkGatewayReadiness();
       observedHealthy = observedHealthy || state.healthy;
+      throwIfCandidateFailed(gateway, childSpawnError, earlyExit);
       if (state.ready) {
-        try {
-          gateway.commitActivation?.();
-        } catch (error) {
-          const activationError = normalizeError(error, "App-managed Agent activation commit failed");
-          await stopCandidateAfterStartupFailure();
-          rollbackGatewayActivation(gateway, activationError);
-          recordError("activation_commit_failed", {
-            reason: "commit_activation_failed",
-            error_code:
-              error && typeof error === "object" && typeof error.code === "string"
-                ? error.code
-                : null,
-          });
-          throw activationError;
-        }
-        phase = "running";
-        readyGateway = gateway;
+        await acceptReadyCandidate(gateway, { commitActivation: true });
         return;
-      }
-      if (spawnError) {
-        recordError("spawn_failed", {
-          reason: "process_start_failed",
-          error_code: typeof spawnError.code === "string" ? spawnError.code : null,
-        });
-        rollbackGatewayActivation(gateway, spawnError);
-        throw new Error(`Failed to start Butler app server: ${spawnError.message}`);
-      }
-      if (earlyExit) {
-        recordError("early_exit", {
-          exit_code: earlyExit.code,
-          signal: earlyExit.signal,
-        });
-        rollbackGatewayActivation(
-          gateway,
-          new Error(
-            `Butler app server exited before becoming healthy: code=${earlyExit.code ?? "null"} signal=${earlyExit.signal ?? "null"}.`,
-          ),
-        );
-        throw new Error(
-          `Butler app server exited before becoming healthy: code=${earlyExit.code ?? "null"} signal=${earlyExit.signal ?? "null"}.`,
-        );
       }
       await startupWindow.waitBeforeRetry();
     }
-    const errorCode = observedHealthy ? "readiness_timeout" : "health_timeout";
-    const timeoutError = new Error(
-      `Timed out waiting for Butler app server at ${getServerUrl()}.`,
-    );
-    await stopCandidateAfterStartupFailure();
-    rollbackGatewayActivation(gateway, timeoutError);
-    recordError(errorCode, {
-      attempts: startupWindow.attempts(),
-      host: "127.0.0.1",
-      port: getPort(),
-    });
-    throw timeoutError;
+    await throwCandidateStartupTimeout(gateway, observedHealthy, startupWindow);
   }
 
   async function restart() {

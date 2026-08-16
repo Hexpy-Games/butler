@@ -1365,7 +1365,7 @@ setup_directories() {
   ui_section "Directory Setup"
   echo ""
 
-  mkdir -p "$BUTLER_DATA"/{memory/{hot,db,projects,conversations},cognition/profile,personas,config/subsession-activity,tasks,logs}
+  mkdir -p "$BUTLER_DATA"/{memory/{hot,db,projects,conversations},cognition/profile,personas,config,tasks,logs}
   ui_success "Data directory tree created"
 
   # Copy config template if no config exists
@@ -1929,48 +1929,6 @@ generate_custom_eol() {
   bash "$generator_path" "$input" "$butler_name" "$template_path" "$output_path"
 }
 
-telegram_detect_chat_id() {
-  local bot_token="$1"
-  local max_attempts="${2:-0}"
-  local attempts=0
-  local updates_response chat_id error_text
-
-  curl -s -X POST "https://api.telegram.org/bot${bot_token}/deleteWebhook" \
-    -d "drop_pending_updates=false" >/dev/null 2>&1 || true
-
-  while true; do
-    attempts=$((attempts + 1))
-    updates_response=$(curl -s \
-      --data-urlencode "timeout=10" \
-      --data-urlencode "allowed_updates=[\"message\",\"edited_message\",\"channel_post\",\"my_chat_member\"]" \
-      "https://api.telegram.org/bot${bot_token}/getUpdates" 2>/dev/null || true)
-    if command -v jq &>/dev/null && [[ -n "$updates_response" ]]; then
-      error_text=$(echo "$updates_response" | jq -r 'select(.ok == false) | .description // empty' 2>/dev/null || true)
-      if [[ -n "$error_text" ]]; then
-        echo "ERROR:${error_text}"
-        return 1
-      fi
-      chat_id=$(echo "$updates_response" | jq -r '
-        [
-          .result[]?
-          | (.message.chat.id // .edited_message.chat.id // .channel_post.chat.id // .my_chat_member.chat.id // empty)
-        ]
-        | map(tostring)
-        | last // empty
-      ' 2>/dev/null || true)
-      if [[ -n "$chat_id" && "$chat_id" != "null" ]]; then
-        echo "$chat_id"
-        return 0
-      fi
-    fi
-    if [[ "$max_attempts" -gt 0 && "$attempts" -ge "$max_attempts" ]]; then
-      echo "ERROR:Timed out waiting for a Telegram DM."
-      return 1
-    fi
-    sleep 2
-  done
-}
-
 # ─── Minimal Runtime Setup / First-Chat Onboarding Marker ───────────────────
 
 detect_user_timezone() {
@@ -2051,7 +2009,6 @@ write_minimal_runtime_config() {
     cfg.webSearch = cfg.webSearch && typeof cfg.webSearch === 'object' ? cfg.webSearch : {};
     cfg.webSearch.provider = cfg.webSearch.provider || 'duckduckgo-html';
     cfg.webSearch.readerBackend = cfg.webSearch.readerBackend || 'lightweight';
-    cfg.telegram = cfg.telegram && typeof cfg.telegram === 'object' ? cfg.telegram : {};
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');
   "
@@ -2185,34 +2142,10 @@ gateway_choice_is_explicit() {
   [[ -n "${INSTALL_GATEWAY_ARG:-${BUTLER_GATEWAY:-${BUTLER_INSTALL_GATEWAY:-}}}" ]]
 }
 
-ensure_telegram_transport_config() {
-  local telegram_config="$BUTLER_DATA/config/telegram-transport.json"
-  if [[ ! -f "$telegram_config" ]]; then
-    mkdir -p "$(dirname "$telegram_config")"
-    cat > "$telegram_config" << EOF
-{
-  "topicRouting": {
-    "enabled": true,
-    "configSource": "$BUTLER_DATA/butler.config.json",
-    "scripts": {
-      "send": "$BUTLER_HOME/packages/butler-agent/scripts/subsession-send.sh",
-      "start": "$BUTLER_HOME/packages/butler-agent/scripts/subsession-start.sh"
-    }
-  }
-}
-EOF
-    ui_success "Telegram transport config created"
-  else
-    ui_success "Telegram transport config already exists"
-  fi
-}
-
 configure_gateway() {
   ui_section "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "Gateway Setup" || echo "Gateway Setup")"
   echo ""
 
-  BOT_TOKEN=""
-  CHAT_ID=""
   ui_success "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "Butler 앱 게이트웨이 준비 완료" || echo "Butler App gateway ready")"
 }
 
@@ -2684,9 +2617,6 @@ health_check() {
     ui_warn "model selected: unknown"
   fi
 
-  if [[ -n "${BOT_TOKEN:-}" && -n "${CHAT_ID:-}" ]]; then
-    ui_success "telegram gateway: paired"
-  fi
 }
 
 # ─── Completion Screen ───────────────────────────────────────────────────────
@@ -3010,7 +2940,6 @@ main() {
   echo ""
 
   # Initialize globals
-  BOT_TOKEN="" CHAT_ID=""
   OS_TYPE="" ARCH_TYPE="" PKG_INSTALL="" PKG_MANAGER=""
 
   bootstrap_gum || true

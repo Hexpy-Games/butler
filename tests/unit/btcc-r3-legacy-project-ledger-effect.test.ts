@@ -577,15 +577,15 @@ async function createHarness(input: HarnessInput) {
   const scope = { turnId: command.turnId, sessionId: SESSION_ID };
   const imported = await stores.durableWork.importOpenLegacyWork(scope);
   if (imported?.work.currentStage === "execution") {
-    await stores.durableWork.continueWork({
-      ...scope,
-      mutationCallId: `continue-imported-plan-${input.recordId}-${input.currentKind}`,
-      workId: imported.work.workId,
-    });
-    await stores.durableWork.recordCheckpoint({
+    await stores.durableWork.bindOpenWork(scope, imported.work.workId);
+    await stores.durableWork.recordReview({
       ...scope,
       mutationCallId: `review-imported-plan-${input.recordId}-${input.currentKind}`,
-      nextStage: "review",
+      subject: "result",
+      verdict: "revise",
+      correctionScope: "planning",
+      summary: "The imported execution needs a current reviewed Plan.",
+      corrections: ["Replace the imported Plan before another effect."],
     });
   }
   const effectCalls = [{
@@ -809,7 +809,7 @@ function exactAppBinding(
     workspace_path: projectRoot,
     ledger_project_id: "legacy-fixture-alias",
     ledger_root: projectRoot,
-    source: "app_project_db",
+    source: "workspace_metadata",
     resolved_at: "2026-07-31T00:00:00.000Z",
     initialized: true,
     initialization_generation: "test",

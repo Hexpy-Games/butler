@@ -2,12 +2,57 @@ import { expect, test } from "bun:test";
 import {
   allowedNextWorkStages,
   createDurableWorkService,
+  resolveWorkReviewTransition,
   type DurableWorkContext,
   type DurableWorkReview,
   type DurableWorkStore,
   type DurableWorkView,
   type RecordWorkReviewCommand,
 } from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
+
+test("semantic Review judgments deterministically traverse the fixed graph", () => {
+  expect(resolveWorkReviewTransition({
+    currentStage: "planning",
+    subject: "plan",
+    verdict: "accept",
+  })).toEqual({ entryStage: "review", nextStage: "execution" });
+  expect(resolveWorkReviewTransition({
+    currentStage: "planning",
+    subject: "plan",
+    verdict: "revise",
+  })).toEqual({ entryStage: "review", nextStage: "planning" });
+  expect(resolveWorkReviewTransition({
+    currentStage: "execution",
+    subject: "result",
+    verdict: "accept",
+  })).toEqual({ entryStage: "review", nextStage: "validation" });
+  expect(resolveWorkReviewTransition({
+    currentStage: "execution",
+    subject: "result",
+    verdict: "partial",
+    correctionScope: "planning",
+  })).toEqual({ entryStage: "review", nextStage: "planning" });
+  expect(resolveWorkReviewTransition({
+    currentStage: "validation",
+    subject: "completion",
+    verdict: "accept",
+  })).toEqual({ entryStage: "validation", nextStage: "reporting" });
+  expect(resolveWorkReviewTransition({
+    currentStage: "reporting",
+    subject: "completion",
+    verdict: "revise",
+    correctionScope: "execution",
+  })).toEqual({ entryStage: "validation", nextStage: "execution" });
+  expect(() => resolveWorkReviewTransition({
+    currentStage: "execution",
+    subject: "result",
+    verdict: "revise",
+  })).toThrow(expect.objectContaining({
+    code: "work_transition_guard_unmet",
+    unmetGuard: "correction_scope_required",
+    nextAction: "choose_planning_or_execution_correction",
+  }));
+});
 import {
   DURABLE_WORK_TOOL_DEFINITIONS,
   executeDurableWorkTool,
@@ -32,7 +77,7 @@ test("Managed Work exposes the fixed six-stage transition guide", () => {
   expect(allowedNextWorkStages("reporting")).toEqual(["validation"]);
 });
 
-test("the existing Review tool exposes completion Validation alongside disposition", async () => {
+test("Work exposes atomic disposition alongside optional Review", async () => {
   expect(DURABLE_WORK_TOOL_DEFINITIONS.map(({ name }) => name)).toEqual([
     "start_work",
     "continue_work",
@@ -47,7 +92,8 @@ test("the existing Review tool exposes completion Validation alongside dispositi
   expect(JSON.stringify(review?.parameters)).toContain(
     '"enum":["plan","result","completion"]',
   );
-  expect(JSON.stringify(review?.parameters)).toContain("validation");
+  expect(JSON.stringify(review?.parameters)).not.toContain("next_stage");
+  expect(JSON.stringify(review?.parameters)).toContain("correction_scope");
 
   let receivedSubject: string | undefined;
   const view = workView({ currentStage: "validation" });
@@ -67,7 +113,6 @@ test("the existing Review tool exposes completion Validation alongside dispositi
       verdict: "accept",
       summary: "The whole Work satisfies the original request.",
       corrections: [],
-      next_stage: "reporting",
     },
   });
 
@@ -98,7 +143,6 @@ test("result acceptance enters Review but cannot complete Work", async () => {
     verdict: "accept",
     summary: "The actual result is correct.",
     corrections: [],
-    nextStage: "validation",
   });
 
   expect(command).toMatchObject({
@@ -110,7 +154,7 @@ test("result acceptance enters Review but cannot complete Work", async () => {
   expect(command?.expectedResultReviewRevisionId).toBeUndefined();
 });
 
-test("completion acceptance binds the current result Review and completes only terminal Work", async () => {
+test("completion acceptance binds the current result Review without closing Work", async () => {
   let command: RecordWorkReviewCommand | undefined;
   const resultReview = acceptedResultReview(["result-1"]);
   const view = workView({
@@ -143,7 +187,6 @@ test("completion acceptance binds the current result Review and completes only t
     verdict: "accept",
     summary: "The whole Work satisfies the original request and Plan.",
     corrections: [],
-    nextStage: "reporting",
   });
 
   expect(command).toMatchObject({
@@ -211,13 +254,14 @@ function fakeStore(input: {
   return {
     loadContext: () => Promise.resolve(input.context),
     importOpenLegacyWork: () => Promise.resolve(null),
+    bindOpenWork: () => Promise.resolve(input.context.work),
     startWork: () => Promise.resolve(input.context.work),
     continueWork: () => Promise.resolve(input.context.work),
     replacePlan: () => Promise.resolve(input.context.work),
     recordCheckpoint: () => Promise.resolve(input.context.work),
     recordReview: input.recordReview,
     recordDisposition: () => Promise.resolve(input.context.work),
-    recordCloseoutMissing: () => Promise.resolve(),
+    claimCloseoutCorrection: () => Promise.resolve(false),
     attachToolResult: () => Promise.resolve(input.context.work),
     boundWorkForTurn: () => Promise.resolve(input.context.work),
   };

@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS btcc_guided_work_disposition_revisions (
   revision INTEGER NOT NULL,
   result_sequence INTEGER NOT NULL DEFAULT 0,
   material_fingerprint TEXT NOT NULL DEFAULT '',
+  runtime_owned_open INTEGER NOT NULL DEFAULT 0 CHECK (runtime_owned_open IN (0, 1)),
   disposition TEXT NOT NULL CHECK (disposition IN ('completed', 'open', 'blocked')),
   summary TEXT NOT NULL,
   action_updates_json TEXT NOT NULL,

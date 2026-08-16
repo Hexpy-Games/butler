@@ -7,14 +7,7 @@ export type GuidedCommandContext = {
   accessMode: "full_access" | "read_only";
   filesystemBoundary:
     | { kind: "read_only_observation" }
-    | { kind: "full_access_contained" }
-    | {
-      kind: "isolated_validation";
-      writeRoots: string[];
-      homeRoot: string;
-      tempRoot: string;
-      artifactRoot: string;
-    };
+    | { kind: "full_access_contained" };
   signal?: AbortSignal;
 };
 

@@ -85,6 +85,7 @@ export type GuidedWorkDispositionRow = {
   revision: number;
   result_sequence: number;
   material_fingerprint: string;
+  runtime_owned_open: number;
   disposition: DurableWorkDisposition["disposition"];
   summary: string;
   action_updates_json: string;

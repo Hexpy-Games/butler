@@ -40,12 +40,12 @@ export const runCommandToolDefinition = {
       },
       validation_suite: {
         type: "string",
-        description: "Stable validation suite id; emits a validation receipt; failed suites need a later pass before completion.",
+        description: "Stable validation suite id used only for validation evidence and output presentation. It never selects a sandbox or execution environment.",
       },
       state_effect: {
         type: "string",
         enum: ["read_only", "mutation", "validation", "remote_observation"],
-        description: "Effect: mutation and remote_observation require full access plus accepted Plan Review; remote_observation is an audited network effect for remote status/log reads. validation uses validation_suite.",
+        description: "Effect intent: mutation and remote_observation require full access plus accepted Plan Review. For read_only and validation, the admitted access mode owns the execution environment; validation_suite only labels evidence.",
       },
       output_mode: {
         type: "string",

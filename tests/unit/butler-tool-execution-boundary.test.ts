@@ -128,8 +128,8 @@ describe("Butler actual tool execution boundary", () => {
 
     const direct = await execute({
       name: "read_file",
-      args: { path: "fact.txt" },
-      rawArguments: JSON.stringify({ path: "fact.txt" }),
+      args: { requests: [{ path: "fact.txt" }] },
+      rawArguments: JSON.stringify({ requests: [{ path: "fact.txt" }] }),
     });
     expect(direct).toMatchObject({ ok: true });
 
@@ -137,11 +137,11 @@ describe("Butler actual tool execution boundary", () => {
       name: "tool_call",
       args: {
         id: "native:read_file",
-        arguments: { path: "fact.txt" },
+        arguments: { requests: [{ path: "fact.txt" }] },
       },
       rawArguments: JSON.stringify({
         id: "native:read_file",
-        arguments: { path: "fact.txt" },
+        arguments: { requests: [{ path: "fact.txt" }] },
       }),
     });
     expect(bridged).toMatchObject({ ok: true });

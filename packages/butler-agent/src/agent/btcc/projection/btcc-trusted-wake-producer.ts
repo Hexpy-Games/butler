@@ -79,7 +79,7 @@ async function reconcile(
       rejected += 1;
       continue;
     }
-    let authorizedWake = false;
+    let authorizedWake: boolean;
     try {
       authorizedWake = await input.wakeAuthorizations.validateWake(authorization);
     } catch {
@@ -173,7 +173,7 @@ async function authorizeCandidate(
     authorizationRef,
     ...(resultScopeRef ? { resultScopeRef } : {}),
   };
-  let authorized = false;
+  let authorized: boolean;
   try {
     authorized = await input.wakeAuthorizations.validateWake(authorization);
   } catch {

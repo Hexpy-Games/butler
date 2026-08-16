@@ -40,7 +40,6 @@ test("six-stage Work persists Validation bindings and replay without duplicate r
       verdict: "accept",
       summary: "현재 계획으로 실행할 수 있습니다.",
       corrections: [],
-      nextStage: "execution",
     });
     journal.start({
       turnId: scope.turnId,
@@ -77,7 +76,7 @@ test("six-stage Work persists Validation bindings and replay without duplicate r
     });
     expect(resultReviewed).toMatchObject({
       status: "open",
-      currentStage: "review",
+      currentStage: "validation",
       latestResultReview: {
         subject: "result",
         verdict: "accept",
@@ -93,7 +92,6 @@ test("six-stage Work persists Validation bindings and replay without duplicate r
       verdict: "accept" as const,
       summary: "원 요청, 계획, 결과, 영수증을 대조해 완료를 확인했습니다.",
       corrections: [],
-      nextStage: "reporting" as const,
     };
     const validated = await service.recordReview(completionInput);
     expect(validated).toMatchObject({
@@ -122,6 +120,7 @@ test("six-stage Work persists Validation bindings and replay without duplicate r
       latestDisposition: {
         disposition: "completed",
         originTurnId: scope.turnId,
+        runtimeOwnedOpen: false,
       },
     });
     expect(stages(db, completed.workId)).toEqual([
@@ -129,9 +128,10 @@ test("six-stage Work persists Validation bindings and replay without duplicate r
       "planning",
       "review",
       "execution",
-      "review",
-      "validation",
-      "reporting",
+    "review",
+    "validation",
+    "validation",
+    "reporting",
       "reporting",
     ]);
     expect(reviewBinding(db, completed.workId)).toEqual({
@@ -213,6 +213,13 @@ test("R3-11 constraints migrate without rewriting completed Work history", async
 
   migrateBtccSchema(db);
   migrateBtccSchema(db);
+
+  expect(db.query<{
+    name: string;
+    dflt_value: string | null;
+  }, []>("PRAGMA table_info(btcc_guided_work_disposition_revisions)").all()
+    .find((column) => column.name === "runtime_owned_open"))
+    .toMatchObject({ dflt_value: "0" });
 
   const legacy = await new SqliteGuidedWorkStore(db)
     .boundWorkForTurn("legacy-turn");

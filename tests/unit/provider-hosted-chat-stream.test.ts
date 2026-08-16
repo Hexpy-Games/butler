@@ -73,13 +73,13 @@ test("indexed tool-call deltas reconstruct one exact call", async () => {
         index: 0,
         id: "call-1",
         type: "function",
-        function: { name: "read_", arguments: "{\"pa" },
+        function: { name: "read_", arguments: "{\"requests\":[{\"pa" },
       }] } }],
     } },
     { afterMs: 1, data: {
       choices: [{ index: 0, delta: { tool_calls: [{
         index: 0,
-        function: { name: "file", arguments: "th\":\"SPEC.md\"}" },
+        function: { name: "file", arguments: "th\":\"SPEC.md\"}]}" },
       }] }, finish_reason: "tool_calls" }],
     } },
     { afterMs: 1, data: "[DONE]" },
@@ -97,7 +97,7 @@ test("indexed tool-call deltas reconstruct one exact call", async () => {
   expect(response.choices[0].message.tool_calls).toEqual([{
     id: "call-1",
     type: "function",
-    function: { name: "read_file", arguments: "{\"path\":\"SPEC.md\"}" },
+    function: { name: "read_file", arguments: "{\"requests\":[{\"path\":\"SPEC.md\"}]}" },
   }]);
 });
 

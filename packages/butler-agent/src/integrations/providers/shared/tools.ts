@@ -4,7 +4,7 @@ import type { FunctionToolCall, FunctionToolDefinition, OpenAIResponse } from ".
 
 
 
-export function normalizeFunctionToolCallName(rawName: unknown, allowedNames?: Set<string>): string | null {
+export function normalizeFunctionToolCallName(rawName: unknown, _allowedNames?: Set<string>): string | null {
   if (typeof rawName !== "string") return null;
   const name = rawName.trim();
   if (!name) return null;

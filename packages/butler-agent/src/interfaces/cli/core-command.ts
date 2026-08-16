@@ -1,7 +1,5 @@
 #!/usr/bin/env bun
 import { spawnSync } from "child_process";
-import { createInterface } from "readline/promises";
-import { stdin as input, stdout as output } from "process";
 
 import { buildMetricsStatus, renderMetricsStatus } from "../../../scripts/metrics-status.ts";
 import { buildServiceHealth, renderStatusContext } from "../../../scripts/status-context.ts";
@@ -14,7 +12,6 @@ import {
 import { parseCommonOptions, type ParsedCommonOptions } from "./args.ts";
 import { renderJsonEnvelope } from "./output.ts";
 import { loadPrivateEnvIntoProcess, privateEnvPath } from "./private-env.ts";
-import { buildTelegramCliStatus, pairTelegramChat, redactTelegramToken } from "./telegram.ts";
 
 function optionValue(args: string[], name: string): string | null {
   const index = args.indexOf(name);
@@ -211,67 +208,6 @@ function metrics(parsed: ParsedCommonOptions, args: string[]): never | void {
   process.exit(result.status ?? 1);
 }
 
-function telegramStatus(parsed: ParsedCommonOptions): void {
-  const data = buildTelegramCliStatus(parsed.options.data);
-  if (parsed.options.json) {
-    printEnvelope(parsed, "butler telegram status", data);
-  } else {
-    console.log([
-      "Butler Telegram",
-      `token configured: ${data.tokenConfigured}`,
-      `chat paired: ${data.chatPaired}`,
-      `chat id: ${data.chatId ?? "none"}`,
-    ].join("\n"));
-  }
-}
-
-async function promptSecret(label: string): Promise<string> {
-  const rl = createInterface({ input, output });
-  try {
-    return (await rl.question(label)).trim();
-  } finally {
-    rl.close();
-  }
-}
-
-async function telegramPair(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
-  if (args.includes("--token")) {
-    fail(parsed, "invalid_arguments", "telegram pair does not accept token values through command-line flags");
-  }
-  let token = process.env.TELEGRAM_BOT_TOKEN?.trim() || "";
-  if (!token && parsed.options.nonInteractive) {
-    fail(parsed, "invalid_arguments", "telegram pair requires an existing TELEGRAM_BOT_TOKEN in non-interactive mode");
-  }
-  if (!token) {
-    token = await promptSecret("Telegram bot token: ");
-  }
-  if (!token) fail(parsed, "invalid_arguments", "telegram bot token is required");
-
-  if (!parsed.options.quiet && !parsed.options.json) {
-    console.log("Send any message to the Telegram bot. Waiting until you cancel or a chat is detected.");
-  }
-  try {
-    const data = await pairTelegramChat({
-      butlerData: parsed.options.data,
-      token,
-      timeoutMs: numericOption(args, "--timeout-ms") ?? 0,
-      apiBase: process.env.BUTLER_TELEGRAM_API_BASE,
-    });
-    if (parsed.options.json) {
-      printEnvelope(parsed, "butler telegram pair", data);
-    } else {
-      console.log(`Telegram paired: chat ${data.chatId}`);
-    }
-  } catch (error) {
-    fail(
-      parsed,
-      "external_unavailable",
-      redactTelegramToken(error instanceof Error ? error.message : String(error), token),
-      5,
-    );
-  }
-}
-
 async function main(): Promise<void> {
   const parsed = parseCommonOptions(Bun.argv.slice(2));
   if (parsed.errors.length > 0) {
@@ -285,8 +221,6 @@ async function main(): Promise<void> {
   if (command === "auth" && args[0] === "status") return authStatus(parsed);
   if (command === "auth" && args[0] === "login") return authLogin(parsed);
   if (command === "model" && args[0] === "status") return modelStatus(parsed);
-  if (command === "telegram" && args[0] === "status") return telegramStatus(parsed);
-  if (command === "telegram" && args[0] === "pair") return await telegramPair(parsed, args.slice(1));
   fail(parsed, "unknown_command", `unknown Butler core command: ${parsed.args.join(" ")}`);
 }
 

@@ -6,3 +6,9 @@ export type {
   BtccTurnOutcome,
   BtccTurnRequest,
 } from "./contracts.ts";
+export type {
+  GuidedOperationResultReader,
+  GuidedToolJournal,
+  GuidedToolJournalRecord,
+  OperationResultDeliveryState,
+} from "./ports/guided-tool-journal.ts";

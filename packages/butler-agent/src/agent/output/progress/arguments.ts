@@ -69,8 +69,12 @@ export function safeFileActionLabel(
   name: "edit_file" | "write_file" | "read_file",
   args: Record<string, unknown>,
 ): string {
+  const firstRequest = name === "read_file" && Array.isArray(args.requests)
+    ? args.requests.find((value) => value !== null && typeof value === "object") as
+      Record<string, unknown> | undefined
+    : undefined;
   const path = safePathishValue(
-    args.path ?? args.file_path ?? args.file ?? args.target,
+    firstRequest?.path ?? args.path ?? args.file_path ?? args.file ?? args.target,
     "",
   );
   const fileName = basename(path) || path;

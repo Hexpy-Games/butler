@@ -2,9 +2,6 @@ import type { SessionWorkspaceBindingStore, WorkspaceReference } from "../sessio
 import type { ButlerToolExecutorRegistry } from "./butler-tools.ts";
 import { createFileToolHandlers } from "./file-tools/index.ts";
 import { createRunCommandToolHandlers } from "./run-command/index.ts";
-import {
-  createWorkspacePagePreviewToolHandlers,
-} from "./workspace-page-preview/index.ts";
 import { createSessionWorkspaceToolHandlers } from "./session-workspace/index.ts";
 
 export function createWorkspaceToolHandlers(input: {
@@ -19,11 +16,6 @@ export function createWorkspaceToolHandlers(input: {
   return {
     ...createRunCommandToolHandlers({
       butlerHome: input.butlerHome,
-      butlerData: input.butlerData,
-      workspacePath,
-      workspaceReference: input.workspaceReference,
-    }),
-    ...createWorkspacePagePreviewToolHandlers({
       butlerData: input.butlerData,
       workspacePath,
       workspaceReference: input.workspaceReference,

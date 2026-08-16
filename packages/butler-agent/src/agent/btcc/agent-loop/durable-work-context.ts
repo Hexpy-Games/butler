@@ -14,10 +14,7 @@ export function renderDurableWorkContext(
     `Explicit relation Work id (model-only; never report to user): ${work.workId}`,
   ];
   if (work.currentStage) {
-    rows.push(
-      `Current stage: ${work.currentStage}`,
-      `Allowed next stages: ${work.allowedNextStages.join(", ") || "none"}`,
-    );
+    rows.push(`Current stage: ${work.currentStage}`);
     if (work.currentStage === "review") {
       rows.push(
         "Optional stage focus: review the current Plan or actual execution result and " +

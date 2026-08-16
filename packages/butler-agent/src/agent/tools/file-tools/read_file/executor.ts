@@ -12,8 +12,6 @@ import {
   normalizeOptionalFileToolCursor,
 } from "../shared/cursor.ts";
 import {
-  DEFAULT_MAX_BYTES,
-  MAX_FILE_BYTES,
   integer,
   normalizeRequest,
   normalizedQueryRequests,
@@ -50,23 +48,18 @@ export async function executeReadFileTool(
     error: parsed.error,
     detail: parsed.detail,
     message: "Tool arguments must be a JSON object.",
-    recovery_hint: "Retry read_file with path or requests.",
+    recovery_hint: "Retry read_file with 1-20 canonical request objects.",
     evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, error: parsed.error }),
   };
   const args = parsed.args;
-  const hasPath = typeof args.path === "string" && args.path.trim().length > 0;
-  const hasRequests = args.requests !== undefined;
-  if ((hasPath && hasRequests) || (!hasPath && !hasRequests)) {
-    return { ok: false, error: "invalid_arguments", message: "Provide exactly one of path or requests.", recovery_hint: "Use path for one file or requests for 1-20 files.", evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, error: "invalid_arguments" }) };
-  }
-  const requests: (ReadRequest | null)[] = hasPath
-    ? [{ path: String(args.path).trim(), max_bytes: integer(args.max_bytes, DEFAULT_MAX_BYTES, 1, MAX_FILE_BYTES), ...(args.start_line === undefined ? {} : { start_line: integer(args.start_line, 1, 1, 10_000_000) }), ...(args.limit_lines === undefined ? {} : { limit_lines: integer(args.limit_lines, 1, 1, 10_000) }) }]
-    : (Array.isArray(args.requests) ? args.requests.map(normalizeRequest) : []);
+  const requests: (ReadRequest | null)[] = Array.isArray(args.requests)
+    ? args.requests.map(normalizeRequest)
+    : [];
   if (requests.length === 0 || requests.length > MAX_BATCH_REQUESTS || requests.some((request) => request === null)) {
-    return { ok: false, error: "invalid_arguments", message: "requests must contain 1-20 objects with a path.", recovery_hint: "Retry with one path or 1-20 canonical request objects.", evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, error: "invalid_arguments" }) };
+    return { ok: false, error: "invalid_arguments", message: "requests must contain 1-20 objects with a path.", recovery_hint: "Retry with 1-20 canonical request objects.", evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, error: "invalid_arguments" }) };
   }
   const normalizedRequests = requests as ReadRequest[];
-  const maxTotalBytes = integer(args.max_total_bytes, hasPath ? normalizedRequests[0]!.max_bytes : DEFAULT_MAX_TOTAL_BYTES, 1, MAX_TOTAL_BYTES);
+  const maxTotalBytes = integer(args.max_total_bytes, DEFAULT_MAX_TOTAL_BYTES, 1, MAX_TOTAL_BYTES);
   const boundWorkspaceRoot = context.workspaceReference?.get() ?? context.workspacePath;
   const workspaceRoot = getWorkspaceRoot(args, boundWorkspaceRoot);
   const query = cursorQueryHash({
@@ -76,7 +69,7 @@ export async function executeReadFileTool(
   const cursorInput = normalizeOptionalFileToolCursor(args.cursor);
   const cursor = cursorInput === undefined ? null : decodeFileToolCursor(cursorInput);
   if (cursorInput !== undefined && (!cursor || cursor.tool !== "read_file" || cursor.query !== query)) {
-    return invalidCursorResult("invalid_cursor", "The read_file cursor is malformed or does not match the current request options.", "Restart read_file with the same path or requests and omit cursor.");
+    return invalidCursorResult("invalid_cursor", "The read_file cursor is malformed or does not match the current request options.", "Restart read_file with the same requests and omit cursor.");
   }
   const cursorIndex = cursor?.request_index ?? 0;
   if (cursorIndex < 0 || cursorIndex >= normalizedRequests.length) {
@@ -196,27 +189,21 @@ export async function executeReadFileTool(
     output_bytes: totalOutputBytes,
     files_requested: normalizedRequests.length,
   };
-  if (hasPath) {
-    const single = results.find((result) => result.path === normalizedRequests[0]!.path) ?? results[0];
-    if (!single) return { ok: false, error: "io_error", message: "The file read did not produce a result.", metrics };
-    const safeSinglePath = safeWorkspacePath(normalizedRequests[0]!.path);
-    return {
-      ...single,
-      ...(aggregateTruncated || nextCursor ? { truncated: true } : {}),
-      ...(nextCursor ? { next_cursor: nextCursor } : {}),
-      metrics,
-      evidence_receipts: single.ok
-        ? fileToolEvidenceReceipt({ toolName: "read_file", summary: `Read ${single.truncated ? "truncated " : ""}workspace file`, references: { ...(safeSinglePath ? { path: safeSinglePath } : {}), bytes: single.bytes, sha256: single.sha256, truncated: Boolean(single.truncated), start_line: single.start_line, end_line: single.end_line }, satisfies: safeSinglePath ? ["source_verified"] : [] })
-        : undefined,
-      evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: single.ok && Boolean(safeSinglePath), path: normalizedRequests[0]!.path, bytes: single.bytes, sha256: single.sha256, truncated: single.truncated, error: single.ok && !safeSinglePath ? "unsafe_reference" : single.error }),
-    };
-  }
   const batchEvidenceFiles = results.slice(0, MAX_BATCH_REQUESTS).flatMap((result) => {
     const path = safeWorkspacePath(result.path);
     return path && result.ok && result.skipped !== true ? [{ path, bytes: result.bytes, sha256: result.sha256 }] : [];
   }).slice(0, 12);
+  const hasUsableResult = results.some((result) =>
+    result.ok && result.skipped !== true,
+  );
   return {
-    ok: true,
+    ok: hasUsableResult,
+    ...(!hasUsableResult
+      ? {
+          error: "all_files_failed",
+          message: "No requested file produced a usable result.",
+        }
+      : {}),
     files: results,
     files_requested: normalizedRequests.length,
     files_read: filesRead,
@@ -231,6 +218,6 @@ export async function executeReadFileTool(
       references: { files: batchEvidenceFiles, truncated: aggregateTruncated || Boolean(nextCursor) },
       satisfies: batchEvidenceFiles.length > 0 ? ["source_verified"] : [],
     }),
-    evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: batchEvidenceFiles.length > 0, truncated: aggregateTruncated || Boolean(nextCursor), files: results, error: batchEvidenceFiles.length > 0 ? undefined : "all_files_failed" }),
+    evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: hasUsableResult, truncated: aggregateTruncated || Boolean(nextCursor), files: results, error: hasUsableResult ? undefined : "all_files_failed" }),
   };
 }

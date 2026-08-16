@@ -300,8 +300,7 @@ describe("file tool evidence capability receipts", () => {
     await writeFile(join(workspace, "long.txt"), "abcdef");
     const result = await executeReadFileTool(call({
       workspace_root: workspace,
-      path: "long.txt",
-      max_bytes: 3,
+      requests: [{ path: "long.txt", max_bytes: 3 }],
     }));
     const receipts = (result as Record<string, unknown>).evidence_capability_receipts as unknown[];
     const ledger = buildEvidenceCapabilityLedger({ required: ["source_verified"], receipts });
@@ -312,7 +311,12 @@ describe("file tool evidence capability receipts", () => {
       evidence_kind: "workspace_inspection",
       verified: true,
       references: [{ path: "long.txt" }],
-      scope: { truncated: true, bytes: 6 },
+      scope: {
+        batch: true,
+        files_requested: 1,
+        files_verified: 1,
+        truncated: true,
+      },
       limitations: ["Result was bounded and may be partial."],
     });
     expect(JSON.stringify(receipts)).not.toContain("abc");
@@ -321,7 +325,7 @@ describe("file tool evidence capability receipts", () => {
   test("records skipped file receipts without unsafe paths", async () => {
     const result = await executeReadFileTool(call({
       workspace_root: workspace,
-      path: "../private.txt",
+      requests: [{ path: "../private.txt" }],
     }));
     const receipts = (result as Record<string, unknown>).evidence_capability_receipts as unknown[];
     const ledger = buildEvidenceCapabilityLedger({ required: ["source_verified"], receipts });

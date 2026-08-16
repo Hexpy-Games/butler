@@ -301,67 +301,6 @@
     "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
   },
   {
-    "id": "gateway.configure.telegram",
-    "path": [
-      "gateway",
-      "configure",
-      "telegram"
-    ],
-    "usage": "butler gateway configure telegram [--chat-id ID] [--format markdownv2|plain] [--json]",
-    "priority": "operator",
-    "status": "implemented",
-    "implemented": true,
-    "supportsJson": true,
-    "summary": "Configure Telegram gateway metadata.",
-    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
-  },
-  {
-    "id": "gateway.credential.set.telegram",
-    "path": [
-      "gateway",
-      "credential",
-      "set",
-      "telegram"
-    ],
-    "usage": "butler gateway credential set telegram --token-stdin [--json]",
-    "priority": "operator",
-    "status": "implemented",
-    "implemented": true,
-    "supportsJson": true,
-    "summary": "Store a Telegram gateway token without echoing it.",
-    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
-  },
-  {
-    "id": "gateway.pair.telegram",
-    "path": [
-      "gateway",
-      "pair",
-      "telegram"
-    ],
-    "usage": "butler gateway pair telegram [--json]",
-    "priority": "operator",
-    "status": "implemented",
-    "implemented": true,
-    "supportsJson": true,
-    "summary": "Pair Telegram through the agent-owned gateway surface.",
-    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
-  },
-  {
-    "id": "gateway.unpair.telegram",
-    "path": [
-      "gateway",
-      "unpair",
-      "telegram"
-    ],
-    "usage": "butler gateway unpair telegram [--yes] [--json]",
-    "priority": "operator",
-    "status": "implemented",
-    "implemented": true,
-    "supportsJson": true,
-    "summary": "Remove Telegram gateway pairing.",
-    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
-  },
-  {
     "id": "gateway.test",
     "path": [
       "gateway",
@@ -568,34 +507,6 @@
     "implemented": true,
     "supportsJson": false,
     "summary": "Repair Butler-managed runtime binaries and pointers.",
-    "spec": "docs/specs/cli/core-commands.md"
-  },
-  {
-    "id": "telegram.pair",
-    "path": [
-      "telegram",
-      "pair"
-    ],
-    "usage": "butler telegram pair",
-    "priority": "core",
-    "status": "implemented",
-    "implemented": true,
-    "supportsJson": false,
-    "summary": "Pair a Telegram chat with Butler.",
-    "spec": "docs/specs/cli/core-commands.md"
-  },
-  {
-    "id": "telegram.status",
-    "path": [
-      "telegram",
-      "status"
-    ],
-    "usage": "butler telegram status [--json]",
-    "priority": "core",
-    "status": "implemented",
-    "implemented": true,
-    "supportsJson": true,
-    "summary": "Report Telegram credential, pairing, and polling readiness.",
     "spec": "docs/specs/cli/core-commands.md"
   },
   {
@@ -987,34 +898,6 @@
     "supportsJson": true,
     "summary": "Validate core, user, and project skill definitions without exposing raw content.",
     "spec": ".project-ledger/specs/butler-rc-hardening-foundations.md"
-  },
-  {
-    "id": "telegram.send-test",
-    "path": [
-      "telegram",
-      "send-test"
-    ],
-    "usage": "butler telegram send-test [--message TEXT]",
-    "priority": "operator",
-    "status": "implemented",
-    "implemented": true,
-    "supportsJson": false,
-    "summary": "Send a safe Telegram test message.",
-    "spec": "docs/specs/cli/operator-commands.md"
-  },
-  {
-    "id": "telegram.unpair",
-    "path": [
-      "telegram",
-      "unpair"
-    ],
-    "usage": "butler telegram unpair [--yes]",
-    "priority": "operator",
-    "status": "implemented",
-    "implemented": true,
-    "supportsJson": false,
-    "summary": "Remove paired Telegram chat state.",
-    "spec": "docs/specs/cli/operator-commands.md"
   },
   {
     "id": "work.dashboard",

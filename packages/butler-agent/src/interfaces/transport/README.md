@@ -12,8 +12,6 @@ calls.
 - `delivery-guard.ts`: retry, deduplication, idempotency, and delivery status
   handling.
 - `mock/`: in-memory adapter for transport-agnostic tests.
-- `telegram/`: Telegram adapter, polling, MarkdownV2 rendering, and native
-  control helpers.
 
 ## Boundaries
 

@@ -69,7 +69,7 @@ function candidatePriority(path: string): number {
     segments.some((segment) => ["test", "tests", "fixture", "fixtures"].includes(segment)) ||
     /\.(?:spec|test)\.[^/]+$/u.test(path)
   ) return 3;
-  if (segments.some((segment) => ["benchmark", "benchmarks", "example", "examples", "scripts"].includes(segment))) return 2;
+  if (segments.some((segment) => ["example", "examples", "scripts"].includes(segment))) return 2;
   return 1;
 }
 

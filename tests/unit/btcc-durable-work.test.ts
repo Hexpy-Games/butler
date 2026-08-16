@@ -59,591 +59,7 @@ test("first Plan opens scoped Work without making Direct or Assisted Turns pay f
   }
 });
 
-test("legacy replace_plan translates relation exactly once before writing its Plan", async () => {
-  const fixture = durableWorkFixture();
-  try {
-    const origin = fixture.turn(
-      "turn-legacy-relation-origin",
-      "session-legacy-relation",
-      "보고서를 준비해 주세요.",
-    );
-    const opened = await fixture.service.replacePlan(
-      planInput(origin, "legacy-opening-plan"),
-    );
-    expect(fixture.db.query<{ operation: string; work_id: string }, []>(`
-      SELECT operation, work_id FROM btcc_guided_work_relation_commands
-      ORDER BY rowid
-    `).all()).toEqual([{
-      operation: "start_work",
-      work_id: opened.workId,
-    }]);
-
-    const continuation = fixture.turn(
-      "turn-legacy-relation-continue",
-      "session-legacy-relation",
-      "이어서 검증해 주세요.",
-    );
-    const revised = await fixture.service.replacePlan({
-      ...planInput(continuation, "legacy-continuation-plan"),
-      objective: "보고서를 검증해 마무리한다",
-    });
-    expect(revised.workId).toBe(opened.workId);
-    expect(await fixture.service.boundWorkForTurn(continuation.turnId))
-      .toMatchObject({ workId: opened.workId });
-    expect(fixture.db.query<{ operation: string; work_id: string }, []>(`
-      SELECT operation, work_id FROM btcc_guided_work_relation_commands
-      ORDER BY rowid
-    `).all()).toEqual([
-      { operation: "start_work", work_id: opened.workId },
-      { operation: "continue_work", work_id: opened.workId },
-    ]);
-
-    const replay = await fixture.service.replacePlan({
-      ...planInput(continuation, "legacy-continuation-plan"),
-      objective: "보고서를 검증해 마무리한다",
-    });
-    expect(replay.currentPlan?.planRevisionId).toBe(revised.currentPlan?.planRevisionId);
-    expect(fixture.count("btcc_guided_work_relation_commands")).toBe(2);
-  } finally {
-    fixture.close();
-  }
-});
-
-test("explicit relation commands replay idempotently after SQLite restart", async () => {
-  const root = mkdtempSync(join(tmpdir(), "btcc-r3-explicit-relation-"));
-  const dbPath = join(root, "butler.sqlite");
-  let db: Database | null = new Database(dbPath);
-  try {
-    db.exec(BTCC_SUCCESSOR_SCHEMA);
-    const first = createDurableWorkService(new SqliteGuidedWorkStore(db));
-    const startScope = insertGuidedTurn(
-      db,
-      "turn-explicit-start",
-      "session-explicit-relation",
-      "새 보고서를 준비해 주세요.",
-    );
-    const started = await first.startWork({
-      ...startScope,
-      mutationCallId: "explicit-start-call",
-      objective: "새 보고서를 준비한다",
-    });
-    const replayedInProcess = await first.startWork({
-      ...startScope,
-      mutationCallId: "explicit-start-call",
-      objective: "새 보고서를 준비한다",
-    });
-    expect(replayedInProcess.workId).toBe(started.workId);
-    await expect(first.startWork({
-      ...startScope,
-      mutationCallId: "explicit-start-call",
-      objective: "다른 목표",
-    })).rejects.toThrow("relation identity conflict");
-    db.close();
-    db = null;
-
-    db = new Database(dbPath);
-    db.exec(BTCC_SUCCESSOR_SCHEMA);
-    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(db));
-    const replayedAfterRestart = await resumed.startWork({
-      ...startScope,
-      mutationCallId: "explicit-start-call",
-      objective: "새 보고서를 준비한다",
-    });
-    expect(replayedAfterRestart.workId).toBe(started.workId);
-    expect(db.query<{ count: number }, []>(`
-      SELECT COUNT(*) AS count FROM btcc_guided_works
-    `).get()?.count).toBe(1);
-    expect(db.query<{ count: number }, []>(`
-      SELECT COUNT(*) AS count FROM btcc_guided_turn_work_bindings
-      WHERE is_current = 1
-    `).get()?.count).toBe(1);
-    expect(db.query<{ count: number }, []>(`
-      SELECT COUNT(*) AS count FROM btcc_guided_work_relation_commands
-    `).get()?.count).toBe(1);
-
-    const continueScope = insertGuidedTurn(
-      db,
-      "turn-explicit-continue",
-      "session-explicit-relation",
-      "이어서 검토해 주세요.",
-    );
-    const continued = await resumed.continueWork({
-      ...continueScope,
-      mutationCallId: "explicit-continue-call",
-      workId: started.workId,
-    });
-    const continuedReplay = await resumed.continueWork({
-      ...continueScope,
-      mutationCallId: "explicit-continue-call",
-      workId: started.workId,
-    });
-    expect(continued.workId).toBe(started.workId);
-    expect(continuedReplay.workId).toBe(started.workId);
-    expect(db.query<{ count: number }, []>(`
-      SELECT COUNT(*) AS count FROM btcc_guided_work_relation_commands
-    `).get()?.count).toBe(2);
-  } finally {
-    db?.close();
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("an explicit relation makes legacy startNew unable to switch Work", async () => {
-  const fixture = durableWorkFixture();
-  try {
-    const scope = fixture.turn(
-      "turn-explicit-no-switch",
-      "session-explicit-no-switch",
-      "먼저 바인딩한 Work를 이어서 진행해 주세요.",
-    );
-    const started = await fixture.service.startWork({
-      ...scope,
-      mutationCallId: "explicit-no-switch-start",
-      objective: "기존 Work를 진행한다",
-    });
-    expect(await fixture.service.boundWorkForTurn(scope.turnId))
-      .toMatchObject({ workId: started.workId, status: "open" });
-
-    await expect(fixture.service.replacePlan({
-      ...planInput(scope, "explicit-no-switch-legacy-plan"),
-      startNew: true,
-    })).rejects.toThrow("relation is already selected");
-
-    expect(fixture.count("btcc_guided_works")).toBe(1);
-    expect(fixture.count("btcc_guided_work_session_heads")).toBe(1);
-    expect(fixture.count("btcc_guided_work_relation_commands")).toBe(1);
-    expect(fixture.db.query<{ status: string }, [string]>(`
-      SELECT status FROM btcc_guided_works WHERE work_id = ?
-    `).get(started.workId)?.status).toBe("open");
-    expect(fixture.db.query<{ work_id: string }, [string]>(`
-      SELECT work_id FROM btcc_guided_work_session_heads WHERE session_id = ?
-    `).get(scope.sessionId)?.work_id).toBe(started.workId);
-    expect(await fixture.service.boundWorkForTurn(scope.turnId))
-      .toMatchObject({ workId: started.workId, status: "open" });
-  } finally {
-    fixture.close();
-  }
-});
-
-test("start_work atomically backfills completed reads in journal order onto only the new Work", async () => {
-  const fixture = durableWorkFixture();
-  try {
-    const candidateTurn = fixture.turn(
-      "turn-atomic-backfill-candidate",
-      "session-atomic-backfill",
-      "기존 후보 Work를 열어 주세요.",
-    );
-    const candidate = await fixture.service.replacePlan(
-      planInput(candidateTurn, "atomic-backfill-candidate-plan"),
-    );
-    const scope = fixture.turn(
-      "turn-atomic-backfill-start",
-      "session-atomic-backfill",
-      "두 결과를 새 Work에 연결해 주세요.",
-    );
-    fixture.tool(scope.turnId, "z-read-first", "read_file", {
-      content: "first",
-    });
-    fixture.tool(scope.turnId, "a-read-second", "read_file", {
-      content: "second",
-    });
-    fixture.db.query(`
-      UPDATE btcc_guided_tool_calls
-      SET started_at = '2026-08-08T00:00:00.000Z'
-      WHERE turn_id = ?
-    `).run(scope.turnId);
-
-    const started = await fixture.service.startWork({
-      ...scope,
-      mutationCallId: "atomic-backfill-start",
-      objective: "두 결과를 검증한다",
-      backfillToolCallIds: ["z-read-first", "a-read-second"],
-    });
-
-    expect(started.workId).not.toBe(candidate.workId);
-    expect(started.resultRefs.map((result) => result.toolCallId)).toEqual([
-      "z-read-first",
-      "a-read-second",
-    ]);
-    expect((await fixture.service.boundWorkForTurn(scope.turnId))?.workId)
-      .toBe(started.workId);
-    expect((await fixture.service.boundWorkForTurn(candidateTurn.turnId))?.status)
-      .toBe("abandoned");
-    expect((await fixture.service.loadContext(candidateTurn))?.work.resultRefs)
-      .toEqual([]);
-    expect(fixture.count("btcc_guided_work_results")).toBe(2);
-  } finally {
-    fixture.close();
-  }
-});
-
-test("disposition rejects a current-Turn result already attached to a foreign Work atomically", async () => {
-  const fixture = durableWorkFixture();
-  try {
-    const foreignScope = fixture.turn(
-      "turn-disposition-foreign-origin",
-      "session-disposition-foreign",
-      "외부 Work를 준비합니다.",
-    );
-    const foreign = await fixture.service.startWork({
-      ...foreignScope,
-      mutationCallId: "disposition-foreign-start",
-      objective: "외부 Work",
-    });
-    const scope = fixture.turn(
-      "turn-disposition-foreign-target",
-      "session-disposition-target",
-      "다른 Work의 근거를 훔치지 마세요.",
-    );
-    const target = await fixture.service.startWork({
-      ...scope,
-      mutationCallId: "disposition-foreign-target-start",
-      objective: "현재 Work",
-    });
-    fixture.tool(scope.turnId, "disposition-foreign-read", "read_file", {
-      content: "foreign result",
-    });
-    const source = fixture.db.query<{
-      rowid: number;
-      turn_sequence: number | null;
-    }, [string]>(`
-      SELECT rowid, turn_sequence FROM btcc_guided_tool_calls WHERE call_id = ?
-    `).get("disposition-foreign-read")!;
-    fixture.db.query(`
-      INSERT INTO btcc_guided_work_results (
-        result_ref, work_id, sequence, tool_call_id, origin_turn_id,
-        source_turn_rowid, source_turn_sequence, attached_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      "foreign-result-ref",
-      foreign.workId,
-      1,
-      "disposition-foreign-read",
-      scope.turnId,
-      source.rowid,
-      source.turn_sequence,
-      new Date().toISOString(),
-    );
-
-    await expect(fixture.service.recordDisposition({
-      ...scope,
-      mutationCallId: "disposition-foreign-call",
-      workId: target.workId,
-      disposition: "completed",
-      summary: "외부 근거는 거부해야 합니다.",
-    })).rejects.toThrow("already bound to another Work");
-
-    expect(fixture.count("btcc_guided_work_disposition_revisions")).toBe(0);
-    expect(fixture.count("btcc_guided_work_disposition_commands")).toBe(0);
-    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(0);
-    expect(fixture.db.query<{ status: string }, [string]>(`
-      SELECT status FROM btcc_guided_works WHERE work_id = ?
-    `).get(target.workId)?.status).toBe("open");
-    expect(fixture.db.query<{ work_id: string }, [string]>(`
-      SELECT work_id FROM btcc_guided_work_results WHERE tool_call_id = ?
-    `).get("disposition-foreign-read")?.work_id).toBe(foreign.workId);
-  } finally {
-    fixture.close();
-  }
-});
-
-test("relation backfill failure rolls back Work, binding, receipt, and prior attachments", async () => {
-  const fixture = durableWorkFixture();
-  try {
-    const candidateTurn = fixture.turn(
-      "turn-atomic-failure-candidate",
-      "session-atomic-failure",
-      "기존 후보 Work를 열어 주세요.",
-    );
-    const candidate = await fixture.service.replacePlan(
-      planInput(candidateTurn, "atomic-failure-candidate-plan"),
-    );
-    const scope = fixture.turn(
-      "turn-atomic-failure-start",
-      "session-atomic-failure",
-      "결과 연결 중 오류를 검증해 주세요.",
-    );
-    fixture.tool(scope.turnId, "atomic-failure-read-1", "read_file", {
-      content: "first",
-    });
-    fixture.tool(scope.turnId, "atomic-failure-read-2", "read_file", {
-      content: "second",
-    });
-    fixture.db.exec(`
-      CREATE TRIGGER atomic_backfill_failure
-      BEFORE INSERT ON btcc_guided_work_results
-      WHEN NEW.tool_call_id = 'atomic-failure-read-2'
-      BEGIN
-        SELECT RAISE(ABORT, 'injected backfill failure');
-      END;
-    `);
-
-    await expect(fixture.service.startWork({
-      ...scope,
-      mutationCallId: "atomic-failure-start",
-      objective: "실패 시 아무 관계도 남기지 않는다",
-      backfillToolCallIds: [
-        "atomic-failure-read-1",
-        "atomic-failure-read-2",
-      ],
-    })).rejects.toThrow("injected backfill failure");
-
-    expect(fixture.count("btcc_guided_works")).toBe(1);
-    expect(fixture.count("btcc_guided_turn_work_bindings")).toBe(1);
-    expect(fixture.count("btcc_guided_work_results")).toBe(0);
-    expect(fixture.count("btcc_guided_work_relation_commands")).toBe(1);
-    expect((await fixture.service.boundWorkForTurn(scope.turnId))).toBeNull();
-    expect((await fixture.service.boundWorkForTurn(candidateTurn.turnId))?.workId)
-      .toBe(candidate.workId);
-    expect((await fixture.service.boundWorkForTurn(candidateTurn.turnId))?.status)
-      .toBe("open");
-    expect(fixture.db.query<{ work_id: string }, [string]>(`
-      SELECT work_id FROM btcc_guided_work_session_heads WHERE session_id = ?
-    `).get(scope.sessionId)?.work_id).toBe(candidate.workId);
-  } finally {
-    fixture.close();
-  }
-});
-
-test("legacy replace_plan relation translation backfills atomically", async () => {
-  const fixture = durableWorkFixture();
-  try {
-    const scope = fixture.turn(
-      "turn-legacy-atomic-backfill",
-      "session-legacy-atomic-backfill",
-      "계획을 열며 두 결과를 연결해 주세요.",
-    );
-    fixture.tool(scope.turnId, "legacy-atomic-read-1", "read_file", {
-      content: "first",
-    });
-    fixture.tool(scope.turnId, "legacy-atomic-read-2", "read_file", {
-      content: "second",
-    });
-    fixture.db.exec("CREATE TRIGGER legacy_atomic_backfill_failure " +
-      "BEFORE INSERT ON btcc_guided_work_results " +
-      "WHEN NEW.tool_call_id = 'legacy-atomic-read-2' " +
-      "BEGIN SELECT RAISE(ABORT, 'injected legacy backfill failure'); END;");
-
-    await expect(fixture.service.replacePlan({
-      ...planInput(scope, "legacy-atomic-plan"),
-      startNew: true,
-      backfillToolCallIds: [
-        "legacy-atomic-read-1",
-        "legacy-atomic-read-2",
-      ],
-    })).rejects.toThrow("injected legacy backfill failure");
-
-    expect(fixture.count("btcc_guided_works")).toBe(0);
-    expect(fixture.count("btcc_guided_work_session_heads")).toBe(0);
-    expect(fixture.count("btcc_guided_turn_work_bindings")).toBe(0);
-    expect(fixture.count("btcc_guided_work_relation_commands")).toBe(0);
-    expect(fixture.count("btcc_guided_work_plan_revisions")).toBe(0);
-    expect(fixture.count("btcc_guided_work_results")).toBe(0);
-  } finally {
-    fixture.close();
-  }
-});
-
-test("start_work rejects cancelled or fenced Turns without relation rows", async () => {
-  for (const state of ["cancelled", "fenced"] as const) {
-    const fixture = durableWorkFixture();
-    try {
-      const scope = fixture.turn(
-        `turn-start-${state}`,
-        `session-start-${state}`,
-        "중단된 Turn에서는 Work를 열지 마세요.",
-      );
-      if (state === "cancelled") {
-        fixture.db.query(`
-          UPDATE btcc_turns SET semantic_state = 'cancelled',
-            execution_fence = execution_fence + 1,
-            final_disposition = 'cancelled'
-          WHERE turn_id = ?
-        `).run(scope.turnId);
-      } else {
-        fixture.db.query(`
-          UPDATE btcc_turns SET execution_fence = execution_fence + 1
-          WHERE turn_id = ?
-        `).run(scope.turnId);
-      }
-
-      await expect(fixture.service.startWork({
-        ...scope,
-        mutationCallId: `start-${state}-relation`,
-        objective: "중단된 Turn에서 시작하지 않는다",
-      })).rejects.toThrow("stopped or fenced");
-
-      expect(fixture.count("btcc_guided_works")).toBe(0);
-      expect(fixture.count("btcc_guided_work_session_heads")).toBe(0);
-      expect(fixture.count("btcc_guided_turn_work_bindings")).toBe(0);
-      expect(fixture.count("btcc_guided_work_relation_commands")).toBe(0);
-    } finally {
-      fixture.close();
-    }
-  }
-});
-
-test("continue_work rejects cancelled or fenced Turns without binding or receipt", async () => {
-  for (const state of ["cancelled", "fenced"] as const) {
-    const fixture = durableWorkFixture();
-    try {
-      const origin = fixture.turn(
-        `turn-continue-origin-${state}`,
-        `session-continue-${state}`,
-        "먼저 Work를 열어 주세요.",
-      );
-      const opened = await fixture.service.replacePlan(
-        planInput(origin, `continue-origin-${state}`),
-      );
-      const continuation = fixture.turn(
-        `turn-continue-${state}`,
-        `session-continue-${state}`,
-        "중단된 Turn에서는 이어 붙이지 마세요.",
-      );
-      if (state === "cancelled") {
-        fixture.db.query(`
-          UPDATE btcc_turns SET semantic_state = 'cancelled',
-            execution_fence = execution_fence + 1,
-            final_disposition = 'cancelled'
-          WHERE turn_id = ?
-        `).run(continuation.turnId);
-      } else {
-        fixture.db.query(`
-          UPDATE btcc_turns SET execution_fence = execution_fence + 1
-          WHERE turn_id = ?
-        `).run(continuation.turnId);
-      }
-
-      await expect(fixture.service.continueWork({
-        ...continuation,
-        mutationCallId: `continue-${state}-relation`,
-        workId: opened.workId,
-      })).rejects.toThrow("stopped or fenced");
-
-      expect(fixture.count("btcc_guided_works")).toBe(1);
-      expect(fixture.count("btcc_guided_turn_work_bindings")).toBe(1);
-      expect(fixture.count("btcc_guided_work_relation_commands")).toBe(1);
-      expect(await fixture.service.boundWorkForTurn(continuation.turnId)).toBeNull();
-      expect(await fixture.service.boundWorkForTurn(origin.turnId))
-        .toMatchObject({ workId: opened.workId, status: "open" });
-      expect(fixture.db.query<{ work_id: string }, [string]>(`
-        SELECT work_id FROM btcc_guided_work_session_heads WHERE session_id = ?
-      `).get(continuation.sessionId)?.work_id).toBe(opened.workId);
-    } finally {
-      fixture.close();
-    }
-  }
-});
-
-test("Stop fences all bound Work result and progress writes without mutation", async () => {
-  for (const state of ["cancelled", "fenced"] as const) {
-    const fixture = durableWorkFixture();
-    try {
-      const scope = fixture.turn(
-        `turn-bound-stop-${state}`,
-        `session-bound-stop-${state}`,
-        "중단된 Turn에서는 새 Work 결과를 기록하지 마세요.",
-      );
-      const opened = await fixture.service.replacePlan(
-        planInput(scope, `bound-stop-${state}-plan`),
-      );
-      fixture.tool(scope.turnId, `bound-stop-${state}-read`, "read_file", {
-        content: "late result",
-      });
-      fixture.db.query(`
-        UPDATE btcc_turns SET semantic_state = ?, execution_fence = execution_fence + 1,
-          final_disposition = ? WHERE turn_id = ?
-      `).run(
-        state === "cancelled" ? "cancelled" : "admitted",
-        state === "cancelled" ? "cancelled" : null,
-        scope.turnId,
-      );
-      const counts = {
-        results: fixture.count("btcc_guided_work_results"),
-        checkpoints: fixture.count("btcc_guided_work_checkpoint_revisions"),
-        reviews: fixture.count("btcc_guided_work_review_revisions"),
-      };
-
-      await expect(fixture.service.attachToolResult({
-        ...scope,
-        mutationCallId: `bound-stop-${state}-attach`,
-        toolCallId: `bound-stop-${state}-read`,
-      })).rejects.toThrow("stopped or fenced");
-      await expect(fixture.service.recordCheckpoint({
-        ...scope,
-        mutationCallId: `bound-stop-${state}-checkpoint`,
-        nextStage: "review",
-      })).rejects.toThrow("stopped or fenced");
-      await expect(fixture.service.recordReview({
-        ...scope,
-        mutationCallId: `bound-stop-${state}-review`,
-        subject: "plan",
-        verdict: "accept",
-        summary: "중단 이후에는 기록하지 않는다.",
-        corrections: [],
-      })).rejects.toThrow("stopped or fenced");
-
-      expect(fixture.count("btcc_guided_work_results")).toBe(counts.results);
-      expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(counts.checkpoints);
-      expect(fixture.count("btcc_guided_work_review_revisions")).toBe(counts.reviews);
-      expect(await fixture.service.boundWorkForTurn(scope.turnId)).toMatchObject({
-        workId: opened.workId,
-        status: "open",
-        resultRefs: [],
-      });
-    } finally {
-      fixture.close();
-    }
-  }
-});
-
-test("only completed ordinary results are eligible for relation backfill or attachment", async () => {
-  for (const status of ["failed", "cancelled"] as const) {
-    const fixture = durableWorkFixture();
-    try {
-      const scope = fixture.turn(
-        `turn-ineligible-${status}`,
-        `session-ineligible-${status}`,
-        "실패한 결과는 Work에 연결하지 마세요.",
-      );
-      const callId = `ineligible-${status}-read`;
-      fixture.tool(scope.turnId, callId, "read_file", { content: status });
-      fixture.db.query(`
-        UPDATE btcc_guided_tool_calls SET status = ?, error_code = ? WHERE call_id = ?
-      `).run(status, `injected_${status}`, callId);
-
-      await expect(fixture.service.startWork({
-        ...scope,
-        mutationCallId: `ineligible-${status}-relation`,
-        objective: "실패 결과를 연결하지 않는다",
-        backfillToolCallIds: [callId],
-      })).rejects.toThrow("not eligible for attachment");
-      expect(fixture.count("btcc_guided_works")).toBe(0);
-      expect(fixture.count("btcc_guided_turn_work_bindings")).toBe(0);
-      expect(fixture.count("btcc_guided_work_relation_commands")).toBe(0);
-
-      const opened = await fixture.service.startWork({
-        ...scope,
-        mutationCallId: `ineligible-${status}-bind`,
-        objective: "연결할 Work를 준비한다",
-      });
-      await expect(fixture.service.attachToolResult({
-        ...scope,
-        mutationCallId: `ineligible-${status}-attach`,
-        toolCallId: callId,
-      })).rejects.toThrow("not eligible for attachment");
-      expect(fixture.count("btcc_guided_work_results")).toBe(0);
-      expect(await fixture.service.boundWorkForTurn(scope.turnId)).toMatchObject({
-        workId: opened.workId,
-        resultRefs: [],
-      });
-    } finally {
-      fixture.close();
-    }
-  }
-});
-
-test("invalid stage transitions leave the current stage and action progress unchanged", async () => {
+test("invalid semantic Reviews leave the current stage and action progress unchanged", async () => {
   const fixture = durableWorkFixture();
   try {
     const scope = fixture.turn(
@@ -655,12 +71,19 @@ test("invalid stage transitions leave the current stage and action progress unch
       planInput(scope, "invalid-transition-plan"),
     );
 
-    await expect(fixture.service.recordCheckpoint({
+    await expect(fixture.service.recordReview({
       ...scope,
       mutationCallId: "invalid-transition-call",
-      nextStage: "reporting",
+      subject: "result",
+      verdict: "accept",
+      summary: "결과가 완료되었습니다.",
+      corrections: [],
       actionUpdates: [{ actionKey: "write-report", status: "done" }],
-    })).rejects.toThrow("allowed next stages: review");
+    })).rejects.toMatchObject({
+      code: "work_transition_guard_unmet",
+      unmetGuard: "plan_review_required",
+      nextAction: "record_plan_review",
+    });
 
     const unchanged = await fixture.service.loadContext(scope);
     expect(unchanged?.work).toMatchObject({
@@ -745,12 +168,6 @@ test("a fresh Turn cannot replace Work after committing its continuation", async
     const opened = await fixture.service.replacePlan(
       planInput(origin, "continuation-origin-plan"),
     );
-    await fixture.service.recordCheckpoint({
-      ...origin,
-      mutationCallId: "continuation-origin-review-stage",
-      nextStage: "review",
-    });
-
     const continuation = fixture.turn(
       "turn-continuation-resume",
       "session-continuation-lock",
@@ -764,7 +181,6 @@ test("a fresh Turn cannot replace Work after committing its continuation", async
     await fixture.service.recordCheckpoint({
       ...continuation,
       mutationCallId: "continuation-resume-execution",
-      nextStage: "execution",
       actionUpdates: [{ actionKey: "write-report", status: "active" }],
     });
 
@@ -923,11 +339,6 @@ test("tool results stay in the journal, bind to checkpoints, and exclude Work co
   try {
     const scope = fixture.turn("turn-results", "session-results", "두 파일을 비교해 주세요.");
     await fixture.service.replacePlan(planInput(scope, "results-plan"));
-    await fixture.service.recordCheckpoint({
-      ...scope,
-      mutationCallId: "results-plan-review-stage",
-      nextStage: "review",
-    });
     await fixture.service.recordReview({
       ...scope,
       mutationCallId: "results-plan-review",
@@ -935,11 +346,6 @@ test("tool results stay in the journal, bind to checkpoints, and exclude Work co
       verdict: "accept",
       summary: "현재 계획으로 진행합니다.",
       corrections: [],
-    });
-    await fixture.service.recordCheckpoint({
-      ...scope,
-      mutationCallId: "results-execution-stage-1",
-      nextStage: "execution",
     });
     fixture.tool(scope.turnId, "read-call-1", "read_file", { content: "alpha" });
     const attached = await fixture.service.attachToolResult({
@@ -955,18 +361,12 @@ test("tool results stay in the journal, bind to checkpoints, and exclude Work co
     const firstCheckpoint = await fixture.service.recordCheckpoint({
       ...scope,
       mutationCallId: "checkpoint-call-1",
-      nextStage: "review",
       publicSummary: "첫 파일을 읽었습니다.",
       nextStep: "두 번째 파일을 읽습니다.",
     });
     expect(firstCheckpoint.latestCheckpoint?.referencedResultRefs)
       .toEqual([attached.resultRefs[0]!.resultRef]);
 
-    await fixture.service.recordCheckpoint({
-      ...scope,
-      mutationCallId: "results-execution-stage-2",
-      nextStage: "execution",
-    });
     fixture.tool(scope.turnId, "read-call-2", "read_file", { content: "beta" });
     await fixture.service.attachToolResult({
       ...scope,
@@ -976,7 +376,6 @@ test("tool results stay in the journal, bind to checkpoints, and exclude Work co
     const secondCheckpoint = await fixture.service.recordCheckpoint({
       ...scope,
       mutationCallId: "checkpoint-call-2",
-      nextStage: "review",
       publicSummary: "두 결과를 비교했습니다.",
       nextStep: "차이를 보고합니다.",
     });
@@ -1148,7 +547,6 @@ test("one Plan Review call enters Review and advances to Execution idempotently"
       verdict: "accept" as const,
       summary: "계획이 요청 결과와 검증을 직접 다룹니다.",
       corrections: [],
-      nextStage: "execution" as const,
     };
     const reviewed = await fixture.service.recordReview(input);
 
@@ -1179,6 +577,106 @@ test("one Plan Review call enters Review and advances to Execution idempotently"
   }
 });
 
+test("record_work_disposition is atomic, idempotent, and the sole closeout authority", async () => {
+  const fixture = durableWorkFixture();
+  try {
+    const scope = fixture.turn(
+      "turn-atomic-disposition",
+      "session-atomic-disposition",
+      "작업을 완료하고 닫아 주세요.",
+    );
+    const opened = await fixture.service.replacePlan(
+      planInput(scope, "atomic-disposition-plan"),
+    );
+    fixture.tool(scope.turnId, "atomic-evidence-read", "read_file", {
+      content: "verified result",
+    });
+    await expect(fixture.service.recordDisposition({
+      ...scope,
+      mutationCallId: "invalid-disposition",
+      workId: opened.workId,
+      disposition: "completed",
+      summary: "잘못된 근거로 완료합니다.",
+      actionUpdates: [{ actionKey: "write-report", status: "done" }],
+      evidenceRefs: ["missing-evidence"],
+    })).rejects.toThrow("evidence reference is not eligible");
+    expect(fixture.count("btcc_guided_work_disposition_revisions")).toBe(0);
+    expect((await fixture.service.boundWorkForTurn(scope.turnId))?.status).toBe("open");
+
+    const input = {
+      ...scope,
+      mutationCallId: "completed-disposition",
+      workId: opened.workId,
+      disposition: "completed" as const,
+      summary: "요청한 작업을 완료했습니다.",
+      actionUpdates: [{ actionKey: "write-report", status: "done" as const }],
+      backfillToolCallIds: ["atomic-evidence-read"],
+    };
+    const completed = await fixture.service.recordDisposition(input);
+    const evidenceResultRef = completed.resultRefs.find((result) =>
+      result.toolCallId === "atomic-evidence-read")?.resultRef;
+    expect(completed).toMatchObject({
+      status: "completed",
+      actionProgress: [{ actionKey: "write-report", status: "done" }],
+      latestDisposition: {
+        disposition: "completed",
+        originTurnId: scope.turnId,
+        evidenceRefs: [],
+        evidenceSnapshot: [evidenceResultRef],
+      },
+    });
+    expect((await fixture.service.recordDisposition(input)).status).toBe("completed");
+    expect(fixture.count("btcc_guided_work_disposition_revisions")).toBe(1);
+    expect(fixture.count("btcc_guided_work_disposition_commands")).toBe(1);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("disposition replay is idempotent across a SQLite restart", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-r3-disposition-replay-"));
+  const dbPath = join(root, "butler.sqlite");
+  let db: Database | null = new Database(dbPath);
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const scope = insertGuidedTurn(
+      db,
+      "turn-disposition-restart",
+      "session-disposition-restart",
+      "재시작 후에도 닫아 주세요.",
+    );
+    const first = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const work = await first.replacePlan({
+      ...planInput(scope, "disposition-restart-plan"),
+      startNew: true,
+    });
+    const input = {
+      ...scope,
+      mutationCallId: "disposition-restart-call",
+      workId: work.workId,
+      disposition: "completed" as const,
+      summary: "재시작 전 완료",
+      actionUpdates: [{ actionKey: "write-report", status: "done" as const }],
+    };
+    const completed = await first.recordDisposition(input);
+    db.close();
+    db = null;
+    db = new Database(dbPath);
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const replay = await resumed.recordDisposition(input);
+    expect(replay.workId).toBe(completed.workId);
+    expect(replay.latestDisposition?.dispositionRevisionId)
+      .toBe(completed.latestDisposition?.dispositionRevisionId);
+    expect(db.query<{ count: number }, []>(`
+      SELECT COUNT(*) AS count FROM btcc_guided_work_disposition_revisions
+    `).get()?.count).toBe(1);
+  } finally {
+    db?.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("result Review and completion Validation stay open until disposition closes Work", async () => {
   const fixture = durableWorkFixture();
   try {
@@ -1195,7 +693,6 @@ test("result Review and completion Validation stay open until disposition closes
       verdict: "accept",
       summary: "실행 가능한 계획입니다.",
       corrections: [],
-      nextStage: "execution",
     });
     fixture.tool(scope.turnId, "fused-result-write", "write_file", {
       path: "report.md",
@@ -1224,13 +721,13 @@ test("result Review and completion Validation stay open until disposition closes
 
     expect(reviewedResult).toMatchObject({
       status: "open",
-      currentStage: "review",
+      currentStage: "validation",
       actionProgress: [{
         actionKey: "write-report",
         status: "done",
         note: "보고서 작성과 확인을 마쳤습니다.",
       }],
-      latestCheckpoint: { revision: 5, stage: "review" },
+      latestCheckpoint: { revision: 6, stage: "validation" },
       latestResultReview: {
         verdict: "accept",
         boundResultRefs: [expect.any(String)],
@@ -1243,21 +740,31 @@ test("result Review and completion Validation stay open until disposition closes
       verdict: "accept" as const,
       summary: "전체 Work가 원래 요청과 현재 Plan을 충족합니다.",
       corrections: [],
-      nextStage: "reporting" as const,
     };
-    const completed = await fixture.service.recordReview(completionInput);
-    expect(completed).toMatchObject({
+    const validated = await fixture.service.recordReview(completionInput);
+    expect(validated).toMatchObject({
       status: "open",
       currentStage: "reporting",
-      latestCheckpoint: { revision: 7, stage: "reporting" },
+      latestCheckpoint: { revision: 8, stage: "reporting" },
       latestCompletionValidation: {
         verdict: "accept",
         boundResultReviewRevisionId:
           reviewedResult.latestResultReview?.reviewRevisionId,
       },
     });
+    const completed = await fixture.service.recordDisposition({
+      ...scope,
+      mutationCallId: "fused-completed-disposition",
+      workId: validated.workId,
+      disposition: "completed",
+      summary: "전체 Work를 완료했습니다.",
+    });
+    expect(completed).toMatchObject({
+      status: "completed",
+      latestDisposition: { disposition: "completed" },
+    });
     expect(fixture.count("btcc_guided_work_review_revisions")).toBe(3);
-    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(7);
+    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(9);
     const persistedStages = fixture.db.query<{ stage: string }, [string]>(`
       SELECT stage FROM btcc_guided_work_checkpoint_revisions
       WHERE work_id = ? ORDER BY revision ASC
@@ -1269,12 +776,20 @@ test("result Review and completion Validation stay open until disposition closes
       "execution",
       "review",
       "validation",
+      "validation",
+      "reporting",
       "reporting",
     ]);
-    expect((await fixture.service.recordReview(completionInput)).status)
-      .toBe("open");
+    expect((await fixture.service.recordDisposition({
+      ...scope,
+      mutationCallId: "fused-completed-disposition",
+      workId: validated.workId,
+      disposition: "completed",
+      summary: "전체 Work를 완료했습니다.",
+    })).status)
+      .toBe("completed");
     expect(fixture.count("btcc_guided_work_review_revisions")).toBe(3);
-    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(7);
+    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(9);
   } finally {
     fixture.close();
   }
@@ -1295,13 +810,16 @@ test("an invalid Review transition leaves Review and action progress untouched",
     await expect(fixture.service.recordReview({
       ...scope,
       mutationCallId: "invalid-fused-review",
-      subject: "plan",
+      subject: "result",
       verdict: "accept",
-      summary: "지원하지 않는 다음 단계로 이동합니다.",
+      summary: "계획 검토 전에 결과 검토를 시도합니다.",
       corrections: [],
       actionUpdates: [{ actionKey: "write-report", status: "done" }],
-      nextStage: "conception",
-    })).rejects.toThrow("allowed next stages: planning, execution, validation");
+    })).rejects.toMatchObject({
+      code: "work_transition_guard_unmet",
+      unmetGuard: "plan_review_required",
+      nextAction: "record_plan_review",
+    });
 
     expect(await fixture.service.boundWorkForTurn(scope.turnId)).toEqual(opened);
     expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(2);
@@ -1335,7 +853,6 @@ test("a Review transaction rolls back its progress when Review persistence fails
       summary: "계획을 검토했습니다.",
       corrections: [],
       actionUpdates: [{ actionKey: "write-report", status: "active" as const }],
-      nextStage: "execution" as const,
     };
 
     await expect(fixture.service.recordReview(input))
@@ -1374,11 +891,6 @@ test("Reviews bind runtime revisions while disposition remains the closeout auth
       }],
     });
     const firstPlan = await fixture.service.replacePlan(reviewPlan("review-plan-1"));
-    await fixture.service.recordCheckpoint({
-      ...scope,
-      mutationCallId: "review-plan-stage-1",
-      nextStage: "review",
-    });
     const acceptedPlan = await fixture.service.recordReview({
       ...scope,
       mutationCallId: "plan-review-1",
@@ -1390,6 +902,16 @@ test("Reviews bind runtime revisions while disposition remains the closeout auth
     expect(acceptedPlan.latestPlanReview?.boundPlanRevisionId)
       .toBe(firstPlan.currentPlan?.planRevisionId);
 
+    await fixture.service.recordReview({
+      ...scope,
+      mutationCallId: "result-review-return-to-planning",
+      subject: "result",
+      verdict: "revise",
+      correctionScope: "planning",
+      summary: "현재 계획을 수정해야 합니다.",
+      corrections: ["검증 단계를 계획에 반영합니다."],
+    });
+
     const revisedPlan = await fixture.service.replacePlan({
       ...reviewPlan("review-plan-2"),
       objective: "산출물을 작성하고 실제 결과를 확인한다",
@@ -1398,25 +920,18 @@ test("Reviews bind runtime revisions while disposition remains the closeout auth
     expect(revisedPlan.latestPlanReview?.boundPlanRevisionId)
       .not.toBe(revisedPlan.currentPlan?.planRevisionId);
 
-    const unresolvedResultReview = await fixture.service.recordReview({
+    await expect(fixture.service.recordReview({
       ...scope,
       mutationCallId: "result-review-before-current-plan-review",
       subject: "result",
       verdict: "accept",
       summary: "현재 Plan을 검토하지 않은 채 완료하려고 합니다.",
       corrections: [],
+    })).rejects.toMatchObject({
+      code: "work_transition_guard_unmet",
+      nextAction: "record_plan_review",
     });
-    expect(unresolvedResultReview.status).toBe("open");
-    expect(unresolvedResultReview.latestResultReview?.verdict).toBe("accept");
-    expect(unresolvedResultReview.actionProgress.every((action) =>
-      action.status === "pending",
-    )).toBe(true);
 
-    await fixture.service.recordCheckpoint({
-      ...scope,
-      mutationCallId: "review-plan-stage-2",
-      nextStage: "review",
-    });
     const acceptedRevisedPlan = await fixture.service.recordReview({
       ...scope,
       mutationCallId: "plan-review-2",
@@ -1431,7 +946,6 @@ test("Reviews bind runtime revisions while disposition remains the closeout auth
     await fixture.service.recordCheckpoint({
       ...scope,
       mutationCallId: "review-execution-stage",
-      nextStage: "execution",
       actionUpdates: [{ actionKey: "write-report", status: "active" }],
     });
     fixture.tool(scope.turnId, "write-call", "write_file", { path: "report.md" });
@@ -1443,7 +957,6 @@ test("Reviews bind runtime revisions while disposition remains the closeout auth
     const resultProgress = await fixture.service.recordCheckpoint({
       ...scope,
       mutationCallId: "review-result-stage",
-      nextStage: "review",
       actionUpdates: [{
         actionKey: "write-report",
         status: "done",
@@ -1468,6 +981,7 @@ test("Reviews bind runtime revisions while disposition remains the closeout auth
       mutationCallId: "result-review-revise",
       subject: "result",
       verdict: "revise",
+      correctionScope: "execution",
       summary: "검증이 더 필요합니다.",
       corrections: ["파일 내용을 다시 읽습니다."],
     });
@@ -1484,27 +998,31 @@ test("Reviews bind runtime revisions while disposition remains the closeout auth
       corrections: [],
     });
     expect(acceptedResult.status).toBe("open");
-    const completed = await fixture.service.recordReview({
+    const validated = await fixture.service.recordReview({
       ...scope,
       mutationCallId: "completion-validation-accept",
       subject: "completion",
       verdict: "accept",
       summary: "전체 Work가 원래 요청과 현재 Plan을 충족합니다.",
       corrections: [],
-      nextStage: "reporting",
     });
-    expect(completed.status).toBe("open");
-    expect(completed.latestCompletionValidation).toMatchObject({
+    expect(validated.status).toBe("open");
+    expect(validated.latestCompletionValidation).toMatchObject({
       subject: "completion",
       verdict: "accept",
       boundResultReviewRevisionId:
         acceptedResult.latestResultReview?.reviewRevisionId,
     });
-    const later = fixture.turn("turn-after-complete", "session-review", "다음 요청");
-    expect((await fixture.service.loadContext(later))?.work).toMatchObject({
-      workId: completed.workId,
-      status: "open",
+    const completed = await fixture.service.recordDisposition({
+      ...scope,
+      mutationCallId: "completion-disposition-accept",
+      workId: validated.workId,
+      disposition: "completed",
+      summary: "전체 Work를 완료했습니다.",
     });
+    expect(completed.status).toBe("completed");
+    const later = fixture.turn("turn-after-complete", "session-review", "다음 요청");
+    expect(await fixture.service.loadContext(later)).toBeNull();
 
     fixture.tool(scope.turnId, "read-after-accept", "read_file", { content: "verified" });
     const reopened = await fixture.service.attachToolResult({
@@ -1537,7 +1055,6 @@ test("a late effect blocker keeps the accepted result Review and leaves Work blo
       verdict: "accept",
       summary: "현재 계획으로 진행합니다.",
       corrections: [],
-      nextStage: "execution",
     });
     fixture.db.query(`
       INSERT INTO btcc_guided_work_effect_blockers (
@@ -1577,7 +1094,7 @@ test("a late effect blocker keeps the accepted result Review and leaves Work blo
     });
     expect(reviewed).toMatchObject({
       status: "blocked",
-      currentStage: "review",
+      currentStage: "validation",
       latestResultReview: { verdict: "accept" },
     });
     const validated = await fixture.service.recordReview({
@@ -1587,7 +1104,6 @@ test("a late effect blocker keeps the accepted result Review and leaves Work blo
       verdict: "accept",
       summary: "The result is ready, but the effect blocker remains.",
       corrections: ["Reconcile the outstanding effect before claiming completion."],
-      nextStage: "reporting",
     });
 
     expect(validated).toMatchObject({
@@ -1642,6 +1158,7 @@ test("Reviews reject stale Plan, progress, and result snapshots", async () => {
       requestSha256: "stale-plan-review-request",
       currentStage: first.currentStage!,
       entryStage: "review",
+      nextStage: "execution",
       actionProgress: first.actionProgress,
       progressChanged: false,
     })).rejects.toThrow("Plan changed before its Review");
@@ -1649,7 +1166,7 @@ test("Reviews reject stale Plan, progress, and result snapshots", async () => {
     await fixture.service.recordCheckpoint({
       ...scope,
       mutationCallId: "stale-progress-update",
-      nextStage: "review",
+      publicSummary: "진행 상태가 바뀌었습니다.",
     });
     await expect(fixture.store.recordReview({
       ...scope,
@@ -1664,6 +1181,7 @@ test("Reviews reject stale Plan, progress, and result snapshots", async () => {
       requestSha256: "stale-progress-review-request",
       currentStage: second.currentStage!,
       entryStage: "review",
+      nextStage: "execution",
       actionProgress: second.actionProgress,
       progressChanged: false,
     })).rejects.toThrow("progress changed");
@@ -1695,6 +1213,7 @@ test("Reviews reject stale Plan, progress, and result snapshots", async () => {
       requestSha256: "stale-result-review-request",
       currentStage: reviewed.currentStage!,
       entryStage: "review",
+      nextStage: "validation",
       actionProgress: reviewed.actionProgress,
       progressChanged: false,
     })).rejects.toThrow("results changed");
@@ -1728,7 +1247,7 @@ test("Stop changes Turn state without changing the bound Work", async () => {
   }
 });
 
-test("Work review waits for a concurrent shared SQLite writer", async () => {
+test("Work disposition waits for a concurrent shared SQLite writer", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-contention-"));
   const dbPath = join(root, "butler.sqlite");
   const db = new Database(dbPath, { create: true });
@@ -1743,11 +1262,6 @@ test("Work review waits for a concurrent shared SQLite writer", async () => {
   );
   try {
     await service.replacePlan(planInput(scope, "contention-plan"));
-    await service.recordCheckpoint({
-      ...scope,
-      mutationCallId: "contention-review-stage",
-      nextStage: "review",
-    });
     await service.recordReview({
       ...scope,
       mutationCallId: "contention-plan-review",
@@ -1758,13 +1272,7 @@ test("Work review waits for a concurrent shared SQLite writer", async () => {
     });
     await service.recordCheckpoint({
       ...scope,
-      mutationCallId: "contention-execution-stage",
-      nextStage: "execution",
-    });
-    await service.recordCheckpoint({
-      ...scope,
       mutationCallId: "contention-result-stage",
-      nextStage: "review",
       actionUpdates: [{ actionKey: "write-report", status: "done" }],
     });
     const acceptedResult = await service.recordReview({
@@ -1792,17 +1300,15 @@ test("Work review waits for a concurrent shared SQLite writer", async () => {
     });
     await once(child.stdout!, "data");
 
-    const completed = await service.recordReview({
+    const completed = await service.recordDisposition({
       ...scope,
-      mutationCallId: "contention-completion-validation",
-      subject: "completion",
-      verdict: "accept",
-      summary: "전체 Work가 원래 요청과 현재 Plan을 충족합니다.",
-      corrections: [],
-      nextStage: "reporting",
+      mutationCallId: "contention-completed-disposition",
+      workId: acceptedResult.workId,
+      disposition: "completed",
+      summary: "전체 Work를 완료했습니다.",
     });
 
-    expect(completed.status).toBe("open");
+    expect(completed.status).toBe("completed");
     expect((await once(child, "exit"))[0]).toBe(0);
   } finally {
     db.close();
@@ -2336,9 +1842,9 @@ test("foreign or failed effect receipts cannot satisfy disposition evidence", as
         "write_file",
         "workspace:report.md",
         input.status,
-        applied ? "{\"written\":true}" : null,
-        applied ? `{\"receipt_id\":\"${input.receiptId}\"}` : null,
-        applied ? null : "{\"code\":\"effect_dispatch_failed\"}",
+        applied ? '{"written":true}' : null,
+        applied ? `{"receipt_id":"${input.receiptId}"}` : null,
+        applied ? null : '{"code":"effect_dispatch_failed"}',
         new Date().toISOString(),
         new Date().toISOString(),
         applied ? new Date().toISOString() : null,

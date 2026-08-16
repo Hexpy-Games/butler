@@ -144,13 +144,13 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "typed Project Ledger changes in the active project",
   );
   expect(instructions).toContain(
-    "Use record_work_checkpoint to enter an allowed next stage",
+    "Checkpoints update only actions or progress",
   );
   expect(instructions).toContain(
-    "Plan review judges the Plan itself",
+    "Accept starts execution; revise or partial returns to planning",
   );
   expect(instructions).toContain(
-    "mark the first action you will execute active in that same call's action_updates",
+    "On accept, mark the first action active in the same Review",
   );
   expect(instructions).toContain(
     "record_work_review for optional Plan Review, result Review, or completion Validation",
@@ -165,11 +165,13 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "request them in the same round so safe tools can run together",
   );
   expect(instructions).toContain(
-    "use record_work_checkpoint only for meaningful stage or action progress",
+    "use record_work_checkpoint only for meaningful action or concise outcome progress",
   );
   expect(instructions).toContain(
-    "include any known action_updates and the legal stage to enter after the Review as next_stage",
+    "Only revised or partial result/completion needs correction_scope",
   );
+  expect(instructions).not.toContain("next_stage");
+  expect(instructions).not.toContain("allowed next stages");
   expect(instructions).toContain(
     "record_work_disposition using completed only when every current Plan action is done or skipped",
   );
@@ -207,8 +209,9 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     .toBeLessThan(instructions.indexOf("use record_work_checkpoint only for meaningful"));
   expect(instructions).toContain("not a demand for endless polish");
   expect(instructions).toContain(
-    "correct and re-inspect only when a visible defect materially harms",
+    "report it with any material limitation instead of extending Work",
   );
+  expect(instructions).not.toContain("inspect_workspace_page");
   expect(instructions.indexOf("If useful, record a result Review or completion Validation"))
     .toBeLessThan(instructions.indexOf("Settle the bound Work with record_work_disposition"));
   expect(instructions).toContain(
@@ -352,7 +355,6 @@ test("guided workspace visibility owns the exact native workspace surface", () =
     "run_command",
     "write_file",
     "edit_file",
-    "inspect_workspace_page",
     "bind_session_git_worktree",
   ]) {
     expect(fullNames.filter((visibleName) => visibleName === name)).toHaveLength(1);
@@ -370,7 +372,6 @@ test("guided workspace visibility owns the exact native workspace surface", () =
     "run_command",
     "write_file",
     "edit_file",
-    "inspect_workspace_page",
     "bind_session_git_worktree",
   ]) {
     expect(readOnlyNames).not.toContain(name);
@@ -426,22 +427,6 @@ test("R3 Work scope follows explicit storage mode instead of project shell prese
     sessionId: projectTurn.sessionId,
     projectRef: "butler",
   });
-});
-
-test("R3 hides page preview when the foreground App host is unavailable", () => {
-  const turn = turnRecord({
-    accessMode: "full_access",
-    executionPolicy: {
-      ...executionPolicy("local"),
-      accessMode: "full_access",
-    },
-  });
-
-  expect(
-    authorizedToolDefinitions(turn, {}).some(
-      (definition) => definition.name === "inspect_workspace_page",
-    ),
-  ).toBe(false);
 });
 
 function turnRecord(options: {

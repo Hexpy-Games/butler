@@ -12,8 +12,6 @@ import type {
   FreshBtccTurnCommand,
   BtccTurnProgressObserver,
 } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
-import type { BtccCommittedProgressEvent } from
-  "../../packages/butler-agent/src/agent/btcc/projection/index.ts";
 import { InMemoryBtccProgressEventRepository } from "./support/fake-btcc-gateway-runtime.ts";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/contracts.ts";

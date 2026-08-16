@@ -48,6 +48,7 @@ export class ScriptedBtccGatewayRuntime implements Btcc {
   };
   readonly progressEvents = new InMemoryBtccProgressEventRepository();
   readonly wakeAuthorizations = new InMemoryBtccWakeAuthorizationRepository();
+  protected readonly sessionByTurn = new Map<string, string>();
   readonly runtime = {
     runTurn: (
       command: BtccRunCommand,
@@ -68,13 +69,17 @@ export class ScriptedBtccGatewayRuntime implements Btcc {
   stopTurn(request: { turnId: string }): Promise<BtccTurnOutcome> {
     return this.handle({ kind: "stop", turnId: request.turnId }).then((outcome) => {
       if (outcome.kind === "cancelled" || outcome.kind === "already_cancelled") {
+        const sessionId = this.sessionByTurn.get(request.turnId) ?? "general";
+        const appChatId = sessionId.startsWith("butler/app-")
+          ? sessionId.slice("butler/app-".length)
+          : sessionId;
         this.progressEvents.append({
-          sessionId: "general",
+          sessionId,
           turnId: request.turnId,
           destination: {
             transport: "app",
             accountId: "local",
-            peer: { kind: "dm", id: "general" },
+            peer: { kind: "dm", id: appChatId },
             replyToMessageId: request.turnId,
           },
           event: { kind: "turn.cancelled" },
@@ -91,6 +96,9 @@ export class ScriptedBtccGatewayRuntime implements Btcc {
   ): Promise<BtccTurnOutcome> {
     this.commands.push(command);
     if (command.kind === "stop") return { kind: "cancelled", turnId: command.turnId };
+    if (command.kind !== "resume") {
+      this.sessionByTurn.set(command.turnId, command.sessionId);
+    }
     await onAdmitted?.(command.kind !== "resume");
     const text = typeof this.answer === "function" ? this.answer(command) : this.answer;
     await progress?.stateChanged({
@@ -226,6 +234,9 @@ export class StoppableBtccGatewayRuntime extends ScriptedBtccGatewayRuntime {
       const outcome = { kind: "cancelled", turnId: command.turnId } as const;
       this.resolveRun?.(outcome);
       return outcome;
+    }
+    if (command.kind !== "resume") {
+      this.sessionByTurn.set(command.turnId, command.sessionId);
     }
     await onAdmitted?.(command.kind !== "resume");
     this.resolveStarted?.();

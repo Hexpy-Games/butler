@@ -31,8 +31,8 @@ test("tracked files do not contain operator-specific hardcoded fixtures", () => 
     { label: "operator Unix home path", value: `/Users/${operatorSlug}` },
     { label: "operator romanized name", value: ["Yeon", "woo"].join("") },
     { label: "operator Korean name", value: koreanOperatorName },
-    { label: "operator Telegram handle", value: `@${operatorSlug}_jo` },
-    { label: "operator Telegram numeric id", value: ["861", "455", "9634"].join("") },
+    { label: "operator public handle", value: `@${operatorSlug}_jo` },
+    { label: "operator public numeric id", value: ["861", "455", "9634"].join("") },
     { label: "operator private LAN address", value: ["192", "168", "1", "34"].join(".") },
     { label: "old local-model LAN placeholder", value: ["192", "168", "1", "8"].join(".") },
     {

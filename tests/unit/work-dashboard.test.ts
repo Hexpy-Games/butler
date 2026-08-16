@@ -8,7 +8,6 @@ import {
   performWorkControl,
   renderWorkDashboard,
 } from "../../packages/butler-agent/src/agent/work/work-dashboard.ts";
-import { onStatusCommand } from "../../packages/butler-agent/src/integrations/telegram/commands/handlers.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -185,27 +184,4 @@ test("work controls validate state before returning transport-neutral intents", 
     message: "delivery retry queued",
   });
   expect(queue.read("notification-failed")?.status).toBe("pending");
-});
-
-test("Telegram status command includes the canonical work dashboard projection", async () => {
-  writeTask("task-status-command", {
-    status: "RECOVERABLE",
-    request: "recover through status command",
-  });
-  const sent: string[] = [];
-
-  await onStatusCommand({
-    sessions: {} as any,
-    async sendMessage(_chatId, text) {
-      sent.push(text);
-    },
-  }, {
-    chatId: "chat-1",
-    userId: "user-1",
-  });
-
-  expect(sent).toHaveLength(1);
-  expect(sent[0]).toContain("## Work Dashboard");
-  expect(sent[0]).toContain("recoverable=1");
-  expect(sent[0]).not.toContain("task-status-command");
 });

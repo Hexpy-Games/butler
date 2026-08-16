@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type {
+  AppSessionView,
   AppSettingsView,
   ElectronHarnessOptions,
   ElectronScenario,
@@ -39,7 +40,6 @@ import {
   verifyDurableCancelled,
   verifyDurableFinal,
 } from "./scenario-step.ts";
-import { sessionViewCall } from "./packaged-memory-campaign-read-path.ts";
 
 export async function runBtccR3ElectronHarness(
   scenarioInput: ElectronScenario,
@@ -126,9 +126,11 @@ export async function runBtccR3ElectronHarness(
         stoppedAtMs: null,
       });
       await openSession(run, launch.page);
-      const restartedView = await sessionViewCall(launch.page, {
-        sessionId: run.sessionId,
-      });
+      const restartedView = await bridgeCall<AppSessionView>(
+        launch.page,
+        "getSessionView",
+        { sessionId: run.sessionId },
+      );
       assert(
         restartedView.session_id === run.sessionId,
         "Session did not survive Electron restart.",

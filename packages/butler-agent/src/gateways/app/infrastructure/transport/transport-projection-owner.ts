@@ -23,9 +23,7 @@ export class AppTransportProjectionOwner {
       openTurnTranscriptFiles?: () => string[];
       syncTerminalQueue?: () => boolean;
       reopenCompletedLiveLanes: () => void;
-      terminalSettlementWakeOwner: { request(): void; close(): void };
       recordFailure: (error: unknown) => void;
-      maintenanceOwner?: { start(): void; close(): void };
     },
   ) {}
 
@@ -64,7 +62,6 @@ export class AppTransportProjectionOwner {
       ));
     }
     this.requestTerminalSync();
-    this.input.maintenanceOwner?.start();
   }
 
   close(): void {
@@ -77,8 +74,6 @@ export class AppTransportProjectionOwner {
     this.changedTranscripts.clear();
     this.retryAttempt = 0;
     for (const watcher of this.watchers.splice(0)) watcher.close();
-    this.input.terminalSettlementWakeOwner.close();
-    this.input.maintenanceOwner?.close();
     this.resolveIdleWaiters();
   }
 
@@ -142,7 +137,6 @@ export class AppTransportProjectionOwner {
         }
         this.cycleActive = false;
         this.retryAttempt = 0;
-        this.input.terminalSettlementWakeOwner.request();
         this.resolveIdleWaiters();
       } catch (error) {
         this.cycleActive = false;

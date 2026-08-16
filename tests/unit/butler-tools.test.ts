@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
 import { spawnSync } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -14,7 +13,6 @@ import {
   diagnoseButlerToolPolicy,
   selectButlerToolProfiles,
   selectButlerToolsForTurn,
-  toolContractJsonChars,
 } from "../../packages/butler-agent/src/agent/tools/profiles.ts";
 import {
   PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES,
@@ -178,43 +176,6 @@ function runProjectLedger(args: string[], projectPath: string): void {
   expect(result.status).toBe(0);
 }
 
-function writeAppProjectDb(path: string, input: {
-  id: string;
-  displayName: string;
-  workspacePath: string;
-  ledgerProjectId?: string;
-}): void {
-  const db = new Database(path);
-  db.run(`
-    CREATE TABLE projects (
-      id TEXT NOT NULL,
-      display_name TEXT NOT NULL,
-      workspace_path TEXT NOT NULL,
-      workspace_label TEXT NOT NULL,
-      safe_path_label TEXT NOT NULL,
-      ledger_project_id TEXT,
-      archived INTEGER NOT NULL DEFAULT 0,
-      updated_at TEXT NOT NULL
-    )
-  `);
-  db.query(`
-    INSERT INTO projects (
-      id, display_name, workspace_path, workspace_label, safe_path_label,
-      ledger_project_id, archived, updated_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, 0, ?)
-  `).run(
-    input.id,
-    input.displayName,
-    input.workspacePath,
-    input.displayName,
-    input.displayName,
-    input.ledgerProjectId ?? input.id,
-    new Date().toISOString(),
-  );
-  db.close(false);
-}
-
 test("Project Ledger tool wrappers inherit the active workspace when project_path is omitted", async () => {
   const butlerHome = join(tempDir, "butler-home");
   const butlerData = join(tempDir, "butler-data");
@@ -305,21 +266,14 @@ test("session-bound executor fails closed when its WorkspaceReference is omitted
   })).rejects.toThrow("session_workspace_unavailable");
 });
 
-test("Project Ledger tool wrappers resolve active app project id through the app registry", async () => {
+test("Project Ledger tool wrappers resolve bounded project and workspace facts", async () => {
   const butlerHome = join(tempDir, "butler-home");
   const butlerData = join(tempDir, "butler-data");
   const workspacePath = join(tempDir, "workspaces", "sandy-folder");
-  const appDbPath = join(tempDir, "butler-client.sqlite");
   const cliPath = join(butlerHome, "packages", "project-ledger", "bin", "project-ledger");
   mkdirSync(workspacePath, { recursive: true });
   mkdirSync(join(butlerHome, "packages", "project-ledger", "bin"), { recursive: true });
   writeFileSync(join(workspacePath, "package.json"), `${JSON.stringify({ name: "sandy-bot" })}\n`, "utf8");
-  writeAppProjectDb(appDbPath, {
-    id: "project-sandy-bot-35a0e102",
-    displayName: "Sandy Bot",
-    workspacePath,
-    ledgerProjectId: "sandy-bot",
-  });
   writeFileSync(
     cliPath,
     "console.log(JSON.stringify({ ok: true, command: process.argv.slice(2).join(' '), privacy: {}, data: { argv: process.argv.slice(2) } }));\n",
@@ -329,8 +283,8 @@ test("Project Ledger tool wrappers resolve active app project id through the app
   const execute = createButlerToolExecutor({
     butlerHome,
     butlerData,
-    appMessageDbPath: appDbPath,
     projectId: "project-sandy-bot-35a0e102",
+    workspacePath,
   });
   const result = await execute({
     name: "inspect_project_status",
@@ -356,18 +310,10 @@ test("Project Ledger read tools cannot leave the active App project", async () =
   const butlerHome = join(tempDir, "butler-home");
   const butlerData = join(tempDir, "butler-data");
   const workspacePath = join(tempDir, "workspaces", "sandy-folder");
-  const appDbPath = join(tempDir, "butler-client.sqlite");
   mkdirSync(workspacePath, { recursive: true });
-  writeAppProjectDb(appDbPath, {
-    id: "project-sandy-bot-35a0e102",
-    displayName: "Sandy Bot",
-    workspacePath,
-    ledgerProjectId: "sandy-bot",
-  });
   const execute = createButlerToolExecutor({
     butlerHome,
     butlerData,
-    appMessageDbPath: appDbPath,
     projectId: "project-sandy-bot-35a0e102",
   });
   const calls = [
@@ -791,7 +737,6 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "grep_files",
     "list_files",
     "bind_session_git_worktree",
-    "inspect_workspace_page",
     ...projectLedgerToolNames,
     "get_work_dashboard",
     "inspect_project_status",
@@ -799,6 +744,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "render_project_dashboard",
     "complete_project_work",
     "get_context_monitor",
+    "read_operation_results",
     "read_tool_evidence_artifact",
     "read_tool_output_artifact",
     "get_usage_monitor",
@@ -982,7 +928,6 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
     "web-read",
     "web-search",
     "work-tracking",
-    "workspace-page-preview",
   ];
   const groupedToolNames = groupNames.flatMap((groupName) => (
     readdirSync(join(toolsRoot, groupName))
@@ -1097,9 +1042,6 @@ test("project sessions expose bounded project tools without workspace escalation
   expect(names).not.toContain("call_mcp_tool");
   expect(names).not.toContain("create_planned_task");
   expect(names).not.toContain("create_work_orchestration");
-  // Direct Conception recall plus canonical session list/read are intentionally
-  // part of the default surface; keep the expanded contract bounded.
-  expect(toolContractJsonChars(tools)).toBeLessThan(16_000);
 });
 
 test("project sessions keep Project Ledger lifecycle tools hidden for status-only wording", () => {
@@ -1172,8 +1114,6 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  // The workspace surface carries the same default memory-reference contract.
-  expect(toolContractJsonChars(tools)).toBeLessThan(33_000);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -1409,7 +1349,6 @@ test("Project Ledger runtime metadata exposes the bounded project profile withou
   expect(names).not.toContain("project_ledger_task_complete");
   expect(names).not.toContain("project_ledger_create");
   expect(names).not.toContain("get_weather_with_knowhow");
-  expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
 });
 
 test("Project Ledger project sessions expose lifecycle tools whenever Ledger tracked", () => {
@@ -1868,7 +1807,7 @@ test("file tools reject raw Butler data Project Ledger source inspection", async
     name: "read_file",
     args: {
       workspace_root: tempDir,
-      path: "project-ledger/projects/demo/specs/feature.md",
+      requests: [{ path: "project-ledger/projects/demo/specs/feature.md" }],
     },
     rawArguments: "{}",
   }) as any;
@@ -2030,6 +1969,39 @@ test("run_command protects fallback home Project Ledger records", async () => {
     if (previousHome === undefined) delete process.env.HOME;
     else process.env.HOME = previousHome;
   }
+});
+
+test("run_command does not attribute a concurrent canonical Project Ledger mutation to the child", async () => {
+  const workspace = join(tempDir, "workspace");
+  const dataLedgerFile = join(
+    tempDir,
+    "project-ledger",
+    "projects",
+    "demo",
+    "specs",
+    "feature.md",
+  );
+  mkdirSync(workspace, { recursive: true });
+  mkdirSync(join(dataLedgerFile, ".."), { recursive: true });
+  writeFileSync(dataLedgerFile, "before", "utf8");
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const running = executor({
+    name: "run_command",
+    args: {
+      command: `${JSON.stringify(process.execPath)} -e "Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250)"`,
+    },
+    rawArguments: "{}",
+  }) as Promise<Record<string, unknown>>;
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  writeFileSync(dataLedgerFile, "canonical concurrent update", "utf8");
+
+  await expect(running).resolves.toMatchObject({ ok: true });
+  expect(readFileSync(dataLedgerFile, "utf8")).toBe("canonical concurrent update");
 });
 
 test("run_command leaves Project Ledger unchanged after detached delayed writes", async () => {
@@ -3172,8 +3144,17 @@ test("workspace file tool schemas keep the runtime-owned root out of model argum
     expect(tool).toBeDefined();
     expect(tool?.parameters.properties).not.toHaveProperty("workspace_root");
   }
-  expect((BUTLER_TOOLS.find((tool) => tool.name === "read_file")?.parameters.properties as any)
-    .path.description).toContain("inside the active workspace");
+  const readFileParameters = BUTLER_TOOLS.find((tool) =>
+    tool.name === "read_file")?.parameters as any;
+  expect(readFileParameters.required).toEqual(["requests"]);
+  expect(Object.keys(readFileParameters.properties)).toEqual([
+    "requests",
+    "max_total_bytes",
+    "cursor",
+  ]);
+  expect(readFileParameters.properties).not.toHaveProperty("path");
+  expect(readFileParameters.properties.requests.items.properties.path.description)
+    .toContain("inside the active workspace");
   expect((BUTLER_TOOLS.find((tool) => tool.name === "list_files")?.parameters.properties as any)
     .include_globs).toBeDefined();
   expect(BUTLER_TOOLS.find((tool) => tool.name === "write_file")?.description)

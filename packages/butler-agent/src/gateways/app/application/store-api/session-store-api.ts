@@ -71,6 +71,10 @@ export interface AppStoreSessionApi {
     chatId: string,
     options?: SessionMessagePageOptions,
   ): SessionMessagePage<MessageRecord>;
+  listProjectedMessagePage(
+    chatId: string,
+    options?: SessionMessagePageOptions,
+  ): SessionMessagePage<MessageRecord>;
   listTurns(chatId?: string, cursor?: number): TurnRecord[];
   listTurnProgressSnapshotsForMessages(
     messages: MessageRecord[],
@@ -148,7 +152,8 @@ export function createSessionStoreApi(
       return kernel.conversationProjection.status();
     },
     replayConversationProjection(input = {}) {
-      return kernel.conversationProjection.replayOutbox(input);
+      void input;
+      return kernel.conversationProjection.replayOutbox();
     },
     rebuildConversationProjection(conversationSessionId) {
       return kernel.conversationProjection.rebuildSession(conversationSessionId);
@@ -190,6 +195,9 @@ export function createSessionStoreApi(
     },
     listMessagePage(chatId, options) {
       return kernel.sessionRecords.listMessagePage(chatId, options);
+    },
+    listProjectedMessagePage(chatId, options) {
+      return kernel.sessionMessageProjection.sessionViewMessagePage(chatId, options);
     },
     listTurns(chatId = DEFAULT_CHAT_ID, cursor = 0) {
       return kernel.sessionRecords.listTurns(chatId, cursor);

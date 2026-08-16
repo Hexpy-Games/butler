@@ -29,39 +29,35 @@ import {
   isSameDeliveredFinalProjection,
   projectAppFinalResult,
 } from "./final-result-projection.ts";
-import { reconcileBtccTerminalTurn } from
-  "./btcc-terminal-projection.ts";
 import { projectAppTurnFailure } from "./projected-turn-failure.ts";
 import { projectAppWorkerResult } from "./worker-result-projection.ts";
 import type {
   AppTransportProjectionStoreOptions,
 } from "./transport-projection-contract.ts";
-import { AppTransportHistoricalReconciliationStore } from
-  "./historical-reconciliation-store.ts";
 import { StagedTransportOutboundStore } from
   "./staged-transport-outbound-store.ts";
-import type { AppConversationTurnOutcomeProjection } from
-  "../../domain/projections/app-conversation-projection-types.ts";
+import { OPERATION_OUTPUT_CHUNK_EVENT_KIND } from
+  "../../../../agent/events/operation-output-event.ts";
+import { AppOperationOutputProjectionStore } from
+  "../operation-output/app-operation-output-projection-store.ts";
+import {
+  projectAppCancellationAck,
+  projectAppCancellationTerminal,
+} from "./cancellation-projection.ts";
 
 export class AppTransportProjectionStore {
   private readonly transcriptSync: AppTransportTranscriptSyncStore;
   private readonly projectedEvents: AppProjectedTransportEventStore;
   private readonly stagedOutbounds: StagedTransportOutboundStore;
-  private readonly historical: AppTransportHistoricalReconciliationStore;
+  private readonly operationOutputs: AppOperationOutputProjectionStore;
   private transcriptCycleComplete = false;
   private deferredCycleComplete = false;
   private deferredFinalCursor = "";
 
   constructor(private readonly options: AppTransportProjectionStoreOptions) {
     this.projectedEvents = new AppProjectedTransportEventStore(options.db);
+    this.operationOutputs = new AppOperationOutputProjectionStore(options.db);
     this.stagedOutbounds = new StagedTransportOutboundStore(options.db);
-    this.historical = new AppTransportHistoricalReconciliationStore({
-      options,
-      hasProjectedAction: (actionId) =>
-        this.hasProjectedTransportEvent(actionId),
-      markProjectedAction: (actionId, eventId, targetChatId) =>
-        this.markProjectedTransportEvent(actionId, eventId, targetChatId),
-    });
     this.transcriptSync = new AppTransportTranscriptSyncStore({
       db: options.db,
       butlerData: options.butlerData,
@@ -116,85 +112,6 @@ export class AppTransportProjectionStore {
     this.deferredCycleComplete = false;
   }
 
-  /**
-   * Reconciles a durable Agent conversation outcome through the same terminal
-   * authority used by live App transport events. The action receipt is stable
-   * on the canonical outcome id, so replay after a missed live event cannot
-   * duplicate final messages or terminal events.
-   */
-  projectConversationTurnOutcome(
-    input: AppConversationTurnOutcomeProjection,
-  ): boolean {
-    const actionId = `conversation-outcome:${input.outcome_id}`;
-    if (this.hasProjectedTransportEvent(actionId)) return false;
-    const turn = this.options.getTurnRow(input.app_turn_id);
-    if (!turn) throw new Error(`App turn not found: ${input.app_turn_id}`);
-    const event: TranscriptEvent = {
-      eventId: actionId,
-      sessionId: input.app_chat_id,
-      kind: "outbound",
-      timestamp: input.created_at,
-      transport: "app",
-      payload: {
-        actionId,
-        message: { text: input.assistant_text ?? "" },
-        metadata: {
-          source: "conversation.turn_outcome_written",
-          kind: "final_result",
-          turnId: input.app_turn_id,
-          canonicalMessageId: input.assistant_message_id,
-        },
-      },
-    };
-    if (input.outcome === "delivered") {
-      return projectAppFinalResult({
-        options: this.options,
-        markProjectedTransportEvent: (id, eventId, chatId) =>
-          this.markProjectedTransportEvent(id, eventId, chatId),
-        chatId: input.app_chat_id,
-        turnId: input.app_turn_id,
-        actionId,
-        event,
-        message: event.payload.message as Record<string, unknown>,
-        metadata: event.payload.metadata as Record<string, unknown>,
-        terminalRecoverableCorrection: false,
-        queuedFinalProjection: "accept",
-      });
-    }
-    if (input.outcome === "cancelled") {
-      if (!isTerminalTurnStateForProjection(turn.state)) {
-        this.options.finalizeCancelledTurn(input.app_chat_id, input.app_turn_id);
-      }
-      this.markProjectedTransportEvent(actionId, event.eventId, input.app_chat_id);
-      return true;
-    }
-    if (input.outcome === "failed" || input.outcome === "recoverable") {
-      if (!isTerminalTurnStateForProjection(turn.state)) {
-        projectAppTurnFailure({
-          options: this.options,
-          chatId: input.app_chat_id,
-          turnId: input.app_turn_id,
-          message: { text: "Butler could not complete this turn." },
-          metadata: {
-            safeErrorCode: input.safe_code ??
-              (input.outcome === "recoverable"
-                ? "conversation_turn_recoverable"
-                : "conversation_turn_failed"),
-          },
-          eventTimestamp: input.created_at,
-        });
-      }
-      this.markProjectedTransportEvent(actionId, event.eventId, input.app_chat_id);
-      return true;
-    }
-    this.markProjectedTransportEvent(actionId, event.eventId, input.app_chat_id);
-    return false;
-  }
-
-  reconcileNextHistoricalPage(): boolean {
-    return this.historical.reconcileNextPage();
-  }
-
   private resetBatchCycle(): void {
     this.transcriptCycleComplete = false;
     this.deferredCycleComplete = false;
@@ -227,6 +144,24 @@ export class AppTransportProjectionStore {
     if (!actionId || !turnId) return false;
     const turn = this.options.getTurnRow(turnId);
     if (!turn) return false;
+    const cancellationAck = projectAppCancellationAck({
+      options: this.options,
+      chatId,
+      turnId,
+      actionId,
+      event,
+      metadata,
+      deliveryState,
+      stage: () => this.stagedOutbounds.stage({
+          actionId,
+          chatId,
+          event,
+          state: "awaiting_delivery",
+        }),
+      markProjected: () =>
+        this.markProjectedTransportEvent(actionId, event.eventId, chatId),
+    });
+    if (cancellationAck !== null) return cancellationAck;
     const turnEvent = runtimeTurnEventFromAppOutboundMetadata(metadata);
     if (turnEvent) {
       if (deliveryState !== "delivered") {
@@ -237,6 +172,14 @@ export class AppTransportProjectionStore {
           state: "awaiting_delivery",
         });
         return false;
+      }
+      if (turnEvent.kind === OPERATION_OUTPUT_CHUNK_EVENT_KIND) {
+        const projected = this.operationOutputs.project({
+          turnId,
+          payload: turnEvent.payload ?? {},
+        });
+        this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+        return projected;
       }
       const alreadyProjectedReceipt =
         (turnEvent.kind === TURN_ACKNOWLEDGED_EVENT_KIND ||
@@ -254,20 +197,17 @@ export class AppTransportProjectionStore {
             eventTimestamp: event.timestamp,
           })
         : false;
+      const cancellationProjected = turnEvent.kind === "turn.cancelled"
+        ? projectAppCancellationTerminal({
+          options: this.options,
+          chatId,
+          turnId,
+          timestamp: event.timestamp,
+        })
+        : false;
       this.markProjectedTransportEvent(actionId, event.eventId, chatId);
       if (!alreadyProjectedReceipt) this.options.touchChat(chatId);
-      const terminalProjected =
-        turnEvent.kind === "turn.completed" ||
-          turnEvent.kind === "turn.cancelled"
-          ? reconcileBtccTerminalTurn({
-            options: this.options,
-            hasProjectedAction: (id) => this.hasProjectedTransportEvent(id),
-            markProjectedAction: (id, eventId, targetChatId) =>
-              this.markProjectedTransportEvent(id, eventId, targetChatId),
-            turnId,
-          }) > 0
-          : false;
-      return !alreadyProjectedReceipt || terminalProjected || runtimeFaultProjected;
+      return !alreadyProjectedReceipt || cancellationProjected || runtimeFaultProjected;
     }
 
     let terminalRecoverableCorrection = false;

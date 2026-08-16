@@ -46,13 +46,13 @@ import { readConversationSessionToolDefinition, readConversationSessionToolMetad
 import { updateExplicitMemoryToolDefinition, updateExplicitMemoryToolMetadata } from "./memory/update_explicit_memory/index.ts";
 import { listSkillsToolDefinition, listSkillsToolMetadata } from "./skills/list_skills/index.ts";
 import {
-  inspectWorkspacePageToolDefinition,
-  inspectWorkspacePageToolMetadata,
-} from "./workspace-page-preview/index.ts";
-import {
   bindSessionGitWorktreeToolDefinition,
   bindSessionGitWorktreeToolMetadata,
 } from "./session-workspace/index.ts";
+import {
+  readOperationResultsToolDefinition,
+  readOperationResultsToolMetadata,
+} from "./monitoring/read_operation_results/index.ts";
 
 export const CORE_BUTLER_TOOLS = [
   webSearchToolDefinition,
@@ -65,7 +65,6 @@ export const CORE_BUTLER_TOOLS = [
   grepFilesToolDefinition,
   listFilesToolDefinition,
   bindSessionGitWorktreeToolDefinition,
-  inspectWorkspacePageToolDefinition,
   ...projectLedgerNativeToolDefinitions,
   getWorkDashboardToolDefinition,
   inspectProjectStatusToolDefinition,
@@ -73,6 +72,7 @@ export const CORE_BUTLER_TOOLS = [
   renderProjectDashboardToolDefinition,
   completeProjectWorkToolDefinition,
   getContextMonitorToolDefinition,
+  readOperationResultsToolDefinition,
   readToolEvidenceArtifactToolDefinition,
   readToolOutputArtifactToolDefinition,
   getUsageMonitorToolDefinition,
@@ -119,7 +119,6 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [grepFilesToolDefinition.name]: grepFilesToolMetadata,
   [listFilesToolDefinition.name]: listFilesToolMetadata,
   [bindSessionGitWorktreeToolDefinition.name]: bindSessionGitWorktreeToolMetadata,
-  [inspectWorkspacePageToolDefinition.name]: inspectWorkspacePageToolMetadata,
   ...projectLedgerNativeToolMetadata,
   [getWorkDashboardToolDefinition.name]: getWorkDashboardToolMetadata,
   [inspectProjectStatusToolDefinition.name]: inspectProjectStatusToolMetadata,
@@ -127,6 +126,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [renderProjectDashboardToolDefinition.name]: renderProjectDashboardToolMetadata,
   [completeProjectWorkToolDefinition.name]: completeProjectWorkToolMetadata,
   [getContextMonitorToolDefinition.name]: getContextMonitorToolMetadata,
+  [readOperationResultsToolDefinition.name]: readOperationResultsToolMetadata,
   [readToolEvidenceArtifactToolDefinition.name]: readToolEvidenceArtifactToolMetadata,
   [readToolOutputArtifactToolDefinition.name]: readToolOutputArtifactToolMetadata,
   [getUsageMonitorToolDefinition.name]: getUsageMonitorToolMetadata,

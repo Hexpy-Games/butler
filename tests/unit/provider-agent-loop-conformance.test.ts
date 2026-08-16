@@ -141,7 +141,7 @@ test("unknown and invalid tool calls become ordinary model-visible results", asy
   const toolMessages = requests[1]?.messages.filter((message) => message.role === "tool") ?? [];
   expect(toolMessages).toHaveLength(2);
   expect(toolMessages.map((message) => message.content).join("\n")).toContain("tool_unavailable");
-  expect(toolMessages.map((message) => message.content).join("\n")).toContain("tool_invalid_arguments");
+  expect(toolMessages.map((message) => message.content).join("\n")).toContain("invalid_arguments");
 });
 
 test("final candidate review and correction remain inside BTCC", async () => {

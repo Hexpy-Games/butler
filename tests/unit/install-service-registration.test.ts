@@ -598,7 +598,6 @@ test("non-interactive installer gateway defaults to Butler App without chooser",
     is_non_interactive_shell() { return 0; }
     tl_choose() { echo should-not-prompt; exit 42; }
     configure_gateway >/dev/null
-    [[ -z "\${BOT_TOKEN:-}" && -z "\${CHAT_ID:-}" ]]
     echo ok
   `);
 
@@ -615,8 +614,6 @@ test("interactive installer gateway uses Butler App without chooser", () => {
     is_non_interactive_shell() { return 1; }
     tl_choose() { echo should-not-prompt; exit 42; }
     configure_gateway >/dev/null
-    test ! -f "$tmp/config/telegram-transport.json"
-    [[ -z "\${BOT_TOKEN:-}" && -z "\${CHAT_ID:-}" ]]
     echo ok
   `);
 
@@ -624,10 +621,10 @@ test("interactive installer gateway uses Butler App without chooser", () => {
   expect(result.stdout.trim()).toBe("ok");
 });
 
-test("installer rejects explicit Telegram gateway setup", () => {
+test("installer rejects an unsupported explicit gateway", () => {
   const result = runInstallerFunction(`
     set -euo pipefail
-    source ./install.sh --gateway telegram
+    source ./install.sh --gateway mail
   `);
 
   expect(result.status).toBe(2);

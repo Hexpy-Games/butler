@@ -104,15 +104,7 @@ import {
   loadPrivateEnvIntoProcess,
   privateEnvPath,
   readPrivateEnv,
-  upsertPrivateEnvValue,
 } from "./private-env.ts";
-import {
-  buildTelegramCliStatus,
-  pairTelegramChat,
-  redactTelegramToken,
-  sendTelegramTestMessage,
-  unpairTelegramChat,
-} from "./telegram.ts";
 import {
   deleteMcpServer,
   listMcpServers,
@@ -140,10 +132,7 @@ import {
   patchGatewaySettings,
   readAppGatewayPid,
   readGatewaySettings,
-  removeGatewayConfigKeys,
   resolveAppGatewayRuntimeConfig,
-  resolveTelegramGatewayRuntimeConfig,
-  updateTelegramCompatibilityConfig,
   writeAppGatewayPid,
 } from "../../operations/gateway/registry.ts";
 
@@ -171,7 +160,6 @@ const SAFE_CONFIG_PATHS = new Set([
   "webSearch.planning.defaultDepth",
   "metrics.enabled",
   "metrics.retentionDays",
-  "telegram.defaultFormat",
 ]);
 
 function hasFlag(args: string[], name: string): boolean {
@@ -455,7 +443,6 @@ function safeLogLine(line: string): string {
   return line
     .replace(/(Bearer\s+)[A-Za-z0-9._-]+/gi, "$1[redacted]")
     .replace(/(OPENAI_API_KEY=)[^\s]+/gi, "$1[redacted]")
-    .replace(/(TELEGRAM_BOT_TOKEN=)[^\s]+/gi, "$1[redacted]")
     .replace(/bot\d+:[A-Za-z0-9_-]+/g, "bot[redacted]");
 }
 
@@ -659,16 +646,9 @@ function modelSet(parsed: ParsedCommonOptions, args: string[]): void {
 }
 
 async function transportStatus(parsed: ParsedCommonOptions): Promise<void> {
-  const telegram = buildTelegramCliStatus(parsed.options.data);
   const mock = new MockTransportAdapter({ id: "mock" });
   const data = {
     transports: [
-      {
-        id: "telegram",
-        configured: telegram.tokenConfigured,
-        paired: telegram.chatPaired,
-        capabilities: ["send", "poll", "markdownv2"],
-      },
       {
         id: mock.id,
         configured: true,
@@ -697,12 +677,6 @@ async function transportTest(parsed: ParsedCommonOptions, args: string[]): Promi
     });
     const data = { transport, ok: result.ok, sentActions: mock.sentActions.length, transportMessageId: result.transportMessageId ?? null };
     print(parsed, "butler transport test", data, `Mock transport test: ${result.ok ? "passed" : "failed"}.`);
-    return;
-  }
-  if (transport === "telegram") {
-    const status = buildTelegramCliStatus(parsed.options.data);
-    const data = { transport, configured: status.tokenConfigured, paired: status.chatPaired, sendTestCommand: "butler telegram send-test" };
-    print(parsed, "butler transport test", data, `Telegram configured=${status.tokenConfigured} paired=${status.chatPaired}.`);
     return;
   }
   fail(parsed, "invalid_arguments", `unsupported transport: ${transport}`);
@@ -777,15 +751,12 @@ async function gatewaySetEnabled(
   const gatewayId = gatewayIdOrFail(parsed, args[1]);
   patchGatewaySettings(parsed.options.data, gatewayId, { enabled });
   const view = await buildGatewayStatusView(parsed.options.data, gatewayId);
-  const data = {
-    ...view,
-    restartRecommended: gatewayId === "telegram" && enabled,
-  };
-  print(parsed, `butler gateway ${enabled ? "enable" : "disable"} ${gatewayId}`, data, [
+  print(
+    parsed,
+    `butler gateway ${enabled ? "enable" : "disable"} ${gatewayId}`,
+    view,
     `${gatewayId} gateway ${enabled ? "enabled" : "disabled"}.`,
-    gatewayId === "telegram" && enabled ? "Restart Butler Agent to start embedded Telegram polling." : "",
-    gatewayId === "telegram" && !enabled ? "Embedded Telegram polling will stop shortly if Butler is running." : "",
-  ].filter(Boolean).join("\n"));
+  );
 }
 
 function parseGatewayPort(parsed: ParsedCommonOptions, args: string[]): number | undefined {
@@ -818,159 +789,25 @@ async function gatewayConfigureApp(parsed: ParsedCommonOptions, args: string[]):
   ].join("\n"));
 }
 
-async function gatewayConfigureTelegram(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
-  const chatId = optionValue(args, "--chat-id");
-  const format = optionValue(args, "--format");
-  if (!chatId && !format) {
-    fail(parsed, "invalid_arguments", "gateway configure telegram requires --chat-id or --format");
-  }
-  if (format && format !== "markdownv2" && format !== "plain") {
-    fail(parsed, "invalid_arguments", "--format must be markdownv2 or plain");
-  }
-  const config: Record<string, unknown> = {};
-  if (chatId) {
-    config.chatId = chatId;
-    upsertPrivateEnvValue(parsed.options.data, "TELEGRAM_CHAT_ID", chatId);
-  }
-  if (format) config.defaultFormat = format;
-  patchGatewaySettings(parsed.options.data, "telegram", { enabled: true, config });
-  updateTelegramCompatibilityConfig(parsed.options.data, {
-    ...(chatId ? { chatId } : {}),
-    ...(format ? { defaultFormat: format as "markdownv2" | "plain" } : {}),
-  });
-  const view = await buildGatewayStatusView(parsed.options.data, "telegram");
-  print(parsed, "butler gateway configure telegram", view, [
-    "Telegram gateway configured.",
-    `chat paired: ${Boolean(view.config.chatPaired)}`,
-    `format: ${String(view.config.defaultFormat ?? "markdownv2")}`,
-    "Restart Butler Agent to apply embedded gateway changes.",
-  ].join("\n"));
-}
-
 async function gatewayConfigure(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
-  const gatewayId = gatewayIdOrFail(parsed, args[1]);
-  if (gatewayId === "app") return await gatewayConfigureApp(parsed, args);
-  return await gatewayConfigureTelegram(parsed, args);
-}
-
-async function gatewayCredential(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
-  const action = args[1];
-  const gatewayId = gatewayIdOrFail(parsed, args[2]);
-  if (action !== "set" || gatewayId !== "telegram") {
-    fail(parsed, "invalid_arguments", "supported credential command: gateway credential set telegram --token-stdin");
-  }
-  if (!hasFlag(args, "--token-stdin")) {
-    fail(parsed, "invalid_arguments", "telegram credentials must be provided with --token-stdin");
-  }
-  const token = (await Bun.stdin.text()).trim();
-  if (!token) fail(parsed, "invalid_arguments", "telegram token is required on stdin");
-  upsertPrivateEnvValue(parsed.options.data, "TELEGRAM_BOT_TOKEN", token);
-  patchGatewaySettings(parsed.options.data, "telegram", { enabled: true });
-  const view = await buildGatewayStatusView(parsed.options.data, "telegram");
-  print(parsed, "butler gateway credential set telegram", {
-    gateway: view.id,
-    credentials: view.credentials,
-    tokenStored: true,
-    tokenValueIncluded: false,
-    envPath: ".env",
-  }, [
-    "Telegram token stored.",
-    "token: [redacted]",
-  ].join("\n"));
-}
-
-async function gatewayPair(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
-  const gatewayId = gatewayIdOrFail(parsed, args[1]);
-  if (gatewayId !== "telegram") fail(parsed, "invalid_arguments", "only telegram pairing is currently supported");
-  const env = readPrivateEnv(parsed.options.data);
-  const token = env.TELEGRAM_BOT_TOKEN?.trim() || process.env.TELEGRAM_BOT_TOKEN?.trim() || "";
-  if (!token) fail(parsed, "invalid_arguments", "telegram token is not configured; run gateway credential set telegram --token-stdin");
-  try {
-    const result = await pairTelegramChat({
-      butlerData: parsed.options.data,
-      token,
-      timeoutMs: numericOption(args, "--timeout-ms", 0, Number.MAX_SAFE_INTEGER),
-      apiBase: process.env.BUTLER_TELEGRAM_API_BASE,
-    });
-    const chatId = result.chatId ?? "";
-    patchGatewaySettings(parsed.options.data, "telegram", {
-      enabled: true,
-      config: { chatId },
-    });
-    updateTelegramCompatibilityConfig(parsed.options.data, { chatId });
-    const view = await buildGatewayStatusView(parsed.options.data, "telegram");
-    print(parsed, "butler gateway pair telegram", {
-      gateway: view.id,
-      chatPaired: true,
-      tokenValueIncluded: false,
-      pairedAt: result.pairedAt,
-    }, [
-      "Telegram paired.",
-      "chat id: [configured]",
-      "Restart Butler Agent to apply embedded gateway changes.",
-    ].join("\n"));
-  } catch (error) {
-    fail(
-      parsed,
-      "external_unavailable",
-      redactTelegramToken(error instanceof Error ? error.message : String(error), token),
-      5,
-    );
-  }
-}
-
-async function gatewayUnpair(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
-  const gatewayId = gatewayIdOrFail(parsed, args[1]);
-  if (gatewayId !== "telegram") fail(parsed, "invalid_arguments", "only telegram unpair is currently supported");
-  requireYes(parsed, "gateway unpair telegram");
-  const result = unpairTelegramChat(parsed.options.data);
-  removeGatewayConfigKeys(parsed.options.data, "telegram", ["chatId"]);
-  updateTelegramCompatibilityConfig(parsed.options.data, { chatId: "" });
-  const view = await buildGatewayStatusView(parsed.options.data, "telegram");
-  print(parsed, "butler gateway unpair telegram", {
-    gateway: view.id,
-    removed: result.removed,
-    chatPaired: false,
-    tokenConfigured: view.credentials.botToken,
-  }, [
-    "Telegram unpaired.",
-    "token retained: yes",
-    "Restart Butler Agent to apply embedded gateway changes.",
-  ].join("\n"));
+  gatewayIdOrFail(parsed, args[1]);
+  return await gatewayConfigureApp(parsed, args);
 }
 
 async function gatewayTest(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
   const gatewayId = gatewayIdOrFail(parsed, args[1]);
   const view = await buildGatewayStatusView(parsed.options.data, gatewayId);
-  if (gatewayId === "app") {
-    const data = {
-      gateway: gatewayId,
-      ok: view.enabled && view.running,
-      status: view.status,
-      serverUrl: view.config.serverUrl,
-    };
-    print(parsed, "butler gateway test app", data, `App gateway test: ${data.ok ? "passed" : "not running"}.`);
-    return;
-  }
-  const telegram = resolveTelegramGatewayRuntimeConfig({ butlerData: parsed.options.data });
   const data = {
     gateway: gatewayId,
-    ok: telegram.enabled && telegram.tokenConfigured && telegram.chatPaired,
-    enabled: telegram.enabled,
-    tokenConfigured: telegram.tokenConfigured,
-    chatPaired: telegram.chatPaired,
-    deliveryAttempted: false,
+    ok: view.enabled && view.running,
+    status: view.status,
+    serverUrl: view.config.serverUrl,
   };
-  print(parsed, "butler gateway test telegram", data, [
-    `Telegram gateway readiness: ${data.ok ? "ready" : "not ready"}.`,
-    "Delivery test: skipped; use `butler telegram send-test` for a live send.",
-  ].join("\n"));
+  print(parsed, "butler gateway test app", data, `App gateway test: ${data.ok ? "passed" : "not running"}.`);
 }
 
 function ensureAppGateway(parsed: ParsedCommonOptions, gatewayId: ReturnType<typeof gatewayIdOrFail>): void {
-  if (gatewayId !== "app") {
-    fail(parsed, "unsupported_operation", `${gatewayId} is embedded in butler-main; restart Butler Agent to apply lifecycle changes`);
-  }
+  if (gatewayId !== "app") fail(parsed, "unsupported_operation", `unsupported gateway: ${gatewayId}`);
 }
 
 function appGatewayCommand(parsed: ParsedCommonOptions): string[] {
@@ -1045,17 +882,7 @@ async function gatewayStop(parsed: ParsedCommonOptions, args: string[]): Promise
 
 async function gatewayRestart(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
   const gatewayId = gatewayIdOrFail(parsed, args[1]);
-  if (gatewayId !== "app") {
-    requireYes(parsed, `gateway restart ${gatewayId}`);
-    print(parsed, `butler gateway restart ${gatewayId}`, {
-      gateway: gatewayId,
-      lifecycle: "embedded",
-      restarted: false,
-      restartRequired: true,
-      serviceCommand: "butler restart",
-    }, `${gatewayId} is embedded in butler-main. Run \`butler restart\` to apply changes.`);
-    return;
-  }
+  ensureAppGateway(parsed, gatewayId);
   const current = await buildGatewayStatusView(parsed.options.data, "app");
   if (!current.enabled) {
     print(parsed, "butler gateway restart app", { ...current, restarted: false }, "App gateway is disabled. Run `butler gateway enable app` first.");
@@ -1076,15 +903,7 @@ async function gatewayRestart(parsed: ParsedCommonOptions, args: string[]): Prom
 
 function gatewayLogs(parsed: ParsedCommonOptions, args: string[]): void {
   const gatewayId = gatewayIdOrFail(parsed, args[1]);
-  if (gatewayId !== "app") {
-    print(parsed, `butler gateway logs ${gatewayId}`, {
-      gateway: gatewayId,
-      lifecycle: "embedded",
-      supported: false,
-      serviceLogCommand: "butler logs --service butler-main",
-    }, `${gatewayId} is embedded in butler-main. Use \`butler logs --service butler-main\`.`);
-    return;
-  }
+  ensureAppGateway(parsed, gatewayId);
   const lines = numericOption(args, "--lines", 80, 1_000);
   const logs = appGatewayLogPaths(parsed.options.data);
   const entries = [logs.stdout, logs.stderr].filter(existsSync);
@@ -1343,26 +1162,6 @@ function skills(parsed: ParsedCommonOptions, args: string[]): void {
   if (subcommand === "import") return skillsImport(parsed, args);
   if (subcommand === "validate") return skillsValidate(parsed, args);
   fail(parsed, "unknown_command", `unknown skills command: ${subcommand}`);
-}
-
-async function telegramSendTest(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
-  try {
-    const data = await sendTelegramTestMessage({
-      butlerData: parsed.options.data,
-      message: optionValue(args, "--message") ?? undefined,
-      apiBase: process.env.BUTLER_TELEGRAM_API_BASE,
-    });
-    print(parsed, "butler telegram send-test", data, `Telegram test delivered to chat ${data.chatId}.`);
-  } catch (error) {
-    const token = readPrivateEnv(parsed.options.data).TELEGRAM_BOT_TOKEN ?? "";
-    fail(parsed, "external_unavailable", redactTelegramToken(error instanceof Error ? error.message : String(error), token), 5);
-  }
-}
-
-function telegramUnpair(parsed: ParsedCommonOptions): void {
-  requireYes(parsed, "telegram unpair");
-  const data = unpairTelegramChat(parsed.options.data);
-  print(parsed, "butler telegram unpair", data, data.removed ? "Telegram chat pairing removed." : "No Telegram chat pairing was present.");
 }
 
 function compactTaskSummary(summary: ReturnType<TaskStore["summaries"]>[number]) {
@@ -2142,9 +1941,6 @@ async function gateway(parsed: ParsedCommonOptions, args: string[]): Promise<voi
   if (args[0] === "enable") return await gatewaySetEnabled(parsed, args, true);
   if (args[0] === "disable") return await gatewaySetEnabled(parsed, args, false);
   if (args[0] === "configure") return await gatewayConfigure(parsed, args);
-  if (args[0] === "credential") return await gatewayCredential(parsed, args);
-  if (args[0] === "pair") return await gatewayPair(parsed, args);
-  if (args[0] === "unpair") return await gatewayUnpair(parsed, args);
   if (args[0] === "test") return await gatewayTest(parsed, args);
   if (args[0] === "logs") return gatewayLogs(parsed, args);
   if (args[0] === "run") return gatewayRun(parsed, args);
@@ -2152,12 +1948,6 @@ async function gateway(parsed: ParsedCommonOptions, args: string[]): Promise<voi
   if (args[0] === "stop") return await gatewayStop(parsed, args);
   if (args[0] === "restart") return await gatewayRestart(parsed, args);
   fail(parsed, "unknown_command", `unknown gateway command: ${args[0] ?? ""}`);
-}
-
-async function telegram(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
-  if (args[0] === "send-test") return await telegramSendTest(parsed, args);
-  if (args[0] === "unpair") return telegramUnpair(parsed);
-  fail(parsed, "unknown_command", `unknown telegram command: ${args[0] ?? ""}`);
 }
 
 function config(parsed: ParsedCommonOptions, args: string[]): void {
@@ -2378,7 +2168,6 @@ async function main(): Promise<void> {
   if (command === "gateway") return await gateway(parsed, args);
   if (command === "mcp") return await mcp(parsed, args);
   if (command === "skills") return skills(parsed, args);
-  if (command === "telegram") return await telegram(parsed, args);
   if (command === "work") return work(parsed, args);
   if (command === "cognition") return await cognition(parsed, args, "butler cognition");
   if (command === "cog") return await cognition(parsed, args, "butler cog");

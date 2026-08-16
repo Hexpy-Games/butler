@@ -173,7 +173,6 @@ function declaredOutputCount(value: unknown): number {
     ? value.filter((item) => typeof item === "string" && Boolean(item.trim())).length
     : 0;
 }
-
 function readSpooledStreams(path: string): { stdout: string; stderr: string } {
   const payload = readFileSync(path, "utf8");
   const stdoutMarker = "\n--- stdout ---\n";

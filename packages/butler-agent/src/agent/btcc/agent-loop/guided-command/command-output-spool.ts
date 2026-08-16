@@ -22,6 +22,8 @@ export class CommandOutputSpool {
   private readonly payloadPath: string;
   private readonly stdout: WriteStream;
   private readonly stderr: WriteStream;
+  private stdoutSource?: Readable;
+  private stderrSource?: Readable;
 
   constructor(butlerData: string) {
     const root = join(butlerData, "runtime", "btcc", "command-spool");
@@ -35,8 +37,17 @@ export class CommandOutputSpool {
   }
 
   capture(stdout: Readable, stderr: Readable): void {
+    this.stdoutSource = stdout;
+    this.stderrSource = stderr;
     stdout.pipe(this.stdout);
     stderr.pipe(this.stderr);
+  }
+
+  stopCapture(): void {
+    this.stdoutSource?.unpipe(this.stdout);
+    this.stderrSource?.unpipe(this.stderr);
+    if (!this.stdout.writableEnded && !this.stdout.destroyed) this.stdout.end();
+    if (!this.stderr.writableEnded && !this.stderr.destroyed) this.stderr.end();
   }
 
   async complete(summary: CommandOutputSummary): Promise<SpooledCommandOutput> {
@@ -79,6 +90,8 @@ export class CommandOutputSpool {
   }
 
   discard(): void {
+    this.stdoutSource?.unpipe(this.stdout);
+    this.stderrSource?.unpipe(this.stderr);
     this.stdout.destroy();
     this.stderr.destroy();
     remove(this.stdoutPath);

@@ -14,6 +14,12 @@ import type {
 } from "./contracts.ts";
 
 const commandHost = selectCommandHostAdapter(process.platform);
+const TERMINATION_GRACE_MS = 500;
+const FORCE_SETTLEMENT_GRACE_MS = 500;
+
+type TerminationCause =
+  | { kind: "timeout" }
+  | { kind: "abort"; reason: unknown };
 
 export async function executeGuidedCommand(
   args: Record<string, unknown>,
@@ -24,14 +30,6 @@ export async function executeGuidedCommand(
   const timeoutMs = number(args.timeout_ms, 120_000);
   const invocation = commandHost.invocation(command, context);
   const environment = butlerToolProcessEnvironment({ butlerData: context.butlerData });
-  if (context.filesystemBoundary.kind === "isolated_validation") {
-    environment.HOME = context.filesystemBoundary.homeRoot;
-    environment.TMPDIR = context.filesystemBoundary.tempRoot;
-    environment.TMP = context.filesystemBoundary.tempRoot;
-    environment.TEMP = context.filesystemBoundary.tempRoot;
-    environment.BUTLER_ARTIFACTS_DIR = context.filesystemBoundary.artifactRoot;
-    environment.BUTLER_ARTIFACT_DIR = context.filesystemBoundary.artifactRoot;
-  }
   return new Promise((resolve, reject) => {
     const spool = new CommandOutputSpool(context.butlerData);
     const child = spawn(invocation.executable, invocation.args, {
@@ -40,28 +38,55 @@ export async function executeGuidedCommand(
       stdio: ["ignore", "pipe", "pipe"],
       env: environment,
     });
-    let timedOut = false;
+    let settled = false;
+    let terminationCause: TerminationCause | undefined;
+    let forcedTerminationSent = false;
+    let forceTimer: ReturnType<typeof setTimeout> | undefined;
+    let forcedSettlementTimer: ReturnType<typeof setTimeout> | undefined;
     spool.capture(child.stdout, child.stderr);
-    const terminate = () => commandHost.terminate(child);
-    const timer = setTimeout(() => {
-      timedOut = true;
-      terminate();
-    }, timeoutMs);
-    const abort = () => terminate();
-    context.signal?.addEventListener("abort", abort, { once: true });
-    child.once("error", (error) => {
-      clearTimeout(timer);
+
+    const clearLifecycle = () => {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (forceTimer) clearTimeout(forceTimer);
+      if (forcedSettlementTimer) clearTimeout(forcedSettlementTimer);
       context.signal?.removeEventListener("abort", abort);
+    };
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      clearLifecycle();
       spool.discard();
       reject(error);
-    });
-    child.once("close", async (exitCode, signal) => {
-      clearTimeout(timer);
-      context.signal?.removeEventListener("abort", abort);
-      commandHost.terminateDescendants(child);
-      if (context.signal?.aborted) {
+    };
+    const signalFailure = (signal: NodeJS.Signals, error: unknown) =>
+      new GuidedCommandRejectedError(
+        "command_termination_failed",
+        `Failed to deliver ${signal} while terminating the guided command: ${errorMessage(error)}`,
+      );
+    const forceTerminateOnce = (): boolean => {
+      if (forcedTerminationSent) return true;
+      forcedTerminationSent = true;
+      try {
+        commandHost.terminateDescendants(child);
+        return true;
+      } catch (error) {
+        fail(signalFailure("SIGKILL", error));
+        return false;
+      }
+    };
+    const settle = async (
+      exitCode: number | null,
+      signal: NodeJS.Signals | null,
+      forceOutputClose: boolean,
+    ) => {
+      if (settled) return;
+      if (!forceTerminateOnce()) return;
+      settled = true;
+      clearLifecycle();
+      if (forceOutputClose) spool.stopCapture();
+      if (terminationCause?.kind === "abort") {
         spool.discard();
-        reject(context.signal.reason ?? new Error("Command cancelled"));
+        reject(terminationCause.reason);
         return;
       }
       const summary: CommandOutputSummary = {
@@ -69,13 +94,52 @@ export async function executeGuidedCommand(
         cwd,
         exitCode,
         signal,
-        timedOut,
+        timedOut: terminationCause?.kind === "timeout",
       };
       try {
         resolve(await spool.complete(summary));
       } catch (error) {
         reject(error);
       }
+    };
+    const requestTermination = (cause: TerminationCause) => {
+      if (terminationCause || settled) return;
+      terminationCause = cause;
+      try {
+        commandHost.terminate(child);
+      } catch (error) {
+        fail(signalFailure("SIGTERM", error));
+        return;
+      }
+      forceTimer = setTimeout(() => {
+        if (settled) return;
+        if (!forceTerminateOnce()) return;
+        forcedSettlementTimer = setTimeout(() => {
+          void settle(null, child.signalCode, true);
+        }, FORCE_SETTLEMENT_GRACE_MS);
+      }, TERMINATION_GRACE_MS);
+    };
+    const abort = () => requestTermination({
+      kind: "abort",
+      reason: context.signal?.reason ?? new Error("Command cancelled"),
+    });
+
+    const timeoutTimer = setTimeout(
+      () => requestTermination({ kind: "timeout" }),
+      timeoutMs,
+    );
+    context.signal?.addEventListener("abort", abort, { once: true });
+    if (context.signal?.aborted) abort();
+    child.once("error", (error) => {
+      if (!forceTerminateOnce()) return;
+      fail(error);
+    });
+    child.once("close", async (exitCode, signal) => {
+      await settle(
+        terminationCause ? null : exitCode,
+        signal,
+        false,
+      );
     });
   });
 }
@@ -112,4 +176,8 @@ function requireString(value: unknown, name: string): string {
 
 function number(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

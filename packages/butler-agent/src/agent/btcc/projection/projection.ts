@@ -84,6 +84,9 @@ export function createGuidedActivityProjection(input: {
         !candidate.claimed && candidate.name === presentationCall.name,
       ) ?? pendingTools.find((candidate) => !candidate.claimed);
       const kind = activityKind(presentationCall.name);
+      const batchHasManagedTool = pendingTools.some((candidate) =>
+        activityKind(candidate.name) !== "ordinary",
+      );
       let group = pending?.group;
       if (!group && kind === "ordinary") {
         group = currentActivity ?? fallbackOrdinaryActivity;
@@ -101,7 +104,7 @@ export function createGuidedActivityProjection(input: {
       });
       if (pending) pending.claimed = true;
       if (kind !== "ordinary") managed = true;
-      if (managed && !group.deferredUntilAccepted) {
+      if ((managed || batchHasManagedTool) && !group.deferredUntilAccepted) {
         await publishGroup({ ...input, nextSourceRevision }, group);
       }
       return bindingFromGroup(group);
@@ -207,9 +210,7 @@ export function createGuidedActivityProjection(input: {
       ...(content.nextStep ? { nextStep: content.nextStep } : {}),
       ...(first?.name === "record_work_review" &&
           first.args.subject === "plan" &&
-          first.args.verdict === "accept" &&
-          (first.args.next_stage === undefined ||
-            first.args.next_stage === "execution")
+          first.args.verdict === "accept"
         ? {
             startsExecution: true,
             ...(activeActionTitle
@@ -235,7 +236,7 @@ export function createGuidedActivityProjection(input: {
     if (
       first?.name === "record_work_review" &&
       first.args.subject === "completion" &&
-      first.args.next_stage === "reporting"
+      first.args.verdict === "accept"
     ) {
       const reportingDirection = publicText(groupInput.text);
       if (reportingDirection) {

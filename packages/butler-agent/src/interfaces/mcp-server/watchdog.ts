@@ -3,11 +3,10 @@
  *
  * Runs every 1 minute and performs:
  * 1. Dead worker cleanup      — RUNNING tasks with dead PIDs → FAILED
- * 2. Telegram polling check   — if getUpdates succeeds (no 409) → restart butler
- * 3. Agent-browser cleanup    — daemon processes older than 1h → killed
- * 4. Orchestrator liveness    — native main pid missing → trigger start-butler.sh
- * 5. MCP server liveness      — MCP dead while butler-main is alive → Telegram alert
- * 6. Orphan MCP server reap   — kill MCP whose parent host is dead
+ * 2. Agent-browser cleanup    — daemon processes older than 1h → killed
+ * 3. Orchestrator liveness    — native main pid missing → trigger start-butler.sh
+ * 4. MCP server liveness      — record MCP health transitions
+ * 5. Orphan MCP server reap   — kill MCP whose parent host is dead
  */
 
 import { join } from "path";
@@ -23,7 +22,6 @@ import {
   readServiceState,
   startService,
 } from "../../operations/service/native-service-supervisor.ts";
-import { butlerAgentScriptPath } from "../../runtime/paths.ts";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -39,7 +37,6 @@ const MCP_HEALTH_STATE_FILE = join(STATE_DIR, "watchdog-mcp-health.json");
 const INTERVAL_MS = 1 * 60 * 1000; // 1 minute
 const BROWSER_DAEMON_MAX_SECS = 3600; // 1 hour
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const SINGLETON_DISABLED = process.env.BUTLER_WATCHDOG_DISABLE_SINGLETON === "true";
 const SERVICE_LIVENESS_DISABLED = process.env.BUTLER_WATCHDOG_DISABLE_SERVICE_LIVENESS === "true";
 
@@ -54,25 +51,6 @@ export function formatLogLine(msg: string, date: Date = new Date()): string {
   const mi = pad(date.getMinutes());
   const s = pad(date.getSeconds());
   return `[${y}-${mo}-${d} ${h}:${mi}:${s}] [watchdog] ${msg}`;
-}
-
-export type TelegramHealthResult = "healthy" | "dead" | "conflict";
-
-/**
- * Parse a Telegram getUpdates response.
- * - conflict: another instance holds the polling slot (409) → no restart
- * - dead:     ok:true → nobody else is polling → butler polling is dead → restart
- * - healthy:  any other error (network, auth, etc.) → assume ok, don't restart
- */
-export function parseTelegramHealth(response: {
-  ok?: boolean;
-  error_code?: number;
-  description?: string;
-}): TelegramHealthResult {
-  if (response.error_code === 409) return "conflict";
-  if (response.description?.includes("Conflict")) return "conflict";
-  if (response.ok === true) return "dead";
-  return "healthy";
 }
 
 // ── Injectable deps for checkDeadWorkers (enables unit testing) ──────────────
@@ -168,249 +146,7 @@ productionDeps.readFile = (path) => {
   }
 };
 
-// ── Check 2: Telegram polling health ─────────────────────────────────────────
-
-/**
- * checkTelegramHealth — checks bot reachability via getMe (not getUpdates).
- *
- * parseTelegramHealth (above) interprets getUpdates responses to decide if
- * the polling process is alive. checkTelegramHealth is different: it calls
- * getMe to verify the bot token is valid and the API is reachable, then
- * tracks degradation state and sends a recovery notification when the bot
- * comes back online.
- */
-
-export interface TelegramHealthDeps {
-  fetchGetMe(): Promise<{ ok?: boolean }>;
-  notify(text: string): Promise<void>;
-  log(msg: string): void;
-  now?(): number;
-}
-
-// ── Health state machine (spec 07) ──────────────────────────────────────────
-
-export enum HealthState {
-  HEALTHY = "HEALTHY",
-  PENDING = "PENDING",
-  FIRING = "FIRING",
-  RECOVERING = "RECOVERING",
-}
-
-export interface HealthCheckConfig {
-  intervalMs: number;
-  failureThreshold: number;
-  recoveryThreshold: number;
-  keepFiringForMs: number;
-  startupGracePeriod: number;
-}
-
-export const DEFAULT_HEALTH_CONFIG: HealthCheckConfig = {
-  intervalMs: 5 * 60 * 1000,
-  failureThreshold: 3,
-  recoveryThreshold: 2,
-  keepFiringForMs: 10 * 60 * 1000,
-  startupGracePeriod: 1,
-};
-
-interface WatchdogState {
-  healthState: HealthState;
-  consecutiveFails: number;
-  consecutiveOk: number;
-  firingStartedAt: number;
-  graceRemaining: number;
-}
-
-const _state: WatchdogState = {
-  healthState: HealthState.HEALTHY,
-  consecutiveFails: 0,
-  consecutiveOk: 0,
-  firingStartedAt: 0,
-  graceRemaining: DEFAULT_HEALTH_CONFIG.startupGracePeriod,
-};
-
-/** Exported for testing — resets the internal health state. */
-export function _resetTelegramHealthState(): void {
-  _state.healthState = HealthState.HEALTHY;
-  _state.consecutiveFails = 0;
-  _state.consecutiveOk = 0;
-  _state.firingStartedAt = 0;
-  _state.graceRemaining = DEFAULT_HEALTH_CONFIG.startupGracePeriod;
-}
-
-/** Exported for testing — returns current health state. */
-export function _getHealthState(): HealthState {
-  return _state.healthState;
-}
-
-/** Pure state transition logic for health checks. */
-export function processHealthResult(
-  ok: boolean,
-  now: number,
-  config: HealthCheckConfig = DEFAULT_HEALTH_CONFIG,
-): { notify?: string } {
-  // Grace period: skip processing
-  if (_state.graceRemaining > 0) {
-    _state.graceRemaining--;
-    return {};
-  }
-
-  switch (_state.healthState) {
-    case HealthState.HEALTHY:
-      if (ok) return {};
-      _state.healthState = HealthState.PENDING;
-      _state.consecutiveFails = 1;
-      return {};
-
-    case HealthState.PENDING:
-      if (ok) {
-        _state.healthState = HealthState.HEALTHY;
-        _state.consecutiveFails = 0;
-        return {};
-      }
-      _state.consecutiveFails++;
-      if (_state.consecutiveFails >= config.failureThreshold) {
-        _state.healthState = HealthState.FIRING;
-        _state.firingStartedAt = now;
-        _state.consecutiveFails = 0;
-        return { notify: "down" };
-      }
-      return {};
-
-    case HealthState.FIRING:
-      if (ok) {
-        _state.healthState = HealthState.RECOVERING;
-        _state.consecutiveOk = 1;
-      }
-      return {};
-
-    case HealthState.RECOVERING:
-      if (!ok) {
-        _state.healthState = HealthState.FIRING;
-        _state.consecutiveOk = 0;
-        _state.firingStartedAt = now;
-        return {};
-      }
-      _state.consecutiveOk++;
-      if (
-        _state.consecutiveOk >= config.recoveryThreshold &&
-        now - _state.firingStartedAt >= config.keepFiringForMs
-      ) {
-        _state.healthState = HealthState.HEALTHY;
-        _state.consecutiveOk = 0;
-        _state.consecutiveFails = 0;
-        _state.firingStartedAt = 0;
-        return { notify: "recovery" };
-      }
-      return {};
-  }
-}
-
-export async function checkTelegramHealth(deps?: TelegramHealthDeps): Promise<void> {
-  const d: TelegramHealthDeps = deps ?? {
-    fetchGetMe: async () => {
-      if (!BOT_TOKEN) throw new Error("no token");
-      const res = await fetch(
-        `https://api.telegram.org/bot${BOT_TOKEN}/getMe`,
-        { signal: AbortSignal.timeout(10_000) },
-      );
-      return (await res.json()) as { ok?: boolean };
-    },
-    notify: sendTelegramNotification,
-    log,
-  };
-
-  if (!deps && !BOT_TOKEN) return;
-
-  const now = (d.now ?? Date.now)();
-  let ok: boolean;
-
-  try {
-    const data = await d.fetchGetMe();
-    ok = data.ok === true;
-  } catch {
-    ok = false;
-  }
-
-  const result = processHealthResult(ok, now);
-
-  if (result.notify === "down") {
-    d.log("Telegram API down — sending down notification");
-    await d.notify("⚠️ Telegram API connection lost — message delivery may be interrupted.");
-  } else if (result.notify === "recovery") {
-    d.log("Telegram bot recovered — sending recovery notification");
-    await d.notify("⚡ Telegram connection restored — some messages may have been missed.");
-  }
-}
-
-/** Best-effort Telegram notification for watchdog alerts.
- *  When a dedupKey is provided, delegates to packages/butler-agent/scripts/lib/notify-guard.sh so
- *  overlapping alerts (e.g. watchdog's MCP-down vs start-butler.sh's crash
- *  message) collapse to a single Telegram message. */
-async function sendTelegramNotification(
-  text: string,
-  dedupKey?: string,
-  ttlSecs: number = 30,
-): Promise<void> {
-  if (!BOT_TOKEN) return;
-
-  if (dedupKey) {
-    const guard = butlerAgentScriptPath(BUTLER_HOME, "lib", "notify-guard.sh");
-    if (existsSync(guard)) {
-      try {
-        const proc = Bun.spawn(
-          [
-            "bash",
-            "-c",
-            `source "${guard}" && notify_once "$1" "$2" "$3"`,
-            "notify_once",
-            dedupKey,
-            String(ttlSecs),
-            text,
-          ],
-          {
-            env: { ...process.env, BUTLER_HOME, BUTLER_DATA },
-            stdout: "ignore",
-            stderr: "ignore",
-          },
-        );
-        await proc.exited;
-        return;
-      } catch (err: any) {
-        log(`notify-guard spawn failed, falling back to direct send: ${err.message}`);
-      }
-    }
-  }
-
-  // Read chat_id from config
-  const configPath = join(BUTLER_HOME, "data", "butler.config.json");
-  let chatId = process.env.TELEGRAM_CHAT_ID || "";
-  if (!chatId) {
-    try {
-      const config = JSON.parse(
-        readFileSync(configPath, "utf8"),
-      );
-      chatId = config?.telegram?.groupId || "";
-    } catch {}
-  }
-  if (!chatId) return;
-
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    const data = await res.json() as { ok?: boolean; description?: string };
-    if (!data.ok) {
-      log(`Telegram sendMessage not ok: ${data.description ?? "unknown error"}`);
-    }
-  } catch (err: any) {
-    log(`Failed to send Telegram notification: ${err.message}`);
-  }
-}
-
-// ── Check 4: Agent-browser daemon cleanup ────────────────────────────────────
+// ── Check 2: Agent-browser daemon cleanup ────────────────────────────────────
 
 async function checkAgentBrowserDaemons(): Promise<number> {
   let actions = 0;
@@ -517,12 +253,12 @@ function writeMcpHealthState(state: McpHealthState): void {
  * checkMcpLiveness — alerts when MCP server is dead but butler-main is alive.
  *
  * Uses a state machine persisted to data/state/watchdog-mcp-health.json to
- * send Telegram alerts only on health-state TRANSITIONS:
- *   healthy → down:    send 🛑 alert once
- *   down → healthy:    send ✅ recovery once
+ * record health-state transitions:
+ *   healthy → down
+ *   down → healthy
  *   no transition:     silent
  *
- * We deliberately do NOT auto-restart — the alert is enough.
+ * We deliberately do NOT auto-restart.
  */
 async function checkMcpLiveness(): Promise<void> {
   const nativeState = readNativeMainState(getNativeMainStatePath(BUTLER_DATA));
@@ -555,20 +291,10 @@ async function checkMcpLiveness(): Promise<void> {
 
   if (!currentlyHealthy) {
     // healthy → down
-    log("MCP server process not found while butler-main is alive — sending down alert");
-    await sendTelegramNotification(
-      "🛑 MCP server is down. Tool access may be broken. Manual restart recommended: butler restart",
-      "butler-main-crash",
-      30,
-    );
+    log("MCP server process not found while butler-main is alive");
   } else {
     // down → healthy (recovered)
-    log(`MCP server recovered after ${durationMin}m — sending recovery alert`);
-    await sendTelegramNotification(
-      `✅ MCP server recovered (was down for ${durationMin}m).`,
-      "butler-main-recovery",
-      30,
-    );
+    log(`MCP server recovered after ${durationMin}m`);
   }
 }
 
@@ -634,14 +360,7 @@ async function runCycle(): Promise<void> {
     log(`checkDeadWorkers error: ${err.message}`);
   }
 
-  // 2. Telegram polling health
-  try {
-    await checkTelegramHealth();
-  } catch (err: any) {
-    log(`checkTelegramHealth error: ${err.message}`);
-  }
-
-  // 3. Agent-browser daemon cleanup
+  // 2. Agent-browser daemon cleanup
   try {
     const n = await checkAgentBrowserDaemons();
     totalActions += n;

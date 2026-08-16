@@ -24,6 +24,8 @@ import {
   safeEndpointLabel,
 } from "../../../integrations/providers/provider-errors.ts";
 import { throwIfAborted } from "../../../integrations/providers/shared/runtime-support.ts";
+import { createRoundToolSurfaceSnapshot } from
+  "../agent-loop/round-tool-surface.ts";
 
 /**
  * Compatibility boundary for callers that still provide the pre-BTCC tool
@@ -43,9 +45,11 @@ export async function runLegacyFunctionToolPromptText(
   const resolveTools = () => {
     const dynamicTools = options.dynamicTools?.();
     const activeTools = dynamicTools && dynamicTools.length > 0 ? dynamicTools : options.tools;
-    if (!requiredToolRepairNames || requiredToolRepairNames.size === 0) return activeTools;
+    if (!requiredToolRepairNames || requiredToolRepairNames.size === 0) {
+      return createRoundToolSurfaceSnapshot(activeTools);
+    }
     const narrowed = activeTools.filter((tool) => requiredToolRepairNames!.has(tool.name));
-    return narrowed.length > 0 ? narrowed : activeTools;
+    return createRoundToolSurfaceSnapshot(narrowed.length > 0 ? narrowed : activeTools);
   };
   const finalSynthesis = {
     instructions: finalNoToolInstructions(options.instructions),

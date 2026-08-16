@@ -13,14 +13,14 @@ export type {
 } from "./legacy-work-source.ts";
 export type {
   AttachToolResultInput,
-  RecordCloseoutMissingInput,
+  ContinueWorkCommand,
+  ContinueWorkInput,
+  ClaimWorkCloseoutCorrectionInput,
   DurableWorkDispositionActionUpdate,
   RecordWorkDispositionCommand,
   RecordWorkDispositionInput,
   DurableWorkDisposition,
   DurableWorkDispositionStatus,
-  ContinueWorkCommand,
-  ContinueWorkInput,
   DurableWorkActionProgress,
   DurableWorkActionStatus,
   DurableWorkActionUpdate,
@@ -45,13 +45,21 @@ export type {
   StartWorkCommand,
   StartWorkInput,
   WorkStage,
+  WorkCorrectionScope,
   WorkTurnScope,
 } from "./contracts.ts";
 export {
+  acceptedCurrentResultReview,
   allowedNextWorkStages,
   applyWorkActionUpdates,
+  assertWorkPlanReplacementStage,
   assertWorkStageTransition,
   progressForReplacementPlan,
+  resolveWorkReviewTransition,
+  availableWorkReviewSubjects,
   unresolvedWorkActionKeys,
+  workReviewTargetStage,
+  WorkTransitionGuardError,
   WorkStageTransitionError,
 } from "./work-progress-policy.ts";
+export type { WorkReviewSubject } from "./work-progress-policy.ts";

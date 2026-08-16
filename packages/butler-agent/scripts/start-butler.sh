@@ -43,9 +43,6 @@ RAPID_EXIT_LIMIT=3
 LAUNCH_TIME=$(date +%s)
 CLEAN_EXIT=0
 
-# No-op fallback so trap can call notify_telegram even if sourcing fails later.
-notify_telegram() { :; }
-
 _record_exit() {
   local RC=$?
   rm -f "$INSTANCE_LOCK" "$BUTLER_DATA/locks/butler-launch.lock" 2>/dev/null || true
@@ -68,7 +65,6 @@ _record_exit() {
       echo "crash_loop" > "$BUTLER_DATA/snapshots/last-shutdown-reason" 2>/dev/null || true
       touch "$SHUTDOWN_FLAG" 2>/dev/null || true
       rm -f "$RAPID_EXIT_FILE" 2>/dev/null || true
-      notify_telegram "🛑 Butler crash-loop detected (${COUNT} rapid exits). Native restart suppressed — run 'butler restart' after investigating." 2>/dev/null || true
       # exit 0 tells the native supervisor this was a controlled shutdown.
       exit 0
     fi
@@ -139,73 +135,19 @@ clear_native_main_state() {
   rm -f "$NATIVE_MAIN_STATE_FILE" 2>/dev/null || true
 }
 
-telegram_gateway_enabled() {
-  local settings="$BUTLER_DATA/gateways/telegram.json"
-  [ -f "$settings" ] || return 1
-  if command -v jq >/dev/null 2>&1; then
-    local enabled
-    enabled="$(jq -r 'if has("enabled") then .enabled else false end' "$settings" 2>/dev/null || echo false)"
-    [ "$enabled" = "true" ]
-    return
-  fi
-  grep -Eq '"enabled"[[:space:]]*:[[:space:]]*true' "$settings" 2>/dev/null
-}
-
-_check_telegram_health() {
-  telegram_gateway_enabled || return 0
-  if [ -f "$BUTLER_DATA/.env" ]; then
-    set +u; source "$BUTLER_DATA/.env"; set -u
-  fi
-  local TG_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
-  if [ -z "$TG_TOKEN" ]; then
-    log "WARNING: TELEGRAM_BOT_TOKEN not set — Telegram notifications disabled"
-    return 0
-  fi
-  local RESULT
-  RESULT=$(curl -sf --connect-timeout 5 --max-time 10 \
-    "https://api.telegram.org/bot${TG_TOKEN}/getMe" 2>&1) || {
-    log "WARNING: Telegram bot health check failed (network error)"
-    return 0
-  }
-  if echo "$RESULT" | grep -q '"ok":true'; then
-    local BOT_NAME
-    BOT_NAME=$(echo "$RESULT" | grep -o '"username":"[^"]*"' | head -1 | cut -d'"' -f4)
-    log "Telegram bot healthy: @${BOT_NAME}"
-  else
-    log "WARNING: Telegram bot token invalid or revoked"
-    log "Response: $RESULT"
-  fi
-}
-
-# Source shared Telegram helpers early so startup/crash notifications work
-# before the main process comes online.
-if [ -f "$BUTLER_HOME/packages/butler-agent/scripts/lib/telegram.sh" ]; then
-  source "$BUTLER_HOME/packages/butler-agent/scripts/lib/telegram.sh"
-else
-  notify_telegram() { :; }
-fi
-if [ -f "$BUTLER_HOME/packages/butler-agent/scripts/lib/notify-guard.sh" ]; then
-  source "$BUTLER_HOME/packages/butler-agent/scripts/lib/notify-guard.sh"
-else
-  notify_once() { local _k="$1" _t="$2" _m="$3"; notify_telegram "$_m"; }
-fi
-
 # Kill existing MCP server processes before starting
 pkill -f ".butler/packages/butler-agent/src/interfaces/mcp-server/server.ts" 2>/dev/null || true
-# Kill any stale Telegram integration servers that survived previous sessions.
-# Two telegram bots polling the same token causes 409 conflict and drops incoming messages
-pkill -9 -f "packages/butler-agent/src/integrations/telegram.*server" 2>/dev/null || true
 
 # Wait for processes to actually die (up to 10s) before proceeding
 for i in $(seq 1 20); do
-  if ! pgrep -f "packages/butler-agent/src/integrations/telegram.*server|.butler/packages/butler-agent/src/interfaces/mcp-server/server.ts" >/dev/null 2>&1; then
+  if ! pgrep -f ".butler/packages/butler-agent/src/interfaces/mcp-server/server.ts" >/dev/null 2>&1; then
     break
   fi
   sleep 0.5
 done
 # Force kill if still alive after 10s
-if pgrep -f "packages/butler-agent/src/integrations/telegram.*server|.butler/packages/butler-agent/src/interfaces/mcp-server/server.ts" >/dev/null 2>&1; then
-  pkill -9 -f "packages/butler-agent/src/integrations/telegram.*server|.butler/packages/butler-agent/src/interfaces/mcp-server/server.ts" 2>/dev/null || true
+if pgrep -f ".butler/packages/butler-agent/src/interfaces/mcp-server/server.ts" >/dev/null 2>&1; then
+  pkill -9 -f ".butler/packages/butler-agent/src/interfaces/mcp-server/server.ts" 2>/dev/null || true
   sleep 1
 fi
 
@@ -230,7 +172,6 @@ if [ -d "$TASKS_DIR" ]; then
   done
 fi
 log "Starting native butler bootstrap (runtime: $BUTLER_RUNTIME_EFFECTIVE)"
-_check_telegram_health
 rm -f "$SESSION_FILE"
 write_native_main_state
 # Keep the service process alive by running native butler-main.
@@ -252,9 +193,7 @@ fi
 
 if [ "$RC" -eq 0 ]; then
   log "Native butler bootstrap exited without shutdown flag; treating as crash"
-  notify_once "butler-main-crash" 30 "⚠️ Butler crashed unexpectedly — restarting..." || true
   exit 1
 fi
 
-notify_once "butler-main-crash" 30 "⚠️ Butler crashed unexpectedly — restarting..." || true
 exit "$RC"

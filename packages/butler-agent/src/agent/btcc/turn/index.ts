@@ -27,6 +27,20 @@ export type {
   TurnSemanticState,
   TurnStateRepository,
 } from "./contracts.ts";
+export {
+  createTurnContinuationBudgetState,
+  continuationRequestDigest,
+  parseTurnContinuationBudgetState,
+  selectTurnContinuationBudget,
+  transitionTurnContinuationBudget,
+  TurnContinuationBudgetExhaustedError,
+  TURN_CONTINUATION_EXHAUSTED_CODE,
+} from "./continuation-budget.ts";
+export type {
+  TurnContinuationBudgetEvent,
+  TurnContinuationBudgetLimits,
+  TurnContinuationBudgetState,
+} from "./continuation-budget.ts";
 export type {
   BtccPreparedTurn,
   BtccRunCommand,

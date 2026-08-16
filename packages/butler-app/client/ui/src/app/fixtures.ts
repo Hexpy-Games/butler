@@ -213,7 +213,7 @@ export const HARNESS_PROJECT_DASHBOARD: ProjectDashboardView = {
 
 export const HARNESS_MESSAGES: MessageRecord[] = [
   {
-    id: "m1",
+    id: "message-1",
     chat_id: "butler-client",
     role: "user",
     text: "컴포저와 워커 상태가 겹치지 않도록 정리해줘.",

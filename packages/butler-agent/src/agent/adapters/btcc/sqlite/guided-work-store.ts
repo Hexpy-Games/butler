@@ -1,20 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type {
-  AttachToolResultInput,
-  ContinueWorkCommand,
-  DurableWorkContext,
-  DurableWorkStore,
-  DurableWorkView,
-  LegacyOpenWorkImportResult,
-  LegacyProjectWorkSource,
-  RecordWorkCheckpointCommand,
-  RecordCloseoutMissingInput,
-  RecordWorkDispositionCommand,
-  RecordWorkReviewCommand,
-  ReplaceWorkPlanCommand,
-  StartWorkCommand,
-  WorkTurnScope,
-} from "../../../btcc/work/index.ts";
+import type { AttachToolResultInput, ClaimWorkCloseoutCorrectionInput, ContinueWorkCommand, DurableWorkContext, DurableWorkStore, DurableWorkView, LegacyOpenWorkImportResult, LegacyProjectWorkSource, RecordWorkCheckpointCommand, RecordWorkDispositionCommand, RecordWorkReviewCommand, ReplaceWorkPlanCommand, StartWorkCommand, WorkTurnScope } from
+  "../../../btcc/work/index.ts";
 import { stableJson } from "./identity.ts";
 import {
   GuidedWorkMutationJournal,
@@ -23,12 +9,13 @@ import {
 } from "./guided-work-mutation-journal.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
 import { GuidedWorkProgressWriter } from "./guided-work-progress-writer.ts";
+import { guidedWorkStatusForProgress } from "./guided-work-progress-status.ts";
 import { GuidedWorkDispositionWriter } from "./guided-work-disposition-writer.ts";
-import { GuidedWorkRelationBackfill } from "./guided-work-relation-backfill.ts";
 import { preserveBlockedStatus } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkLegacyImporter } from "./guided-work-legacy-importer.ts";
 import { GuidedWorkLegacyProjectImporter } from
   "./guided-work-legacy-project-importer.ts";
+import { GuidedWorkRelationBackfill } from "./guided-work-relation-backfill.ts";
 import { GuidedWorkReviewWriter } from "./guided-work-review-writer.ts";
 import { GuidedWorkSessionWriter } from "./guided-work-session-writer.ts";
 import { GuidedWorkToolResultWriter } from "./guided-work-tool-result-writer.ts";
@@ -108,6 +95,16 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
 
   async boundWorkForTurn(turnId: string): Promise<DurableWorkView | null> {
     return this.reader.boundView(turnId);
+  }
+
+  async bindOpenWork(
+    scope: WorkTurnScope,
+    expectedWorkId?: string,
+  ): Promise<DurableWorkView | null> {
+    return this.writeTransaction(() => {
+      const work = this.sessions.bindOpenHead(scope, expectedWorkId);
+      return work ? this.reader.view(work.work_id) : null;
+    });
   }
 
   async startWork(input: StartWorkCommand): Promise<DurableWorkView> {
@@ -193,7 +190,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
           status = ?, updated_at = ? WHERE work_id = ?
       `).run(
         planRevisionId,
-        progressWorkStatus(input.actionProgress),
+        guidedWorkStatusForProgress(input.actionProgress),
         now,
         work.work_id,
       );
@@ -241,7 +238,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
       });
       this.db.query(`
         UPDATE btcc_guided_works SET status = ?, updated_at = ? WHERE work_id = ?
-      `).run(progressWorkStatus(input.actionProgress), now, work.work_id);
+      `).run(guidedWorkStatusForProgress(input.actionProgress), now, work.work_id);
       preserveBlockedStatus(this.db, work.work_id);
       this.mutations.record({
         mutationCallId: input.mutationCallId,
@@ -264,8 +261,10 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     return this.dispositions.record(input);
   }
 
-  async recordCloseoutMissing(input: RecordCloseoutMissingInput): Promise<void> {
-    this.dispositions.recordCloseoutMissing(input);
+  async claimCloseoutCorrection(
+    input: ClaimWorkCloseoutCorrectionInput,
+  ): Promise<boolean> {
+    return this.dispositions.claimCloseoutCorrection(input);
   }
 
   async attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView> {
@@ -341,10 +340,4 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   private writeTransaction<T>(operation: () => T): T {
     return this.db.transaction(operation).immediate();
   }
-}
-
-function progressWorkStatus(
-  progress: ReplaceWorkPlanCommand["actionProgress"],
-): "open" | "blocked" {
-  return progress.some((action) => action.status === "blocked") ? "blocked" : "open";
 }

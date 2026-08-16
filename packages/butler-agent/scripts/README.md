@@ -14,8 +14,7 @@ the product CLI, installer, services, and validation scripts.
   `run-text-prompt.ts`, and `run-tool-prompt.ts`.
 - Maintenance and status: `status-context.ts`, `metrics-status.ts`,
   `prune-context-maintenance.ts`, and diagnostic scripts.
-- Auth and transport helpers: `openai-oauth-login.ts`, `send-telegram.sh`, and
-  chat-id resolution utilities.
+- Authentication helpers such as `openai-oauth-login.ts`.
 - `lib/`: shared shell helpers.
 
 ## Boundaries

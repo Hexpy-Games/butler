@@ -2,7 +2,7 @@
 
 `packages/butler-agent/src/test-support/harness/` provides deterministic local session and transcript fixtures.
 It lets tests exercise Butler conversations, worker results, recovery, and
-transport behavior without relying on a live Telegram chat.
+transport behavior without relying on an external service.
 
 ## Key Files
 
@@ -11,7 +11,6 @@ transport behavior without relying on a live Telegram chat.
 - `durable-session-transcript.ts`: append-only transcript storage.
 - `transcripts.ts`: transcript path and normalization helpers.
 - `session-runtime.ts`: test runtime adapter for session turns.
-- `telegram-session-transcript.ts`: Telegram-shaped transcript fixtures.
 - `worker-transcript.ts`: worker transcript fixtures and summaries.
 
 ## Boundaries

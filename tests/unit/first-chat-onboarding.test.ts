@@ -42,7 +42,7 @@ function turnContext(input: {
     binding: binding(input.butlerHome),
     envelope: {
       eventId: "mock:first-chat-onboarding",
-      transport: "telegram",
+      transport: "app",
       accountId: "default",
       peer: { kind: "dm", id: "peer-1" },
       sender: { id: "user-1" },

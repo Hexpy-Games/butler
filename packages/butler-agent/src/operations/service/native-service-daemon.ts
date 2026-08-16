@@ -1,10 +1,11 @@
 import { spawn, type ChildProcess } from "child_process";
 import {
   closeSync,
+  existsSync,
   mkdirSync,
   openSync,
 } from "fs";
-import { dirname } from "path";
+import { dirname, join } from "path";
 import type { EventEmitter } from "events";
 import {
   NATIVE_SUPERVISOR_ID,
@@ -14,6 +15,7 @@ import {
   readServiceState,
   removeServiceState,
   resolveNativeSupervisorPaths,
+  stopServiceBounded,
   writeServiceState,
   type NativeServiceId,
   type NativeServiceSpec,
@@ -24,6 +26,8 @@ import {
   readAppGatewayPid,
 } from "../gateway/registry.ts";
 import { nativeServiceChildLifecycle } from "./native-service-child-lifecycle.ts";
+import { prepareAgentStorageForNativeServiceLaunch } from
+  "./native-service-storage-preparation.ts";
 
 export interface DaemonChildHandle {
   pid?: number;
@@ -135,6 +139,20 @@ export class ManagedServiceDaemon {
 
   constructor(private readonly options: ManagedServiceDaemonOptions) {}
 
+  async prepareStorageAndStartAll(): Promise<void> {
+    const appGateway = this.options.specs.find((spec) => spec.id === "app-gateway");
+    await prepareAgentStorageForNativeServiceLaunch({
+      butlerData: this.options.butlerData,
+      runtimeVersion: "native-service-split-v1",
+      quiesceLegacyWriter: async () => {
+        if (appGateway) {
+          await stopServiceBounded(this.options.butlerData, appGateway);
+        }
+      },
+    });
+    this.startAll();
+  }
+
   startAll(): void {
     try {
       for (const spec of this.options.specs) {
@@ -186,7 +204,13 @@ export class ManagedServiceDaemon {
     this.running.delete(serviceId);
     removeServiceState(this.options.butlerData, serviceId);
     this.log(`${serviceId} exited code=${code ?? "null"} signal=${signal ?? "null"}`);
-    if (this.stopping || running.spec.restartPolicy !== "watchdog") return;
+    const migrationFence = join(
+      this.options.butlerData,
+      "locks",
+      "app-gateway-migration-fence",
+    );
+    if (this.stopping || running.spec.restartPolicy !== "watchdog" ||
+      (serviceId === "app-gateway" && existsSync(migrationFence))) return;
     this.startChild(running.spec);
   }
 
@@ -289,12 +313,13 @@ export class ManagedServiceDaemon {
 
 export async function runForegroundServiceDaemon(input: Partial<NativeSupervisorPaths> = {}): Promise<void> {
   const paths = resolveNativeSupervisorPaths(input);
+  const specs = defaultDaemonServiceSpecs(paths);
   const daemon = new ManagedServiceDaemon({
     butlerData: paths.butlerData,
-    specs: defaultDaemonServiceSpecs(paths),
+    specs,
     log: (line) => process.stdout.write(`[service-daemon] ${line}\n`),
   });
-  daemon.startAll();
+  await daemon.prepareStorageAndStartAll();
 
   await new Promise<void>((resolve) => {
     let shuttingDown = false;

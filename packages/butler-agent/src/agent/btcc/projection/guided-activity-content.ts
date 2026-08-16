@@ -26,7 +26,6 @@ export function publicToolTitle(
   if (name === "write_file" || name === "edit_file") {
     return safeFileActionLabel(name, args) || "파일 변경";
   }
-  if (name === "inspect_workspace_page") return "작업 화면 확인";
   if (name === "tool_search") return "사용 가능한 도구 찾기";
   if (name === "tool_describe") return "도구 사용법 확인";
   if (name === "tool_call") {
@@ -81,8 +80,8 @@ export function activityContent(
     const summary = publicText(first.args.public_summary) || publicText(assistantText) ||
       publicToolTitle(first.name);
     return {
-      displayStage: workStage(first.args.next_stage) ?? "execution",
-      title: checkpointTitle(first.args.next_stage),
+      displayStage: "execution",
+      title: checkpointTitle(),
       summary,
       nextStep: publicText(first.args.next_step),
     };
@@ -202,19 +201,7 @@ function reviewTitle(subject: unknown): string {
   return "결과 검토";
 }
 
-function workStage(value: unknown): WorkStage | undefined {
-  return value === "conception" || value === "planning" || value === "execution" ||
-      value === "review" || value === "validation" || value === "reporting"
-    ? value
-    : undefined;
-}
-
-function checkpointTitle(stage: unknown): string {
-  if (stage === "conception") return "구상 진행 확인";
-  if (stage === "planning") return "계획 진행 확인";
-  if (stage === "review") return "리뷰 준비 확인";
-  if (stage === "validation") return "검증 진행 확인";
-  if (stage === "reporting") return "보고 준비 확인";
+function checkpointTitle(): string {
   return "작업 진행 확인";
 }
 

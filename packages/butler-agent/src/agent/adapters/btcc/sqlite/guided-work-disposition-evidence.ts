@@ -24,6 +24,16 @@ export function resolveDispositionEvidence(
   turnId: string,
   evidenceRefs: string[],
 ): string[] {
+  if (evidenceRefs.length === 0) {
+    return db.query<{ result_ref: string }, [string, string]>(`
+      SELECT result.result_ref
+      FROM btcc_guided_work_results result
+      JOIN btcc_guided_tool_calls calls ON calls.call_id = result.tool_call_id
+      WHERE result.work_id = ? AND result.origin_turn_id = ?
+        AND calls.status = 'completed'
+      ORDER BY result.sequence ASC
+    `).all(workId, turnId).map(({ result_ref }) => result_ref);
+  }
   const snapshot: string[] = [];
   for (const reference of evidenceRefs) {
     const result = db.query<

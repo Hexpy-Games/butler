@@ -480,7 +480,7 @@ test("conversation projection reader stays lazy until the canonical database app
   }
 });
 
-test("App Gateway reports a missing canonical reader and recovers after the Agent creates it", () => {
+test("App Gateway remains available before and after the Agent creates canonical storage", () => {
   const root = temporaryRoot();
   const server = createTestAppServer({
     dbPath: join(root, "app.sqlite"),
@@ -489,8 +489,11 @@ test("App Gateway reports a missing canonical reader and recovers after the Agen
     automationSchedulerIntervalMs: false,
   });
   try {
-    expect(server.store.replayConversationProjection().safe_error_code)
-      .toBe("conversation_reader_unavailable");
+    expect(server.store.replayConversationProjection()).toMatchObject({
+      ok: true,
+      processed: 0,
+      projected_messages: 0,
+    });
 
     const writer = new AgentConversationStore({ butlerData: root });
     writer.beginTurn({
@@ -500,8 +503,11 @@ test("App Gateway reports a missing canonical reader and recovers after the Agen
       actor: "user",
     });
     writer.close();
-    expect(server.store.replayConversationProjection().safe_error_code)
-      .not.toBe("conversation_reader_unavailable");
+    expect(server.store.replayConversationProjection()).toMatchObject({
+      ok: true,
+      processed: 0,
+      projected_messages: 0,
+    });
   } finally {
     server.stop();
   }

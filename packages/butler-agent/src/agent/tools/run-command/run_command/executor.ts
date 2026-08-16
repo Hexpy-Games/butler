@@ -12,11 +12,6 @@ import {
   type CommandValidationEvidence,
 } from "./evidence.ts";
 import { projectLedgerCommandMutationGuard } from "./project-ledger-command-guard.ts";
-import {
-  cleanupProjectLedgerMutationSnapshot,
-  createProjectLedgerMutationSnapshot,
-  restoreProjectLedgerMutationIfChanged,
-} from "./project-ledger-mutation-snapshot.ts";
 import type { WorkspaceReference } from "../../../session-workspaces/index.ts";
 
 type ToolCall = { args: Record<string, unknown>; signal?: AbortSignal };
@@ -668,55 +663,16 @@ export async function runCommandTool(input: {
   );
   const commandStartedAtMs = Date.now();
   mkdirSync(commandGeneratedArtifactRoot(input.butlerData), { recursive: true });
-  const projectLedgerSnapshot = createProjectLedgerMutationSnapshot({
+  const raw = await executeCommandCompatibility({
     command,
     cwd,
-    workspacePath: workspace,
+    timeoutMs,
     butlerData: input.butlerData,
-    butlerHome: input.butlerHome,
+    pipefail: Boolean(validationSuiteFromArgs(input.args)),
+    signal: input.signal,
+    commandExecutor,
   });
-  let raw: ShellCommandResult;
-  let projectLedgerMutation: ReturnType<
-    typeof restoreProjectLedgerMutationIfChanged
-  >;
-  try {
-    raw = await executeCommandCompatibility({
-      command,
-      cwd,
-      timeoutMs,
-      butlerData: input.butlerData,
-      pipefail: Boolean(validationSuiteFromArgs(input.args)),
-      signal: input.signal,
-      commandExecutor,
-    });
-    projectLedgerMutation = restoreProjectLedgerMutationIfChanged(
-      projectLedgerSnapshot,
-    );
-  } finally {
-    cleanupProjectLedgerMutationSnapshot(projectLedgerSnapshot);
-  }
   throwIfCommandAborted(input.signal);
-  if (projectLedgerMutation) {
-    return {
-      ok: false,
-      command,
-      cwd,
-      exit_code: 1,
-      timed_out: false,
-      stdout: "",
-      stderr: projectLedgerMutation.message,
-      error: projectLedgerMutation.error,
-      protected_path: projectLedgerMutation.protected_path,
-      next: projectLedgerMutation.next,
-      evidence_receipts: commandEvidenceReceipts({ success: false, artifacts: [] }),
-      evidence_capability_receipts: commandEvidenceCapabilityReceipts({
-        exitCode: 1,
-        timedOut: false,
-        outputSuppressed: false,
-        outputBudgeted: false,
-      }),
-    };
-  }
 
   const success = raw.exit_code === 0 && raw.timed_out === false;
   const shouldSuppressOutput = success && (

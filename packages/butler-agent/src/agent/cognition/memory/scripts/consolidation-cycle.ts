@@ -8,7 +8,7 @@
 //      that releases the lock. Each phase gets a soft sub-budget; the total
 //      wall-clock budget is hard.
 //   4. Emit structured events per phase and a daily summary line.
-//   5. On failure, fire a Telegram alert (cycle-level aggregated by default).
+//   5. Record phase failures in the structured event log.
 //
 // Invoked by the scheduled Cognition wrapper after the generic Cognition Cycle.
 import { createRequire } from "node:module";
@@ -16,7 +16,6 @@ import { join } from "path";
 import { homedir } from "os";
 
 import { Budget, BudgetExceeded } from "./lib/budget.ts";
-import { butlerAgentScriptPath } from "../../../../runtime/paths.ts";
 import { EventLogger } from "./lib/events.ts";
 import {
   acquireConsolidationLock,
@@ -47,10 +46,6 @@ export interface ConsolidationCycleConfig {
   lockPath: string;
   logsDir: string;
   summaryPath: string;
-  alerts: {
-    telegram: boolean;
-    notifyOnSubPhaseFailure: boolean;
-  };
 }
 
 export interface ConsolidationCyclePhaseDeps {
@@ -59,7 +54,6 @@ export interface ConsolidationCyclePhaseDeps {
   runOptimize: () => Promise<Record<string, unknown>>;
   runHealth: () => Promise<Record<string, unknown>>;
   runProjectCapsules?: () => Promise<Record<string, unknown>>;
-  notifyTelegram?: (msg: string) => void;
 }
 
 export interface ConsolidationCycleResult {
@@ -84,7 +78,6 @@ export async function runConsolidationCycle(
   }
 
   const logger = new EventLogger(cfg.logsDir, undefined, cfg.summaryPath);
-  const alert = deps.notifyTelegram ?? (() => {});
   const failedPhases: Array<{ phase: string; error: string }> = [];
   let aborted: ConsolidationCycleResult["aborted"];
 
@@ -142,9 +135,6 @@ export async function runConsolidationCycle(
           error: info,
         });
         failedPhases.push({ phase, error: info.message });
-        if (cfg.alerts.telegram && cfg.alerts.notifyOnSubPhaseFailure) {
-          alert(`consolidation-cycle: phase ${phase} failed — ${info.message}`);
-        }
       } finally {
         budget.endSubPhase();
       }
@@ -166,17 +156,6 @@ export async function runConsolidationCycle(
       failed_phases: failedPhases.map((f) => f.phase),
     },
   });
-
-  // Cycle-level aggregated alert (default).
-  if (
-    cfg.alerts.telegram &&
-    !cfg.alerts.notifyOnSubPhaseFailure &&
-    (failedPhases.length > 0 || aborted === "aborted_budget")
-  ) {
-    const parts = failedPhases.map((f) => `${f.phase}: ${f.error}`);
-    if (aborted === "aborted_budget") parts.push("aborted_budget");
-    alert(`consolidation-cycle: cycle failed — ${parts.join("; ")}`);
-  }
 
   return { exitCode: 0, phasesRun, aborted };
 }
@@ -247,10 +226,6 @@ function loadConfig(): ConsolidationCycleConfig {
     lockPath: consolidationLockPath(butlerData()),
     logsDir: join(consolidationDir, "logs"),
     summaryPath: join(consolidationDir, "run-summary.jsonl"),
-    alerts: {
-      telegram: sc.alerts?.telegram !== false,
-      notifyOnSubPhaseFailure: sc.alerts?.notifyOnSubPhaseFailure === true,
-    },
   };
 }
 
@@ -263,17 +238,6 @@ function loadRawConsolidationCycle(): any {
   } catch {
     return {};
   }
-}
-
-function notifyTelegramCli(msg: string): void {
-  try {
-    const { spawnSync } = require("child_process");
-    spawnSync(
-      "bash",
-      ["-c", `source "${butlerAgentScriptPath(butlerHome(), "lib", "telegram.sh")}" && notify_telegram "$1"`, "bash", msg],
-      { encoding: "utf8", timeout: 15000 },
-    );
-  } catch {}
 }
 
 function buildCatchupSessions(): Array<import("./phases/catchup.ts").CatchupSession> {
@@ -348,7 +312,6 @@ if (import.meta.main) {
       runConsolidate: async () => ({}),
       runOptimize: async () => ({}),
       runHealth: async () => ({}),
-      notifyTelegram: notifyTelegramCli,
     });
     process.exit(r.exitCode);
   }
@@ -422,21 +385,17 @@ if (import.meta.main) {
         logRetentionDays,
         diskQuotaMb,
         now: Date.now(),
-        alert: (m: string) => deps.notifyTelegram?.(m),
+        alert: () => {},
       }) as unknown as Record<string, unknown>,
-    notifyTelegram: notifyTelegramCli,
   };
 
   let exitCode: number;
   try {
     const r = await runConsolidationCycle(cfg, deps);
     exitCode = r.exitCode;
-  } catch (err: any) {
+  } catch {
     // Defense in depth — runConsolidationCycle catches phase exceptions, but if the
-    // orchestrator itself throws we must still release DB handles and alert.
-    try {
-      notifyTelegramCli(`consolidation-cycle: orchestrator crashed — ${String(err?.message ?? err)}`);
-    } catch {}
+    // orchestrator itself throws we must still release DB handles.
     exitCode = 1;
   } finally {
     try { db.close(); } catch {}

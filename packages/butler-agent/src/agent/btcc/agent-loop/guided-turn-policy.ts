@@ -5,8 +5,7 @@ import { parseToolCatalogId } from "../../tools/progressive-catalog.ts";
 import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
 import { PROJECT_LEDGER_MUTATION_TOOL_NAME_SET } from
   "../../tools/project-ledger/mutation-tools.ts";
-import { selectInitialToolsFromSurfaceController } from
-  "../../tools/tool-surface-selection.ts";
+import { selectButlerToolsForTurn } from "../../tools/profiles.ts";
 import { WORK_TRACKING_TOOL_NAMES } from "../../tools/work-tracking/shared.ts";
 import type { FunctionToolDefinition } from
   "../../../integrations/providers/runtime-contracts.ts";
@@ -21,14 +20,14 @@ import { isDurableWorkTool } from "../work/index.ts";
 import { GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES } from
   "./guided-project-ledger-effect.ts";
 import { guidedToolDefinition } from "./guided-tool-definition.ts";
-import { workspacePagePreviewAvailabilityOverride } from
-  "../../tools/workspace-page-preview/index.ts";
 import { safeCommandActionLabel } from "../../output/progress/arguments.ts";
 import { currentModelRouteCandidate } from "../model-route/index.ts";
 import {
   applyGuidedWorkspaceAuthorization,
   guidedWorkspaceVisibleToolNames,
 } from "./guided-session-workspace-policy.ts";
+import { readOperationResultsToolDefinition } from
+  "../../tools/monitoring/read_operation_results/index.ts";
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
   disabledReason:
@@ -41,12 +40,6 @@ export const GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES = {
   create_automation: GUIDED_AUTOMATION_EFFECT_UNAVAILABLE,
   delete_automation: GUIDED_AUTOMATION_EFFECT_UNAVAILABLE,
   run_due_automations: GUIDED_AUTOMATION_EFFECT_UNAVAILABLE,
-  call_mcp_tool: {
-    disabledReason:
-      "This guided runtime does not yet have a guarded MCP effect adapter. MCP tool dispatch is unavailable; MCP capability discovery and resource reads remain available.",
-    recoveryHint:
-      "Use list_mcp_capabilities or read_mcp_resource for read-only evidence, choose an enabled native tool, or report the limitation.",
-  },
 } as const satisfies NativeToolAvailabilityOverrides;
 
 const GUIDED_UNAVAILABLE_NATIVE_TOOL_NAMES = new Set(
@@ -79,7 +72,8 @@ export function guidedPolicy(turn: TurnRecord): ButlerExecutionPolicy {
 
 export function authorizedToolDefinitions(
   turn: TurnRecord,
-  env: NodeJS.ProcessEnv = process.env,
+  _env: NodeJS.ProcessEnv = process.env,
+  exactResultReplayEnabled = false,
 ): FunctionToolDefinition[] {
   const policy = guidedPolicy(turn);
   const requiredProfiles = new Set([
@@ -96,15 +90,15 @@ export function authorizedToolDefinitions(
     requiredNativeTools: policy.requiredNativeTools,
     ...(policy.projectId ? { projectId: policy.projectId } : {}),
   };
-  const selected = selectInitialToolsFromSurfaceController({
+  const selected = selectButlerToolsForTurn({
     role: policy.role,
-    message: turn.originalMessage,
+    text: turn.originalMessage,
     sessionMetadata: {
       ...(policy.projectId ? { projectId: policy.projectId } : {}),
       runtimePolicy,
     },
-    tools: BUTLER_TOOLS,
-  }).tools;
+    tools: guidedNativeToolDefinitions(exactResultReplayEnabled),
+  });
   const names = new Set(selected.map((tool) => tool.name));
   for (const name of [
     "tool_search",
@@ -122,11 +116,8 @@ export function authorizedToolDefinitions(
     policy,
     projectRef: turn.context.projectRef,
   });
-  if (isZaiMcpVisionTurn(turn)) names.add("analyze_attached_image");
-  else names.delete("analyze_attached_image");
-  if (workspacePagePreviewAvailabilityOverride(env)) {
-    names.delete("inspect_workspace_page");
-  }
+  if (policy.accessMode === "full_access") names.add("call_mcp_tool");
+  else names.delete("call_mcp_tool");
   for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
   const guidedLedgerEffects = new Set<string>(
     policy.accessMode === "full_access" &&
@@ -138,7 +129,8 @@ export function authorizedToolDefinitions(
   for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
   for (const name of guidedLedgerEffects) names.add(name);
   return [
-    ...BUTLER_TOOLS.filter((tool) => names.has(tool.name)),
+    ...guidedNativeToolDefinitions(exactResultReplayEnabled)
+      .filter((tool) => names.has(tool.name)),
     ...(policy.trackingMode === "none" ? [] : DURABLE_WORK_TOOL_DEFINITIONS),
   ];
 }
@@ -188,16 +180,13 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
   return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
 }
 
-export function isZaiMcpVisionTurn(turn: TurnRecord): boolean {
-  const a = turn.context.imageAdmission;
-  return a?.tuple.providerId === "zai" && a.tuple.modelId === "glm-5.2" &&
-    a.tuple.carrierProtocol === "zai_mcp_vision" && a.capability.toolServerId === "zai-vision" &&
-    a.capability.toolName === "analyze_image" &&
-    a.capability.toolCapabilityDigest === a.tuple.catalogCapabilityDigest;
-}
-
-export function guidedNativeToolDefinitions(): ButlerToolDefinition[] {
-  return BUTLER_TOOLS.map(guidedToolDefinition);
+export function guidedNativeToolDefinitions(
+  exactResultReplayEnabled = false,
+): ButlerToolDefinition[] {
+  return BUTLER_TOOLS
+    .filter((tool) => exactResultReplayEnabled ||
+      tool.name !== readOperationResultsToolDefinition.name)
+    .map(guidedToolDefinition);
 }
 
 export function selectedModelRef(turn: TurnRecord): string {

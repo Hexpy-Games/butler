@@ -10,6 +10,29 @@ import {
   raceProviderRoundWithSignal,
   type ProviderRoundPolicy,
 } from "../shared/provider-round-guard.ts";
+import type {
+  ModelRouteRequestContext,
+  ProviderRouteCacheIdentity,
+  StableProviderCachePrefixContract,
+} from "../../../agent/btcc/ports/model-round.ts";
+import { establishFinalProviderCacheIdentity } from "./stable-provider-prefix.ts";
+
+export interface OpenAIProviderBudgetContext {
+  attribution?: PromptUsageAttribution;
+  roundIndex: number;
+  routeTransportAttemptOrdinal?: number;
+  providerRetryOrdinal?: number;
+  butlerData?: string;
+  admitBoundedProviderBody?: (serializedBytes: number) => Promise<void>;
+  stableProviderCachePrefix?: StableProviderCachePrefixContract;
+  routeContext?: ModelRouteRequestContext;
+  previousProviderRouteIdentity?: unknown;
+  onProviderRouteCacheIdentity?: (input: {
+    identity: ProviderRouteCacheIdentity;
+    serializedStablePrefix: string;
+  }) => void;
+  authMode?: import("./auth.ts").OpenAIAuthMode;
+}
 
 
 
@@ -19,7 +42,7 @@ export async function createOpenAIResponse(
   signal?: AbortSignal,
   authOverride?: OpenAIAuthOverride,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
-  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
+  budgetContext?: OpenAIProviderBudgetContext,
   providerRoundPolicy?: Partial<ProviderRoundPolicy>,
   retryAttempts?: number,
 ): Promise<OpenAIResponse> {
@@ -28,6 +51,7 @@ export async function createOpenAIResponse(
     signal,
     policy: openAIProviderRoundPolicy(providerRoundPolicy),
   });
+  let providerRetryOrdinal = 0;
   try {
     return await raceProviderRoundWithSignal(
       withModelApiRetry(
@@ -36,7 +60,12 @@ export async function createOpenAIResponse(
           guard.signal,
           auth,
           onProviderStreamEvent,
-          budgetContext,
+          {
+            ...budgetContext,
+            roundIndex: budgetContext?.roundIndex ?? 0,
+            providerRetryOrdinal: providerRetryOrdinal++,
+            authMode: auth.mode,
+          },
           () => guard.recordProgress(),
           () => guard.start(),
         ),
@@ -77,7 +106,7 @@ export async function createOpenAIResponseOnce(
   signal?: AbortSignal,
   authOverride?: OpenAIAuthOverride,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
-  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
+  budgetContext?: OpenAIProviderBudgetContext,
   onProviderRoundProgress?: () => void,
   onProviderRoundStarted?: () => void,
 ): Promise<OpenAIResponse> {
@@ -94,12 +123,13 @@ export async function createOpenAIResponseOnce(
     );
   }
   const { __butler_codex_stateless_input: _codexStatelessInput, ...rawOfficialBody } = body;
-  const officialBody: Record<string, any> = {
-    ...(budgetContext?.attribution?.requestedOutputTokens && rawOfficialBody.max_output_tokens === undefined
-      ? { max_output_tokens: budgetContext.attribution.requestedOutputTokens }
-      : {}),
-    ...rawOfficialBody,
-  };
+  const requestedOutput = budgetContext?.attribution?.requestedOutputTokens &&
+      rawOfficialBody.max_output_tokens === undefined
+    ? { max_output_tokens: budgetContext.attribution.requestedOutputTokens }
+    : {};
+  const officialBody: Record<string, any> = budgetContext?.stableProviderCachePrefix
+    ? { ...rawOfficialBody, ...requestedOutput }
+    : { ...requestedOutput, ...rawOfficialBody };
   const endpoint = safeEndpointLabel(getResponsesUrl());
   const model = typeof officialBody.model === "string" ? officialBody.model : undefined;
   const admittedRequest = admitSerializedProviderRequest({
@@ -112,6 +142,21 @@ export async function createOpenAIResponseOnce(
     usageAttribution: budgetContext?.attribution,
     roundIndex: budgetContext?.roundIndex,
   });
+  if (budgetContext?.stableProviderCachePrefix) {
+    budgetContext.onProviderRouteCacheIdentity?.(establishFinalProviderCacheIdentity({
+      body: officialBody,
+      serializedBody: admittedRequest.serialized_request,
+      stable: budgetContext.stableProviderCachePrefix,
+      route: budgetContext.routeContext,
+      providerId: "openai",
+      authMode: auth.mode,
+      serializerContract: "butler.openai-responses-final-json.v1",
+      previousIdentity: budgetContext.previousProviderRouteIdentity,
+    }));
+  }
+  await budgetContext?.admitBoundedProviderBody?.(
+    Buffer.byteLength(admittedRequest.serialized_request, "utf8"),
+  );
 
   let response: Response;
   try {
@@ -158,7 +203,7 @@ export async function createOpenAIResponseOnce(
     });
   }
 
-  return (await response.json()) as OpenAIResponse;
+  return await response.json() as OpenAIResponse;
 }
 
 

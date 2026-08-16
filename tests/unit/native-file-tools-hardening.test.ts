@@ -163,11 +163,11 @@ describe("native file tools hardening", () => {
   test("read_file byte truncation preserves UTF-8 boundaries", async () => {
     const workspace = await tmpWorkspace();
     await writeFile(join(workspace, "utf8.txt"), "한🙂글", "utf8");
-    const result = await executeReadFileTool({ arguments: { path: "utf8.txt", max_bytes: 4 } }, { workspacePath: workspace }) as { ok: true; content: string; byte_truncated: boolean };
+    const result = await executeReadFileTool({ arguments: { requests: [{ path: "utf8.txt", max_bytes: 4 }] } }, { workspacePath: workspace }) as { ok: true; files: Array<{ content: string; byte_truncated: boolean }> };
     expect(result.ok).toBe(true);
-    expect(result.byte_truncated).toBe(true);
-    expect(result.content).toBe("한");
-    expect(result.content.includes("�")).toBe(false);
+    expect(result.files[0]!.byte_truncated).toBe(true);
+    expect(result.files[0]!.content).toBe("한");
+    expect(result.files[0]!.content.includes("�")).toBe(false);
   });
 
   test("trusted session workspace overrides a model-supplied workspace root", async () => {
@@ -177,12 +177,12 @@ describe("native file tools hardening", () => {
     const result = await executeReadFileTool({
       arguments: {
         workspace_root: "/",
-        path: "owned.txt",
+        requests: [{ path: "owned.txt" }],
       },
-    }, { workspacePath: workspace }) as { ok: boolean; content?: string };
+    }, { workspacePath: workspace }) as { ok: boolean; files: Array<{ content?: string }> };
 
     expect(result.ok).toBe(true);
-    expect(result.content).toContain("runtime-owned workspace");
+    expect(result.files[0]!.content).toContain("runtime-owned workspace");
   });
 
   test("grep_files reports traversal caps as partial results", async () => {
@@ -199,11 +199,11 @@ describe("native file tools hardening", () => {
     const workspace = await tmpWorkspace();
     await mkdir(join(workspace, ".tmp", "generated"), { recursive: true });
     await mkdir(join(workspace, "packages", "feature", "src"), { recursive: true });
-    await mkdir(join(workspace, "packages", "feature", "scripts", "benchmarks"), { recursive: true });
+    await mkdir(join(workspace, "packages", "feature", "scripts", "fixtures"), { recursive: true });
     await mkdir(join(workspace, "tests"), { recursive: true });
     await writeFile(join(workspace, ".tmp", "generated", "cache.ts"), "prompt_cache_key", "utf8");
     await writeFile(join(workspace, "tests", "cache.test.ts"), "prompt_cache_key", "utf8");
-    await writeFile(join(workspace, "packages", "feature", "scripts", "benchmarks", "cache.ts"), "prompt_cache_key", "utf8");
+    await writeFile(join(workspace, "packages", "feature", "scripts", "fixtures", "cache.ts"), "prompt_cache_key", "utf8");
     await writeFile(join(workspace, "packages", "feature", "src", "cache.ts"), "prompt_cache_key", "utf8");
 
     const result = await executeGrepFilesTool({
@@ -222,7 +222,7 @@ describe("native file tools hardening", () => {
   test("evidence receipts distinguish read, write, and search operations", async () => {
     const workspace = await tmpWorkspace();
     await writeFile(join(workspace, "file.txt"), "needle", "utf8");
-    const readResult = await executeReadFileTool({ arguments: { path: "file.txt" } }, { workspacePath: workspace }) as unknown as { evidence_receipts: Array<{ covers: string[] }> };
+    const readResult = await executeReadFileTool({ arguments: { requests: [{ path: "file.txt" }] } }, { workspacePath: workspace }) as unknown as { evidence_receipts: Array<{ covers: string[] }> };
     const writeResult = await executeWriteFileTool({ arguments: { path: "out.txt", content: "ok" } }, { workspacePath: workspace }) as { evidence_receipts: Array<{ covers: string[] }> };
     const grepResult = await executeGrepFilesTool({ arguments: { pattern: "needle" } }, { workspacePath: workspace }) as { evidence_receipts: Array<{ covers: string[] }> };
     expect(readResult.evidence_receipts[0].covers).toContain("workspace_file_read");

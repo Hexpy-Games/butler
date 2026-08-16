@@ -89,7 +89,7 @@ test("runBtccAgentLoop sends an unknown OpenAI function call to the model as too
   expect(requests).toHaveLength(2);
   const continuationInput = requests[1]?.input as Array<Record<string, unknown>>;
   const toolOutput = continuationInput.find((item) =>
-    item.type === "function_call_output"
+    item.type === "function_call_output",
   );
   expect(toolOutput?.output).toBeString();
   expect(toolOutput?.output).toContain("tool_unavailable");
