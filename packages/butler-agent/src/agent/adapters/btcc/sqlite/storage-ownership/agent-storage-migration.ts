@@ -24,7 +24,6 @@ import {
 } from "./manifest.ts";
 import {
   copyAndValidateStatefulTables,
-  rejectUnknownSourceTables,
   validateAgentBtccDatabase,
   validateCanonicalManifest,
   validateReceiptSnapshot,
@@ -85,7 +84,6 @@ export async function prepareAgentBtccStorage(input: {
     migrateBtccSchema(target);
     target.exec(STORAGE_METADATA_SCHEMA);
     validateCanonicalManifest(target);
-    if (source) rejectUnknownSourceTables(source);
     target.transaction(() =>
       copyAndValidateStatefulTables(source, target!),
     ).immediate();

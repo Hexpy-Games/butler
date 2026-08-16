@@ -109,12 +109,6 @@ export function validateCanonicalManifest(db: Database): void {
   }
 }
 
-export function rejectUnknownSourceTables(db: Database): void {
-  const known = new Set<string>(AGENT_BTCC_STATEFUL_TABLES);
-  const unknown = btccTableNames(db).find((table) => !known.has(table));
-  if (unknown) throw new Error(`agent_btcc_migration_unknown_source_table:${unknown}`);
-}
-
 export function validateAgentBtccDatabase(db: Database): void {
   const quick = db.query<Record<string, string>, []>("PRAGMA quick_check").get();
   if (!quick || Object.values(quick)[0] !== "ok") {
@@ -157,13 +151,19 @@ function copyAndValidateTable(
   if (!source || !tableExists(source, table)) {
     return tableReceipt(target, table, tableColumns(target, table));
   }
+  const sourcePrimaryKey = primaryKeyColumns(source, table);
+  const targetPrimaryKey = primaryKeyColumns(target, table);
+  if (JSON.stringify(sourcePrimaryKey) !== JSON.stringify(targetPrimaryKey)) {
+    throw new Error(`agent_btcc_migration_primary_key_mismatch:${table}`);
+  }
   const sourceColumns = tableColumns(source, table);
   const targetColumnSet = new Set(tableColumns(target, table));
   const columns = sourceColumns.filter((column) => targetColumnSet.has(column));
-  if (columns.length !== sourceColumns.length) {
-    throw new Error(`agent_btcc_migration_target_column_missing:${table}`);
-  }
-  const selected = selectRows(source, table, columns);
+  const selected = projectAgentSourceRows(
+    source,
+    table,
+    selectRows(source, table, columns),
+  );
   if (selected.length > 0) {
     const names = columns.map(quoteIdentifier).join(", ");
     const placeholders = columns.map(() => "?").join(", ");
@@ -172,7 +172,7 @@ function copyAndValidateTable(
     );
     for (const row of selected) insert.run(...columns.map((column) => row[column]));
   }
-  const sourceReceipt = tableReceipt(source, table, columns);
+  const sourceReceipt = receiptForRows(table, columns, selected);
   const targetReceipt = tableReceipt(target, table, columns);
   if (sourceReceipt.rowCount !== targetReceipt.rowCount ||
     sourceReceipt.contentSha256 !== targetReceipt.contentSha256) {
@@ -186,13 +186,60 @@ function tableReceipt(
   table: string,
   columns: string[],
 ): AgentBtccMigrationTableReceipt {
-  const rows = selectRows(db, table, columns);
+  return receiptForRows(table, columns, selectRows(db, table, columns));
+}
+
+function receiptForRows(
+  table: string,
+  columns: string[],
+  rows: Record<string, CopyableValue>[],
+): AgentBtccMigrationTableReceipt {
   const digest = createHash("sha256");
   for (const row of rows) {
     digest.update(JSON.stringify(columns.map((column) => encodeValue(row[column]))));
     digest.update("\n");
   }
   return { name: table, rowCount: rows.length, contentSha256: digest.digest("hex") };
+}
+
+function projectAgentSourceRows(
+  source: Database,
+  table: string,
+  rows: Record<string, CopyableValue>[],
+): Record<string, CopyableValue>[] {
+  if (table === "btcc_checkpoints") {
+    const activeLegacy = rows.find((row) =>
+      row.kind !== "runtime" && row.is_active === 1,
+    );
+    if (activeLegacy) {
+      throw new Error("agent_btcc_migration_active_legacy_checkpoint");
+    }
+    return rows.filter((row) => row.kind === "runtime");
+  }
+  if (table === "btcc_state_claims") {
+    const runtimeCheckpointIds = new Set(
+      source.query<{ checkpoint_id: string }, []>(`
+        SELECT checkpoint_id FROM btcc_checkpoints WHERE kind = 'runtime'
+      `).all().map((row) => row.checkpoint_id),
+    );
+    const activeLegacy = rows.find((row) =>
+      !runtimeCheckpointIds.has(String(row.checkpoint_id)) && row.status === "active",
+    );
+    if (activeLegacy) {
+      throw new Error("agent_btcc_migration_active_legacy_claim");
+    }
+    return rows.filter((row) => runtimeCheckpointIds.has(String(row.checkpoint_id)));
+  }
+  if (table === "btcc_turns") {
+    return rows.map((row) => {
+      if (row.final_disposition !== "deferred") return row;
+      if (row.semantic_state !== "delivered") {
+        throw new Error("agent_btcc_migration_invalid_deferred_turn");
+      }
+      return { ...row, final_disposition: "completed" };
+    });
+  }
+  return rows;
 }
 
 function selectRows(
