@@ -20,7 +20,7 @@ recovery, memory, search, automation, and diagnostics.
 - `core-command.ts`: Core command handlers.
 - `operator-command.ts`: support and recovery handlers.
 - `advanced-command.ts`: stable advanced command handlers.
-- `telegram.ts` and `private-env.ts`: CLI-only Telegram and private env helpers.
+- `private-env.ts`: CLI-only private environment helpers.
 
 ## Boundaries
 

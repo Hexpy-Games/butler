@@ -12,7 +12,6 @@ contracts remain outside this folder.
 - `project-ledger/`: Butler's adapter for the portable Project Ledger CLI.
 - `search/`: web search planning, provider selection, and page reading.
 - `skills/`: bundled skill catalog loading and selection.
-- `telegram/`: Telegram command package and topic helper code.
 
 ## Boundaries
 

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,37 +60,6 @@ function runLedger(data: string, projectPath: string, args: string[]): void {
     encoding: "utf8",
   });
   if (result.status !== 0) throw new Error(result.stderr || `project-ledger ${args[0]} failed`);
-}
-
-function appProjectDatabase(path: string, workspacePath: string): void {
-  const db = new Database(path);
-  db.run(`
-    CREATE TABLE projects (
-      id TEXT NOT NULL,
-      display_name TEXT NOT NULL,
-      workspace_path TEXT NOT NULL,
-      workspace_label TEXT NOT NULL,
-      safe_path_label TEXT NOT NULL,
-      ledger_project_id TEXT,
-      archived INTEGER NOT NULL DEFAULT 0,
-      updated_at TEXT NOT NULL
-    )
-  `);
-  db.query(`
-    INSERT INTO projects (
-      id, display_name, workspace_path, workspace_label, safe_path_label,
-      ledger_project_id, archived, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, 0, ?)
-  `).run(
-    "project-1",
-    "Source Project",
-    workspacePath,
-    "Source Project",
-    "source-project",
-    "project-1",
-    new Date().toISOString(),
-  );
-  db.close();
 }
 
 function result(overrides: Partial<CommandResult> = {}): CommandResult {
@@ -159,8 +127,11 @@ describe("session-owned Git worktree lifecycle", () => {
     expect(listed).toMatchObject({ ok: true });
     expect((listed as { files?: Array<{ path?: string; bytes?: number }> }).files)
       .toContainEqual({ path: "rebound-list.txt", bytes: 8 });
-    const reread = await fileHandlers.read_file({ name: "read_file", args: { path: "rebound-list.txt" }, rawArguments: "{}" });
-    expect(reread).toMatchObject({ ok: true, path: "rebound-list.txt", content: "rebound\n" });
+    const reread = await fileHandlers.read_file({ name: "read_file", args: { requests: [{ path: "rebound-list.txt" }] }, rawArguments: "{}" });
+    expect(reread).toMatchObject({
+      ok: true,
+      files: [{ ok: true, path: "rebound-list.txt", content: "rebound\n" }],
+    });
     expect(store.getBySessionId("session-1")?.metadata?.sessionWorkspace).toMatchObject({
       schema: "butler.session-workspace-binding.v1",
       ownership: "session",
@@ -173,8 +144,6 @@ describe("session-owned Git worktree lifecycle", () => {
     const store = bindingStore(fixture.data, fixture.repository);
     const reference = createWorkspaceReference(fixture.repository);
     const ledgerPath = initProjectLedger(fixture.data, "project-1");
-    const appMessageDbPath = join(fixture.root, "app-message.sqlite");
-    appProjectDatabase(appMessageDbPath, fixture.repository);
     runLedger(fixture.data, ledgerPath, [
       "work",
       "create",
@@ -190,7 +159,6 @@ describe("session-owned Git worktree lifecycle", () => {
     const executor = createButlerToolExecutor({
       butlerHome: process.cwd(),
       butlerData: fixture.data,
-      appMessageDbPath,
       workspacePath: fixture.repository,
       sessionId: "session-1",
       projectId: "project-1",
@@ -658,7 +626,6 @@ describe("session-owned Git worktree lifecycle", () => {
         const resolveBase = createGuidedPersistentEffectResolver({
           butlerHome: fixture.root,
           butlerData: fixture.data,
-          appMessageDbPath: join(fixture.root, "app-message.sqlite"),
           workspacePath: fixture.repository,
           workspaceReference,
           sessionId,
@@ -697,7 +664,6 @@ describe("session-owned Git worktree lifecycle", () => {
         const executeButlerTool = createButlerToolExecutor({
           butlerHome: fixture.root,
           butlerData: fixture.data,
-          appMessageDbPath: join(fixture.root, "app-message.sqlite"),
           workspacePath: fixture.repository,
           workspaceReference,
           sessionId,
@@ -712,10 +678,11 @@ describe("session-owned Git worktree lifecycle", () => {
           signal,
           workScope: scope,
           authorizedNames: new Set(["bind_session_git_worktree"]),
-          visibleNames: new Set(["bind_session_git_worktree"]),
           describedToolIds: new Set(),
           durableWork: stores.durableWork,
           toolJournal: stores.guidedToolJournal,
+          workspacePath: workspaceReference.get,
+          butlerData: fixture.data,
           executeButlerTool,
         });
       };

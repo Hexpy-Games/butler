@@ -25,8 +25,8 @@ export function structuredToolResultModelPreview(input: {
     return output ? grepFilesPreview(output) : null;
   }
   if (input.toolName === "read_file") {
-    const output = toolPayload(input.output, ["content", "path"]);
-    return output ? readFilePreview(output) : null;
+    const output = toolPayload(input.output, ["files"]);
+    return output ? readFileBatchPreview(output) : null;
   }
   if (input.toolName === "read_conversation_context") {
     const output = toolPayload(input.output, ["messages", "summaries"]);
@@ -338,11 +338,31 @@ function grepFilesPreview(output: Record<string, unknown>): Record<string, unkno
   });
 }
 
+function readFileBatchPreview(output: Record<string, unknown>): Record<string, unknown> {
+  const files = Array.isArray(output.files)
+    ? output.files.slice(0, 20).flatMap((value) => {
+      const file = record(value);
+      return file ? [readFilePreview(file)] : [];
+    })
+    : [];
+  return compactUndefined({
+    tool_name: "read_file",
+    ok: typeof output.ok === "boolean" ? output.ok : undefined,
+    files,
+    files_requested: finiteNumber(output.files_requested),
+    files_read: finiteNumber(output.files_read),
+    truncated: output.truncated === true,
+    next_cursor: text(output.next_cursor),
+  });
+}
+
 function readFilePreview(output: Record<string, unknown>): Record<string, unknown> {
   const content = readFileContentPreview(output);
   return compactUndefined({
-    tool_name: "read_file",
+    ok: typeof output.ok === "boolean" ? output.ok : undefined,
     path: text(output.path),
+    error: text(output.error),
+    message: boundedText(output.message, 320),
     start_line: finiteNumber(output.start_line),
     end_line: finiteNumber(output.end_line),
     truncated: output.truncated === true,

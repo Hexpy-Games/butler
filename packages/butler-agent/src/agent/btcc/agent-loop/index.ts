@@ -10,7 +10,9 @@ export type {
   BtccTextToolCallDisposition,
   BtccAgentLoopToolCall,
   BtccAgentLoopToolDefinition,
+  BtccAgentLoopToolError,
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
 export { createProductionGuidedTurnAgent } from "./guided-turn-agent.ts";
+export { isGuidedWorkCloseoutError } from "./guided-work-closeout-error.ts";
 export type { ModelRoundPort } from "../ports/model-round.ts";

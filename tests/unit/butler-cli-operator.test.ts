@@ -127,26 +127,6 @@ function runCli(args: string[], butlerData: string, extraEnv: Record<string, str
   });
 }
 
-function runCliWithStdin(
-  args: string[],
-  butlerData: string,
-  stdin: string,
-  extraEnv: Record<string, string> = {},
-) {
-  return Bun.spawnSync(["node", cli, ...args, "--data", butlerData], {
-    cwd: root,
-    env: {
-      ...process.env,
-      ...extraEnv,
-      BUTLER_DATA: butlerData,
-      BUTLER_HOME: root,
-    },
-    stdin: Buffer.from(stdin),
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-}
-
 function stdoutText(result: ReturnType<typeof runCli>): string {
   return new TextDecoder().decode(result.stdout);
 }
@@ -251,10 +231,7 @@ test("gateway CLI manages app gateway settings through safe output", () => {
     const list = runCli(["gateway", "list", "--json"], butlerData);
     expect(list.exitCode).toBe(0);
     parsed = JSON.parse(stdoutText(list));
-    expect(parsed.data.gateways.map((gateway: { id: string }) => gateway.id)).toEqual([
-      "app",
-      "telegram",
-    ]);
+    expect(parsed.data.gateways.map((gateway: { id: string }) => gateway.id)).toEqual(["app"]);
 
     const status = runCli(["gateway", "status", "app"], butlerData);
     expect(status.exitCode).toBe(0);
@@ -275,123 +252,6 @@ test("gateway CLI manages app gateway settings through safe output", () => {
     rmSync(butlerData, { recursive: true, force: true });
   }
 });
-
-test("gateway CLI manages Telegram credentials and embedded lifecycle safely", () => {
-  const butlerData = tempRoot();
-  try {
-    const freshStatus = runCli(["gateway", "status", "telegram", "--json"], butlerData);
-    expect(freshStatus.exitCode).toBe(0);
-    let parsed = JSON.parse(stdoutText(freshStatus));
-    expect(parsed.data).toMatchObject({
-      enabled: false,
-      configured: false,
-      running: false,
-      status: "disabled",
-    });
-    expect(parsed.data.nextActions).toEqual(["butler gateway enable telegram"]);
-
-    const token = "123456:test-secret-token";
-    const credential = runCliWithStdin([
-      "gateway",
-      "credential",
-      "set",
-      "telegram",
-      "--token-stdin",
-      "--json",
-    ], butlerData, `${token}\n`);
-    expect(credential.exitCode).toBe(0);
-    expect(stdoutText(credential)).not.toContain(token);
-    parsed = JSON.parse(stdoutText(credential));
-    expect(parsed.data).toMatchObject({
-      gateway: "telegram",
-      tokenStored: true,
-      tokenValueIncluded: false,
-    });
-
-    const configured = runCli([
-      "gateway",
-      "configure",
-      "telegram",
-      "--chat-id",
-      "12345",
-      "--format",
-      "plain",
-      "--json",
-    ], butlerData);
-    expect(configured.exitCode).toBe(0);
-    expect(stdoutText(configured)).not.toContain(token);
-    expect(stdoutText(configured)).not.toContain("12345");
-    parsed = JSON.parse(stdoutText(configured));
-    expect(parsed.data.config).toMatchObject({
-      chatPaired: true,
-      defaultFormat: "plain",
-    });
-
-    const privateEnv = readFileSync(join(butlerData, ".env"), "utf8");
-    expect(privateEnv).toContain("TELEGRAM_BOT_TOKEN");
-    expect(privateEnv).toContain("TELEGRAM_CHAT_ID");
-    const compatibility = JSON.parse(
-      readFileSync(join(butlerData, "butler.config.json"), "utf8"),
-    );
-    expect(compatibility.telegram).toMatchObject({
-      groupId: "12345",
-      defaultFormat: "plain",
-    });
-
-    const status = runCli(["gateway", "status", "telegram", "--json"], butlerData);
-    expect(status.exitCode).toBe(0);
-    parsed = JSON.parse(stdoutText(status));
-    expect(parsed.data).toMatchObject({
-      enabled: true,
-      running: true,
-      status: "embedded",
-      lifecycle: "embedded",
-      configured: true,
-      credentials: {
-        botToken: true,
-      },
-    });
-    expect(stdoutText(status)).not.toContain(token);
-    expect(stdoutText(status)).not.toContain("12345");
-
-    const restartWithoutYes = runCli(["gateway", "restart", "telegram", "--json"], butlerData);
-    expect(restartWithoutYes.exitCode).toBe(2);
-    expect(JSON.parse(stdoutText(restartWithoutYes)).error.code).toBe("invalid_arguments");
-
-    const restart = runCli(["gateway", "restart", "telegram", "--yes", "--json"], butlerData);
-    expect(restart.exitCode).toBe(0);
-    parsed = JSON.parse(stdoutText(restart));
-    expect(parsed.data).toMatchObject({
-      gateway: "telegram",
-      lifecycle: "embedded",
-      restarted: false,
-      restartRequired: true,
-      serviceCommand: "butler restart",
-    });
-
-    const unpairWithoutYes = runCli(["gateway", "unpair", "telegram", "--json"], butlerData);
-    expect(unpairWithoutYes.exitCode).toBe(2);
-    const unpair = runCli(["gateway", "unpair", "telegram", "--yes", "--json"], butlerData);
-    expect(unpair.exitCode).toBe(0);
-    parsed = JSON.parse(stdoutText(unpair));
-    expect(parsed.data).toMatchObject({
-      gateway: "telegram",
-      chatPaired: false,
-      tokenConfigured: true,
-    });
-
-    const disabled = runCli(["gateway", "disable", "telegram", "--json"], butlerData);
-    expect(disabled.exitCode).toBe(0);
-    parsed = JSON.parse(stdoutText(disabled));
-    expect(parsed.data).toMatchObject({
-      enabled: false,
-      status: "disabled",
-      restartRecommended: false,
-    });
-  } finally {
-    rmSync(butlerData, { recursive: true, force: true });
-  }
-}, 15_000);
 
 test("operator personalization commands persist naming profile privately", () => {
   const butlerData = tempRoot();
@@ -559,34 +419,19 @@ test("operator model and auth commands use canonical refs and avoid secret leaka
   }
 });
 
-test("operator transport and Telegram commands are testable without live Telegram", () => {
+test("operator mock transport command is testable without an external service", () => {
   const butlerData = tempRoot();
   try {
-    writeFileSync(join(butlerData, ".env"), [
-      "TELEGRAM_BOT_TOKEN=123:secret",
-      "TELEGRAM_CHAT_ID=456",
-      "",
-    ].join("\n"));
-
     const status = runCli(["transport", "status", "--json"], butlerData);
     expect(status.exitCode).toBe(0);
     let parsed = JSON.parse(stdoutText(status));
-    expect(parsed.data.transports.find((item: { id: string }) => item.id === "telegram")).toMatchObject({
-      configured: true,
-      paired: true,
-    });
-    expect(stdoutText(status)).not.toContain("123:secret");
+    expect(parsed.data.transports.map((item: { id: string }) => item.id)).toEqual(["mock"]);
 
     const mock = runCli(["transport", "test", "--transport", "mock", "--json"], butlerData);
     expect(mock.exitCode).toBe(0);
     parsed = JSON.parse(stdoutText(mock));
     expect(parsed.data.ok).toBe(true);
 
-    const unpair = runCli(["telegram", "unpair", "--yes", "--json"], butlerData);
-    expect(unpair.exitCode).toBe(0);
-    parsed = JSON.parse(stdoutText(unpair));
-    expect(parsed.data.removed).toBe(true);
-    expect(readFileSync(join(butlerData, ".env"), "utf8")).not.toContain("TELEGRAM_CHAT_ID");
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
@@ -1771,7 +1616,7 @@ test("operator logs --follow streams appended safe lines", async () => {
     }
     expect(stdout).toContain("[butler-out.log] initial line");
 
-    writeFileSync(logPath, "next TELEGRAM_BOT_TOKEN=super-secret\n", {
+    writeFileSync(logPath, "next OPENAI_API_KEY=super-secret\n", {
       encoding: "utf8",
       flag: "a",
     });
@@ -1788,7 +1633,7 @@ test("operator logs --follow streams appended safe lines", async () => {
     stdout += decoder.decode();
 
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("[butler-out.log] next TELEGRAM_BOT_TOKEN=[redacted]");
+    expect(stdout).toContain("[butler-out.log] next OPENAI_API_KEY=[redacted]");
     expect(stdout).not.toContain("super-secret");
     expect(stderr).toBe("");
   } finally {

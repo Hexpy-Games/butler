@@ -40,7 +40,11 @@ export function getButlerData(): string {
 
 
 
-export function openAIInputWithAttachments(prompt: string, attachments?: AttachmentRef[]): unknown {
+export function openAIInputWithAttachments(
+  prompt: string,
+  attachments?: AttachmentRef[],
+  promptAlreadyIncludesAttachmentContext = false,
+): unknown {
   const imageParts = (attachments ?? [])
     .map((attachment) => attachmentImageDataUrl(attachment))
     .filter((url): url is string => Boolean(url))
@@ -48,7 +52,9 @@ export function openAIInputWithAttachments(prompt: string, attachments?: Attachm
       type: "input_image",
       image_url: imageUrl,
     }));
-  const text = promptWithAttachmentContext(prompt, attachments);
+  const text = promptAlreadyIncludesAttachmentContext
+    ? prompt
+    : promptWithAttachmentContext(prompt, attachments);
   if (imageParts.length === 0) return text;
   return [{
     role: "user",

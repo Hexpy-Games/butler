@@ -16,55 +16,7 @@ NATIVE_MAIN_STATE_FILE="$BUTLER_DATA/state/butler-main-native.json"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [stop-butler] $*"; }
 
-telegram_gateway_enabled() {
-  local settings="$BUTLER_DATA/gateways/telegram.json"
-  [ -f "$settings" ] || return 1
-  if command -v jq >/dev/null 2>&1; then
-    local enabled
-    enabled="$(jq -r 'if has("enabled") then .enabled else false end' "$settings" 2>/dev/null || echo false)"
-    [ "$enabled" = "true" ]
-    return
-  fi
-  grep -Eq '"enabled"[[:space:]]*:[[:space:]]*true' "$settings" 2>/dev/null
-}
-
 log "Stopping all butler services..."
-
-# Send shutdown notification via Telegram (before killing anything)
-_notify_shutdown() {
-  telegram_gateway_enabled || return 0
-  if [ -f "$BUTLER_DATA/.env" ]; then
-    set +u; source "$BUTLER_DATA/.env"; set -u
-  fi
-  local TG_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
-  if [ -z "$TG_TOKEN" ]; then return 0; fi
-
-  # Collect all chat IDs: access.json allowlist first, fallback to env/config
-  local ACCESS_FILE="${BUTLER_DATA:-$HOME/.butler}/config/telegram-access.json"
-  local CHAT_IDS=()
-  if [ -f "$ACCESS_FILE" ]; then
-    while IFS= read -r cid; do
-      [ -n "$cid" ] && CHAT_IDS+=("$cid")
-    done < <(jq -r '.allowFrom[]? // empty' "$ACCESS_FILE" 2>/dev/null)
-  fi
-  if [ ${#CHAT_IDS[@]} -eq 0 ]; then
-    local TG_CHAT
-    TG_CHAT=$(jq -r '.telegram.groupId // empty' "$BUTLER_DATA/butler.config.json" 2>/dev/null || echo "")
-    if [ -z "$TG_CHAT" ]; then
-      TG_CHAT="${TELEGRAM_CHAT_ID:-}"
-    fi
-    [ -z "$TG_CHAT" ] && return 0
-    CHAT_IDS=("$TG_CHAT")
-  fi
-
-  for TG_CHAT in "${CHAT_IDS[@]}"; do
-    curl -sf -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-      -d "chat_id=${TG_CHAT}" \
-      --data-urlencode "text=🛑 Butler shutting down (controlled stop)" >/dev/null 2>&1 || true
-  done
-  log "Shutdown notification sent via Telegram to ${#CHAT_IDS[@]} recipient(s)"
-}
-_notify_shutdown
 
 # 0. Set shutdown flag so start-butler.sh's while-loop exits cleanly (code 0)
 SHUTDOWN_FLAG="$BUTLER_DATA/locks/butler-shutdown"
@@ -88,11 +40,9 @@ fi
 # 2. Kill butler runtime processes by name
 log "Killing butler processes..."
 pkill -f "butler-mcp-server" 2>/dev/null || true
-pkill -f "butler-telegram" 2>/dev/null || true
 pkill -f "butler-embed-server" 2>/dev/null || true
 # Fallback patterns for processes without exec -a naming
 pkill -f ".butler/packages/butler-agent/src/interfaces/mcp-server/server.ts" 2>/dev/null || true
-pkill -9 -f "packages/butler-agent/src/integrations/telegram.*server" 2>/dev/null || true
 
 # Native services are normally stopped through durable supervisor state above.
 # These patterns recover from older or damaged state files where a wrapper pid
@@ -107,7 +57,7 @@ pkill -TERM -f "$BUTLER_HOME/packages/butler-agent/src/interfaces/mcp-server/[w]
 
 # 3. Wait for processes to die
 for i in $(seq 1 20); do
-  if ! pgrep -f "butler-mcp-server|butler-telegram|butler-embed-server|.butler/packages/butler-agent/src/interfaces/mcp-server" >/dev/null 2>&1; then
+  if ! pgrep -f "butler-mcp-server|butler-embed-server|.butler/packages/butler-agent/src/interfaces/mcp-server" >/dev/null 2>&1; then
     break
   fi
   sleep 0.5

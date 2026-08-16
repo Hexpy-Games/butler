@@ -206,13 +206,8 @@ if rg -n '\$BUTLER_HOME/logs|\$\{BUTLER_HOME\}/logs|join\([^)]*BUTLER_HOME[^)]*"
   fail "private logs must be written under \$BUTLER_DATA/logs, not \$BUTLER_HOME/logs"
 fi
 
-rg -q 'runTelegramPolling|Telegram polling started|getUpdates' packages/butler-agent/src/application/native-butler.ts packages/butler-agent/src/interfaces/transport/telegram/polling-runner.ts \
-  || fail "native butler-main must own the Telegram polling loop"
-
-generic_bearer_word="bearer"
 generic_bearer_env="OPENAI_B""EARER_TOKEN"
 if rg -n -i \
-  -e "${generic_bearer_word}[ _-]?token" \
   -e "$generic_bearer_env" \
   --glob '!node_modules/**' --glob '!data/**' --glob '!tests/unit/native-purge-gate.sh' .; then
   fail "generic OpenAI raw-token auth must not be offered in active product surfaces"

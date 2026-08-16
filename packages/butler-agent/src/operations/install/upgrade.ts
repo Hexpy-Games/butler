@@ -89,7 +89,7 @@ export function createUpgradeReport(input: {
     "Verify source checkout and private data directories.",
     "Prepare or repair the managed Butler runtime.",
     "Install workspace dependencies with the managed runtime.",
-    "Validate OpenAI/Codex auth and Telegram pairing independently.",
+    "Validate OpenAI/Codex authentication independently.",
     "Restart Butler Agent services after successful checks.",
   ];
   if (dryRun?.removedFields.length) {
@@ -108,7 +108,6 @@ export function createUpgradeReport(input: {
       "managed-runtime",
       "workspace-dependencies",
       "openai-auth",
-      "telegram-pairing",
       "native-services",
       "config",
     ],

@@ -3,6 +3,8 @@ import {
   runBtccAgentLoop,
   type BtccAgentLoopToolDefinition,
 } from "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
+import { createRoundToolSurfaceSnapshot } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/round-tool-surface.ts";
 import type {
   ModelRoundMessage,
   ModelRoundPort,
@@ -10,6 +12,8 @@ import type {
   ModelRoundResult,
   ModelRoundToolCall,
 } from "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
+import { readFileToolDefinition } from
+  "../../packages/butler-agent/src/agent/tools/file-tools/read_file/index.ts";
 
 const echoTool: BtccAgentLoopToolDefinition = {
   name: "echo",
@@ -95,6 +99,78 @@ test("BTCC returns a text-only model response", async () => {
     "model_call",
     "model_response",
   ]);
+});
+
+test("BTCC awaits one round tool snapshot and uses it for provider and execution", async () => {
+  const secondTool: BtccAgentLoopToolDefinition = {
+    ...echoTool,
+    name: "second_echo",
+  };
+  const observedTools: string[][] = [];
+  const executed: string[] = [];
+  let snapshotIndex = 0;
+  const snapshots = [
+    createRoundToolSurfaceSnapshot([echoTool]),
+    createRoundToolSurfaceSnapshot([secondTool]),
+    createRoundToolSurfaceSnapshot([secondTool]),
+  ] as const;
+  const { port, requests } = scriptedModelRound([
+    (request) => {
+      observedTools.push(request.tools.map((tool) => tool.name));
+      return response({ toolCalls: [call("first", "echo", { message: "one" })] });
+    },
+    (request) => {
+      observedTools.push(request.tools.map((tool) => tool.name));
+      return response({ toolCalls: [call("stale", "echo", { message: "two" })] });
+    },
+    (request) => {
+      observedTools.push(request.tools.map((tool) => tool.name));
+      return response({ text: "done" });
+    },
+  ]);
+
+  const result = await runBtccAgentLoop({
+    prompt: "run the admitted tool",
+    model: "test/model",
+    tools: [echoTool],
+    resolveTools: async () => snapshots[snapshotIndex++]!,
+    modelRound: port,
+    executeTool: async (toolCall) => {
+      executed.push(toolCall.name);
+      return { ok: true };
+    },
+  });
+
+  expect(result.finalText).toBe("done");
+  expect(observedTools).toEqual([["echo"], ["second_echo"], ["second_echo"]]);
+  expect(requests.map((request) => request.toolSurfaceDigest)).toEqual([
+    snapshots[0].digest, snapshots[1].digest, snapshots[2].digest,
+  ]);
+  expect(executed).toEqual(["echo"]);
+  expect(JSON.stringify(toolMessages(requests[2]))).toContain("tool_unavailable");
+});
+
+test("BTCC rejects an incoherent round tool snapshot before provider dispatch", async () => {
+  const snapshot = createRoundToolSurfaceSnapshot([echoTool]);
+  let providerCalls = 0;
+
+  await expect(runBtccAgentLoop({
+    prompt: "do not dispatch",
+    model: "test/model",
+    tools: [echoTool],
+    resolveTools: () => ({ ...snapshot, digest: "0".repeat(64) }),
+    modelRound: {
+      async runRound() {
+        providerCalls += 1;
+        return response({ text: "unexpected" });
+      },
+    },
+    executeTool: async () => ({ ok: true }),
+  })).rejects.toMatchObject({
+    name: "RoundToolSurfaceError",
+    code: "round_tool_surface_snapshot_mismatch",
+  });
+  expect(providerCalls).toBe(0);
 });
 
 test("BTCC does not create an empty-response retry loop", async () => {
@@ -191,7 +267,7 @@ test("BTCC keeps bounded web evidence in the model message and the full result i
     .toContain("RAW_WEB_RESULT_SHOULD_STAY_DURABLE");
 });
 
-test("BTCC serializes schema validation failures as structured observations", async () => {
+test("BTCC serializes schema validation failures as compact typed errors", async () => {
   const modelInputs: string[] = [];
   let executed = 0;
   const { port } = scriptedModelRound([
@@ -227,10 +303,11 @@ test("BTCC serializes schema validation failures as structured observations", as
   expect(executed).toBe(0);
   expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(2);
   const context = modelInputs.slice(1).join("\n");
-  expect(context).toContain("\"observation_kind\":\"tool_invalid_arguments\"");
+  expect(context).toContain("\"code\":\"invalid_arguments\"");
   expect(context).toContain("Tool echo requires argument: message");
   expect(context).toContain("Tool echo received unsupported argument(s): extra");
-  expect(context).toContain("\"model_visible_content\"");
+  expect(context).not.toContain("model_visible_content");
+  expect(context).not.toContain("Arguments:");
 });
 
 test("BTCC rejects JSON Schema type, enum, and array violations as ordinary tool observations", async () => {
@@ -297,7 +374,7 @@ test("BTCC rejects JSON Schema type, enum, and array violations as ordinary tool
   expect(context).toContain("Invalid enum value at $.mode");
   expect(context).toContain("Expected at least 2 items at $.items");
   expect(context).toContain("Expected string at $.items[1]");
-  expect(context).toContain("\"observation_kind\":\"tool_invalid_arguments\"");
+  expect(context).toContain("\"code\":\"invalid_arguments\"");
 });
 
 test("BTCC keeps tool validation feedback after provider compaction", async () => {
@@ -332,8 +409,8 @@ test("BTCC keeps tool validation feedback after provider compaction", async () =
 
   expect(result.finalText).toBe("I can correct the search call.");
   expect(providerToolContent).toContain("Tool web_search requires argument: query");
-  expect(providerToolContent).toContain("tool_invalid_arguments");
-  expect(providerToolContent).toContain("Use this observation to retry");
+  expect(providerToolContent).toContain('"code":"invalid_arguments"');
+  expect(providerToolContent).not.toContain("Use this observation to retry");
 });
 
 test("BTCC preserves the exact structured successful result for the next round", async () => {
@@ -392,7 +469,7 @@ test("BTCC exposes assistant text before executing selected tools", async () => 
     "tool:echo",
   ]);
   expect(result.messages.some((message) =>
-    message.role === "assistant" && message.content === "I will run the echo check now."
+    message.role === "assistant" && message.content === "I will run the echo check now.",
   )).toBe(true);
 });
 
@@ -499,8 +576,10 @@ test("BTCC returns validation errors as model-visible tool results", async () =>
   });
 
   const toolEvent = result.events.find((event) => event.type === "tool_result");
-  expect(toolEvent?.toolResult?.ok).toBe(false);
-  expect(toolEvent?.toolResult?.error).toContain("requires argument");
+  const toolResult = toolEvent?.toolResult;
+  expect(toolResult?.ok).toBe(false);
+  if (toolResult?.ok !== false) throw new Error("expected failed tool result");
+  expect(toolResult.error.message).toContain("requires argument");
   expect(observed).toContain("requires argument");
   expect(result.finalText).toBe("I saw the validation error.");
 });
@@ -526,11 +605,107 @@ test("BTCC converts thrown tool errors into model-visible tool results", async (
   });
 
   const toolEvent = result.events.find((event) => event.type === "tool_result");
-  expect(toolEvent?.toolResult?.ok).toBe(false);
-  expect(toolEvent?.toolResult?.error).toBe("boom");
+  const toolResult = toolEvent?.toolResult;
+  expect(toolResult?.ok).toBe(false);
+  if (toolResult?.ok !== false) throw new Error("expected failed tool result");
+  expect(toolResult.error).toEqual({
+    code: "tool_execution_failed",
+    message: "boom",
+  });
   expect(observed).toContain('"ok":false');
   expect(observed).toContain("boom");
   expect(result.finalText).toBe("The tool failed truthfully.");
+});
+
+test("BTCC promotes resolved logical failures and exposes one compact error", async () => {
+  let observed: Record<string, unknown> | undefined;
+  const rawFailure = {
+    ok: false,
+    error: {
+      code: "invalid_work_stage_transition",
+      message: "Result review is required before completion review.",
+      current_stage: "review",
+      next_action: "Review the result.",
+    },
+    work: {
+      work_id: "private-work-id",
+      actions: [{ action_key: "private-action", status: "done" }],
+    },
+    evidence_capability_receipts: [{ private: "receipt" }],
+  };
+  const { port } = scriptedModelRound([
+    response({ toolCalls: [call("call-1", "echo", { message: "hello" })] }),
+    (request) => {
+      observed = JSON.parse(toolMessages(request)[0]?.content ?? "null");
+      return response({ text: "I saw one clear failure." });
+    },
+  ]);
+
+  const result = await runBtccAgentLoop({
+    prompt: "logical failure",
+    model: "test/model",
+    tools: [echoTool],
+    modelRound: port,
+    executeTool: async () => rawFailure,
+  });
+
+  const toolResult = result.events.find((event) =>
+    event.type === "tool_result")?.toolResult;
+  expect(toolResult).toMatchObject({
+    ok: false,
+    error: {
+      code: "invalid_work_stage_transition",
+      message: "Result review is required before completion review.",
+    },
+    output: rawFailure,
+  });
+  expect(observed).toEqual({
+    ok: false,
+    error: {
+      code: "invalid_work_stage_transition",
+      message: "Result review is required before completion review.",
+    },
+  });
+  expect(JSON.stringify(observed)).not.toContain("private-work-id");
+  expect(JSON.stringify(observed)).not.toContain("receipt");
+});
+
+test("BTCC rejects removed read_file aliases without executing or echoing arguments", async () => {
+  let executions = 0;
+  let observed: Record<string, unknown> | undefined;
+  const { port } = scriptedModelRound([
+    response({ toolCalls: [call("read-invalid", "read_file", {
+      path: "private-name.txt",
+      requests: [{ path: "also-private.txt" }],
+    })] }),
+    (request) => {
+      observed = JSON.parse(toolMessages(request)[0]?.content ?? "null");
+      return response({ text: "I will use requests only." });
+    },
+  ]);
+
+  await runBtccAgentLoop({
+    prompt: "read one file",
+    model: "test/model",
+    tools: [readFileToolDefinition],
+    modelRound: port,
+    executeTool: async () => {
+      executions += 1;
+      return { ok: true };
+    },
+  });
+
+  expect(executions).toBe(0);
+  expect(observed).toEqual({
+    ok: false,
+    error: {
+      code: "invalid_arguments",
+      message: "Tool read_file received unsupported argument(s): path",
+      field: "path",
+    },
+  });
+  expect(JSON.stringify(observed)).not.toContain("private-name.txt");
+  expect(JSON.stringify(observed)).not.toContain("also-private.txt");
 });
 
 test("BTCC runs concurrency-safe tool calls in parallel and preserves result order", async () => {
@@ -872,7 +1047,7 @@ test("BTCC keeps repeated invalid schema arguments as structured observations", 
   expect(result.finalText).not.toContain("same tool call failed repeatedly");
   expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(3);
   const context = modelInputs.slice(1).join("\n");
-  expect(context).toContain("\"observation_kind\":\"tool_invalid_arguments\"");
+  expect(context).toContain("\"code\":\"invalid_arguments\"");
   expect(context).toContain("Tool echo requires argument: message");
 });
 

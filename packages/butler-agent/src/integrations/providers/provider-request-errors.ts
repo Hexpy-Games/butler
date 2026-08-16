@@ -479,6 +479,33 @@ export function providerNetworkError(input: {
   });
 }
 
+export function providerStreamInterruptedError(input: {
+  provider: string;
+  api: string;
+  error: unknown;
+  endpoint?: string;
+  model?: string;
+  admission?: ModelRequestAdmissionReceipt;
+  headers?: Pick<Headers, "get">;
+}): ModelProviderRequestError {
+  const label = providerLabel(input.provider);
+  return new ModelProviderRequestError({
+    code: "provider_stream_interrupted",
+    message: `${label} response stream ended before completion. Butler will apply the configured provider recovery policy.`,
+    provider: input.provider,
+    api: input.api,
+    endpoint: input.endpoint,
+    model: input.model,
+    retryable: true,
+    cause: safeErrorText(errorMessage(input.error)),
+    requestGeneration: input.admission?.plan.generation,
+    measuredInputTokens: input.admission?.plan.compiled_input_tokens,
+    registeredInputCapacity: input.admission?.plan.input_capacity_tokens,
+    requestHash: input.admission?.serialized_request_sha256,
+    providerRequestId: providerRequestId(input.headers),
+  });
+}
+
 export function providerEmptyResponseError(input: {
   provider: string;
   api: string;

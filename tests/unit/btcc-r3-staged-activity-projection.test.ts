@@ -99,7 +99,6 @@ test("completion review projects a distinct validation activity without another 
         subject: "completion",
         verdict: "accept",
         summary: "원 요청, 계획, 검사 결과와 실제 산출물이 모두 일치합니다.",
-        next_stage: "reporting",
       },
     }],
   });
@@ -110,7 +109,6 @@ test("completion review projects a distinct validation activity without another 
       subject: "completion",
       verdict: "accept",
       summary: "원 요청, 계획, 검사 결과와 실제 산출물이 모두 일치합니다.",
-      next_stage: "reporting",
     },
   });
 
@@ -142,7 +140,6 @@ test("accepted completion projects the model-authored reporting direction after 
     subject: "completion",
     verdict: "accept",
     summary: "원 요청과 검증 결과가 모두 일치합니다.",
-    next_stage: "reporting",
   };
   projection.observeToolBatch({
     text: "변경 내용, 검증 결과, 운영 반영 순서로 정리해 보고합니다.",
@@ -399,7 +396,6 @@ test("ordinary tools across model rounds inherit the accepted checkpoint activit
     },
   });
   const checkpointArgs = {
-    next_stage: "execution",
     public_summary: "프로필 연결 정책과 표현 경로를 한 작업으로 수정합니다.",
     next_step: "관련 구현을 확인하고 수정한 뒤 검증합니다.",
     action_updates: [{
@@ -420,12 +416,12 @@ test("ordinary tools across model rounds inherit the accepted checkpoint activit
 
   const rounds = [
     [
-      { name: "read_file", args: { path: "one.ts" } },
+      { name: "read_file", args: { requests: [{ path: "one.ts" }] } },
       { name: "grep_files", args: { pattern: "profile" } },
     ],
     [{ name: "project_ledger_create", args: { kind: "spec", id: "SPEC-1" } }],
     [{ name: "grep_files", args: { pattern: "decision" } }],
-    [{ name: "read_file", args: { path: "two.ts" } }],
+    [{ name: "read_file", args: { requests: [{ path: "two.ts" }] } }],
     [{ name: "edit_file", args: { path: "two.ts" } }],
     [{
       name: "run_command",
@@ -470,7 +466,6 @@ test("the active model-authored action owns prose summaries and deterministic op
     subject: "plan",
     verdict: "accept",
     summary: "검색 인덱스와 턴 판정을 함께 고치는 실행 계획을 승인합니다.",
-    next_stage: "execution",
     action_updates: [{ action_key: actionTitle, status: "active" }],
   };
   projection.observeToolBatch({
@@ -486,7 +481,7 @@ test("the active model-authored action owns prose summaries and deterministic op
 
   const first = {
     name: "read_file",
-    args: { path: "src/games/word-chain/game-handler.ts" },
+    args: { requests: [{ path: "src/games/word-chain/game-handler.ts" }] },
   };
   const fullSummary =
     "냥, 답변 경로부터 확인하고 검색 인덱스와 턴 판정을 함께 수정한 뒤 전체 검증까지 진행하겠다냐.";
@@ -542,9 +537,9 @@ test("unanchored empty ordinary rounds reuse one fallback activity across tool m
   });
   const bindings = [];
   for (const call of [
-    { name: "read_file", args: { path: "one.ts" } },
+    { name: "read_file", args: { requests: [{ path: "one.ts" }] } },
     { name: "grep_files", args: { pattern: "profile" } },
-    { name: "read_file", args: { path: "two.ts" } },
+    { name: "read_file", args: { requests: [{ path: "two.ts" }] } },
   ]) {
     projection.observeToolBatch({ text: "", toolCalls: [call] });
     bindings.push(await projection.observeTool({
@@ -572,7 +567,7 @@ test("unanchored assistant prose remains a full summary and never becomes the ac
   const summary = "냥, 우선 실제 구현 경로와 현재 상태를 충분히 확인한 뒤 필요한 변경과 검증을 이어가겠다냐.";
   const call = {
     name: "read_file",
-    args: { path: "src/games/word-chain/game-handler.ts" },
+    args: { requests: [{ path: "src/games/word-chain/game-handler.ts" }] },
   };
   projection.observeToolBatch({ text: summary, toolCalls: [call] });
   await projection.observeTool({ ...call, effectiveToolName: call.name });
@@ -750,7 +745,7 @@ test("final delivery has no activity API that can duplicate the answer body", ()
   expect(projection).not.toHaveProperty("publishFinal");
 });
 
-test("Plan and result subjects stay in Review while a checkpoint can display Validation", async () => {
+test("Review subjects project their entered Review or Validation activity", async () => {
   expect(await acceptedActivity("record_work_review", {
     subject: "plan",
     verdict: "accept",
@@ -767,9 +762,10 @@ test("Plan and result subjects stay in Review while a checkpoint can display Val
     displayStage: "review",
     title: "결과 검토",
   }));
-  expect(await acceptedActivity("record_work_checkpoint", {
-    next_stage: "validation",
-    public_summary: "전체 완료 조건을 확인합니다.",
+  expect(await acceptedActivity("record_work_review", {
+    subject: "completion",
+    verdict: "accept",
+    summary: "전체 완료 조건을 확인합니다.",
   })).toEqual(expect.objectContaining({
     displayStage: "validation",
     summary: "전체 완료 조건을 확인합니다.",
@@ -782,7 +778,7 @@ async function acceptedActivity(
 ): Promise<{ displayStage?: string; title: string; summary: string }> {
   const updates: Array<{ displayStage?: string; title: string; summary: string }> = [];
   const projection = createGuidedActivityProjection({
-    turnId: `turn-${name}-${String(args.subject ?? args.next_stage)}`,
+    turnId: `turn-${name}-${String(args.subject ?? name)}`,
     progress: {
       stateChanged() {},
       phaseActivityChanged(update) {

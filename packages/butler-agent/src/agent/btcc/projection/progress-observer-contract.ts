@@ -54,6 +54,7 @@ export interface BtccTurnProgressObserver {
     detailRows?: ToolProgressSummary["detailRows"];
     resultRef?: { id: string; sha256: string };
     byteLength?: number;
+    resultJson?: string;
   }): void | Promise<void>;
   modelRoundWaitingChanged?(update: {
     turnId: string;

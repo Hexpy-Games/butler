@@ -1,11 +1,6 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
+import { expect, test } from "bun:test";
+import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
-import {
-  listPersonaPresets,
-  setPersona,
-} from "../../packages/butler-agent/src/integrations/telegram/commands/butler.ts";
 
 const expectedPresets = [
   "archivist",
@@ -97,57 +92,4 @@ test("Korean persona presets use localized runtime voice signals instead of tran
       expect(line).not.toMatch(/\b(sir|Sir|Master|client|attendant|young master|my lord|nya)\b/);
     }
   }
-});
-
-let tempRoot = "";
-let tempData = "";
-let originalHome: string | undefined;
-let originalData: string | undefined;
-
-beforeEach(() => {
-  originalHome = process.env.BUTLER_HOME;
-  originalData = process.env.BUTLER_DATA;
-  tempRoot = join(tmpdir(), `butler-persona-home-${Date.now()}-${Math.random()}`);
-  tempData = join(tmpdir(), `butler-persona-data-${Date.now()}-${Math.random()}`);
-  process.env.BUTLER_HOME = tempRoot;
-  process.env.BUTLER_DATA = tempData;
-});
-
-afterEach(() => {
-  rmSync(tempRoot, { recursive: true, force: true });
-  rmSync(tempData, { recursive: true, force: true });
-  if (originalHome === undefined) delete process.env.BUTLER_HOME;
-  else process.env.BUTLER_HOME = originalHome;
-  if (originalData === undefined) delete process.env.BUTLER_DATA;
-  else process.env.BUTLER_DATA = originalData;
-});
-
-test("setPersona copies the template for the configured user language", () => {
-  mkdirSync(join(tempRoot, "resources", "personas", "templates", "en"), { recursive: true });
-  mkdirSync(join(tempRoot, "resources", "personas", "templates", "ko"), { recursive: true });
-  mkdirSync(tempData, { recursive: true });
-  writeFileSync(
-    join(tempRoot, "resources", "personas", "templates", "en", "butler.md"),
-    "---\nname: butler\npreview: \"English\"\n---\n\n# English Butler\n",
-    "utf8",
-  );
-  writeFileSync(
-    join(tempRoot, "resources", "personas", "templates", "ko", "butler.md"),
-    "---\nname: butler\npreview: \"한국어\"\n---\n\n# 한국어 Butler\n",
-    "utf8",
-  );
-  writeFileSync(join(tempData, "butler.config.json"), JSON.stringify({ user: { language: "ko" } }, null, 2), "utf8");
-
-  expect(listPersonaPresets()).toEqual(["butler"]);
-
-  setPersona("butler");
-
-  const active = readFileSync(join(tempData, "personas", "active.md"), "utf8");
-  expect(active).toContain("base: butler");
-  expect(active).toContain("base_locale: ko");
-  expect(active).toContain("# 한국어 Butler");
-
-  const config = JSON.parse(readFileSync(join(tempData, "butler.config.json"), "utf8"));
-  expect(config.system.activePersona).toBe("butler");
-  expect(config.system.activePersonaLocale).toBe("ko");
 });

@@ -201,8 +201,8 @@ test("BTCC progress and wake facts keep stable identities across SQLite reopen",
     peer: { kind: "dm" as const, id: "general" },
     replyToMessageId: "message-facts",
   };
-  let startedEventId = "";
-  let startedActionId = "";
+  let startedEventId: string;
+  let startedActionId: string;
   const first = openBtccSqliteStores({
     dbPath,
     ownerId: "lifecycle-facts-1",

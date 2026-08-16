@@ -287,7 +287,6 @@ function isSensitiveSchemaKey(key: string): boolean {
     "default",
     "example",
     "examples",
-    "const",
     "secret",
     "token",
     "api_key",

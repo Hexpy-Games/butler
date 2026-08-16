@@ -15,11 +15,14 @@ export function migrateBtccSchema(db: Database): void {
     ensureGuidedWorkResultOrder(db);
     ensureGuidedWorkDispositionSchema(db);
     ensureGuidedEffectRecoveryPayloadTable(db);
+    ensureGuidedWorkDispositionSchema(db);
     ensureGuidedWorkProgressColumns(db);
     ensureTurnProgressDestination(db);
     ensureTurnRouteState(db);
+    ensureTurnContinuationBudget(db);
     ensureModelRoundAcceptanceCheckpoint(db);
     ensureModelRouteFailureDisposition(db);
+    ensureGuidedToolResultDeliveryColumns(db);
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
@@ -27,34 +30,40 @@ export function migrateBtccSchema(db: Database): void {
 
 function ensureGuidedWorkDispositionSchema(db: Database): void {
   if (!tableExists(db, "btcc_guided_works")) return;
-  // The disposition records are additive.  Re-running this DDL is safe for
-  // both a fresh database and a copied pre-disposition database.
   db.exec(BTCC_GUIDED_WORK_DISPOSITION_TABLE_SCHEMA);
-  if (tableExists(db, "btcc_guided_work_disposition_revisions")) {
-    ensureColumn(
-      db,
-      "btcc_guided_work_disposition_revisions",
-      "result_sequence",
-      "INTEGER NOT NULL DEFAULT 0",
-    );
-    ensureColumn(
-      db,
-      "btcc_guided_work_disposition_revisions",
-      "material_fingerprint",
-      "TEXT NOT NULL DEFAULT ''",
-    );
-  }
+  if (!tableExists(db, "btcc_guided_work_disposition_revisions")) return;
+  ensureColumn(
+    db,
+    "btcc_guided_work_disposition_revisions",
+    "result_sequence",
+    "INTEGER NOT NULL DEFAULT 0",
+  );
+  ensureColumn(
+    db,
+    "btcc_guided_work_disposition_revisions",
+    "material_fingerprint",
+    "TEXT NOT NULL DEFAULT ''",
+  );
+  ensureColumn(
+    db,
+    "btcc_guided_work_disposition_revisions",
+    "runtime_owned_open",
+    "INTEGER NOT NULL DEFAULT 0",
+  );
 }
 
-/**
- * Keep Work result projections in the same order as the authoritative
- * Turn-local journal.  The Work-local sequence remains the append/revision
- * boundary used by checkpoints and reviews; these source fields let views
- * recover execution order when concurrent completion attaches out of order.
- * Legacy rows are backfilled from their origin Turn and journal call when the
- * evidence exists, and otherwise remain on the deterministic Work sequence
- * fallback in the reader.
- */
+function ensureTurnContinuationBudget(db: Database): void {
+  if (!tableExists(db, "btcc_turns")) return;
+  ensureColumn(db, "btcc_turns", "continuation_budget_json", "TEXT");
+}
+
+function ensureGuidedToolResultDeliveryColumns(db: Database): void {
+  if (!tableExists(db, "btcc_guided_tool_calls")) return;
+  ensureColumn(db, "btcc_guided_tool_calls", "delivery_state", "TEXT");
+  ensureColumn(db, "btcc_guided_tool_calls", "delivery_round_id", "TEXT");
+  ensureColumn(db, "btcc_guided_tool_calls", "delivery_response_sha256", "TEXT");
+}
+
 function ensureGuidedWorkResultOrder(db: Database): void {
   const table = "btcc_guided_work_results";
   if (!tableExists(db, table)) return;
@@ -86,12 +95,6 @@ function ensureGuidedWorkResultOrder(db: Database): void {
   `);
 }
 
-/**
- * Preserve the original insertion order of Turn-local tool calls when older
- * rows predate the explicit sequence column. SQLite rowid is only used here
- * to deterministically seed legacy rows; all new writes receive a monotonic
- * per-Turn sequence from SqliteGuidedToolJournal.start.
- */
 function ensureGuidedToolJournalOrder(db: Database): void {
   const table = "btcc_guided_tool_calls";
   if (!tableExists(db, table)) return;

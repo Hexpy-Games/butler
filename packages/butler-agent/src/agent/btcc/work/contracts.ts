@@ -106,6 +106,8 @@ export type DurableWorkDisposition = {
   resultSequence: number;
   /** Internal immutable snapshot used to reject stale closeout candidates. */
   materialFingerprint: string;
+  /** Persisted provenance for deterministic notice replay before Turn delivery. */
+  runtimeOwnedOpen: boolean;
   disposition: DurableWorkDispositionStatus;
   summary: string;
   actionUpdates: DurableWorkDispositionActionUpdate[];
@@ -203,6 +205,8 @@ export type RecordWorkCheckpointInput = WorkTurnScope & {
   nextStep?: string;
 };
 
+export type WorkCorrectionScope = "planning" | "execution";
+
 export type RecordWorkReviewInput = WorkTurnScope & {
   mutationCallId: string;
   subject: "plan" | "result" | "completion";
@@ -210,6 +214,7 @@ export type RecordWorkReviewInput = WorkTurnScope & {
   summary: string;
   corrections: string[];
   actionUpdates?: DurableWorkActionUpdate[];
+  correctionScope?: WorkCorrectionScope;
   nextStage?: WorkStage;
 };
 
@@ -230,6 +235,14 @@ export type RecordWorkDispositionInput = WorkTurnScope & {
   followups?: string[];
   /** Runtime-only current-Turn completed calls to attach atomically. */
   backfillToolCallIds?: string[];
+  /** Material Work snapshot expected immediately after atomic Turn backfill. */
+  expectedMaterialFingerprint?: string;
+  /** Marks the deterministic runtime-owned open generation; never model input. */
+  runtimeOwnedOpenGeneration?: Readonly<{ version: 1 }>;
+};
+
+export type ClaimWorkCloseoutCorrectionInput = WorkTurnScope & {
+  workId: string;
 };
 
 export type RecordCloseoutMissingInput = WorkTurnScope & {
@@ -265,7 +278,7 @@ export type ContinueWorkCommand = ContinueWorkInput & {
 
 export type RecordWorkCheckpointCommand = Omit<
   RecordWorkCheckpointInput,
-  "nextStage" | "actionUpdates" | "publicSummary" | "nextStep"
+  "actionUpdates" | "publicSummary" | "nextStep"
 > & {
   expectedPlanRevisionId: string;
   expectedProgressRevision: number;
@@ -284,6 +297,7 @@ export type RecordWorkReviewCommand = RecordWorkReviewInput & {
   requestSha256: string;
   currentStage: WorkStage;
   entryStage: "review" | "validation";
+  nextStage: WorkStage;
   actionProgress: DurableWorkActionProgress[];
   progressChanged: boolean;
 };
@@ -297,13 +311,17 @@ export interface DurableWorkService {
   importOpenLegacyWork(
     scope: WorkTurnScope,
   ): Promise<LegacyOpenWorkImportResult | null>;
+  bindOpenWork(
+    scope: WorkTurnScope,
+    expectedWorkId?: string,
+  ): Promise<DurableWorkView | null>;
   startWork(input: StartWorkInput): Promise<DurableWorkView>;
   continueWork(input: ContinueWorkInput): Promise<DurableWorkView>;
   replacePlan(input: ReplaceWorkPlanInput): Promise<DurableWorkView>;
   recordCheckpoint(input: RecordWorkCheckpointInput): Promise<DurableWorkView>;
   recordReview(input: RecordWorkReviewInput): Promise<DurableWorkView>;
   recordDisposition(input: RecordWorkDispositionInput): Promise<DurableWorkView>;
-  recordCloseoutMissing(input: RecordCloseoutMissingInput): Promise<void>;
+  claimCloseoutCorrection(input: ClaimWorkCloseoutCorrectionInput): Promise<boolean>;
   attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView>;
   boundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
 }
@@ -313,13 +331,17 @@ export interface DurableWorkStore {
   importOpenLegacyWork(
     scope: WorkTurnScope,
   ): Promise<LegacyOpenWorkImportResult | null>;
+  bindOpenWork(
+    scope: WorkTurnScope,
+    expectedWorkId?: string,
+  ): Promise<DurableWorkView | null>;
   startWork(input: StartWorkCommand): Promise<DurableWorkView>;
   continueWork(input: ContinueWorkCommand): Promise<DurableWorkView>;
   replacePlan(input: ReplaceWorkPlanCommand): Promise<DurableWorkView>;
   recordCheckpoint(input: RecordWorkCheckpointCommand): Promise<DurableWorkView>;
   recordReview(input: RecordWorkReviewCommand): Promise<DurableWorkView>;
   recordDisposition(input: RecordWorkDispositionCommand): Promise<DurableWorkView>;
-  recordCloseoutMissing(input: RecordCloseoutMissingInput): Promise<void>;
+  claimCloseoutCorrection(input: ClaimWorkCloseoutCorrectionInput): Promise<boolean>;
   attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView>;
   boundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
 }

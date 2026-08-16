@@ -3,7 +3,6 @@ import type {
   ModelRoundRequest,
   ModelRoundResult,
 } from "../../../agent/btcc/ports/model-round.ts";
-import { agentLoopImageDataUrl } from "../../../agent/tools/tool-result-media.ts";
 import {
   afterAttributedModelResponse,
   beforeAttributedModelRequest,
@@ -28,19 +27,32 @@ import { logPromptCacheStats, recordPromptCacheMetric } from "./usage.ts";
 import { resolveDynamicOpenAIModel } from "./models.ts";
 import type { OpenAIAuthOverride } from "../runtime-contracts.ts";
 import {
+  isOpenAIResponseContinuation,
+  requiredLegacyOpenAISent,
+  type OpenAIResponseContinuation,
+} from "./response-continuation.ts";
+import {
   extractPromptCacheStats,
   usageReportFromStats,
 } from "../shared/runtime-support.ts";
-
-interface OpenAIContinuation {
-  provider: "openai";
-  responseId: string;
-  sent: {
-    toolMessages: number;
-    userMessages: number;
-  };
-  statelessInput: Array<Record<string, unknown>>;
-}
+import {
+  openAIBoundedConversationItems,
+  openAIToolMessageItems,
+  selectNewBoundedConversationItems,
+} from "./conversation-items.ts";
+import {
+  parseDeliveredThroughOrdinal,
+  turnItemOrdinal,
+  validateBoundedProviderOrdinals,
+} from "../../../agent/btcc/ports/bounded-provider-continuation.ts";
+import {
+  stableProviderOrderedBody,
+} from "./stable-provider-prefix.ts";
+import {
+  stableProviderPrefixInvariant,
+  type ProviderRouteCacheIdentity,
+} from
+  "../../../agent/btcc/ports/model-round.ts";
 
 export async function runOpenAIModelRound(
   request: ModelRoundRequest,
@@ -56,9 +68,20 @@ export async function runOpenAIModelRound(
   const promptCache = resolveOpenAIPromptCacheConfig(
     request.cacheScope ?? "btcc-agent-loop",
   );
-  const previous = isOpenAIContinuation(request.continuation)
+  const previous = isOpenAIResponseContinuation(request.continuation)
     ? request.continuation
     : null;
+  if (request.stableProviderCachePrefix) {
+    if (!request.routeContext) {
+      throw stableProviderPrefixInvariant("stable_provider_prefix_route_context_missing");
+    }
+    if (request.routeContext.modelRef !== request.model) {
+      throw stableProviderPrefixInvariant("stable_provider_prefix_route_model_mismatch");
+    }
+    if (previous && !previous.providerRouteIdentity) {
+      throw stableProviderPrefixInvariant("stable_provider_prefix_previous_identity_missing");
+    }
+  }
   const firstUser = request.messages.find((message) => message.role === "user");
   const imageManifests = request.imageManifests ?? request.attachments
     ?.flatMap((attachment) => attachment.visualManifest ? [attachment.visualManifest] : []) ?? [];
@@ -75,36 +98,69 @@ export async function runOpenAIModelRound(
     : openAIInputWithAttachments(
         firstUser?.content ?? "",
         request.attachments ? [...request.attachments] : undefined,
+        Boolean(request.boundedContinuation),
       );
   const initialStatelessInput = toCodexStatelessInput(initialInput);
-  const continuationMessages = previous
-    ? newOpenAIContinuationMessages(
+  const continuationMessages = previous && !request.boundedContinuation
+      ? newOpenAIContinuationMessages(
         request.messages,
-        previous.sent,
+        requiredLegacyOpenAISent(previous.sent),
         request.butlerData,
       )
     : null;
-  const requestItems = continuationMessages?.items ?? initialInput;
-  const statelessRequestInput = previous
-    ? [...previous.statelessInput, ...continuationMessages!.statelessItems]
-    : initialStatelessInput;
+  const projectedPreviousStatelessInput = previous && !request.boundedContinuation
+    ? projectAcknowledgedToolOutputs(
+        requiredLegacyStatelessInput(previous.statelessInput),
+        request.messages,
+      )
+    : undefined;
+  const boundedStatelessInput = request.boundedContinuation
+    ? openAIBoundedConversationItems(
+        request.messages,
+        request.butlerData,
+        initialStatelessInput,
+      )
+    : null;
+  if (boundedStatelessInput && previous && previous.deliveredThroughOrdinal === undefined) {
+    throw new Error("bounded_continuation_watermark_missing");
+  }
+  const deliveredThroughOrdinal = boundedStatelessInput && previous
+    ? parseDeliveredThroughOrdinal(previous.deliveredThroughOrdinal)
+    : -1;
+  const boundedOfficialInput = boundedStatelessInput
+    ? selectNewBoundedConversationItems(
+        boundedStatelessInput,
+        deliveredThroughOrdinal,
+      )
+    : null;
+  const responseOrdinal = request.boundedContinuation
+    ? turnItemOrdinal(request.boundedContinuation.responseItemId)
+    : -1;
+  if (boundedStatelessInput) validateBoundedProviderOrdinals(
+    boundedStatelessInput.itemOrdinals,
+    responseOrdinal,
+    deliveredThroughOrdinal,
+  );
+  const requestItems = boundedOfficialInput?.items ??
+    continuationMessages?.items ?? initialInput;
+  const statelessRequestInput = boundedStatelessInput?.items ?? (previous
+    ? [...projectedPreviousStatelessInput!, ...continuationMessages!.statelessItems]
+    : initialStatelessInput);
   const roundIndex = request.usageAttribution?.roundIndex ?? 0;
   beforeAttributedModelRequest({
     attribution: request.usageAttribution,
     roundIndex,
   });
 
-  const response = await createOpenAIResponse(
-    {
+  const modelTools = request.tools.length > 0
+    ? modelFacingFunctionTools(request.tools)
+    : undefined;
+  const dynamicBody = {
       model,
       store: true,
       ...promptCache,
       instructions: request.instructions,
-      ...(request.tools.length > 0
-        ? {
-            tools: modelFacingFunctionTools(request.tools),
-          }
-        : {}),
+      ...(modelTools ? { tools: modelTools } : {}),
       tool_choice: request.toolChoice ?? "auto",
       reasoning,
       ...(previous
@@ -115,15 +171,44 @@ export async function runOpenAIModelRound(
           }
         : {
             input: requestItems,
-            __butler_codex_stateless_input: initialStatelessInput,
+            __butler_codex_stateless_input: statelessRequestInput,
           }),
-    },
+    };
+  const providerBody = request.stableProviderCachePrefix
+    ? stableProviderOrderedBody({
+        stable: request.stableProviderCachePrefix,
+        model,
+        tools: modelTools,
+        toolChoice: request.toolChoice ?? "auto",
+        reasoning,
+        instructions: request.instructions,
+        dynamic: Object.fromEntries(Object.entries(dynamicBody).filter(([key]) =>
+          !["model", "tools", "tool_choice", "reasoning", "instructions"].includes(key),
+        )),
+      })
+    : dynamicBody;
+  let providerCacheIdentity: ProviderRouteCacheIdentity | undefined;
+  const response = await createOpenAIResponse(
+    providerBody,
     request.signal,
     authOverride,
     request.onProviderStreamEvent,
     {
       attribution: request.usageAttribution,
       roundIndex,
+      butlerData: request.butlerData,
+      routeTransportAttemptOrdinal: request.routeTransportAttemptOrdinal ?? 0,
+      admitBoundedProviderBody: request.boundedContinuation?.admitProviderBody,
+      stableProviderCachePrefix: request.stableProviderCachePrefix,
+      routeContext: request.routeContext,
+      previousProviderRouteIdentity: previous?.providerRouteIdentity,
+      onProviderRouteCacheIdentity: (established) => {
+        if (providerCacheIdentity &&
+            JSON.stringify(providerCacheIdentity) !== JSON.stringify(established.identity)) {
+          throw stableProviderPrefixInvariant("stable_provider_prefix_retry_identity_changed");
+        }
+        providerCacheIdentity = established.identity;
+      },
     },
     undefined,
     request.providerRetryAttempts,
@@ -172,11 +257,25 @@ export async function runOpenAIModelRound(
   const statelessInput = [...statelessRequestInput, ...functionCalls].map(
     retainTextOnlyAfterSuccessfulImageReplay,
   );
-  const nextContinuation: OpenAIContinuation = {
+  const boundedContinuation = request.boundedContinuation;
+  const bounded = Boolean(boundedContinuation);
+  const nextContinuation: OpenAIResponseContinuation = {
     provider: "openai",
     responseId: response.id,
-    sent: continuationMessages?.sent ?? { toolMessages: 0, userMessages: 1 },
-    statelessInput,
+    ...(providerCacheIdentity
+      ? { providerRouteIdentity: providerCacheIdentity }
+      : {}),
+    ...(boundedStatelessInput
+      ? { deliveredThroughOrdinal: responseOrdinal }
+      : { sent: continuationMessages?.sent ?? { toolMessages: 0, userMessages: 1 } }),
+    ...(boundedContinuation?.contextProjection
+      ? { contextProjection: boundedContinuation.contextProjection }
+      : {}),
+    ...(!bounded
+      ? {
+          statelessInput,
+        }
+      : {}),
   };
   if (continuationMessages) {
     nextContinuation.sent = continuationMessages.sent;
@@ -199,23 +298,40 @@ export async function runOpenAIModelRound(
   };
 }
 
-function isOpenAIContinuation(value: unknown): value is OpenAIContinuation {
-  return Boolean(
-    value &&
-    typeof value === "object" &&
-    (value as Record<string, unknown>).provider === "openai" &&
-    typeof (value as Record<string, unknown>).responseId === "string",
-  );
+function projectAcknowledgedToolOutputs(
+  previous: readonly Record<string, unknown>[],
+  messages: readonly ModelRoundMessage[],
+): Array<Record<string, unknown>> {
+  const references = new Map(messages.flatMap((message) =>
+    message.role === "tool" && message.toolCallId && message.operationResultReference
+      ? [[message.toolCallId, message.content] as const]
+      : [],
+  ));
+  if (references.size === 0) return [...previous];
+  return previous.map((item) => {
+    if (item.type !== "function_call_output" || typeof item.call_id !== "string") {
+      return item;
+    }
+    const output = references.get(item.call_id);
+    return output === undefined ? item : { ...item, output };
+  });
+}
+
+function requiredLegacyStatelessInput(
+  value: OpenAIResponseContinuation["statelessInput"],
+): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) throw new Error("openai_stateless_continuation_missing");
+  return value;
 }
 
 function newOpenAIContinuationMessages(
   messages: readonly ModelRoundMessage[],
-  alreadySent: OpenAIContinuation["sent"],
-  butlerData?: string,
+  alreadySent: NonNullable<OpenAIResponseContinuation["sent"]>,
+  _butlerData?: string,
 ): {
   items: Array<Record<string, unknown>>;
   statelessItems: Array<Record<string, unknown>>;
-  sent: OpenAIContinuation["sent"];
+  sent: OpenAIResponseContinuation["sent"];
 } {
   const items: Array<Record<string, unknown>> = [];
   const statelessItems: Array<Record<string, unknown>> = [];
@@ -225,7 +341,7 @@ function newOpenAIContinuationMessages(
     if (message.role === "tool") {
       toolMessages += 1;
       if (toolMessages <= alreadySent.toolMessages) continue;
-      const [item, statelessItem] = openAIToolMessageItems(message, butlerData);
+      const [item, statelessItem] = openAIToolMessageItems(message);
       items.push(item);
       statelessItems.push(statelessItem);
       continue;
@@ -241,34 +357,6 @@ function newOpenAIContinuationMessages(
     statelessItems.push(item);
   }
   return { items, statelessItems, sent: { toolMessages, userMessages } };
-}
-
-function openAIToolMessageItems(
-  message: ModelRoundMessage,
-  butlerData?: string,
-): [Record<string, unknown>, Record<string, unknown>] {
-  const images = (message.imageAttachments ?? []).flatMap((attachment) => {
-    const imageUrl = agentLoopImageDataUrl(attachment, butlerData);
-    return imageUrl
-      ? [{ type: "input_image", image_url: imageUrl, detail: "high" }]
-      : [];
-  });
-  const output =
-    images.length > 0
-      ? [{ type: "input_text", text: message.content }, ...images]
-      : message.content;
-  const statelessItem = {
-    type: "function_call_output",
-    call_id: message.toolCallId,
-    output,
-  };
-  return [
-    {
-      ...statelessItem,
-      output,
-    },
-    statelessItem,
-  ];
 }
 
 function retainTextOnlyAfterSuccessfulImageReplay(

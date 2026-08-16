@@ -1,8 +1,8 @@
 import type { ButlerToolExecutor } from "../../tools/butler-tools.ts";
 import type {
+  GuidedToolJournal,
   GuidedToolJournalRecord,
-  SqliteGuidedToolJournal,
-} from "../../adapters/index.ts";
+} from "../ports/index.ts";
 import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type {
   GuidedActivityBinding,
@@ -41,7 +41,7 @@ export type GuidedRecordedToolReplayExecution = {
   workScope: WorkTurnScope;
   describedToolIds: Set<string>;
   durableWork: DurableWorkService;
-  toolJournal: SqliteGuidedToolJournal;
+  toolJournal: GuidedToolJournal;
   resolveModelRef?: () => string;
 };
 

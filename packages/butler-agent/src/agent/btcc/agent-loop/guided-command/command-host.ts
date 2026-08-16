@@ -19,12 +19,7 @@ const darwinCommandHost: CommandHostAdapter = {
     if (context.filesystemBoundary.kind === "full_access_contained") {
       return shellInvocation(command);
     }
-    return sandboxInvocation(
-      command,
-      context.filesystemBoundary.kind === "isolated_validation"
-        ? isolatedValidationProfile(context.filesystemBoundary.writeRoots)
-        : readOnlyProfile(),
-    );
+    return sandboxInvocation(command, readOnlyProfile());
   },
   terminate(child) {
     terminateProcessGroup(child, "SIGTERM");
@@ -97,18 +92,6 @@ function readOnlyProfile(): string {
     "(allow default)",
     "(deny file-write*)",
     '(allow file-write-data (literal "/dev/null"))',
-    "(deny network*)",
-  ].join("\n");
-}
-
-function isolatedValidationProfile(writeRoots: readonly string[]): string {
-  return [
-    "(version 1)",
-    "(allow default)",
-    "(deny file-write*)",
-    '(allow file-write-data (literal "/dev/null"))',
-    ...writeRoots.map((root) =>
-      `(allow file-write* (subpath ${JSON.stringify(canonicalCommandRoot(root))}))`),
     "(deny network*)",
   ].join("\n");
 }

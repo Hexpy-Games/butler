@@ -9,12 +9,9 @@ import type {
 } from "../../../agent/btcc/index.ts";
 import { createAgentTurnEvent } from "../../../agent/events/turn-events.ts";
 import type { RuntimeTurnEventInput } from "../../../agent/events/turn-events.ts";
-import { DeliveryGuard } from "../../transport/delivery-guard.ts";
 import {
   APP_TRANSPORT,
 } from "../../transport/app/adapter.ts";
-
-const TELEGRAM_TRANSPORT = "telegram";
 
 type BtccProgressDestination = NonNullable<BtccTurnRequest["progressDestination"]>;
 
@@ -69,8 +66,6 @@ export function createNativeButlerProgressPublisher(input: {
 }): BtccTurnProgressPublisher {
   return {
     async publish(event): Promise<void> {
-      if (event.destination.transport === TELEGRAM_TRANSPORT) return;
-
       const action = appTurnEventAction({ event });
       if (!action) {
         throw new Error(`No enabled progress publisher for ${event.destination.transport}`);
@@ -96,19 +91,6 @@ export function startupMessage(modelRef: string): string {
   return `🔄 Butler started (model: ${model})`;
 }
 
-export function statusText(input: {
-  sessionId: string;
-  modelRef: string;
-  butlerData: string;
-}): string {
-  return [
-    "Butler status: online",
-    `session: ${input.sessionId}`,
-    `model: ${input.modelRef}`,
-    `data: ${input.butlerData}`,
-  ].join("\n");
-}
-
 export function writeStartupGraceMarker(butlerData: string): void {
   mkdirSync(join(butlerData, "state"), { recursive: true });
   writeFileSync(
@@ -116,45 +98,6 @@ export function writeStartupGraceMarker(butlerData: string): void {
     `${Date.now() / 1000 + 45}\n`,
     "utf8",
   );
-}
-
-export async function sendStartupNotification(input: {
-  butlerHome: string;
-  chatId?: string;
-  sessionId: string;
-  message: string;
-  sendTelegram?: (input: {
-    chatId: string;
-    text: string;
-    threadId?: string;
-  }) => Promise<DeliveryResult>;
-}): Promise<DeliveryResult | undefined> {
-  const chatId = input.chatId?.trim();
-  if (!chatId) return undefined;
-  const { createTelegramTransportAdapter } = await import(
-    "../../transport/telegram/adapter.ts",
-  );
-  const action: OutboundAction = {
-    actionId: `telegram-out:${input.sessionId}:startup`,
-    transport: "telegram",
-    accountId: "default",
-    peer: { kind: "group", id: chatId },
-    message: { text: input.message },
-    metadata: {
-      source: "gateway/native-butler/projection-and-lifecycle.ts",
-      type: "startup-notification",
-    },
-  };
-  const guard = new DeliveryGuard({
-    adapters: [createTelegramTransportAdapter({
-      butlerHome: input.butlerHome,
-      sendTelegram: input.sendTelegram,
-    })],
-  });
-  return await guard.deliver(input.sessionId, action, {
-    source: "gateway/native-butler/projection-and-lifecycle.ts",
-    type: "startup-notification",
-  });
 }
 
 export async function waitForShutdown(input: {

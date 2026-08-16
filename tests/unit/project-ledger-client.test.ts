@@ -106,7 +106,7 @@ describe("projectLedgerProjectPath", () => {
     );
   });
 
-  test("maps an active app project id through the app project registry before falling back to Butler", () => {
+  test("maps bounded App project and workspace facts without opening the App registry", () => {
     const butlerHome = makeTempDir();
     const butlerData = makeTempDir();
     const workspace = join(makeTempDir(), "sandy-workspace-folder");
@@ -123,8 +123,8 @@ describe("projectLedgerProjectPath", () => {
     expect(projectLedgerProjectPath({
       butlerHome,
       butlerData,
-      appMessageDbPath: appDbPath,
       projectId: "project-sandy-bot-35a0e102",
+      workspacePath: workspace,
     }, {})).toBe(join(
       butlerData,
       "project-ledger",
@@ -133,12 +133,13 @@ describe("projectLedgerProjectPath", () => {
     ));
   });
 
-  test("pins explicit references to the active App project id", () => {
+  test("pins explicit references to the bounded active project context", () => {
     const butlerHome = makeTempDir();
     const butlerData = makeTempDir();
     const workspace = join(makeTempDir(), "sandy-workspace-folder");
     const appDbPath = join(makeTempDir(), "butler-client.sqlite");
     mkdirSync(workspace, { recursive: true });
+    writeFileSync(join(workspace, "package.json"), `${JSON.stringify({ name: "sandy-bot" })}\n`, "utf8");
     writeAppProjectDb(appDbPath, {
       id: "project-sandy-bot-35a0e102",
       displayName: "Sandy Bot",
@@ -148,8 +149,8 @@ describe("projectLedgerProjectPath", () => {
     const input = {
       butlerHome,
       butlerData,
-      appMessageDbPath: appDbPath,
       projectId: "project-sandy-bot-35a0e102",
+      workspacePath: workspace,
     };
 
     expect(projectLedgerProjectPath(input, {
@@ -188,7 +189,6 @@ describe("projectLedgerProjectPath", () => {
         {
           butlerHome,
           butlerData,
-          appMessageDbPath: appDbPath,
           projectId: "project-sandy-bot-35a0e102",
         },
         {},
@@ -196,7 +196,7 @@ describe("projectLedgerProjectPath", () => {
     }).toThrow("project_ledger_project_resolution_failed");
   });
 
-  test("maps an explicit app project name through the app project registry", () => {
+  test("maps an explicit workspace path without opening the App project registry", () => {
     const butlerHome = makeTempDir();
     const butlerData = makeTempDir();
     const workspace = join(makeTempDir(), "sandy-workspace-folder");
@@ -213,8 +213,7 @@ describe("projectLedgerProjectPath", () => {
     expect(projectLedgerProjectPath({
       butlerHome,
       butlerData,
-      appMessageDbPath: appDbPath,
-    }, { project_path: "Sandy Bot" })).toBe(join(
+    }, { project_path: workspace })).toBe(join(
       butlerData,
       "project-ledger",
       "projects",

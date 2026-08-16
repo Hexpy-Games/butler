@@ -1,13 +1,10 @@
 import type { ButlerServiceClient } from "../../../core/client.ts";
-import type { ConversationProjectionReader } from "../../../../agent/conversation/types.ts";
 import type {
   AppMessageResponder,
   AppServerStore,
 } from "../../application/store/app-server-store.ts";
 import type { FixedWindowRateLimiter } from "./rate-limiter.ts";
 import type { LocalAuthConfig } from "./local-auth.ts";
-import type { SessionBindingStore } from
-  "../../../../test-support/harness/session-store.ts";
 import type { ProviderQuotaMonitor } from "../../../../operations/metrics/provider-quota.ts";
 
 export interface CreateAppServerOptions {
@@ -25,8 +22,6 @@ export interface CreateAppServerOptions {
   uiRoot?: string;
   devCorsOrigin?: string;
   serviceClient?: ButlerServiceClient;
-  conversationProjectionReader?: ConversationProjectionReader;
-  sessionBindingStore?: SessionBindingStore;
   providerQuotaMonitor?: ProviderQuotaMonitor;
   messageRateLimit?: MessageRateLimitOptions;
   automationSchedulerIntervalMs?: number | false;

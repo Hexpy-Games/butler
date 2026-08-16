@@ -28,7 +28,7 @@ _butler_ts() {
 
 # Main logging function
 # Usage: butler_log <component> <level> <message>
-# Components: hooks, tasks, telegram, system, doctor (or any string)
+# Components: hooks, tasks, system, doctor (or any string)
 # Levels: ERROR, WARN, INFO, DEBUG
 butler_log() {
   local component="${1:-system}"

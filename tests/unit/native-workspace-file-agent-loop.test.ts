@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER } from
+  "../support/phase-continuity-private-digester.ts";
 import {
   mkdirSync,
   mkdtempSync,
@@ -259,7 +261,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
   };
   let planReviewed = false;
   let resultReviewed = false;
-  let dispositionRecorded = false;
+  let completionReviewed = false;
   let rereadRequested = false;
   let listPageCount = 0;
   let listContinuationCount = 0;
@@ -404,7 +406,6 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
           if (rereadRequested) {
             return toolResponse(toolCall("checkpoint", "record_work_checkpoint", {
               action_updates: [{ action_key: "edit-native-files", status: "done" }],
-              next_stage: "review",
               public_summary: "Both edited files were reread through native tools.",
               next_step: "Deliver the completed reviewed Work.",
             }));
@@ -468,18 +469,22 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
             return toolResponse(toolCall("completion-review", "record_work_review", {
               subject: "completion",
               verdict: "accept",
-              next_stage: "reporting",
               summary: "The reviewed edit and reread satisfy the whole Work.",
             }));
           }
-          if (!dispositionRecorded) {
-            dispositionRecorded = true;
-            const bound = await stores.durableWork.boundWorkForTurn("native-file-agent-loop-turn");
-            expect(bound).not.toBeNull();
-            return toolResponse(toolCall("complete-work", "record_work_disposition", {
-              work_id: bound!.workId,
+          if (!completionReviewed) {
+            completionReviewed = true;
+            const workId = (lastOutput.work as { work_id?: unknown } | undefined)
+              ?.work_id;
+            expect(typeof workId).toBe("string");
+            return toolResponse(toolCall("completion-disposition", "record_work_disposition", {
+              work_id: workId,
               disposition: "completed",
-              summary: "The reviewed native workspace edit is complete.",
+              summary: "The reviewed native file edit is complete.",
+              action_updates: [{
+                action_key: "edit-native-files",
+                status: "done",
+              }],
             }));
           }
           return {
@@ -487,11 +492,6 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
             toolCalls: [],
           };
         }
-        case "record_work_disposition":
-          return {
-            text: "Native workspace files were reviewed, edited, reread, and delivered.",
-            toolCalls: [],
-          };
         case "edit_file": {
           expectNoWorkspaceRoot(lastOutput, workspace);
           expectRedactedCapabilityReceipts(lastOutput, workspace, ["needle", "edited"], false);
@@ -514,6 +514,11 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
             verdict: "accept",
             summary: "The two files were edited and reread through native tools.",
           }));
+        case "record_work_disposition":
+          return {
+            text: "Native workspace files were reviewed, edited, reread, and delivered.",
+            toolCalls: [],
+          };
         default:
           throw new Error(`Unexpected tool in scripted provider: ${lastTool.name}`);
       }
@@ -522,9 +527,9 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
 
   try {
     const agent = createProductionGuidedTurnAgent({
+      phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
       butlerHome: process.cwd(),
       butlerData: data,
-      appMessageDbPath: dbPath,
       contextDocuments: stores.contextDocuments,
       toolJournal: stores.guidedToolJournal,
       effectJournal: stores.guidedEffectJournal,

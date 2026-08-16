@@ -6,10 +6,17 @@ import {
   listServices,
   resolveNativeSupervisorPaths,
   startServices,
+  stopServiceBounded,
+  stopServices,
   stopServicesBounded,
   type NativeServiceProjection,
   type NativeServiceSpec,
 } from "../src/operations/service/native-service-supervisor.ts";
+import {
+  prepareAgentStorageForNativeServiceLaunch,
+  restartNativeServicesAfterStoragePreparation,
+} from
+  "../src/operations/service/native-service-storage-preparation.ts";
 
 function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
@@ -36,17 +43,35 @@ if (command === "start" && dryRun) {
   preflight = specs.map(preflightServiceStart);
   services = specs.map(projectDryRunService);
 } else if (command === "start") {
+  await prepareStorageBeforeStart();
   services = startServices(paths);
 } else if (command === "stop") {
   services = await stopServicesBounded(paths);
 } else if (command === "restart") {
-  await stopServicesBounded(paths);
-  services = startServices(paths);
+  services = await restartNativeServicesAfterStoragePreparation({
+    prepareStorage: prepareStorageBeforeStart,
+    stopServices: () => { stopServices(paths); },
+    startServices: () => startServices(paths),
+  });
 } else if (command === "ps" || command === "status") {
   services = listServices(paths);
 } else {
   console.error(`unknown native service command: ${command}`);
   process.exit(2);
+}
+
+async function prepareStorageBeforeStart(): Promise<void> {
+  const specs = defaultNativeServiceSpecs(paths);
+  const appGateway = specs.find((spec) => spec.id === "app-gateway");
+  await prepareAgentStorageForNativeServiceLaunch({
+    butlerData: paths.butlerData,
+    runtimeVersion: "native-service-split-v1",
+    quiesceLegacyWriter: async () => {
+      if (appGateway) {
+        await stopServiceBounded(paths.butlerData, appGateway);
+      }
+    },
+  });
 }
 
 if (json) {

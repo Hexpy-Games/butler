@@ -1,14 +1,15 @@
 import type {
-  DurableWorkReview,
   DurableWorkService,
   DurableWorkStore,
-  DurableWorkView,
   WorkTurnScope,
 } from "./contracts.ts";
 import {
+  acceptedCurrentResultReview,
   applyWorkActionUpdates,
+  assertWorkPlanReplacementStage,
   assertWorkStageTransition,
   progressForReplacementPlan,
+  resolveWorkReviewTransition,
 } from "./work-progress-policy.ts";
 import {
   validateCheckpoint,
@@ -36,6 +37,13 @@ export function createDurableWorkService(
       validateScope(scope);
       return store.importOpenLegacyWork(scope);
     },
+    bindOpenWork(scope, expectedWorkId) {
+      validateScope(scope);
+      if (expectedWorkId !== undefined) {
+        requiredText(expectedWorkId, "expectedWorkId");
+      }
+      return store.bindOpenWork(scope, expectedWorkId);
+    },
     startWork(input) {
       validateStartWork(input);
       const { backfillToolCallIds: _backfillToolCallIds, ...identityInput } = input;
@@ -58,7 +66,10 @@ export function createDurableWorkService(
       const context = startNew ? null : await store.loadContext(input);
       const openingPlan = !context?.work.currentPlan;
       if (context && !openingPlan) {
-        assertWorkStageTransition(context.work.currentStage, "planning");
+        if (!context.work.currentStage) {
+          throw new Error("Durable Work Plan requires a current stage");
+        }
+        assertWorkPlanReplacementStage(context.work.currentStage);
       } else {
         assertWorkStageTransition(undefined, "conception");
         assertWorkStageTransition("conception", "planning");
@@ -99,8 +110,6 @@ export function createDurableWorkService(
       if (!plan || !context.work.currentStage) {
         throw new Error("Durable Work progress requires a current Plan and stage");
       }
-      const nextStage = input.nextStage ?? context.work.currentStage;
-      assertWorkStageTransition(context.work.currentStage, nextStage);
       return store.recordCheckpoint({
         ...input,
         expectedPlanRevisionId: plan.planRevisionId,
@@ -110,12 +119,11 @@ export function createDurableWorkService(
           sessionId: input.sessionId,
           projectRef: input.projectRef ?? null,
           mutationCallId: input.mutationCallId,
-          nextStage: input.nextStage ?? null,
           actionUpdates: input.actionUpdates ?? [],
           publicSummary: input.publicSummary ?? null,
           nextStep: input.nextStep ?? null,
         }),
-        stage: nextStage,
+        stage: context.work.currentStage,
         actionProgress: applyWorkActionUpdates(
           context.work,
           input.actionUpdates ?? [],
@@ -132,15 +140,19 @@ export function createDurableWorkService(
       if (!plan || !currentStage) {
         throw new Error("Durable Work Review requires a current Plan and stage");
       }
-      const entryStage = input.subject === "completion" ? "validation" : "review";
-      assertWorkStageTransition(currentStage, entryStage);
-      const nextStage = input.nextStage ?? entryStage;
-      assertWorkStageTransition(entryStage, nextStage);
+      const { entryStage, nextStage } = resolveWorkReviewTransition({
+        currentStage,
+        subject: input.subject,
+        verdict: input.verdict,
+        ...(input.correctionScope
+          ? { correctionScope: input.correctionScope }
+          : {}),
+      });
       const actionProgress = applyWorkActionUpdates(
         context.work,
         input.actionUpdates ?? [],
       );
-      const acceptedResultReview = currentAcceptedResultReview(context.work);
+      const acceptedResultReview = acceptedCurrentResultReview(context.work);
       return store.recordReview({
         ...input,
         expectedPlanRevisionId: plan.planRevisionId,
@@ -162,10 +174,11 @@ export function createDurableWorkService(
           summary: input.summary,
           corrections: input.corrections,
           actionUpdates: input.actionUpdates ?? [],
-          nextStage: input.nextStage ?? null,
+          correctionScope: input.correctionScope ?? null,
         }),
         currentStage,
         entryStage,
+        nextStage,
         actionProgress,
         progressChanged: (input.actionUpdates?.length ?? 0) > 0,
       });
@@ -174,6 +187,7 @@ export function createDurableWorkService(
       validateDisposition(input);
       const {
         backfillToolCallIds: _backfillToolCallIds,
+        expectedMaterialFingerprint: _expectedMaterialFingerprint,
         ...identityInput
       } = input;
       return store.recordDisposition({
@@ -189,9 +203,9 @@ export function createDurableWorkService(
         ),
       });
     },
-    recordCloseoutMissing(input) {
+    claimCloseoutCorrection(input) {
       validateCloseoutMissing(input);
-      return store.recordCloseoutMissing(input);
+      return store.claimCloseoutCorrection(input);
     },
     attachToolResult(input) {
       validateMutation(input);
@@ -212,17 +226,4 @@ async function requireWorkContext(
   const context = await store.loadContext(scope);
   if (!context) throw new Error("Durable Work progress requires open Work");
   return context;
-}
-
-function currentAcceptedResultReview(
-  work: DurableWorkView,
-): DurableWorkReview | undefined {
-  const review = work.latestResultReview;
-  if (review?.verdict !== "accept") return undefined;
-  const resultRefs = work.resultRefs.map(({ resultRef }) => resultRef);
-  if (review.boundResultRefs.length !== resultRefs.length) return undefined;
-  return review.boundResultRefs.every((resultRef, index) =>
-      resultRef === resultRefs[index])
-    ? review
-    : undefined;
 }

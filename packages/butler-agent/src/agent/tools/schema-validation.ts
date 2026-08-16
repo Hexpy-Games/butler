@@ -27,6 +27,7 @@ export interface ToolCallArgumentsValidation {
   arguments: Record<string, unknown>;
   rawArguments: string;
   error: string | null;
+  errorField: string | null;
 }
 
 export function validateToolCallArguments(input: {
@@ -44,6 +45,7 @@ export function validateToolCallArguments(input: {
         arguments: {},
         rawArguments,
         error: `Tool ${input.toolName} received malformed JSON arguments`,
+        errorField: null,
       };
     }
   }
@@ -52,18 +54,22 @@ export function validateToolCallArguments(input: {
       arguments: {},
       rawArguments,
       error: `Tool ${input.toolName} arguments must be a JSON object`,
+      errorField: null,
     };
   }
 
   const args = parsed as Record<string, unknown>;
   const validation = validateJsonObjectSchema(args, input.schema);
-  if (validation.ok) return { arguments: args, rawArguments, error: null };
+  if (validation.ok) {
+    return { arguments: args, rawArguments, error: null, errorField: null };
+  }
   const argumentPath = validation.path.replace(/^\$\.?/u, "");
   if (validation.reason === "missing_required") {
     return {
       arguments: args,
       rawArguments,
       error: `Tool ${input.toolName} requires argument: ${argumentPath}`,
+      errorField: argumentPath || null,
     };
   }
   if (validation.reason === "unexpected_property") {
@@ -72,12 +78,14 @@ export function validateToolCallArguments(input: {
       arguments: args,
       rawArguments,
       error: `Tool ${input.toolName} received unsupported argument(s): ${unexpected}`,
+      errorField: argumentPath || null,
     };
   }
   return {
     arguments: args,
     rawArguments,
     error: `Tool ${input.toolName} received invalid arguments: ${validation.message}`,
+    errorField: argumentPath || null,
   };
 }
 

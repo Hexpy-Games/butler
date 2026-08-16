@@ -22,6 +22,7 @@ import {
 import { openOwnedSqliteConnection } from
   "../../../../foundation/sqlite/owned-sqlite-connection.ts";
 import { SqliteGuidedToolJournal } from "./guided-tool-journal.ts";
+import { SqliteGuidedOperationResultReader } from "./guided-operation-result-reader.ts";
 import { SqliteGuidedEffectJournal } from "./guided-effect-store.ts";
 import { SqliteGuidedWorkStore } from "./guided-work-store.ts";
 import {
@@ -35,6 +36,7 @@ import { SqliteBtccProgressEventRepository } from
   "./sqlite-btcc-progress-event-repository.ts";
 import { SqliteBtccWakeAuthorizationRepository } from
   "./sqlite-btcc-wake-authorization-repository.ts";
+import { selectTurnContinuationBudget } from "../../../btcc/turn/index.ts";
 
 export function openBtccSqliteStores(input: {
   dbPath: string;
@@ -69,6 +71,7 @@ export function openBtccSqliteStores(input: {
       db,
       turns,
       owner,
+      selectTurnContinuationBudget(),
     ),
     turns,
     progressEvents: new SqliteBtccProgressEventRepository(db),
@@ -76,6 +79,7 @@ export function openBtccSqliteStores(input: {
     messages: new SqliteCanonicalMessageStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
     guidedToolJournal: new SqliteGuidedToolJournal(db),
+    guidedOperationResultReader: new SqliteGuidedOperationResultReader(db),
     guidedEffectJournal: new SqliteGuidedEffectJournal(db),
     durableWork,
     legacyCutover,

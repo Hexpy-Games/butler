@@ -69,7 +69,6 @@ export const BOOLEAN_FLAGS = new Set([
 
 export const PRIVATE_CONTENT_PATTERNS = [
   /OPENAI_API_KEY\s*=/i,
-  /TELEGRAM_BOT_TOKEN\s*=/i,
   /BEGIN PRIVATE TRANSCRIPT/i,
   /rawTranscript\s*[:=]/i,
   /private transcript\s*[:=]/i,

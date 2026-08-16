@@ -31,7 +31,6 @@ type ToolCall = { args: Record<string, unknown> };
 type ProjectLedgerExecutorInput = {
   butlerHome: string;
   butlerData: string;
-  appMessageDbPath?: string;
   workspacePath?: string;
   sessionId?: string;
   projectId?: string;

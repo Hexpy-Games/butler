@@ -519,7 +519,7 @@ test("task store summarizes useful worker log when result file is empty", () => 
     "[worker-runner] [2026-04-24 13:50:15] stderr:",
     " 33 pass",
     " 0 fail",
-    "[worker-runner] [2026-04-24 13:50:24] run_shell (Run nested package's declared test script that is not included in the root check script.): (cd packages/butler-agent/src/integrations/telegram && bun run test)",
+    "[worker-runner] [2026-04-24 13:50:24] run_shell (Run nested package's declared test script that is not included in the root check script.): (cd packages/butler-app/client/ui && npm test)",
     "[worker-runner] [2026-04-24 13:50:25] run_shell result: exit=1 timed_out=false",
     "[worker-runner] [2026-04-24 13:50:25] stderr:",
     "The following filters did not match any test files:",
@@ -591,13 +591,13 @@ test("task store preserves partial command evidence before backend continuation 
     "[worker-runner] [2026-04-24 21:17:03] run_shell result: exit=0 timed_out=false",
     "[worker-runner] [2026-04-24 21:17:03] stdout:",
     "fixtures/butler-project",
-    "packages/butler-agent/src/interfaces/transport/telegram/live-gateway.ts",
+    "packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts",
     "packages/butler-agent/src/integrations/providers/provider.ts",
-    "[worker-runner] [2026-04-24 21:17:12] run_shell (Inspect transport code): rg -n \"telegram|poll\" src",
+    "[worker-runner] [2026-04-24 21:17:12] run_shell (Inspect gateway code): rg -n \"gateway|route\" src",
     "[worker-runner] [2026-04-24 21:17:13] run_shell result: exit=0 timed_out=false",
     "[worker-runner] [2026-04-24 21:17:13] stdout:",
-    "packages/butler-agent/src/interfaces/transport/telegram/polling-runner.ts:1:import",
-    "packages/butler-agent/src/interfaces/transport/telegram/live-gateway.ts:1:import",
+    "packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts:1:import",
+    "packages/butler-agent/src/gateways/app/interface/server/server-types.ts:1:import",
     "[worker-runner] [2026-04-24 21:17:29] ERROR: Codex backend error: server_error request ID 64f9065c",
   ].join("\n"), "utf8");
 
@@ -605,7 +605,7 @@ test("task store preserves partial command evidence before backend continuation 
 
   expect(task?.observedResult).toContain("Partial successful command");
   expect(task?.observedResult).toContain("Inspect project files");
-  expect(task?.observedResult).toContain("packages/butler-agent/src/interfaces/transport/telegram/live-gateway.ts");
+  expect(task?.observedResult).toContain("packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts");
   expect(task?.observedResult).toContain("server_error request ID 64f9065c");
   expect(task?.observedResult).not.toContain("결과 파일과 실행 로그 요약을 찾지 못했습니다");
 });

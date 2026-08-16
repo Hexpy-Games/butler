@@ -11,7 +11,9 @@ import {
   createAppSessionInteractionModuleGraph,
   type AppSessionInteractionModuleGraph,
 } from "./session-interaction-module-graph.ts";
-import { resolveProviderVisualCapability } from "../../../../integrations/providers/registry.ts";
+import type { ButlerServiceClient } from "../../../core/client.ts";
+import { resolveProviderVisualCapability } from
+  "../../../../integrations/providers/registry.ts";
 import type { SessionMessagePageOptions } from "./session-message-page.ts";
 
 export interface AppSessionModuleGraph {
@@ -38,9 +40,17 @@ export function createAppSessionModuleGraph(input: {
   butlerHome: string;
   defaultChatId: string;
   defaultChatTitle: string;
+  serviceClient: ButlerServiceClient;
   host: any;
 }): AppSessionModuleGraph {
-  const { db, butlerData, defaultChatId, defaultChatTitle, host } = input;
+  const {
+    db,
+    butlerData,
+    defaultChatId,
+    defaultChatTitle,
+    serviceClient,
+    host,
+  } = input;
   const messageFiles = new AppMessageFileStore(
     db,
     butlerData,
@@ -194,6 +204,7 @@ export function createAppSessionModuleGraph(input: {
     butlerData,
     defaultChatTitle,
     messageFiles,
+    serviceClient,
     host,
   });
   return {

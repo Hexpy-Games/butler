@@ -34,16 +34,19 @@ import {
   safeSegment,
 } from "./scenario-preflight.ts";
 
-const ELECTRON_OWNED_PREVIEW_HOST = join(
+const R3_GUIDED_TURN_STATE = join(
   "packages",
-  "butler-app",
-  "client",
-  "electron",
-  "local-page-preview-host.mjs",
+  "butler-agent",
+  "src",
+  "agent",
+  "adapters",
+  "btcc",
+  "sqlite",
+  "guided-turn-state.ts",
 );
 
 export function productAgentOwnership(repoRoot: string): AgentOwnership {
-  return existsSync(join(resolve(repoRoot), ELECTRON_OWNED_PREVIEW_HOST))
+  return existsSync(join(resolve(repoRoot), R3_GUIDED_TURN_STATE))
     ? "electron"
     : "harness";
 }
@@ -273,12 +276,6 @@ function prepareConfig(
       sleepCycle: { ...sleepCycle, enabled: false },
     };
   }
-  config.telegram = {
-    ...(isRecord(config.telegram) ? config.telegram : {}),
-    enabled: false,
-    permissionRelay: false,
-    topics: {},
-  };
   writeJson(join(run.dataRoot, "butler.config.json"), config);
 }
 
@@ -308,7 +305,9 @@ function bindPreparedSession(run: PreparedRun): void {
       modelProviderId: run.model.split("/", 1)[0] || "openai",
       modelRef: run.model as `${string}/${string}`,
       transportBindings: [],
-      metadata: { source: "btcc-r3-electron-e2e-fixture" },
+      metadata: {
+        source: "btcc-r3-electron-e2e-fixture",
+      },
     });
   } finally {
     bindingStore.close();

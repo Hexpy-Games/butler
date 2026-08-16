@@ -36,6 +36,7 @@ export function createGuidedOperationalProgressCapture(
       operationChanged: (update) => progress.operationChanged?.(update),
       modelRoundWaitingChanged: (update) => progress.modelRoundWaitingChanged?.(update),
       operationalNoticeChanged: (update) => progress.operationalNoticeChanged?.(update),
+      runtimeFaulted: (update) => progress.runtimeFaulted?.(update),
     },
     facts: () => values.slice(),
   };

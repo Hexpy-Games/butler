@@ -58,6 +58,22 @@ function visibilityForEventKind(kind: string): "public" | "internal" {
 }
 
 function payloadForEventKind(kind: string): Record<string, unknown> {
+  if (kind === "operation.output.chunk") {
+    const content = Buffer.from("fixture", "utf8");
+    const digest = new Bun.CryptoHasher("sha256").update(content).digest("hex");
+    return {
+      requestId: "request-1",
+      resultId: "result-1",
+      resultSha256: "0".repeat(64),
+      chunkIndex: 0,
+      chunkCount: 1,
+      byteStart: 0,
+      byteEnd: content.byteLength,
+      byteLength: content.byteLength,
+      contentBase64: content.toString("base64"),
+      contentSha256: digest,
+    };
+  }
   if (kind === TURN_DECISION_EVENT_KIND) {
     return {
       decisionId: "decision-1",

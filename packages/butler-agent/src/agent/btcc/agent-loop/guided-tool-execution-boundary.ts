@@ -35,7 +35,10 @@ export function createGuidedToolExecutionBoundary(input: {
   effectService: GuidedEffectService;
   accessMode: GuidedEffectAccessMode;
   signal: AbortSignal;
-  executeCommand(call: ButlerToolCall): Promise<unknown>;
+  executeCommand(
+    call: ButlerToolCall,
+    executeRegistered: () => Promise<unknown>,
+  ): Promise<unknown>;
   resolvePersistentEffect(
     call: ButlerToolCall,
     execute: (prepared?: {
@@ -108,7 +111,14 @@ export function createGuidedToolExecutionBoundary(input: {
         return call.args.state_effect === "mutation" ||
             call.args.state_effect === "remote_observation"
           ? executePersistentEffect(call, execute, context.effectOccurrenceId)
-          : input.executeCommand(call);
+          : input.executeCommand(call, execute);
+      }
+      if (call.name === "call_mcp_tool") {
+        return executePersistentEffect(
+          call,
+          execute,
+          context.effectOccurrenceId,
+        );
       }
       return unavailableEffect(call.name);
     }

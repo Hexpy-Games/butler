@@ -7,12 +7,14 @@ import type {
   TurnActionResult,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
+import type { ButlerServiceClient } from "../../../core/client.ts";
+import { sessionHintForRow } from "./session-read-model.ts";
 
 export type TurnCancellationInput = {
   db: Database;
   getTurn: (turnId: string) => TurnRecord;
   getTurnRow: (turnId: string) => TurnRow | null;
-  cancelResponder: (turnId: string) => boolean;
+  serviceClient: ButlerServiceClient;
   finalizeCancelledTurn: (chatId: string, turnId: string) => TurnRecord;
   cleanupTurnEventSequences: (chatId: string, turnId: string) => void;
   ensureCancelledTurnActivityMessage: (
@@ -32,18 +34,26 @@ export class AppTurnCancellation {
     }
 
     this.recordDecision(row);
-    if (!this.input.cancelResponder(turnId)) {
-      this.input.ensureCancelledTurnActivityMessage(row.chat_id, turnId);
-      return emptyResult(this.input.getTurn(turnId));
-    }
-
-    this.completeDirectResponder(turnId);
-    const cancelled = this.input.finalizeCancelledTurn(row.chat_id, turnId);
-    this.input.cleanupTurnEventSequences(row.chat_id, turnId);
-    return emptyResult(cancelled);
+    this.dispatchPending(turnId, row.chat_id);
+    return emptyResult(this.input.getTurn(turnId));
   }
 
   reconcile(sessionId?: string): void {
+    const pending = this.input.db
+      .query<{ id: string; chat_id: string }, [string | null, string | null]>(`
+        SELECT turns.id, turns.chat_id
+        FROM turns
+        JOIN app_turn_cancel_outbox
+          ON app_turn_cancel_outbox.turn_id = turns.id
+        WHERE turns.state = 'cancelling'
+          AND app_turn_cancel_outbox.state = 'pending'
+          AND app_turn_cancel_outbox.queue_id IS NULL
+          AND (? IS NULL OR turns.chat_id = ?)
+        ORDER BY turns.rowid ASC
+      `)
+      .all(sessionId ?? null, sessionId ?? null);
+    for (const row of pending) this.dispatchPending(row.id, row.chat_id);
+
     const rows = this.input.db
       .query<{ id: string; chat_id: string }, [string | null, string | null]>(`
         SELECT turns.id, turns.chat_id
@@ -108,13 +118,23 @@ export class AppTurnCancellation {
     })();
   }
 
-  private completeDirectResponder(turnId: string): void {
-    const now = new Date().toISOString();
+  private dispatchPending(turnId: string, chatId: string): void {
+    const pending = this.input.db.query<{ created_at: string }, [string]>(`
+      SELECT created_at FROM app_turn_cancel_outbox
+      WHERE turn_id = ? AND state = 'pending' AND queue_id IS NULL
+    `).get(turnId);
+    if (!pending) return;
+    const queued = this.input.serviceClient.enqueueAppCancellation({
+      chatId,
+      sessionId: sessionHintForRow(chatId),
+      turnId,
+      requestId: `cancel:${turnId}`,
+      requestedAt: pending.created_at,
+    }, { source: "app-turn-cancellation" });
     this.input.db.query(`
-      UPDATE app_turn_cancel_outbox
-      SET state = 'completed', accepted_at = ?, completed_at = ?
-      WHERE turn_id = ? AND state = 'pending'
-    `).run(now, now, turnId);
+      UPDATE app_turn_cancel_outbox SET queue_id = ?
+      WHERE turn_id = ? AND state = 'pending' AND queue_id IS NULL
+    `).run(queued.queueId, turnId);
   }
 }
 

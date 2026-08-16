@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type {
   DeliveryResult,
@@ -19,20 +18,18 @@ import { DeliveryGuard } from "../interfaces/transport/delivery-guard.ts";
 import { createAppTransportAdapter } from "../interfaces/transport/app/adapter.ts";
 import { NativeInboundQueue } from "../gateways/core/inbound-queue.ts";
 import {
-  resolveTelegramGatewayRuntimeConfig,
-} from "../operations/gateway/registry.ts";
+  validateAgentBtccStorageForReadiness,
+} from "../agent/adapters/index.ts";
 import {
   createProductionBtccComposition,
   type BtccComposition,
 } from "../agent/composition/index.ts";
-import { AppBtccStopConsumer } from "../gateways/app/application/btcc-stop-consumer.ts";
 import {
   BtccInboundDispatcher,
   createBtccGatewayHandlers,
 } from "../interfaces/gateway/btcc/index.ts";
 import {
   appTurnEventAction,
-  appTurnStateDbPath,
   bindButlerSession,
   createNativeButlerProgressPublisher,
   createNativeButlerDefaultProvider,
@@ -42,9 +39,7 @@ import {
   resolveButlerData,
   resolveButlerHome,
   resolveButlerSession,
-  sendStartupNotification,
   startupMessage,
-  statusText,
   waitForShutdown,
   writeStartupGraceMarker,
 } from "../interfaces/gateway/native-butler/index.ts";
@@ -52,7 +47,6 @@ import {
   clearAppForegroundExecutorReadiness,
   publishAppForegroundExecutorReadiness,
 } from "../operations/service/app-foreground-readiness.ts";
-import { ensureTranscriptActivityAggregate } from "../operations/metrics/transcript-activity-index.ts";
 
 export interface NativeButlerMainOptions {
   butlerHome?: string;
@@ -60,21 +54,14 @@ export interface NativeButlerMainOptions {
   btcc?: Btcc;
   btccHost?: BtccComposition["host"];
   provider?: ModelProviderAdapter;
-  sendTelegram?: (input: {
-    chatId: string;
-    text: string;
-    threadId?: string;
-  }) => Promise<DeliveryResult>;
   shutdownSignal?: AbortSignal;
   shutdownPollMs?: number;
-  enableTelegramPolling?: boolean;
   waitForShutdown?: boolean;
 }
 
 export interface NativeButlerMainResult {
   sessionId: string;
   startupMessage: string;
-  startupDelivery?: DeliveryResult;
   shutdownReason: "signal" | "flag" | "runtime-replacement" | "bootstrap-only";
 }
 
@@ -85,20 +72,7 @@ export async function runNativeButlerMain(
 ): Promise<NativeButlerMainResult> {
   const butlerHome = resolveButlerHome(input.butlerHome);
   const butlerData = resolveButlerData(input.butlerData);
-  // Reconstruct the bounded transcript activity aggregate before serving
-  // status requests. This is a cold/startup path; request handlers only read
-  // the resulting single checkpoint and never enumerate transcript history.
-  try {
-    ensureTranscriptActivityAggregate({ butlerData });
-  } catch {
-    // A diagnostic aggregate must not prevent the primary Agent from starting.
-  }
   const config = readButlerConfig(butlerData);
-  const telegramGateway = resolveTelegramGatewayRuntimeConfig({
-    butlerData,
-    compatibilityConfig: config as Record<string, any>,
-  });
-  const appMessageDbPath = appTurnStateDbPath(butlerData);
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
   let btcc: Btcc | undefined = input.btcc;
@@ -108,22 +82,11 @@ export async function runNativeButlerMain(
   const pollMs = input.shutdownPollMs ?? 500;
 
   let sessionId: string | null = null;
-  let stopTelegramPolling = false;
   let runtimeReplacementRequested = false;
-  let telegramPolling: Promise<void> | undefined;
-  let stopConsumer: AppBtccStopConsumer | undefined;
   const inboundDispatcher = new BtccInboundDispatcher();
   const inboundQueue = new NativeInboundQueue(butlerData);
-  const serviceShouldStop = () =>
-    stopTelegramPolling || runtimeReplacementRequested ||
-    input.shutdownSignal?.aborted || existsSync(shutdownFlagPath);
-  const currentTelegramGateway = () =>
-    resolveTelegramGatewayRuntimeConfig({
-      butlerData,
-      compatibilityConfig: readButlerConfig(butlerData) as Record<string, any>,
-    });
-  const telegramShouldStop = () => serviceShouldStop() || !currentTelegramGateway().enabled;
   try {
+    clearAppForegroundExecutorReadiness(butlerData);
     sessionId = resolveButlerSession(store, butlerData);
     const binding = bindButlerSession({
       store,
@@ -134,10 +97,10 @@ export async function runNativeButlerMain(
     });
     persistButlerSessionPointer(butlerData, binding.sessionId);
     if (!btcc) {
+      validateAgentBtccStorageForReadiness({ butlerData });
       const composition = createProductionBtccComposition({
         butlerHome,
         butlerData,
-        appMessageDbPath,
         ownerId: `native-butler:${process.pid}`,
         sessionBindings: store,
       });
@@ -149,16 +112,9 @@ export async function runNativeButlerMain(
     await btccReady;
 
     const router = new GatewayRouter({ store });
-    const telegramAdapter = telegramGateway.enabled
-      ? (await import("../interfaces/transport/telegram/adapter.ts"))
-        .createTelegramTransportAdapter({
-          butlerHome,
-          sendTelegram: input.sendTelegram,
-        })
-      : null;
     const appAdapter = createAppTransportAdapter();
     const deliveryGuard = new DeliveryGuard({
-      adapters: telegramAdapter ? [telegramAdapter, appAdapter] : [appAdapter],
+      adapters: [appAdapter],
       butlerData,
     });
     const deliverThroughEnabledGate = async (
@@ -166,22 +122,12 @@ export async function runNativeButlerMain(
       action: OutboundAction,
       metadata: Record<string, unknown>,
     ): Promise<DeliveryResult> => {
-      if (action.transport === "telegram" && !currentTelegramGateway().enabled) {
-        return {
-          ok: false,
-          error: "Telegram gateway disabled",
-        };
-      }
       return await deliveryGuard.deliver(activeSessionId, action, metadata);
     };
     const progressPublisher = createNativeButlerProgressPublisher({
       deliver: deliverThroughEnabledGate,
     });
-    if (btccHost) {
-      stopConsumer = new AppBtccStopConsumer(appMessageDbPath, btcc, btccHost.progress);
-      await stopConsumer.reconcile();
-      await btccHost.progress.reconcile(progressPublisher);
-    }
+    if (btccHost) await btccHost.progress.reconcile(progressPublisher);
     const recovered = inboundQueue.recoverRuntimeInterruptions(() => true);
     if (recovered.requeued > 0) {
       process.stdout.write(
@@ -204,43 +150,8 @@ export async function runNativeButlerMain(
       }),
       butlerData,
     });
-    if (telegramAdapter) {
-      const [{ createTelegramLiveGateway }, { runTelegramPolling }] =
-        await Promise.all([
-          import("../interfaces/transport/telegram/live-gateway.ts"),
-          import("../interfaces/transport/telegram/polling-runner.ts"),
-        ]);
-      const gateway = createTelegramLiveGateway({
-        adapter: telegramAdapter,
-        router,
-        server,
-        renderStatus: () => statusText({
-          sessionId: binding.sessionId,
-          modelRef: binding.modelRef,
-          butlerData,
-        }),
-      });
-      await gateway.start();
-      telegramPolling = input.enableTelegramPolling === false
-        ? undefined
-        : runTelegramPolling({
-          butlerData,
-          gateway,
-          shouldStop: telegramShouldStop,
-          log: (line) => {
-            process.stdout.write(`[telegram] ${line}\n`);
-          },
-        });
-    }
     writeStartupGraceMarker(butlerData);
     const startupText = startupMessage(binding.modelRef);
-    const startupDelivery = telegramGateway.enabled ? await sendStartupNotification({
-      butlerHome,
-      chatId: telegramGateway.chatId ?? undefined,
-      sessionId: binding.sessionId,
-      message: startupText,
-      sendTelegram: input.sendTelegram,
-    }) : undefined;
     publishAppForegroundExecutorReadiness(butlerData);
 
     let shutdownReason: NativeButlerMainResult["shutdownReason"] = "bootstrap-only";
@@ -251,7 +162,6 @@ export async function runNativeButlerMain(
         pollMs,
         shouldReplaceProcess: () => runtimeReplacementRequested,
         onPoll: async () => {
-          await stopConsumer?.reconcile();
           await btccHost?.progress.reconcile(progressPublisher);
           const summary = inboundDispatcher.poll({
             queue: inboundQueue,
@@ -277,17 +187,11 @@ export async function runNativeButlerMain(
         inboundDispatcher.waitForIdle(),
         new Promise((resolve) => setTimeout(resolve, 12_000)),
       ]);
-      stopTelegramPolling = true;
-      await Promise.race([
-        telegramPolling,
-        new Promise((resolve) => setTimeout(resolve, 12_000)),
-      ]);
     }
 
     return {
       sessionId: binding.sessionId,
       startupMessage: startupText,
-      startupDelivery,
       shutdownReason,
     };
   } catch (error) {
@@ -324,8 +228,6 @@ export async function runNativeButlerMain(
     throw error;
   } finally {
     clearAppForegroundExecutorReadiness(butlerData);
-    stopTelegramPolling = true;
-    stopConsumer?.close();
     await btccHost?.close();
     store.close();
   }

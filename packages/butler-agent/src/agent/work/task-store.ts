@@ -160,7 +160,6 @@ export interface TaskRecoveryReconcileResult {
 }
 
 const NOTIFIED_MARKER = ".worker-result-notified";
-const LEGACY_NOTIFIED_MARKER = ".telegram-notified";
 
 function readText(path: string): string {
   try {
@@ -1047,10 +1046,7 @@ export class TaskStore {
   read(taskId: string): TaskRecord | null {
     const taskDir = this.taskDir(taskId);
     if (!existsSync(taskDir)) return null;
-    const notifiedAt =
-      readText(join(taskDir, NOTIFIED_MARKER)) ||
-      readText(join(taskDir, LEGACY_NOTIFIED_MARKER)) ||
-      null;
+    const notifiedAt = readText(join(taskDir, NOTIFIED_MARKER)) || null;
     const result = readText(join(taskDir, "result.md")) || null;
     const log = readText(join(taskDir, "log.txt"));
     const logSummary = summarizeWorkerLog(log);

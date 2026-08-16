@@ -1,4 +1,29 @@
-import type { DurableWorkContext, DurableWorkView } from "../work/index.ts";
+import type {
+  DurableWorkContext,
+  DurableWorkService,
+  DurableWorkView,
+  WorkTurnScope,
+} from "../work/index.ts";
+import { safeBoundWork, safeLoadWorkContext } from "./guided-work-runtime.ts";
+
+export function createGuidedExecutionWindowObserver(input: {
+  durableWork: DurableWorkService;
+  workScope: WorkTurnScope;
+  turnId: string;
+  trackingMode: "ledger" | "local" | "none";
+  signal: AbortSignal;
+}) {
+  return async ({ windowIndex }: { windowIndex: number }) => {
+    if (input.signal.aborted) throwGuidedAbort(input.signal);
+    const context = input.trackingMode === "none"
+      ? null
+      : await safeLoadWorkContext(input.durableWork, input.workScope);
+    const boundWork = input.trackingMode === "none"
+      ? null
+      : await safeBoundWork(input.durableWork, input.turnId);
+    return renderExecutionWindowObservation({ windowIndex, context, boundWork });
+  };
+}
 
 export function renderExecutionWindowObservation(input: {
   windowIndex: number;
@@ -31,4 +56,9 @@ export function renderExecutionWindowObservation(input: {
 
 function singleLine(value: string, limit: number): string {
   return value.replace(/\s+/gu, " ").trim().slice(0, limit);
+}
+
+function throwGuidedAbort(signal: AbortSignal): never {
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new Error("Guided Turn was aborted");
 }

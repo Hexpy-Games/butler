@@ -1,11 +1,9 @@
 #!/usr/bin/env bun
-import { recordTelegramInboundFromEnv } from "../src/test-support/harness/telegram-session-transcript.ts";
 import { recordSystemEvent } from "../src/test-support/harness/durable-session-transcript.ts";
 
 function usage(): never {
   console.error(
     "Usage:\n" +
-      "  $BUTLER_BUN run packages/butler-agent/scripts/session-transcript.ts inbound-from-env <session_id>\n" +
       "  $BUTLER_BUN run packages/butler-agent/scripts/session-transcript.ts system-from-env <session_id>\n",
   );
   process.exit(1);
@@ -13,18 +11,6 @@ function usage(): never {
 
 const [, , command, ...rest] = process.argv;
 if (!command) usage();
-
-if (command === "inbound-from-env") {
-  const [sessionId] = rest;
-  if (!sessionId) usage();
-  const result = recordTelegramInboundFromEnv(sessionId);
-  if (!result) {
-    console.error("No inbound transcript input found in environment");
-    process.exit(2);
-  }
-  console.log(result.session.sessionId);
-  process.exit(0);
-}
 
 if (command === "system-from-env") {
   const [sessionId] = rest;

@@ -73,30 +73,8 @@
       "activationDecayD": 0.5,
       "activationPruneFloor": -3.0,
       "hotCacheCompactThresholdBytes": 32768,
-      "logRetentionDays": 7,
-      "alerts": {
-        "telegram": true,
-        "notifyOnSubPhaseFailure": false
-      }
+      "logRetentionDays": 7
     }
-  },
-  "telegram": {
-    "defaultFormat": "markdownv2",
-    "ackReaction": "⚡",
-    "permissionRelay": false,
-    "groupId": "",
-    "topic": {
-      "undoWindowSec": 30,
-      "sessionTtlSec": 300,
-      "awaitInputTtlSec": 60,
-      "pageSize": 10
-    },
-    "autoRegister": {
-      "rateLimitPerMinute": 5,
-      "burst": 10,
-      "windowSec": 60
-    },
-    "topics": {}
   },
   "timeouts": {
     "workerDefaultSec": 600,

@@ -9,7 +9,7 @@ export function renderPartialLimitResponse(
   if (results.length > 0) {
     lines.push("What I completed:");
     for (const result of results) {
-      lines.push(`- ${result.name}: ${result.ok ? "ok" : `failed (${result.error ?? "unknown error"})`}`);
+      lines.push(`- ${result.name}: ${result.ok ? "ok" : `failed (${result.error.message})`}`);
     }
   }
   lines.push("What remains: a final synthesis may need another turn.");

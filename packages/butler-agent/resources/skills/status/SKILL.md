@@ -18,4 +18,4 @@ reporting: Reply with concise canonical status and hide raw ids unless debug is 
    - Top section: formatted butler_status summary.
    - `## Context Window` section: output of status-context.ts.
 
-4. Reply to the principal via Telegram reply tool with the combined message.
+4. Reply to the principal with the combined message.

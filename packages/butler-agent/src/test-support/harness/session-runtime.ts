@@ -12,12 +12,6 @@ interface ButlerProjectConfig {
   path?: string;
 }
 
-interface ButlerTelegramTopicConfig {
-  project?: string;
-  path?: string;
-  topicName?: string;
-}
-
 interface ButlerConfig {
   system?: {
     runtime?: string;
@@ -26,10 +20,6 @@ interface ButlerConfig {
     defaultModel?: string;
   };
   projects?: ButlerProjectConfig[];
-  telegram?: {
-    groupId?: string;
-    topics?: Record<string, ButlerTelegramTopicConfig>;
-  };
 }
 
 export interface RegisterRuntimeSessionInput {
@@ -60,7 +50,6 @@ export interface ResolvedRuntimeBinding {
   butlerData: string;
 }
 
-const DEFAULT_TELEGRAM_ACCOUNT_ID = "default";
 const DEFAULT_NATIVE_MODEL_REF = "openai/gpt-5.5-codex";
 
 function getButlerHome(explicit?: string): string {
@@ -127,55 +116,6 @@ function resolveProjectId(workspacePath: string, butlerHome: string, config: But
   return undefined;
 }
 
-function buildTransportBindings(
-  role: DurableRole,
-  workspacePath: string,
-  butlerHome: string,
-  config: ButlerConfig,
-): SessionBinding["transportBindings"] {
-  const normalizedWorkspace = expandHomePath(workspacePath, homedir()) || workspacePath;
-  const normalizedButlerHome = expandHomePath(butlerHome, homedir()) || butlerHome;
-  const groupId = config.telegram?.groupId?.trim();
-  if (!groupId) return [];
-
-  if (role === "butler") {
-    return [
-      {
-        transport: "telegram",
-        accountId: DEFAULT_TELEGRAM_ACCOUNT_ID,
-        peerId: groupId,
-      },
-    ];
-  }
-
-  const bindings: SessionBinding["transportBindings"] = [];
-  for (const [topicId, topic] of Object.entries(config.telegram?.topics ?? {})) {
-    const topicPath = expandHomePath(topic.path, homedir());
-    if (topicPath && topicPath === normalizedWorkspace) {
-      bindings.push({
-        transport: "telegram",
-        accountId: DEFAULT_TELEGRAM_ACCOUNT_ID,
-        peerId: groupId,
-        threadId: topicId,
-      });
-    }
-  }
-
-  if (bindings.length > 0) return bindings;
-
-  if (normalizedWorkspace === normalizedButlerHome) {
-    return [
-      {
-        transport: "telegram",
-        accountId: DEFAULT_TELEGRAM_ACCOUNT_ID,
-        peerId: groupId,
-      },
-    ];
-  }
-
-  return [];
-}
-
 function sessionPointerDir(butlerData: string): string {
   return join(butlerData, "config", "subsession-sessions");
 }
@@ -231,7 +171,7 @@ export function resolveRuntimeBinding(input: RegisterRuntimeSessionInput): Resol
     runtimeAdapterId,
     modelProviderId: providerId,
     modelRef: normalizeModelRef(input.modelRef, providerId, config, input.role),
-    transportBindings: buildTransportBindings(input.role, workspacePath, butlerHome, config),
+    transportBindings: [],
   };
 
   return {

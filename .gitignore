@@ -14,8 +14,6 @@ memory/user-profile.md
 memory/projects/*.md
 memory/conversations/
 memory/db/
-src/integrations/telegram/config.json
-
 # ── Topic session dirs — per-thread CWD for unattached topics ────────────────
 data/topics/
 

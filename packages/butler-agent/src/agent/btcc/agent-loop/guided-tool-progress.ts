@@ -46,13 +46,14 @@ export async function publishOperation(
       status: input.status,
       ...(inputLabel && inputLabel !== input.toolName ? { inputLabel } : {}),
       ...(detailRows.length > 0 ? { detailRows } : {}),
-      ...(input.resultJson
+      ...(input.resultJson !== undefined
         ? {
             resultRef: {
               id: digest(`btcc-guided-tool-result.v1\0${digest(input.resultJson)}`),
               sha256: digest(input.resultJson),
             },
             byteLength: Buffer.byteLength(input.resultJson),
+            resultJson: input.resultJson,
           }
         : {}),
     });

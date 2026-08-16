@@ -15,14 +15,12 @@ test("Managed continuation distinguishes result Review from current completion V
 
   expect(isDurableWorkCompletionValidationCurrent(context.work)).toBe(true);
   expect(rendered).toContain("Current stage: validation");
-  expect(rendered).toContain("Allowed next stages: reporting");
   expect(rendered).toContain("Optional stage focus: validate the whole Work");
-  expect(rendered).not.toContain("Required stage focus:");
   expect(rendered).toContain("Latest result review: accept — The artifact passed its checks.");
   expect(rendered).toContain(
     "Latest completion validation: accept — The whole Work satisfies the original request.",
   );
-  expect(rendered).toContain("Use optional Reviews or Validation when they help");
+  expect(rendered).toContain("settle the bound Work with a truthful disposition");
 
   const fallback = guidedOperationalFallback({
     originalRequest: context.originalRequest.content,

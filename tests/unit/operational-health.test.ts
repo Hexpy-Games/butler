@@ -24,7 +24,7 @@ test("operational health summarizes delivery backlog and recoverable tasks", () 
   }), "utf8");
   writeFileSync(join(queueDir, "failed.json"), JSON.stringify({
     status: "failed",
-    lastError: "Telegram Bad Request: message is too long",
+    lastError: "Remote Bad Request: message is too long",
   }), "utf8");
   writeFileSync(join(queueDir, "delivered.json"), JSON.stringify({
     status: "delivered",
@@ -66,7 +66,7 @@ test("operational health summarizes delivery backlog and recoverable tasks", () 
       failed: 1,
       delivered: 1,
       sessionFailed: 1,
-      lastError: "Telegram Bad Request: message is too long",
+      lastError: "Remote Bad Request: message is too long",
     },
     sessionActivity: {
       status: "available",

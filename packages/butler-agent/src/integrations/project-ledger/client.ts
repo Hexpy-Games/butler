@@ -28,7 +28,6 @@ export function projectLedgerProjectPath(
     butlerData?: string;
     workspacePath?: string;
     projectId?: string;
-    appMessageDbPath?: string;
   },
   args: Record<string, unknown>,
 ): string {
@@ -45,7 +44,6 @@ export function projectLedgerProjectPath(
   try {
     return activeProjectLedgerResolver.resolve({
       butlerData: input.butlerData,
-      appMessageDbPath: input.appMessageDbPath,
       appProjectId: input.projectId,
       workspacePath: input.workspacePath,
       explicitRef: explicitRef || undefined,

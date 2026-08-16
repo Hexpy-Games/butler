@@ -15,7 +15,7 @@ navigate.
 - `interfaces/`: product adapters such as CLI, gateway, MCP server/client, and
   transports.
 - `integrations/`: adapters for external capabilities such as model providers,
-  Project Ledger, search, skills, and Telegram command integration.
+  Project Ledger, search, and skills.
 - `operations/`: service supervision, scheduler, health, metrics, install,
   release, and validation-facing runtime support.
 - `personalization/`: profile, onboarding, persona, and personalization logic

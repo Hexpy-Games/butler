@@ -25,10 +25,6 @@ import {
   readNativeMainState,
   uptimeSecondsFromState,
 } from "../../integrations/providers/native-main-state.ts";
-import {
-  TELEGRAM_MARKDOWN_V2_PARSE_MODE,
-  toTelegramMarkdownV2,
-} from "../transport/telegram/markdown-v2.ts";
 
 // ── MCP server log (file only — stdout is reserved for JSON-RPC) ──────────────
 const MCP_LOG_DIR = join(BUTLER_DIR.DATA, "logs");
@@ -335,46 +331,6 @@ server.tool(
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     } catch (err: any) {
       return { content: [{ type: "text", text: `Graph unavailable: ${err.message}` }] };
-    }
-  },
-);
-
-server.tool(
-  "send_telegram",
-  "Send a message to a Telegram chat or topic thread via Bot API.",
-  {
-    chat_id: z.string().describe("Telegram chat ID"),
-    text: z.string().describe("Message text"),
-    thread_id: z.string().optional().describe("Topic thread ID (message_thread_id) for group topics"),
-    format: z.enum(["text", "markdownv2", "html"]).optional().describe("Parse mode. Defaults to 'markdownv2' (auto-converts plain text and CommonMark — no manual escaping needed). Use 'text' to bypass conversion."),
-  },
-  async ({ chat_id, text, thread_id, format }) => {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    if (!token) {
-      return { content: [{ type: "text", text: "Error: TELEGRAM_BOT_TOKEN not set in environment" }] };
-    }
-
-    const effectiveFormat = format ?? "markdownv2";
-    const outText = effectiveFormat === "markdownv2" ? toTelegramMarkdownV2(text) : text;
-    const body: Record<string, unknown> = { chat_id, text: outText };
-    if (thread_id) body.message_thread_id = parseInt(thread_id, 10);
-    if (effectiveFormat !== "text") {
-      body.parse_mode = effectiveFormat === "markdownv2" ? TELEGRAM_MARKDOWN_V2_PARSE_MODE : "HTML";
-    }
-
-    try {
-      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json() as { ok: boolean; description?: string; result?: { message_id: number } };
-      if (!data.ok) {
-        return { content: [{ type: "text", text: `Telegram error: ${data.description}` }] };
-      }
-      return { content: [{ type: "text", text: `Sent. message_id: ${data.result?.message_id}` }] };
-    } catch (err: any) {
-      return { content: [{ type: "text", text: `Request failed: ${err.message}` }] };
     }
   },
 );

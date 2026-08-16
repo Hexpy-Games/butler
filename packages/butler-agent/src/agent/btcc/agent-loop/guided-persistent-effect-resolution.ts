@@ -20,6 +20,7 @@ import {
   isGuidedProjectLedgerEffectTool,
 } from "./guided-project-ledger-effect.ts";
 import { prepareGuidedCommandEffect } from "./guided-command-effect.ts";
+import { prepareGuidedMcpToolEffect } from "./guided-mcp-tool-effect.ts";
 import {
   createGuidedWorkspaceFileEffectAdapter,
   workspaceFileEffectTarget,
@@ -41,7 +42,6 @@ type ExecuteRegisteredTool = (prepared?: {
 export function createGuidedPersistentEffectResolver(input: {
   butlerHome: string;
   butlerData: string;
-  appMessageDbPath: string;
   workspacePath: string;
   workspaceReference?: WorkspaceReference;
   sessionId?: string;
@@ -97,6 +97,12 @@ export function createGuidedPersistentEffectResolver(input: {
         originalRequest: input.originalRequest,
       });
     }
+    if (call.name === "call_mcp_tool") {
+      return prepareGuidedMcpToolEffect({
+        args: call.args,
+        executeRegistered,
+      });
+    }
     if (call.name === "edit_file") {
       const planRevisionId = effectContext.work.currentPlan?.planRevisionId;
       const prior = planRevisionId && effectContext.occurrenceId
@@ -146,7 +152,6 @@ export function createGuidedPersistentEffectResolver(input: {
       return null;
     }
     const ledgerLookup = {
-      appMessageDbPath: input.appMessageDbPath,
       appProjectId: input.projectId,
       workspacePath: activeWorkspacePath(),
     };

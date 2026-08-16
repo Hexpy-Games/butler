@@ -2,7 +2,7 @@ import { basename, extname, isAbsolute } from "node:path";
 import type { BtccFinalArtifact } from "../contracts.ts";
 import { digest } from "../identity/index.ts";
 import type { GuidedToolJournalRecord } from
-  "../../adapters/index.ts";
+  "../ports/index.ts";
 
 const MAX_FINAL_ARTIFACTS = 12;
 const MAX_FINAL_ARTIFACT_BYTES = 10 * 1024 * 1024;

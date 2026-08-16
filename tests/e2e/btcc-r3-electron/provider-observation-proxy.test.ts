@@ -61,7 +61,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
   const requestBody = Buffer.from(JSON.stringify({
     model: "gpt-test",
     input: "한글 request body",
-    prompt_cache_key: "benchmark:btcc-agent-loop",
+    prompt_cache_key: "test:btcc-agent-loop",
   }));
   let capturedBody: Buffer = Buffer.alloc(0);
   let capturedAuthorization = "";

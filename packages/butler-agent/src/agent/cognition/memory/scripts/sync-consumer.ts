@@ -29,7 +29,7 @@ import {
 import { transcriptFileNameForSessionId } from "./lib/session-id.ts";
 import { cognitionMemoryRoot } from "../../paths.ts";
 import { indexTranscriptLinesForQuery } from "../exact-query.ts";
-import { butlerAgentScriptPath, butlerAgentSourcePath } from "../../../../runtime/paths.ts";
+import { butlerAgentSourcePath } from "../../../../runtime/paths.ts";
 import {
   completionJobProcessed,
   readConversationCompletionObservation,
@@ -67,7 +67,6 @@ const FAIL_COUNTER_FILE = join(
   "sync-consumer-fail-count",
 );
 const FAIL_ALERT_THRESHOLD = 5;
-const TELEGRAM_LIB = butlerAgentScriptPath(BUTLER_HOME, "lib", "telegram.sh");
 
 interface ResolveTranscriptOptions {
   butlerDataDir?: string;
@@ -193,27 +192,13 @@ export function resetFailCounter(file: string = FAIL_COUNTER_FILE): void {
   } catch {}
 }
 
-// Track whether we've already alerted for the current streak so we fire
-// a single telegram message, not one per failing poll.
+// Track whether we've already emitted an alert for the current streak.
 let alertedForStreak = false;
 
 function emitFailureAlert(count: number): void {
   process.stderr.write(
     `sync-consumer: ${count} consecutive index failures — see ${DLQ_FILE}\n`,
   );
-  if (!existsSync(TELEGRAM_LIB)) return;
-  const msg = `Butler sync-consumer: ${count} consecutive index failures. Check DLQ: ${DLQ_FILE}`;
-  try {
-    spawnSync(
-      "bash",
-      ["-c", `source "${TELEGRAM_LIB}" && notify_telegram "$1"`, "bash", msg],
-      {
-        env: { ...process.env, BUTLER_HOME, BUTLER_DATA },
-        timeout: 15000,
-        encoding: "utf8",
-      },
-    );
-  } catch {}
 }
 
 // ---------------------------------------------------------------------------

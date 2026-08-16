@@ -14,10 +14,7 @@ export type ProjectionAuthorityBatch = {
 
 const AUTHORITY_BATCH_SIZE = 32;
 
-export function btccRetainsTurnAuthority(
-  db: Database,
-  turnId: string,
-): boolean {
+export function btccRetainsTurnAuthority(db: Database, turnId: string): boolean {
   try {
     const row = db.query<{ semantic_state: string }, [string]>(`
       SELECT semantic_state FROM btcc_turns WHERE turn_id = ?
@@ -77,10 +74,7 @@ export function reconcileBtccTurnProjectionAuthorityBatch(
   };
 }
 
-function activeBtccRows(
-  db: Database,
-  turnIds: string[],
-): ProjectionAuthorityRow[] {
+function activeBtccRows(db: Database, turnIds: string[]): ProjectionAuthorityRow[] {
   if (turnIds.length === 0) return [];
   const placeholders = turnIds.map(() => "?").join(", ");
   return db.query<ProjectionAuthorityRow, string[]>(`

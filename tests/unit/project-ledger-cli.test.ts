@@ -1985,7 +1985,7 @@ test("project-ledger doctor detects missing spec orphan task stale view and priv
     });
     writeFileSync(
       join(ledgerProjectRoot(project), "risks", "R-0001.md"),
-      "---\nid: R-0001\nkind: risk\ntitle: Privacy leak\nstatus: open\n---\nTELEGRAM_BOT_TOKEN=secret\n",
+      "---\nid: R-0001\nkind: risk\ntitle: Privacy leak\nstatus: open\n---\nOPENAI_API_KEY=secret\n",
       "utf8",
     );
 
@@ -1996,7 +1996,7 @@ test("project-ledger doctor detects missing spec orphan task stale view and priv
     expect(issueCodes).toContain("orphan_task");
     expect(issueCodes).toContain("stale_view");
     expect(issueCodes).toContain("possible_private_content");
-    expect(JSON.stringify(doctor)).not.toContain("TELEGRAM_BOT_TOKEN=secret");
+    expect(JSON.stringify(doctor)).not.toContain("OPENAI_API_KEY=secret");
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

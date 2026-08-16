@@ -165,13 +165,10 @@ function printNextSteps() {
 ✓ Setup complete.
 
 Next steps:
-1. Configure Telegram
-   → Set TELEGRAM_BOT_TOKEN in your environment
-
-2. Start butler:
+1. Start butler:
    → ./packages/butler-agent/scripts/start-butler.sh
 
-3. (Optional) Start the embedding server for vector memory:
+2. (Optional) Start the embedding server for vector memory:
    → ./packages/butler-agent/scripts/start-embed-server.sh
 
 Full setup guide: README.md

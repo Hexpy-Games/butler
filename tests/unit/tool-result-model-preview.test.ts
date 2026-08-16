@@ -68,22 +68,34 @@ test("read file model preview keeps location and bounded content", () => {
   const preview = structuredToolResultModelPreview({
     toolName: "read_file",
     output: {
-      path: "src/a.ts",
-      start_line: 10,
-      end_line: 20,
+      ok: true,
+      files_requested: 1,
+      files_read: 1,
       truncated: true,
-      content: "x".repeat(6_000),
+      files: [{
+        ok: true,
+        path: "src/a.ts",
+        start_line: 10,
+        end_line: 20,
+        truncated: true,
+        content: "x".repeat(6_000),
+      }],
     },
   });
 
   expect(preview).toMatchObject({
     tool_name: "read_file",
-    path: "src/a.ts",
-    start_line: 10,
-    end_line: 20,
+    ok: true,
+    files: [{
+      path: "src/a.ts",
+      start_line: 10,
+      end_line: 20,
+      truncated: true,
+    }],
     truncated: true,
   });
-  expect(String(preview?.content).length).toBeLessThan(5_000);
+  const files = preview?.files as Array<Record<string, unknown>>;
+  expect(String(files[0]?.content).length).toBeLessThan(5_000);
 });
 
 test("large read previews expose the exact next source line instead of implying the full slice was visible", () => {
@@ -92,25 +104,33 @@ test("large read previews expose the exact next source line instead of implying 
   const preview = structuredToolResultModelPreview({
     toolName: "read_file",
     output: {
-      path: "src/large.ts",
-      start_line: 1,
-      end_line: 300,
+      ok: true,
+      files_requested: 1,
+      files_read: 1,
       truncated: true,
-      content,
+      files: [{
+        ok: true,
+        path: "src/large.ts",
+        start_line: 1,
+        end_line: 300,
+        truncated: true,
+        content,
+      }],
     },
   });
 
-  expect(preview).toMatchObject({
+  const file = (preview?.files as Array<Record<string, unknown>>)[0];
+  expect(file).toMatchObject({
     preview_content_truncated: true,
     preview_start_line: 1,
     omitted_through_line: 300,
   });
-  expect(preview?.preview_end_line).toBeNumber();
-  expect(preview?.next_start_line).toBe(Number(preview?.preview_end_line) + 1);
-  expect(String(preview?.content)).toContain(
-    `continue with read_file start_line=${String(preview?.next_start_line)}`,
+  expect(file?.preview_end_line).toBeNumber();
+  expect(file?.next_start_line).toBe(Number(file?.preview_end_line) + 1);
+  expect(String(file?.content)).toContain(
+    `continue with read_file start_line=${String(file?.next_start_line)}`,
   );
-  expect(Number(preview?.preview_end_line)).toBeLessThan(300);
+  expect(Number(file?.preview_end_line)).toBeLessThan(300);
 });
 
 test("bounded conversation context remains a complete provider-safe observation", () => {

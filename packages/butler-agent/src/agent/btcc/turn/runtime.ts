@@ -8,7 +8,6 @@ import type {
 } from "../contracts.ts";
 import type { CanonicalMessageStore } from "../delivery/index.ts";
 import { insertCanonicalMessage } from "../delivery/index.ts";
-import { contentRef, digest } from "../identity/index.ts";
 import { createTurnExecutionSupervisor } from "../recovery/index.ts";
 import type { CommittedSuccessorReadiness } from "../recovery/index.ts";
 import { acquireStateExecution } from "./acquire-state-execution.ts";
@@ -22,13 +21,21 @@ import type {
 import { stopTurn } from "./stop-turn.ts";
 import { isSqliteContention } from "../../../foundation/sqlite-contention.ts";
 import type { BtccAgentLoop, BtccAgentLoopResult } from "../agent-loop/index.ts";
+import { isGuidedWorkCloseoutError } from "../agent-loop/index.ts";
+import {
+  isPhaseContinuityProjectionError,
+  isRoundToolSurfaceError,
+} from "../ports/model-round.ts";
 import {
   isModelRouteDurabilityError,
   ModelRouteRecoveredFailureError,
 } from "../model-route/index.ts";
 import { ModelProviderRequestError, safeRuntimeFailure } from "../../../integrations/providers/provider-errors.ts";
 import { createModelRouteRuntimeHooks } from "./model-route-runtime-hooks.ts";
+import { isPhaseScopedMemoryProjectionError } from
+  "../../context/context-projection.ts";
 import { operationalFailureMessage } from "./turn-runtime-failure.ts";
+import { guidedFinalTransition } from "./guided-final-transition.ts";
 import {
   createNoopRuntimeMemoryAttributionPort,
   type RuntimeMemoryAttributionPort,
@@ -57,9 +64,9 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
   private readonly memoryAttribution: RuntimeMemoryAttributionPort;
 
   constructor(private readonly dependencies: TurnRuntimeDependencies) {
-    this.memoryAttribution = dependencies.memoryAttribution ?? createNoopRuntimeMemoryAttributionPort();
+    this.memoryAttribution = dependencies.memoryAttribution ??
+      createNoopRuntimeMemoryAttributionPort();
   }
-
   runTurn(
     command: BtccRunCommand,
     progress?: BtccTurnProgressObserver,
@@ -153,7 +160,11 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
           }),
         });
       } catch (error) {
-        if (isModelRouteDurabilityError(error)) throw error;
+        if (isModelRouteDurabilityError(error) ||
+            isPhaseContinuityProjectionError(error) ||
+            isPhaseScopedMemoryProjectionError(error) ||
+            isRoundToolSurfaceError(error) ||
+            isGuidedWorkCloseoutError(error)) throw error;
         if (isRetryableProviderExhaustion(error)) {
           const failure = safeRuntimeFailure(error);
           const failureCode = error instanceof ModelRouteRecoveredFailureError
@@ -287,40 +298,6 @@ function isRetryableProviderExhaustion(error: unknown): boolean {
 
 export function createTurnRuntime(dependencies: TurnRuntimeDependencies): BtccTurnRuntime {
   return new DefaultTurnRuntime(dependencies);
-}
-
-function guidedFinalTransition(turn: TurnRecord, result: BtccAgentLoopResult) {
-  const content = result.content.trim() || operationalFailureMessage(turn.originalMessage);
-  const finalPayloadBody = {
-    turnId: turn.turnId,
-    contentSha256: digest(content),
-    route: result.route,
-    disposition: "completed" as const,
-    content,
-    ...(result.artifacts?.length ? { artifacts: result.artifacts } : {}),
-  };
-  const finalPayload = {
-    ref: contentRef("payload", finalPayloadBody),
-    ...finalPayloadBody,
-  };
-  const committedRevision = turn.revision + 1;
-  const outboxId = digest(
-    `btcc-canonical-delivery.v1\0${turn.turnId}\0${committedRevision}\0${finalPayload.ref.sha256}`,
-  );
-  return {
-    kind: "accept_guided_final" as const,
-    successor: "delivery_committed" as const,
-    successorCheckpointKind: "runtime" as const,
-    route: result.route,
-    finalPayload,
-    deliveryOutbox: {
-      outboxId,
-      finalPayloadRef: finalPayload.ref,
-      expectedMessageId: digest(`btcc-assistant-message.v1\0${outboxId}`),
-      content,
-      status: "pending" as const,
-    },
-  };
 }
 
 async function publishState(

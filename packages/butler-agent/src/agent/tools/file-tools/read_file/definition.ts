@@ -3,28 +3,24 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const readFileToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "read_file",
-  description: "Read one bounded UTF-8 workspace file or 1-20 files in request order with path guard, binary/UTF-8 checks, aggregate limits, stale-safe continuation, and evidence receipts.",
+  description: "Read 1-20 bounded UTF-8 workspace files in request order with path guard, binary/UTF-8 checks, aggregate limits, stale-safe continuation, and evidence receipts. Use a one-item requests array for one file.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
-      path: {
-        type: "string",
-        description: "File path inside the active workspace. Prefer a workspace-relative path; a contained absolute path shown by a tool is also accepted.",
-      },
-      start_line: { type: "integer", minimum: 1 },
-      limit_lines: { type: "integer", minimum: 1, maximum: 10000 },
-      max_bytes: { type: "integer", minimum: 1, maximum: 1048576 },
       requests: {
         type: "array",
         minItems: 1,
         maxItems: 20,
-        description: "Canonical bounded batch requests. Use requests instead of path, never both.",
+        description: "Canonical bounded read requests. Use one item for one file.",
         items: {
           type: "object",
           additionalProperties: false,
           properties: {
-            path: { type: "string" },
+            path: {
+              type: "string",
+              description: "File path inside the active workspace. Prefer a workspace-relative path; a contained absolute path shown by a tool is also accepted.",
+            },
             start_line: { type: "integer", minimum: 1 },
             limit_lines: { type: "integer", minimum: 1, maximum: 10000 },
             max_bytes: { type: "integer", minimum: 1, maximum: 1048576 },
@@ -35,6 +31,7 @@ export const readFileToolDefinition: ButlerToolDefinition = {
       max_total_bytes: { type: "integer", minimum: 1, maximum: 4194304 },
       cursor: { type: "string" },
     },
+    required: ["requests"],
   },
   effectBoundary: "none",
   concurrencySafe: true,

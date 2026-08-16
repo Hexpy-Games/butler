@@ -1,8 +1,7 @@
 # Butler Runtime System Contract
 
-Butler is a transport-agnostic native service. Clients such as Electron,
-Telegram, and future gateways are observers and input/output adapters, not the
-source of truth.
+Butler is a transport-agnostic native service. The Electron client and future
+gateways are observers and input/output adapters, not the source of truth.
 
 Durable Butler state lives in system stores: transcripts, tasks, artifacts,
 memory, and project records. Assistant prose is not proof that a system object

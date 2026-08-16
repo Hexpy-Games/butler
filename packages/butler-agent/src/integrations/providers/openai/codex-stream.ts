@@ -1,10 +1,18 @@
-import type { CodexSseAccumulator, OpenAIResponse, PromptUsageAttribution, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
+import type { CodexSseAccumulator, OpenAIResponse, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
 import { codexAccountIdFromAuthorization, codexRequestBody } from "./responses-client.ts";
 import { codexSseResponseFromAccumulator } from "./codex-response-assembly.ts";
 import { emitProviderStreamProjectionBestEffort } from "../shared/runtime-support.ts";
 import { getCodexOriginator, getCodexResponsesUrl, getCodexUserAgent } from "./config.ts";
-import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
+import { establishFinalProviderCacheIdentity } from "./stable-provider-prefix.ts";
+import {
+  ModelProviderRequestError,
+  providerHttpError,
+  providerNetworkError,
+  providerStreamInterruptedError,
+  safeEndpointLabel,
+} from "../provider-errors.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
+import type { OpenAIProviderBudgetContext } from "./responses-client.ts";
 
 export function createCodexSseAccumulator(
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
@@ -199,8 +207,12 @@ export async function readCodexSseResponse(
 ): Promise<OpenAIResponse> {
   const accumulator = createCodexSseAccumulator(onProviderStreamEvent);
   if (!response.body) {
-    await consumeCodexSseText(await response.text(), accumulator, onValidEvent);
-    return codexSseResponseFromAccumulator(accumulator);
+    await consumeCodexSseText(
+      await readCodexResponseText(response),
+      accumulator,
+      onValidEvent,
+    );
+    return completedCodexSseResponse(accumulator);
   }
 
   const reader = response.body.getReader();
@@ -209,7 +221,7 @@ export async function readCodexSseResponse(
   let assembled = false;
   try {
     while (true) {
-      const { value, done } = await reader.read();
+      const { value, done } = await readCodexStreamChunk(reader);
       if (!done && (!value || value.byteLength === 0)) {
         await yieldToEventLoop();
         continue;
@@ -221,13 +233,19 @@ export async function readCodexSseResponse(
         const frame = buffer.slice(0, boundary.index);
         buffer = buffer.slice(boundary.index + boundary.length);
         await consumeCodexSseFrame(accumulator, frame, onValidEvent);
+        if (accumulator.completed) {
+          const result = completedCodexSseResponse(accumulator);
+          assembled = true;
+          await cancelReader(reader);
+          return result;
+        }
       }
       if (done) break;
     }
     if (buffer.trim()) {
       await consumeCodexSseFrame(accumulator, buffer, onValidEvent);
     }
-    const result = codexSseResponseFromAccumulator(accumulator);
+    const result = completedCodexSseResponse(accumulator);
     assembled = true;
     return result;
   } finally {
@@ -237,6 +255,38 @@ export async function readCodexSseResponse(
     } catch {
       // The stream may have released its lock while closing.
     }
+  }
+}
+
+function completedCodexSseResponse(accumulator: CodexSseAccumulator): OpenAIResponse {
+  if (!accumulator.completed) {
+    throw new CodexStreamInterruptedError("stream closed before response.completed");
+  }
+  return codexSseResponseFromAccumulator(accumulator);
+}
+
+class CodexStreamInterruptedError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause });
+    this.name = "CodexStreamInterruptedError";
+  }
+}
+
+async function readCodexResponseText(response: Response): Promise<string> {
+  try {
+    return await response.text();
+  } catch (error) {
+    throw new CodexStreamInterruptedError("failed reading Codex response body", error);
+  }
+}
+
+async function readCodexStreamChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+) {
+  try {
+    return await reader.read();
+  } catch (error) {
+    throw new CodexStreamInterruptedError("failed reading Codex response stream", error);
   }
 }
 
@@ -305,7 +355,7 @@ export async function createCodexResponse(
   authorization: string,
   signal?: AbortSignal,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
-  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
+  budgetContext?: OpenAIProviderBudgetContext,
   onProviderRoundProgress?: () => void,
   onProviderRoundStarted?: () => void,
 ): Promise<OpenAIResponse> {
@@ -321,6 +371,23 @@ export async function createCodexResponse(
     usageAttribution: budgetContext?.attribution,
     roundIndex: budgetContext?.roundIndex,
   });
+  if (budgetContext?.stableProviderCachePrefix) {
+    budgetContext.onProviderRouteCacheIdentity?.(establishFinalProviderCacheIdentity({
+      body: requestBody,
+      serializedBody: admittedRequest.serialized_request,
+      stable: budgetContext.stableProviderCachePrefix,
+      route: budgetContext.routeContext,
+      providerId: "openai-codex",
+      authMode: budgetContext.authMode === "codex_oauth"
+        ? "codex_oauth"
+        : "codex_subscription",
+      serializerContract: "butler.openai-codex-final-json.v1",
+      previousIdentity: budgetContext.previousProviderRouteIdentity,
+    }));
+  }
+  await budgetContext?.admitBoundedProviderBody?.(
+    Buffer.byteLength(admittedRequest.serialized_request, "utf8"),
+  );
   let response: Response;
   try {
     onProviderRoundStarted?.();
@@ -339,6 +406,7 @@ export async function createCodexResponse(
       signal,
     });
   } catch (error) {
+    if (signal?.aborted) throw signal.reason ?? error;
     throw providerNetworkError({
       provider: "openai-codex",
       api: "codex_responses",
@@ -371,5 +439,26 @@ export async function createCodexResponse(
     });
   }
 
-  return await readCodexSseResponse(response, onProviderStreamEvent, onProviderRoundProgress);
+  let parsed: OpenAIResponse;
+  try {
+    parsed = await readCodexSseResponse(response, onProviderStreamEvent, onProviderRoundProgress);
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason ?? error;
+    if (
+      error instanceof ModelProviderRequestError ||
+      !(error instanceof CodexStreamInterruptedError)
+    ) {
+      throw error;
+    }
+    throw providerStreamInterruptedError({
+      provider: "openai-codex",
+      api: "codex_responses",
+      endpoint,
+      model,
+      error: error.cause ?? error,
+      admission: admittedRequest,
+      headers: response.headers,
+    });
+  }
+  return parsed;
 }

@@ -45,7 +45,7 @@ test("delivery guard converts adapter exceptions into retryable delivery failure
       async start() {},
       async send() {
         calls += 1;
-        throw new Error("Telegram Bad Request: message is too long");
+        throw new Error("Remote Bad Request: message is too long");
       },
     }],
   });
@@ -56,7 +56,7 @@ test("delivery guard converts adapter exceptions into retryable delivery failure
   expect(result).toMatchObject({
     actionId: "report-1",
     ok: false,
-    error: "Telegram Bad Request: message is too long",
+    error: "Remote Bad Request: message is too long",
   });
 });
 

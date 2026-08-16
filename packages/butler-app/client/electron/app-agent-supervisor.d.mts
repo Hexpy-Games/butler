@@ -21,7 +21,6 @@ export function buildBundledAgentSupervisorEnv(input: {
   rendererOrigin: string;
   explicitUiUrl?: string | null;
   projectFolderTokenSecret?: string | null;
-  localPagePreviewUrl?: string | null;
   localAuth: { filePath: string; token: string };
 }): Record<string, string | undefined>;
 

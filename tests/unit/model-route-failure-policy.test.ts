@@ -101,6 +101,7 @@ test("retries explicitly classified transport and rate-limit failures", () => {
     "provider_protocol_error",
     "provider_rate_limited",
     "provider_round_timeout",
+    "provider_stream_interrupted",
   ];
 
   for (const code of codes) {

@@ -213,14 +213,14 @@ test("historical app projection reader tolerates legacy and canonical schemas", 
     db.query(`
       INSERT INTO messages (
         id, chat_id, role, text, created_at, conversation_session_id, conversation_turn_id, conversation_message_id
-      ) VALUES ('m1', 'general', 'user', 'hello', '2026-07-02T00:00:00.000Z', 'cs1', 'ct1', 'cm1')
+      ) VALUES ('message-1', 'general', 'user', 'hello', '2026-07-02T00:00:00.000Z', 'cs1', 'ct1', 'cm1')
     `).run();
   } finally {
     db.close();
   }
 
   expect(readHistoricalAppProjectionRows(dbPath)).toEqual([{
-    id: "m1",
+    id: "message-1",
     chat_id: "general",
     role: "user",
     text: "hello",

@@ -7,6 +7,7 @@ export {
   providerHttpError,
   providerNetworkError,
   providerRoundTimeoutError,
+  providerStreamInterruptedError,
   safeEndpointLabel,
   type ProviderStructuredError,
   type RuntimeFailureDiagnostic,

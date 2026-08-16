@@ -72,7 +72,6 @@ export function guidedWorkspaceVisibleToolNames(
     "run_command",
     "write_file",
     "edit_file",
-    "inspect_workspace_page",
     ...(policy.projectId ? ["bind_session_git_worktree"] : []),
   ];
 }

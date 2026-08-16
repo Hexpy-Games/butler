@@ -565,7 +565,6 @@ switch (command) {
   }
   case "auth":
   case "model":
-  case "telegram":
     if (knownCommand?.priority === "operator") {
       runBun(operatorCommandArgs(command, args, common), common);
     } else if (knownCommand?.priority === "advanced") {

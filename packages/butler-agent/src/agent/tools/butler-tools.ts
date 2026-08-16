@@ -22,23 +22,28 @@ import { createMcpToolHandlers } from "./mcp/index.ts";
 import { createImageToolHandlers } from "./image/index.ts";
 import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
+import { createReadOperationResultsHandler } from
+  "./monitoring/read_operation_results/executor.ts";
 import { createToolBridgeToolHandlers } from "./tool-bridge/index.ts";
 import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
 import { createSkillToolHandlers } from "./skills/index.ts";
 import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
-import { workspacePagePreviewAvailabilityOverride } from "./workspace-page-preview/index.ts";
 import { createWorkspaceToolHandlers } from "./workspace-tool-handlers.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
-import type { ButlerToolCall } from "./types.ts";
+import type {
+  ButlerToolCall,
+} from "./types.ts";
 import type {
   ButlerToolExecutorInput,
+} from "./butler-tool-executor-contracts.ts";
+import type {
   ButlerToolExecutorRegistry,
   ButlerToolHandler,
   ButlerToolRuntimeContext,
   ContextualButlerToolExecutor,
-} from "./butler-tool-executor-contracts.ts";
+} from "./tool-execution-contracts.ts";
 export { BUTLER_TOOLS, CORE_BUTLER_TOOLS } from "./registry.ts";
 export type {
   ButlerToolCall,
@@ -49,12 +54,12 @@ export type {
 } from "./types.ts";
 export type {
   ButlerToolExecutionBoundary,
+  ButlerToolExecutor,
   ButlerToolExecutorRegistry,
   ButlerToolHandler,
   ButlerToolRuntimeContext,
   ContextualButlerToolExecutor,
-} from "./butler-tool-executor-contracts.ts";
-export type ButlerToolExecutor = (call: ButlerToolCall) => Promise<unknown>;
+} from "./tool-execution-contracts.ts";
 
 const BUTLER_TOOL_DEFINITIONS_BY_NAME = new Map(
   BUTLER_TOOLS.map((definition) => [definition.name, definition] as const),
@@ -128,11 +133,7 @@ export function createButlerToolExecutor(
   const todoListStore = new TodoListStore(input.butlerData);
   const workStreamStore = new WorkStreamStore(input.butlerData);
   const automationStore = new AutomationStore(input.butlerData);
-  const previewOverride = workspacePagePreviewAvailabilityOverride();
-  const nativeToolAvailabilityOverrides = {
-    ...(previewOverride ? { inspect_workspace_page: previewOverride } : {}),
-    ...(input.nativeToolAvailabilityOverrides ?? {}),
-  };
+  const nativeToolAvailabilityOverrides = input.nativeToolAvailabilityOverrides ?? {};
   const toolExecutorRef: { current?: ButlerToolExecutorRegistry } = {};
   const executeActualTool: ContextualButlerToolExecutor = async (
     call,
@@ -163,10 +164,12 @@ export function createButlerToolExecutor(
   };
   const dispatchTool: ButlerToolHandler = executeActualTool;
   const toolExecutors = createButlerToolExecutorRegistry({
+    ...(input.operationResultExactReader
+      ? createReadOperationResultsHandler(input.operationResultExactReader)
+      : {}),
     ...createProjectLedgerToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
-      appMessageDbPath: input.appMessageDbPath,
       workspacePath: input.workspacePath,
       workspaceReference: projectLedgerWorkspaceReference,
       sessionId: input.sessionId, projectId: input.projectId,
@@ -177,6 +180,7 @@ export function createButlerToolExecutor(
       sessionId: input.sessionId,
       webSearchProvider: input.webSearchProvider,
       currentToolNames: input.currentToolNames,
+      nativeToolDefinitions: input.nativeToolDefinitions,
       hiddenNativeToolNames: input.hiddenNativeToolNames,
       nativeToolAvailabilityOverrides,
     }),
@@ -213,7 +217,6 @@ export function createButlerToolExecutor(
     ...createMemoryToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
-      appMessageDbPath: input.appMessageDbPath,
       sessionId: input.sessionId,
       projectId: input.projectId,
       memoryVectorBackend: input.memoryVectorBackend,

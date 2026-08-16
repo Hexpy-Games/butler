@@ -8,16 +8,13 @@ import type {
   StepObservation,
 } from "./contracts.ts";
 import {
+  bridgeCall,
   openSession,
   replaceInterruptedExecutorOnce,
   rendererFinalText,
   rendererVisibleActivities,
   type ProductLaunch,
 } from "./product-launch.ts";
-import {
-  ProductCallFailure,
-  sessionViewCall,
-} from "./packaged-memory-campaign-read-path.ts";
 import {
   hashText,
   materializePrompt,
@@ -46,8 +43,9 @@ export interface WaitForTurnOptions {
 }
 
 export function isTransientSessionReadError(error: unknown): boolean {
-  return error instanceof ProductCallFailure &&
-    (error.apiCode === "request_failed" || error.apiCode === "internal_error");
+  const message = error instanceof Error ? error.message : String(error);
+  return /(?:Request failed|Failed to fetch|fetch failed|ECONNREFUSED)/iu
+    .test(message);
 }
 
 function progressLabels(view: AppSessionView): string[] {
@@ -88,7 +86,7 @@ export async function waitForTurn(
     await replaceInterruptedExecutorOnce(run, launch);
     let view: AppSessionView;
     try {
-      view = await sessionViewCall(launch.page, {
+      view = await bridgeCall<AppSessionView>(launch.page, "getSessionView", {
         sessionId: run.sessionId,
       });
     } catch (error) {
@@ -148,7 +146,7 @@ export async function verifyDurableFinal(
   expectedFinal: string,
 ): Promise<boolean> {
   await openSession(run, launch.page);
-  const view = await sessionViewCall(launch.page, {
+  const view = await bridgeCall<AppSessionView>(launch.page, "getSessionView", {
     sessionId: run.sessionId,
   });
   const assistant = assistantForTurn(view, turnId);
@@ -165,7 +163,7 @@ export async function verifyDurableCancelled(
   turnId: string,
 ): Promise<boolean> {
   await openSession(run, launch.page);
-  const view = await sessionViewCall(launch.page, {
+  const view = await bridgeCall<AppSessionView>(launch.page, "getSessionView", {
     sessionId: run.sessionId,
   });
   return view.latest_turn?.id === turnId && view.status === "cancelled";
@@ -178,7 +176,7 @@ export async function runScenarioStep(
   prior: ReadonlyMap<string, StepObservation>,
   providerProxy?: ProviderObservationProxy,
 ): Promise<StepObservation> {
-  const before = await sessionViewCall(launch.page, {
+  const before = await bridgeCall<AppSessionView>(launch.page, "getSessionView", {
     sessionId: run.sessionId,
   });
   const previousTurnId = before.latest_turn?.id ?? null;

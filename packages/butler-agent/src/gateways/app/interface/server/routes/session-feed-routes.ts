@@ -135,7 +135,7 @@ function messagesSinceCursor(input: AppRouteContext): Response {
   // The session view is intentionally bounded to the latest page, so filtering
   // it would silently drop deltas when a client has been offline for more than
   // one page. Read from the canonical cursor-aware store instead.
-  const page = input.store.listMessagePage(sessionId, {
+  const page = input.store.listProjectedMessagePage(sessionId, {
     ...(cursorFloor > 0 ? { afterCursor: cursorFloor } : {}),
   });
   const messages = page.items;

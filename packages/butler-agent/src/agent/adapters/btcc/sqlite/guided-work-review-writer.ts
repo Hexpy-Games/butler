@@ -6,6 +6,7 @@ import type {
 import { preserveBlockedStatus } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkMutationJournal } from "./guided-work-mutation-journal.ts";
 import { GuidedWorkProgressWriter } from "./guided-work-progress-writer.ts";
+import { guidedWorkStatusForProgress } from "./guided-work-progress-status.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
 import { GuidedWorkSessionWriter } from "./guided-work-session-writer.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
@@ -115,7 +116,7 @@ export class GuidedWorkReviewWriter {
 
       this.db.query(`
         UPDATE btcc_guided_works SET status = ?, updated_at = ? WHERE work_id = ?
-      `).run(progressWorkStatus(input), now, work.work_id);
+      `).run(guidedWorkStatusForProgress(input.actionProgress), now, work.work_id);
       preserveBlockedStatus(this.db, work.work_id);
       // Review/Validation is optional quality evidence.  It must not be a
       // second closeout authority: Work status changes to `completed` only
@@ -178,12 +179,4 @@ export class GuidedWorkReviewWriter {
     this.db.query("UPDATE btcc_guided_works SET updated_at = ? WHERE work_id = ?")
       .run(now, workId);
   }
-}
-
-function progressWorkStatus(
-  input: Pick<RecordWorkReviewCommand, "actionProgress">,
-): "open" | "blocked" {
-  return input.actionProgress.some((action) => action.status === "blocked")
-    ? "blocked"
-    : "open";
 }

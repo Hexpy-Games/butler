@@ -1,6 +1,6 @@
-import { Database } from "bun:sqlite";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { Database } from "bun:sqlite";
 
 export function resolveCanonicalProjectWorkspace(input: {
   butlerData: string;
@@ -9,46 +9,10 @@ export function resolveCanonicalProjectWorkspace(input: {
 }): string {
   const projectId = input.projectId.trim();
   if (!projectId) throw new Error("continuity_project_binding_missing");
-  const appRegistryPath = join(
-    input.butlerData,
-    "app-server",
-    "butler-client.sqlite",
-  );
-  if (existsSync(appRegistryPath)) {
-    let db: Database | null = null;
-    try {
-      db = new Database(appRegistryPath, { readonly: true });
-      const row = db
-        .query<{ workspace_path: string }, [string]>(
-          `
-        SELECT workspace_path
-        FROM projects
-        WHERE id = ? AND archived = 0
-        LIMIT 1
-      `,
-        )
-        .get(projectId);
-      if (row) {
-        const workspace = row.workspace_path.trim();
-        if (!workspace || !isAbsolute(workspace)) {
-          throw new Error("continuity_project_registry_path_invalid");
-        }
-        return workspace;
-      }
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message === "continuity_project_registry_path_invalid"
-      ) {
-        throw error;
-      }
-      throw new Error("continuity_project_registry_unreadable", {
-        cause: error,
-      });
-    } finally {
-      db?.close();
-    }
-  }
+  const bound = input.boundWorkspacePath?.trim();
+  if (bound && isAbsolute(bound)) return bound;
+  const registered = readRegisteredProjectWorkspace(input.butlerData, projectId);
+  if (registered) return registered;
   const configPath = join(input.butlerData, "butler.config.json");
   try {
     const raw = JSON.parse(readFileSync(configPath, "utf8")) as {
@@ -68,8 +32,29 @@ export function resolveCanonicalProjectWorkspace(input: {
   } catch {
     // The authenticated session binding is the canonical fallback snapshot.
   }
-  const bound = input.boundWorkspacePath?.trim();
-  if (!bound || !isAbsolute(bound))
-    throw new Error("continuity_project_workspace_unresolved");
-  return bound;
+  throw new Error("continuity_project_workspace_unresolved");
+}
+
+function readRegisteredProjectWorkspace(
+  butlerData: string,
+  projectId: string,
+): string | null {
+  let database: Database | undefined;
+  try {
+    database = new Database(
+      join(butlerData, "app-server", "butler-client.sqlite"),
+      { readonly: true, strict: true },
+    );
+    const row = database.query(
+      "SELECT workspace_path FROM projects WHERE id = ? AND archived = 0 LIMIT 1",
+    ).get(projectId) as { workspace_path?: unknown } | null;
+    return typeof row?.workspace_path === "string" &&
+        row.workspace_path.trim() && isAbsolute(row.workspace_path)
+      ? row.workspace_path
+      : null;
+  } catch {
+    return null;
+  } finally {
+    database?.close(false);
+  }
 }

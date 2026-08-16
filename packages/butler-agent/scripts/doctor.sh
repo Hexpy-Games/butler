@@ -170,22 +170,6 @@ check_environment() {
     fixes="Run install.sh with Codex subscription login, or add OPENAI_API_KEY=..."
   fi
 
-  local bot_token chat_id
-  bot_token="$(load_env_var TELEGRAM_BOT_TOKEN 2>/dev/null || true)"
-  chat_id="$(load_env_var TELEGRAM_CHAT_ID 2>/dev/null || true)"
-  if [[ -z "$bot_token" ]]; then
-    [[ "$status" == "PASS" ]] && status="WARN"
-    details="${details}TELEGRAM_BOT_TOKEN: not set (Telegram not configured)\n"
-  else
-    details="${details}TELEGRAM_BOT_TOKEN: set\n"
-  fi
-  if [[ -n "$bot_token" && -z "$chat_id" ]]; then
-    [[ "$status" == "PASS" ]] && status="WARN"
-    details="${details}TELEGRAM_CHAT_ID: not set (partial Telegram setup)\n"
-  elif [[ -n "$chat_id" ]]; then
-    details="${details}TELEGRAM_CHAT_ID: set\n"
-  fi
-
   local msg
   if [[ "$status" == "FAIL" ]]; then msg="required variables missing"
   else msg=".env present, auth=${auth_mode}"; fi
@@ -347,62 +331,6 @@ check_services() {
   add_result "native services" "services" "$status" "${online_count}/${total_count} services healthy" "$details" "$fixes"
 }
 
-# ─── Check 5: Telegram Bot Connectivity ───────────────────────────
-check_telegram() {
-  local bot_token chat_id
-  bot_token="$(load_env_var TELEGRAM_BOT_TOKEN 2>/dev/null || true)"
-  chat_id="$(load_env_var TELEGRAM_CHAT_ID 2>/dev/null || true)"
-
-  if [[ -z "$bot_token" ]]; then
-    add_result "telegram" "telegram" "WARN" "Telegram not configured (no bot token)" "" "Set TELEGRAM_BOT_TOKEN in .env"
-    return
-  fi
-
-  if ! command -v curl &>/dev/null; then
-    add_result "telegram" "telegram" "WARN" "cannot verify (curl not found)" "" "Install curl"
-    return
-  fi
-
-  local status="PASS" details=""
-
-  # getMe
-  local resp
-  resp="$(curl -s --max-time 5 "https://api.telegram.org/bot${bot_token}/getMe" 2>/dev/null || true)"
-  if [[ -z "$resp" ]]; then
-    add_result "telegram" "telegram" "FAIL" "API unreachable" "Could not connect to Telegram API" "Check network"
-    return
-  fi
-
-  # Check if ok:true (simple grep — no JSON parser needed)
-  if echo "$resp" | grep -q '"ok":true'; then
-    local bot_user
-    bot_user="$(echo "$resp" | grep -oE '"username":"[^"]+"' | head -1 | cut -d'"' -f4)"
-    details="${details}bot: @${bot_user}\n"
-  else
-    add_result "telegram" "telegram" "FAIL" "bot token invalid" "$resp" "Check token with @BotFather"
-    return
-  fi
-
-  # getChat
-  if [[ -n "$chat_id" ]]; then
-    local chat_resp
-    chat_resp="$(curl -s --max-time 5 "https://api.telegram.org/bot${bot_token}/getChat?chat_id=${chat_id}" 2>/dev/null || true)"
-    if echo "$chat_resp" | grep -q '"ok":true'; then
-      details="${details}chat $chat_id: accessible\n"
-    else
-      status="WARN"
-      details="${details}chat $chat_id: not accessible\n"
-    fi
-  else
-    status="WARN"
-    details="${details}TELEGRAM_CHAT_ID not set\n"
-  fi
-
-  local msg
-  [[ "$status" == "PASS" ]] && msg="bot token valid, chat accessible" || msg="bot token valid, partial setup"
-  add_result "telegram" "telegram" "$status" "$msg" "$details" ""
-}
-
 # ─── Check 6: Embed Server Health ─────────────────────────────────
 check_embed() {
   local socket_path="${EMBED_SOCKET:-/tmp/butler-embed.sock}"
@@ -460,7 +388,7 @@ check_permissions() {
   local status="PASS" details="" fixes=""
   local exec_count=0
 
-  for script in packages/butler-agent/scripts/start-butler.sh packages/butler-agent/scripts/send-telegram.sh; do
+  for script in packages/butler-agent/scripts/start-butler.sh; do
     local full="$BUTLER_HOME/$script"
     [[ -f "$full" ]] || continue
     if [[ -x "$full" ]]; then
@@ -811,7 +739,7 @@ except Exception:
 check_logs() {
   local status="PASS" details="" msg=""
   local log_dir="$BUTLER_DATA/logs"
-  local expected_logs=(hooks.log tasks.log telegram.log system.log)
+  local expected_logs=(hooks.log tasks.log system.log)
   local missing=0 oversized=0
 
   for log_name in "${expected_logs[@]}"; do
@@ -915,7 +843,6 @@ do_collect_logs() {
       -e 's/sk-ant-[a-zA-Z0-9_-]*/sk-ant-REDACTED/g' \
       -e 's/[0-9]\{8,\}:[A-Za-z0-9_-]\{35,\}/BOT_TOKEN_REDACTED/g' \
       -e 's/\(ANTHROPIC_API_KEY=\).*/\1REDACTED/g' \
-      -e 's/\(TELEGRAM_BOT_TOKEN=\).*/\1REDACTED/g' \
       "$file" > "$tmp" 2>/dev/null && mv "$tmp" "$file" || rm -f "$tmp"
   }
 
@@ -930,7 +857,7 @@ do_collect_logs() {
   # Copy log files (last 24h or last 100 lines)
   local today_prefix
   today_prefix="$(date -u +%Y-%m-%d)"
-  for log_name in hooks.log tasks.log telegram.log system.log; do
+  for log_name in hooks.log tasks.log system.log; do
     local src="$BUTLER_DATA/logs/$log_name"
     if [[ -f "$src" ]]; then
       local filtered
@@ -1157,7 +1084,7 @@ if $FIX_MODE; then
   exit $?
 fi
 
-ALL_CHECKS=(dependencies environment config services telegram embed permissions disk steward workers delivery hooks logs)
+ALL_CHECKS=(dependencies environment config services embed permissions disk steward workers delivery hooks logs)
 
 if [[ -n "$CHECK_FILTER" ]]; then
   found=false

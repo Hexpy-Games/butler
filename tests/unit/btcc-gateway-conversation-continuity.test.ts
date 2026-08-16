@@ -36,11 +36,55 @@ import {
 } from "./support/fake-btcc-gateway-runtime.ts";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/contracts.ts";
+import { createAppCancellationEnvelope } from
+  "../../packages/butler-agent/src/gateways/core/app-transport.ts";
+import type { Btcc } from
+  "../../packages/butler-agent/src/agent/btcc/contracts.ts";
 
 const roots: string[] = [];
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+test("typed cancellation invokes only BTCC stop and returns a durable ack", async () => {
+  const stopped: string[] = [];
+  const btcc: Btcc = {
+    runTurn: async () => {
+      throw new Error("cancellation must not enter runTurn");
+    },
+    stopTurn: async ({ turnId }) => {
+      stopped.push(turnId);
+      return { kind: "cancelled", turnId };
+    },
+  };
+  const result = await createBtccGatewayHandlers({ btcc }).butler!({
+    route: {
+      sessionId: "butler/app-cancel",
+      role: "butler",
+      reason: "session-hint",
+      workspacePath: process.cwd(),
+    },
+    envelope: createAppCancellationEnvelope({
+      chatId: "app-cancel",
+      sessionId: "butler/app-cancel",
+      turnId: "turn-cancel",
+      requestId: "cancel-request",
+      requestedAt: "2026-08-13T00:00:00.000Z",
+    }),
+  });
+
+  expect(stopped).toEqual(["turn-cancel"]);
+  expect(result.metadata).toMatchObject({
+    text: "",
+    turnId: "turn-cancel",
+    controlAck: {
+      kind: "cancel_turn",
+      requestId: "cancel-request",
+      turnId: "turn-cancel",
+      outcome: "cancelled",
+    },
+  });
 });
 
 test("BTCC facade commits each Turn and gives the next Turn recent conversation", async () => {

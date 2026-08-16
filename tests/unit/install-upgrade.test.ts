@@ -77,7 +77,6 @@ test("upgrade report explains layout, migration, repair targets, and rollback", 
     "managed-runtime",
     "workspace-dependencies",
     "openai-auth",
-    "telegram-pairing",
     "native-services",
     "config",
   ]);

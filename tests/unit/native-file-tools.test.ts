@@ -47,26 +47,73 @@ describe("workspace path guard", () => {
 });
 
 describe("read_file", () => {
+  test("uses one requests/files contract and rejects the removed path alias", async () => {
+    await writeFile(join(root, "canonical.txt"), "canonical", "utf8");
+
+    const legacy = await executeReadFileTool(call({
+      workspace_root: root,
+      path: "canonical.txt",
+    })) as any;
+    expect(legacy.ok).toBe(false);
+    expect(legacy.error).toBe("invalid_arguments");
+
+    const canonical = await executeReadFileTool(call({
+      workspace_root: root,
+      requests: [{ path: "canonical.txt" }],
+    })) as any;
+    expect(canonical.ok).toBe(true);
+    expect(canonical.files).toEqual([
+      expect.objectContaining({
+        ok: true,
+        path: "canonical.txt",
+        content: "canonical",
+      }),
+    ]);
+    expect(canonical).not.toHaveProperty("content");
+  });
+
+  test("treats successful canonical reads as successful even when requests use bound absolute paths", async () => {
+    await writeFile(join(root, "absolute-a.txt"), "alpha", "utf8");
+    await writeFile(join(root, "absolute-b.txt"), "beta", "utf8");
+
+    const result = await executeReadFileTool(
+      call({
+        requests: [
+          { path: join(root, "absolute-a.txt") },
+          { path: join(root, "absolute-b.txt") },
+        ],
+      }),
+      { workspacePath: root },
+    ) as any;
+
+    expect(result.ok).toBe(true);
+    expect(result).not.toHaveProperty("error");
+    expect(result.files).toEqual([
+      expect.objectContaining({ ok: true, content: "alpha" }),
+      expect.objectContaining({ ok: true, content: "beta" }),
+    ]);
+  });
+
   test("reads bounded text with truncation and rejects binary", async () => {
     await writeFile(join(root, "a.txt"), "abcdef");
-    const res = await executeReadFileTool(call({ workspace_root: root, path: "a.txt", max_bytes: 3 })) as any;
-    expect(res.ok).toBe(true); expect(res.content).toBe("abc"); expect(res.truncated).toBe(true); expect(res.evidence_receipts[0].verified).toBe(true);
+    const res = await executeReadFileTool(call({ workspace_root: root, requests: [{ path: "a.txt", max_bytes: 3 }] })) as any;
+    expect(res.ok).toBe(true); expect(res.files[0].content).toBe("abc"); expect(res.truncated).toBe(true); expect(res.evidence_receipts[0].verified).toBe(true);
     expect(res.metrics.bytes_read).toBe(6);
     expect(res.metrics.output_bytes).toBe(3);
     await writeFile(join(root, "lines.txt"), "one\ntwo\nthree\nfour");
-    const lineRes = await executeReadFileTool(call({ workspace_root: root, path: "lines.txt", start_line: 2, limit_lines: 2 })) as any;
-    expect(lineRes.content).toBe("two\nthree"); expect(lineRes.start_line).toBe(2); expect(lineRes.end_line).toBe(3); expect(lineRes.truncated).toBe(true);
+    const lineRes = await executeReadFileTool(call({ workspace_root: root, requests: [{ path: "lines.txt", start_line: 2, limit_lines: 2 }] })) as any;
+    expect(lineRes.files[0].content).toBe("two\nthree"); expect(lineRes.files[0].start_line).toBe(2); expect(lineRes.files[0].end_line).toBe(3); expect(lineRes.truncated).toBe(true);
     await writeFile(join(root, "bin.dat"), Buffer.from([1, 0, 2]));
-    expect(((await executeReadFileTool(call({ workspace_root: root, path: "bin.dat" }))) as any).error).toBe("binary_file_not_supported");
-    expect(((await executeReadFileTool(call({ workspace_root: root, path: join(root, "a.txt") }))) as any).content).toBe("abcdef");
+    expect(((await executeReadFileTool(call({ workspace_root: root, requests: [{ path: "bin.dat" }] }))) as any).files[0].error).toBe("binary_file_not_supported");
+    expect(((await executeReadFileTool(call({ workspace_root: root, requests: [{ path: join(root, "a.txt") }] }))) as any).files[0].content).toBe("abcdef");
   });
 
   test("rejects Project Ledger inspection through read_file", async () => {
     await mkdir(join(root, ".project-ledger", "specs"), { recursive: true });
     await writeFile(join(root, ".project-ledger", "specs", "feature.md"), "# Feature\n", "utf8");
-    const res = await executeReadFileTool(call({ workspace_root: root, path: ".project-ledger/specs/feature.md" })) as any;
+    const res = await executeReadFileTool(call({ workspace_root: root, requests: [{ path: ".project-ledger/specs/feature.md" }] })) as any;
     expect(res.ok).toBe(false);
-    expect(res.error).toBe("protected_path");
+    expect(res.files[0].error).toBe("protected_path");
   });
 
   test("sanitizes supplied workspace-root protected-path rejection", async () => {
@@ -77,7 +124,7 @@ describe("read_file", () => {
       const res = await executeReadFileTool(
         call({
           workspace_root: outsideRoot,
-          path: ".project-ledger/specs/private.md",
+          requests: [{ path: ".project-ledger/specs/private.md" }],
         }),
         { workspacePath: root },
       ) as any;
@@ -120,36 +167,39 @@ describe("read_file", () => {
 
   test("keeps the requested line offset across aggregate and line continuations", async () => {
     await writeFile(join(root, "offset.txt"), "one\ntwo\nthree\n", "utf8");
-    const first = await executeReadFileTool(call({ workspace_root: root, path: "offset.txt", start_line: 2, limit_lines: 1, max_total_bytes: 2 })) as any;
-    expect(first.content).toBe("tw");
-    expect(first.start_line).toBe(2);
-    expect(first.end_line).toBe(2);
-    const second = await executeReadFileTool(call({ workspace_root: root, path: "offset.txt", start_line: 2, limit_lines: 1, max_total_bytes: 2, cursor: first.next_cursor })) as any;
-    expect(second.content).toBe("o");
-    expect(second.start_line).toBe(2);
-    const third = await executeReadFileTool(call({ workspace_root: root, path: "offset.txt", start_line: 2, limit_lines: 1, max_total_bytes: 2, cursor: second.next_cursor })) as any;
-    expect(third.content).toBe("th");
-    expect(third.start_line).toBe(3);
-    expect(third.content).not.toBe("\n");
+    const readArgs = { requests: [{ path: "offset.txt", start_line: 2, limit_lines: 1 }], max_total_bytes: 2 };
+    const first = await executeReadFileTool(call({ workspace_root: root, ...readArgs })) as any;
+    expect(first.files[0].content).toBe("tw");
+    expect(first.files[0].start_line).toBe(2);
+    expect(first.files[0].end_line).toBe(2);
+    const second = await executeReadFileTool(call({ workspace_root: root, ...readArgs, cursor: first.next_cursor })) as any;
+    expect(second.files[0].content).toBe("o");
+    expect(second.files[0].start_line).toBe(2);
+    const third = await executeReadFileTool(call({ workspace_root: root, ...readArgs, cursor: second.next_cursor })) as any;
+    expect(third.files[0].content).toBe("th");
+    expect(third.files[0].start_line).toBe(3);
+    expect(third.files[0].content).not.toBe("\n");
   });
 
   test("preserves UTF-8 boundaries while continuing from a non-first line", async () => {
     await writeFile(join(root, "unicode-lines.txt"), "첫째\n한🙂글\n끝\n", "utf8");
-    const first = await executeReadFileTool(call({ workspace_root: root, path: "unicode-lines.txt", start_line: 2, limit_lines: 1, max_total_bytes: 4 })) as any;
+    const readArgs = { requests: [{ path: "unicode-lines.txt", start_line: 2, limit_lines: 1 }], max_total_bytes: 4 };
+    const first = await executeReadFileTool(call({ workspace_root: root, ...readArgs })) as any;
     expect(first.ok).toBe(true);
-    expect(first.content).toBe("한");
-    expect(first.start_line).toBe(2);
-    expect(first.content.includes("�")).toBe(false);
-    const second = await executeReadFileTool(call({ workspace_root: root, path: "unicode-lines.txt", start_line: 2, limit_lines: 1, max_total_bytes: 4, cursor: first.next_cursor })) as any;
+    expect(first.files[0].content).toBe("한");
+    expect(first.files[0].start_line).toBe(2);
+    expect(first.files[0].content.includes("�")).toBe(false);
+    const second = await executeReadFileTool(call({ workspace_root: root, ...readArgs, cursor: first.next_cursor })) as any;
     expect(second.ok).toBe(true);
-    expect(second.content).toBe("🙂");
-    expect(second.start_line).toBe(2);
-    expect(second.content.includes("�")).toBe(false);
+    expect(second.files[0].content).toBe("🙂");
+    expect(second.files[0].start_line).toBe(2);
+    expect(second.files[0].content.includes("�")).toBe(false);
   });
 
   test("rejects forged read cursor offsets at UTF-8 boundaries and EOF", async () => {
     await writeFile(join(root, "cursor-unicode.txt"), "🙂x", "utf8");
-    const first = await executeReadFileTool(call({ workspace_root: root, path: "cursor-unicode.txt", max_bytes: 4 })) as any;
+    const readArgs = { requests: [{ path: "cursor-unicode.txt", max_bytes: 4 }] };
+    const first = await executeReadFileTool(call({ workspace_root: root, ...readArgs })) as any;
     const decoded = decodeFileToolCursor(first.next_cursor) as any;
     expect(decoded).not.toBeNull();
     const forge = (offset_bytes: number) => encodeFileToolCursor({
@@ -159,9 +209,9 @@ describe("read_file", () => {
       offset_bytes,
       file_sha256: decoded.file_sha256,
     });
-    const midCharacter = await executeReadFileTool(call({ workspace_root: root, path: "cursor-unicode.txt", max_bytes: 4, cursor: forge(1) })) as any;
+    const midCharacter = await executeReadFileTool(call({ workspace_root: root, ...readArgs, cursor: forge(1) })) as any;
     expect(midCharacter.error).toBe("invalid_cursor");
-    const beyondEof = await executeReadFileTool(call({ workspace_root: root, path: "cursor-unicode.txt", max_bytes: 4, cursor: forge(100) })) as any;
+    const beyondEof = await executeReadFileTool(call({ workspace_root: root, ...readArgs, cursor: forge(100) })) as any;
     expect(beyondEof.error).toBe("invalid_cursor");
   });
 
@@ -169,14 +219,14 @@ describe("read_file", () => {
     await writeFile(join(root, "blank-cursor.txt"), "blank cursor content\n", "utf8");
     const blank = await executeReadFileTool(call({
       workspace_root: root,
-      path: "blank-cursor.txt",
+      requests: [{ path: "blank-cursor.txt" }],
       cursor: "  ",
     })) as any;
     expect(blank.ok).toBe(true);
-    expect(blank.content).toBe("blank cursor content\n");
+    expect(blank.files[0].content).toBe("blank cursor content\n");
     const malformed = await executeReadFileTool(call({
       workspace_root: root,
-      path: "blank-cursor.txt",
+      requests: [{ path: "blank-cursor.txt" }],
       cursor: "not-a-cursor",
     })) as any;
     expect(malformed.error).toBe("invalid_cursor");
@@ -383,9 +433,9 @@ describe("session-bound workspace authority", () => {
       expect(listed.files.map((file: { path: string }) => file.path)).toContain("bound.txt");
       expect(listed.files.map((file: { path: string }) => file.path)).not.toContain("project-only.txt");
 
-      const read = await invoke("read_file", { workspace_root: root, path: "bound.txt" });
+      const read = await invoke("read_file", { workspace_root: root, requests: [{ path: "bound.txt" }] });
       expect(read.ok).toBe(true);
-      expect(read.content).toBe("needle from bound workspace\n");
+      expect(read.files[0].content).toBe("needle from bound workspace\n");
 
       const grep = await invoke("grep_files", { workspace_root: root, pattern: "needle" });
       expect(grep.ok).toBe(true);

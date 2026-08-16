@@ -142,16 +142,13 @@ test("BTCC child domains use each other through public indexes", () => {
   }
 });
 
-test("native product entrypoints own BTCC composition and Gateway has no product path", () => {
-  const applicationEntrypoints = [
-    "application/native-butler.ts",
-    "application/native-steward.ts",
-  ];
-  for (const entrypoint of applicationEntrypoints) {
-    expect(existsSync(join(sourceRoot, entrypoint)), entrypoint).toBe(true);
-    expect(readFileSync(join(sourceRoot, entrypoint), "utf8"), entrypoint)
-      .toContain("createProductionBtccComposition");
-  }
+test("Native Butler alone owns BTCC composition and the retired Steward is absent", () => {
+  const nativeButler = "application/native-butler.ts";
+  const nativeSteward = "application/native-steward.ts";
+  expect(existsSync(join(sourceRoot, nativeButler)), nativeButler).toBe(true);
+  expect(readFileSync(join(sourceRoot, nativeButler), "utf8"), nativeButler)
+    .toContain("createProductionBtccComposition");
+  expect(existsSync(join(sourceRoot, nativeSteward)), nativeSteward).toBe(false);
 
   for (const removedPath of [
     "interfaces/gateway/native-butler-bootstrap.ts",
@@ -160,12 +157,13 @@ test("native product entrypoints own BTCC composition and Gateway has no product
     expect(existsSync(join(sourceRoot, removedPath)), removedPath).toBe(false);
   }
 
-  const scripts = [
-    "packages/butler-agent/scripts/native-butler-main.ts",
+  const nativeMainScript = "packages/butler-agent/scripts/native-butler-main.ts";
+  expect(readFileSync(join(repositoryRoot, nativeMainScript), "utf8"))
+    .toContain("src/application/native-butler.ts");
+  expect(existsSync(join(
+    repositoryRoot,
     "packages/butler-agent/scripts/native-steward-turn.ts",
-  ].map((path) => readFileSync(join(repositoryRoot, path), "utf8"));
-  expect(scripts.join("\n")).toContain("src/application/native-butler.ts");
-  expect(scripts.join("\n")).toContain("src/application/native-steward.ts");
+  ))).toBe(false);
 });
 
 function childDomain(path: string, childDomains: Set<string>): string | null {

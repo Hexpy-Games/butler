@@ -233,12 +233,12 @@ test("planned task store records and answers principal decisions", () => {
   const answered = store.answerDecision({
     decisionId: "dec-1",
     optionId: "approve",
-    transport: "telegram",
+    transport: "app",
     actorId: "user-1",
   });
   expect(answered.decision?.response).toMatchObject({
     option_id: "approve",
-    transport: "telegram",
+    transport: "app",
     actor_id: "user-1",
   });
 });

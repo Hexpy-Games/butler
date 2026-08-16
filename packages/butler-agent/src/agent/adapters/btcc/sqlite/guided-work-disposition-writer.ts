@@ -3,7 +3,7 @@ import type {
   DurableWorkActionProgress,
   DurableWorkDispositionActionUpdate,
   DurableWorkView,
-  RecordCloseoutMissingInput,
+  ClaimWorkCloseoutCorrectionInput,
   RecordWorkDispositionCommand,
 } from "../../../btcc/work/index.ts";
 import {
@@ -53,13 +53,21 @@ export class GuidedWorkDispositionWriter {
       const replay = this.replay(input);
       if (replay) return replay;
 
-      const work = this.sessions.requireBoundForDisposition(input);
+      const runtimeOwnedOpen = input.disposition === "open" &&
+        input.runtimeOwnedOpenGeneration?.version === 1;
+      const work = runtimeOwnedOpen
+        ? this.sessions.requireBoundForRuntimeOpen(input)
+        : this.sessions.requireBoundForDisposition(input);
       if (work.work_id !== input.workId) {
         throw new Error("Durable Work disposition target is not bound to this Turn");
       }
 
       this.attachCurrentTurnResults(work.work_id, input);
       const current = this.reader.view(work.work_id);
+      const runtimeCompleted = this.runtimeCompletedTransition(input, current);
+      if (runtimeCompleted === "fresh_completed") return current;
+      this.validateExpectedMaterial(input, current);
+      const reopenCompleted = runtimeCompleted === "reopen";
       const actionProgress = this.actionProgress(current, input.actionUpdates ?? []);
       const remainingActions = normalizeDispositionStringList(input.remainingActions ?? []);
       const nextCondition = normalizeDispositionOptional(input.nextCondition);
@@ -90,11 +98,11 @@ export class GuidedWorkDispositionWriter {
       this.db.query(`
         INSERT INTO btcc_guided_work_disposition_revisions (
           disposition_revision_id, work_id, revision, result_sequence, disposition, summary,
-          material_fingerprint,
+          material_fingerprint, runtime_owned_open,
           action_updates_json, remaining_actions_json, next_condition,
           evidence_refs_json, evidence_snapshot_json, followups_json,
           origin_turn_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         dispositionRevisionId,
         work.work_id,
@@ -103,6 +111,7 @@ export class GuidedWorkDispositionWriter {
         input.disposition,
         input.summary.trim(),
         "",
+        runtimeOwnedOpen ? 1 : 0,
         stableJson(input.actionUpdates ?? []),
         stableJson(remainingActions),
         nextCondition ?? null,
@@ -130,8 +139,10 @@ export class GuidedWorkDispositionWriter {
 
       this.db.query(`
         UPDATE btcc_guided_works SET status = ?, updated_at = ?
-        WHERE work_id = ? AND status IN ('open', 'blocked')
-      `).run(input.disposition, now, work.work_id);
+        WHERE work_id = ? AND (
+          status IN ('open', 'blocked') OR (? = 1 AND status = 'completed')
+        )
+      `).run(input.disposition, now, work.work_id, reopenCompleted ? 1 : 0);
 
       this.db.query(`
         INSERT INTO btcc_guided_work_disposition_commands (
@@ -156,8 +167,8 @@ export class GuidedWorkDispositionWriter {
     }).immediate();
   }
 
-  recordCloseoutMissing(input: RecordCloseoutMissingInput): void {
-    this.db.transaction(() => {
+  claimCloseoutCorrection(input: ClaimWorkCloseoutCorrectionInput): boolean {
+    return this.db.transaction(() => {
       const work = this.sessions.requireBoundForCloseoutDiagnostic(input);
       if (work.work_id !== input.workId) {
         throw new Error("Durable Work closeout diagnostic target is not bound to this Turn");
@@ -165,7 +176,7 @@ export class GuidedWorkDispositionWriter {
       const diagnosticKey = digest(
         `btcc-guided-work-closeout-missing.v1\0${input.turnId}\0${input.workId}`,
       );
-      this.db.query(`
+      const inserted = this.db.query(`
         INSERT OR IGNORE INTO btcc_guided_work_closeout_diagnostics (
           diagnostic_id, diagnostic_key, code, turn_id, work_id, created_at
         ) VALUES (?, ?, 'closeout_missing', ?, ?, ?)
@@ -176,6 +187,7 @@ export class GuidedWorkDispositionWriter {
         input.workId,
         new Date().toISOString(),
       );
+      return inserted.changes === 1;
     }).immediate();
   }
 
@@ -206,7 +218,7 @@ export class GuidedWorkDispositionWriter {
       SELECT call_id FROM btcc_guided_tool_calls
       WHERE turn_id = ? AND status = 'completed'
         AND tool_name NOT IN (${controlPlaceholders})
-      ORDER BY turn_sequence, rowid
+      ORDER BY rowid
     `).all(input.turnId, ...CONTROL_TOOL_NAMES);
     for (const result of currentResults) ids.add(result.call_id);
     for (const toolCallId of ids) {
@@ -240,6 +252,32 @@ export class GuidedWorkDispositionWriter {
     return updates.length > 0
       ? applyWorkActionUpdates(work, updates)
       : work.actionProgress;
+  }
+
+  private validateExpectedMaterial(
+    input: RecordWorkDispositionCommand,
+    current: DurableWorkView,
+  ): void {
+    if (!input.expectedMaterialFingerprint) return;
+    if (dispositionMaterialFingerprint(current) !== input.expectedMaterialFingerprint) {
+      throw new Error("Durable Work changed before its disposition was persisted");
+    }
+  }
+
+  private runtimeCompletedTransition(
+    input: RecordWorkDispositionCommand,
+    current: DurableWorkView,
+  ): "none" | "fresh_completed" | "reopen" {
+    if (input.disposition !== "open" || current.status !== "completed" ||
+        input.runtimeOwnedOpenGeneration?.version !== 1 ||
+        !input.expectedMaterialFingerprint) {
+      return "none";
+    }
+    const latest = current.latestDisposition;
+    const freshForTurn = latest?.originTurnId === input.turnId &&
+      latest.disposition === current.status &&
+      latest.materialFingerprint === dispositionMaterialFingerprint(current);
+    return freshForTurn ? "fresh_completed" : "reopen";
   }
 
   private validateDisposition(input: {

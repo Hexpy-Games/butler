@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import {
-  WorkStageTransitionError,
+  WorkTransitionGuardError,
   type DurableWorkContext,
   type DurableWorkService,
   type DurableWorkView,
@@ -13,7 +13,7 @@ import {
   renderDurableWorkContext,
 } from "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tools.ts";
 
-test("R3 Work exposes explicit relation tools and compact optional control tools", () => {
+test("R3 Work exposes three optional controls plus atomic disposition", () => {
   expect(DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name)).toEqual([
     "start_work",
     "continue_work",
@@ -29,23 +29,25 @@ test("R3 Work exposes explicit relation tools and compact optional control tools
   expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
     .toContain("overall multi-Turn user outcome");
   expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[3]))
-    .toContain("next_stage");
+    .not.toContain("next_stage");
   expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[3]))
     .toContain("action_updates");
   expect(DURABLE_WORK_TOOL_DEFINITIONS[3]?.description)
     .toContain("when no Review is being recorded");
   expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[4]))
-    .toContain("next_stage");
+    .not.toContain("next_stage");
   expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[4]))
     .toContain("action_updates");
   expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[4]))
-    .toContain('"enum":["planning","execution","review","validation","reporting"]');
+    .toContain('"correction_scope"');
+  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[4]))
+    .toContain('"enum":["planning","execution"]');
   expect(DURABLE_WORK_TOOL_DEFINITIONS[4]?.description)
     .toContain("Plan and result subjects enter review");
   expect(DURABLE_WORK_TOOL_DEFINITIONS[4]?.description)
     .toContain("does not judge the Review or Validation meaning");
   expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[4]?.parameters))
-    .toContain("The legal stage to enter after Review or Validation");
+    .toContain("where correction belongs");
   for (const tool of DURABLE_WORK_TOOL_DEFINITIONS) {
     expect(tool.concurrencySafe).not.toBe(true);
   }
@@ -60,6 +62,7 @@ test("R3 Work exposes explicit relation tools and compact optional control tools
   expect(DURABLE_WORK_TOOL_DEFINITIONS[5]?.description)
     .toContain("does not require Plan, Review, or stage sequence records");
   const encoded = JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS);
+  expect(encoded).not.toContain("evidence_refs");
   expect(encoded).not.toContain("revision_id");
   expect(encoded).not.toContain("result_id");
   expect(encoded).not.toContain("checkpoint_id");
@@ -153,7 +156,6 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
       work_id: "work-1",
       status: "open",
       current_stage: "planning",
-      allowed_next_stages: ["review"],
       actions: [{ action_key: "research", status: "pending" }],
       unresolved_action_keys: ["research"],
       completion_blockers: [
@@ -178,7 +180,6 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
     mutationCallId: "call-progress",
     name: "record_work_checkpoint",
     args: {
-      next_stage: "review",
       action_updates: [{
         action_key: "research",
         status: "done",
@@ -188,7 +189,6 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
   });
   expect(progress).toMatchObject({ ok: true });
   expect(progressReceived).toMatchObject({
-    nextStage: "review",
     actionUpdates: [{
       actionKey: "research",
       status: "done",
@@ -221,8 +221,8 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
     name: "record_work_review",
     args: {
       subject: "result",
-      verdict: "accept",
-      next_stage: "reporting",
+      verdict: "revise",
+      correction_scope: "planning",
       action_updates: [{
         action_key: "research",
         status: "done",
@@ -235,8 +235,8 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
   expect(reviewReceived).toMatchObject({
     mutationCallId: "call-review",
     subject: "result",
-    verdict: "accept",
-    nextStage: "reporting",
+    verdict: "revise",
+    correctionScope: "planning",
     actionUpdates: [{
       actionKey: "research",
       status: "done",
@@ -354,7 +354,6 @@ test("R3 Work tool results do not repeat anchored Plan detail", async () => {
       work_id: "work-1",
       status: "open",
       current_stage: "planning",
-      allowed_next_stages: ["review"],
       actions: [{ action_key: "research", status: "active" }],
       unresolved_action_keys: ["research"],
       completion_blockers: [
@@ -370,7 +369,7 @@ test("R3 Work tool results do not repeat anchored Plan detail", async () => {
   expect(Buffer.byteLength(encoded)).toBeLessThan(600);
 });
 
-test("R3 Work transition rejection returns the allowed next stage as ordinary feedback", async () => {
+test("R3 Work transition rejection returns one semantic next action", async () => {
   const current = workView();
   const service = fakeService({
     loadContext: async () => ({
@@ -382,8 +381,13 @@ test("R3 Work transition rejection returns the allowed next stage as ordinary fe
       },
       resultFacts: [],
     }),
-    recordCheckpoint: async () => {
-      throw new WorkStageTransitionError("planning", "reporting", ["review"]);
+    recordReview: async () => {
+      throw new WorkTransitionGuardError(
+        "planning",
+        "result_review_accept",
+        "plan_review_required",
+        "record_plan_review",
+      );
     },
   });
 
@@ -391,22 +395,26 @@ test("R3 Work transition rejection returns the allowed next stage as ordinary fe
     service,
     scope: { turnId: "turn-1", sessionId: "session-1" },
     mutationCallId: "invalid-transition",
-    name: "record_work_checkpoint",
-    args: { next_stage: "reporting" },
+    name: "record_work_review",
+    args: {
+      subject: "result",
+      verdict: "accept",
+      summary: "The result is ready.",
+    },
   });
 
   expect(result).toMatchObject({
     ok: false,
     error: {
-      code: "invalid_work_stage_transition",
+      code: "work_transition_guard_unmet",
       current_stage: "planning",
-      attempted_stage: "reporting",
-      allowed_next_stages: ["review"],
+      requested_action: "result_review_accept",
+      unmet_guard: "plan_review_required",
+      next_action: "record_plan_review",
     },
     work: {
       status: "open",
       current_stage: "planning",
-      allowed_next_stages: ["review"],
       unresolved_action_keys: ["research"],
     },
   });
@@ -466,7 +474,6 @@ test("R3 generic Work rejection returns the current guardrail view", async () =>
     work: {
       work_id: "work-1",
       current_stage: "planning",
-      allowed_next_stages: ["review"],
       actions: [{ action_key: "research", status: "pending" }],
       unresolved_action_keys: ["research"],
     },
@@ -517,7 +524,7 @@ test("R3 continuation context stays concise and semantic", () => {
   const rendered = renderDurableWorkContext(context) ?? "";
   expect(rendered).toContain("Original request (highest priority): Research the market");
   expect(rendered).toContain("Current stage: planning");
-  expect(rendered).toContain("Allowed next stages: review");
+  expect(rendered).not.toContain("Allowed next stages");
   expect(rendered).toContain("Governing references: SPEC-REPORT");
   expect(rendered).toContain("- [pending] research: Collect evidence");
   expect(rendered).toContain("Current plan details:");
@@ -625,13 +632,14 @@ function fakeService(
   return {
     loadContext: async () => null,
     importOpenLegacyWork: async () => null,
+    bindOpenWork: async () => null,
     startWork: async () => workView(),
     continueWork: async () => workView(),
     replacePlan: async () => workView(),
     recordCheckpoint: async () => workView(),
     recordReview: async () => workView(),
     recordDisposition: async () => workView(),
-    recordCloseoutMissing: async () => {},
+    claimCloseoutCorrection: async () => false,
     attachToolResult: async () => workView(),
     boundWorkForTurn: async () => null,
     ...overrides,

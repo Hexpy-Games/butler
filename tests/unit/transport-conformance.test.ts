@@ -1,10 +1,7 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "fs";
-import { join } from "path";
 import type { InboundEnvelope, OutboundAction, TransportAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { DeliveryGuard } from "../../packages/butler-agent/src/interfaces/transport/delivery-guard.ts";
 import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/mock/adapter.ts";
-import { createTelegramTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/telegram/adapter.ts";
 import {
   finalAggregateSummaryFromTurnEvents,
   shouldProjectTurnEventAsProgressDraft,
@@ -43,37 +40,6 @@ const fixtures: AdapterFixture[] = [
           },
         } satisfies InboundEnvelope,
         sent: adapter.sentActions,
-      };
-    },
-  },
-  {
-    id: "telegram",
-    create() {
-      const sent: OutboundAction[] = [];
-      const adapter = createTelegramTransportAdapter({
-        botToken: "test-token",
-        sendTelegram: async (request) => {
-          sent.push({
-            actionId: `telegram-send:${sent.length}`,
-            transport: "telegram",
-            accountId: "default",
-            peer: { kind: "dm", id: request.chatId },
-            message: { text: request.text },
-          });
-          return { ok: true, transportMessageId: `telegram:${sent.length}` };
-        },
-      });
-      return {
-        adapter,
-        inboundInput: {
-          chatId: "chat-1",
-          chatType: "private",
-          messageId: "msg-1",
-          text: "hello",
-          senderId: "user-1",
-          timestamp: new Date(0).toISOString(),
-        },
-        sent,
       };
     },
   },
@@ -122,9 +88,7 @@ for (const fixture of fixtures) {
     expect(sent.length).toBeGreaterThanOrEqual(1);
 
     const wrongTransport = await adapter.send(outboundAction("wrong"));
-    if (fixture.id === "telegram") {
-      expect(wrongTransport.ok).toBe(false);
-    }
+    expect(wrongTransport.ok).toBe(false);
   });
 }
 
@@ -142,7 +106,6 @@ test("delivery guard deduplicates transport actions for conformance fixtures", a
 
 test("turn event projection follows transport capabilities", () => {
   const mock = new MockTransportAdapter({ id: "mock" });
-  const telegram = createTelegramTransportAdapter({ botToken: "test-token" });
   const event = {
     kind: "tool.started",
     visibility: "public",
@@ -151,10 +114,6 @@ test("turn event projection follows transport capabilities", () => {
   expect(turnEventProjectionMode(mock.capabilities)).toBe("live_activity");
   expect(shouldProjectTurnEventLive(mock.capabilities, event)).toBe(true);
   expect(shouldProjectTurnEventAsProgressDraft(mock.capabilities, event)).toBe(false);
-
-  expect(turnEventProjectionMode(telegram.capabilities)).toBe("progress_draft");
-  expect(shouldProjectTurnEventLive(telegram.capabilities, event)).toBe(false);
-  expect(shouldProjectTurnEventAsProgressDraft(telegram.capabilities, event)).toBe(true);
 
   expect(turnEventProjectionMode({
     supportsThreads: false,
@@ -168,24 +127,4 @@ test("turn event projection follows transport capabilities", () => {
     event,
     { kind: "guard.completed", visibility: "public" },
   ])).toBe("1 safe activity event, response checked");
-});
-
-test("BTCC Gateway adapters remain transport-agnostic", () => {
-  const gatewayRoot = join(
-    process.cwd(),
-    "packages",
-    "butler-agent",
-    "src",
-    "interfaces",
-    "gateway",
-    "btcc",
-  );
-  const adapterFiles = [
-    "btcc-inbound-dispatcher.ts",
-    "create-btcc-gateway-handlers.ts",
-    "project-turn-outcome.ts",
-  ].map((file) => join(gatewayRoot, file));
-  for (const file of adapterFiles) {
-    expect(readFileSync(file, "utf8")).not.toMatch(/telegram/i);
-  }
 });

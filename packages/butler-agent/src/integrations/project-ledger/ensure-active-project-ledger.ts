@@ -10,7 +10,6 @@ import { runProjectLedgerTool } from "./client.ts";
 import { resolve } from "node:path";
 
 type ProjectLedgerLookup = {
-  appMessageDbPath?: string;
   appProjectId?: string;
   workspacePath?: string;
   explicitRef?: string;

@@ -134,13 +134,13 @@ export function findLocalLiveSessions(deps: LocalSessionDiscoveryDeps = {}): Loc
     ) {
       const path = join(butlerData, "transcripts", transcriptFileNameForSessionId(session.sessionId));
       if (!fs.existsSync(path)) continue;
-      const telegramBinding = session.transportBindings.find((binding) => binding.transport === "telegram");
+      const threadBinding = session.transportBindings.find((binding) => binding.threadId);
       sources.push({
         session,
         path,
         projectName: session.projectId ?? (session.role === "butler" ? "butler" : session.sessionId),
         source: session.role === "butler" ? "butler" : "steward",
-        topic: telegramBinding?.threadId,
+        topic: threadBinding?.threadId,
       });
     }
     return sources.sort((left, right) => left.session.updatedAt.localeCompare(right.session.updatedAt));

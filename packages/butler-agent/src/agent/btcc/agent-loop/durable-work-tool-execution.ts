@@ -1,14 +1,15 @@
 import type {
   DurableWorkActionStatus,
   DurableWorkActionUpdate,
+  DurableWorkDispositionStatus,
   DurableWorkPlanAction,
   DurableWorkService,
-  DurableWorkDispositionStatus,
-  WorkStage,
+  DurableWorkView,
   WorkTurnScope,
 } from "../work/index.ts";
 import {
-  WorkStageTransitionError,
+  WorkTransitionGuardError,
+  unresolvedWorkActionKeys,
 } from
   "../work/index.ts";
 import type { DurableWorkToolName } from "../work/index.ts";
@@ -20,7 +21,7 @@ type WorkToolInput = {
   mutationCallId: string;
   name: DurableWorkToolName;
   args: Record<string, unknown>;
-  /** Completed ordinary calls from this Turn, supplied by the runtime only. */
+  expectedMaterialFingerprint?: string;
   priorToolCallIds?: readonly string[];
 };
 
@@ -39,18 +40,19 @@ export async function executeDurableWorkTool(
             : input.name === "record_work_review"
               ? await input.service.recordReview(decodeReview(input))
               : await input.service.recordDisposition(decodeDisposition(input));
-    return { ok: true, work: durableWorkToolView(view) };
+    return { ok: true, work: workToolView(view) };
   } catch (error) {
     const current = await input.service.loadContext(input.scope).catch(() => null);
-    if (error instanceof WorkStageTransitionError) {
+    if (error instanceof WorkTransitionGuardError) {
       return {
         ok: false,
         error: {
           code: error.code,
           message: error.message,
           current_stage: error.currentStage,
-          attempted_stage: error.attemptedStage,
-          allowed_next_stages: error.allowedNextStages,
+          requested_action: error.requestedAction,
+          unmet_guard: error.unmetGuard,
+          next_action: error.nextAction,
         },
         ...(current ? { work: durableWorkToolView(current.work) } : {}),
       };
@@ -122,11 +124,9 @@ function backfillInput(input: WorkToolInput):
 }
 
 function decodeCheckpoint(input: WorkToolInput) {
-  const nextStage = decodeWorkStage(input.args.next_stage);
   return {
     ...input.scope,
     mutationCallId: input.mutationCallId,
-    ...(nextStage ? { nextStage } : {}),
     actionUpdates: decodeActionUpdates(input.args.action_updates),
     ...(optionalStringValue(input.args.public_summary)
       ? { publicSummary: optionalStringValue(input.args.public_summary)! }
@@ -137,30 +137,28 @@ function decodeCheckpoint(input: WorkToolInput) {
   };
 }
 
-function decodeWorkStage(value: unknown): WorkStage | undefined {
-  const nextStage = optionalStringValue(value);
-  if (nextStage && !WORK_STAGE_SET.has(nextStage)) {
-    throw new Error(`Unsupported Work stage: ${nextStage}`);
-  }
-  return nextStage as WorkStage | undefined;
-}
-
 function decodeReview(input: WorkToolInput) {
   const subject = stringValue(input.args.subject, "subject");
   const verdict = stringValue(input.args.verdict, "verdict");
-  const nextStage = decodeWorkStage(input.args.next_stage);
+  const correctionScope = optionalStringValue(input.args.correction_scope);
   if (subject !== "plan" && subject !== "result" && subject !== "completion") {
     throw new Error(`Unsupported Work review subject: ${subject}`);
   }
   if (verdict !== "accept" && verdict !== "revise" && verdict !== "partial") {
     throw new Error(`Unsupported Work review verdict: ${verdict}`);
   }
+  if (correctionScope && correctionScope !== "planning" &&
+    correctionScope !== "execution") {
+    throw new Error(`Unsupported Work correction scope: ${correctionScope}`);
+  }
   return {
     ...input.scope,
     mutationCallId: input.mutationCallId,
     subject: subject as "plan" | "result" | "completion",
     verdict: verdict as "accept" | "revise" | "partial",
-    ...(nextStage ? { nextStage } : {}),
+    ...(correctionScope
+      ? { correctionScope: correctionScope as "planning" | "execution" }
+      : {}),
     actionUpdates: decodeActionUpdates(input.args.action_updates),
     summary: stringValue(input.args.summary, "summary"),
     corrections: optionalStringArray(input.args.corrections, "corrections"),
@@ -169,7 +167,8 @@ function decodeReview(input: WorkToolInput) {
 
 function decodeDisposition(input: WorkToolInput) {
   const disposition = stringValue(input.args.disposition, "disposition");
-  if (disposition !== "completed" && disposition !== "open" && disposition !== "blocked") {
+  if (disposition !== "completed" && disposition !== "open" &&
+    disposition !== "blocked") {
     throw new Error(`Unsupported Work disposition: ${disposition}`);
   }
   return {
@@ -179,13 +178,23 @@ function decodeDisposition(input: WorkToolInput) {
     disposition: disposition as DurableWorkDispositionStatus,
     summary: stringValue(input.args.summary, "summary"),
     actionUpdates: decodeDispositionActionUpdates(input.args.action_updates),
-    remainingActions: optionalStringArray(input.args.remaining_actions, "remaining_actions"),
+    remainingActions: optionalStringArray(
+      input.args.remaining_actions,
+      "remaining_actions",
+    ),
     ...(optionalStringValue(input.args.next_condition)
       ? { nextCondition: optionalStringValue(input.args.next_condition)! }
       : {}),
-    evidenceRefs: optionalStringArray(input.args.evidence_refs, "evidence_refs"),
     followups: optionalStringArray(input.args.followups, "followups"),
-    ...backfillInput(input),
+    ...(input.priorToolCallIds?.length
+      ? {
+          evidenceRefs: [...input.priorToolCallIds],
+          backfillToolCallIds: [...input.priorToolCallIds],
+        }
+      : {}),
+    ...(input.expectedMaterialFingerprint
+      ? { expectedMaterialFingerprint: input.expectedMaterialFingerprint }
+      : {}),
   };
 }
 
@@ -216,6 +225,44 @@ function decodeEffect(
   return {
     capability: stringValue(effect.capability, `actions[${actionIndex}].effect.capability`),
     target: stringValue(effect.target, `actions[${actionIndex}].effect.target`),
+  };
+}
+
+function workToolView(work: DurableWorkView): Record<string, unknown> {
+  const unresolved = unresolvedWorkActionKeys(work.actionProgress);
+  const completionBlockers = [
+    ...(unresolved.length > 0 ? ["unresolved_actions"] : []),
+    ...((work.effectBlockers?.length ?? 0) > 0
+      ? ["effect_reconciliation_required"]
+      : []),
+  ];
+  return {
+    work_id: work.workId,
+    status: work.status,
+    current_stage: work.currentStage ?? null,
+    actions: work.currentPlan?.actions.map((action) => {
+      const progress = work.actionProgress.find((item) =>
+        item.actionKey === action.actionKey);
+      return {
+        action_key: action.actionKey,
+        status: progress?.status ?? "pending",
+      };
+    }) ?? [],
+    unresolved_action_keys: unresolved,
+    completion_blockers: completionBlockers,
+    latest_plan_review: work.latestPlanReview?.verdict ?? null,
+    latest_result_review: work.latestResultReview?.verdict ?? null,
+    latest_completion_validation: work.latestCompletionValidation?.verdict ?? null,
+    ...(work.latestDisposition
+      ? {
+          latest_disposition: {
+            disposition: work.latestDisposition.disposition,
+            summary: work.latestDisposition.summary,
+            remaining_actions: work.latestDisposition.remainingActions,
+            next_condition: work.latestDisposition.nextCondition ?? null,
+          },
+        }
+      : {}),
   };
 }
 
@@ -277,15 +324,6 @@ function booleanValue(value: unknown, fallback: boolean, field: string): boolean
   if (typeof value !== "boolean") throw new Error(`Work update requires ${field} to be boolean`);
   return value;
 }
-
-const WORK_STAGE_SET = new Set<string>([
-  "conception",
-  "planning",
-  "execution",
-  "review",
-  "validation",
-  "reporting",
-]);
 
 const WORK_ACTION_STATUS_SET = new Set<string>([
   "pending",

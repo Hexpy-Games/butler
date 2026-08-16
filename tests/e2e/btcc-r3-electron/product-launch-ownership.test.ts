@@ -47,20 +47,23 @@ function preparedRun(
   };
 }
 
-test("R3 preview capability selects Electron-owned Agent while R2 remains harness-owned", () => {
+test("R3 guided runtime selects Electron-owned Agent while R2 remains harness-owned", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-product-ownership-"));
   try {
     expect(productAgentOwnership(root)).toBe("harness");
-    const previewHost = join(
+    const guidedTurnState = join(
       root,
       "packages",
-      "butler-app",
-      "client",
-      "electron",
-      "local-page-preview-host.mjs",
+      "butler-agent",
+      "src",
+      "agent",
+      "adapters",
+      "btcc",
+      "sqlite",
+      "guided-turn-state.ts",
     );
-    mkdirSync(dirname(previewHost), { recursive: true });
-    writeFileSync(previewHost, "export {};\n", "utf8");
+    mkdirSync(dirname(guidedTurnState), { recursive: true });
+    writeFileSync(guidedTurnState, "export {};\n", "utf8");
     expect(productAgentOwnership(root)).toBe("electron");
   } finally {
     rmSync(root, { recursive: true, force: true });

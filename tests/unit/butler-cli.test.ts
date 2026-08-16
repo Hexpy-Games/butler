@@ -428,53 +428,6 @@ test("Butler CLI model status uses runtime provider model and cache envelope", (
   }
 });
 
-test("Butler CLI Telegram status reports pairing without exposing the token", () => {
-  const butlerData = tempRoot();
-
-  try {
-    writeFileSync(join(butlerData, ".env"), [
-      "TELEGRAM_BOT_TOKEN=123:secret",
-      "TELEGRAM_CHAT_ID=456",
-      "",
-    ].join("\n"));
-    const result = spawnSync("node", [cli, "telegram", "status", "--json", "--data", butlerData], {
-      cwd: root,
-      encoding: "utf8",
-    });
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).not.toContain("123:secret");
-    const parsed = JSON.parse(result.stdout);
-    expect(parsed.ok).toBe(true);
-    expect(parsed.data.tokenConfigured).toBe(true);
-    expect(parsed.data.chatPaired).toBe(true);
-    expect(parsed.data.chatId).toBe("456");
-  } finally {
-    rmSync(butlerData, { recursive: true, force: true });
-  }
-});
-
-test("Butler CLI Telegram pair rejects command-line token values", () => {
-  const result = spawnSync("node", [
-    cli,
-    "telegram",
-    "pair",
-    "--token",
-    "123:secret",
-    "--json",
-    "--non-interactive",
-  ], {
-    cwd: root,
-    encoding: "utf8",
-  });
-
-  expect(result.status).toBe(2);
-  expect(result.stdout).not.toContain("123:secret");
-  const parsed = JSON.parse(result.stdout);
-  expect(parsed.error.code).toBe("invalid_arguments");
-  expect(parsed.error.message).toContain("does not accept token values");
-});
-
 test("Butler CLI runtime repair requires explicit confirmation", () => {
   const result = spawnSync("node", [cli, "runtime", "repair", "--json"], {
     cwd: root,

@@ -10,14 +10,14 @@ import type {
   WorkTurnScope,
 } from "../work/index.ts";
 import type { TurnRecord } from "../turn/index.ts";
-import type { SqliteGuidedToolJournal } from "../../adapters/index.ts";
+import type { GuidedToolJournal } from "../ports/index.ts";
 import { sanitizePublicText } from "../../events/turn-events.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import { publicWorkActionDisplay } from "../projection/index.ts";
 
 type GuidedWorkRuntimeInput = {
   durableWork: DurableWorkService;
-  toolJournal: SqliteGuidedToolJournal;
+  toolJournal: GuidedToolJournal;
 };
 
 export function workScopeForTurn(
@@ -66,6 +66,18 @@ export async function safeBoundWork(
   }
 }
 
+export async function safeBindOpenWork(
+  service: DurableWorkService,
+  scope: WorkTurnScope,
+  expectedWorkId?: string,
+): Promise<DurableWorkView | null> {
+  try {
+    return await service.bindOpenWork(scope, expectedWorkId);
+  } catch {
+    return null;
+  }
+}
+
 export async function loadInitialGuidedWork(
   input: GuidedWorkRuntimeInput,
   scope: WorkTurnScope,
@@ -101,21 +113,6 @@ export async function safeAttachToolResult(
     });
   } catch {
     // Work bookkeeping cannot veto an otherwise valid tool result.
-  }
-}
-
-export async function safeRecordCloseoutMissing(
-  service: DurableWorkService,
-  scope: WorkTurnScope,
-  workId: string,
-): Promise<void> {
-  try {
-    await service.recordCloseoutMissing({
-      ...scope,
-      workId,
-    });
-  } catch {
-    // A stopped Turn or storage failure must retain the existing delivery path.
   }
 }
 

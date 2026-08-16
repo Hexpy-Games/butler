@@ -41,6 +41,12 @@ export class MockTransportAdapter implements TransportAdapter {
   }
 
   async send(action: OutboundAction): Promise<DeliveryResult> {
+    if (action.transport !== this.id) {
+      return {
+        ok: false,
+        error: `transport_mismatch:${action.transport}`,
+      };
+    }
     this.sentActions.push(action);
     if (this.onSend) {
       return await this.onSend(action);

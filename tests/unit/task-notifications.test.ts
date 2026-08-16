@@ -394,14 +394,14 @@ test("task notification includes partial worker evidence before backend failure"
   const taskDir = join(tempDir, "tasks", "task-backend-failure");
   mkdirSync(taskDir, { recursive: true });
   writeFileSync(join(taskDir, "status"), "FAILED\n", "utf8");
-  writeFileSync(join(taskDir, "request.md"), "inspect Telegram intake\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "inspect app intake\n", "utf8");
   writeFileSync(join(taskDir, "result.md"), "EXIT_CODE: 1\n", "utf8");
   writeFileSync(join(taskDir, "log.txt"), [
     "[worker-runner] [2026-04-24 21:17:02] run_shell (Inspect transport files): rg --files packages/butler-agent/src/interfaces/transport",
     "[worker-runner] [2026-04-24 21:17:03] run_shell result: exit=0 timed_out=false",
     "[worker-runner] [2026-04-24 21:17:03] stdout:",
-    "packages/butler-agent/src/interfaces/transport/telegram/live-gateway.ts",
-    "packages/butler-agent/src/interfaces/transport/telegram/polling-runner.ts",
+    "packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts",
+    "packages/butler-agent/src/gateways/app/interface/server/server-types.ts",
     "[worker-runner] [2026-04-24 21:17:29] ERROR: Codex backend error: server_error request ID 64f9065c",
   ].join("\n"), "utf8");
 
@@ -410,7 +410,7 @@ test("task notification includes partial worker evidence before backend failure"
 
   expect(notification?.text).toContain("Worker task failed.");
   expect(notification?.text).toContain("Partial successful command");
-  expect(notification?.text).toContain("packages/butler-agent/src/interfaces/transport/telegram/live-gateway.ts");
+  expect(notification?.text).toContain("packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts");
   expect(notification?.text).toContain("server_error request ID 64f9065c");
   expect(notification?.text).not.toContain("No result file or execution log summary was available");
 });
@@ -431,13 +431,13 @@ test("task notification converts to transport-agnostic outbound action", () => {
 
   expect(taskNotificationToOutboundAction({
     notification,
-    transport: "telegram",
+    transport: "app",
     accountId: "default",
     peerKind: "group",
     peerId: "123",
   })).toMatchObject({
     actionId: "task-notification:worker-result-task-2",
-    transport: "telegram",
+    transport: "app",
     peer: { kind: "group", id: "123" },
     message: { text: "failed" },
     metadata: {

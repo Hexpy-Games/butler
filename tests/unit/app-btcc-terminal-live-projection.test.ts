@@ -23,17 +23,9 @@ import { collectGuidedFinalArtifacts } from
 
 afterEach(() => cleanupTranscriptProjectionHarnesses());
 
-test("delivered turn event directly projects the canonical BTCC answer", () => {
+test("completed turn event waits for the durable transcript final", () => {
   const harness = createHarness();
-  seedBtccTerminalSchema(harness.db);
   seedAppTurn(harness.db, harness.chatId, "live-delivered-turn");
-  seedCanonicalDelivery(
-    harness.db,
-    "live-delivered-turn",
-    "live-outbox",
-    "live-message",
-    "Canonical answer",
-  );
   const state = projectionState(harness.db);
   const projection = harness.createProjectionStore(state.options);
   writeTranscript(harness, terminalTurnEvents({
@@ -43,16 +35,12 @@ test("delivered turn event directly projects the canonical BTCC answer", () => {
   }));
 
   expect(projection.syncNextBatch()).toBe(false);
-  expect(turnState(harness.db, "live-delivered-turn")).toBe("delivered");
-  expect(state.assistant?.text).toBe("Canonical answer");
-  expect(state.assistantWrites).toBe(1);
+  expect(turnState(harness.db, "live-delivered-turn")).toBe("running");
+  expect(state.assistant).toBeNull();
+  expect(state.assistantWrites).toBe(0);
   expect(state.turnEvents).toContain("turn.completed");
   expect(harness.projected()).toEqual([]);
   expect(projectedReceipt(harness.db, "live-completed-event")).toBe(true);
-  expect(projectedReceipt(
-    harness.db,
-    "btcc-canonical-final:live-outbox",
-  )).toBe(true);
 
   appendTranscript(harness, finalResultEvent({
     actionId: "late-identical-final",
@@ -61,6 +49,7 @@ test("delivered turn event directly projects the canonical BTCC answer", () => {
     generatedSessionTitle: "Useful title",
   }));
   expect(projection.syncNextBatch()).toBe(false);
+  expect(turnState(harness.db, "live-delivered-turn")).toBe("delivered");
   expect(state.generatedTitles).toEqual(["Useful title"]);
   expect(state.assistantWrites).toBe(1);
 
@@ -216,7 +205,62 @@ test("cancelled turn event directly closes a non-terminal App turn", () => {
   harness.close();
 });
 
-test("repairs the App execution model from an identityless accepted route", () => {
+test("delivered cancellation ack and terminal event settle the App outbox", () => {
+  const harness = createHarness();
+  seedAppTurn(harness.db, harness.chatId, "queued-cancel-turn");
+  const now = new Date().toISOString();
+  harness.db.query(`
+    INSERT INTO app_turn_cancel_outbox (turn_id, state, created_at)
+    VALUES (?, 'pending', ?)
+  `).run("queued-cancel-turn", now);
+  const state = projectionState(harness.db);
+  const projection = harness.createProjectionStore(state.options);
+  const actionId = "cancel-ack-action";
+  writeTranscript(harness, [{
+    eventId: "cancel-ack-outbound",
+    sessionId: "runtime-session",
+    kind: "outbound",
+    timestamp: now,
+    transport: "app",
+    payload: {
+      actionId,
+      message: { text: "" },
+      metadata: {
+        kind: "turn_cancellation_ack",
+        turnId: "queued-cancel-turn",
+        requestId: "cancel-request",
+        queueId: "cancel-queue",
+        dispatchClaimId: "cancel-claim",
+        outcome: "cancelled",
+      },
+    },
+  }, {
+    eventId: "cancel-ack-delivery",
+    sessionId: "runtime-session",
+    kind: "delivery",
+    timestamp: now,
+    transport: "app",
+    payload: { actionId, ok: true },
+  }, ...terminalTurnEvents({
+    actionId: "cancel-terminal-action",
+    turnId: "queued-cancel-turn",
+    kind: "turn.cancelled",
+  })]);
+
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(harness.db.query<Record<string, string>, [string]>(`
+    SELECT state, queue_id, dispatch_claim_id FROM app_turn_cancel_outbox
+    WHERE turn_id = ?
+  `).get("queued-cancel-turn")).toMatchObject({
+    state: "completed",
+    queue_id: "cancel-queue",
+    dispatch_claim_id: "cancel-claim",
+  });
+  expect(turnState(harness.db, "queued-cancel-turn")).toBe("cancelled");
+  harness.close();
+});
+
+test("projects execution model only from final transcript metadata", () => {
   const harness = createHarness();
   seedBtccTerminalSchema(harness.db);
   seedAcceptedModelRoundSchema(harness.db);
@@ -238,6 +282,10 @@ test("repairs the App execution model from an identityless accepted route", () =
     turnId: "identityless-repair-turn",
     text: "Local answer",
     generatedSessionTitle: "Local title",
+    executionModel: {
+      requestedModelRef: "openai/gpt-5.6-sol",
+      effectiveModelRef: "local/gemma-local",
+    },
   })]);
 
   expect(projection.syncNextBatch()).toBe(false);
@@ -248,7 +296,7 @@ test("repairs the App execution model from an identityless accepted route", () =
   harness.close();
 });
 
-test("chooses the latest same-timestamp backup and preserves its accepted identity", () => {
+test("preserves requested, effective, and provider-reported transcript identity", () => {
   const harness = createHarness();
   seedBtccTerminalSchema(harness.db);
   seedAcceptedModelRoundSchema(harness.db);
@@ -288,6 +336,11 @@ test("chooses the latest same-timestamp backup and preserves its accepted identi
     turnId: "same-timestamp-repair-turn",
     text: "Backup answer",
     generatedSessionTitle: "Backup title",
+    executionModel: {
+      requestedModelRef: "openai/gpt-5.6-sol",
+      effectiveModelRef: "local/gemma-backup",
+      providerReportedModelRef: "local/gemma-backup-served",
+    },
   })]);
 
   expect(projection.syncNextBatch()).toBe(false);
@@ -483,30 +536,6 @@ function insertAcceptedModelRound(
   );
 }
 
-function seedCanonicalDelivery(
-  db: Database,
-  turnId: string,
-  outboxId: string,
-  messageId: string,
-  content: string,
-): void {
-  const now = new Date().toISOString();
-  db.query(`
-    INSERT INTO btcc_turns (
-      turn_id, semantic_state, final_disposition, delivery_outbox_id,
-      canonical_assistant_message_id
-    ) VALUES (?, 'delivered', 'completed', ?, ?)
-  `).run(turnId, outboxId, messageId);
-  db.query(`
-    INSERT INTO btcc_delivery_outbox (outbox_id, status)
-    VALUES (?, 'observed')
-  `).run(outboxId);
-  db.query(`
-    INSERT INTO btcc_messages (message_id, content, created_at)
-    VALUES (?, ?, ?)
-  `).run(messageId, content, now);
-}
-
 function terminalTurnEvents(input: {
   actionId: string;
   turnId: string;
@@ -543,7 +572,8 @@ function finalResultEvent(input: {
   turnId: string;
   text: string;
   generatedSessionTitle: string;
-  artifacts?: Array<Record<string, unknown>>;
+  executionModel?: Record<string, string>;
+  artifacts?: ReturnType<typeof collectGuidedFinalArtifacts>;
 }): TranscriptEvent {
   return {
     eventId: `event-${input.actionId}`,
@@ -561,6 +591,7 @@ function finalResultEvent(input: {
         kind: "final_result",
         turnId: input.turnId,
         generatedSessionTitle: input.generatedSessionTitle,
+        ...(input.executionModel ? { executionModel: input.executionModel } : {}),
       },
     },
   };

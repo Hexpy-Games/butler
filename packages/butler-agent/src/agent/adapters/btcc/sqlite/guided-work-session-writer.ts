@@ -8,16 +8,22 @@ import type {
 import type { GuidedWorkRow, GuidedWorkTurn } from "./guided-work-records.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
 import { guidedWorkMatchesScope } from "./guided-work-scope.ts";
+import { GuidedWorkRelationCommandJournal } from
+  "./guided-work-relation-command-journal.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
 
 export class GuidedWorkSessionWriter {
+  private readonly relations: GuidedWorkRelationCommandJournal;
+
   constructor(
     private readonly db: Database,
     private readonly reader: GuidedWorkViewReader,
-  ) {}
+  ) {
+    this.relations = new GuidedWorkRelationCommandJournal(db);
+  }
 
   start(input: StartWorkCommand): GuidedWorkRow {
-    const replay = this.replayRelation(
+    const replay = this.relations.replay(
       input.mutationCallId,
       "start_work",
       input.requestSha256,
@@ -33,7 +39,7 @@ export class GuidedWorkSessionWriter {
       this.abandon(head.work_id);
     }
     const work = this.createAndBind(input, turn);
-    this.recordRelation(
+    this.relations.record(
       input.mutationCallId,
       "start_work",
       input.requestSha256,
@@ -43,7 +49,7 @@ export class GuidedWorkSessionWriter {
   }
 
   continue(input: ContinueWorkCommand): GuidedWorkRow {
-    const replay = this.replayRelation(
+    const replay = this.relations.replay(
       input.mutationCallId,
       "continue_work",
       input.requestSha256,
@@ -60,7 +66,7 @@ export class GuidedWorkSessionWriter {
         !guidedWorkMatchesScope(bound, input)) {
         throw new Error("Durable Work continuation target is not the current open Work");
       }
-      this.recordRelation(
+      this.relations.record(
         input.mutationCallId,
         "continue_work",
         input.requestSha256,
@@ -74,12 +80,40 @@ export class GuidedWorkSessionWriter {
       throw new Error("Durable Work continuation target is not the current open Work");
     }
     this.bind(turn, head.work_id);
-    this.recordRelation(
+    this.relations.record(
       input.mutationCallId,
       "continue_work",
       input.requestSha256,
       head.work_id,
     );
+    return head;
+  }
+
+  bindOpenHead(
+    scope: WorkTurnScope,
+    expectedWorkId?: string,
+  ): GuidedWorkRow | null {
+    const turn = this.reader.turn(scope);
+    const bound = this.reader.boundWork(scope.turnId);
+    const head = this.reader.sessionHead(scope.sessionId);
+    if (expectedWorkId && bound?.work_id !== expectedWorkId &&
+      head?.work_id !== expectedWorkId) {
+      return null;
+    }
+    if (bound) {
+      if (expectedWorkId && bound.work_id !== expectedWorkId) return null;
+      if (!head || bound.work_id !== head.work_id) {
+        throw new Error("Durable Work Turn binding is no longer the Session head");
+      }
+      if (!guidedWorkMatchesScope(bound, scope)) {
+        throw new Error("Durable Work Turn scope does not match its bound Work");
+      }
+      return isOpenWork(bound) ? bound : null;
+    }
+    if (!head || !isOpenWork(head)) return null;
+    if (expectedWorkId && head.work_id !== expectedWorkId) return null;
+    if (!guidedWorkMatchesScope(head, scope)) return null;
+    this.bind(turn, head.work_id);
     return head;
   }
 
@@ -114,7 +148,7 @@ export class GuidedWorkSessionWriter {
         this.abandon(current.work_id);
       }
       const work = this.createAndBind(input, turn);
-      this.recordRelation(
+      this.relations.record(
         input.mutationCallId,
         "start_work",
         input.requestSha256,
@@ -126,7 +160,7 @@ export class GuidedWorkSessionWriter {
       const wasBound = Boolean(bound);
       this.bind(turn, current.work_id);
       if (!wasBound) {
-        this.recordRelation(
+        this.relations.record(
           input.mutationCallId,
           "continue_work",
           input.requestSha256,
@@ -136,7 +170,7 @@ export class GuidedWorkSessionWriter {
       return current;
     }
     const work = this.createAndBind(input, turn);
-    this.recordRelation(
+    this.relations.record(
       input.mutationCallId,
       "start_work",
       input.requestSha256,
@@ -177,12 +211,10 @@ export class GuidedWorkSessionWriter {
     return this.requireBound(scope, false);
   }
 
-  /**
-   * Closeout diagnostics are bookkeeping only.  They still require the
-   * admitted/current relation and Stop fence, but must remain appendable when
-   * a legacy review/import left a bound Work terminal before disposition was
-   * introduced.
-   */
+  requireBoundForRuntimeOpen(scope: WorkTurnScope): GuidedWorkRow {
+    return this.requireBound(scope, true);
+  }
+
   requireBoundForCloseoutDiagnostic(scope: WorkTurnScope): GuidedWorkRow {
     return this.requireBound(scope, true);
   }
@@ -251,47 +283,6 @@ export class GuidedWorkSessionWriter {
     `).run(input.sessionId, workId, now);
     this.bind(turn, workId);
     return this.reader.sessionHead(input.sessionId)!;
-  }
-
-  private replayRelation(
-    mutationCallId: string,
-    operation: "start_work" | "continue_work",
-    requestSha256: string,
-  ): GuidedWorkRow | null {
-    const row = this.db.query<{
-      operation: string;
-      request_sha256: string;
-      work_id: string;
-    }, [string]>(`
-      SELECT operation, request_sha256, work_id
-      FROM btcc_guided_work_relation_commands WHERE mutation_call_id = ?
-    `).get(mutationCallId);
-    if (!row) return null;
-    if (row.operation !== operation || row.request_sha256 !== requestSha256) {
-      throw new Error(`Durable Work relation identity conflict: ${mutationCallId}`);
-    }
-    return this.db.query<GuidedWorkRow, [string]>(
-      "SELECT * FROM btcc_guided_works WHERE work_id = ?",
-    ).get(row.work_id) ?? null;
-  }
-
-  private recordRelation(
-    mutationCallId: string,
-    operation: "start_work" | "continue_work",
-    requestSha256: string,
-    workId: string,
-  ): void {
-    this.db.query(`
-      INSERT INTO btcc_guided_work_relation_commands (
-        mutation_call_id, operation, request_sha256, work_id, created_at
-      ) VALUES (?, ?, ?, ?, ?)
-    `).run(
-      mutationCallId,
-      operation,
-      requestSha256,
-      workId,
-      new Date().toISOString(),
-    );
   }
 
   private abandon(workId: string): void {

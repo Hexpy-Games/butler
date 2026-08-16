@@ -8,6 +8,7 @@ import type {
   ModelRoundResult,
   ModelRoundTool,
   ModelRoundToolCall,
+  PhaseContinuityPrivateDigester,
 } from "../ports/model-round.ts";
 import type {
   ImageCapabilityEvidence,
@@ -23,6 +24,9 @@ import type {
   ReasoningEffort,
 } from "../../../integrations/providers/runtime-contracts.ts";
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
+import type { OperationResultReplay } from "../operation-result-replay/index.ts";
+import type { TurnContinuationBudgetState } from "../turn/index.ts";
+import type { BtccRoundToolSurfaceSnapshot } from "./round-tool-surface.ts";
 import type { BtccFinalArtifact } from "../contracts.ts";
 import type { RuntimeMemoryAttributionPort } from
   "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
@@ -35,6 +39,11 @@ export type BtccAgentLoopResult = {
   content: string;
   route: "direct" | "assisted" | "managed";
   artifacts?: BtccFinalArtifact[];
+  modelIdentity?: {
+    requestedModelRef: string;
+    effectiveModelRef: string;
+    providerReportedModelRef?: string;
+  };
 };
 
 export interface BtccAgentLoop {
@@ -76,16 +85,30 @@ export interface BtccAgentLoop {
       modelRef: string;
       result: import("../ports/model-round.ts").ModelRoundResult;
     }) => Promise<void>;
+    transitionContinuationBudget?: (
+      event: import("../turn/index.ts").TurnContinuationBudgetEvent,
+    ) => Promise<import("../turn/index.ts").TurnContinuationBudgetState>;
   }): Promise<BtccAgentLoopResult>;
 }
 
-export interface BtccAgentLoopToolResult {
+export interface BtccAgentLoopToolError {
+  code: string;
+  message: string;
+  field?: string;
+}
+
+export type BtccAgentLoopToolResult = {
   toolCallId: string;
   name: string;
-  ok: boolean;
+  ok: true;
+  output: unknown;
+} | {
+  toolCallId: string;
+  name: string;
+  ok: false;
+  error: BtccAgentLoopToolError;
   output?: unknown;
-  error?: string;
-}
+};
 
 export type BtccTextToolCallDisposition =
   | { status: "continue"; observation: string }
@@ -117,6 +140,7 @@ export interface BtccFinalSynthesisOptions {
 
 export interface BtccAgentLoopInput {
   prompt: string;
+  phaseContinuityPrivateDigester?: PhaseContinuityPrivateDigester;
   turnId?: string;
   recoveryAttempt?: number;
   model?: string;
@@ -124,6 +148,7 @@ export interface BtccAgentLoopInput {
   instructions?: string;
   reasoningEffort?: ReasoningEffort;
   cacheScope?: string;
+  stableProviderCachePrefix?: import("../ports/model-round.ts").StableProviderCachePrefixContract;
   signal?: AbortSignal;
   attachments?: readonly AttachmentRef[];
   imageCarrier?: ImageCarrierTuple;
@@ -142,9 +167,19 @@ export interface BtccAgentLoopInput {
   progress?: BtccTurnProgressObserver;
   toolChoice?: "auto" | "required";
   tools: readonly BtccAgentLoopToolDefinition[];
-  resolveTools?: () => readonly BtccAgentLoopToolDefinition[];
+  resolveTools?: () => BtccRoundToolSurfaceSnapshot | Promise<BtccRoundToolSurfaceSnapshot>;
   resolveToolChoice?: () => "auto" | "required" | undefined;
   modelRound: ModelRoundPort;
+  operationResultReplay?: OperationResultReplay;
+  continuationBudget?: {
+    state: TurnContinuationBudgetState;
+    admitRequest(input: {
+      roundId: string; requestDigest: string; modelFacingBytes: number;
+    }): Promise<void>;
+    recordOutput(input: { roundId: string; outputBytes: number }): Promise<void>;
+    recordToolRound(input: { roundId: string }): Promise<void>;
+  };
+  resolveOperationResultCallId?: (providerCallId: string) => string | undefined;
   /**
    * The execution window is an internal scheduling boundary, not a semantic
    * model/tool budget. A guided caller supplies this callback to reread

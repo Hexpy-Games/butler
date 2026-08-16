@@ -477,7 +477,7 @@ test("progressive tool discovery and dispatch keep distinct product-facing title
     summary: "실행: git commit",
   })).toBe("실행: git commit");
   expect(publicToolTitle("read_file", {
-    path: "src/games/word-chain/game-handler.ts",
+    requests: [{ path: "src/games/word-chain/game-handler.ts" }],
   })).toBe("읽기: game-handler.ts");
   expect(publicToolTitle("edit_file", {
     path: "src/games/word-chain/game-handler.ts",

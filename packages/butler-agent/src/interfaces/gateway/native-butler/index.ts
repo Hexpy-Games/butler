@@ -1,5 +1,4 @@
 export {
-  appTurnStateDbPath,
   bindButlerSession,
   createNativeButlerDefaultProvider,
   persistButlerSessionPointer,
@@ -13,9 +12,7 @@ export {
 export {
   appTurnEventAction,
   createNativeButlerProgressPublisher,
-  sendStartupNotification,
   startupMessage,
-  statusText,
   waitForShutdown,
   writeStartupGraceMarker,
 } from "./projection-and-lifecycle.ts";
