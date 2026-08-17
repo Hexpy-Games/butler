@@ -164,6 +164,20 @@ test("Windows distribution is a separate manually dispatched action", () => {
   expect(distributionWorkflow).not.toContain("-Mode Lifecycle");
 });
 
+test("Windows distribution signs bundled runtime inputs before package verification", () => {
+  for (const releaseWorkflow of [distributionWorkflow, communityWorkflow]) {
+    expect(releaseWorkflow).toContain("$signedBun = Join-Path");
+    expect(releaseWorkflow).toContain("Copy-Item -LiteralPath $bunPath");
+    expect(releaseWorkflow).toContain("Set-AuthenticodeSignature");
+    expect(releaseWorkflow).toContain(
+      '"BUTLER_APP_MANAGED_BUN_WIN32_X64=$signedBun"',
+    );
+    expect(releaseWorkflow).toContain(
+      '"BUTLER_APP_WINDOWS_PROCESS_HOST=$processHost"',
+    );
+  }
+});
+
 test("Windows community distribution is manual, exact-tag based, and explicitly acknowledged", () => {
   expect(communityWorkflow).toContain("workflow_dispatch:");
   expect(communityWorkflow).toContain("tag:");

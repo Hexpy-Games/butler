@@ -64,6 +64,7 @@ jobs:
         env:
           WINDOWS_CERTIFICATE_PFX: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_SIGN_TIMESTAMP_SERVER: ${{ secrets.WINDOWS_SIGN_TIMESTAMP_SERVER }}
         run: |
           $certificatePath = Join-Path $env:RUNNER_TEMP 'butler-windows-signing.pfx'
           [IO.File]::WriteAllBytes(
@@ -74,12 +75,32 @@ jobs:
             $certificatePath,
             $env:WINDOWS_CERTIFICATE_PASSWORD
           )
+          if (-not $certificate.HasPrivateKey) {
+            throw 'production signing certificate must include a private key'
+          }
+          $bunPath = (Get-Command bun.exe).Source
+          $signedBun = Join-Path $env:RUNNER_TEMP 'butler-runtime-bun.exe'
+          Copy-Item -LiteralPath $bunPath -Destination $signedBun -Force
           $processHost = Join-Path $env:RUNNER_TEMP 'butler-process-host.exe'
           bun run packages/butler-agent/scripts/windows/build-process-host.ts $processHost
           if ($LASTEXITCODE -ne 0) { throw 'Windows process host build failed' }
+          foreach ($path in @($signedBun, $processHost)) {
+            $signingParameters = @{
+              LiteralPath = $path
+              Certificate = $certificate
+              HashAlgorithm = 'SHA256'
+            }
+            if (-not [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGN_TIMESTAMP_SERVER)) {
+              $signingParameters.TimestampServer = $env:WINDOWS_SIGN_TIMESTAMP_SERVER
+            }
+            $signature = Set-AuthenticodeSignature @signingParameters
+            if ([string]$signature.Status -ne 'Valid') {
+              throw "Windows runtime input signing failed for $path with status $($signature.Status)"
+            }
+          }
           "BUTLER_WINDOWS_SIGN_CERTIFICATE_FILE=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Append
           "BUTLER_WINDOWS_SIGN_CERTIFICATE_SHA1=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "BUTLER_APP_MANAGED_BUN_WIN32_X64=$((Get-Command bun.exe).Source)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BUTLER_APP_MANAGED_BUN_WIN32_X64=$signedBun" | Out-File -FilePath $env:GITHUB_ENV -Append
           "BUTLER_APP_WINDOWS_PROCESS_HOST=$processHost" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build and verify production-signed Windows package
         env:
