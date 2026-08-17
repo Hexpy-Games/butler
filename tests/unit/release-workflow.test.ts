@@ -430,8 +430,8 @@ test("current release notes describe the GitHub release changelog", () => {
 
   expect(notes).toContain(`# Butler ${currentReleaseTag}`);
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("event-driven SSE activity and context updates");
-  expect(notes).toContain("bounded memory and artifact snapshots");
+  expect(notes).toContain("bounded, phase-aware");
+  expect(notes).toContain("preservation of mixed App-owned state");
   expect(notes).not.toContain("transcript projection incremental");
   expect(notes).not.toContain("final-result App transport events");
   expect(notes).not.toContain("(#46)");
