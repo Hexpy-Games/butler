@@ -80,7 +80,7 @@ test("version tag release workflow publishes Butler Agent artifact with packaged
   expect(workflow).not.toContain("packages/butler-app/client/ui/dist");
 });
 
-test("version tag release workflow publishes signed app artifacts", () => {
+test("version tag release workflow publishes community macOS and Linux app artifacts", () => {
   const workflowPath = join(root, ".github", "workflows", "release.yml");
   expect(existsSync(workflowPath)).toBe(true);
   const workflow = readFileSync(workflowPath, "utf8");
@@ -120,16 +120,13 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).toContain("--artifact-base-url");
   expect(verifyIndex).toBeGreaterThan(packageIndex);
   expect(workflow).toContain("bun run release:app:smoke -- --out dist/release/app");
-  expect(workflow).toContain("BUTLER_APP_RELEASE_SMOKE_MODE: production");
-  expect(workflow).toContain("BUTLER_APP_REQUIRE_PRODUCTION_SIGNING: \"1\"");
-  expect(workflow).toContain("BUTLER_APP_SIGN_IDENTITY");
-  expect(workflow).toContain("BUTLER_APP_NOTARY_KEYCHAIN_PROFILE");
-  expect(workflow).toContain(
-    "BUTLER_APP_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}",
-  );
-  expect(workflow).toContain(
-    "BUTLER_APP_NOTARY_KEYCHAIN_PROFILE: butler-notary",
-  );
+  expect(workflow).toContain("BUTLER_APP_RELEASE_SMOKE_MODE: ad-hoc");
+  expect(workflow).not.toContain("Configure macOS signing and notarization");
+  expect(workflow).not.toContain("BUTLER_APP_REQUIRE_PRODUCTION_SIGNING");
+  expect(workflow).not.toContain("BUTLER_APP_SIGN_IDENTITY");
+  expect(workflow).not.toContain("BUTLER_APP_NOTARY_KEYCHAIN_PROFILE");
+  expect(workflow).not.toContain("MACOS_CERTIFICATE_P12");
+  expect(workflow).not.toContain("MACOS_NOTARY_APPLE_ID");
   expect(workflow).not.toContain('grep -F "Butler-linux-x64/Butler"');
   expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.dmg");
   expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.zip");
@@ -428,6 +425,9 @@ test("current release notes describe the GitHub release changelog", () => {
   expect(notes).toContain("## Change Log");
   expect(notes).toContain("bounded, phase-aware");
   expect(notes).toContain("preservation of mixed App-owned state");
+  expect(notes).toContain("ad-hoc signed macOS App");
+  expect(notes).toContain("unsigned Windows community installer");
+  expect(notes).toContain("Ubuntu x64 and ARM64 DEB packages");
   expect(notes).not.toContain("transcript projection incremental");
   expect(notes).not.toContain("final-result App transport events");
   expect(notes).not.toContain("(#46)");
