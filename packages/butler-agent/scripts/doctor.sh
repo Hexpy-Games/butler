@@ -668,6 +668,10 @@ check_hooks() {
   local hooks_checked=0 issues=0
 
   local hook_dirs=()
+  if [[ ${#hook_dirs[@]} -eq 0 ]]; then
+    add_result "hooks" "hooks" "PASS" "no hooks.json files found" "" ""
+    return
+  fi
 
   for hooks_dir in "${hook_dirs[@]}"; do
     local hooks_json="$hooks_dir/hooks.json"
