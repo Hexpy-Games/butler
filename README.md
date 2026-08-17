@@ -33,15 +33,15 @@ workstreams.
 ## Quick Start
 
 Download Butler App from the
-[v0.0.22 GitHub Release](https://github.com/Hexpy-Games/butler/releases/tag/v0.0.22).
+[v0.0.23 GitHub Release](https://github.com/Hexpy-Games/butler/releases/tag/v0.0.23).
 
 | Platform | Installer |
 | --- | --- |
-| macOS Apple Silicon | `butler-app-0.0.22-darwin-arm64.dmg` |
-| Linux x64 | `butler-app-0.0.22-linux-x64.deb` |
-| Linux ARM64 | `butler-app-0.0.22-linux-arm64.deb` |
-| Arch Linux x64 | `butler-app-0.0.22-archlinux-x64.pkg.tar.zst` |
-| Windows x64 | `butler-app-0.0.22-win32-x64-setup.exe` |
+| macOS Apple Silicon | `butler-app-0.0.23-darwin-arm64.dmg` |
+| Linux x64 | `butler-app-0.0.23-linux-x64.deb` |
+| Linux ARM64 | `butler-app-0.0.23-linux-arm64.deb` |
+| Arch Linux x64 | `butler-app-0.0.23-archlinux-x64.pkg.tar.zst` |
+| Windows x64 | `butler-app-0.0.23-win32-x64-community-setup.exe` |
 
 Butler Agent is included in the app. On first launch, setup runs inside the
 Butler App in this order:
@@ -59,25 +59,19 @@ Butler shuts the complete App-owned Agent process tree down.
 
 The Microsoft Store is Butler's primary Windows distribution path. During Store
 onboarding and review, the GitHub Releases Windows x64 installer remains
-available in parallel. Download the canonical
-`butler-app-<version>-win32-x64-setup.exe` and its matching `.sha256` sidecar
-from the release assets, then run the Setup executable. Installation, first run,
-runtime, uninstall, and subsequent in-app updates use the existing Windows
-Squirrel package. GitHub-installed Butler users can open Settings to check for
-and apply updates from the GitHub Releases channel; Microsoft Store installs
-remain Store-managed.
-
-The community signing key is pinned by the repository's public
-`WINDOWS_COMMUNITY_CERTIFICATE_SHA256` variable. Rotate the PFX secret only
-with an explicit pin update and a bridge release signed by the old key, or ask
-users to reinstall; replacing the secret alone must fail before publication.
+available in parallel. Download
+`butler-app-<version>-win32-x64-community-setup.exe` and its matching `.sha256`
+sidecar from the release assets, then run the Setup executable. Installation,
+first run, runtime, and uninstall use the existing Windows Squirrel package.
+The community path does not publish a Squirrel updater feed; download each new
+version from its GitHub Release (or use the Microsoft Store) when updating.
 
 An ordinary SmartScreen warning can be continued with **More info** and then
 **Run anyway**. This community build is not signed by a public-trust publisher,
 so a warning is expected. Smart App Control enforcement is different: it can
 block the app with no override (there is no user override). On such machines,
-do not disable Smart App Control; use the Microsoft Store, a future
-SignPath-signed release, or a machine whose policy permits the app instead.
+do not disable Smart App Control; use the Microsoft Store or a machine whose
+policy permits the app instead.
 
 Use the standalone Agent only when you want the headless runtime without the
 desktop app.
@@ -86,7 +80,7 @@ desktop app.
 
 ```bash
 cd ~
-wget https://github.com/Hexpy-Games/butler/releases/download/v0.0.22/butler-agent-0.0.22-all.tar.gz
+wget https://github.com/Hexpy-Games/butler/releases/download/v0.0.23/butler-agent-0.0.23-all.tar.gz
 mkdir -p ~/butler
 tar -xzf ~/butler-agent-*-all.tar.gz -C ~/butler
 cd ~/butler
@@ -226,7 +220,7 @@ commands.
 
 ## Status
 
-Butler is `v0.0.22` and pre-release. Expect breaking changes before `v1.0.0`.
+Butler is `v0.0.23` and pre-release. Expect breaking changes before `v1.0.0`.
 
 The intended deployment model is single-user and self-hosted on a machine you
 control. Butler can run tools, edit files, dispatch background workers, and

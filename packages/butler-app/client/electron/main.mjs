@@ -95,7 +95,6 @@ import {
   manageWindowsSquirrelShortcut,
   removeWindowsOperationalState,
   resolveWindowsSquirrelLaunch,
-  resolveWindowsSquirrelUpdateManifestUrl,
   resolveWindowsUpdateFeedUrl,
   shouldDelayWindowsFirstUpdateCheck,
   verifyWindowsInstallerPublisher,
@@ -197,23 +196,6 @@ let serverHealthUrl = new URL("/health", serverUrl).toString();
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
 const isWindows = process.platform === "win32";
-const windowsSquirrelUpdateManifestUrl = resolveWindowsSquirrelUpdateManifestUrl({
-  platform: process.platform,
-  isPackaged: app.isPackaged,
-  execPath: process.execPath,
-  env: process.env,
-});
-const hasExplicitAppUpdateManifest = [
-  process.env.BUTLER_APP_UPDATE_MANIFEST,
-  process.env.BUTLER_UPDATE_MANIFEST,
-].some((value) => typeof value === "string" && value.trim());
-const bundledAgentSupervisorBaseEnv =
-  windowsSquirrelUpdateManifestUrl && !hasExplicitAppUpdateManifest
-    ? {
-        ...process.env,
-        BUTLER_APP_UPDATE_MANIFEST: windowsSquirrelUpdateManifestUrl,
-      }
-    : process.env;
 const appLifecycleMode = resolveAppLifecycleMode({
   platform: process.platform,
   isPackaged: app.isPackaged,
@@ -291,7 +273,6 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   getRendererOrigin: () => rendererOrigin,
   explicitServerUrl,
   explicitUiUrl,
-  baseEnv: bundledAgentSupervisorBaseEnv,
   projectFolderTokenSecret,
   startupTimeoutMs: 120_000,
   onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
@@ -2438,7 +2419,6 @@ ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
       signature: {
         status: signature.status,
         publisherConsistent: signature.publisherConsistent,
-        acceptanceMode: signature.acceptanceMode,
       },
     };
   }

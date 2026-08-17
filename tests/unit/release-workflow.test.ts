@@ -250,7 +250,9 @@ test("README directs default installs to Butler App and advanced installs to Age
 
   expect(quickStart).toContain("GitHub Release");
   expect(quickStart).toContain(`butler-app-${currentVersion}-darwin-arm64.dmg`);
-  expect(quickStart).toContain(`butler-app-${currentVersion}-win32-x64-setup.exe`);
+  expect(quickStart).toContain(
+    `butler-app-${currentVersion}-win32-x64-community-setup.exe`,
+  );
   expect(quickStart).toContain(`butler-app-${currentVersion}-linux-x64.deb`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-linux-arm64.deb`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-archlinux-x64.pkg.tar.zst`);
@@ -282,24 +284,18 @@ test(
     expect(windows).toContain("primary");
     expect(windows).toContain("GitHub Releases");
     expect(windows).toContain(
-      "butler-app-<version>-win32-x64-setup.exe",
+      "butler-app-<version>-win32-x64-community-setup.exe",
     );
     expect(windows).toContain(".sha256");
     expect(windows).toContain("runtime");
-    expect(windows).toContain("Settings");
-    expect(windows).toContain("in-app updates");
-    expect(windows).toContain("GitHub Releases channel");
-    expect(windows).toContain("WINDOWS_COMMUNITY_CERTIFICATE_SHA256");
-    expect(windows).toContain("bridge release");
-    expect(windows).toContain("reinstall");
-    expect(windows).not.toContain("does not publish a Squirrel updater feed");
-    expect(windows).not.toContain("download each new");
+    expect(windows).toContain("does not publish a Squirrel updater feed");
+    expect(windows).toContain("download each new");
+    expect(windows).not.toContain("WINDOWS_COMMUNITY_CERTIFICATE_SHA256");
     expect(windows).toContain("SmartScreen");
     expect(windows).toContain("More info");
     expect(windows).toContain("Run anyway");
     expect(windows).toContain("Smart App Control");
     expect(windows).toContain("no override");
-    expect(windows).toContain("SignPath");
     expect(windows).toContain("do not disable");
   },
 );

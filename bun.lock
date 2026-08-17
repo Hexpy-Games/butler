@@ -52,7 +52,7 @@
     },
     "packages/butler-app/client/electron": {
       "name": "butler-electron-client",
-      "version": "0.0.22",
+      "version": "0.0.23",
       "devDependencies": {
         "@electron/packager": "^20.3.0",
         "@electron/windows-sign": "^1.2.2",
@@ -101,7 +101,7 @@
     },
     "packages/butler-progress-projection": {
       "name": "@butler/progress-projection",
-      "version": "0.0.22",
+      "version": "0.0.23",
     },
     "packages/project-ledger": {
       "name": "@butler/project-ledger",
