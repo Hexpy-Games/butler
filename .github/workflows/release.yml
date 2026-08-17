@@ -158,39 +158,7 @@ jobs:
           file "$arm_linux_bun" | grep -E 'ELF 64-bit.*aarch64|ELF 64-bit.*ARM aarch64'
           echo "BUTLER_APP_MANAGED_BUN_LINUX_ARM64=$arm_linux_bun" >> "$GITHUB_ENV"
 
-      - name: Configure macOS signing and notarization
-        env:
-          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
-          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          for name in MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD MACOS_NOTARY_APPLE_ID MACOS_NOTARY_PASSWORD MACOS_NOTARY_TEAM_ID; do
-            test -n "${!name:-}" || { printf 'Missing required release secret: %s\n' "$name" >&2; exit 1; }
-          done
-          keychain="$RUNNER_TEMP/butler-signing.keychain-db"
-          certificate="$RUNNER_TEMP/butler-signing.p12"
-          printf '%s' "$MACOS_CERTIFICATE_P12" | base64 --decode > "$certificate"
-          security create-keychain -p "" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "" "$keychain"
-          security import "$certificate" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$keychain"
-          security list-keychains -d user -s "$keychain" login.keychain-db
-          xcrun notarytool store-credentials butler-notary \
-            --apple-id "$MACOS_NOTARY_APPLE_ID" \
-            --team-id "$MACOS_NOTARY_TEAM_ID" \
-            --password "$MACOS_NOTARY_PASSWORD" \
-            --keychain "$keychain"
-          echo "BUTLER_APP_NOTARY_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
-
       - name: Package app release
-        env:
-          BUTLER_APP_REQUIRE_PRODUCTION_SIGNING: "1"
-          BUTLER_APP_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
-          BUTLER_APP_NOTARY_KEYCHAIN_PROFILE: butler-notary
         run: |
           bun run release:app:package \
             --out dist/release/app \
@@ -198,10 +166,7 @@ jobs:
 
       - name: Verify packaged app artifacts
         env:
-          BUTLER_APP_RELEASE_SMOKE_MODE: production
-          BUTLER_APP_REQUIRE_PRODUCTION_SIGNING: "1"
-          BUTLER_APP_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
-          BUTLER_APP_NOTARY_KEYCHAIN_PROFILE: butler-notary
+          BUTLER_APP_RELEASE_SMOKE_MODE: ad-hoc
         run: bun run release:app:smoke -- --out dist/release/app
 
       - name: Publish app GitHub Release files
