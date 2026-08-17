@@ -1458,3 +1458,19 @@ test("minimal non-interactive installer prepares first-chat onboarding without u
   expect(result.stdout.trim()).toBe("ok");
   expect(result.stderr).not.toContain("BUTLER_USER_NAME");
 });
+
+test("doctor reports an empty hook inventory instead of exiting on macOS Bash", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    BUTLER_HOME="$PWD" BUTLER_DATA="$tmp" bash packages/butler-agent/scripts/doctor.sh --check hooks --json
+  `);
+
+  expect(result.status).toBe(0);
+  expect(JSON.parse(result.stdout)).toMatchObject({
+    checks: [{ key: "hooks", status: "PASS", message: "no hooks.json files found" }],
+    summary: { pass: 1, warn: 0, fail: 0 },
+    exitCode: 0,
+  });
+});
