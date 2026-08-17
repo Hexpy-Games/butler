@@ -60,6 +60,18 @@ const interactiveController = readFileSync(
   ),
   "utf8",
 );
+const windowsInstaller = readFileSync(
+  join(
+    root,
+    "packages",
+    "butler-app",
+    "client",
+    "electron",
+    "scripts",
+    "create-windows-installer.mjs",
+  ),
+  "utf8",
+);
 const electronPackage = JSON.parse(readFileSync(
   join(root, "packages", "butler-app", "client", "electron", "package.json"),
   "utf8",
@@ -176,6 +188,12 @@ test("Windows distribution signs bundled runtime inputs before package verificat
       '"BUTLER_APP_WINDOWS_PROCESS_HOST=$processHost"',
     );
   }
+});
+
+test("Windows package signing prefers the supplied PFX over store lookup", () => {
+  expect(windowsInstaller).toContain(
+    "certificateFile\n      ? signingOptions\n      : certificateThumbprint",
+  );
 });
 
 test("Windows community distribution is manual, exact-tag based, and explicitly acknowledged", () => {
