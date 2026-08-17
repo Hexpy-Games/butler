@@ -56,17 +56,19 @@ if (signingOptions) {
     appDirectory: resolve(appDirectory),
     description: "Butler",
     hashes: ["sha256"],
-    ...(certificateThumbprint
-      ? {
-          hookFunction: (path) => {
-            try {
-              signWithCurrentUserCertificate(path, certificateThumbprint);
-            } catch {
-              signingFailures.push(path);
-            }
-          },
-        }
-      : signingOptions),
+    ...(certificateFile
+      ? signingOptions
+      : certificateThumbprint
+        ? {
+            hookFunction: (path) => {
+              try {
+                signWithCurrentUserCertificate(path, certificateThumbprint);
+              } catch {
+                signingFailures.push(path);
+              }
+            },
+          }
+        : {}),
   });
   if (signingFailures.length > 0) {
     throw new Error(
