@@ -6,7 +6,6 @@ import {
   manageWindowsSquirrelShortcut,
   removeWindowsOperationalState,
   resolveWindowsSquirrelLaunch,
-  resolveWindowsSquirrelUpdateManifestUrl,
   resolveWindowsUpdateFeedUrl,
   shouldDelayWindowsFirstUpdateCheck,
   verifyWindowsInstallerPublisher,
@@ -27,9 +26,8 @@ describe("Windows Squirrel lifecycle", () => {
     expect(handler).toBeGreaterThan(0);
     expect(handler).toBeLessThan(main.indexOf("createBundledAgentSupervisor({"));
     expect(handler).toBeLessThan(main.indexOf("app.requestSingleInstanceLock()"));
-    expect(main).toContain("resolveWindowsSquirrelUpdateManifestUrl");
-    expect(main).toContain("baseEnv: bundledAgentSupervisorBaseEnv");
-    expect(main).toContain("BUTLER_APP_UPDATE_MANIFEST");
+    expect(main).not.toContain("resolveWindowsSquirrelUpdateManifestUrl");
+    expect(main).not.toContain("baseEnv: bundledAgentSupervisorBaseEnv");
     expect(main).toContain("normalInitializationReached: false");
     expect(main).toContain('errorCode: typeof errorCode === "string" ? errorCode : null');
   });
@@ -260,68 +258,7 @@ describe("Windows Squirrel lifecycle", () => {
     })).toBe("http://127.0.0.1:18080/win32");
   });
 
-  test("GitHub update manifest is selected only for the packaged Squirrel layout", () => {
-    const squirrelPath =
-      "C:\\Users\\dev\\AppData\\Local\\butler-app\\app-0.0.19\\Butler.exe";
-    expect(resolveWindowsSquirrelUpdateManifestUrl({
-      platform: "win32",
-      isPackaged: true,
-      execPath: squirrelPath,
-      env: {},
-    })).toBe(
-      "https://github.com/Hexpy-Games/butler/releases/latest/download/windows-app-update-manifest.json",
-    );
-    expect(resolveWindowsSquirrelUpdateManifestUrl({
-      platform: "win32",
-      isPackaged: true,
-      execPath: "C:\\Program Files\\WindowsApps\\Butler_0.0.19\\Butler.exe",
-      env: {},
-    })).toBeNull();
-    expect(resolveWindowsSquirrelUpdateManifestUrl({
-      platform: "win32",
-      isPackaged: true,
-      execPath: squirrelPath,
-      env: { BUTLER_APP_UPDATE_MANIFEST: "https://updates.example/custom.json" },
-    })).toBe("https://updates.example/custom.json");
-    expect(resolveWindowsSquirrelUpdateManifestUrl({
-      platform: "win32",
-      isPackaged: true,
-      execPath: squirrelPath,
-      env: {
-        BUTLER_APP_UPDATE_MANIFEST: "https://updates.example/app.json",
-        BUTLER_UPDATE_MANIFEST: "https://updates.example/generic.json",
-      },
-    })).toBe("https://updates.example/app.json");
-    expect(resolveWindowsSquirrelUpdateManifestUrl({
-      platform: "win32",
-      isPackaged: true,
-      execPath: "C:\\Users\\dev\\AppData\\Local\\butler-app\\app-dev\\Butler.exe",
-      env: {},
-    })).toBeNull();
-    expect(resolveWindowsSquirrelUpdateManifestUrl({
-      platform: "win32",
-      isPackaged: true,
-      execPath: "butler-app\\app-0.0.19\\Butler.exe",
-      env: {},
-    })).toBeNull();
-    expect(resolveWindowsSquirrelUpdateManifestUrl({
-      platform: "win32",
-      isPackaged: false,
-      execPath: squirrelPath,
-      env: {},
-    })).toBeNull();
-  });
-
   test("staged installer must match the installed Butler publisher", () => {
-    const lifecycle = readFileSync(resolve(
-      import.meta.dir,
-      "../../packages/butler-app/client/electron/windows-squirrel-lifecycle.mjs",
-    ), "utf8");
-    expect(lifecycle).toContain("X509Chain");
-    expect(lifecycle).toContain("X509RevocationMode");
-    expect(lifecycle).toContain("X509VerificationFlags");
-    expect(lifecycle).toContain("chainStatus");
-    expect(lifecycle).toContain("UntrustedRoot");
     const thumbprint = "A".repeat(40);
     const subject = "CN=Hexpy Games, O=Hexpy Games";
     let environment: NodeJS.ProcessEnv = {};
@@ -330,8 +267,6 @@ describe("Windows Squirrel lifecycle", () => {
       candidateInstaller: "C:\\updates\\ButlerSetup.exe",
       env: {
         PSModulePath: "C:\\pwsh-only-modules",
-        WINDOWS_COMMUNITY_CERTIFICATE_PFX: "private-pfx",
-        WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD: "private-password",
         BUTLER_WINDOWS_SIGN_CERTIFICATE_PASSWORD: "private-password",
       },
       runPowerShell: (_executable, _args, options) => {
@@ -339,13 +274,8 @@ describe("Windows Squirrel lifecycle", () => {
         return {
           status: 0,
           stdout: JSON.stringify([
-            { status: "Valid", thumbprint, subject, chainStatus: [] },
-            {
-              status: "Valid",
-              thumbprint: "B".repeat(40),
-              subject,
-              chainStatus: [],
-            },
+            { status: "Valid", thumbprint, subject },
+            { status: "Valid", thumbprint: "B".repeat(40), subject },
           ]),
         };
       },
@@ -354,11 +284,8 @@ describe("Windows Squirrel lifecycle", () => {
       signerThumbprint: thumbprint,
       signerSubject: subject,
       publisherConsistent: true,
-      acceptanceMode: "public-trust",
     });
     expect(environment.PSModulePath).toBeUndefined();
-    expect(environment.WINDOWS_COMMUNITY_CERTIFICATE_PFX).toBeUndefined();
-    expect(environment.WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD).toBeUndefined();
     expect(environment.BUTLER_WINDOWS_SIGN_CERTIFICATE_PASSWORD).toBeUndefined();
     expect(() => verifyWindowsInstallerPublisher({
       currentExecutable: "C:\\installed\\Butler.exe",
@@ -366,100 +293,21 @@ describe("Windows Squirrel lifecycle", () => {
       runPowerShell: () => ({
         status: 0,
         stdout: JSON.stringify([
-          { status: "Valid", thumbprint, subject, chainStatus: [] },
+          { status: "Valid", thumbprint, subject },
           {
             status: "Valid",
             thumbprint: "B".repeat(40),
             subject: "CN=Different Publisher",
-            chainStatus: [],
           },
         ]),
       }),
     })).toThrow("windows_installer_publisher_mismatch");
-    expect(verifyWindowsInstallerPublisher({
-      currentExecutable: "C:\\installed\\Butler.exe",
-      candidateInstaller: "C:\\updates\\ButlerSetup.exe",
-      runPowerShell: () => ({
-        status: 0,
-        stdout: JSON.stringify([
-          {
-            status: "UnknownError",
-            thumbprint,
-            subject,
-            chainStatus: ["UntrustedRoot"],
-          },
-          {
-            status: "UnknownError",
-            thumbprint,
-            subject,
-            chainStatus: ["UntrustedRoot"],
-          },
-        ]),
-      }),
-    })).toMatchObject({
-      status: "UnknownError",
-      acceptanceMode: "community",
-      signerThumbprint: thumbprint,
-      signerSubject: subject,
-    });
-    expect(() => verifyWindowsInstallerPublisher({
-      currentExecutable: "C:\\installed\\Butler.exe",
-      candidateInstaller: "C:\\updates\\ButlerSetup.exe",
-      runPowerShell: () => ({
-        status: 0,
-        stdout: JSON.stringify([
-          {
-            status: "UnknownError",
-            thumbprint,
-            subject,
-            chainStatus: ["UntrustedRoot"],
-          },
-          {
-            status: "UnknownError",
-            thumbprint: "B".repeat(40),
-            subject,
-            chainStatus: ["UntrustedRoot"],
-          },
-        ]),
-      }),
-    })).toThrow("windows_installer_certificate_mismatch");
-    expect(() => verifyWindowsInstallerPublisher({
-      currentExecutable: "C:\\installed\\Butler.exe",
-      candidateInstaller: "C:\\updates\\ButlerSetup.exe",
-      runPowerShell: () => ({
-        status: 0,
-        stdout: JSON.stringify([
-          {
-            status: "NotTrusted",
-            thumbprint,
-            subject,
-            chainStatus: ["UntrustedRoot"],
-          },
-          {
-            status: "NotTrusted",
-            thumbprint,
-            subject,
-            chainStatus: ["UntrustedRoot"],
-          },
-        ]),
-      }),
-    })).toThrow("windows_installer_signature_invalid");
-    for (const status of ["NotSigned", "HashMismatch", "NotSupported", "Incompatible"]) {
-      expect(() => verifyWindowsInstallerPublisher({
-        currentExecutable: "C:\\installed\\Butler.exe",
-        candidateInstaller: "C:\\updates\\ButlerSetup.exe",
-        runPowerShell: () => ({
-          status: 0,
-          stdout: JSON.stringify([
-            { status, thumbprint, subject, chainStatus: [] },
-            { status, thumbprint, subject, chainStatus: [] },
-          ]),
-        }),
-      })).toThrow("windows_installer_signature_invalid");
-    }
-    for (const chainStatus of [
-      ["PartialChain"],
-      ["UntrustedRoot", "RevocationStatusUnknown"],
+    for (const status of [
+      "UnknownError",
+      "NotSigned",
+      "HashMismatch",
+      "NotSupported",
+      "Incompatible",
     ]) {
       expect(() => verifyWindowsInstallerPublisher({
         currentExecutable: "C:\\installed\\Butler.exe",
@@ -467,34 +315,12 @@ describe("Windows Squirrel lifecycle", () => {
         runPowerShell: () => ({
           status: 0,
           stdout: JSON.stringify([
-            { status: "UnknownError", thumbprint, subject, chainStatus },
-            { status: "UnknownError", thumbprint, subject, chainStatus },
+            { status, thumbprint, subject },
+            { status, thumbprint, subject },
           ]),
         }),
       })).toThrow("windows_installer_signature_invalid");
     }
-    expect(() => verifyWindowsInstallerPublisher({
-      currentExecutable: "C:\\installed\\Butler.exe",
-      candidateInstaller: "C:\\updates\\ButlerSetup.exe",
-      runPowerShell: () => ({
-        status: 0,
-        stdout: JSON.stringify([
-          { status: "UnknownError", thumbprint, subject, chainStatus: ["UntrustedRoot"] },
-          { status: "Valid", thumbprint, subject, chainStatus: [] },
-        ]),
-      }),
-    })).toThrow("windows_installer_signature_invalid");
-    expect(() => verifyWindowsInstallerPublisher({
-      currentExecutable: "C:\\installed\\Butler.exe",
-      candidateInstaller: "C:\\updates\\ButlerSetup.exe",
-      runPowerShell: () => ({
-        status: 0,
-        stdout: JSON.stringify([
-          { status: "UnknownError", thumbprint, subject },
-          { status: "UnknownError", thumbprint, subject, chainStatus: ["UntrustedRoot"] },
-        ]),
-      }),
-    })).toThrow("windows_installer_signature_invalid");
     expect(() => verifyWindowsInstallerPublisher({
       currentExecutable: "C:\\installed\\Butler.exe",
       candidateInstaller: "C:\\updates\\ButlerSetup.exe",

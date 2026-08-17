@@ -87,11 +87,10 @@ test("supervisor env binds bundled Agent to localhost and keeps auth token out o
   expect(JSON.stringify(env)).not.toContain("super-secret-local-auth-token");
 });
 
-test("supervisor env carries the injected Windows manifest source", () => {
+test("supervisor env carries an explicit app update manifest source", () => {
   const env = buildBundledAgentSupervisorEnv({
     baseEnv: {
-      BUTLER_APP_UPDATE_MANIFEST:
-        "https://github.com/Hexpy-Games/butler/releases/latest/download/windows-app-update-manifest.json",
+      BUTLER_APP_UPDATE_MANIFEST: "https://updates.example/app.json",
     },
     gatewayEnv: {},
     port: 18888,
@@ -104,9 +103,7 @@ test("supervisor env carries the injected Windows manifest source", () => {
       token: "super-secret-local-auth-token",
     },
   });
-  expect(env.BUTLER_APP_UPDATE_MANIFEST).toBe(
-    "https://github.com/Hexpy-Games/butler/releases/latest/download/windows-app-update-manifest.json",
-  );
+  expect(env.BUTLER_APP_UPDATE_MANIFEST).toBe("https://updates.example/app.json");
 });
 
 test("bundled Agent supervisor starts, health-checks, restarts, and stops", async () => {
