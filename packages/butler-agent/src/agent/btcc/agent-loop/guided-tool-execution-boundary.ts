@@ -17,7 +17,7 @@ import type {
   AuthorityCommandInput,
   PrincipalAuthority,
 } from "../authority/index.ts";
-import { AUTHORITY_DENIAL_TEXT } from "../authority/index.ts";
+import type { GuidedToolJournal } from "../ports/guided-tool-journal.ts";
 import {
   acceptedGuidedPlanActionKey,
   deferredGuidedAuthorityResult,
@@ -27,6 +27,10 @@ import {
   sameGuidedEffectJson,
   unavailableGuidedEffect,
 } from "./guided-persistent-effect-resolution.ts";
+import {
+  hasModifyReplanProvenance,
+  resolveGuidedAuthorityContinuation,
+} from "./guided-authority-continuation.ts";
 
 export type GuidedPersistentEffectRequest = {
   target: string;
@@ -54,6 +58,7 @@ type GuidedToolExecutionBoundaryInput = {
   reasoningEffort?: string;
   workspacePath?: string;
   authorityRequestRef?: string;
+  toolJournal?: GuidedToolJournal;
   accessMode: GuidedEffectAccessMode;
   signal: AbortSignal;
   executeCommand(
@@ -109,59 +114,18 @@ export function createGuidedToolExecutionBoundary(
     let authorityExecution: Awaited<ReturnType<PrincipalAuthority["execution"]>> | undefined;
     let effectiveCall = call;
     if (input.authorityRequestRef) {
-      if (!authority) {
-        return ordinaryGuidedEffectError(
-          "authority_context_missing",
-          "The approved command authority is unavailable.",
-        );
-      }
-      if (!input.ownerSessionId) {
-        return ordinaryGuidedEffectError(
-          "authority_context_missing",
-          "The approved command owner session is unavailable.",
-        );
-      }
-      try {
-        authorityExecution = authority.execution({
-          ownerSessionId: input.ownerSessionId,
-          requestRef: input.authorityRequestRef,
-        });
-      } catch (error) {
-        return ordinaryGuidedEffectError(
-          error instanceof Error ? error.message : "authority_request_not_found",
-          "The approved command identity is unavailable.",
-        );
-      }
-      if (authorityExecution.sourceWorkId !== work.workId ||
-          authorityExecution.sourceTurnId === input.sourceTurnId ||
-          authorityExecution.sourceSessionId !== input.ownerSessionId ||
-          !input.workspacePath ||
-          authorityExecution.workspacePath !== input.workspacePath ||
-          authorityExecution.capability !== call.name &&
-            authorityExecution.capability !== "run_command_remote_observation") {
-        return ordinaryGuidedEffectError(
-          "authority_request_identity_mismatch",
-          "The approved command is bound to a different Work or session.",
-        );
-      }
-      if (authorityExecution.decision === "denied") {
-        return ordinaryGuidedEffectError(
-          "authority_request_denied",
-          AUTHORITY_DENIAL_TEXT,
-          { next_action: "Report the denial or choose a non-effectful alternative." },
-        );
-      }
-      effectiveCall = {
-        ...call,
-        args: authorityExecution.normalizedInput,
-        rawArguments: JSON.stringify(authorityExecution.normalizedInput),
-      };
-      if (authorityExecution.outcome !== "pending") {
-        return ordinaryGuidedEffectError(
-          "authority_request_outcome_fenced",
-          "The approved command already has a durable outcome.",
-        );
-      }
+      const continuation = resolveGuidedAuthorityContinuation({
+        authority,
+        requestRef: input.authorityRequestRef,
+        ownerSessionId: input.ownerSessionId,
+        sourceTurnId: input.sourceTurnId,
+        workspacePath: input.workspacePath,
+        sourceWorkId: work.workId,
+        call,
+      });
+      if (!continuation.ok) return continuation.result;
+      authorityExecution = continuation.execution;
+      effectiveCall = continuation.effectiveCall;
     }
     const effectOccurrenceId = authorityExecution
       ? `authority:${authorityExecution.requestRef}`
@@ -177,16 +141,20 @@ export function createGuidedToolExecutionBoundary(
         resolution.error.message,
       );
     }
-    if (authorityExecution && (
-      resolution.target !== authorityExecution.normalizedTarget ||
-      !sameGuidedEffectJson(resolution.input, authorityExecution.normalizedInput)
+    const approvedAuthorityExecution = authorityExecution?.decision === "allowed"
+      ? authorityExecution
+      : undefined;
+    if (approvedAuthorityExecution && (
+      resolution.target !== approvedAuthorityExecution.normalizedTarget ||
+      !sameGuidedEffectJson(resolution.input, approvedAuthorityExecution.normalizedInput)
     )) {
       return ordinaryGuidedEffectError(
         "authority_request_identity_mismatch",
         "The stored command identity changed before execution.",
       );
     }
-    if (!authorityExecution && input.accessMode === "ask_first") {
+    if ((!authorityExecution || authorityExecution.decision === "modified") &&
+        input.accessMode === "ask_first") {
       if (!authority) {
         return ordinaryGuidedEffectError(
           "authority_context_missing",
@@ -218,6 +186,22 @@ export function createGuidedToolExecutionBoundary(
       if (!actionKey.ok) {
         return ordinaryGuidedEffectError(actionKey.code, actionKey.message);
       }
+      const authorityGeneration = authorityExecution?.decision === "modified"
+        ? authorityExecution.authorityGeneration + 1
+        : 1;
+      if (authorityExecution?.decision === "modified" &&
+          (!input.toolJournal ||
+            !hasModifyReplanProvenance({
+              toolJournal: input.toolJournal,
+              work,
+              priorPlanRevisionId: authorityExecution.planRevisionId,
+              sourceTurnId: input.sourceTurnId!,
+            }))) {
+        return ordinaryGuidedEffectError(
+          "authority_modify_replan_required",
+          "The replacement command requires a new Plan and accepted Review in this scheduled Turn.",
+        );
+      }
       try {
         const admission = authority.admit({
           ownerSessionId: input.ownerSessionId,
@@ -227,7 +211,7 @@ export function createGuidedToolExecutionBoundary(
           workspacePath: input.workspacePath,
           planRevisionId,
           actionKey: actionKey.value,
-          authorityGeneration: 1,
+          authorityGeneration,
           capability: resolution.adapter.capability,
           target: resolution.target,
           normalizedInput,
@@ -241,6 +225,12 @@ export function createGuidedToolExecutionBoundary(
             { next_action: "Report the denial or choose a non-effectful alternative." },
           );
         }
+        if (admission.status === "modified") {
+          return ordinaryGuidedEffectError(
+            "authority_request_modified",
+            "The reviewed command was replaced before it could run.",
+          );
+        }
       } catch (error) {
         return ordinaryGuidedEffectError(
           error instanceof Error ? error.message : "authority_request_identity_mismatch",
@@ -248,7 +238,7 @@ export function createGuidedToolExecutionBoundary(
         );
       }
       return deferredGuidedAuthorityResult();
-    } else if (authorityExecution) {
+    } else if (approvedAuthorityExecution) {
       const actionKey = acceptedGuidedPlanActionKey(
         work,
         resolution.adapter.capability,
@@ -257,8 +247,8 @@ export function createGuidedToolExecutionBoundary(
       if (!actionKey.ok) {
         return ordinaryGuidedEffectError(actionKey.code, actionKey.message);
       }
-      if (work.currentPlan?.planRevisionId !== authorityExecution.planRevisionId ||
-          actionKey.value !== authorityExecution.actionKey) {
+      if (work.currentPlan?.planRevisionId !== approvedAuthorityExecution.planRevisionId ||
+          actionKey.value !== approvedAuthorityExecution.actionKey) {
         return ordinaryGuidedEffectError(
           "authority_request_identity_mismatch",
           "The approved command is no longer bound to the accepted Plan action.",
@@ -267,7 +257,7 @@ export function createGuidedToolExecutionBoundary(
     }
     const outcome = await input.effectService.execute({
       work,
-      accessMode: authorityExecution
+      accessMode: approvedAuthorityExecution
         ? "full_access"
         : input.accessMode,
       occurrenceId: effectOccurrenceId,
@@ -276,7 +266,7 @@ export function createGuidedToolExecutionBoundary(
       input: resolution.input,
       adapter: resolution.adapter,
     });
-    if (authorityExecution) {
+    if (approvedAuthorityExecution) {
       authority!.recordOutcome({
         requestRef: input.authorityRequestRef!,
         ownerSessionId: input.ownerSessionId!,

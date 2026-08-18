@@ -74,6 +74,7 @@ export function createGuidedAuthorityProjection(input: {
   activity: GuidedActivityProjection;
   authority?: PrincipalAuthority;
   ownerSessionId: string;
+  turnId: string;
   requestRef?: string;
 }): {
   publicActivity: GuidedActivityProjection;
@@ -102,6 +103,7 @@ export function createGuidedAuthorityProjection(input: {
       ? projectGuidedAuthorityOutcome({
           authority: input.authority,
           ownerSessionId: input.ownerSessionId,
+          turnId: input.turnId,
           requestRef: input.requestRef,
         })
       : text,
@@ -111,13 +113,15 @@ export function createGuidedAuthorityProjection(input: {
 function authorityDecisionForContinuation(input: {
   authority?: PrincipalAuthority;
   ownerSessionId: string;
+  turnId: string;
   requestRef?: string;
-}): "allowed" | "denied" | undefined {
+}): "allowed" | "denied" | "modified" | undefined {
   if (!input.authority || !input.requestRef) return undefined;
   try {
     return input.authority.execution({
       ownerSessionId: input.ownerSessionId,
       requestRef: input.requestRef,
+      turnId: input.turnId,
     }).decision;
   } catch {
     return undefined;
@@ -127,11 +131,13 @@ function authorityDecisionForContinuation(input: {
 function createGuidedPublicActivity(input: {
   accessMode: GuidedEffectAccessMode;
   activity: GuidedActivityProjection;
-  authorityDecision?: "allowed" | "denied";
+  authorityDecision?: "allowed" | "denied" | "modified";
 }): GuidedActivityProjection {
   if (input.accessMode !== "ask_first") return input.activity;
   const pendingText = input.authorityDecision === "denied"
     ? AUTHORITY_DENIAL_TEXT
+    : input.authorityDecision === "modified"
+      ? "Replacement command is waiting for Allow."
     : "Reviewed command pending Allow.";
   return {
     observeToolBatch: (batch) => input.activity.observeToolBatch({
@@ -147,7 +153,7 @@ function createGuidedPublicActivity(input: {
 function createGuidedPublicLoopCallbacks(input: {
   accessMode: GuidedEffectAccessMode;
   activity: GuidedActivityProjection;
-  authorityDecision?: "allowed" | "denied";
+  authorityDecision?: "allowed" | "denied" | "modified";
 }): Pick<BtccAgentLoopInput, "onAssistantTextBeforeTools" | "finalTextFromToolResult"> {
   return {
     onAssistantTextBeforeTools: ({ text, toolCalls }) => input.activity.observeToolBatch({
@@ -155,6 +161,8 @@ function createGuidedPublicLoopCallbacks(input: {
         ? text
         : input.authorityDecision === "denied"
           ? AUTHORITY_DENIAL_TEXT
+          : input.authorityDecision === "modified"
+            ? "Replacement command is waiting for Allow."
           : "Reviewed command pending Allow.",
       toolCalls: toolCalls.map((call) => ({
         name: call.name,
@@ -163,6 +171,9 @@ function createGuidedPublicLoopCallbacks(input: {
     }),
     finalTextFromToolResult: ({ toolResult }) => {
       if (input.authorityDecision === "denied") return AUTHORITY_DENIAL_TEXT;
+      if (input.authorityDecision === "modified" && authorityPending(toolResult.output)) {
+        return "Replacement command is waiting for Allow.";
+      }
       return authorityPending(toolResult.output)
         ? "This reviewed command is waiting for Allow."
         : null;
@@ -173,6 +184,7 @@ function createGuidedPublicLoopCallbacks(input: {
 function projectGuidedAuthorityOutcome(input: {
   authority?: PrincipalAuthority;
   ownerSessionId: string;
+  turnId: string;
   requestRef: string;
 }): string {
   if (!input.authority) return "Approved command outcome could not be verified.";
@@ -180,8 +192,10 @@ function projectGuidedAuthorityOutcome(input: {
     const execution = input.authority.execution({
       ownerSessionId: input.ownerSessionId,
       requestRef: input.requestRef,
+      turnId: input.turnId,
     });
     if (execution.decision === "denied") return AUTHORITY_DENIAL_TEXT;
+    if (execution.decision === "modified") return "Replacement command is waiting for Allow.";
     if (execution.outcome === "applied") return "Approved command completed once.";
     if (execution.outcome === "failed") return "Approved command failed to complete.";
     return "Approved command outcome is pending.";

@@ -118,6 +118,7 @@ export async function loadGuidedTurnWork(input: {
     ? input.authority.execution({
         ownerSessionId: input.scope.sessionId,
         requestRef: input.authorityRequestRef,
+        turnId: input.scope.turnId,
       })
     : undefined;
   if (input.authorityRequestRef && !storedAuthority) {

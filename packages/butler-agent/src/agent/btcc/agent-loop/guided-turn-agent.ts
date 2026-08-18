@@ -43,6 +43,7 @@ import {
 import { loadGuidedOperationalFacts } from "./guided-operational-facts.ts";
 import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
 import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
+import { privateModifyContinuationPromptInput } from "./guided-authority-continuation.ts";
 
 type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & {
   modelRound: ModelRoundPort;
@@ -156,6 +157,7 @@ export function createProductionGuidedTurnAgent(
           authority: authority!, ownerSessionId: turn.sessionId, sourceTurnId: turn.turnId,
           modelRef: `${turn.modelSelection.provider}/${turn.modelSelection.model}`, reasoningEffort: turn.modelSelection.reasoningEffort,
           workspacePath: workspaceReference.get(),
+          toolJournal: input.toolJournal,
           ...(turn.context.authorityRequestRef
             ? { authorityRequestRef: turn.context.authorityRequestRef }
             : {}),
@@ -194,6 +196,7 @@ export function createProductionGuidedTurnAgent(
         activity,
         authority,
         ownerSessionId: turn.sessionId,
+        turnId: turn.turnId,
         ...(turn.context.authorityRequestRef
           ? { requestRef: turn.context.authorityRequestRef }
           : {}),
@@ -239,6 +242,9 @@ export function createProductionGuidedTurnAgent(
         responseLanguage,
         promptInput: {
           ...input, workContext: renderDurableWorkContext(initialWork), effectContext,
+          ...privateModifyContinuationPromptInput(
+            authority, turn.sessionId, turn.context.authorityRequestRef, turn.turnId,
+          ),
         },
         initialRequestBytes: modelRound.initialRequestBytes,
         butlerData: input.butlerData,

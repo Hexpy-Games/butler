@@ -22,18 +22,33 @@ export async function handleAuthorityRoutes(
   }
 
   const match = input.request.method === "POST"
-    ? input.url.pathname.match(/^\/authority-requests\/([^/]+)\/(allow|deny)$/u)
+    ? input.url.pathname.match(/^\/authority-requests\/([^/]+)\/(allow|deny|modify)$/u)
     : null;
   if (!match) return null;
   const requestRef = decodeURIComponent(match[1]!);
   const decisionAction = match[2];
   let decision;
   try {
-    decision = decisionAction === "deny"
-      ? input.authority.deny({ ownerSessionId, requestRef })
-      : input.authority.allow({ ownerSessionId, requestRef });
+    if (decisionAction === "modify") {
+      decision = input.authority.modify({
+        ownerSessionId,
+        requestRef,
+        alternativeInput: await modifyInput(input.request),
+      });
+    } else {
+      decision = decisionAction === "deny"
+        ? input.authority.deny({ ownerSessionId, requestRef })
+        : input.authority.allow({ ownerSessionId, requestRef });
+    }
   } catch (error) {
     if (error instanceof AuthorityRequestError) {
+      if (error.code === "authority_modify_input_missing" ||
+          error.code === "authority_modify_input_too_large") {
+        throw new RequestError(400, error.code, "Modify instruction is invalid.");
+      }
+      if (error.code === "authority_modify_identity_mismatch") {
+        throw new RequestError(409, error.code, "Modify instruction conflicts with the stored decision.");
+      }
       throw new RequestError(404, "authority_request_not_found", "Authority request not found.");
     }
     throw error;
@@ -53,13 +68,18 @@ export async function handleAuthorityRoutes(
     authority_request_ref: decision.requestRef,
   };
   try {
-    await input.store.sendMessage(queueInput, undefined, {
+    const scheduled = await input.store.sendMessage(queueInput, undefined, {
       deferResponderTurns: true,
     });
+    const scheduledTurnId = scheduled.turn?.id ?? scheduled.queued?.turn_id;
+    if (!scheduledTurnId) {
+      throw new RequestError(409, "authority_source_turn_missing", "Authority source Turn could not be scheduled.");
+    }
     input.authority.markScheduled({
       ownerSessionId,
       requestRef: decision.requestRef,
       clientMessageId: decision.scheduleClientMessageId,
+      turnId: scheduledTurnId,
     });
   } catch (error) {
     if (error instanceof AuthorityRequestError) {
@@ -72,6 +92,24 @@ export async function handleAuthorityRoutes(
     decision: decision.decision,
     scheduled: true,
   }), 202);
+}
+
+async function modifyInput(request: Request): Promise<string> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    throw new RequestError(400, "authority_modify_input_missing", "Modify instruction is invalid.");
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new RequestError(400, "authority_modify_input_missing", "Modify instruction is invalid.");
+  }
+  const record = body as Record<string, unknown>;
+  const alternative = record.alternative ?? record.instruction;
+  if (typeof alternative !== "string" || !alternative.trim()) {
+    throw new RequestError(400, "authority_modify_input_missing", "Modify instruction is invalid.");
+  }
+  return alternative;
 }
 
 function chatIdFromSessionHint(sessionId: string): string | null {

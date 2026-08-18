@@ -22,6 +22,8 @@ import { BTCC_AUTHORITY_SCHEMA } from "../../packages/butler-agent/src/agent/ada
 const AUTHORITY_DENIAL_TEXT = "Reviewed command denied. No command was run.";
 const PRIVATE_PROVIDER_TEXT = "provider-private-deny-text";
 const PRIVATE_CONTINUATION_INPUT = "Report the denied command with its private arguments.";
+const PRIVATE_MODIFY_INPUT = "Use the private replacement target and print only the replacement value.";
+const PRIVATE_MODIFY_PROVIDER_TEXT = "provider-private-modify-text";
 
 const roots: string[] = [];
 
@@ -301,6 +303,284 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
   }
 });
 
+test("real App ask_first Modify schedules one same-Work replan Turn before a replacement authority request", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-self-modify-vertical-"));
+  roots.push(root);
+  publishNativeReadiness(root);
+  mkdirSync(join(root, "replacement-dir"), { recursive: true });
+  const appDbPath = join(root, "app.sqlite");
+  const bindings = new SessionBindingStore(
+    join(root, "runtime", "session-store.sqlite"),
+    "ephemeral",
+  );
+  bindings.upsert({
+    sessionId: sessionHintForRow("general"),
+    role: "butler",
+    workspacePath: root,
+    runtimeAdapterId: "btcc-turn-runtime",
+    modelProviderId: "openai",
+    modelRef: "openai/gpt-5.5",
+    transportBindings: [{ transport: "app", accountId: "local", peerId: "general" }],
+  });
+  const composition = createProductionBtccComposition({
+    butlerHome: root,
+    butlerData: root,
+    ownerId: "self-modify-vertical-test",
+    sessionBindings: bindings,
+    modelRound: modifyingCommandRound(),
+  });
+  const server = createAppServer({
+    dbPath: appDbPath,
+    butlerHome: root,
+    butlerData: root,
+    port: 0,
+  });
+  const queue = new NativeInboundQueue(root);
+  const inbound = new BtccInboundDispatcher();
+  const gateway = createGatewayServer({
+    router: new GatewayRouter({ store: bindings }),
+    handlers: createBtccGatewayHandlers({ btcc: composition.btcc }),
+    butlerData: root,
+  });
+  const deliveryGuard = new DeliveryGuard({
+    adapters: [createAppTransportAdapter()],
+    butlerData: root,
+  });
+  const clientMessageId = "client-cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  try {
+    const response = await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: "general",
+        text: "Run the reviewed command with the requested replacement.",
+        model: "openai/gpt-5.5",
+        reasoning_effort: "low",
+        access_mode: "ask_first",
+        client_message_id: clientMessageId,
+      }),
+    });
+    expect(response.status).toBe(202);
+    const summary = inbound.poll({
+      queue,
+      server: gateway,
+      store: bindings,
+      deliveryGuard,
+      limit: 4,
+      maxConcurrentSessions: 1,
+    });
+    await inbound.waitForIdle();
+    expect(summary.claimed).toBe(1);
+    expect(summary.failed).toBe(0);
+    expect(summary.interrupted).toBe(0);
+    await waitForQueueState(appDbPath, clientMessageId, "dispatched");
+    expect(await Bun.file(join(root, "old-modify-command.txt")).exists()).toBe(false);
+    const authorityResponse = await fetch(`${server.url}authority-requests?session_id=general`);
+    expect(authorityResponse.status).toBe(200);
+    const authorityBody = await authorityResponse.json() as {
+      data: { requests: Array<Record<string, unknown>> };
+    };
+    expect(authorityBody.data.requests).toHaveLength(1);
+    const requestRef = authorityBody.data.requests[0]?.request_ref;
+    expect(typeof requestRef).toBe("string");
+    const beforeModifyProjection = JSON.stringify(authorityBody.data.requests[0]);
+    expect(beforeModifyProjection).not.toContain(PRIVATE_MODIFY_INPUT);
+    expect(beforeModifyProjection).not.toContain("old-modify-command.txt");
+
+    const modify = await fetch(
+      `${server.url}authority-requests/${encodeURIComponent(String(requestRef))}/modify?session_id=general`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ alternative: PRIVATE_MODIFY_INPUT }),
+      },
+    );
+    expect(modify.status).toBe(202);
+    const replayModify = await fetch(
+      `${server.url}authority-requests/${encodeURIComponent(String(requestRef))}/modify?session_id=general`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ alternative: PRIVATE_MODIFY_INPUT }),
+      },
+    );
+    expect(replayModify.status).toBe(202);
+
+    const scheduled = new Database(appDbPath, { readonly: true });
+    let scheduledClientMessageId = "";
+    let resumedTurnId = "";
+    let sourceTurnId = "";
+    try {
+      const rows = scheduled.query<{
+        client_message_id: string;
+        turn_id: string;
+        text: string;
+        control_resolution_json: string;
+      }, []>(`
+        SELECT client_message_id, turn_id, text, control_resolution_json
+        FROM session_queued_messages WHERE chat_id = 'general' ORDER BY rowid ASC
+      `).all();
+      expect(rows).toHaveLength(2);
+      expect(rows[1]?.control_resolution_json).toContain(String(requestRef));
+      expect(rows[1]?.text).not.toContain(PRIVATE_MODIFY_INPUT);
+      scheduledClientMessageId = rows[1]!.client_message_id;
+      resumedTurnId = rows[1]!.turn_id;
+      sourceTurnId = rows[0]!.turn_id;
+      expect(resumedTurnId).not.toBe(sourceTurnId);
+    } finally {
+      scheduled.close();
+    }
+
+    const resumedSummary = inbound.poll({
+      queue,
+      server: gateway,
+      store: bindings,
+      deliveryGuard,
+      limit: 4,
+      maxConcurrentSessions: 1,
+    });
+    await inbound.waitForIdle();
+    expect(resumedSummary.claimed).toBe(1);
+    expect(resumedSummary.failed).toBe(0);
+    await waitForQueueState(appDbPath, scheduledClientMessageId, "dispatched");
+    expect(await Bun.file(join(root, "old-modify-command.txt")).exists()).toBe(false);
+    expect(await Bun.file(join(root, "replacement-modify-command.txt")).exists()).toBe(false);
+
+    const afterAuthorityResponse = await fetch(`${server.url}authority-requests?session_id=general`);
+    expect(afterAuthorityResponse.status).toBe(200);
+    const afterAuthorityBody = await afterAuthorityResponse.json() as {
+      data: { requests: Array<Record<string, unknown>> };
+    };
+    expect(afterAuthorityBody.data.requests).toHaveLength(1);
+    const replacementRequest = afterAuthorityBody.data.requests[0]!;
+    const replacementRequestRef = String(replacementRequest.request_ref);
+    expect(replacementRequestRef).not.toBe(String(requestRef));
+    expect(replacementRequest.executable).toBe("printf");
+    const publicProjection = JSON.stringify(replacementRequest);
+    expect(publicProjection).not.toContain(PRIVATE_MODIFY_INPUT);
+    expect(publicProjection).not.toContain(PRIVATE_MODIFY_PROVIDER_TEXT);
+    expect(publicProjection).not.toContain("replacement-modify-command.txt");
+
+    const messagesResponse = await fetch(`${server.url}messages?chat_id=general`);
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      data: { messages: Array<{ role: string; turn_id?: string; text: string }> };
+    };
+    const resumedMessages = messagesBody.data.messages.filter(
+      (message) => message.role === "assistant" && message.turn_id === resumedTurnId,
+    );
+    expect(resumedMessages).toHaveLength(1);
+    expect(resumedMessages[0]?.text).toBe("Replacement command is waiting for Allow.");
+    const serializedMessages = JSON.stringify(messagesBody.data.messages);
+    expect(serializedMessages).not.toContain(PRIVATE_MODIFY_INPUT);
+    expect(serializedMessages).not.toContain(PRIVATE_MODIFY_PROVIDER_TEXT);
+
+    const eventsResponse = await fetch(`${server.url}events?limit=200`);
+    expect(eventsResponse.status).toBe(200);
+    const eventsBody = await eventsResponse.json() as {
+      data: { events: Array<{ payload: Record<string, unknown> }> };
+    };
+    const serializedEvents = JSON.stringify(eventsBody.data.events);
+    expect(serializedEvents).not.toContain(PRIVATE_MODIFY_INPUT);
+    expect(serializedEvents).not.toContain(PRIVATE_MODIFY_PROVIDER_TEXT);
+    expect(serializedEvents).not.toContain("old-modify-command.txt");
+    expect(serializedEvents).not.toContain("replacement-modify-command.txt");
+
+    const finalDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), {
+      readonly: true,
+    });
+    try {
+      const oldAuthority = finalDb.query<{
+        decision: string;
+        schedule_state: string;
+        schedule_turn_id: string | null;
+        private_alternative_input: string | null;
+        source_work_id: string;
+        source_turn_id: string;
+        plan_revision_id: string;
+      }, [string]>(`
+        SELECT decision, schedule_state, schedule_turn_id, private_alternative_input,
+          source_work_id, source_turn_id
+          , plan_revision_id
+        FROM btcc_authority_requests WHERE request_ref = ?
+      `).get(String(requestRef));
+      expect(oldAuthority).toMatchObject({
+        decision: "modified",
+        schedule_state: "scheduled",
+        schedule_turn_id: resumedTurnId,
+        private_alternative_input: PRIVATE_MODIFY_INPUT,
+        source_turn_id: sourceTurnId,
+      });
+      const replacementAuthority = finalDb.query<{
+        decision: string;
+        authority_generation: number;
+        source_turn_id: string;
+        source_work_id: string;
+        plan_revision_id: string;
+        action_key: string;
+      }, [string]>(`
+        SELECT decision, authority_generation, source_turn_id, source_work_id,
+          plan_revision_id, action_key
+        FROM btcc_authority_requests WHERE request_ref = ?
+      `).get(replacementRequestRef);
+      expect(replacementAuthority).toMatchObject({
+        decision: "pending",
+        authority_generation: 2,
+        source_turn_id: resumedTurnId,
+        source_work_id: oldAuthority?.source_work_id,
+        action_key: "run-replacement-modify-command",
+      });
+      expect(replacementAuthority?.plan_revision_id).not.toBe(oldAuthority?.plan_revision_id);
+
+      const planRows = finalDb.query<{
+        plan_revision_id: string;
+        revision: number;
+        origin_turn_id: string;
+        actions_json: string;
+      }, [string]>(`
+        SELECT plan_revision_id, revision, origin_turn_id, actions_json
+        FROM btcc_guided_work_plan_revisions
+        WHERE work_id = ? ORDER BY revision ASC
+      `).all(oldAuthority!.source_work_id);
+      expect(planRows).toHaveLength(2);
+      expect(planRows[1]).toMatchObject({
+        origin_turn_id: resumedTurnId,
+        revision: 2,
+      });
+      expect(planRows[1]?.actions_json).toContain("replacement-dir");
+      const review = finalDb.query<{
+        subject: string;
+        verdict: string;
+        bound_plan_revision_id: string;
+        origin_turn_id: string;
+      }, [string]>(`
+        SELECT subject, verdict, bound_plan_revision_id, origin_turn_id
+        FROM btcc_guided_work_review_revisions
+        WHERE work_id = ? ORDER BY revision DESC LIMIT 1
+      `).get(oldAuthority!.source_work_id);
+      expect(review).toMatchObject({
+        subject: "plan",
+        verdict: "accept",
+        bound_plan_revision_id: planRows[1]!.plan_revision_id,
+        origin_turn_id: resumedTurnId,
+      });
+      expect(finalDb.query<{ count: number }, []>(
+        "SELECT COUNT(*) AS count FROM btcc_guided_effects",
+      ).get()?.count ?? 0).toBe(0);
+      expect(finalDb.query<{ attempts: number | null }, []>(
+        "SELECT SUM(dispatch_attempts) AS attempts FROM btcc_guided_effects",
+      ).get()?.attempts ?? 0).toBe(0);
+    } finally {
+      finalDb.close();
+    }
+  } finally {
+    server.stop();
+    await composition.host.close();
+    bindings.close();
+    clearNativeReadiness(root);
+  }
+});
+
 function deniedCommandRound(): ModelRoundPort {
   let round = 0;
   const command = commandValueForPrivacy();
@@ -370,6 +650,101 @@ function deniedCommandRound(): ModelRoundPort {
   };
 }
 
+function modifyingCommandRound(): ModelRoundPort {
+  let round = 0;
+  const oldCommand = "printf 'old-private-value\\n' > old-modify-command.txt";
+  return {
+    async runRound(request) {
+      round += 1;
+      if (round === 1) {
+        const plan = {
+          start_new: true,
+          objective: "Run one command with a possible replacement",
+          actions: [{
+            action_key: "run-old-modify-command",
+            description: "Run the original command only after approval",
+            dependency_keys: [],
+            effect: { capability: "run_command", target: "workspace-command:." },
+          }],
+          checks: ["old-modify-command.txt contains the original output"],
+        };
+        const review = {
+          subject: "plan",
+          verdict: "accept",
+          summary: "The original command is reviewed for this task.",
+        };
+        return {
+          toolCalls: [
+            toolCall("modify-plan", "replace_work_plan", plan),
+            toolCall("modify-review", "record_work_review", review),
+            toolCall("modify-run", "run_command", {
+              command: oldCommand,
+              cwd: ".",
+              state_effect: "mutation",
+              summary: "Run original reviewed command",
+            }),
+          ],
+        };
+      }
+      if (round === 2) {
+        const serialized = JSON.stringify(request.messages);
+        if (!serialized.includes(PRIVATE_MODIFY_INPUT)) {
+          throw new Error(`private Modify input missing from exact scheduled Turn: ${serialized}`);
+        }
+        const workId = request.messages
+          .map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1])
+          .find(Boolean);
+        if (!workId) throw new Error("same Work identity was not projected to the Modify Turn");
+        const replacementPlan = {
+          start_new: false,
+          objective: "Run one command with a possible replacement",
+          actions: [{
+            action_key: "run-replacement-modify-command",
+            description: "Run the replacement command only after approval",
+            dependency_keys: [],
+            effect: {
+              capability: "run_command",
+              target: "workspace-command:replacement-dir",
+            },
+          }],
+          checks: ["replacement-modify-command.txt contains the replacement output"],
+        };
+        const review = {
+          subject: "plan",
+          verdict: "accept",
+          summary: "The replacement plan is accepted in the scheduled Modify Turn.",
+          action_updates: [{
+            action_key: "run-replacement-modify-command",
+            status: "active",
+          }],
+        };
+        return {
+          text: PRIVATE_MODIFY_PROVIDER_TEXT,
+          toolCalls: [
+            toolCall("modify-continue", "continue_work", { work_id: workId }),
+            toolCall("modify-result-review", "record_work_review", {
+              subject: "result",
+              verdict: "partial",
+              summary: "The original effect was not dispatched; replan the requested target.",
+              corrections: ["Replan the requested target before another effect proposal."],
+              correction_scope: "planning",
+            }),
+            toolCall("modify-replan", "replace_work_plan", replacementPlan),
+            toolCall("modify-re-review", "record_work_review", review),
+            toolCall("modify-replacement-run", "run_command", {
+              command: "printf 'replacement-private-value\\n' > replacement-modify-command.txt",
+              cwd: "replacement-dir",
+              state_effect: "mutation",
+              summary: "Run replacement reviewed command",
+            }),
+          ],
+        };
+      }
+      throw new Error(`unexpected Modify model round ${round}`);
+    },
+  };
+}
+
 function commandValueForPrivacy(): string {
   return "printf 'private-deny-value\\n' --private-deny-flag > denied-command.txt";
 }
@@ -420,11 +795,11 @@ function seedLegacyAuthorityRequest(root: string): LegacyAuthorityRow {
   const dbPath = join(root, "agent-runtime", "btcc.sqlite");
   mkdirSync(join(root, "agent-runtime"), { recursive: true });
   const legacySchema = BTCC_AUTHORITY_SCHEMA.replace(
-    "decision IN ('pending', 'allowed', 'denied')",
+    "decision IN ('pending', 'allowed', 'denied', 'modified')",
     "decision IN ('pending', 'allowed')",
   );
   if (!legacySchema.includes("decision IN ('pending', 'allowed')") ||
-      legacySchema.includes("decision IN ('pending', 'allowed', 'denied')")) {
+      legacySchema.includes("decision IN ('pending', 'allowed', 'denied', 'modified')")) {
     throw new Error("AF-02A legacy authority schema was not constructed exactly");
   }
   const row: LegacyAuthorityRow = {
