@@ -8,6 +8,7 @@ import {
 } from "../../../../operations/gateway/registry.ts";
 import { reclaimStaleAppGatewayPort } from "../../domain/runtime/port-claim.ts";
 import { createAppServer } from "../server/create-app-server.ts";
+import { openBtccAuthorityStore } from "../../../../agent/adapters/index.ts";
 
 const dataRoot =
   process.env.BUTLER_DATA ?? join(process.env.HOME ?? process.cwd(), ".butler");
@@ -45,6 +46,7 @@ const bridgeMode =
   process.env.BUTLER_APP_SERVER_BRIDGE === "off" ? "external" : "local";
 const shouldWritePidFile = process.env.BUTLER_APP_GATEWAY_PID_FILE !== "off";
 mkdirSync(dirname(dbPath), { recursive: true });
+const authorityStore = openBtccAuthorityStore({ butlerData: dataRoot });
 
 const portClaim = reclaimStaleAppGatewayPort({
   port: Number.isFinite(port) ? port : 18765,
@@ -77,6 +79,7 @@ const app = createAppServer({
       : 60000,
   },
   localAuth,
+  authority: authorityStore.authority,
 });
 
 console.log(
@@ -96,16 +99,19 @@ process.on("SIGINT", () => {
   clearInterval(keepAliveInterval);
   if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
   app.stop();
+  authorityStore.close();
   process.exit(0);
 });
 process.on("SIGTERM", () => {
   clearInterval(keepAliveInterval);
   if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
   app.stop();
+  authorityStore.close();
   process.exit(0);
 });
 process.on("exit", () => {
   if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
+  authorityStore.close();
 });
 
 function readLocalAuthConfig(env: NodeJS.ProcessEnv): {

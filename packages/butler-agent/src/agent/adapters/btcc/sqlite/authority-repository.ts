@@ -1,0 +1,206 @@
+import type { Database } from "bun:sqlite";
+import type { PrincipalAuthorityRepository } from "../../../btcc/authority/index.ts";
+
+type AuthorityRecord = Parameters<PrincipalAuthorityRepository["insert"]>[0];
+
+export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRepository {
+  constructor(private readonly db: Database) {}
+
+  findByIdentity(identitySha256: string): AuthorityRecord | null {
+    return this.find("identity_sha256", identitySha256);
+  }
+
+  findBySlot(input: {
+    sourceWorkId: string;
+    planRevisionId: string;
+    actionKey: string;
+    capability: string;
+    authorityGeneration: number;
+  }): AuthorityRecord | null {
+    const row = this.db.query<AuthorityRecord, [string, string, string, string, number]>(`
+      SELECT
+        request_id AS requestId, request_ref AS requestRef,
+        identity_sha256 AS identitySha256, owner_session_id AS ownerSessionId,
+        source_session_id AS sourceSessionId, source_turn_id AS sourceTurnId,
+        source_work_id AS sourceWorkId, workspace_path AS workspacePath,
+        plan_revision_id AS planRevisionId, action_key AS actionKey,
+        authority_generation AS authorityGeneration, capability,
+        normalized_target AS normalizedTarget, normalized_input_json AS normalizedInputJson,
+        model_ref AS modelRef, reasoning_effort AS reasoningEffort, category,
+        reason, executable, command_count AS commandCount, decision,
+        schedule_state AS scheduleState, schedule_client_message_id AS scheduleClientMessageId,
+        schedule_input_text AS scheduleInputText, outcome,
+        outcome_receipt_json AS outcomeReceiptJson, created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM btcc_authority_requests
+      WHERE source_work_id = ? AND plan_revision_id = ? AND action_key = ?
+        AND capability = ? AND authority_generation = ?
+      LIMIT 1
+    `).get(
+      input.sourceWorkId,
+      input.planRevisionId,
+      input.actionKey,
+      input.capability,
+      input.authorityGeneration,
+    );
+    return row ?? null;
+  }
+
+  insert(record: AuthorityRecord): void {
+    this.db.query(`
+      INSERT INTO btcc_authority_requests (
+        request_id, request_ref, identity_sha256, owner_session_id,
+        source_session_id, source_turn_id, source_work_id, workspace_path,
+        plan_revision_id, action_key, authority_generation, capability,
+        normalized_target, normalized_input_json, model_ref, reasoning_effort,
+        category, reason, executable, command_count, decision, schedule_state,
+        schedule_client_message_id, schedule_input_text, outcome,
+        outcome_receipt_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT DO NOTHING
+    `).run(
+      record.requestId,
+      record.requestRef,
+      record.identitySha256,
+      record.ownerSessionId,
+      record.sourceSessionId,
+      record.sourceTurnId,
+      record.sourceWorkId,
+      record.workspacePath,
+      record.planRevisionId,
+      record.actionKey,
+      record.authorityGeneration,
+      record.capability,
+      record.normalizedTarget,
+      record.normalizedInputJson,
+      record.modelRef,
+      record.reasoningEffort,
+      record.category,
+      record.reason,
+      record.executable,
+      record.commandCount,
+      record.decision,
+      record.scheduleState,
+      record.scheduleClientMessageId,
+      record.scheduleInputText,
+      record.outcome,
+      record.outcomeReceiptJson,
+      record.createdAt,
+      record.updatedAt,
+    );
+  }
+
+  findByPublicRef(requestRef: string): AuthorityRecord | null {
+    return this.find("request_ref", requestRef);
+  }
+
+  listPending(ownerSessionId: string): AuthorityRecord[] {
+    return this.db.query<AuthorityRecord, [string]>(`
+      SELECT
+        request_id AS requestId, request_ref AS requestRef,
+        identity_sha256 AS identitySha256, owner_session_id AS ownerSessionId,
+        source_session_id AS sourceSessionId, source_turn_id AS sourceTurnId,
+        source_work_id AS sourceWorkId, workspace_path AS workspacePath,
+        plan_revision_id AS planRevisionId, action_key AS actionKey,
+        authority_generation AS authorityGeneration, capability,
+        normalized_target AS normalizedTarget, normalized_input_json AS normalizedInputJson,
+        model_ref AS modelRef, reasoning_effort AS reasoningEffort, category,
+        reason, executable, command_count AS commandCount, decision,
+        schedule_state AS scheduleState, schedule_client_message_id AS scheduleClientMessageId,
+        schedule_input_text AS scheduleInputText, outcome,
+        outcome_receipt_json AS outcomeReceiptJson, created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM btcc_authority_requests
+      WHERE owner_session_id = ? AND decision = 'pending'
+      ORDER BY created_at ASC
+    `).all(ownerSessionId);
+  }
+
+  allow(requestRef: string, ownerSessionId: string, now: string): AuthorityRecord | null {
+    const current = this.find("request_ref", requestRef);
+    if (!current || current.ownerSessionId !== ownerSessionId) return null;
+    if (current.decision === "allowed") return current;
+    if (current.decision !== "pending") return null;
+    this.db.query(`
+      UPDATE btcc_authority_requests
+      SET decision = 'allowed', updated_at = ?
+      WHERE request_ref = ? AND owner_session_id = ? AND decision = 'pending'
+    `).run(now, requestRef, ownerSessionId);
+    const updated = this.find("request_ref", requestRef);
+    return updated?.ownerSessionId === ownerSessionId && updated.decision === "allowed"
+      ? updated
+      : null;
+  }
+
+  markScheduled(
+    requestRef: string,
+    ownerSessionId: string,
+    clientMessageId: string,
+    now: string,
+  ): AuthorityRecord | null {
+    const current = this.find("request_ref", requestRef);
+    if (!current || current.ownerSessionId !== ownerSessionId) return null;
+    if (current.scheduleState === "scheduled") {
+      return current.scheduleClientMessageId === clientMessageId ? current : null;
+    }
+    if (current.decision !== "allowed" || current.scheduleClientMessageId !== clientMessageId) {
+      return null;
+    }
+    this.db.query(`
+      UPDATE btcc_authority_requests
+      SET schedule_state = 'scheduled', updated_at = ?
+      WHERE request_ref = ? AND owner_session_id = ? AND decision = 'allowed'
+        AND schedule_client_message_id = ?
+    `).run(now, requestRef, ownerSessionId, clientMessageId);
+    const updated = this.find("request_ref", requestRef);
+    return updated?.ownerSessionId === ownerSessionId &&
+        updated.decision === "allowed" && updated.scheduleState === "scheduled"
+      ? updated
+      : null;
+  }
+
+  recordOutcome(input: {
+    requestRef: string;
+    sourceWorkId: string;
+    status: "applied" | "failed";
+    receiptJson?: string;
+    now: string;
+  }): AuthorityRecord | null {
+    this.db.query(`
+      UPDATE btcc_authority_requests
+      SET outcome = ?, outcome_receipt_json = COALESCE(?, outcome_receipt_json), updated_at = ?
+      WHERE request_ref = ? AND source_work_id = ? AND decision = 'allowed'
+        AND outcome IN ('pending', 'failed')
+    `).run(
+      input.status,
+      input.receiptJson ?? null,
+      input.now,
+      input.requestRef,
+      input.sourceWorkId,
+    );
+    return this.find("request_ref", input.requestRef);
+  }
+
+  private find(column: "identity_sha256" | "request_ref", value: string): AuthorityRecord | null {
+    const row = this.db.query<AuthorityRecord, [string]>(`
+      SELECT
+        request_id AS requestId, request_ref AS requestRef,
+        identity_sha256 AS identitySha256, owner_session_id AS ownerSessionId,
+        source_session_id AS sourceSessionId, source_turn_id AS sourceTurnId,
+        source_work_id AS sourceWorkId, workspace_path AS workspacePath,
+        plan_revision_id AS planRevisionId, action_key AS actionKey,
+        authority_generation AS authorityGeneration, capability,
+        normalized_target AS normalizedTarget, normalized_input_json AS normalizedInputJson,
+        model_ref AS modelRef, reasoning_effort AS reasoningEffort, category,
+        reason, executable, command_count AS commandCount, decision,
+        schedule_state AS scheduleState, schedule_client_message_id AS scheduleClientMessageId,
+        schedule_input_text AS scheduleInputText, outcome,
+        outcome_receipt_json AS outcomeReceiptJson, created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM btcc_authority_requests
+      WHERE ${column} = ?
+      LIMIT 1
+    `).get(value);
+    return row ?? null;
+  }
+}

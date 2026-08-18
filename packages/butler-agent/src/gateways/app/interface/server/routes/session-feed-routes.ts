@@ -68,6 +68,13 @@ export async function handleSessionFeedRoutes(
       "Message text is required.",
     );
   }
+  if (Object.hasOwn(body, "authority_request_ref")) {
+    throw new RequestError(
+      400,
+      "invalid_request",
+      "Authority decisions must use the Allow endpoint.",
+    );
+  }
 
   const chatId = body.chat_id?.trim() || "general";
   if (!input.messageRateLimiter.consume(`messages:${chatId}`)) {

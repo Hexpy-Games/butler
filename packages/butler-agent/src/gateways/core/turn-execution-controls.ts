@@ -33,6 +33,8 @@ export interface TurnControlResolution {
     enabled: boolean;
     models: ModelRef[];
   };
+  /** Internal App Allow adapter identity; excluded from signed execution controls. */
+  authority_request_ref?: string;
 }
 
 export interface TurnExecutionControlsV1 {

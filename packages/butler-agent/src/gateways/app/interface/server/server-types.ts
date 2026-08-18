@@ -6,6 +6,7 @@ import type {
 import type { FixedWindowRateLimiter } from "./rate-limiter.ts";
 import type { LocalAuthConfig } from "./local-auth.ts";
 import type { ProviderQuotaMonitor } from "../../../../operations/metrics/provider-quota.ts";
+import type { PrincipalAuthority } from "../../../../agent/btcc/authority/index.ts";
 
 export interface CreateAppServerOptions {
   dbPath?: string;
@@ -25,6 +26,8 @@ export interface CreateAppServerOptions {
   providerQuotaMonitor?: ProviderQuotaMonitor;
   messageRateLimit?: MessageRateLimitOptions;
   automationSchedulerIntervalMs?: number | false;
+  /** Production composition-owned authority aggregate adapter. */
+  authority?: PrincipalAuthority;
   localAuth?: {
     required?: boolean;
     token?: string | null;
@@ -55,6 +58,7 @@ export interface AppRouteRequest {
   messageRateLimiter: FixedWindowRateLimiter;
   localAuth: LocalAuthConfig;
   butlerData: string;
+  authority: PrincipalAuthority;
 }
 
 export interface AppRouteContext extends Omit<AppRouteRequest, "localAuth"> {

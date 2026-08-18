@@ -115,6 +115,7 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
       documents: this.dependencies.contextDocuments,
       attachments: request.message.attachments,
       imageAdmission: request.message.imageAdmission,
+      authorityRequestRef: request.appTurnContext?.authorityRequestRef,
       turnAccessMode: controls?.access_mode,
     });
     const modelSelection = admitModel(binding, controls);
@@ -170,6 +171,7 @@ export function snapshotTurnContext(input: {
   documents: BtccContextDocumentWriter;
   attachments?: AttachmentRef[];
   imageAdmission?: import("../../image-attachment/contracts.ts").VisualImageAdmissionResult;
+  authorityRequestRef?: string;
   turnAccessMode?: TurnAccessMode;
 }): ButlerContextInput {
   const sections = [
@@ -221,6 +223,7 @@ export function snapshotTurnContext(input: {
       workspacePath: input.binding.workspacePath,
       ...(input.binding.projectId ? { projectId: input.binding.projectId } : {}),
     },
+    ...(input.authorityRequestRef ? { authorityRequestRef: input.authorityRequestRef } : {}),
     ...(input.attachments?.length
       ? { attachments: input.attachments.map((attachment) => ({
           id: attachment.id,

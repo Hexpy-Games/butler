@@ -1,5 +1,10 @@
 import type { SqliteGuidedEffectJournal } from "../../adapters/index.ts";
 import type { ButlerExecutionPolicy } from "../contracts.ts";
+import type {
+  DurableWorkService,
+  DurableWorkView,
+  WorkTurnScope,
+} from "../work/index.ts";
 import { acceptedPlanEffectId } from "../effects/index.ts";
 import type { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
@@ -213,4 +218,101 @@ export function createGuidedPersistentEffectResolver(input: {
       adapter: effect.adapter,
     };
   };
+}
+
+export function sameGuidedEffectJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function acceptedGuidedPlanActionKey(
+  work: DurableWorkView,
+  capability: string,
+  target: string,
+):
+  | { ok: true; value: string }
+  | { ok: false; code: string; message: string } {
+  const actions = work.currentPlan?.actions.filter((action) =>
+    action.effect?.capability === capability && action.effect.target === target,
+  ) ?? [];
+  if (actions.length === 0) {
+    return {
+      ok: false,
+      code: "effect_action_not_found",
+      message: "No accepted Plan action matches this effect capability and target.",
+    };
+  }
+  if (actions.length !== 1) {
+    return {
+      ok: false,
+      code: "effect_action_ambiguous",
+      message: "More than one accepted Plan action matches this effect.",
+    };
+  }
+  return { ok: true, value: actions[0]!.actionKey };
+}
+
+export async function loadGuidedEffectWork(
+  service: DurableWorkService,
+  scope: WorkTurnScope,
+): Promise<DurableWorkView | null> {
+  try {
+    return await service.boundWorkForTurn(scope.turnId);
+  } catch {
+    return null;
+  }
+}
+
+export function unavailableGuidedEffect(toolName: string): Record<string, unknown> {
+  return ordinaryGuidedEffectError(
+    "effect_adapter_unavailable",
+    `${toolName} cannot make persistent or external changes in this R3 runtime. Use an available typed effect tool or report the limitation.`,
+  );
+}
+
+export function ordinaryGuidedEffectError(
+  code: string,
+  message: string,
+  details: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    ok: false,
+    error: {
+      code,
+      message,
+      recoverable: true,
+      next_action: "Amend or review the current Plan, choose a safe typed tool, or report the concrete limitation.",
+      ...details,
+    },
+  };
+}
+
+export function deferredGuidedAuthorityResult(): Record<string, unknown> {
+  return {
+    ok: true,
+    authority_pending: true,
+    status: "awaiting_allow",
+    message: "This reviewed command is waiting for Allow before dispatch.",
+  };
+}
+
+export function guidedEffectReceipt(
+  result: unknown,
+  receipt: Record<string, unknown>,
+): Record<string, unknown> {
+  const resultRecord = result && typeof result === "object" && !Array.isArray(result)
+    ? result as Record<string, unknown>
+    : undefined;
+  const startLine = typeof resultRecord?.start_line === "number"
+    ? resultRecord.start_line
+    : undefined;
+  const publicReceipt = startLine === undefined
+    ? receipt
+    : { ...receipt, start_line: startLine };
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    return {
+      ...result as Record<string, unknown>,
+      effect_receipt: publicReceipt,
+    };
+  }
+  return { ok: true, result, effect_receipt: publicReceipt };
 }

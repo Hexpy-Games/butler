@@ -3,6 +3,7 @@ import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
 import { TOOL_CAPABILITY_METADATA } from "../../tools/registry.ts";
 
 const NON_FULL_ACCESS_TOOL_NAMES = new Set([
+  "run_command",
   "list_tool_capabilities",
   "tool_search",
   "tool_describe",
@@ -59,15 +60,20 @@ export function applyGuidedWorkspaceAuthorization(input: {
     if (hasProject) input.names.add("bind_session_git_worktree");
     return;
   }
+  if (input.policy.accessMode === "ask_first") input.names.add("run_command");
   for (const name of input.names) {
-    if (!NON_FULL_ACCESS_TOOL_NAMES.has(name)) input.names.delete(name);
+    if (
+      !NON_FULL_ACCESS_TOOL_NAMES.has(name) ||
+      (name === "run_command" && input.policy.accessMode !== "ask_first")
+    ) input.names.delete(name);
   }
 }
 
 export function guidedWorkspaceVisibleToolNames(
   policy: WorkspacePolicy,
 ): string[] {
-  if (policy.accessMode !== "full_access") return [];
+  if (policy.accessMode === "read_only") return [];
+  if (policy.accessMode === "ask_first") return ["run_command"];
   return [
     "run_command",
     "write_file",
