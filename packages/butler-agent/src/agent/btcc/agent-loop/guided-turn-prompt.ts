@@ -6,6 +6,7 @@ import { guidedPolicy } from "./guided-turn-policy.ts";
 import { projectGuidedToolContext } from
   "./guided-tool-context-projection.ts";
 import type { ModelContextSegmentKind } from "../ports/model-round.ts";
+import { renderPrivateModifyContinuationInput } from "./guided-authority-continuation.ts";
 
 export interface GuidedTextSegmentSource {
   kind: ModelContextSegmentKind;
@@ -57,6 +58,7 @@ export function renderGuidedPrompt(
     toolJournal: GuidedToolJournal;
     workContext?: string | null;
     effectContext?: string | null;
+    privateContinuationInput?: string;
   },
 ): string {
   return renderGuidedPromptAttribution(turn, input).text;
@@ -70,6 +72,7 @@ export function renderGuidedPromptAttribution(
     toolJournal: GuidedToolJournal;
     workContext?: string | null;
     effectContext?: string | null;
+    privateContinuationInput?: string;
   },
 ): GuidedTextAttribution {
   const policy = guidedPolicy(turn);
@@ -93,6 +96,7 @@ export function renderGuidedPromptAttribution(
         : "other_typed_context" },
     { text: renderCurrentWork(input.workContext), kind: "project_ledger_and_work_authority" },
     { text: renderCurrentEffects(input.effectContext), kind: "phase_continuity" },
+    { text: renderPrivateModifyContinuationInput(input.privateContinuationInput), kind: "phase_continuity" },
     { text: context, kind: "memory_recall_context" },
     { text: attachments, kind: "source_reference" },
     { text: priorTools, kind: "older_tool_result_projection" },

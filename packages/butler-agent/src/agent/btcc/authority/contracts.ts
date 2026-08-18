@@ -1,5 +1,5 @@
 export type AuthorityCategory = "command";
-export type AuthorityDecision = "pending" | "allowed" | "denied";
+export type AuthorityDecision = "pending" | "allowed" | "denied" | "modified";
 export type AuthorityScheduleState = "pending" | "scheduled";
 export type AuthorityOutcome = "pending" | "applied" | "failed";
 
@@ -58,6 +58,11 @@ export type AuthorityAdmissionResult =
       status: "denied";
       requestRef: string;
       denialText: typeof AUTHORITY_DENIAL_TEXT;
+    }
+  | {
+      status: "modified";
+      requestRef: string;
+      replacementPending: true;
     };
 
 export type AuthorityAllowResult = {
@@ -84,6 +89,18 @@ export type AuthorityDenyResult = {
   decision: "denied";
 };
 
+export type AuthorityModifyResult = {
+  requestRef: string;
+  sourceSessionId: string;
+  sourceWorkId: string;
+  scheduleClientMessageId: string;
+  scheduleInputText: string;
+  modelRef: string;
+  reasoningEffort: string;
+  scheduleState: AuthorityScheduleState;
+  decision: "modified";
+};
+
 export type AuthorityStoredExecution = {
   requestRef: string;
   sourceSessionId: string;
@@ -96,7 +113,9 @@ export type AuthorityStoredExecution = {
   capability: string;
   normalizedTarget: string;
   normalizedInput: AuthorityCommandInput;
-  decision: "allowed" | "denied";
+  decision: "allowed" | "denied" | "modified";
+  alternativeInput?: string;
+  scheduleTurnId?: string;
   outcome: AuthorityOutcome;
 };
 
@@ -122,10 +141,17 @@ export interface PrincipalAuthorityRepository {
   listPending(ownerSessionId: string): AuthorityRecord[];
   allow(requestRef: string, ownerSessionId: string, now: string): AuthorityRecord | null;
   deny(requestRef: string, ownerSessionId: string, now: string): AuthorityRecord | null;
+  modify(
+    requestRef: string,
+    ownerSessionId: string,
+    alternativeInput: string,
+    now: string,
+  ): AuthorityRecord | null;
   markScheduled(
     requestRef: string,
     ownerSessionId: string,
     clientMessageId: string,
+    turnId: string,
     now: string,
   ): AuthorityRecord | null;
   recordOutcome(input: {
@@ -162,6 +188,8 @@ export type AuthorityRecord = {
   scheduleState: AuthorityScheduleState;
   scheduleClientMessageId: string;
   scheduleInputText: string;
+  scheduleTurnId: string | null;
+  privateAlternativeInput: string | null;
   outcome: AuthorityOutcome;
   outcomeReceiptJson: string | null;
   createdAt: string;
@@ -179,14 +207,21 @@ export interface PrincipalAuthority {
     ownerSessionId: string;
     requestRef: string;
   }): AuthorityDenyResult;
+  modify(input: {
+    ownerSessionId: string;
+    requestRef: string;
+    alternativeInput: string;
+  }): AuthorityModifyResult;
   markScheduled(input: {
     ownerSessionId: string;
     requestRef: string;
     clientMessageId: string;
+    turnId: string;
   }): void;
   execution(input: {
     ownerSessionId: string;
     requestRef: string;
+    turnId: string;
   }): AuthorityStoredExecution;
   recordOutcome(input: AuthorityOutcomeInput): void;
 }

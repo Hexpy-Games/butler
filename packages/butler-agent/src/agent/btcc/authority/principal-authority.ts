@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import type {
-  AuthorityAdmissionResult,
   AuthorityAllowResult,
   AuthorityDenyResult,
+  AuthorityModifyResult,
   AuthorityOutcomeInput,
   AuthorityRecord,
   AuthorityRequestProjection,
@@ -10,10 +10,15 @@ import type {
   PrincipalAuthority,
   PrincipalAuthorityRepository,
 } from "./contracts.ts";
-import { AUTHORITY_DENIAL_TEXT } from "./contracts.ts";
+import {
+  admissionResult,
+  authorityProjection,
+} from "./admission-projection.ts";
 
 const ALLOW_SCHEDULE_INPUT_TEXT = "Continue the approved operation exactly once.";
 const DENY_SCHEDULE_INPUT_TEXT = "The reviewed command was denied.";
+const MODIFY_SCHEDULE_INPUT_TEXT = "Continue with the reviewed alternative.";
+const MAX_ALTERNATIVE_INPUT_BYTES = 16 * 1024;
 
 export function createPrincipalAuthority(
   repository: PrincipalAuthorityRepository,
@@ -75,6 +80,8 @@ export function createPrincipalAuthority(
         scheduleState: "pending",
         scheduleClientMessageId: deterministicClientMessageId(requestId),
         scheduleInputText: ALLOW_SCHEDULE_INPUT_TEXT,
+        scheduleTurnId: null,
+        privateAlternativeInput: null,
         outcome: "pending",
         outcomeReceiptJson: null,
         createdAt: now,
@@ -89,7 +96,7 @@ export function createPrincipalAuthority(
     },
 
     list(input): AuthorityRequestProjection[] {
-      return repository.listPending(input.ownerSessionId).map(projection);
+      return repository.listPending(input.ownerSessionId).map(authorityProjection);
     },
 
     allow(input): AuthorityAllowResult {
@@ -124,11 +131,40 @@ export function createPrincipalAuthority(
       };
     },
 
+    modify(input): AuthorityModifyResult {
+      const alternativeInput = requiredAlternative(input.alternativeInput);
+      const modified = repository.modify(
+        input.requestRef,
+        input.ownerSessionId,
+        alternativeInput,
+        new Date().toISOString(),
+      );
+      if (!modified) {
+        const current = repository.findByPublicRef(input.requestRef);
+        if (current?.decision === "modified") {
+          throw new AuthorityRequestError("authority_modify_identity_mismatch");
+        }
+        throw new AuthorityRequestError("authority_request_not_found");
+      }
+      return {
+        requestRef: modified.requestRef,
+        sourceSessionId: modified.sourceSessionId,
+        sourceWorkId: modified.sourceWorkId,
+        scheduleClientMessageId: modified.scheduleClientMessageId,
+        scheduleInputText: MODIFY_SCHEDULE_INPUT_TEXT,
+        modelRef: modified.modelRef,
+        reasoningEffort: modified.reasoningEffort,
+        scheduleState: modified.scheduleState,
+        decision: "modified",
+      };
+    },
+
     markScheduled(input): void {
       const updated = repository.markScheduled(
         input.requestRef,
         input.ownerSessionId,
         input.clientMessageId,
+        input.turnId,
         new Date().toISOString(),
       );
       if (!updated) throw new AuthorityRequestError("authority_schedule_identity_mismatch");
@@ -139,8 +175,17 @@ export function createPrincipalAuthority(
       if (!record || record.ownerSessionId !== input.ownerSessionId) {
         throw new AuthorityRequestError("authority_request_not_found");
       }
-      if (record.decision !== "allowed" && record.decision !== "denied") {
+      if (record.decision !== "allowed" && record.decision !== "denied" &&
+          record.decision !== "modified") {
         throw new AuthorityRequestError("authority_request_not_allowed");
+      }
+      if (record.scheduleState !== "scheduled" ||
+          record.scheduleTurnId !== input.turnId) {
+        throw new AuthorityRequestError("authority_schedule_turn_mismatch");
+      }
+      if (record.decision === "modified" &&
+          !record.privateAlternativeInput?.trim()) {
+        throw new AuthorityRequestError("authority_request_corrupt");
       }
       let normalizedInput: AuthorityStoredExecution["normalizedInput"];
       try {
@@ -161,6 +206,12 @@ export function createPrincipalAuthority(
         normalizedTarget: record.normalizedTarget,
         normalizedInput,
         decision: record.decision,
+        ...(record.privateAlternativeInput
+          ? { alternativeInput: record.privateAlternativeInput }
+          : {}),
+        ...(record.scheduleTurnId
+          ? { scheduleTurnId: record.scheduleTurnId }
+          : {}),
         outcome: record.outcome,
       };
     },
@@ -187,40 +238,6 @@ export class AuthorityRequestError extends Error {
     super(code);
     this.name = "AuthorityRequestError";
   }
-}
-
-function admissionResult(record: AuthorityRecord): AuthorityAdmissionResult {
-  if (record.decision === "allowed") {
-    return {
-      status: "allowed",
-      requestRef: record.requestRef,
-      sourceWorkId: record.sourceWorkId,
-      normalizedTarget: record.normalizedTarget,
-      normalizedInput: JSON.parse(record.normalizedInputJson),
-    };
-  }
-  if (record.decision === "denied") {
-    return {
-      status: "denied",
-      requestRef: record.requestRef,
-      denialText: AUTHORITY_DENIAL_TEXT,
-    };
-  }
-  return {
-    status: "pending",
-    requestRef: record.requestRef,
-    projection: projection(record),
-  };
-}
-
-function projection(record: AuthorityRecord): AuthorityRequestProjection {
-  return {
-    request_ref: record.requestRef,
-    category: record.category,
-    reason: record.reason,
-    executable: record.executable,
-    command_count: 1,
-  };
 }
 
 function firstExecutable(command: string): string {
@@ -306,5 +323,13 @@ function digest(value: string): string {
 
 function required(value: string, label: string): string {
   if (!value.trim()) throw new AuthorityRequestError(`authority_${label.replace(/\s+/gu, "_")}_missing`);
+  return value;
+}
+
+function requiredAlternative(value: string): string {
+  if (!value.trim()) throw new AuthorityRequestError("authority_modify_input_missing");
+  if (Buffer.byteLength(value, "utf8") > MAX_ALTERNATIVE_INPUT_BYTES) {
+    throw new AuthorityRequestError("authority_modify_input_too_large");
+  }
   return value;
 }
