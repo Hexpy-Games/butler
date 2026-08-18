@@ -4,3 +4,4 @@ export type {
   PrincipalAuthority,
   PrincipalAuthorityRepository,
 } from "./contracts.ts";
+export { AUTHORITY_DENIAL_TEXT } from "./contracts.ts";

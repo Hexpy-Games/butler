@@ -132,6 +132,22 @@ export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRep
       : null;
   }
 
+  deny(requestRef: string, ownerSessionId: string, now: string): AuthorityRecord | null {
+    const current = this.find("request_ref", requestRef);
+    if (!current || current.ownerSessionId !== ownerSessionId) return null;
+    if (current.decision === "denied") return current;
+    if (current.decision !== "pending") return null;
+    this.db.query(`
+      UPDATE btcc_authority_requests
+      SET decision = 'denied', updated_at = ?
+      WHERE request_ref = ? AND owner_session_id = ? AND decision = 'pending'
+    `).run(now, requestRef, ownerSessionId);
+    const updated = this.find("request_ref", requestRef);
+    return updated?.ownerSessionId === ownerSessionId && updated.decision === "denied"
+      ? updated
+      : null;
+  }
+
   markScheduled(
     requestRef: string,
     ownerSessionId: string,
@@ -143,18 +159,20 @@ export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRep
     if (current.scheduleState === "scheduled") {
       return current.scheduleClientMessageId === clientMessageId ? current : null;
     }
-    if (current.decision !== "allowed" || current.scheduleClientMessageId !== clientMessageId) {
+    if ((current.decision !== "allowed" && current.decision !== "denied") ||
+        current.scheduleClientMessageId !== clientMessageId) {
       return null;
     }
     this.db.query(`
       UPDATE btcc_authority_requests
       SET schedule_state = 'scheduled', updated_at = ?
-      WHERE request_ref = ? AND owner_session_id = ? AND decision = 'allowed'
+      WHERE request_ref = ? AND owner_session_id = ? AND decision IN ('allowed', 'denied')
         AND schedule_client_message_id = ?
     `).run(now, requestRef, ownerSessionId, clientMessageId);
     const updated = this.find("request_ref", requestRef);
     return updated?.ownerSessionId === ownerSessionId &&
-        updated.decision === "allowed" && updated.scheduleState === "scheduled"
+        (updated.decision === "allowed" || updated.decision === "denied") &&
+        updated.scheduleState === "scheduled"
       ? updated
       : null;
   }

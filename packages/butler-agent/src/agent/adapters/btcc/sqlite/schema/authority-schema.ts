@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS btcc_authority_requests (
   reason TEXT NOT NULL,
   executable TEXT NOT NULL,
   command_count INTEGER NOT NULL CHECK (command_count >= 1),
-  decision TEXT NOT NULL CHECK (decision IN ('pending', 'allowed')),
+  decision TEXT NOT NULL CHECK (decision IN ('pending', 'allowed', 'denied')),
   schedule_state TEXT NOT NULL CHECK (schedule_state IN ('pending', 'scheduled')),
   schedule_client_message_id TEXT NOT NULL UNIQUE,
   schedule_input_text TEXT NOT NULL,
