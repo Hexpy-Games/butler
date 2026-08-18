@@ -89,6 +89,142 @@ test("delivery guard deduplicates successful deliveries by session and action", 
   expect(calls).toBe(1);
 });
 
+test("duplicate non-App and unclaimed App deliveries keep the historical transcript cardinality", async () => {
+  const guard = new DeliveryGuard({
+    butlerData: tempDir,
+    adapters: [{
+      id: "mock",
+      capabilities: {
+        supportsThreads: false,
+        supportsMessageEdit: false,
+        supportsReactions: false,
+        supportsAttachments: false,
+        supportsStreamingEdits: false,
+        supportsPresence: false,
+      },
+      async start() {},
+      async send() {
+        return { ok: true };
+      },
+    }, {
+      id: "app",
+      capabilities: {
+        supportsThreads: false,
+        supportsMessageEdit: false,
+        supportsReactions: false,
+        supportsAttachments: false,
+        supportsStreamingEdits: false,
+        supportsPresence: false,
+      },
+      async start() {},
+      async send() {
+        return { ok: true };
+      },
+    }],
+  });
+  const nonAppAction = { ...action, actionId: "generic-duplicate" };
+  await guard.deliver("butler/main", nonAppAction);
+  const transcriptPath = join(tempDir, "transcripts", "butler_main.jsonl");
+  const afterNonApp = readFileSync(transcriptPath, "utf8").trim().split("\n").length;
+  const duplicateNonApp = await guard.deliver("butler/main", nonAppAction);
+  const afterNonAppDuplicate = readFileSync(transcriptPath, "utf8").trim().split("\n").length;
+
+  const unclaimedAppAction: OutboundAction = {
+    ...action,
+    actionId: "unclaimed-app-duplicate",
+    transport: "app",
+  };
+  await guard.deliver("butler/main", unclaimedAppAction);
+  const afterUnclaimedApp = readFileSync(transcriptPath, "utf8").trim().split("\n").length;
+  const duplicateUnclaimedApp = await guard.deliver("butler/main", unclaimedAppAction);
+  const afterUnclaimedAppDuplicate = readFileSync(transcriptPath, "utf8").trim().split("\n").length;
+
+  expect(duplicateNonApp).toMatchObject({ ok: true, duplicate: true });
+  expect(duplicateUnclaimedApp).toMatchObject({ ok: true, duplicate: true });
+  expect(afterNonAppDuplicate).toBe(afterNonApp);
+  expect(afterUnclaimedAppDuplicate).toBe(afterUnclaimedApp);
+});
+
+test("duplicate claimed App delivery records the replay claim for projection", async () => {
+  const guard = new DeliveryGuard({
+    butlerData: tempDir,
+    adapters: [{
+      id: "app",
+      capabilities: {
+        supportsThreads: false,
+        supportsMessageEdit: false,
+        supportsReactions: false,
+        supportsAttachments: false,
+        supportsStreamingEdits: false,
+        supportsPresence: false,
+      },
+      async start() {},
+      async send() {
+        return { ok: true };
+      },
+    }],
+  });
+  const claimedAppAction: OutboundAction = {
+    ...action,
+    actionId: "claimed-app-replay",
+    transport: "app",
+    metadata: {
+      kind: "final_result",
+      appQueueClaimId: "app-session-queue:123:claimed-replay",
+      appQueueClaimProvenance: "matching_app_target",
+    },
+  };
+  const first = await guard.deliver("butler/main", claimedAppAction);
+  const transcriptPath = join(tempDir, "transcripts", "butler_main.jsonl");
+  const afterFirst = readFileSync(transcriptPath, "utf8").trim().split("\n").length;
+  const second = await guard.deliver("butler/main", claimedAppAction);
+  const afterSecond = readFileSync(transcriptPath, "utf8").trim().split("\n").length;
+
+  expect(first).toMatchObject({ ok: true });
+  expect(first.duplicate).toBeUndefined();
+  expect(second).toMatchObject({ ok: true, duplicate: true });
+  expect(afterSecond).toBe(afterFirst + 2);
+});
+
+test("forged App claim metadata keeps historical duplicate transcript cardinality", async () => {
+  const guard = new DeliveryGuard({
+    butlerData: tempDir,
+    adapters: [{
+      id: "app",
+      capabilities: {
+        supportsThreads: false,
+        supportsMessageEdit: false,
+        supportsReactions: false,
+        supportsAttachments: false,
+        supportsStreamingEdits: false,
+        supportsPresence: false,
+      },
+      async start() {},
+      async send() {
+        return { ok: true };
+      },
+    }],
+  });
+  const forged: OutboundAction = {
+    ...action,
+    actionId: "forged-app-claim",
+    transport: "app",
+    metadata: {
+      kind: "final_result",
+      appQueueClaimId: "app-session-queue:123:forged",
+    },
+  };
+  const first = await guard.deliver("butler/main", forged);
+  const transcriptPath = join(tempDir, "transcripts", "butler_main.jsonl");
+  const afterFirst = readFileSync(transcriptPath, "utf8").trim().split("\n").length;
+  const second = await guard.deliver("butler/main", forged);
+  const afterSecond = readFileSync(transcriptPath, "utf8").trim().split("\n").length;
+
+  expect(first).toMatchObject({ ok: true });
+  expect(second).toMatchObject({ ok: true, duplicate: true });
+  expect(afterSecond).toBe(afterFirst);
+});
+
 test("delivery guard writes transcripts to its explicit Butler data owner", async () => {
   const ownedData = join(tempDir, "owned-runtime");
   const guard = new DeliveryGuard({

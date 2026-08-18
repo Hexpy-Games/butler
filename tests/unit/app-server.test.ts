@@ -142,7 +142,7 @@ function appendAppTurnEventOutboundForTest(input: {
   timestamp?: string;
 }): void {
   const timestamp = input.timestamp ?? "2026-05-18T12:00:30.000Z";
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: input.sessionId,
       kind: "outbound",
@@ -165,12 +165,12 @@ function appendAppTurnEventOutboundForTest(input: {
     }),
   );
   if (input.includeDelivery === false) return;
-  appendAppTurnEventDeliveryForTest({
-    sessionId: input.sessionId,
-    actionId: input.actionId,
-    delivered: input.delivered,
-    timestamp,
-  });
+  queueMicrotask(() => appendAppTurnEventDeliveryForTest({
+      sessionId: input.sessionId,
+      actionId: input.actionId,
+      delivered: input.delivered,
+      timestamp,
+    }));
 }
 
 function appendAppTurnEventDeliveryForTest(input: {
@@ -180,7 +180,7 @@ function appendAppTurnEventDeliveryForTest(input: {
   timestamp?: string;
 }): void {
   const delivered = input.delivered ?? true;
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: input.sessionId,
       kind: "delivery",
@@ -1061,7 +1061,7 @@ test("one server-owned transcript watcher projects changes without a client refr
     });
     const turnId = result.data.turn.id;
     const userMessageId = result.data.accepted.id;
-    appendTranscriptEvent(
+    appendAppTranscriptEvent(
       createTranscriptEvent({
         sessionId: "butler/app-general",
         kind: "outbound",
@@ -1240,15 +1240,23 @@ test("app transport sync projects native actor turn event outbounds", async () =
           event.payload?.turn_id === turnId &&
           event.payload.event?.kind === TURN_DECISION_EVENT_KIND,
       ),
-    ).toBeUndefined();
-
-    server.stop();
-    server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+      ).toBeUndefined();
 
     appendAppTurnEventDeliveryForTest({
       sessionId: "butler/app-general",
       actionId,
     });
+    await waitForCondition(() => Boolean(server.store.db.query<
+      { action_id: string },
+      [string]
+    >(`
+      SELECT action_id FROM app_transport_projection_receipts
+      WHERE action_id = ?
+    `).get(actionId)));
+
+    server.stop();
+    server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+
     await waitForCondition(() => Boolean(server.store.db.query<
       { action_id: string },
       [string]
@@ -5253,7 +5261,7 @@ test("session summary shows only prompt-loaded skills from context metadata", as
       text: "status",
     });
     const turnId = result.data.turn.id;
-    appendTranscriptEvent(
+    appendAppTranscriptEvent(
       createTranscriptEvent({
         sessionId: runtimeSessionId,
         kind: "system",
@@ -7533,6 +7541,9 @@ test("app transport preserves selected reasoning effort in App-owned turn contex
 
 test("app transport send fails the turn instead of leaving thinking when queue handoff fails", async () => {
   const serviceClient: ButlerServiceClient = {
+    findAppTurn() {
+      return null;
+    },
     enqueueAppCancellation() {
       throw new Error("unexpected cancellation");
     },
@@ -8282,7 +8293,7 @@ test("app transport final result projection delivers queued turns after app-serv
   server.stop();
 
   writeFileSync(join(tempDir, "queued-result.md"), "# Queued result\n", "utf8");
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: runtimeSessionId,
       kind: "outbound",
@@ -8434,7 +8445,7 @@ test("app transport no-visible limited final closes queued turns without assista
   const turnId = result.data.turn.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -8471,10 +8482,11 @@ test("app transport no-visible limited final closes queued turns without assista
     ).toEqual(["continue without generic recovery text"]);
     expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
     expect(messages.data.turn_progress[turnId]).toMatchObject({
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "failed",
+      delivery_state: "failed_system",
       limitation_codes: [],
       limitations: [],
+      summary: "Failed",
     });
     expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
       "internal_recovery_required",
@@ -8482,18 +8494,19 @@ test("app transport no-visible limited final closes queued turns without assista
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "delivered",
-      safe_status_label: "Delivered with limitations",
+      state: "failed",
+      safe_status_label: "Failed",
       retryable: false,
+      safe_error_code: "no_visible_result",
     });
-    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "failed",
+      delivery_state: "failed_system",
       limitation_codes: [],
       limitations: [],
+      summary: "Failed",
     });
     expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
       "internal_recovery_required",
@@ -8503,8 +8516,8 @@ test("app transport no-visible limited final closes queued turns without assista
     );
     expect(sessionView.data.latest_turn).toMatchObject({
       id: turnId,
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "failed",
+      delivery_state: "failed_system",
       limitation_codes: [],
       limitations: [],
     });
@@ -8620,7 +8633,7 @@ test("app transport live generic internal verification text is hidden unless mar
   const turnId = result.data.turn.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -8666,10 +8679,11 @@ test("app transport live generic internal verification text is hidden unless mar
       "could not verify",
     );
     expect(messages.data.turn_progress[turnId]).toMatchObject({
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "failed",
+      delivery_state: "failed_system",
       limitation_codes: [],
       limitations: [],
+      summary: "Failed",
     });
     expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
       "internal_recovery_required",
@@ -8687,10 +8701,16 @@ test("app transport live generic internal verification text is hidden unless mar
     ).toEqual([]);
     expect(sessionView.data.latest_turn).toMatchObject({
       id: turnId,
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "failed",
+      delivery_state: "failed_system",
       limitation_codes: [],
       limitations: [],
+    });
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "failed",
+      safe_error_code: "no_visible_result",
     });
     expect(JSON.stringify(sessionView.data)).not.toContain(
       "internal_recovery_required",
@@ -8711,7 +8731,7 @@ test("app transport internal limited final text is hidden by typed limitation co
   const turnId = result.data.turn.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -8749,10 +8769,11 @@ test("app transport internal limited final text is hidden by typed limitation co
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "failed",
+      delivery_state: "failed_system",
       limitation_codes: [],
       limitations: [],
+      summary: "Failed",
     });
     expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
       "internal_recovery_required",
@@ -8772,7 +8793,7 @@ test("app transport ownerless internal recovery failures terminate without leaki
   const turnId = result.data.turn.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -8871,7 +8892,7 @@ test("repeated app transport ownerless recovery failures remain terminal without
   const turnId = result.data.turn.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -8913,7 +8934,7 @@ test("repeated app transport ownerless recovery failures remain terminal without
     ).length;
     expect(firstQueuedCount).toBe(1);
 
-    appendTranscriptEvent(
+    appendAppTranscriptEvent(
       createTranscriptEvent({
         sessionId: "butler/app-general",
         kind: "outbound",
@@ -8996,7 +9017,7 @@ test("late continuation evidence cannot resurrect an already terminal ownerless 
   const turnId = result.data.turn.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9041,7 +9062,7 @@ test("late continuation evidence cannot resurrect an already terminal ownerless 
       }),
     );
 
-    appendTranscriptEvent(
+    appendAppTranscriptEvent(
       createTranscriptEvent({
         sessionId: "butler/app-general",
         kind: "outbound",
@@ -9069,7 +9090,7 @@ test("late continuation evidence cannot resurrect an already terminal ownerless 
         },
       }),
     );
-    appendTranscriptEvent(
+    appendAppTranscriptEvent(
       createTranscriptEvent({
         sessionId: "butler/app-general",
         kind: "outbound",
@@ -9142,7 +9163,7 @@ test("app transport internal recovery failures do not mask prior provider failur
   const turnId = result.data.turn.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9164,7 +9185,7 @@ test("app transport internal recovery failures do not mask prior provider failur
       },
     }),
   );
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9211,7 +9232,7 @@ test("app transport internal recovery failures do not mask prior provider failur
   }
 });
 
-test("app transport no-visible final removes an earlier failure assistant for the same turn", async () => {
+test("app transport no-visible final does not overwrite an earlier terminal failure", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -9236,7 +9257,7 @@ test("app transport no-visible final removes an earlier failure assistant for th
     }),
   );
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9260,7 +9281,7 @@ test("app transport no-visible final removes an earlier failure assistant for th
       },
     }),
   );
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9301,14 +9322,18 @@ test("app transport no-visible final removes an earlier failure assistant for th
       ]),
     ).toEqual([
       ["user", "continue after a recoverable dispatch failure"],
+      [
+        "assistant",
+        "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+      ],
     ]);
-    expect(JSON.stringify(messages)).not.toContain("dispatch lease expired");
     expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
     expect(messages.data.turn_progress[turnId]).toMatchObject({
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "failed",
+      delivery_state: "failed_system",
       limitation_codes: [],
       limitations: [],
+      summary: "Failed",
     });
     expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
       "internal_recovery_required",
@@ -9316,10 +9341,11 @@ test("app transport no-visible final removes an earlier failure assistant for th
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "failed",
+      delivery_state: "failed_system",
       limitation_codes: [],
       limitations: [],
+      summary: "Failed",
     });
     expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
       "internal_recovery_required",
@@ -9339,7 +9365,7 @@ test("app transport no-visible final with missing delivery metadata does not cre
   const turnId = result.data.turn.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9373,10 +9399,17 @@ test("app transport no-visible final with missing delivery metadata does not cre
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "failed",
+      delivery_state: "failed_system",
       limitation_codes: [],
       limitations: [],
+      summary: "Failed",
+    });
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "failed",
+      safe_error_code: "no_visible_result",
     });
     expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
       "internal_recovery_required",
@@ -9396,7 +9429,7 @@ test("app transport no-visible final with system delivery state is not projected
   const turnId = result.data.turn.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9432,11 +9465,11 @@ test("app transport no-visible final with system delivery state is not projected
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "thinking",
+      state: "failed",
       retryable: false,
-      cancellable: true,
+      cancellable: false,
+      safe_error_code: "no_visible_result",
     });
-    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
   } finally {
     server.stop();
   }
@@ -9461,7 +9494,7 @@ test("app transport preserves marked public progress finalization text", async (
     "다음 진행에서는 이 지점부터 이어가면 됩니다.",
   ].join("\n");
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9525,7 +9558,7 @@ test("app transport navigation sync skips zero-byte final artifacts", async () =
 
   writeFileSync(join(tempDir, "result.md"), "# Projected result\n", "utf8");
   writeFileSync(join(tempDir, "empty.err"), "", "utf8");
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9603,7 +9636,7 @@ test("app transport final result projection strips Butler final-answer envelope"
   const turnId = result.data.turn.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9693,7 +9726,7 @@ test("app transport final result projection does not resurrect cancelled turns",
   });
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9748,7 +9781,7 @@ test("app transport failure projection does not downgrade delivered turns", asyn
   expect(result.data.turn.state).toBe("thinking");
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9769,7 +9802,7 @@ test("app transport failure projection does not downgrade delivered turns", asyn
       },
     }),
   );
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9848,7 +9881,7 @@ test("app transport final projection does not resurrect timed out failed turns",
       },
     }),
   );
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9871,7 +9904,7 @@ test("app transport final projection does not resurrect timed out failed turns",
       },
     }),
   );
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9919,7 +9952,7 @@ test("app transport final projection does not resurrect timed out failed turns",
   }
 });
 
-test("recoverable limited final can close a timeout failed app turn", async () => {
+test("recoverable limited final cannot overwrite a timeout failed app turn", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -9968,7 +10001,7 @@ test("recoverable limited final can close a timeout failed app turn", async () =
   );
   db.close();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -9992,7 +10025,7 @@ test("recoverable limited final can close a timeout failed app turn", async () =
       },
     }),
   );
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -10029,26 +10062,23 @@ test("recoverable limited final can close a timeout failed app turn", async () =
       messages.data.messages.map((message: { text: string }) => message.text),
     ).toEqual([
       "continue a recoverable WorkStream",
+      "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
     ]);
-    expect(
-      messages.data.messages.filter(
-        (message: { role: string }) => message.role === "assistant",
-      ),
-    ).toEqual([]);
     expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "delivered",
+      state: "failed",
+      safe_error_code: "inbound_dispatch_timeout",
       retryable: false,
     });
-    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "failed",
+      delivery_state: "failed_system",
       limitation_codes: [],
       limitations: [],
+      summary: "Failed",
     });
     expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
       "internal_recovery_required",
@@ -10074,7 +10104,7 @@ test("recoverable limited final without queue claim cannot close a failed app tu
   const turnId = result.data.turn.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -10096,7 +10126,7 @@ test("recoverable limited final without queue claim cannot close a failed app tu
       },
     }),
   );
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -10155,7 +10185,7 @@ test("app transport queued final waits for matching processed terminal record", 
   });
   const turnId = result.data.turn.id;
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -10263,7 +10293,7 @@ test("app transport rejects a deferred final when the terminal claim mismatches"
       text: "do not publish a final from the wrong dispatch claim",
     });
     const turnId = result.data.turn.id;
-    appendTranscriptEvent(
+    appendAppTranscriptEvent(
       createTranscriptEvent({
         sessionId: "butler/app-general",
         kind: "outbound",
@@ -10381,7 +10411,7 @@ test("app transport retries deferred finals independently by session", async () 
         text: "Second final.",
       },
     ]) {
-      appendTranscriptEvent(
+      appendAppTranscriptEvent(
         createTranscriptEvent({
           sessionId: `butler/app-${item.chatId}`,
           kind: "outbound",
@@ -10408,8 +10438,13 @@ test("app transport retries deferred finals independently by session", async () 
       SELECT COUNT(*) AS count FROM app_transport_projection_staged_outbounds
       WHERE state = 'deferred_final'
     `).get()?.count ?? 0) === 2);
-    server.stop();
+    // Keep the original queue owner live while the second App composition
+    // starts. The sibling must preserve its unexpired claims; stopping the
+    // original before this point would intentionally reclaim them and make
+    // these pre-recovery fixture finals stale.
+    const originalServer = server;
     server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+    originalServer.stop();
     const processedQueueDir = join(
       tempDir,
       "runtime",
@@ -10487,7 +10522,7 @@ test("app transport retries deferred finals independently by session", async () 
 
 test("app transport worker result projection is durable and idempotent", async () => {
   const dbPath = join(tempDir, "app.sqlite");
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -10545,7 +10580,7 @@ test("app transport progress projection recovers queued work blocks after app-se
   expect(beforeSession).toBeTruthy();
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -10569,7 +10604,7 @@ test("app transport progress projection recovers queued work blocks after app-se
       },
     }),
   );
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -10593,7 +10628,7 @@ test("app transport progress projection recovers queued work blocks after app-se
       },
     }),
   );
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -10703,7 +10738,7 @@ test("app transport progress projection preserves tool-start public notes", asyn
   const userMessageId = result.data.accepted.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -10736,7 +10771,7 @@ test("app transport progress projection preserves tool-start public notes", asyn
       },
     }),
   );
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -10813,7 +10848,7 @@ test("app transport progress projection stays idempotent after a large event bac
   const userMessageId = result.data.accepted.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -10999,7 +11034,7 @@ test("app transport sync skips unchanged transcript snapshots", async () => {
   const userMessageId = result.data.accepted.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -11061,7 +11096,7 @@ test("app transport sync includes archived sessions while a turn is active", asy
   await postJson(`${server.url}sessions/general/archive`, {});
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -11119,7 +11154,7 @@ test("app transport sync projects appended progress and final events once", asyn
   const userMessageId = result.data.accepted.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -11154,7 +11189,7 @@ test("app transport sync projects appended progress and final events once", asyn
       SELECT action_id FROM app_transport_projection_receipts WHERE action_id = ?
     `).get(`runtime-intermediate:app:${userMessageId}:initial-progress`)));
 
-    appendTranscriptEvent(
+    appendAppTranscriptEvent(
       createTranscriptEvent({
         sessionId: "butler/app-general",
         kind: "outbound",
@@ -11179,7 +11214,7 @@ test("app transport sync projects appended progress and final events once", asyn
         },
       }),
     );
-    appendTranscriptEvent(
+    appendAppTranscriptEvent(
       createTranscriptEvent({
         sessionId: "butler/app-general",
         kind: "outbound",
@@ -11246,7 +11281,7 @@ test("terminal app transport snapshots do not expose stale running progress rows
   const userMessageId = result.data.accepted.id;
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -11280,7 +11315,7 @@ test("terminal app transport snapshots do not expose stale running progress rows
       },
     }),
   );
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -11359,7 +11394,7 @@ test("app transport failure projection fails queued turns after app-server resta
   expect(result.data.turn.state).toBe("thinking");
   server.stop();
 
-  appendTranscriptEvent(
+  appendAppTranscriptEvent(
     createTranscriptEvent({
       sessionId: "butler/app-general",
       kind: "outbound",
@@ -11543,7 +11578,7 @@ test("ordinary failed turn retry rejection keeps stale app transport failure pro
     );
     expect(retry.status).toBe(409);
 
-    appendTranscriptEvent(
+    appendAppTranscriptEvent(
       createTranscriptEvent({
         sessionId: "butler/app-general",
         kind: "outbound",
@@ -13830,6 +13865,7 @@ test("pending cancellation outbox dispatches after App restart", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   const queue = new FileQueueButlerServiceClient({ butlerData: tempDir });
   const failingClient: ButlerServiceClient = {
+    findAppTurn: (input) => queue.findAppTurn(input),
     enqueueAppTurn: (input, metadata) => queue.enqueueAppTurn(input, metadata),
     enqueueAppCancellation(input, metadata) {
       queue.enqueueAppCancellation(input, metadata);
@@ -14289,6 +14325,119 @@ async function patchJson(url: string, body: unknown) {
   });
   expect(response.ok).toBe(true);
   return await response.json();
+}
+
+function appendAppTranscriptEvent(
+  event: Parameters<typeof appendTranscriptEvent>[0],
+  butlerData = tempDir,
+): void {
+  // Restart fixtures intentionally append the transcript between stopping
+  // owner A and constructing owner B. Defer the durable write by one turn so
+  // B has registered its queue incarnation before this helper binds the
+  // event's immutable App claim. This keeps the fixture on the same durable
+  // claim fence as production without manufacturing a claim in the test.
+  const payload = event.payload as Record<string, unknown>;
+  const metadata = payload.metadata && typeof payload.metadata === "object" &&
+    !Array.isArray(payload.metadata)
+    ? payload.metadata as Record<string, unknown>
+    : undefined;
+  const message = payload.message && typeof payload.message === "object" &&
+    !Array.isArray(payload.message)
+    ? payload.message as Record<string, unknown>
+    : undefined;
+  const hasTurnBinding = typeof metadata?.turnId === "string" ||
+    typeof metadata?.turn_id === "string" ||
+    typeof message?.replyToMessageId === "string";
+  if (hasTurnBinding) queueMicrotask(() => appendAppTranscriptEventNow(event, butlerData));
+  else appendAppTranscriptEventNow(event, butlerData);
+}
+
+function appendAppTranscriptEventNow(
+  event: Parameters<typeof appendTranscriptEvent>[0],
+  butlerData: string,
+): void {
+  const payload = event.payload as Record<string, unknown>;
+  const metadata = payload.metadata && typeof payload.metadata === "object" &&
+    !Array.isArray(payload.metadata)
+    ? payload.metadata as Record<string, unknown>
+    : undefined;
+  let turnId = typeof metadata?.turnId === "string"
+    ? metadata.turnId
+    : typeof metadata?.turn_id === "string"
+      ? metadata.turn_id
+      : undefined;
+  const dbPath = join(butlerData, "app.sqlite");
+  const message = payload.message && typeof payload.message === "object" &&
+    !Array.isArray(payload.message)
+    ? payload.message as Record<string, unknown>
+    : undefined;
+  const replyToMessageId = typeof message?.replyToMessageId === "string"
+    ? message.replyToMessageId
+    : undefined;
+  if (turnId && !metadata?.appQueueClaimId && existsSync(dbPath)) {
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      const claim = db.query<{
+        claim_id: string | null;
+      }, [string]>(`
+        SELECT claim_id
+        FROM session_queued_messages
+        WHERE turn_id = ? AND state = 'dispatching' AND claim_id IS NOT NULL
+        ORDER BY rowid DESC
+        LIMIT 1
+      `).get(turnId)?.claim_id;
+      if (claim) {
+        appendTranscriptEvent({
+          ...event,
+          payload: {
+            ...payload,
+            metadata: {
+              ...metadata,
+              appQueueClaimId: claim,
+              fixtureBinding: "canonical_app_queue",
+            },
+          },
+        }, butlerData);
+        return;
+      }
+    } finally {
+      db.close();
+    }
+  }
+  if (!turnId && replyToMessageId && existsSync(dbPath)) {
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      turnId = db.query<{ id: string }, [string]>(`
+        SELECT id FROM turns WHERE user_message_id = ?
+        ORDER BY rowid DESC LIMIT 1
+      `).get(replyToMessageId)?.id;
+      const claim = turnId
+        ? db.query<{ claim_id: string | null }, [string]>(`
+            SELECT claim_id FROM session_queued_messages
+            WHERE turn_id = ? AND state = 'dispatching' AND claim_id IS NOT NULL
+            ORDER BY rowid DESC LIMIT 1
+          `).get(turnId)?.claim_id
+        : undefined;
+      if (turnId && claim && !metadata?.appQueueClaimId) {
+        appendTranscriptEvent({
+          ...event,
+          payload: {
+            ...payload,
+            metadata: {
+              ...(metadata ?? {}),
+              turnId,
+              appQueueClaimId: claim,
+              fixtureBinding: "canonical_app_queue",
+            },
+          },
+        }, butlerData);
+        return;
+      }
+    } finally {
+      db.close();
+    }
+  }
+  appendTranscriptEvent(event, butlerData);
 }
 
 async function deleteJson(url: string) {

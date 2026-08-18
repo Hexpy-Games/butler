@@ -14,7 +14,10 @@ import type {
 } from "../../../test-support/harness/contracts.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
 import type { DeliveryGuard } from "../../transport/delivery-guard.ts";
-import { controlAckActions } from "./control-ack-action.ts";
+import {
+  controlAckActions,
+  isMatchingClaimedAppTarget,
+} from "./control-ack-action.ts";
 import { bindQueuedInboundSession } from "./queued-inbound-session-binder.ts";
 
 type BtccInboundServer = {
@@ -130,11 +133,32 @@ async function dispatchItem(
   try {
     const result = await options.server.handleInbound(item.envelope);
     if (result.status !== "handled") {
-      options.queue.fail(item, `BTCC gateway ${result.status}`, {
+      const terminalDelivery = await deliverGatewayFailure(item, result, options);
+      if (terminalDelivery === false) {
+        options.queue.parkForProcessReplacement(item, "App terminal failure delivery was not committed.", {
+          source: "gateway/btcc/btcc-inbound-dispatcher.ts",
+          dispatchStatus: "terminal-delivery-interrupted",
+        }, options.now?.());
+        summary.interrupted = 1;
+        return summary;
+      }
+      if (terminalDelivery === undefined) {
+        options.queue.fail(item, `BTCC gateway ${result.status}`, {
+          source: "gateway/btcc/btcc-inbound-dispatcher.ts",
+          dispatchStatus: result.status,
+        }, options.now?.());
+        summary.failed = 1;
+        return summary;
+      }
+      const committed = options.queue.complete(item, {
         source: "gateway/btcc/btcc-inbound-dispatcher.ts",
         dispatchStatus: result.status,
+        terminalFailure: true,
+        delivered: terminalDelivery,
       }, options.now?.());
-      summary.failed = 1;
+      if (!committed) return summary;
+      summary.handled = 1;
+      summary.delivered = terminalDelivery;
       return summary;
     }
 
@@ -166,6 +190,50 @@ async function dispatchItem(
   }
 }
 
+async function deliverGatewayFailure(
+  item: ClaimedInboundEvent,
+  result: Exclude<GatewayDispatchResult, { status: "handled" }>,
+  options: BtccInboundDispatchOptions,
+): Promise<number | false | undefined> {
+  if (item.envelope.transport !== "app") return undefined;
+  const turnId = item.envelope.routingHints?.turnId?.trim();
+  if (!turnId) return undefined;
+  const safeErrorCode = result.status === "missing-handler"
+    ? "gateway_missing_handler"
+    : "gateway_unroutable";
+  const action: OutboundAction = {
+    actionId: `btcc-terminal-failure:${item.queueId}`,
+    transport: "app",
+    accountId: item.envelope.accountId,
+    peer: {
+      kind: "dm",
+      id: item.envelope.peer.id,
+    },
+    message: {
+      text: "Butler could not route this request to its execution session.",
+      replyToMessageId: item.envelope.message.id,
+    },
+    metadata: {
+      source: "gateway/btcc/btcc-inbound-dispatcher.ts",
+      kind: "turn_failed",
+      turnId,
+      safeErrorCode,
+      appQueueClaimId: item.envelope.routingHints?.appQueueClaimId,
+      queueId: item.queueId,
+      dispatchClaimId: item.processing.claimId,
+    },
+  };
+  const deliver = options.deliverAction ??
+    ((sessionId: string, outbound: OutboundAction, metadata: Record<string, unknown>) =>
+      options.deliveryGuard.deliver(sessionId, outbound, metadata));
+  const receipt = await deliver(
+    item.envelope.routingHints?.sessionId ?? item.envelope.peer.id,
+    action,
+    { source: "gateway/btcc/btcc-inbound-dispatcher.ts", terminalFailure: true },
+  );
+  return receipt.ok ? 1 : false;
+}
+
 async function deliverResult(
   item: ClaimedInboundEvent,
   result: Extract<GatewayDispatchResult, { status: "handled" }>,
@@ -192,33 +260,69 @@ function finalActions(
   store: SessionBindingStore,
 ): OutboundAction[] {
   const controlAck = result.handlerResult.metadata?.controlAck;
-  if (controlAck && typeof controlAck === "object" && !Array.isArray(controlAck)) {
-    const binding = store.getBySessionId(result.route.sessionId);
-    return controlAckActions({
-      item,
-      controlAck: controlAck as Record<string, unknown>,
-      targets: binding?.transportBindings ?? [],
-    });
-  }
-  const text = result.handlerResult.metadata?.text;
-  if (typeof text !== "string" || !text.trim()) return [];
   const binding = store.getBySessionId(result.route.sessionId);
   const targets = binding?.transportBindings ?? [];
+  const actions: OutboundAction[] = [];
+  if (controlAck && typeof controlAck === "object" && !Array.isArray(controlAck)) {
+    actions.push(...controlAckActions({
+      item,
+      controlAck: controlAck as Record<string, unknown>,
+      targets,
+    }));
+  }
+  const terminalKind = optionalText(result.handlerResult.metadata?.kind);
+  if (terminalKind === "turn_cancelled") {
+    const terminalTargets = claimedAppTerminalTargets(item, targets);
+    actions.push(...terminalTargets.map((target) => finalAction({
+      item,
+      target,
+      text: "",
+      artifacts: [],
+      turnId: optionalText(result.handlerResult.metadata?.turnId) ??
+        item.envelope.routingHints?.turnId,
+      terminalKind,
+      safeErrorCode: "turn_cancelled",
+    })));
+    return actions;
+  }
+  if (actions.length > 0) return actions;
+  const text = result.handlerResult.metadata?.text;
   const artifacts = artifactRefs(result.handlerResult.metadata?.artifacts);
+  const noVisibleReply = typeof text !== "string" ||
+    (!text.trim() && artifacts.length === 0);
+  const finalTargets = noVisibleReply
+    ? claimedAppTerminalTargets(item, targets)
+    : targets;
+  if (noVisibleReply && finalTargets.length === 0) return actions;
   const generatedSessionTitle = optionalText(
     result.handlerResult.metadata?.generatedSessionTitle,
   );
-  return targets.map((target) => finalAction({
+  return finalTargets.map((target) => finalAction({
     item,
     target,
-    text,
+    text: typeof text === "string" ? text : "",
     artifacts,
     generatedSessionTitle,
     executionModel: result.handlerResult.metadata?.executionModel,
     canonicalMessageId: optionalText(result.handlerResult.metadata?.canonicalMessageId),
     turnId: optionalText(result.handlerResult.metadata?.turnId) ??
       item.envelope.routingHints?.turnId,
+    noVisibleReply,
+    safeErrorCode: noVisibleReply ? "no_visible_result" : undefined,
   }));
+}
+
+function claimedAppTerminalTargets(
+  item: ClaimedInboundEvent,
+  targets: SessionTransportBinding[],
+): SessionTransportBinding[] {
+  if (item.envelope.transport !== "app") return [];
+  const claimId = item.envelope.routingHints?.appQueueClaimId;
+  if (
+    typeof claimId !== "string" ||
+    !/^[\w:./-]{1,96}$/u.test(claimId.trim())
+  ) return [];
+  return targets.filter((target) => isMatchingClaimedAppTarget(item, target));
 }
 
 function finalAction(input: {
@@ -230,8 +334,17 @@ function finalAction(input: {
   canonicalMessageId?: string;
   turnId?: string;
   executionModel?: unknown;
+  terminalKind?: string;
+  noVisibleReply?: boolean;
+  safeErrorCode?: string;
 }): OutboundAction {
   const { item, target } = input;
+  const appClaimBinding = isMatchingClaimedAppTarget(item, target)
+    ? {
+        appQueueClaimId: item.envelope.routingHints?.appQueueClaimId,
+        appQueueClaimProvenance: "matching_app_target",
+      }
+    : {};
   return {
     actionId: `btcc-final:${input.canonicalMessageId ?? item.queueId}:${target.transport}:${target.peerId}:${target.threadId ?? "main"}`,
     transport: target.transport,
@@ -248,9 +361,12 @@ function finalAction(input: {
     },
     metadata: {
       source: "gateway/btcc/btcc-inbound-dispatcher.ts",
-      kind: "final_result",
+      kind: input.terminalKind ?? "final_result",
       queueId: item.queueId,
       dispatchClaimId: item.processing.claimId,
+      ...appClaimBinding,
+      ...(input.noVisibleReply ? { noVisibleReply: true } : {}),
+      ...(input.safeErrorCode ? { safeErrorCode: input.safeErrorCode } : {}),
       turnId: input.turnId,
       canonicalMessageId: input.canonicalMessageId,
       generatedSessionTitle: input.generatedSessionTitle,

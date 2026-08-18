@@ -46,6 +46,8 @@ export function createAppTransportModuleGraph(input: {
     (turn) => {
       host.appendTerminalTurnStateChanged(turn);
     },
+    <T>(callback: () => T) => host.db.transaction(callback)(),
+    (input) => host.sessionQueue.fenceQueuedTurnClaim(input),
   );
   const transportProjection = new AppTransportProjectionStore({
     db,
@@ -91,6 +93,12 @@ export function createAppTransportModuleGraph(input: {
     touchChat: (chatId) => host.touchChat(chatId),
     drainQueuedSessionMessages: (chatId) =>
       host.drainQueuedSessionMessages(chatId),
+    queuedTurnClaimStatus: (chatId, turnId, claimId) =>
+      host.sessionQueue.queuedTurnClaimStatus(chatId, turnId, claimId),
+    fenceQueuedTurnClaim: (input) =>
+      host.sessionQueue.fenceQueuedTurnClaim(input),
+    acknowledgeQueuedMessageForTurn: (input) =>
+      host.sessionQueue.acknowledgeForTurn(input),
   });
   const recordProjectionFailure = (name: string, error: unknown) =>
     recordOperationalMetric({

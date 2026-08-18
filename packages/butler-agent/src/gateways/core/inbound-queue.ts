@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { existsSync, mkdirSync, readdirSync, renameSync } from "fs";
 import { join } from "path";
 import type { InboundEnvelope } from "./contracts.ts";
@@ -134,13 +134,112 @@ export class NativeInboundQueue {
   ): QueuedInboundEvent {
     const queueId = `idempotent-${safeQueueId(envelope.eventId)}`;
     for (const state of ["pending", "processing", "processed", "failed"] as const) {
-      const existing = this.readQueuedRecord(join(this.dir(state), `${queueId}.json`));
-      if (existing) return existing;
+      const path = join(this.dir(state), `${queueId}.json`);
+      const existing = this.readQueuedRecord(path);
+      if (existing) {
+        const existingClaim = existing.envelope.routingHints?.appQueueClaimId;
+        const nextClaim = envelope.routingHints?.appQueueClaimId;
+        if (nextClaim && nextClaim !== existingClaim && state === "pending") {
+          const updated: QueuedInboundEvent = {
+            ...existing,
+            envelope: {
+              ...existing.envelope,
+              routingHints: {
+                ...existing.envelope.routingHints,
+                appQueueClaimId: nextClaim,
+              },
+            },
+          };
+          atomicWriteInboundQueueRecord(path, updated);
+          return updated;
+        }
+        if (nextClaim && nextClaim !== existingClaim) {
+          return this.enqueueClaimReconciliation(
+            envelope,
+            existing.envelope.eventId,
+            nextClaim,
+            metadata,
+            now,
+          );
+        }
+        return existing;
+      }
     }
     const record: QueuedInboundEvent = {
       version: 1, queueId, envelope, enqueuedAt: now.toISOString(), attempts: 0, metadata,
     };
     atomicWriteInboundQueueRecord(join(this.dir("pending"), `${queueId}.json`), record);
+    return record;
+  }
+
+  findIdempotent(envelope: InboundEnvelope): QueuedInboundEvent | null {
+    const queueId = `idempotent-${safeQueueId(envelope.eventId)}`;
+    let canonical: QueuedInboundEvent | null = null;
+    for (const state of ["pending", "processing", "processed", "failed"] as const) {
+      const existing = this.readQueuedRecord(
+        join(this.dir(state), `${queueId}.json`),
+      );
+      if (existing) {
+        canonical = existing;
+        break;
+      }
+    }
+    const claimId = envelope.routingHints?.appQueueClaimId;
+    if (canonical && claimId && canonical.envelope.routingHints?.appQueueClaimId !== claimId) {
+      const reconciliationId = reconciliationQueueId(
+        canonical.envelope.eventId,
+        claimId,
+      );
+      for (const state of ["pending", "processing", "processed", "failed"] as const) {
+        const existing = this.readQueuedRecord(
+          join(this.dir(state), `${reconciliationId}.json`),
+        );
+        if (existing) return existing;
+      }
+      return null;
+    }
+    return canonical;
+  }
+
+  private enqueueClaimReconciliation(
+    envelope: InboundEnvelope,
+    canonicalEventId: string,
+    claimId: string,
+    metadata: Record<string, unknown>,
+    now: Date,
+  ): QueuedInboundEvent {
+    const eventId = `${envelope.eventId}:claim:${claimId}`;
+    // Keep the reconciliation record within the bounded public queue-id token
+    // accepted by App projection.  The hash is stable for the canonical event
+    // and reclaimed claim, while avoiding a second unbounded queue identity.
+    const queueId = reconciliationQueueId(canonicalEventId, claimId);
+    for (const state of ["pending", "processing", "processed", "failed"] as const) {
+      const existing = this.readQueuedRecord(join(this.dir(state), `${queueId}.json`));
+      if (existing) return existing;
+    }
+    const record: QueuedInboundEvent = {
+      version: 1,
+      queueId,
+      envelope: {
+        ...envelope,
+        eventId,
+        routingHints: {
+          ...envelope.routingHints,
+          canonicalEventId,
+          appQueueClaimId: claimId,
+        },
+      },
+      enqueuedAt: now.toISOString(),
+      attempts: 0,
+      metadata: {
+        ...metadata,
+        reconciliationOfEventId: canonicalEventId,
+      },
+    };
+    atomicWriteInboundQueueRecord(
+      join(this.dir("pending"), `${queueId}.json`),
+      record,
+    );
     return record;
   }
 
@@ -353,6 +452,14 @@ export class NativeInboundQueue {
     return current?.processing?.claimId === item.processing.claimId;
   }
 }
+
+function reconciliationQueueId(canonicalEventId: string, claimId: string): string {
+  const reconciliationDigest = createHash("sha256")
+    .update(`${canonicalEventId}\u0000${claimId}`)
+    .digest("hex");
+  return `idempotent-reconcile-${reconciliationDigest}`;
+}
+
 function processingOwnerLiveness(ownerId: string | undefined): "alive" | "dead" | "unknown" {
   const match = /^(\d+):/u.exec(ownerId ?? "");
   if (!match) return "unknown";

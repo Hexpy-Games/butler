@@ -74,6 +74,8 @@ export interface InboundEnvelope {
     stewardId?: string;
     turnId?: string;
     turnAttempt?: number;
+    appQueueClaimId?: string;
+    canonicalEventId?: string;
   };
   executionControls?: TurnExecutionControlsV1;
   appTurnContext?: {

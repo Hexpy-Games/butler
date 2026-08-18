@@ -120,6 +120,371 @@ test("product App ingress is handled once by the BTCC dispatcher", async () => {
   }
 });
 
+test("claimed App cancellation terminal targets only the matching App binding", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-mixed-terminal-"));
+  const queue = new NativeInboundQueue(butlerData);
+  const store = new SessionBindingStore(
+    join(butlerData, "runtime", "sessions.sqlite"),
+    "ephemeral",
+  );
+  const sessionId = "butler/app-general";
+  const claimId = "app-session-queue:123:mixed-terminal";
+  const actions: Array<{ transport: string; text?: string; claim?: unknown }> = [];
+  try {
+    store.upsert({
+      sessionId,
+      role: "butler",
+      workspacePath: butlerData,
+      runtimeAdapterId: "btcc-turn-runtime",
+      modelProviderId: "openai",
+      modelRef: "openai/gpt-5.6-sol",
+      transportBindings: [
+        { transport: "app", accountId: "local", peerId: "general" },
+        { transport: "mock", accountId: "remote", peerId: "general" },
+      ],
+    });
+    queue.enqueue({
+      eventId: "app:mixed-terminal",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "general" },
+      sender: { id: "app-user" },
+      message: {
+        id: "message-mixed-terminal",
+        text: "cancel this claimed App turn",
+        timestamp: "2026-08-18T00:00:00.000Z",
+      },
+      routingHints: {
+        sessionId,
+        turnId: "turn-mixed-terminal",
+        appQueueClaimId: claimId,
+      },
+    });
+    const dispatcher = new BtccInboundDispatcher();
+    const summary = dispatcher.poll({
+      queue,
+      store,
+      deliveryGuard: new DeliveryGuard({ adapters: [] }),
+      deliverAction: async (_sessionId, action) => {
+        actions.push({
+          transport: action.transport,
+          text: action.message.text,
+          claim: action.metadata?.appQueueClaimId,
+        });
+        return { ok: true };
+      },
+      server: {
+        async handleInbound() {
+          return {
+            status: "handled" as const,
+            route: {
+              sessionId,
+              role: "butler" as const,
+              reason: "session-hint" as const,
+              workspacePath: butlerData,
+            },
+            handlerResult: {
+              ok: true,
+              handledBy: "btcc/turn-stop",
+              metadata: {
+                kind: "turn_cancelled",
+                turnId: "turn-mixed-terminal",
+              },
+            },
+          };
+        },
+      },
+    });
+    await dispatcher.waitForIdle();
+
+    expect(summary.handled).toBe(1);
+    expect(actions).toEqual([{
+      transport: "app",
+      text: "",
+      claim: claimId,
+    }]);
+  } finally {
+    store.close();
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("claimed App visible finals bind claim metadata only to the matching App target", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-mixed-visible-final-"));
+  const queue = new NativeInboundQueue(butlerData);
+  const store = new SessionBindingStore(
+    join(butlerData, "runtime", "sessions.sqlite"),
+    "ephemeral",
+  );
+  const sessionId = "butler/app-general";
+  const claimId = "app-session-queue:123:mixed-visible-final";
+  const actions: Array<{
+    transport: string;
+    peerId: string;
+    text?: string;
+    claim?: unknown;
+    provenance?: unknown;
+  }> = [];
+  try {
+    store.upsert({
+      sessionId,
+      role: "butler",
+      workspacePath: butlerData,
+      runtimeAdapterId: "btcc-turn-runtime",
+      modelProviderId: "openai",
+      modelRef: "openai/gpt-5.6-sol",
+      transportBindings: [
+        { transport: "app", accountId: "local", peerId: "general" },
+        { transport: "app", accountId: "local", peerId: "other" },
+        { transport: "mock", accountId: "remote", peerId: "general" },
+      ],
+    });
+    queue.enqueue({
+      eventId: "app:mixed-visible-final",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "general" },
+      sender: { id: "app-user" },
+      message: {
+        id: "message-mixed-visible-final",
+        text: "return the visible final",
+        timestamp: "2026-08-18T00:00:00.000Z",
+      },
+      routingHints: {
+        sessionId,
+        turnId: "turn-mixed-visible-final",
+        appQueueClaimId: claimId,
+      },
+    });
+    const dispatcher = new BtccInboundDispatcher();
+    const summary = dispatcher.poll({
+      queue,
+      store,
+      deliveryGuard: new DeliveryGuard({ adapters: [] }),
+      deliverAction: async (_sessionId, action) => {
+        actions.push({
+          transport: action.transport,
+          peerId: action.peer.id,
+          text: action.message.text,
+          claim: action.metadata?.appQueueClaimId,
+          provenance: action.metadata?.appQueueClaimProvenance,
+        });
+        return { ok: true };
+      },
+      server: {
+        async handleInbound() {
+          return {
+            status: "handled" as const,
+            route: {
+              sessionId,
+              role: "butler" as const,
+              reason: "session-hint" as const,
+              workspacePath: butlerData,
+            },
+            handlerResult: {
+              ok: true,
+              handledBy: "btcc/turn-runtime",
+              metadata: {
+                text: "visible final",
+                turnId: "turn-mixed-visible-final",
+              },
+            },
+          };
+        },
+      },
+    });
+    await dispatcher.waitForIdle();
+
+    expect(summary.handled).toBe(1);
+    expect(actions).toEqual([
+      {
+        transport: "app",
+        peerId: "general",
+        text: "visible final",
+        claim: claimId,
+        provenance: "matching_app_target",
+      },
+      {
+        transport: "app",
+        peerId: "other",
+        text: "visible final",
+        claim: undefined,
+        provenance: undefined,
+      },
+      {
+        transport: "mock",
+        peerId: "general",
+        text: "visible final",
+        claim: undefined,
+        provenance: undefined,
+      },
+    ]);
+  } finally {
+    store.close();
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("control acknowledgements bind App claim metadata only to the matching App target", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-mixed-control-ack-"));
+  const queue = new NativeInboundQueue(butlerData);
+  const store = new SessionBindingStore(
+    join(butlerData, "runtime", "sessions.sqlite"),
+    "ephemeral",
+  );
+  const sessionId = "butler/app-general";
+  const claimId = "app-session-queue:123:mixed-control-ack";
+  const actions: Array<{ transport: string; claim?: unknown; provenance?: unknown }> = [];
+  try {
+    store.upsert({
+      sessionId,
+      role: "butler",
+      workspacePath: butlerData,
+      runtimeAdapterId: "btcc-turn-runtime",
+      modelProviderId: "openai",
+      modelRef: "openai/gpt-5.6-sol",
+      transportBindings: [
+        { transport: "app", accountId: "local", peerId: "general" },
+        { transport: "mock", accountId: "remote", peerId: "general" },
+      ],
+    });
+    queue.enqueue({
+      eventId: "app:mixed-control-ack",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "general" },
+      sender: { id: "app-user" },
+      message: { id: "message-mixed-control-ack", text: "", timestamp: "2026-08-18T00:00:00.000Z" },
+      routingHints: { sessionId, turnId: "turn-mixed-control-ack", appQueueClaimId: claimId },
+    });
+    const dispatcher = new BtccInboundDispatcher();
+    dispatcher.poll({
+      queue,
+      store,
+      deliveryGuard: new DeliveryGuard({ adapters: [] }),
+      deliverAction: async (_sessionId, action) => {
+        actions.push({
+          transport: action.transport,
+          claim: action.metadata?.appQueueClaimId,
+          provenance: action.metadata?.appQueueClaimProvenance,
+        });
+        return { ok: true };
+      },
+      server: {
+        async handleInbound() {
+          return {
+            status: "handled" as const,
+            route: {
+              sessionId,
+              role: "butler" as const,
+              reason: "session-hint" as const,
+              workspacePath: butlerData,
+            },
+            handlerResult: {
+              ok: true,
+              handledBy: "btcc/turn-stop",
+              metadata: {
+                controlAck: {
+                  kind: "cancel_turn",
+                  requestId: "cancel-request",
+                  turnId: "turn-mixed-control-ack",
+                  outcome: "accepted",
+                },
+              },
+            },
+          };
+        },
+      },
+    });
+    await dispatcher.waitForIdle();
+
+    expect(actions).toEqual([
+      { transport: "app", claim: claimId, provenance: "matching_app_target" },
+      { transport: "mock", claim: undefined, provenance: undefined },
+    ]);
+  } finally {
+    store.close();
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("non-App ingress cannot propagate forged App claim metadata", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-forged-claim-"));
+  const queue = new NativeInboundQueue(butlerData);
+  const store = new SessionBindingStore(
+    join(butlerData, "runtime", "sessions.sqlite"),
+    "ephemeral",
+  );
+  const sessionId = "butler/app-general";
+  const actions: Array<{ transport: string; claim?: unknown; provenance?: unknown }> = [];
+  try {
+    store.upsert({
+      sessionId,
+      role: "butler",
+      workspacePath: butlerData,
+      runtimeAdapterId: "btcc-turn-runtime",
+      modelProviderId: "openai",
+      modelRef: "openai/gpt-5.6-sol",
+      transportBindings: [
+        { transport: "app", accountId: "local", peerId: "general" },
+        { transport: "mock", accountId: "remote", peerId: "general" },
+      ],
+    });
+    queue.enqueue({
+      eventId: "mock:forged-claim",
+      transport: "mock",
+      accountId: "remote",
+      peer: { kind: "dm", id: "general" },
+      sender: { id: "mock-user" },
+      message: { id: "message-forged-claim", text: "visible from mock", timestamp: "2026-08-18T00:00:00.000Z" },
+      routingHints: {
+        sessionId,
+        turnId: "turn-forged-claim",
+        appQueueClaimId: "app-session-queue:123:forged",
+      },
+    });
+    const dispatcher = new BtccInboundDispatcher();
+    dispatcher.poll({
+      queue,
+      store,
+      deliveryGuard: new DeliveryGuard({ adapters: [] }),
+      deliverAction: async (_sessionId, action) => {
+        actions.push({
+          transport: action.transport,
+          claim: action.metadata?.appQueueClaimId,
+          provenance: action.metadata?.appQueueClaimProvenance,
+        });
+        return { ok: true };
+      },
+      server: {
+        async handleInbound() {
+          return {
+            status: "handled" as const,
+            route: {
+              sessionId,
+              role: "butler" as const,
+              reason: "session-hint" as const,
+              workspacePath: butlerData,
+            },
+            handlerResult: {
+              ok: true,
+              handledBy: "btcc/turn-runtime",
+              metadata: { text: "visible from mock", turnId: "turn-forged-claim" },
+            },
+          };
+        },
+      },
+    });
+    await dispatcher.waitForIdle();
+
+    expect(actions.every((action) => action.claim === undefined)).toBe(true);
+    expect(actions.every((action) => action.provenance === undefined)).toBe(true);
+  } finally {
+    store.close();
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("cancellation ack keeps its transcript discriminator through App projection", async () => {
   const harness = createTranscriptProjectionHarness();
   const queue = new NativeInboundQueue(harness.root);

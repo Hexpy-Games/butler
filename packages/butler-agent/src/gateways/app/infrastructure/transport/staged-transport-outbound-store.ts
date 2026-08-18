@@ -50,6 +50,21 @@ export class StagedTransportOutboundStore {
     }
   }
 
+  /**
+   * Replace only a stale claim-bearing row.  Callers must invoke this from
+   * the exact-claim transaction; the row's transcript identity remains
+   * immutable for an unchanged claim and legacy/unlinked rows keep the
+   * original conflict behavior.
+   */
+  stageClaimed(input: StagedTransportOutbound, claimId: string): void {
+    const existing = this.load(input.actionId);
+    const existingClaimId = claimIdFromEvent(existing?.event);
+    if (existing && existingClaimId && existingClaimId !== claimId) {
+      this.delete(input.actionId);
+    }
+    this.stage(input);
+  }
+
   load(actionId: string): StagedTransportOutbound | null {
     const row = this.db.query<StagedOutboundRow, [string]>(`
       SELECT action_id, chat_id, event_json, state
@@ -99,4 +114,15 @@ function decodeRow(row: StagedOutboundRow): StagedTransportOutbound {
     event: JSON.parse(row.event_json) as TranscriptEvent,
     state: row.state,
   };
+}
+
+function claimIdFromEvent(event: TranscriptEvent | undefined): string | null {
+  const metadata = event?.payload?.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+  const claimId = (metadata as Record<string, unknown>).appQueueClaimId;
+  return typeof claimId === "string" && claimId.trim().length > 0
+    ? claimId.trim()
+    : null;
 }

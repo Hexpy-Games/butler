@@ -321,6 +321,7 @@ export function createProductionGuidedTurnAgent(
         options: loopOptions,
         parentSignal: signal,
         originalRequest: turn.originalMessage,
+        emptyResponsePolicy: turn.context.emptyResponsePolicy,
         loadFacts: () => loadGuidedOperationalFacts({
           turnId: turn.turnId,
           readBoundWork: () => safeBoundWork(input.durableWork, turn.turnId),
@@ -331,12 +332,17 @@ export function createProductionGuidedTurnAgent(
         }),
       });
       const text = await closeout.reconcileAfterLoop(candidate);
+      const terminalOutcome = turn.context.emptyResponsePolicy === "typed_terminal" &&
+        !text.trim()
+        ? "no_visible" as const
+        : undefined;
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
       const artifacts = collectGuidedFinalArtifacts(
         input.toolJournal.list(turn.turnId),
       );
       return guidedTurnResult({
         content: text,
+        ...(terminalOutcome ? { terminalOutcome } : {}),
         artifacts,
         modelIdentity: acceptedModelIdentity,
         usedTools: toolCalls.usedTools,

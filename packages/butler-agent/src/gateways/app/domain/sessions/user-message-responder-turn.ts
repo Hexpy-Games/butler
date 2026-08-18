@@ -64,6 +64,15 @@ export class AppUserMessageResponderTurn {
           onProgress,
           onTurnEvent,
         ),
+      assertQueueClaim: input.queuedMessageId && input.queueClaimId
+        ? () => {
+          if (!this.input.assertQueuedMessageClaim(
+            input.chatId,
+            input.queuedMessageId!,
+            input.queueClaimId!,
+          )) throw new Error("queued_message_claim_lost");
+        }
+        : undefined,
       touchChat: (chatId) => this.input.touchChat(chatId),
       updateTurnDelivered: (turnId, delivery) => {
         const limitedDelivery =
@@ -82,6 +91,12 @@ export class AppUserMessageResponderTurn {
       },
       updateTurnFailed: (chatId, turnId, safeError) =>
         this.updateTurnFailed(chatId, turnId, safeError),
+      runInTransaction: <T>(callback: () => T) => this.input.runInTransaction(callback),
+      fenceQueuedTurnClaim: (claim) => this.input.fenceQueuedTurnClaim(claim),
+      acknowledgeQueuedMessageForTurn: (claim) =>
+        this.input.acknowledgeQueuedMessageForTurn(claim),
+      terminalResultMessageIdForTurn: (chatId, turnId) =>
+        this.input.terminalResultMessageIdForTurn(chatId, turnId),
     });
   }
 

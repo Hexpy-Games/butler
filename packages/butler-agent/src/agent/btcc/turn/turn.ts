@@ -39,8 +39,10 @@ async function runPreparedTurn(
 ): Promise<BtccTurnOutcome> {
   const prepared = await dependencies.preparation.prepare(request);
   const admittedTurn = await dependencies.turns.findTurn(request.turnId);
-  const progressDestination = admittedTurn?.progressDestination ??
-    destinationForRequest(request);
+  const progressDestination = progressDestinationForRequest(
+    admittedTurn?.progressDestination,
+    request,
+  );
   const progress = projectTurnProgressToEvents(async (event) => {
     prepared.recordEvent(event);
     dependencies.progressEvents.append({
@@ -115,5 +117,16 @@ function destinationForRequest(request: BtccTurnRequest): BtccProgressDestinatio
     accountId: request.accountId,
     peer: { ...request.peer },
     replyToMessageId: request.message.id,
+    ...(request.appQueueClaimId ? { appQueueClaimId: request.appQueueClaimId } : {}),
   };
+}
+
+function progressDestinationForRequest(
+  admitted: BtccProgressDestination | undefined,
+  request: BtccTurnRequest,
+): BtccProgressDestination {
+  const destination = admitted ?? destinationForRequest(request);
+  return request.appQueueClaimId
+    ? { ...destination, appQueueClaimId: request.appQueueClaimId }
+    : destination;
 }

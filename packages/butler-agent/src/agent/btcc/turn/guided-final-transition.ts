@@ -7,7 +7,9 @@ export function guidedFinalTransition(
   turn: TurnRecord,
   result: BtccAgentLoopResult,
 ) {
-  const content = result.content.trim() || operationalFailureMessage(turn.originalMessage);
+  const content = result.terminalOutcome === "no_visible"
+    ? ""
+    : result.content.trim() || operationalFailureMessage(turn.originalMessage);
   const finalPayloadBody = {
     turnId: turn.turnId,
     contentSha256: digest(content),

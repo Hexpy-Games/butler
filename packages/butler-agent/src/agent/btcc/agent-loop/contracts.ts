@@ -37,6 +37,7 @@ export type BtccAgentLoopToolCall = ModelRoundToolCall;
 
 export type BtccAgentLoopResult = {
   content: string;
+  terminalOutcome?: "no_visible";
   route: "direct" | "assisted" | "managed";
   artifacts?: BtccFinalArtifact[];
   modelIdentity?: {

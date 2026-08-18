@@ -492,6 +492,9 @@ test("carries a supported visual tuple from upload through both queues to the na
   );
   const transportInputs: Array<{ attachments?: unknown[] }> = [];
   const serviceClient: ButlerServiceClient = {
+    findAppTurn() {
+      return null;
+    },
     enqueueAppCancellation() {
       throw new Error("cancellation is not expected in this fixture");
     },

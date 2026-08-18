@@ -91,7 +91,7 @@ export function commandFor(
       },
       modelSelection,
       progressDestination: destinationForRequest(request),
-      context: request.trigger.resultScopeRef
+      context: contextForRequest(request, request.trigger.resultScopeRef
         ? {
             ...context,
             baselineObservationScopeRefs: [
@@ -101,7 +101,7 @@ export function commandFor(
               ]),
             ],
           }
-        : context,
+        : context),
     };
   }
   return {
@@ -116,17 +116,29 @@ export function commandFor(
     },
     modelSelection,
     progressDestination: destinationForRequest(request),
-    context,
+    context: contextForRequest(request, context),
   };
 }
 
+function contextForRequest(
+  request: BtccTurnRequest,
+  context: ButlerContextInput,
+): ButlerContextInput {
+  return request.emptyResponsePolicy
+    ? { ...context, emptyResponsePolicy: request.emptyResponsePolicy }
+    : context;
+}
+
 function destinationForRequest(request: BtccTurnRequest): BtccProgressDestination {
-  return request.progressDestination ?? {
+  const destination = request.progressDestination ?? {
     transport: request.transport,
     accountId: request.accountId,
     peer: { ...request.peer },
     replyToMessageId: request.message.id,
   };
+  return request.appQueueClaimId
+    ? { ...destination, appQueueClaimId: request.appQueueClaimId }
+    : destination;
 }
 
 export function inboundEnvelopeFor(request: BtccTurnRequest): InboundEnvelope {

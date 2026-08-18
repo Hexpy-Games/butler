@@ -12,6 +12,8 @@ import {
 import type { MessageRow } from "../core/records.ts";
 import type { AppTransportProjectionStoreOptions } from "./transport-projection-contract.ts";
 import { artifactFilesFromOutbound } from "./outbound-artifact-files.ts";
+import { safeOptionalShortToken } from "../core/projection-safe-values.ts";
+import { projectClaimedOutbound } from "./claimed-outbound-projection.ts";
 
 export function projectAppFinalResult(input: {
   options: AppTransportProjectionStoreOptions;
@@ -28,6 +30,7 @@ export function projectAppFinalResult(input: {
   metadata: Record<string, unknown>;
   terminalRecoverableCorrection: boolean;
   queuedFinalProjection: "accept" | "reject";
+  deleteStagedOutbound: () => void;
 }): boolean {
   const {
     options,
@@ -46,8 +49,6 @@ export function projectAppFinalResult(input: {
     return false;
   }
 
-  projectExecutionModelFromTranscript(options.db, turnId, metadata.executionModel);
-
   const text = sanitizeAppTransportFinalText(message.text);
   const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
   const delivery = deliveryLimitationMetadataFromRecord(metadata);
@@ -55,6 +56,23 @@ export function projectAppFinalResult(input: {
   const noVisibleReply =
     metadata.noVisibleReply === true ||
     shouldTreatLimitedFinalAsNoVisible(artifacts, delivery, metadata);
+  const hasDurableQueueClaim = queuedSettlementRequired(options, chatId, turnId, metadata);
+  if (noVisibleReply && hasDurableQueueClaim) {
+    const settled = projectClaimedOutbound(
+      options,
+      { chatId, turnId, metadata },
+      () => {
+        input.deleteStagedOutbound();
+        projectExecutionModelFromTranscript(options.db, turnId, metadata.executionModel);
+        return projectNoVisibleTerminalFailure(options, chatId, turnId, metadata);
+      },
+    );
+    if (!settled) return false;
+    markProjectedTransportEvent(actionId, event.eventId, chatId);
+    options.touchChat(chatId);
+    void options.drainQueuedSessionMessages(chatId).catch(() => undefined);
+    return true;
+  }
   if (
     noVisibleReply &&
     hasUnsupportedNoVisibleDeliveryState(metadata, delivery)
@@ -64,96 +82,205 @@ export function projectAppFinalResult(input: {
   }
   if (!text && artifacts.length === 0 && !noVisibleReply) return false;
   if (noVisibleReply) {
+    if (!hasDurableQueueClaim) {
+      input.deleteStagedOutbound();
+      projectExecutionModelFromTranscript(options.db, turnId, metadata.executionModel);
+      options.finalizeResponderLimitedDelivery(chatId, turnId, {
+        text: null,
+        reason: delivery?.limitations[0] ?? "Internal recovery required.",
+        delivery: deliveryStateFromProjectedNoVisibleFinal(delivery),
+      });
+      markProjectedTransportEvent(actionId, event.eventId, chatId);
+      options.touchChat(chatId);
+      return true;
+    }
+    input.deleteStagedOutbound();
     options.finalizeResponderLimitedDelivery(chatId, turnId, {
       text: null,
       reason: delivery?.limitations[0] ?? "Internal recovery required.",
       delivery: deliveryStateFromProjectedNoVisibleFinal(delivery),
     });
+    const settled = settleQueuedTurn(options, chatId, turnId, metadata, undefined, "no_visible_result");
+    if (!settled) {
+      if (queuedSettlementRequired(options, chatId, turnId, metadata)) return false;
+      markProjectedTransportEvent(actionId, event.eventId, chatId);
+      options.touchChat(chatId);
+      return true;
+    }
     markProjectedTransportEvent(actionId, event.eventId, chatId);
     options.touchChat(chatId);
+    void options.drainQueuedSessionMessages(chatId).catch(() => undefined);
     return true;
   }
 
-  const existing = options.getLatestAssistantMessageForTurn(turnId);
-  const artifactFiles = artifactFilesFromOutbound({
-    butlerData: options.butlerData,
-    butlerHome: options.butlerHome,
-    messageFiles: options.messageFiles,
-    getChatRow: options.getChatRow,
-    getProjectRow: options.getProjectRow,
-    chatId,
-    artifacts,
-    existingMessageId: existing?.id,
-  });
-  applyGeneratedSessionTitleFromProjection(options, {
-    chatId,
-    turnId,
-    title: metadata.generatedSessionTitle,
-  });
-  if (
-    isSameDeliveredFinal(existing, text, options.getTurn(turnId).state) &&
-    artifactFiles.length === 0
-  ) {
-    markProjectedTransportEvent(actionId, event.eventId, chatId);
-    return false;
-  }
+  let settledForDrain = false;
+  const projected = projectClaimedOutbound(
+    options,
+    { chatId, turnId, metadata },
+    () => {
+      input.deleteStagedOutbound();
+      projectExecutionModelFromTranscript(options.db, turnId, metadata.executionModel);
+      const existing = options.getLatestAssistantMessageForTurn(turnId);
+      const artifactFiles = artifactFilesFromOutbound({
+        butlerData: options.butlerData,
+        butlerHome: options.butlerHome,
+        messageFiles: options.messageFiles,
+        getChatRow: options.getChatRow,
+        getProjectRow: options.getProjectRow,
+        chatId,
+        artifacts,
+        existingMessageId: existing?.id,
+      });
+      applyGeneratedSessionTitleFromProjection(options, {
+        chatId,
+        turnId,
+        title: metadata.generatedSessionTitle,
+      });
+      if (
+        isSameDeliveredFinal(existing, text, options.getTurn(turnId).state) &&
+        artifactFiles.length === 0
+      ) {
+        const settled = settleQueuedTurn(options, chatId, turnId, metadata);
+        if (!settled && queuedSettlementRequired(options, chatId, turnId, metadata)) {
+          return false;
+        }
+        markProjectedTransportEvent(actionId, event.eventId, chatId);
+        settledForDrain = settled;
+        return true;
+      }
 
-  const files = options.messageFiles.createResponderFiles(
-    chatId,
-    artifactFiles,
+      const files = options.messageFiles.createResponderFiles(
+        chatId,
+        artifactFiles,
+      );
+      if (!options.hasTurnEventKind(turnId, "message.final.started")) {
+        options.appendTurnEvent(chatId, turnId, {
+          kind: "message.final.started",
+          payload: { safeLabel: "Preparing final answer" },
+        });
+      }
+      const replies = options.insertOrReplaceAssistantReplies(
+        chatId,
+        turnId,
+        text ? [text] : [],
+        files,
+      );
+      if (
+        terminalRecoverableCorrection ||
+        !options.hasTurnEventKind(turnId, "message.final.completed")
+      ) {
+        options.appendTurnEvent(chatId, turnId, {
+          kind: "message.final.completed",
+          payload: {
+            safeLabel: limitedDelivery
+              ? "Final answer ready with limitations"
+              : "Final answer ready",
+            textChars: text.length,
+            ...(delivery ?? {}),
+          },
+        });
+      }
+      const deliveredTurn = options.updateTurnState(turnId, "delivered", {
+        safeStatusLabel: limitedDelivery
+          ? "Delivered with limitations"
+          : "Delivered",
+        retryable: false,
+        cancellable: false,
+        safeErrorCode: null,
+      });
+      options.appendTerminalTurnStateChanged(deliveredTurn);
+      if (
+        terminalRecoverableCorrection ||
+        !options.hasTurnEventKind(turnId, "turn.completed")
+      ) {
+        options.appendTurnEvent(chatId, turnId, {
+          kind: "turn.completed",
+          payload: {
+            safeLabel: limitedDelivery ? "Completed with limitations" : "Completed",
+            ...(delivery ?? {}),
+          },
+        });
+      }
+      const settled = settleQueuedTurn(
+        options,
+        chatId,
+        turnId,
+        metadata,
+        replies.at(-1)?.id,
+      );
+      if (!settled && queuedSettlementRequired(options, chatId, turnId, metadata)) {
+        return false;
+      }
+      markProjectedTransportEvent(actionId, event.eventId, chatId);
+      options.touchChat(chatId);
+      settledForDrain = settled;
+      return true;
+    },
   );
-  if (!options.hasTurnEventKind(turnId, "message.final.started")) {
-    options.appendTurnEvent(chatId, turnId, {
-      kind: "message.final.started",
-      payload: { safeLabel: "Preparing final answer" },
-    });
-  }
-  options.insertOrReplaceAssistantReplies(
+  if (!projected) return false;
+  if (settledForDrain) void options.drainQueuedSessionMessages(chatId).catch(() => undefined);
+  return true;
+}
+
+function settleQueuedTurn(
+  options: AppTransportProjectionStoreOptions,
+  chatId: string,
+  turnId: string,
+  metadata: Record<string, unknown>,
+  resultMessageId?: string,
+  safeErrorCode?: string,
+): boolean {
+  const claimId = safeOptionalShortToken(metadata.appQueueClaimId);
+  if (!claimId) return false;
+  return options.acknowledgeQueuedMessageForTurn({
     chatId,
     turnId,
-    text ? [text] : [],
-    files,
-  );
-  if (
-    terminalRecoverableCorrection ||
-    !options.hasTurnEventKind(turnId, "message.final.completed")
-  ) {
+    claimId,
+    ...(resultMessageId ? { resultMessageId } : {}),
+    ...(safeErrorCode ? { safeErrorCode } : {}),
+  });
+}
+
+function queuedSettlementRequired(
+  options: AppTransportProjectionStoreOptions,
+  chatId: string,
+  turnId: string,
+  metadata: Record<string, unknown>,
+): boolean {
+  return options.queuedTurnClaimStatus(
+    chatId,
+    turnId,
+    safeOptionalShortToken(metadata.appQueueClaimId),
+  ) !== "unlinked";
+}
+
+function projectNoVisibleTerminalFailure(
+  options: AppTransportProjectionStoreOptions,
+  chatId: string,
+  turnId: string,
+  metadata: Record<string, unknown>,
+): boolean {
+  const safeError = {
+    code: "no_visible_result",
+    message: "Butler could not produce a visible answer for this request.",
+  };
+  if (!options.hasTurnEventKind(turnId, "turn.failed")) {
     options.appendTurnEvent(chatId, turnId, {
-      kind: "message.final.completed",
-    payload: {
-      safeLabel: limitedDelivery
-        ? "Final answer ready with limitations"
-          : "Final answer ready",
-        textChars: text.length,
-        ...(delivery ?? {}),
+      kind: "turn.failed",
+      payload: {
+        safeLabel: "No visible answer",
+        safeErrorCode: safeError.code,
       },
     });
   }
-  const deliveredTurn = options.updateTurnState(turnId, "delivered", {
-    safeStatusLabel: limitedDelivery
-      ? "Delivered with limitations"
-      : "Delivered",
+  const failedTurn = options.updateTurnState(turnId, "failed", {
+    safeStatusLabel: "Failed",
+    safeErrorCode: safeError.code,
     retryable: false,
     cancellable: false,
-    safeErrorCode: null,
   });
-  options.appendTerminalTurnStateChanged(deliveredTurn);
-  if (
-    terminalRecoverableCorrection ||
-    !options.hasTurnEventKind(turnId, "turn.completed")
-  ) {
-    options.appendTurnEvent(chatId, turnId, {
-      kind: "turn.completed",
-      payload: {
-        safeLabel: limitedDelivery ? "Completed with limitations" : "Completed",
-        ...(delivery ?? {}),
-      },
-    });
-  }
-  markProjectedTransportEvent(actionId, event.eventId, chatId);
-  options.touchChat(chatId);
-  void options.drainQueuedSessionMessages(chatId).catch(() => undefined);
-  return true;
+  options.appendTerminalTurnStateChanged(failedTurn);
+  return settleQueuedTurn(options, chatId, turnId, metadata, undefined, safeError.code);
 }
 
 function projectExecutionModelFromTranscript(

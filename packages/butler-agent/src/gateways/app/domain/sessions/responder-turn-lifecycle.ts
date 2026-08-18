@@ -32,6 +32,8 @@ export interface CompleteResponderTurnInput {
   text: string;
   responder: AppMessageResponder;
   options: SendMessageOptions;
+  queuedMessageId?: string;
+  queueClaimId?: string;
 }
 
 export interface CompleteResponderTurnContext<FileRecord> {
@@ -75,12 +77,42 @@ export interface CompleteResponderTurnContext<FileRecord> {
     turnId: string,
     safeError: { code: string; message: string; cause?: string },
   ): TurnRecord;
+  runInTransaction<T>(callback: () => T): T;
+  fenceQueuedTurnClaim(input: {
+    chatId: string;
+    turnId: string;
+    claimId: string;
+  }): boolean;
+  acknowledgeQueuedMessageForTurn(input: {
+    chatId: string;
+    turnId: string;
+    claimId: string;
+    resultMessageId?: string;
+    safeErrorCode?: string | null;
+  }): boolean;
+  terminalResultMessageIdForTurn(chatId: string, turnId: string): string | undefined;
+  assertQueueClaim?: () => void;
 }
 
 export async function completeResponderTurn<FileRecord>(
   input: CompleteResponderTurnInput,
   context: CompleteResponderTurnContext<FileRecord>,
 ): Promise<CompletedResponderTurnResult> {
+  const hasQueuedClaim = Boolean(input.queuedMessageId && input.queueClaimId);
+  const onProgress = hasQueuedClaim
+    ? (row: ProgressSummaryInput) => {
+        runClaimedResponderMutation(input, context, () => {
+          context.appendProgress(row);
+        });
+      }
+    : context.appendProgress;
+  const onTurnEvent = hasQueuedClaim
+    ? (event: RuntimeTurnEventInput) => {
+        runClaimedResponderMutation(input, context, () => {
+          context.appendTurnEvent(event);
+        });
+      }
+    : context.appendTurnEvent;
   try {
     const response = await context.runResponder(
       input.chatId,
@@ -89,53 +121,58 @@ export async function completeResponderTurn<FileRecord>(
       input.text,
       input.responder,
       input.options,
-      context.appendProgress,
-      context.appendTurnEvent,
+      onProgress,
+      onTurnEvent,
     );
-    for (const row of response.progress ?? []) context.appendProgress(row);
-    const responderFiles = context.createResponderMessageFiles(
-      input.chatId,
-      response.files ?? [],
-    );
+    context.assertQueueClaim?.();
     const limitedDelivery = response.delivery?.delivery_state === "delivered_with_limitations" ||
       response.delivery?.delivery_state === "delivered_with_continuation"
       ? response.delivery
       : null;
-    if (!context.hasTurnEventKind(input.turnId, "message.final.started")) {
-      context.appendTurnEvent({
-        kind: "message.final.started",
-        payload: { safeLabel: "Preparing final answer" },
-      });
-    }
-    const replies = context.insertOrReplaceAssistantReplies(
-      input.chatId,
-      input.turnId,
-      response.texts,
-      responderFiles,
-    );
-    if (!context.hasTurnEventKind(input.turnId, "message.final.completed")) {
-      context.appendTurnEvent({
-        kind: "message.final.completed",
-        payload: {
-          safeLabel: limitedDelivery
-            ? "Final answer ready with limitations"
-            : "Final answer ready",
-          textChars: response.texts.join("\n\n").length,
-          ...(limitedDelivery ?? {}),
-        },
-      });
-    }
-    const deliveredTurn = context.updateTurnDelivered(input.turnId, limitedDelivery);
-    if (!context.hasTurnEventKind(input.turnId, "turn.completed")) {
-      context.appendTurnEvent({
-        kind: "turn.completed",
-        payload: {
-          safeLabel: limitedDelivery ? "Completed with limitations" : "Completed",
-          ...(limitedDelivery ?? {}),
-        },
-      });
-    }
-    context.touchChat(input.chatId);
+    const committed = runClaimedResponderMutation(input, context, () => {
+      for (const row of response.progress ?? []) context.appendProgress(row);
+      const responderFiles = context.createResponderMessageFiles(
+        input.chatId,
+        response.files ?? [],
+      );
+      if (!context.hasTurnEventKind(input.turnId, "message.final.started")) {
+        context.appendTurnEvent({
+          kind: "message.final.started",
+          payload: { safeLabel: "Preparing final answer" },
+        });
+      }
+      const replies = context.insertOrReplaceAssistantReplies(
+        input.chatId,
+        input.turnId,
+        response.texts,
+        responderFiles,
+      );
+      if (!context.hasTurnEventKind(input.turnId, "message.final.completed")) {
+        context.appendTurnEvent({
+          kind: "message.final.completed",
+          payload: {
+            safeLabel: limitedDelivery
+              ? "Final answer ready with limitations"
+              : "Final answer ready",
+            textChars: response.texts.join("\n\n").length,
+            ...(limitedDelivery ?? {}),
+          },
+        });
+      }
+      const deliveredTurn = context.updateTurnDelivered(input.turnId, limitedDelivery);
+      if (!context.hasTurnEventKind(input.turnId, "turn.completed")) {
+        context.appendTurnEvent({
+          kind: "turn.completed",
+          payload: {
+            safeLabel: limitedDelivery ? "Completed with limitations" : "Completed",
+            ...(limitedDelivery ?? {}),
+          },
+        });
+      }
+      context.touchChat(input.chatId);
+      acknowledgeClaimedResponderTurn(input, context, replies.at(-1)?.id);
+      return { replies, deliveredTurn };
+    });
     await context.drainQueuedSessionMessages(
       input.chatId,
       input.responder,
@@ -146,21 +183,26 @@ export async function completeResponderTurn<FileRecord>(
       ? publicDeliveryMetadataForProjection(limitedDelivery)
       : null;
     const projectedReplies = publicLimitedDelivery
-      ? replies.map((reply) => ({ ...reply, ...publicLimitedDelivery }))
-      : replies;
+      ? committed.replies.map((reply) => ({ ...reply, ...publicLimitedDelivery }))
+      : committed.replies;
     const reply = projectedReplies.at(-1)!;
     return {
       reply,
       replies: projectedReplies,
-      turn: deliveredTurn,
+      turn: committed.deliveredTurn,
       next_cursor: reply.cursor,
     };
   } catch (error) {
+    if (isQueueClaimLostError(error)) throw error;
     if (isResponderCancelError(error)) {
-      const cancelledTurn = context.finalizeCancelledTurn(
-        input.chatId,
-        input.turnId,
-      );
+      const cancelledTurn = runClaimedResponderMutation(input, context, () => {
+        const cancelled = context.finalizeCancelledTurn(
+          input.chatId,
+          input.turnId,
+        );
+        acknowledgeClaimedResponderTurn(input, context, undefined, "turn_cancelled");
+        return cancelled;
+      });
       await context.drainQueuedSessionMessages(
         input.chatId,
         input.responder,
@@ -173,12 +215,21 @@ export async function completeResponderTurn<FileRecord>(
       };
     }
     const safeError = appSafeResponderError(error);
-    const failedTurn = context.updateTurnFailed(
-      input.chatId,
-      input.turnId,
-      safeError,
-    );
-    context.touchChat(input.chatId);
+    const failedTurn = runClaimedResponderMutation(input, context, () => {
+      const failed = context.updateTurnFailed(
+        input.chatId,
+        input.turnId,
+        safeError,
+      );
+      context.touchChat(input.chatId);
+      acknowledgeClaimedResponderTurn(
+        input,
+        context,
+        context.terminalResultMessageIdForTurn(input.chatId, input.turnId),
+        failed.safe_error_code ?? safeError.code,
+      );
+      return failed;
+    });
     await context.drainQueuedSessionMessages(
       input.chatId,
       input.responder,
@@ -191,6 +242,42 @@ export async function completeResponderTurn<FileRecord>(
   } finally {
     context.cleanupTurnEventSequences(input.chatId, input.turnId);
   }
+}
+
+function runClaimedResponderMutation<T, FileRecord>(
+  input: CompleteResponderTurnInput,
+  context: CompleteResponderTurnContext<FileRecord>,
+  mutation: () => T,
+): T {
+  if (!input.queuedMessageId || !input.queueClaimId) return mutation();
+  return context.runInTransaction(() => {
+    if (!context.fenceQueuedTurnClaim({
+      chatId: input.chatId,
+      turnId: input.turnId,
+      claimId: input.queueClaimId!,
+    })) throw new Error("queued_message_claim_lost");
+    return mutation();
+  });
+}
+
+function acknowledgeClaimedResponderTurn<FileRecord>(
+  input: CompleteResponderTurnInput,
+  context: CompleteResponderTurnContext<FileRecord>,
+  resultMessageId?: string,
+  safeErrorCode?: string,
+): void {
+  if (!input.queuedMessageId || !input.queueClaimId) return;
+  if (!context.acknowledgeQueuedMessageForTurn({
+    chatId: input.chatId,
+    turnId: input.turnId,
+    claimId: input.queueClaimId,
+    ...(resultMessageId ? { resultMessageId } : {}),
+    ...(safeErrorCode ? { safeErrorCode } : {}),
+  })) throw new Error("queued_message_claim_lost");
+}
+
+function isQueueClaimLostError(error: unknown): boolean {
+  return error instanceof Error && error.message === "queued_message_claim_lost";
 }
 
 export function isResponderCancelError(error: unknown): boolean {
