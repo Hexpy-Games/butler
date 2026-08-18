@@ -96,6 +96,8 @@ export interface InboundEnvelope {
       requestedModelRef: ModelRef;
       reasoningEffort: string;
     };
+    /** Internal Allow adapter identity; never populated by arbitrary clients. */
+    authorityRequestRef?: string;
   };
   nativeStewardContext?: {
     version: 1;

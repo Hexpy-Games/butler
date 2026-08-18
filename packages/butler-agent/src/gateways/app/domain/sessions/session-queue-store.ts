@@ -170,7 +170,10 @@ export class AppSessionQueueStore {
       reservation = this.db.transaction(() => {
         const concurrent = this.getQueuedMessageByClientId(chatId, clientMessageId);
         if (concurrent) return { concurrent };
-        const controlResolution = admittedControls ?? this.controlsForMessageSend(chatId, input);
+        const resolvedControls = admittedControls ?? this.controlsForMessageSend(chatId, input);
+        const controlResolution = input.authority_request_ref
+          ? { ...resolvedControls, authority_request_ref: input.authority_request_ref }
+          : resolvedControls;
         const now = new Date().toISOString();
         const queuedId = `queued-${crypto.randomUUID()}`;
         this.db
@@ -278,6 +281,13 @@ export class AppSessionQueueStore {
         "Queued message not found.",
       );
     }
+    if (this.controlResolutionFromRow(current)?.authority_request_ref) {
+      throw new AppStoreOperationError(
+        409,
+        "authority_queue_immutable",
+        "Approved command queue entries cannot be edited.",
+      );
+    }
     const text =
       typeof input.text === "string" ? input.text.trim() : current.text;
     const attachableFiles =
@@ -347,6 +357,13 @@ export class AppSessionQueueStore {
         404,
         "queued_message_not_found",
         "Queued message not found.",
+      );
+    }
+    if (this.controlResolutionFromRow(current)?.authority_request_ref) {
+      throw new AppStoreOperationError(
+        409,
+        "authority_queue_immutable",
+        "Approved command queue entries cannot be deleted.",
       );
     }
     const now = new Date().toISOString();
@@ -826,6 +843,7 @@ function queuedInputIdentityDigest(
       reasoning_effort: input.reasoning_effort ?? null,
       access_mode: input.access_mode ?? null,
       plan_mode: input.plan_mode ?? null,
+      authority_request_ref: input.authority_request_ref ?? null,
     },
     admission_identity: files.map((file) => ({
       id: file.id,

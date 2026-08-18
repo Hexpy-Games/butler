@@ -87,6 +87,7 @@ export function createProductionBtccComposition(input: {
       operationResultReader: stores.guidedOperationResultReader,
       effectJournal: stores.guidedEffectJournal,
       durableWork: stores.durableWork,
+      authority: stores.authority,
       modelRound: input.modelRound,
       sessionBindingStore: bindings,
     }),
@@ -116,6 +117,7 @@ export function createProductionBtccComposition(input: {
     btcc: assembly.btcc,
     host: assembly.host,
     ready: Promise.resolve(),
+    authority: stores.authority,
   };
 }
 

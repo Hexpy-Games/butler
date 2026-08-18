@@ -193,6 +193,9 @@ export class AppUserMessageTurnStore {
         text: input.text,
         executionControls,
         queueClaimId: claimId,
+        ...(input.controls.authority_request_ref
+          ? { authorityRequestRef: input.controls.authority_request_ref }
+          : {}),
         ...(input.visualAdmission ? { visualAdmission: input.visualAdmission } : {}),
       });
       assertQueuedClaim(this.input, input.queued, claimId);
@@ -281,6 +284,9 @@ export class AppUserMessageTurnStore {
         executionControls,
         queueClaimId: claimId,
         queueReplay: true,
+        ...(input.controls.authority_request_ref
+          ? { authorityRequestRef: input.controls.authority_request_ref }
+          : {}),
         ...(input.visualAdmission ? { visualAdmission: input.visualAdmission } : {}),
       });
       assertQueuedClaim(this.input, input.queued, claimId);

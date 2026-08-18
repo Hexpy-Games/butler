@@ -34,6 +34,8 @@ export type ButlerContextInput = {
   executionPolicy?: ButlerExecutionPolicy;
   attachments?: ButlerAttachmentRef[];
   imageAdmission?: VisualImageAdmissionResult;
+  /** Internal App Allow identity bound to this fresh source Turn. */
+  authorityRequestRef?: string;
 };
 
 export type ButlerExecutionPolicy = {

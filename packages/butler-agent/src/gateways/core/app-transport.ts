@@ -122,6 +122,12 @@ function verifyAppTurnContext(
   )) {
     throw new Error("app_turn_context_workspace_invalid");
   }
+  if (
+    context.authorityRequestRef !== undefined &&
+    (!context.authorityRequestRef.trim() || context.authorityRequestRef.length > 256)
+  ) {
+    throw new Error("app_turn_context_authority_ref_invalid");
+  }
 }
 
 export function createAppCancellationEnvelope(

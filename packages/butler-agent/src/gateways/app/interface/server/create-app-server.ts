@@ -6,6 +6,7 @@ import {
   AppStoreOperationError,
   type AppMessageResponder,
 } from "../../application/store/app-server-store.ts";
+import { openBtccAuthorityStore } from "../../../../agent/adapters/index.ts";
 import { apiError } from "../protocol/app-protocol.ts";
 import {
   devCorsHeaders,
@@ -58,6 +59,10 @@ function createComposedAppServer(
   const store = createStore(
     { ...options, butlerData },
   );
+  const authorityStore = options.authority
+    ? undefined
+    : openBtccAuthorityStore({ butlerData });
+  const authority = options.authority ?? authorityStore!.authority;
   const messageRateLimiter = new FixedWindowRateLimiter(
     options.messageRateLimit,
   );
@@ -88,6 +93,7 @@ function createComposedAppServer(
           messageRateLimiter,
           localAuth,
           butlerData,
+          authority,
           serverShutdownSignal: serverShutdownController.signal,
           setRequestIdleTimeout(seconds) {
             bunServer.timeout(request, seconds);
@@ -119,6 +125,7 @@ function createComposedAppServer(
       serverShutdownController.abort();
       server.stop();
       store.close();
+      authorityStore?.close();
     },
   };
 }

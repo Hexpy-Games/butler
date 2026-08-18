@@ -77,6 +77,7 @@ export class AppTransportQueueStore {
     queueClaimId?: string;
     queueReplay?: boolean;
     visualAdmission?: VisualImageAdmissionResult;
+    authorityRequestRef?: string;
   }): TurnRecord {
     let transportInput: Parameters<ButlerServiceClient["enqueueAppTurn"]>[0];
     let turnBeforeEnqueue: TurnRecord;
@@ -138,6 +139,9 @@ export class AppTransportQueueStore {
             requestedModelRef: executionControls.model_ref,
             reasoningEffort: executionControls.reasoning_effort,
           },
+          ...(input.authorityRequestRef
+            ? { authorityRequestRef: input.authorityRequestRef }
+            : {}),
         },
         attachments: this.messageFiles.attachmentsForTransport(
           input.message.id,

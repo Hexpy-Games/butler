@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
  */
 export const AGENT_BTCC_STATEFUL_TABLES = [
   "btcc_admission_claims",
+  "btcc_authority_requests",
   "btcc_canonical_deliveries",
   "btcc_checkpoints",
   "btcc_context_documents",

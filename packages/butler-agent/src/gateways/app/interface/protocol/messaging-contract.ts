@@ -51,6 +51,8 @@ export interface MessageSendRequest {
   access_mode?: SettingsView["access_mode"];
   plan_mode?: boolean;
   queue_policy?: "send_now" | "enqueue_if_busy";
+  /** @internal Durable authority Allow adapter identity. */
+  authority_request_ref?: string;
 }
 
 export interface MessageSendResult {
@@ -93,6 +95,8 @@ export interface QueueMessageRequest {
   reasoning_effort?: SettingsView["reasoning_effort"];
   access_mode?: SettingsView["access_mode"];
   plan_mode?: boolean;
+  /** @internal Durable authority Allow adapter identity. */
+  authority_request_ref?: string;
 }
 
 export interface UpdateQueuedMessageRequest {
@@ -102,6 +106,8 @@ export interface UpdateQueuedMessageRequest {
   reasoning_effort?: SettingsView["reasoning_effort"];
   access_mode?: SettingsView["access_mode"];
   plan_mode?: boolean;
+  /** @internal Durable authority Allow adapter identity. */
+  authority_request_ref?: string;
 }
 
 export interface TurnRecord {
