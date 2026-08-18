@@ -5,11 +5,13 @@ import {
   BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA,
 } from "./guided-work-schema.ts";
 import { BTCC_GUIDED_EFFECT_RECOVERY_PAYLOAD_TABLE_SCHEMA } from "./guided-effect-schema.ts";
+import { BTCC_AUTHORITY_SCHEMA } from "./authority-schema.ts";
 
 type ColumnRow = { name: string };
 
 export function migrateBtccSchema(db: Database): void {
   db.transaction(() => {
+    migrateLegacyAuthorityDecisionConstraint(db);
     ensureLegacyWorkImportProvenance(db);
     ensureGuidedToolJournalOrder(db);
     ensureGuidedWorkResultOrder(db);
@@ -26,6 +28,29 @@ export function migrateBtccSchema(db: Database): void {
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
+}
+
+function migrateLegacyAuthorityDecisionConstraint(db: Database): void {
+  const definition = tableDefinition(db, "btcc_authority_requests");
+  if (!definition || !hasLegacyAuthorityDecisionCheck(definition)) return;
+
+  const legacyTable = "btcc_authority_requests_af02a_legacy";
+  db.exec(`ALTER TABLE btcc_authority_requests RENAME TO ${legacyTable}`);
+  db.exec("DROP INDEX IF EXISTS idx_btcc_authority_requests_owner_pending");
+  db.exec("DROP INDEX IF EXISTS idx_btcc_authority_requests_slot_action");
+  db.exec(BTCC_AUTHORITY_SCHEMA);
+  db.exec(`
+    INSERT INTO btcc_authority_requests
+    SELECT * FROM ${legacyTable}
+    ORDER BY rowid
+  `);
+  db.exec(`DROP TABLE ${legacyTable}`);
+}
+
+function hasLegacyAuthorityDecisionCheck(definition: string): boolean {
+  return /decision\s+TEXT\s+NOT\s+NULL\s+CHECK\s*\(\s*decision\s+IN\s*\(\s*'pending'\s*,\s*'allowed'\s*\)\s*\)/iu.test(
+    definition,
+  );
 }
 
 function ensureGuidedWorkDispositionSchema(db: Database): void {

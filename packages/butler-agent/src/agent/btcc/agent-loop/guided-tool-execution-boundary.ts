@@ -17,6 +17,7 @@ import type {
   AuthorityCommandInput,
   PrincipalAuthority,
 } from "../authority/index.ts";
+import { AUTHORITY_DENIAL_TEXT } from "../authority/index.ts";
 import {
   acceptedGuidedPlanActionKey,
   deferredGuidedAuthorityResult,
@@ -143,6 +144,13 @@ export function createGuidedToolExecutionBoundary(
           "The approved command is bound to a different Work or session.",
         );
       }
+      if (authorityExecution.decision === "denied") {
+        return ordinaryGuidedEffectError(
+          "authority_request_denied",
+          AUTHORITY_DENIAL_TEXT,
+          { next_action: "Report the denial or choose a non-effectful alternative." },
+        );
+      }
       effectiveCall = {
         ...call,
         args: authorityExecution.normalizedInput,
@@ -211,7 +219,7 @@ export function createGuidedToolExecutionBoundary(
         return ordinaryGuidedEffectError(actionKey.code, actionKey.message);
       }
       try {
-        authority.admit({
+        const admission = authority.admit({
           ownerSessionId: input.ownerSessionId,
           sourceSessionId: input.ownerSessionId,
           sourceTurnId: input.sourceTurnId,
@@ -226,6 +234,13 @@ export function createGuidedToolExecutionBoundary(
           modelRef: input.modelRef,
           reasoningEffort: input.reasoningEffort,
         });
+        if (admission.status === "denied") {
+          return ordinaryGuidedEffectError(
+            "authority_request_denied",
+            admission.denialText,
+            { next_action: "Report the denial or choose a non-effectful alternative." },
+          );
+        }
       } catch (error) {
         return ordinaryGuidedEffectError(
           error instanceof Error ? error.message : "authority_request_identity_mismatch",

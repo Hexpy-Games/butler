@@ -1,7 +1,11 @@
 export type AuthorityCategory = "command";
-export type AuthorityDecision = "pending" | "allowed";
+export type AuthorityDecision = "pending" | "allowed" | "denied";
 export type AuthorityScheduleState = "pending" | "scheduled";
 export type AuthorityOutcome = "pending" | "applied" | "failed";
+
+/** Fixed safe projection for a terminal self-session Deny decision. */
+export const AUTHORITY_DENIAL_TEXT =
+  "Reviewed command denied. No command was run." as const;
 
 export type AuthorityCommandInput = {
   command: string;
@@ -49,6 +53,11 @@ export type AuthorityAdmissionResult =
       sourceWorkId: string;
       normalizedTarget: string;
       normalizedInput: AuthorityCommandInput;
+    }
+  | {
+      status: "denied";
+      requestRef: string;
+      denialText: typeof AUTHORITY_DENIAL_TEXT;
     };
 
 export type AuthorityAllowResult = {
@@ -60,7 +69,19 @@ export type AuthorityAllowResult = {
   modelRef: string;
   reasoningEffort: string;
   scheduleState: AuthorityScheduleState;
-  decision: AuthorityDecision;
+  decision: "allowed";
+};
+
+export type AuthorityDenyResult = {
+  requestRef: string;
+  sourceSessionId: string;
+  sourceWorkId: string;
+  scheduleClientMessageId: string;
+  scheduleInputText: string;
+  modelRef: string;
+  reasoningEffort: string;
+  scheduleState: AuthorityScheduleState;
+  decision: "denied";
 };
 
 export type AuthorityStoredExecution = {
@@ -75,7 +96,7 @@ export type AuthorityStoredExecution = {
   capability: string;
   normalizedTarget: string;
   normalizedInput: AuthorityCommandInput;
-  decision: AuthorityDecision;
+  decision: "allowed" | "denied";
   outcome: AuthorityOutcome;
 };
 
@@ -100,6 +121,7 @@ export interface PrincipalAuthorityRepository {
   findByPublicRef(requestRef: string): AuthorityRecord | null;
   listPending(ownerSessionId: string): AuthorityRecord[];
   allow(requestRef: string, ownerSessionId: string, now: string): AuthorityRecord | null;
+  deny(requestRef: string, ownerSessionId: string, now: string): AuthorityRecord | null;
   markScheduled(
     requestRef: string,
     ownerSessionId: string,
@@ -153,6 +175,10 @@ export interface PrincipalAuthority {
     ownerSessionId: string;
     requestRef: string;
   }): AuthorityAllowResult;
+  deny(input: {
+    ownerSessionId: string;
+    requestRef: string;
+  }): AuthorityDenyResult;
   markScheduled(input: {
     ownerSessionId: string;
     requestRef: string;

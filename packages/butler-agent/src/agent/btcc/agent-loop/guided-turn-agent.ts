@@ -37,10 +37,8 @@ import { renderPhaseScopedGuidedTurnRequest } from "./phase-scoped-memory-projec
 import { createFileStoreVerifiedImagePayloadPort } from "../../image-attachment/index.ts";
 import {
   createGuidedAskFirstProgress,
+  createGuidedAuthorityProjection,
   createGuidedOperationalProgressCapture,
-  createGuidedPublicActivity,
-  createGuidedPublicLoopCallbacks,
-  projectGuidedAuthorityOutcome,
 } from "./guided-operational-progress.ts";
 import { loadGuidedOperationalFacts } from "./guided-operational-facts.ts";
 import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
@@ -84,7 +82,6 @@ export function createProductionGuidedTurnAgent(
           : progress,
       );
       const observedProgress = progressCapture.observer;
-      const authorityContinuation = Boolean(turn.context.authorityRequestRef);
       const continuationBudget = guidedContinuationBudget(
         turn,
         transitionContinuationBudget,
@@ -192,9 +189,14 @@ export function createProductionGuidedTurnAgent(
       let progressSourceRevision = 0;
       const nextSourceRevision = () => ++progressSourceRevision;
       const activity = createGuidedActivityProjection({ turnId: turn.turnId, progress: observedProgress, managedInitially: initialWorkBound, nextSourceRevision });
-      const publicActivity = createGuidedPublicActivity({
+      const authorityProjection = createGuidedAuthorityProjection({
         accessMode: policy.accessMode,
         activity,
+        authority,
+        ownerSessionId: turn.sessionId,
+        ...(turn.context.authorityRequestRef
+          ? { requestRef: turn.context.authorityRequestRef }
+          : {}),
       });
       const baseModelRound = input.modelRound ?? createProviderModelRoundPort();
       const {
@@ -217,7 +219,7 @@ export function createProductionGuidedTurnAgent(
         signal,
         resolveModelRef: resolveActiveModelRef,
         progress: observedProgress,
-        activity: publicActivity,
+        activity: authorityProjection.publicActivity,
         workScope,
         authorizedNames,
         visibleNames,
@@ -294,10 +296,7 @@ export function createProductionGuidedTurnAgent(
           durableWork: input.durableWork, workScope, turnId: turn.turnId,
           trackingMode: policy.trackingMode, signal,
         }),
-        ...createGuidedPublicLoopCallbacks({
-          accessMode: policy.accessMode,
-          activity: publicActivity,
-        }),
+        ...authorityProjection.loopCallbacks,
         reviewFinalCandidate: closeout.reviewFinalCandidate,
         executeTool: async (call) => await toolCalls.executeTool({
           name: call.name,
@@ -322,13 +321,7 @@ export function createProductionGuidedTurnAgent(
         }),
       });
       const text = await closeout.reconcileAfterLoop(candidate);
-      const publicText = authorityContinuation && turn.context.authorityRequestRef
-        ? projectGuidedAuthorityOutcome({
-            authority,
-            ownerSessionId: turn.sessionId,
-            requestRef: turn.context.authorityRequestRef,
-          })
-        : text;
+      const publicText = authorityProjection.project(text);
       const terminalOutcome = turn.context.emptyResponsePolicy === "typed_terminal" &&
         !text.trim()
         ? "no_visible" as const
@@ -339,7 +332,7 @@ export function createProductionGuidedTurnAgent(
       );
       return guidedTurnResult({
         content: publicText,
-        ...(terminalOutcome && !authorityContinuation ? { terminalOutcome } : {}),
+        ...(terminalOutcome && !authorityProjection.continuation ? { terminalOutcome } : {}),
         artifacts,
         modelIdentity: acceptedModelIdentity(),
         usedTools: toolCalls.usedTools,

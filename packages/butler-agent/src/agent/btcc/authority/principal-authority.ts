@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type {
   AuthorityAdmissionResult,
   AuthorityAllowResult,
+  AuthorityDenyResult,
   AuthorityOutcomeInput,
   AuthorityRecord,
   AuthorityRequestProjection,
@@ -9,8 +10,10 @@ import type {
   PrincipalAuthority,
   PrincipalAuthorityRepository,
 } from "./contracts.ts";
+import { AUTHORITY_DENIAL_TEXT } from "./contracts.ts";
 
-const SCHEDULE_INPUT_TEXT = "Continue the approved operation exactly once.";
+const ALLOW_SCHEDULE_INPUT_TEXT = "Continue the approved operation exactly once.";
+const DENY_SCHEDULE_INPUT_TEXT = "The reviewed command was denied.";
 
 export function createPrincipalAuthority(
   repository: PrincipalAuthorityRepository,
@@ -71,7 +74,7 @@ export function createPrincipalAuthority(
         decision: "pending",
         scheduleState: "pending",
         scheduleClientMessageId: deterministicClientMessageId(requestId),
-        scheduleInputText: SCHEDULE_INPUT_TEXT,
+        scheduleInputText: ALLOW_SCHEDULE_INPUT_TEXT,
         outcome: "pending",
         outcomeReceiptJson: null,
         createdAt: now,
@@ -101,7 +104,23 @@ export function createPrincipalAuthority(
         modelRef: allowed.modelRef,
         reasoningEffort: allowed.reasoningEffort,
         scheduleState: allowed.scheduleState,
-        decision: allowed.decision,
+        decision: "allowed",
+      };
+    },
+
+    deny(input): AuthorityDenyResult {
+      const denied = repository.deny(input.requestRef, input.ownerSessionId, new Date().toISOString());
+      if (!denied) throw new AuthorityRequestError("authority_request_not_found");
+      return {
+        requestRef: denied.requestRef,
+        sourceSessionId: denied.sourceSessionId,
+        sourceWorkId: denied.sourceWorkId,
+        scheduleClientMessageId: denied.scheduleClientMessageId,
+        scheduleInputText: DENY_SCHEDULE_INPUT_TEXT,
+        modelRef: denied.modelRef,
+        reasoningEffort: denied.reasoningEffort,
+        scheduleState: denied.scheduleState,
+        decision: "denied",
       };
     },
 
@@ -120,7 +139,7 @@ export function createPrincipalAuthority(
       if (!record || record.ownerSessionId !== input.ownerSessionId) {
         throw new AuthorityRequestError("authority_request_not_found");
       }
-      if (record.decision !== "allowed") {
+      if (record.decision !== "allowed" && record.decision !== "denied") {
         throw new AuthorityRequestError("authority_request_not_allowed");
       }
       let normalizedInput: AuthorityStoredExecution["normalizedInput"];
@@ -178,6 +197,13 @@ function admissionResult(record: AuthorityRecord): AuthorityAdmissionResult {
       sourceWorkId: record.sourceWorkId,
       normalizedTarget: record.normalizedTarget,
       normalizedInput: JSON.parse(record.normalizedInputJson),
+    };
+  }
+  if (record.decision === "denied") {
+    return {
+      status: "denied",
+      requestRef: record.requestRef,
+      denialText: AUTHORITY_DENIAL_TEXT,
     };
   }
   return {

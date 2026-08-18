@@ -22,13 +22,16 @@ export async function handleAuthorityRoutes(
   }
 
   const match = input.request.method === "POST"
-    ? input.url.pathname.match(/^\/authority-requests\/([^/]+)\/allow$/u)
+    ? input.url.pathname.match(/^\/authority-requests\/([^/]+)\/(allow|deny)$/u)
     : null;
   if (!match) return null;
   const requestRef = decodeURIComponent(match[1]!);
-  let approved;
+  const decisionAction = match[2];
+  let decision;
   try {
-    approved = input.authority.allow({ ownerSessionId, requestRef });
+    decision = decisionAction === "deny"
+      ? input.authority.deny({ ownerSessionId, requestRef })
+      : input.authority.allow({ ownerSessionId, requestRef });
   } catch (error) {
     if (error instanceof AuthorityRequestError) {
       throw new RequestError(404, "authority_request_not_found", "Authority request not found.");
@@ -36,18 +39,18 @@ export async function handleAuthorityRoutes(
     throw error;
   }
 
-  const chatId = chatIdFromSessionHint(approved.sourceSessionId);
+  const chatId = chatIdFromSessionHint(decision.sourceSessionId);
   if (!chatId) {
     throw new RequestError(409, "authority_source_session_invalid", "Authority source session is not resumable.");
   }
   const queueInput: MessageSendRequest = {
     chat_id: chatId,
-    text: approved.scheduleInputText,
-    client_message_id: approved.scheduleClientMessageId,
-    model: approved.modelRef,
-    reasoning_effort: approved.reasoningEffort as MessageSendRequest["reasoning_effort"],
+    text: decision.scheduleInputText,
+    client_message_id: decision.scheduleClientMessageId,
+    model: decision.modelRef,
+    reasoning_effort: decision.reasoningEffort as MessageSendRequest["reasoning_effort"],
     access_mode: "ask_first",
-    authority_request_ref: approved.requestRef,
+    authority_request_ref: decision.requestRef,
   };
   try {
     await input.store.sendMessage(queueInput, undefined, {
@@ -55,8 +58,8 @@ export async function handleAuthorityRoutes(
     });
     input.authority.markScheduled({
       ownerSessionId,
-      requestRef: approved.requestRef,
-      clientMessageId: approved.scheduleClientMessageId,
+      requestRef: decision.requestRef,
+      clientMessageId: decision.scheduleClientMessageId,
     });
   } catch (error) {
     if (error instanceof AuthorityRequestError) {
@@ -65,8 +68,8 @@ export async function handleAuthorityRoutes(
     throw error;
   }
   return json(apiEnvelope({
-    request_ref: approved.requestRef,
-    decision: "allowed",
+    request_ref: decision.requestRef,
+    decision: decision.decision,
     scheduled: true,
   }), 202);
 }

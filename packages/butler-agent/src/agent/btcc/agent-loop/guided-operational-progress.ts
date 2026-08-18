@@ -1,6 +1,9 @@
 import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type { GuidedEffectAccessMode } from "../effects/index.ts";
-import type { PrincipalAuthority } from "../authority/index.ts";
+import {
+  AUTHORITY_DENIAL_TEXT,
+  type PrincipalAuthority,
+} from "../authority/index.ts";
 import type {
   GuidedActivityBinding,
   GuidedActivityProjection,
@@ -66,14 +69,73 @@ export function createGuidedAskFirstProgress(
   return { stateChanged: (update) => progress.stateChanged(update) };
 }
 
-export function createGuidedPublicActivity(input: {
+export function createGuidedAuthorityProjection(input: {
   accessMode: GuidedEffectAccessMode;
   activity: GuidedActivityProjection;
+  authority?: PrincipalAuthority;
+  ownerSessionId: string;
+  requestRef?: string;
+}): {
+  publicActivity: GuidedActivityProjection;
+  loopCallbacks: Pick<
+    BtccAgentLoopInput,
+    "onAssistantTextBeforeTools" | "finalTextFromToolResult"
+  >;
+  continuation: boolean;
+  project(text: string): string;
+} {
+  const authorityDecision = authorityDecisionForContinuation(input);
+  const publicActivity = createGuidedPublicActivity({
+    accessMode: input.accessMode,
+    activity: input.activity,
+    ...(authorityDecision ? { authorityDecision } : {}),
+  });
+  return {
+    publicActivity,
+    loopCallbacks: createGuidedPublicLoopCallbacks({
+      accessMode: input.accessMode,
+      activity: publicActivity,
+      ...(authorityDecision ? { authorityDecision } : {}),
+    }),
+    continuation: Boolean(input.requestRef),
+    project: (text) => input.requestRef
+      ? projectGuidedAuthorityOutcome({
+          authority: input.authority,
+          ownerSessionId: input.ownerSessionId,
+          requestRef: input.requestRef,
+        })
+      : text,
+  };
+}
+
+function authorityDecisionForContinuation(input: {
+  authority?: PrincipalAuthority;
+  ownerSessionId: string;
+  requestRef?: string;
+}): "allowed" | "denied" | undefined {
+  if (!input.authority || !input.requestRef) return undefined;
+  try {
+    return input.authority.execution({
+      ownerSessionId: input.ownerSessionId,
+      requestRef: input.requestRef,
+    }).decision;
+  } catch {
+    return undefined;
+  }
+}
+
+function createGuidedPublicActivity(input: {
+  accessMode: GuidedEffectAccessMode;
+  activity: GuidedActivityProjection;
+  authorityDecision?: "allowed" | "denied";
 }): GuidedActivityProjection {
   if (input.accessMode !== "ask_first") return input.activity;
+  const pendingText = input.authorityDecision === "denied"
+    ? AUTHORITY_DENIAL_TEXT
+    : "Reviewed command pending Allow.";
   return {
     observeToolBatch: (batch) => input.activity.observeToolBatch({
-      text: "Reviewed command pending Allow.",
+      text: pendingText,
       toolCalls: batch.toolCalls.map((call) => ({ name: call.name, args: {} })),
     }),
     observeTool: (call) => input.activity.observeTool({ ...call, args: {} }),
@@ -82,25 +144,33 @@ export function createGuidedPublicActivity(input: {
   };
 }
 
-export function createGuidedPublicLoopCallbacks(input: {
+function createGuidedPublicLoopCallbacks(input: {
   accessMode: GuidedEffectAccessMode;
   activity: GuidedActivityProjection;
+  authorityDecision?: "allowed" | "denied";
 }): Pick<BtccAgentLoopInput, "onAssistantTextBeforeTools" | "finalTextFromToolResult"> {
   return {
     onAssistantTextBeforeTools: ({ text, toolCalls }) => input.activity.observeToolBatch({
-      text: input.accessMode === "ask_first" ? "Reviewed command pending Allow." : text,
+      text: input.accessMode !== "ask_first"
+        ? text
+        : input.authorityDecision === "denied"
+          ? AUTHORITY_DENIAL_TEXT
+          : "Reviewed command pending Allow.",
       toolCalls: toolCalls.map((call) => ({
         name: call.name,
         args: input.accessMode === "ask_first" ? {} : call.arguments,
       })),
     }),
-    finalTextFromToolResult: ({ toolResult }) => authorityPending(toolResult.output)
-      ? "This reviewed command is waiting for Allow."
-      : null,
+    finalTextFromToolResult: ({ toolResult }) => {
+      if (input.authorityDecision === "denied") return AUTHORITY_DENIAL_TEXT;
+      return authorityPending(toolResult.output)
+        ? "This reviewed command is waiting for Allow."
+        : null;
+    },
   };
 }
 
-export function projectGuidedAuthorityOutcome(input: {
+function projectGuidedAuthorityOutcome(input: {
   authority?: PrincipalAuthority;
   ownerSessionId: string;
   requestRef: string;
@@ -111,6 +181,7 @@ export function projectGuidedAuthorityOutcome(input: {
       ownerSessionId: input.ownerSessionId,
       requestRef: input.requestRef,
     });
+    if (execution.decision === "denied") return AUTHORITY_DENIAL_TEXT;
     if (execution.outcome === "applied") return "Approved command completed once.";
     if (execution.outcome === "failed") return "Approved command failed to complete.";
     return "Approved command outcome is pending.";
