@@ -112,6 +112,9 @@ export function createTranscriptProjectionHarness(
         runtimeFaultRecordForTurn: () => null,
         generatedSessionTitleHandler: () => undefined,
         drainQueuedSessionMessages: async () => undefined,
+        queuedTurnClaimStatus: () => "unlinked",
+        fenceQueuedTurnClaim: () => true,
+        acknowledgeQueuedMessageForTurn: () => true,
         ...overrides,
       });
     },

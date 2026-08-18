@@ -59,6 +59,8 @@ export interface AppStoreKernelTurnLifecycleHost {
     message: MessageRecord;
     text: string;
     executionControls: TurnExecutionControlsV1;
+    queueClaimId?: string;
+    queueReplay?: boolean;
     visualAdmission?: VisualImageAdmissionResult;
   }): TurnRecord;
   runSystemResponderTurn(
@@ -81,6 +83,12 @@ export interface AppStoreKernelTurnLifecycleHost {
     responder?: AppMessageResponder,
     options?: SendMessageOptions,
   ): Promise<void>;
+  dispatchQueuedSessionMessage(
+    chatId: string,
+    queuedMessageId: string,
+    responder?: AppMessageResponder,
+    options?: SendMessageOptions,
+  ): Promise<MessageSendResult | undefined>;
   sessionHasActiveTurn(sessionId: string): boolean;
   reconcileDeliveredSystemResponderTurns(sessionId: string): void;
   reconcileCancelledTurnActivityMessages(sessionId?: string): void;
@@ -170,10 +178,23 @@ export function createTurnLifecycleHost(
       return kernel.systemResponderTurns.schedule(input);
     },
     async drainQueuedSessionMessages(chatId, responder, options = {}) {
+      await kernel.sessionQueueDispatcher.drain(
+        chatId,
+        responder,
+        options,
+      );
+    },
+    async dispatchQueuedSessionMessage(
+      chatId,
+      queuedMessageId,
+      responder,
+      options = {},
+    ) {
       return await kernel.sessionQueueDispatcher.drain(
         chatId,
         responder,
         options,
+        queuedMessageId,
       );
     },
     sessionHasActiveTurn(sessionId) {
@@ -205,7 +226,9 @@ export function createTurnLifecycleHost(
     finalizeCancelledTurn(chatId, turnId) {
       const current = kernel.getTurnRow(turnId);
       if (current?.state === "cancelled") {
-        kernel.ensureCancelledTurnActivityMessage(chatId, turnId);
+        const cancellationMessage = kernel.ensureCancelledTurnActivityMessage(chatId, turnId);
+        const settled = settleCancelledQueuedMessage(kernel, chatId, turnId, cancellationMessage?.id);
+        if (settled !== false) void kernel.drainQueuedSessionMessages(chatId).catch(() => undefined);
         return kernel.turns.getTurn(turnId);
       }
       const cancelledTurn = kernel.updateTurnState(turnId, "cancelled", {
@@ -221,10 +244,28 @@ export function createTurnLifecycleHost(
           payload: { safeLabel: "Cancelled" },
         });
       }
-      kernel.ensureCancelledTurnActivityMessage(chatId, turnId);
+      const cancellationMessage = kernel.ensureCancelledTurnActivityMessage(chatId, turnId);
+      const settled = settleCancelledQueuedMessage(kernel, chatId, turnId, cancellationMessage?.id);
       kernel.touchChat(chatId);
-      void kernel.drainQueuedSessionMessages(chatId).catch(() => undefined);
+      if (settled !== false) void kernel.drainQueuedSessionMessages(chatId).catch(() => undefined);
       return cancelledTurn;
     },
   };
+}
+
+function settleCancelledQueuedMessage(
+  kernel: AppStoreKernel,
+  chatId: string,
+  turnId: string,
+  resultMessageId?: string,
+): boolean | undefined {
+  const claimId = kernel.sessionQueue.claimIdForTurn(chatId, turnId);
+  if (!claimId) return undefined;
+  return kernel.sessionQueue.acknowledgeForTurn({
+    chatId,
+    turnId,
+    claimId,
+    ...(resultMessageId ? { resultMessageId } : {}),
+    safeErrorCode: "turn_cancelled",
+  });
 }

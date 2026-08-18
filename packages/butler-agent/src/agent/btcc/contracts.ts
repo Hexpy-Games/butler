@@ -11,6 +11,7 @@ export type {
   WorkProgressTask,
 } from "./projection/progress-observer-contract.ts";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
+export type BtccEmptyResponsePolicy = "safe_fallback" | "typed_terminal";
 
 export type AdmittedModelSelection = {
   provider: string;
@@ -29,6 +30,7 @@ export type ButlerContextInput = {
   mandatoryHotCacheRefs: string[];
   optionalHotCacheRefs: string[];
   baselineObservationScopeRefs: string[];
+  emptyResponsePolicy?: BtccEmptyResponsePolicy;
   executionPolicy?: ButlerExecutionPolicy;
   attachments?: ButlerAttachmentRef[];
   imageAdmission?: VisualImageAdmissionResult;
@@ -99,6 +101,7 @@ export type BtccTurnCommand =
       message: { messageId: string; content: string };
       modelSelection: AdmittedModelSelection;
       context: ButlerContextInput;
+      emptyResponsePolicy?: BtccEmptyResponsePolicy;
       progressDestination?: BtccProgressDestination;
     }
   | { kind: "resume"; turnId: string; recoveryAttempt?: number }
@@ -117,6 +120,7 @@ export type BtccTurnCommand =
       };
       modelSelection: AdmittedModelSelection;
       context: ButlerContextInput;
+      emptyResponsePolicy?: BtccEmptyResponsePolicy;
       progressDestination?: BtccProgressDestination;
     }
   | { kind: "stop"; turnId: string };
@@ -157,6 +161,7 @@ export type BtccProgressDestination = {
     parentId?: string;
   };
   replyToMessageId: string;
+  appQueueClaimId?: string;
 };
 
 export type BtccCommittedProgressEvent = {
@@ -243,7 +248,9 @@ export type BtccTurnRequest = {
   };
   progressDestination?: BtccProgressDestination;
   executionControls?: BtccTurnExecutionControls;
+  emptyResponsePolicy?: BtccEmptyResponsePolicy;
   appTurnContext?: InboundEnvelope["appTurnContext"];
+  appQueueClaimId?: string;
   signal?: AbortSignal;
 };
 

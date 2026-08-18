@@ -44,6 +44,7 @@ import {
   projectAppCancellationAck,
   projectAppCancellationTerminal,
 } from "./cancellation-projection.ts";
+import { projectClaimedOutbound } from "./claimed-outbound-projection.ts";
 
 export class AppTransportProjectionStore {
   private readonly transcriptSync: AppTransportTranscriptSyncStore;
@@ -127,7 +128,11 @@ export class AppTransportProjectionStore {
     const actionId = safeOptionalShortText(payload.actionId);
     const message = isRecord(payload.message) ? payload.message : {};
     const metadata = isRecord(payload.metadata) ? payload.metadata : {};
-    if (actionId && this.hasProjectedTransportEvent(actionId)) return false;
+    if (
+      actionId &&
+      this.hasProjectedTransportEvent(actionId) &&
+      !safeOptionalShortToken(metadata.appQueueClaimId)
+    ) return false;
     if (isAppWorkerResultOutbound(metadata)) {
       return projectAppWorkerResult({
         options: this.options,
@@ -144,6 +149,16 @@ export class AppTransportProjectionStore {
     if (!actionId || !turnId) return false;
     const turn = this.options.getTurnRow(turnId);
     if (!turn) return false;
+    const claimStatus = this.options.queuedTurnClaimStatus(
+      chatId,
+      turnId,
+      safeOptionalShortToken(metadata.appQueueClaimId),
+    );
+    if (claimStatus === "stale") return false;
+    if (claimStatus === "terminal") {
+      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      return false;
+    }
     const cancellationAck = projectAppCancellationAck({
       options: this.options,
       chatId,
@@ -152,62 +167,94 @@ export class AppTransportProjectionStore {
       event,
       metadata,
       deliveryState,
-      stage: () => this.stagedOutbounds.stage({
-          actionId,
-          chatId,
-          event,
-          state: "awaiting_delivery",
-        }),
+      stage: () => {
+        const claimId = safeOptionalShortToken(metadata.appQueueClaimId);
+        const staged = { actionId, chatId, event, state: "awaiting_delivery" as const };
+        if (claimId) this.stagedOutbounds.stageClaimed(staged, claimId);
+        else this.stagedOutbounds.stage(staged);
+      },
       markProjected: () =>
         this.markProjectedTransportEvent(actionId, event.eventId, chatId),
     });
     if (cancellationAck !== null) return cancellationAck;
     const turnEvent = runtimeTurnEventFromAppOutboundMetadata(metadata);
     if (turnEvent) {
+      const claimId = safeOptionalShortToken(metadata.appQueueClaimId);
       if (deliveryState !== "delivered") {
-        this.stagedOutbounds.stage({
-          actionId,
-          chatId,
-          event,
-          state: "awaiting_delivery",
-        });
-        return false;
+        return projectClaimedOutbound(
+          this.options,
+          { chatId, turnId, metadata },
+          () => {
+            const staged = {
+              actionId,
+              chatId,
+              event,
+              state: "awaiting_delivery" as const,
+            };
+            if (claimId) this.stagedOutbounds.stageClaimed(staged, claimId);
+            else this.stagedOutbounds.stage(staged);
+            return false;
+          },
+        );
       }
-      if (turnEvent.kind === OPERATION_OUTPUT_CHUNK_EVENT_KIND) {
-        const projected = this.operationOutputs.project({
-          turnId,
-          payload: turnEvent.payload ?? {},
-        });
-        this.markProjectedTransportEvent(actionId, event.eventId, chatId);
-        return projected;
-      }
-      const alreadyProjectedReceipt =
-        (turnEvent.kind === TURN_ACKNOWLEDGED_EVENT_KIND ||
-          turnEvent.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) &&
-        this.options.hasTurnEventKind(turnId, turnEvent.kind);
-      if (!alreadyProjectedReceipt)
-        this.options.appendTurnEvent(chatId, turnId, turnEvent);
-      const runtimeFaultProjected = turnEvent.kind === "runtime.fault"
-        ? projectAppTurnFailure({
+      const projectTurnEvent = (): boolean => {
+        if (turnEvent.kind === OPERATION_OUTPUT_CHUNK_EVENT_KIND) {
+          const projected = this.operationOutputs.project({
+            turnId,
+            payload: turnEvent.payload ?? {},
+          });
+          this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+          return projected;
+        }
+        const alreadyProjectedReceipt =
+          (turnEvent.kind === TURN_ACKNOWLEDGED_EVENT_KIND ||
+            turnEvent.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) &&
+          this.options.hasTurnEventKind(turnId, turnEvent.kind);
+        if (!alreadyProjectedReceipt)
+          this.options.appendTurnEvent(chatId, turnId, turnEvent);
+        const runtimeFaultProjected = turnEvent.kind === "runtime.fault"
+          ? projectAppTurnFailure({
+              options: this.options,
+              chatId,
+              turnId,
+              message: { text: turnEvent.payload?.publicSummary },
+              metadata: { ...metadata, safeErrorCode: "runtime_fault" },
+              eventTimestamp: event.timestamp,
+              claimFenceAlreadyHeld: true,
+            })
+          : false;
+        const cancellationProjected = turnEvent.kind === "turn.cancelled"
+          ? projectAppCancellationTerminal({
             options: this.options,
             chatId,
             turnId,
-            message: { text: turnEvent.payload?.publicSummary },
-            metadata: { safeErrorCode: "runtime_fault" },
-            eventTimestamp: event.timestamp,
+            timestamp: event.timestamp,
+            metadata,
+            claimFenceAlreadyHeld: true,
           })
-        : false;
-      const cancellationProjected = turnEvent.kind === "turn.cancelled"
-        ? projectAppCancellationTerminal({
-          options: this.options,
-          chatId,
-          turnId,
-          timestamp: event.timestamp,
-        })
-        : false;
-      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
-      if (!alreadyProjectedReceipt) this.options.touchChat(chatId);
-      return !alreadyProjectedReceipt || cancellationProjected || runtimeFaultProjected;
+          : false;
+        const runtimeFaultSettlementBlocked = turnEvent.kind === "runtime.fault" &&
+          !runtimeFaultProjected &&
+          queuedSettlementRequired(this.options, chatId, turnId, {
+            ...metadata,
+            safeErrorCode: "runtime_fault",
+          });
+        if (!runtimeFaultSettlementBlocked) {
+          this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+        }
+        if (!alreadyProjectedReceipt) this.options.touchChat(chatId);
+        return !alreadyProjectedReceipt || cancellationProjected || runtimeFaultProjected;
+      };
+      const projectTurnEventAndDeleteStage = (): boolean => {
+        const projected = projectTurnEvent();
+        if (deliveryState === "delivered") this.stagedOutbounds.delete(actionId);
+        return projected;
+      };
+      if (!claimId || claimStatus === "unlinked") return projectTurnEventAndDeleteStage();
+      return this.options.db.transaction(() => {
+        if (!this.options.fenceQueuedTurnClaim({ chatId, turnId, claimId })) return false;
+        return projectTurnEventAndDeleteStage();
+      })();
     }
 
     let terminalRecoverableCorrection = false;
@@ -243,15 +290,38 @@ export class AppTransportProjectionStore {
       event.timestamp,
     );
     if (progressRow) {
-      if (this.hasProjectedTransportEvent(actionId)) return false;
-      const projected = !this.options.hasEquivalentProgressSummaryRow(
-        turnId,
-        progressRow,
+      return projectClaimedOutbound(
+        this.options,
+        { chatId, turnId, metadata },
+        () => {
+          if (this.hasProjectedTransportEvent(actionId)) return false;
+          const projected = !this.options.hasEquivalentProgressSummaryRow(
+            turnId,
+            progressRow,
+          );
+          if (projected)
+            this.options.appendProgressSummaryEvent(chatId, turnId, progressRow);
+          this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+          this.options.touchChat(chatId);
+          return projected;
+        },
       );
-      if (projected)
-        this.options.appendProgressSummaryEvent(chatId, turnId, progressRow);
-      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
-      this.options.touchChat(chatId);
+    }
+
+    if (metadata.kind === "turn_cancelled") {
+      if (this.hasProjectedTransportEvent(actionId)) return false;
+      const projected = projectAppCancellationTerminal({
+        options: this.options,
+        chatId,
+        turnId,
+        timestamp: event.timestamp,
+        metadata,
+      });
+      if (projected) {
+        this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+        this.options.touchChat(chatId);
+        void this.options.drainQueuedSessionMessages(chatId).catch(() => undefined);
+      }
       return projected;
     }
 
@@ -265,7 +335,12 @@ export class AppTransportProjectionStore {
         metadata,
         eventTimestamp: event.timestamp,
       });
-      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      if (
+        projected ||
+        !queuedSettlementRequired(this.options, chatId, turnId, metadata)
+      ) {
+        this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      }
       return projected;
     }
 
@@ -275,15 +350,23 @@ export class AppTransportProjectionStore {
       metadata,
     });
     if (queuedFinalProjection === "defer") {
-      this.stagedOutbounds.stage({
-        actionId,
-        chatId,
-        event,
-        state: "deferred_final",
-      });
-      return false;
+      const claimId = safeOptionalShortToken(metadata.appQueueClaimId);
+      return projectClaimedOutbound(
+        this.options,
+        { chatId, turnId, metadata },
+        () => {
+          const staged = {
+            actionId,
+            chatId,
+            event,
+            state: "deferred_final" as const,
+          };
+          if (claimId) this.stagedOutbounds.stageClaimed(staged, claimId);
+          else this.stagedOutbounds.stage(staged);
+          return false;
+        },
+      );
     }
-    this.stagedOutbounds.delete(actionId);
     return projectAppFinalResult({
       options: this.options,
       markProjectedTransportEvent: (id, eventId, targetChatId) =>
@@ -296,6 +379,7 @@ export class AppTransportProjectionStore {
       metadata,
       terminalRecoverableCorrection,
       queuedFinalProjection,
+      deleteStagedOutbound: () => this.stagedOutbounds.delete(actionId),
     });
   }
 
@@ -305,12 +389,12 @@ export class AppTransportProjectionStore {
     );
     for (const pending of batch.rows) {
       if (this.hasProjectedTransportEvent(pending.actionId)) {
-        this.stagedOutbounds.delete(pending.actionId);
+        this.deleteStagedOutboundForPending(pending);
         continue;
       }
       this.projectAppOutboundEvent(pending.chatId, pending.event);
       if (this.hasProjectedTransportEvent(pending.actionId)) {
-        this.stagedOutbounds.delete(pending.actionId);
+        this.deleteStagedOutboundForPending(pending);
       }
     }
     this.deferredFinalCursor = batch.pending ? batch.nextCursor : "";
@@ -323,20 +407,47 @@ export class AppTransportProjectionStore {
     const pending = this.stagedOutbounds.load(actionId);
     if (!pending || pending.state !== "awaiting_delivery") return false;
     if (event.payload.ok !== true) {
-      this.stagedOutbounds.delete(actionId);
-      return false;
+      return this.deleteStagedOutboundForPending(pending);
     }
     if (this.hasProjectedTransportEvent(actionId)) {
-      this.stagedOutbounds.delete(actionId);
-      return false;
+      return this.deleteStagedOutboundForPending(pending);
     }
     const projected = this.projectAppOutboundEvent(
       pending.chatId,
       pending.event,
       "delivered",
     );
-    this.stagedOutbounds.delete(actionId);
-    return projected;
+    const deleted = this.deleteStagedOutboundForPending(pending);
+    return projected || deleted;
+  }
+
+  private deleteStagedOutboundForPending(
+    pending: { actionId: string; chatId: string; event: TranscriptEvent },
+  ): boolean {
+    const metadata = isRecord(pending.event.payload.metadata)
+      ? pending.event.payload.metadata
+      : {};
+    const turnId = this.turnIdForAppOutbound(
+      pending.chatId,
+      metadata,
+      isRecord(pending.event.payload.message)
+        ? pending.event.payload.message
+        : {},
+    );
+    const claimId = safeOptionalShortToken(metadata.appQueueClaimId);
+    if (!claimId) {
+      this.stagedOutbounds.delete(pending.actionId);
+      return true;
+    }
+    if (!turnId) return false;
+    return projectClaimedOutbound(
+      this.options,
+      { chatId: pending.chatId, turnId, metadata },
+      () => {
+        this.stagedOutbounds.delete(pending.actionId);
+        return true;
+      },
+    );
   }
 
   private hasProjectedTransportEvent(actionId: string): boolean {
@@ -377,4 +488,17 @@ export class AppTransportProjectionStore {
 
 function isTerminalTurnStateForProjection(state: TurnState): boolean {
   return ["delivered", "failed", "cancelled", "runtime_fault"].includes(state);
+}
+
+function queuedSettlementRequired(
+  options: AppTransportProjectionStoreOptions,
+  chatId: string,
+  turnId: string,
+  metadata: Record<string, unknown>,
+): boolean {
+  return options.queuedTurnClaimStatus(
+    chatId,
+    turnId,
+    safeOptionalShortToken(metadata.appQueueClaimId),
+  ) !== "unlinked";
 }

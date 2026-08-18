@@ -47,6 +47,9 @@ export function appTurnEventAction(input: {
     metadata: {
       kind: "turn_event",
       turnId: input.event.turnId,
+      ...(input.event.destination.appQueueClaimId
+        ? { appQueueClaimId: input.event.destination.appQueueClaimId }
+        : {}),
       event: publicTurnEvent({
         sessionId: input.event.sessionId,
         turnId: input.event.turnId,

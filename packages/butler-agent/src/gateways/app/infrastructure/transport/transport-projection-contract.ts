@@ -21,6 +21,12 @@ import type {
   TurnState,
 } from "../../interface/protocol/app-protocol.ts";
 
+export type AppQueuedTurnClaimStatus =
+  | "unlinked"
+  | "current"
+  | "terminal"
+  | "stale";
+
 export interface AppTransportProjectionStoreOptions {
   db: Database;
   butlerData: string;
@@ -98,4 +104,21 @@ export interface AppTransportProjectionStoreOptions {
   ) => ((title: string) => void) | undefined;
   touchChat: (chatId: string) => void;
   drainQueuedSessionMessages: (chatId: string) => Promise<void>;
+  queuedTurnClaimStatus: (
+    chatId: string,
+    turnId: string,
+    claimId?: string,
+  ) => AppQueuedTurnClaimStatus;
+  fenceQueuedTurnClaim: (input: {
+    chatId: string;
+    turnId: string;
+    claimId: string;
+  }) => boolean;
+  acknowledgeQueuedMessageForTurn: (input: {
+    chatId: string;
+    turnId: string;
+    claimId: string;
+    resultMessageId?: string;
+    safeErrorCode?: string | null;
+  }) => boolean;
 }
