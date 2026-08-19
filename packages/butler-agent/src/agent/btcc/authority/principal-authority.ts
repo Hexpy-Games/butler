@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
-  AuthorityAllowResult,
-  AuthorityDenyResult,
-  AuthorityModifyResult,
+  AuthorityDecisionAction,
+  AuthorityDecisionResult,
   AuthorityOutcomeInput,
   AuthorityRecord,
   AuthorityRequestProjection,
@@ -16,8 +15,6 @@ import {
 } from "./admission-projection.ts";
 
 const ALLOW_SCHEDULE_INPUT_TEXT = "Continue the approved operation exactly once.";
-const DENY_SCHEDULE_INPUT_TEXT = "The reviewed command was denied.";
-const MODIFY_SCHEDULE_INPUT_TEXT = "Continue with the reviewed alternative.";
 const MAX_ALTERNATIVE_INPUT_BYTES = 16 * 1024;
 
 export function createPrincipalAuthority(
@@ -77,10 +74,8 @@ export function createPrincipalAuthority(
         executable: firstExecutable(input.normalizedInput.command),
         commandCount: 1,
         decision: "pending",
-        scheduleState: "pending",
         scheduleClientMessageId: deterministicClientMessageId(requestId),
         scheduleInputText: ALLOW_SCHEDULE_INPUT_TEXT,
-        scheduleTurnId: null,
         privateAlternativeInput: null,
         outcome: "pending",
         outcomeReceiptJson: null,
@@ -99,88 +94,64 @@ export function createPrincipalAuthority(
       return repository.listPending(input.ownerSessionId).map(authorityProjection);
     },
 
-    allow(input): AuthorityAllowResult {
-      const allowed = repository.allow(input.requestRef, input.ownerSessionId, new Date().toISOString());
-      if (!allowed) throw new AuthorityRequestError("authority_request_not_found");
-      return {
-        requestRef: allowed.requestRef,
-        sourceSessionId: allowed.sourceSessionId,
-        sourceWorkId: allowed.sourceWorkId,
-        scheduleClientMessageId: allowed.scheduleClientMessageId,
-        scheduleInputText: allowed.scheduleInputText,
-        modelRef: allowed.modelRef,
-        reasoningEffort: allowed.reasoningEffort,
-        scheduleState: allowed.scheduleState,
-        decision: "allowed",
-      };
-    },
-
-    deny(input): AuthorityDenyResult {
-      const denied = repository.deny(input.requestRef, input.ownerSessionId, new Date().toISOString());
-      if (!denied) throw new AuthorityRequestError("authority_request_not_found");
-      return {
-        requestRef: denied.requestRef,
-        sourceSessionId: denied.sourceSessionId,
-        sourceWorkId: denied.sourceWorkId,
-        scheduleClientMessageId: denied.scheduleClientMessageId,
-        scheduleInputText: DENY_SCHEDULE_INPUT_TEXT,
-        modelRef: denied.modelRef,
-        reasoningEffort: denied.reasoningEffort,
-        scheduleState: denied.scheduleState,
-        decision: "denied",
-      };
-    },
-
-    modify(input): AuthorityModifyResult {
-      const alternativeInput = requiredAlternative(input.alternativeInput);
-      const modified = repository.modify(
-        input.requestRef,
-        input.ownerSessionId,
-        alternativeInput,
-        new Date().toISOString(),
-      );
-      if (!modified) {
-        const current = repository.findByPublicRef(input.requestRef);
-        if (current?.decision === "modified") {
-          throw new AuthorityRequestError("authority_modify_identity_mismatch");
-        }
+    decide(input): AuthorityDecisionResult {
+      const alternativeInput = input.action === "modify"
+        ? requiredAlternative(input.alternativeInput ?? "")
+        : undefined;
+      const current = repository.findByPublicRef(input.requestRef);
+      if (!current || current.ownerSessionId !== input.ownerSessionId ||
+          current.sourceSessionId !== input.sourceSessionId ||
+          !repository.isSourceWorkEligible({
+            sourceSessionId: current.sourceSessionId,
+            sourceWorkId: current.sourceWorkId,
+          })) {
         throw new AuthorityRequestError("authority_request_not_found");
       }
-      return {
-        requestRef: modified.requestRef,
-        sourceSessionId: modified.sourceSessionId,
-        sourceWorkId: modified.sourceWorkId,
-        scheduleClientMessageId: modified.scheduleClientMessageId,
-        scheduleInputText: MODIFY_SCHEDULE_INPUT_TEXT,
-        modelRef: modified.modelRef,
-        reasoningEffort: modified.reasoningEffort,
-        scheduleState: modified.scheduleState,
-        decision: "modified",
-      };
+      if (current.decision !== "pending") {
+        if (sameDecision(current, input.action, alternativeInput)) {
+          return decisionResult(current);
+        }
+        throw new AuthorityRequestError(
+          input.action === "modify" && current.decision === "modified"
+            ? "authority_modify_identity_mismatch"
+            : "authority_decision_conflict",
+        );
+      }
+      const decided = repository.decide({
+        requestRef: input.requestRef,
+        ownerSessionId: input.ownerSessionId,
+        sourceSessionId: input.sourceSessionId,
+        action: input.action,
+        ...(alternativeInput ? { alternativeInput } : {}),
+        now: new Date().toISOString(),
+      });
+      if (!decided) {
+        const raced = repository.findByPublicRef(input.requestRef);
+        if (raced && sameDecision(raced, input.action, alternativeInput)) {
+          return decisionResult(raced);
+        }
+        throw new AuthorityRequestError("authority_decision_conflict");
+      }
+      return decisionResult(decided);
     },
 
-    markScheduled(input): void {
-      const updated = repository.markScheduled(
-        input.requestRef,
-        input.ownerSessionId,
-        input.clientMessageId,
-        input.turnId,
-        new Date().toISOString(),
-      );
-      if (!updated) throw new AuthorityRequestError("authority_schedule_identity_mismatch");
+    listDecided(): AuthorityDecisionResult[] {
+      return repository.listDecided().map(decisionResult);
     },
 
     execution(input): AuthorityStoredExecution {
       const record = repository.findByPublicRef(input.requestRef);
-      if (!record || record.ownerSessionId !== input.ownerSessionId) {
+      if (!record || record.ownerSessionId !== input.ownerSessionId ||
+          !input.sourceSessionId || !input.clientMessageId ||
+          record.sourceSessionId !== input.sourceSessionId ||
+          record.scheduleClientMessageId !== input.clientMessageId) {
         throw new AuthorityRequestError("authority_request_not_found");
       }
       if (record.decision !== "allowed" && record.decision !== "denied" &&
           record.decision !== "modified") {
         throw new AuthorityRequestError("authority_request_not_allowed");
       }
-      if (record.scheduleState !== "scheduled" ||
-          record.scheduleTurnId !== input.turnId) {
+      if (record.sourceTurnId === input.turnId) {
         throw new AuthorityRequestError("authority_schedule_turn_mismatch");
       }
       if (record.decision === "modified" &&
@@ -208,9 +179,6 @@ export function createPrincipalAuthority(
         decision: record.decision,
         ...(record.privateAlternativeInput
           ? { alternativeInput: record.privateAlternativeInput }
-          : {}),
-        ...(record.scheduleTurnId
-          ? { scheduleTurnId: record.scheduleTurnId }
           : {}),
         outcome: record.outcome,
       };
@@ -299,6 +267,36 @@ function shellWords(input: string): string[] | null {
 function deterministicClientMessageId(requestId: string): string {
   const value = digest(`authority-queue\0${requestId}`).slice(0, 32);
   return `client-${value.slice(0, 8)}-${value.slice(8, 12)}-4${value.slice(13, 16)}-8${value.slice(17, 20)}-${value.slice(20)}`;
+}
+
+function decisionResult(record: AuthorityRecord): AuthorityDecisionResult {
+  if (record.decision === "pending") {
+    throw new AuthorityRequestError("authority_request_not_decided");
+  }
+  return {
+    requestRef: record.requestRef,
+    sourceSessionId: record.sourceSessionId,
+    sourceWorkId: record.sourceWorkId,
+    scheduleClientMessageId: record.scheduleClientMessageId,
+    scheduleInputText: record.scheduleInputText,
+    modelRef: record.modelRef,
+    reasoningEffort: record.reasoningEffort,
+    decision: record.decision,
+  };
+}
+
+function sameDecision(
+  record: AuthorityRecord,
+  action: AuthorityDecisionAction,
+  alternativeInput: string | undefined,
+): boolean {
+  const expected = action === "allow"
+    ? "allowed"
+    : action === "deny"
+      ? "denied"
+      : "modified";
+  return record.decision === expected &&
+    (action !== "modify" || record.privateAlternativeInput === alternativeInput);
 }
 
 function canonicalJson(value: unknown): string {

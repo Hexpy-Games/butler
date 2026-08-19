@@ -3,15 +3,8 @@ import type { BtccAgentLoop, BtccAgentLoopInput, BtccAgentLoopResult } from "./c
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
 import { ActiveProjectLedgerResolver } from "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { createProviderModelRoundPort } from "../../../integrations/providers/runtime.ts";
-import {
-  providerImageAttachments,
-  renderGuidedResponseLanguage,
-} from "./guided-turn-prompt.ts";
-import {
-  GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES,
-  guidedNativeToolDefinitions,
-  hiddenNativeToolNamesForGuidedTurn,
-} from "./guided-turn-policy.ts";
+import { providerImageAttachments, renderGuidedResponseLanguage } from "./guided-turn-prompt.ts";
+import { GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES, guidedNativeToolDefinitions, hiddenNativeToolNamesForGuidedTurn } from "./guided-turn-policy.ts";
 import { selectGuidedTurnPhasePolicy } from "./guided-phase-policy.ts";
 import { createGuidedToolExecutionBoundary } from "./guided-tool-execution-boundary.ts";
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
@@ -20,8 +13,7 @@ import { renderDurableWorkContext } from "./durable-work-tools.ts";
 import { loadGuidedTurnWork, safeBoundWork, workScopeForTurn } from "./guided-work-runtime.ts";
 import { createGuidedToolCallExecutor } from "./guided-tool-call-execution.ts";
 import { runGuidedAgentLoopWithOperationalReport } from "./guided-operational-report.ts";
-import { createGuidedActivityProjection } from
-  "../projection/index.ts";
+import { createGuidedActivityProjection } from "../projection/index.ts";
 import { createGuidedPersistentEffectResolver } from "./guided-persistent-effect-resolution.ts";
 import { createGuidedExecutionWindowObserver } from "./execution-window-observation.ts";
 import { createGuidedSessionWorkspaceRuntime } from "./guided-session-workspace-recovery.ts";
@@ -35,19 +27,14 @@ import { createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
 import { createGuidedRoundToolSurfaceResolver } from "./guided-round-tool-surface.ts";
 import { renderPhaseScopedGuidedTurnRequest } from "./phase-scoped-memory-projection.ts";
 import { createFileStoreVerifiedImagePayloadPort } from "../../image-attachment/index.ts";
-import {
-  createGuidedAskFirstProgress,
-  createGuidedAuthorityProjection,
-  createGuidedOperationalProgressCapture,
-} from "./guided-operational-progress.ts";
+import { createGuidedAskFirstProgress, createGuidedAuthorityProjection, createGuidedOperationalProgressCapture } from "./guided-operational-progress.ts";
 import { loadGuidedOperationalFacts } from "./guided-operational-facts.ts";
 import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
 import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
 import { privateModifyContinuationPromptInput } from "./guided-authority-continuation.ts";
+import type { PrincipalAuthority } from "../authority/index.ts";
 
-type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & {
-  modelRound: ModelRoundPort;
-};
+type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
 
 export function createProductionGuidedTurnAgent(
   input: ProductionGuidedTurnAgentInput,
@@ -100,6 +87,7 @@ export function createProductionGuidedTurnAgent(
         trackingMode: policy.trackingMode,
         authority,
         authorityRequestRef: turn.context.authorityRequestRef,
+        authorityClientMessageId: turn.context.authorityClientMessageId,
         workspacePath: workspaceReference.get(),
       });
       const operationResults = createGuidedOperationResultRuntime({
@@ -155,6 +143,7 @@ export function createProductionGuidedTurnAgent(
           workScope,
           effectService,
           authority: authority!, ownerSessionId: turn.sessionId, sourceTurnId: turn.turnId,
+          authorityClientMessageId: turn.context.authorityClientMessageId,
           modelRef: `${turn.modelSelection.provider}/${turn.modelSelection.model}`, reasoningEffort: turn.modelSelection.reasoningEffort,
           workspacePath: workspaceReference.get(),
           toolJournal: input.toolJournal,
@@ -194,7 +183,11 @@ export function createProductionGuidedTurnAgent(
       const authorityProjection = createGuidedAuthorityProjection({
         accessMode: policy.accessMode,
         activity,
-        authority,
+        authority: projectionAuthority(
+          authority,
+          turn.sessionId,
+          turn.context.authorityClientMessageId,
+        ),
         ownerSessionId: turn.sessionId,
         turnId: turn.turnId,
         ...(turn.context.authorityRequestRef
@@ -244,6 +237,7 @@ export function createProductionGuidedTurnAgent(
           ...input, workContext: renderDurableWorkContext(initialWork), effectContext,
           ...privateModifyContinuationPromptInput(
             authority, turn.sessionId, turn.context.authorityRequestRef, turn.turnId,
+            turn.context.authorityClientMessageId,
           ),
         },
         initialRequestBytes: modelRound.initialRequestBytes,
@@ -346,4 +340,9 @@ export function createProductionGuidedTurnAgent(
       });
     },
   };
+}
+
+function projectionAuthority(authority: PrincipalAuthority | undefined, sourceSessionId: string, clientMessageId: string | undefined): PrincipalAuthority | undefined {
+  if (!authority || !clientMessageId) return authority;
+  return { ...authority, execution: (input) => authority.execution({ ...input, sourceSessionId: input.sourceSessionId ?? sourceSessionId, clientMessageId: input.clientMessageId ?? clientMessageId }) };
 }

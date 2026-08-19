@@ -66,16 +66,18 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
       WHERE type = 'table' AND name = 'btcc_authority_requests'
     `).get()?.sql ?? "";
     expect(definition).toContain("'denied'");
+    const { schedule_state: ignoredScheduleState, ...migratedAuthority } = legacyAuthority;
+    void ignoredScheduleState;
     expect(migratedDb.query<Record<string, unknown>, [string]>(`
       SELECT request_id, request_ref, identity_sha256, owner_session_id,
         source_session_id, source_turn_id, source_work_id, workspace_path,
         plan_revision_id, action_key, authority_generation, capability,
         normalized_target, normalized_input_json, model_ref, reasoning_effort,
-        category, reason, executable, command_count, decision, schedule_state,
+        category, reason, executable, command_count, decision,
         schedule_client_message_id, schedule_input_text, outcome,
         outcome_receipt_json, created_at, updated_at
       FROM btcc_authority_requests WHERE request_ref = ?
-    `).get(legacyAuthority.request_ref)).toEqual(legacyAuthority);
+    `).get(legacyAuthority.request_ref)).toEqual(migratedAuthority);
   } finally {
     migratedDb.close();
   }
@@ -242,11 +244,10 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
       readonly: true,
     });
     try {
-      expect(finalDb.query<{ decision: string; schedule_state: string; outcome: string }, [string]>(`
-        SELECT decision, schedule_state, outcome FROM btcc_authority_requests WHERE request_ref = ?
+      expect(finalDb.query<{ decision: string; outcome: string }, [string]>(`
+        SELECT decision, outcome FROM btcc_authority_requests WHERE request_ref = ?
       `).get(String(requestRef))).toEqual({
         decision: "denied",
-        schedule_state: "scheduled",
         outcome: "pending",
       });
       expect(finalDb.query<{ count: number }, []>(
@@ -492,22 +493,18 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
     try {
       const oldAuthority = finalDb.query<{
         decision: string;
-        schedule_state: string;
-        schedule_turn_id: string | null;
         private_alternative_input: string | null;
         source_work_id: string;
         source_turn_id: string;
         plan_revision_id: string;
       }, [string]>(`
-        SELECT decision, schedule_state, schedule_turn_id, private_alternative_input,
+        SELECT decision, private_alternative_input,
           source_work_id, source_turn_id
           , plan_revision_id
         FROM btcc_authority_requests WHERE request_ref = ?
       `).get(String(requestRef));
       expect(oldAuthority).toMatchObject({
         decision: "modified",
-        schedule_state: "scheduled",
-        schedule_turn_id: resumedTurnId,
         private_alternative_input: PRIVATE_MODIFY_INPUT,
         source_turn_id: sourceTurnId,
       });
@@ -794,10 +791,15 @@ type LegacyAuthorityRow = {
 function seedLegacyAuthorityRequest(root: string): LegacyAuthorityRow {
   const dbPath = join(root, "agent-runtime", "btcc.sqlite");
   mkdirSync(join(root, "agent-runtime"), { recursive: true });
-  const legacySchema = BTCC_AUTHORITY_SCHEMA.replace(
-    "decision IN ('pending', 'allowed', 'denied', 'modified')",
-    "decision IN ('pending', 'allowed')",
-  );
+  const legacySchema = BTCC_AUTHORITY_SCHEMA
+    .replace(
+      "decision IN ('pending', 'allowed', 'denied', 'modified')",
+      "decision IN ('pending', 'allowed')",
+    )
+    .replace(
+      "schedule_client_message_id TEXT NOT NULL UNIQUE,",
+      "schedule_state TEXT NOT NULL CHECK (schedule_state IN ('pending', 'scheduled')),\n  schedule_client_message_id TEXT NOT NULL UNIQUE,\n  schedule_turn_id TEXT,",
+    );
   if (!legacySchema.includes("decision IN ('pending', 'allowed')") ||
       legacySchema.includes("decision IN ('pending', 'allowed', 'denied', 'modified')")) {
     throw new Error("AF-02A legacy authority schema was not constructed exactly");

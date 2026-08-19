@@ -109,15 +109,19 @@ export async function loadGuidedTurnWork(input: {
   trackingMode: "ledger" | "local" | "none";
   authority?: PrincipalAuthority;
   authorityRequestRef?: string;
+  authorityClientMessageId?: string;
   workspacePath: string;
 }): Promise<{
   context: DurableWorkContext | null;
   bound: boolean;
 }> {
-  const storedAuthority = input.authorityRequestRef && input.authority
+  const storedAuthority = input.authorityRequestRef && input.authority &&
+    input.authorityClientMessageId
     ? input.authority.execution({
         ownerSessionId: input.scope.sessionId,
         requestRef: input.authorityRequestRef,
+        sourceSessionId: input.scope.sessionId,
+        clientMessageId: input.authorityClientMessageId,
         turnId: input.scope.turnId,
       })
     : undefined;

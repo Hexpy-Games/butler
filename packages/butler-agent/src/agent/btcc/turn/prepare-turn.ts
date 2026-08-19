@@ -4,10 +4,7 @@ import {
   type ConversationContextStoreReader,
   type ConversationWriter,
 } from "../../conversation/index.ts";
-import type {
-  ContextAssembly,
-  PromptAssembler,
-} from "../../prompt/prompt-assembler.ts";
+import type { ContextAssembly, PromptAssembler } from "../../prompt/prompt-assembler.ts";
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
 import type { StoredSessionBinding } from "../../../test-support/harness/contracts.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
@@ -116,6 +113,7 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
       attachments: request.message.attachments,
       imageAdmission: request.message.imageAdmission,
       authorityRequestRef: request.appTurnContext?.authorityRequestRef,
+      authorityClientMessageId: request.appTurnContext?.authorityClientMessageId,
       turnAccessMode: controls?.access_mode,
     });
     const modelSelection = admitModel(binding, controls);
@@ -172,6 +170,7 @@ export function snapshotTurnContext(input: {
   attachments?: AttachmentRef[];
   imageAdmission?: import("../../image-attachment/contracts.ts").VisualImageAdmissionResult;
   authorityRequestRef?: string;
+  authorityClientMessageId?: string;
   turnAccessMode?: TurnAccessMode;
 }): ButlerContextInput {
   const sections = [
@@ -224,6 +223,7 @@ export function snapshotTurnContext(input: {
       ...(input.binding.projectId ? { projectId: input.binding.projectId } : {}),
     },
     ...(input.authorityRequestRef ? { authorityRequestRef: input.authorityRequestRef } : {}),
+    ...(input.authorityClientMessageId ? { authorityClientMessageId: input.authorityClientMessageId } : {}),
     ...(input.attachments?.length
       ? { attachments: input.attachments.map((attachment) => ({
           id: attachment.id,

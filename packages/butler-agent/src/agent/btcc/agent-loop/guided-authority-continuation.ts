@@ -14,6 +14,7 @@ export function resolveGuidedAuthorityContinuation(input: {
   requestRef: string;
   ownerSessionId?: string;
   sourceTurnId?: string;
+  clientMessageId?: string;
   workspacePath?: string;
   sourceWorkId: string;
   call: ButlerToolCall;
@@ -29,12 +30,17 @@ export function resolveGuidedAuthorityContinuation(input: {
   if (!input.sourceTurnId) {
     return failedContinuation("authority_context_missing", "The approved command source Turn is unavailable.");
   }
+  if (!input.clientMessageId) {
+    return failedContinuation("authority_context_missing", "The approved command queue identity is unavailable.");
+  }
 
   let execution: AuthorityExecution;
   try {
     execution = input.authority.execution({
       ownerSessionId: input.ownerSessionId,
       requestRef: input.requestRef,
+      sourceSessionId: input.ownerSessionId,
+      clientMessageId: input.clientMessageId,
       turnId: input.sourceTurnId,
     });
   } catch (error) {
@@ -46,8 +52,7 @@ export function resolveGuidedAuthorityContinuation(input: {
   if (execution.sourceWorkId !== input.sourceWorkId ||
       execution.sourceTurnId === input.sourceTurnId ||
       execution.sourceSessionId !== input.ownerSessionId ||
-      !input.workspacePath || execution.workspacePath !== input.workspacePath ||
-      execution.scheduleTurnId !== input.sourceTurnId) {
+      !input.workspacePath || execution.workspacePath !== input.workspacePath) {
     return failedContinuation(
       "authority_request_identity_mismatch",
       "The approved command is bound to a different Work or session.",
@@ -119,12 +124,14 @@ export function privateModifyContinuationPromptInput(
   ownerSessionId: string,
   requestRef: string | undefined,
   turnId: string,
+  clientMessageId: string | undefined,
 ): { privateContinuationInput?: string } {
   const value = loadPrivateModifyContinuationInput({
     authority,
     ownerSessionId,
     requestRef,
     turnId,
+    clientMessageId,
   });
   return value ? { privateContinuationInput: value } : {};
 }
@@ -134,12 +141,15 @@ function loadPrivateModifyContinuationInput(input: {
   ownerSessionId: string;
   requestRef?: string;
   turnId: string;
+  clientMessageId?: string;
 }): string | undefined {
-  if (!input.authority || !input.requestRef) return undefined;
+  if (!input.authority || !input.requestRef || !input.clientMessageId) return undefined;
   try {
     const execution = input.authority.execution({
       ownerSessionId: input.ownerSessionId,
       requestRef: input.requestRef,
+      sourceSessionId: input.ownerSessionId,
+      clientMessageId: input.clientMessageId,
       turnId: input.turnId,
     });
     return execution.decision === "modified" ? execution.alternativeInput : undefined;

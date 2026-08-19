@@ -36,6 +36,8 @@ export type ButlerContextInput = {
   imageAdmission?: VisualImageAdmissionResult;
   /** Internal App Allow identity bound to this fresh source Turn. */
   authorityRequestRef?: string;
+  /** Durable App queue identity paired with the stored authority request. */
+  authorityClientMessageId?: string;
 };
 
 export type ButlerExecutionPolicy = {

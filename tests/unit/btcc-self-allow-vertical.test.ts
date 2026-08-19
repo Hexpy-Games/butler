@@ -181,11 +181,10 @@ test("real App ask_first command creates one safe pending authority request with
       expect(finalDb.query<{ count: number }, []>(
         "SELECT COUNT(*) AS count FROM btcc_authority_requests",
       ).get()?.count).toBe(1);
-      expect(finalDb.query<{ decision: string; schedule_state: string; outcome: string }, [string]>(`
-        SELECT decision, schedule_state, outcome FROM btcc_authority_requests WHERE request_ref = ?
+      expect(finalDb.query<{ decision: string; outcome: string }, [string]>(`
+        SELECT decision, outcome FROM btcc_authority_requests WHERE request_ref = ?
       `).get(String(requestRef))).toEqual({
         decision: "allowed",
-        schedule_state: "scheduled",
         outcome: "applied",
       });
       expect(finalDb.query<{ count: number }, []>(
