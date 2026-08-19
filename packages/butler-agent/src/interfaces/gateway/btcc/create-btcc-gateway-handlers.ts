@@ -21,6 +21,7 @@ export function createBtccGatewayHandlers(
       if (outcome.kind !== "cancelled" && outcome.kind !== "already_cancelled") {
         throw new Error(`BTCC cancellation remains recoverable: ${outcome.kind}`);
       }
+      await completeStewardTerminalResult(options, route, turnId, "cancelled", "steward_cancelled");
       return {
         ok: true,
         handledBy: "btcc/turn-stop",
@@ -42,6 +43,7 @@ export function createBtccGatewayHandlers(
     const request = toBtccRequest(route, envelope, turnId);
     const outcome = await options.btcc.runTurn(request);
     if (outcome.kind === "cancelled" || outcome.kind === "already_cancelled") {
+      await completeStewardTerminalResult(options, route, turnId, "cancelled", "steward_cancelled");
       return {
         ok: true,
         handledBy: "btcc/turn-cancelled",
@@ -94,6 +96,23 @@ export function createBtccGatewayHandlers(
     butler: ({ route, envelope }) => handle(route, envelope),
     steward: ({ route, envelope }) => handle(route, envelope),
   };
+}
+
+async function completeStewardTerminalResult(
+  options: BtccGatewayHandlerOptions,
+  route: GatewayRoute,
+  childTurnId: string,
+  status: "cancelled",
+  code: "steward_cancelled",
+): Promise<void> {
+  if (route.role !== "steward" || !options.subsessionDelegation) return;
+  await options.subsessionDelegation.completeStewardResult({
+    childSessionId: route.sessionId,
+    childTurnId,
+    resultId: subsessionResultId(route.sessionId, childTurnId),
+    status,
+    code,
+  });
 }
 
 function toBtccRequest(

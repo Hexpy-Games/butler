@@ -19,6 +19,8 @@ export type {
   ParentInputSink,
   SessionRelation,
   StewardResultEnvelope,
+  StewardResultCode,
+  StewardResultStatus,
   SubsessionDelegationDependencies,
   SubsessionDelegationService,
   SubsessionDelegationStore,
