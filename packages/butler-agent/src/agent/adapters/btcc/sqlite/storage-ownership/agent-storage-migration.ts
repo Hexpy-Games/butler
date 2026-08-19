@@ -22,6 +22,7 @@ import {
   AGENT_BTCC_MIGRATION_MANIFEST_ID,
   AGENT_BTCC_STATEFUL_TABLES,
 } from "./manifest.ts";
+import { upgradeActivatedStorageManifest } from "./manifest-upgrade.ts";
 import {
   copyAndValidateStatefulTables,
   validateAgentBtccDatabase,
@@ -64,6 +65,7 @@ export async function prepareAgentBtccStorage(input: {
 }): Promise<PrepareAgentBtccStorageResult> {
   const paths = agentBtccStoragePaths(input.butlerData);
   if (existsSync(paths.agentBtccDbPath)) {
+    upgradeActivatedStorageManifest(paths.agentBtccDbPath, input.now);
     return { kind: "existing", receipt: readValidatedReceipt(paths.agentBtccDbPath) };
   }
   const fence = await input.quiesceLegacyWriter();
