@@ -138,6 +138,23 @@ export function isSessionViewRefreshEvent(event: TimelineEvent): boolean {
     event.type.startsWith("worker_");
 }
 
+/**
+ * Child activity is projected through the parent SessionView. A child event
+ * therefore refreshes the canonical parent when the relation is already
+ * present in navigation or the active summary; it never becomes a second
+ * client-side session authority.
+ */
+export function eventBelongsToCanonicalSessionView(
+  event: TimelineEvent,
+  activeSessionId: string,
+  directChildSessionIds: ReadonlySet<string> = new Set(),
+): boolean {
+  if (!isSessionViewRefreshEvent(event)) return false;
+  const eventId = eventSessionId(event);
+  return eventId === activeSessionId ||
+    (eventId !== undefined && directChildSessionIds.has(eventId));
+}
+
 export function eventSessionId(event: TimelineEvent): string | undefined {
   const payload = event.payload;
   if (

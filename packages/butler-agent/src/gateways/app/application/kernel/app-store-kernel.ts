@@ -31,7 +31,7 @@ type AppStoreKernelCapabilities = AppStoreKernelState &
 export type AppStoreKernel = AppStoreKernelRuntime & AppStoreKernelCapabilities;
 
 class AppStoreKernelRuntime {
-  constructor(options: AppServerStoreOptions = {}) {
+  constructor(options: AppServerStoreOptions) {
     const kernel = this as unknown as AppStoreKernel;
     Object.assign(
       this,
@@ -45,5 +45,5 @@ class AppStoreKernelRuntime {
 }
 
 export const AppStoreKernel = AppStoreKernelRuntime as unknown as new (
-  options?: AppServerStoreOptions,
+  options: AppServerStoreOptions,
 ) => AppStoreKernel;

@@ -3,6 +3,7 @@
 import { expect, test } from "bun:test";
 import type { TimelineEvent } from "@/app/types.ts";
 import {
+  eventBelongsToCanonicalSessionView,
   eventSessionId,
   isSessionViewRefreshEvent,
 } from "./liveSessionReconciliation.ts";
@@ -176,3 +177,24 @@ for (const eventCase of eventCases) {
     expect(eventSessionId(eventCase.event)).toBe(eventCase.sessionId);
   });
 }
+
+test("routes direct steward child activity through the active parent SessionView", () => {
+  const event: TimelineEvent = {
+    type: "progress.summary",
+    payload: { session_id: "steward-child", turn_id: "child-turn" },
+  };
+  expect(
+    eventBelongsToCanonicalSessionView(
+      event,
+      ACTIVE_SESSION_ID,
+      new Set(["steward-child"]),
+    ),
+  ).toBe(true);
+  expect(
+    eventBelongsToCanonicalSessionView(
+      event,
+      ACTIVE_SESSION_ID,
+      new Set(["unrelated-child"]),
+    ),
+  ).toBe(false);
+});

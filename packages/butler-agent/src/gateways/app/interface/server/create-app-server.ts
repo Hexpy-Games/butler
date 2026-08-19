@@ -19,9 +19,11 @@ import { FixedWindowRateLimiter } from "./rate-limiter.ts";
 import { routeRequest } from "./route-request.ts";
 import { json, RequestError } from "./responses.ts";
 import type {
+  AppRouteRequest,
   AppServerHandle,
   CreateAppServerOptions,
 } from "./server-types.ts";
+import type { StewardObserverReader } from "../../domain/sessions/steward-observer.ts";
 
 export type {
   AppServerHandle,
@@ -57,13 +59,31 @@ function createComposedAppServer(
   const butlerData = resolve(
     options.butlerData ?? process.env.BUTLER_DATA ?? join(homedir(), ".butler"),
   );
-  const store = createStore(
-    { ...options, butlerData },
-  );
-  const authorityStore = options.authority
-    ? undefined
-    : openBtccAuthorityStore({ butlerData });
-  const authority = options.authority ?? authorityStore!.authority;
+  let authorityStore: ReturnType<typeof openBtccAuthorityStore> | undefined;
+  let authority: AppRouteRequest["authority"];
+  let stewardObserver: StewardObserverReader;
+  if (options.authority !== undefined) {
+    if (options.stewardObserver === undefined) {
+      throw new Error(
+        "App server composition requires both authority and steward observer.",
+      );
+    }
+    authority = options.authority;
+    stewardObserver = options.stewardObserver;
+  } else {
+    if (options.stewardObserver !== undefined) {
+      throw new Error(
+        "App server composition rejects a partial authority/observer pair.",
+      );
+    }
+    authorityStore = openBtccAuthorityStore({ butlerData });
+    authority = authorityStore.authority;
+    stewardObserver = authorityStore.observer;
+  }
+  const store = createStore({
+    ...options,
+    butlerData,
+  }, stewardObserver);
   const messageRateLimiter = new FixedWindowRateLimiter(
     options.messageRateLimit,
   );
@@ -135,6 +155,7 @@ function createComposedAppServer(
 
 function createStore(
   options: CreateAppServerOptions,
+  stewardObserver: StewardObserverReader,
 ): AppServerStore {
   return new AppServerStore({
     dbPath: options.dbPath,
@@ -148,6 +169,7 @@ function createStore(
     folderSelectionSecret: options.folderSelectionSecret,
     serviceClient: options.serviceClient,
     providerQuotaMonitor: options.providerQuotaMonitor,
+    stewardObserver,
   });
 }
 

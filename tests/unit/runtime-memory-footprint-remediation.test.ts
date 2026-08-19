@@ -31,6 +31,7 @@ import { readOperationalMetricSummary } from "../../packages/butler-agent/src/op
 import {
   openOwnedSqliteConnection,
 } from "../../packages/butler-agent/src/foundation/sqlite/owned-sqlite-connection.ts";
+import { EMPTY_STEWARD_OBSERVER } from "./support/steward-observer.ts";
 
 const roots: string[] = [];
 
@@ -401,6 +402,7 @@ test("AppServerStore.close stops projection timers before closing its database",
     dbPath: join(root, "app.sqlite"),
     butlerData: root,
     butlerHome: root,
+    stewardObserver: EMPTY_STEWARD_OBSERVER,
   });
   store.close();
   await Bun.sleep(100);

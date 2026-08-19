@@ -9,6 +9,7 @@ import { createProductionBtccComposition } from
   "../../packages/butler-agent/src/agent/composition/index.ts";
 import { AppServerStore } from
   "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
+import { EMPTY_STEWARD_OBSERVER } from "./support/steward-observer.ts";
 import {
   appManagedRuntimePointerPath,
   resolveAppManagedNativeSupervisorPaths,
@@ -22,7 +23,11 @@ test("live App and Agent compositions hold distinct writable SQLite inodes", asy
   roots.push(butlerData);
   const appDbPath = join(butlerData, "app-server", "butler-client.sqlite");
   mkdirSync(join(butlerData, "app-server"), { recursive: true });
-  const app = new AppServerStore({ dbPath: appDbPath, butlerData });
+  const app = new AppServerStore({
+    dbPath: appDbPath,
+    butlerData,
+    stewardObserver: EMPTY_STEWARD_OBSERVER,
+  });
   await prepareAgentBtccStorage({
     butlerData,
     quiesceLegacyWriter: async () => ({
@@ -75,7 +80,11 @@ test("App and Agent writes are reciprocally independent under BEGIN IMMEDIATE", 
   roots.push(root);
   const appPath = join(root, "app-server", "butler-client.sqlite");
   mkdirSync(join(root, "app-server"), { recursive: true });
-  const appStore = new AppServerStore({ dbPath: appPath, butlerData: root });
+  const appStore = new AppServerStore({
+    dbPath: appPath,
+    butlerData: root,
+    stewardObserver: EMPTY_STEWARD_OBSERVER,
+  });
   await prepareAgentBtccStorage({
     butlerData: root,
     quiesceLegacyWriter: async () => ({

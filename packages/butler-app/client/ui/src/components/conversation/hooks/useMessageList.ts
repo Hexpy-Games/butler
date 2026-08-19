@@ -44,22 +44,29 @@ export function useMessageList(
     () => activeTurnProgressSnapshot(summary, turnProgress),
     [summary, turnProgress],
   );
+  const stewardChild = summary?.steward_children?.find(
+    (child) => child.active_turn,
+  );
+  const stewardProgress = stewardChild?.active_turn?.progress;
+  const projectedSnapshot = stewardProgress ?? activeSnapshot;
   const activeTurn = Boolean(
-    activeSnapshot ||
+    projectedSnapshot ||
+      stewardChild?.active_turn ||
       (summary?.turn_state && ACTIVE_TURN_STATES.has(summary.turn_state)),
   );
 
   const progressRows = visibleProgressRows(
-    activeSnapshot?.safe_progress_rows ??
+    projectedSnapshot?.safe_progress_rows ??
     summary?.latest_progress?.safe_progress_rows ??
     [],
   );
   const timelineProgressRows = progressRows.filter((row) => row.kind !== "todo");
   const hasTodoProgress = progressRows.length !== timelineProgressRows.length;
   const turnState =
-    activeSnapshot?.state ??
+    projectedSnapshot?.state ??
     summary?.latest_progress?.state ??
-    summary?.turn_state;
+    summary?.turn_state ??
+    stewardChild?.active_turn?.state;
 
   const showTurnActivity = shouldShowTurnActivity({
     activeTurn,
@@ -108,8 +115,12 @@ export function useMessageList(
     activeTurn,
     progressRows,
     turnState,
-    turnStartedAt: activeSnapshot?.started_at,
-    turnId: activeSnapshot?.turn_id ?? summary?.latest_progress?.turn_id,
+    turnStartedAt:
+      projectedSnapshot?.started_at ?? stewardChild?.active_turn?.created_at,
+    turnId:
+      projectedSnapshot?.turn_id ??
+      stewardChild?.active_turn?.id ??
+      summary?.latest_progress?.turn_id,
     showTurnActivity,
     itemCount,
     copiedMessageId,

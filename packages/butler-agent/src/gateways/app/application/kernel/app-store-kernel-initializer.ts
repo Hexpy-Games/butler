@@ -50,7 +50,7 @@ import { createZaiQuotaAdapter } from
 
 export function initializeAppStoreKernel(
   kernel: AppStoreKernel,
-  options: AppServerStoreOptions = {},
+  options: AppServerStoreOptions,
 ): void {
   kernel.closed = false;
   kernel.projectWorkspaceRoot = resolve(
@@ -65,6 +65,7 @@ export function initializeAppStoreKernel(
   kernel.butlerHome = resolve(
     options.butlerHome ?? process.env.BUTLER_HOME ?? process.cwd(),
   );
+  kernel.stewardObserver = options.stewardObserver;
   kernel.appVersion = safeString(options.appVersion);
   kernel.appUpdateManifest =
     safeString(options.appUpdateManifest) ??
@@ -157,6 +158,7 @@ export function initializeAppStoreKernel(
     () => kernel.sessionCatalog.listSessions({ kind: "chat" }),
     () => kernel.projects.listProjects(),
     () => kernel.projects.listProjects({ includeSessions: true }),
+    (sessionId) => kernel.sessionViews.listStewardChildSummaries(sessionId),
   );
   kernel.workers = new AppWorkerActivityStore(
     kernel.butlerData,

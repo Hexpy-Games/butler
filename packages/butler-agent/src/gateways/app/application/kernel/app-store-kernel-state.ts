@@ -34,6 +34,7 @@ import type { TerminalTurnRetentionQueue } from
   "../../infrastructure/retention/terminal-turn-retention-queue.ts";
 import type { OwnedSqliteConnection } from
   "../../../../foundation/sqlite/owned-sqlite-connection.ts";
+import type { StewardObserverReader } from "../../domain/sessions/steward-observer.ts";
 
 export interface AppStoreKernelState {
   db: Database;
@@ -92,4 +93,5 @@ export interface AppStoreKernelState {
   automationStore: AppAutomationStore;
   messageFiles: AppMessageFileStore;
   integrations: AppIntegrationStore;
+  stewardObserver: StewardObserverReader;
 }

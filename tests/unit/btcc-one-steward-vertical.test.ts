@@ -122,6 +122,25 @@ test("App Turn delegates one bounded mutation to one Steward and synthesizes exa
         ordinal: 1,
         safe_title: "Bounded Steward result",
       });
+      const childSessionId = String(relation?.child_session_id ?? "");
+      const childViewResponse = await fetch(
+        `${app.url}session-view?session_id=${encodeURIComponent(childSessionId)}`,
+        { headers: { authorization: `Bearer ${authToken}` } },
+      );
+      expect(childViewResponse.ok).toBe(true);
+      const childView = await childViewResponse.json() as {
+        data?: {
+          relation?: { child_session_id?: string };
+          messages?: Array<{ role?: string; text?: string }>;
+        };
+      };
+      expect(childView.data?.relation?.child_session_id).toBe(childSessionId);
+      const publicChildTranscript = JSON.stringify(childView.data?.messages ?? []);
+      expect(publicChildTranscript).not.toContain("workspace_and_worktree");
+      expect(publicChildTranscript).not.toContain("expected_result_schema");
+      expect(publicChildTranscript).not.toContain("allowed_tools_and_effects");
+      expect(publicChildTranscript).not.toContain("mutation_scope");
+      expect(publicChildTranscript).not.toContain("delegation_id:");
     const result = btccDb.query<Record<string, unknown>, []>(
         "SELECT relation_id, status, result_id, child_turn_id FROM btcc_steward_results",
       ).get();

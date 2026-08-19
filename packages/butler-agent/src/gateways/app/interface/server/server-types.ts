@@ -7,8 +7,9 @@ import type { FixedWindowRateLimiter } from "./rate-limiter.ts";
 import type { LocalAuthConfig } from "./local-auth.ts";
 import type { ProviderQuotaMonitor } from "../../../../operations/metrics/provider-quota.ts";
 import type { PrincipalAuthority } from "../../../../agent/btcc/authority/index.ts";
+import type { StewardObserverReader } from "../../domain/sessions/steward-observer.ts";
 
-export interface CreateAppServerOptions {
+interface CreateAppServerBaseOptions {
   dbPath?: string;
   butlerData?: string;
   butlerHome?: string;
@@ -26,13 +27,28 @@ export interface CreateAppServerOptions {
   providerQuotaMonitor?: ProviderQuotaMonitor;
   messageRateLimit?: MessageRateLimitOptions;
   automationSchedulerIntervalMs?: number | false;
-  /** Production composition-owned authority aggregate adapter. */
-  authority?: PrincipalAuthority;
   localAuth?: {
     required?: boolean;
     token?: string | null;
   };
 }
+
+/**
+ * The canonical app server owns one authority/observer composition. Callers
+ * may either omit both and let the server compose the SQLite adapters, or
+ * inject the complete pair for an explicitly owned composition. A partial
+ * pair is deliberately rejected by the type system.
+ */
+export type CreateAppServerOptions = CreateAppServerBaseOptions & (
+  | {
+      authority?: never;
+      stewardObserver?: never;
+    }
+  | {
+      authority: PrincipalAuthority;
+      stewardObserver: StewardObserverReader;
+    }
+);
 
 export interface MessageRateLimitOptions {
   max?: number;
