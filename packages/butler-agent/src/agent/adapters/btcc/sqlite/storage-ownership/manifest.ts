@@ -40,14 +40,29 @@ export const AGENT_BTCC_STATEFUL_TABLES = [
   "btcc_r3_legacy_turn_quarantine",
   "btcc_records",
   "btcc_runtime_owners",
+  "btcc_session_relations",
   "btcc_state_claims",
+  "btcc_steward_results",
   "btcc_stop_requests",
+  "btcc_subsession_delegations",
+  "btcc_subsession_outbox",
   "btcc_terminal_settlement_wakes",
   "btcc_turns",
   "btcc_wake_authorizations",
   "btcc_wake_request_facts",
 ] as const;
 
-export const AGENT_BTCC_MIGRATION_MANIFEST_ID = createHash("sha256")
-  .update(JSON.stringify({ schema: "butler.agent-btcc-manifest.v1", tables: AGENT_BTCC_STATEFUL_TABLES }))
-  .digest("hex");
+export function agentBtccManifestId(tables: readonly string[]): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ schema: "butler.agent-btcc-manifest.v1", tables }))
+    .digest("hex");
+}
+
+export const AGENT_BTCC_MIGRATION_MANIFEST_ID =
+  agentBtccManifestId(AGENT_BTCC_STATEFUL_TABLES);
+
+/** Exact activated manifests shipped before additive authority/Steward tables. */
+export const ACCEPTED_HISTORICAL_MANIFEST_IDS = new Set([
+  "0ccdc30dc007152084907cd49f55a79a611204aa0ed9446905e6719e9d1652ed",
+  "24183c8511c1b3b326fad29f45ea4b30924d896c1e017baffe73564822821958",
+]);
