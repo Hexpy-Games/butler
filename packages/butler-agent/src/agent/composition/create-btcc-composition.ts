@@ -139,7 +139,10 @@ export function createProductionBtccComposition(input: {
   return {
     btcc: assembly.btcc,
     host: assembly.host,
-    ready: Promise.resolve(),
+    // A persisted Steward result may have committed its outbox just before
+    // process loss. Re-enter that same durable handoff once at composition
+    // startup; the App queue remains the sole owner after admission.
+    ready: subsessions.recoverPendingParentInputs().then(() => undefined),
     authority: stores.authority,
     subsessions,
   };

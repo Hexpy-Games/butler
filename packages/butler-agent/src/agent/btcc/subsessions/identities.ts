@@ -11,3 +11,7 @@ export function subsessionRootWorkId(
 export function subsessionResultId(childSessionId: string, childTurnId: string): string {
   return `steward-result-${digest(`btcc.subsession.result.v1\0${childSessionId}\0${childTurnId}`).slice(0, 40)}`;
 }
+
+export function subsessionChildTurnId(relationId: string): string {
+  return `steward-turn-${digest(`btcc.subsession.child-turn.v1\0${relationId}`).slice(0, 32)}`;
+}

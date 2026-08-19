@@ -3,9 +3,17 @@ import { digest, stableJson } from "../../../btcc/identity/index.ts";
 import type {
   DelegationPacket,
   SessionRelation,
+  StewardResultCode,
   StewardResultEnvelope,
+  StewardResultStatus,
   SubsessionDelegationStore,
 } from "../../../btcc/subsessions/index.ts";
+import {
+  markParentInputDelivered as markOutboxInputDelivered,
+  pendingParentInputCount as countPendingParentInputs,
+  pendingParentInputForResult as findPendingParentInput,
+  pendingParentInputs as listPendingParentInputs,
+} from "./subsession-outbox-store.ts";
 
 type RelationRow = SessionRelation;
 type DelegationRow = {
@@ -23,25 +31,13 @@ type ResultRow = {
   task_id: string;
   child_session_id: string;
   child_turn_id: string;
-  status: "success";
+  status: StewardResultStatus;
+  code: StewardResultCode | null;
   summary: string;
   acceptance_evidence_json: string;
   changed_artifacts_json: string;
   created_at: string;
 };
-type OutboxRow = {
-  outbox_id: string;
-  relation_id: string;
-  result_id: string;
-  parent_session_id: string;
-  parent_turn_id: string;
-  message_id: string;
-  input_json: string;
-  status: "pending" | "delivered";
-  created_at: string;
-  delivered_at: string | null;
-};
-
 export class SqliteSubsessionDelegationStore implements SubsessionDelegationStore {
   constructor(private readonly db: Database) {}
 
@@ -123,7 +119,13 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       SELECT packet_json FROM btcc_subsession_delegations WHERE relation_id = ?
     `).get(relationId);
     if (!row) return null;
-    return JSON.parse(row.packet_json) as DelegationPacket;
+    try {
+      return JSON.parse(row.packet_json) as DelegationPacket;
+    } catch {
+      // A factual relation with unreadable packet context must fail closed at
+      // the Steward admission boundary; never manufacture replacement facts.
+      return null;
+    }
   }
 
   rootWorkIdByRelationId(relationId: string): string | null {
@@ -132,10 +134,16 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     `).get(relationId)?.root_work_id ?? null;
   }
 
+  taskIdByRelationId(relationId: string): string | null {
+    return this.db.query<{ task_id: string }, [string]>(`
+      SELECT task_id FROM btcc_subsession_delegations WHERE relation_id = ?
+    `).get(relationId)?.task_id ?? null;
+  }
+
   resultByRelationId(relationId: string): StewardResultEnvelope | null {
     const row = this.db.query<ResultRow, [string]>(`
       SELECT result_id, relation_id, task_id, child_session_id, child_turn_id,
-        status, summary, acceptance_evidence_json, changed_artifacts_json, created_at
+        status, code, summary, acceptance_evidence_json, changed_artifacts_json, created_at
       FROM btcc_steward_results WHERE relation_id = ?
     `).get(relationId);
     if (!row) return null;
@@ -146,6 +154,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       child_session_id: row.child_session_id,
       child_turn_id: row.child_turn_id,
       status: row.status,
+      code: row.code ?? null,
       summary: row.summary,
       acceptance_evidence: JSON.parse(row.acceptance_evidence_json) as string[],
       changed_artifacts: JSON.parse(row.changed_artifacts_json) as string[],
@@ -161,9 +170,14 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
 
   commitResult(input: {
     relation: SessionRelation;
-    packet: DelegationPacket;
+    packet: DelegationPacket | null;
     childTurnId: string;
     resultId: string;
+    taskId: string;
+    modelRef: string;
+    reasoningEffort: string;
+    status: StewardResultStatus;
+    code: StewardResultCode | null;
     summary: string;
     acceptanceEvidence: string[];
     changedArtifacts: string[];
@@ -187,10 +201,11 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     const parentText = renderParentResult({
       result_id: input.resultId,
       relation_id: input.relation.relation_id,
-      task_id: input.packet.task_id,
+      task_id: input.taskId,
       child_session_id: input.relation.child_session_id,
       child_turn_id: input.childTurnId,
-      status: "success",
+      status: input.status,
+      code: input.code,
       summary,
       acceptance_evidence: input.acceptanceEvidence,
       changed_artifacts: input.changedArtifacts,
@@ -204,8 +219,8 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       parent_chat_id: input.parentChatId,
       message_id: parentMessageId,
       text: parentText,
-      model_ref: input.packet.model_ref,
-      reasoning_effort: input.packet.reasoning_effort,
+      model_ref: input.modelRef,
+      reasoning_effort: input.reasoningEffort,
       access_mode: "full_access" as const,
       timestamp: now,
     };
@@ -217,10 +232,11 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       const result: StewardResultEnvelope = {
         result_id: input.resultId,
         relation_id: input.relation.relation_id,
-        task_id: input.packet.task_id,
+        task_id: input.taskId,
         child_session_id: input.relation.child_session_id,
         child_turn_id: input.childTurnId,
-        status: "success",
+        status: input.status,
+        code: input.code,
         summary,
         acceptance_evidence: input.acceptanceEvidence,
         changed_artifacts: input.changedArtifacts,
@@ -229,14 +245,16 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       this.db.query(`
         INSERT INTO btcc_steward_results (
           result_id, relation_id, task_id, child_session_id, child_turn_id,
-          status, summary, acceptance_evidence_json, changed_artifacts_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, 'success', ?, ?, ?, ?)
+          status, code, summary, acceptance_evidence_json, changed_artifacts_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         result.result_id,
         result.relation_id,
         result.task_id,
         result.child_session_id,
         result.child_turn_id,
+        result.status,
+        result.code,
         result.summary,
         stableJson(result.acceptance_evidence),
         stableJson(result.changed_artifacts),
@@ -263,9 +281,23 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
   }
 
   pendingParentInputCount(): number {
-    return this.db.query<{ count: number }, []>(`
-      SELECT COUNT(*) AS count FROM btcc_subsession_outbox WHERE status = 'pending'
-    `).get()?.count ?? 0;
+    return countPendingParentInputs(this.db);
+  }
+
+  pendingParentInputs(): Array<{
+    result_id: string;
+    relation_id: string;
+    parent_session_id: string;
+    parent_turn_id: string;
+    parent_chat_id: string;
+    message_id: string;
+    text: string;
+    model_ref: string;
+    reasoning_effort: string;
+    access_mode: "full_access";
+    timestamp: string;
+  }> {
+    return listPendingParentInputs(this.db);
   }
 
   pendingParentInputForResult(resultId: string): {
@@ -281,31 +313,11 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     access_mode: "full_access";
     timestamp: string;
   } | null {
-    const row = this.db.query<Pick<OutboxRow, "input_json">, [string]>(`
-      SELECT input_json FROM btcc_subsession_outbox
-      WHERE result_id = ? AND status = 'pending'
-    `).get(resultId);
-    return row ? JSON.parse(row.input_json) as {
-      relation_id: string;
-      result_id: string;
-      parent_session_id: string;
-      parent_turn_id: string;
-      parent_chat_id: string;
-      message_id: string;
-      text: string;
-      model_ref: string;
-      reasoning_effort: string;
-      access_mode: "full_access";
-      timestamp: string;
-    } : null;
+    return findPendingParentInput(this.db, resultId);
   }
 
   markParentInputDelivered(resultId: string): void {
-    this.db.query(`
-      UPDATE btcc_subsession_outbox
-      SET status = 'delivered', delivered_at = ?
-      WHERE result_id = ? AND status = 'pending'
-    `).run(new Date().toISOString(), resultId);
+    markOutboxInputDelivered(this.db, resultId);
   }
 }
 
@@ -321,6 +333,7 @@ function renderParentResult(result: StewardResultEnvelope): string {
   return [
     "Subsession result",
     `Status: ${result.status}`,
+    ...(result.code ? [`Code: ${result.code}`] : []),
     `Summary: ${result.summary}`,
     `Acceptance evidence: ${result.acceptance_evidence.join("; ")}`,
     `Changed artifacts: ${result.changed_artifacts.join("; ") || "none"}`,

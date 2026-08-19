@@ -28,7 +28,11 @@ CREATE TABLE IF NOT EXISTS btcc_steward_results (
   task_id TEXT NOT NULL,
   child_session_id TEXT NOT NULL,
   child_turn_id TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status = 'success'),
+  status TEXT NOT NULL CHECK (status IN ('success', 'blocked', 'failed', 'cancelled')),
+  code TEXT CHECK (code IS NULL OR code IN (
+    'delegation_context_incomplete',
+    'steward_execution_failed', 'steward_cancelled'
+  )),
   summary TEXT NOT NULL,
   acceptance_evidence_json TEXT NOT NULL,
   changed_artifacts_json TEXT NOT NULL,

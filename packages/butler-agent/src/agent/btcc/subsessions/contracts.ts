@@ -33,7 +33,7 @@ export type DelegationPacket = {
   };
   expected_result_schema: {
     version: 1;
-    status: "success";
+    status: "success" | "blocked" | "failed" | "cancelled";
     required_fields: ["summary", "acceptance_evidence", "changed_artifacts"];
   };
   work_creation_policy: "one_recoverable_child_work";
@@ -52,13 +52,20 @@ export type DelegationPacket = {
   reasoning_effort: string;
 };
 
+export type StewardResultStatus = "success" | "blocked" | "failed" | "cancelled";
+export type StewardResultCode =
+  | "delegation_context_incomplete"
+  | "steward_execution_failed"
+  | "steward_cancelled";
+
 export type StewardResultEnvelope = {
   result_id: string;
   relation_id: string;
   task_id: string;
   child_session_id: string;
   child_turn_id: string;
-  status: "success";
+  status: StewardResultStatus;
+  code: StewardResultCode | null;
   summary: string;
   acceptance_evidence: string[];
   changed_artifacts: string[];
@@ -111,7 +118,9 @@ export type CompleteStewardResultInput = {
   childSessionId: string;
   childTurnId: string;
   resultId: string;
-  summary: string;
+  summary?: string;
+  status?: StewardResultStatus;
+  code?: StewardResultCode;
 };
 
 export type CompleteStewardResultOutcome = {
@@ -131,13 +140,19 @@ export interface SubsessionDelegationStore {
   relationByChildSessionId(childSessionId: string): SessionRelation | null;
   packetByRelationId(relationId: string): DelegationPacket | null;
   rootWorkIdByRelationId(relationId: string): string | null;
+  taskIdByRelationId(relationId: string): string | null;
   resultByRelationId(relationId: string): StewardResultEnvelope | null;
   resultIdForRelation(relationId: string): string | null;
   commitResult(input: {
     relation: SessionRelation;
-    packet: DelegationPacket;
+    packet: DelegationPacket | null;
     childTurnId: string;
     resultId: string;
+    taskId: string;
+    modelRef: string;
+    reasoningEffort: string;
+    status: StewardResultStatus;
+    code: StewardResultCode | null;
     summary: string;
     acceptanceEvidence: string[];
     changedArtifacts: string[];
@@ -170,6 +185,19 @@ export interface SubsessionDelegationStore {
   } | null;
   pendingParentInputCount(): number;
   markParentInputDelivered(resultId: string): void;
+  pendingParentInputs(): Array<{
+    result_id: string;
+    relation_id: string;
+    parent_session_id: string;
+    parent_turn_id: string;
+    parent_chat_id: string;
+    message_id: string;
+    text: string;
+    model_ref: string;
+    reasoning_effort: string;
+    access_mode: "full_access";
+    timestamp: string;
+  }>;
 }
 
 export type SubsessionDelegationService = {
@@ -180,6 +208,7 @@ export type SubsessionDelegationService = {
     objective: string;
   }): Promise<string>;
   completeStewardResult(input: CompleteStewardResultInput): Promise<CompleteStewardResultOutcome>;
+  recoverPendingParentInputs(): Promise<{ attempted: number; delivered: number }>;
   relationForParent(parentSessionId: string): SessionRelation | null;
   resultIdForRelation(relationId: string): string | null;
   pendingParentInputCount(): number;

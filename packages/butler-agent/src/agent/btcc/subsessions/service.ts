@@ -4,14 +4,17 @@ import {
   createWorkspaceReference,
 } from "../../session-workspaces/index.ts";
 import { digest, stableJson } from "../identity/index.ts";
-import { validateStewardCompletion } from "./completion-evidence.ts";
-import { subsessionResultId, subsessionRootWorkId } from "./identities.ts";
+import { subsessionChildTurnId, subsessionResultId, subsessionRootWorkId } from "./identities.ts";
+import { recoverPendingParentInputs } from "./outbox-recovery.ts";
+import { completeStewardResultForDependencies } from "./terminal-result-service.ts";
 import {
   normalizeSubsessionAllowedToolsAndEffects,
   normalizeSubsessionMutationScope,
 } from "./scope.ts";
+import {
+  completePacketContext,
+} from "./terminal-results.ts";
 import type {
-  CompleteStewardResultOutcome,
   CreatedDelegation,
   DelegationPacket,
   DelegationRequest,
@@ -25,6 +28,40 @@ export function createSubsessionDelegationService(
 ): SubsessionDelegationService {
   const childQueue = new NativeInboundQueue(input.butlerData);
   const parentInputSink: ParentInputSink = input.parentInputSink;
+  const completeResult = (resultInput: Parameters<SubsessionDelegationService["completeStewardResult"]>[0]) =>
+    completeStewardResultForDependencies(input, parentInputSink, resultInput);
+  const ensureRootWork = async (child: Parameters<SubsessionDelegationService["ensureChildRootWork"]>[0]): Promise<string> => {
+    const relation = input.store.relationByChildSessionId(child.childSessionId);
+    if (!relation) throw new Error("subsession_relation_missing");
+    const existing = await input.durableWork.boundWorkForTurn(child.childTurnId);
+    const expectedRootWorkId = input.store.rootWorkIdByRelationId(relation.relation_id);
+    if (!expectedRootWorkId) throw new Error("subsession_root_work_identity_missing");
+    if (existing) {
+      if (existing.workId !== expectedRootWorkId || existing.sessionId !== child.childSessionId) {
+        throw new Error("subsession_root_work_identity_mismatch");
+      }
+      return existing.workId;
+    }
+    const packet = input.store.packetByRelationId(relation.relation_id);
+    if (!packet || !completePacketContext(packet)) {
+      await completeResult({
+        childSessionId: child.childSessionId,
+        childTurnId: child.childTurnId,
+        resultId: subsessionResultId(relation.child_session_id, child.childTurnId),
+        status: "blocked",
+        code: "delegation_context_incomplete",
+      });
+      throw new Error("delegation_context_incomplete");
+    }
+    const work = await input.durableWork.startWork({
+      sessionId: child.childSessionId,
+      turnId: child.childTurnId,
+      mutationCallId: `subsession-root-work:${packet.delegation_id}:${packet.task_id}:${child.childSessionId}`,
+      objective: child.objective,
+    });
+    if (work.workId !== expectedRootWorkId) throw new Error("subsession_root_work_identity_mismatch");
+    return work.workId;
+  };
   return {
     async delegate(request) {
       const normalizedRequest = normalizeDelegationRequest(request);
@@ -97,72 +134,13 @@ export function createSubsessionDelegationService(
         child_workspace_path: storedChild.workspacePath } satisfies CreatedDelegation;
     },
     async ensureChildRootWork(child) {
-      const relation = input.store.relationByChildSessionId(child.childSessionId);
-      if (!relation) throw new Error("subsession_relation_missing");
-      const existing = await input.durableWork.boundWorkForTurn(child.childTurnId);
-      const expectedRootWorkId = input.store.rootWorkIdByRelationId(relation.relation_id);
-      if (!expectedRootWorkId) throw new Error("subsession_root_work_identity_missing");
-      if (existing) {
-        if (existing.workId !== expectedRootWorkId || existing.sessionId !== child.childSessionId) {
-          throw new Error("subsession_root_work_identity_mismatch");
-        }
-        return existing.workId;
-      }
-      const packet = input.store.packetByRelationId(relation.relation_id);
-      const work = await input.durableWork.startWork({
-        sessionId: child.childSessionId,
-        turnId: child.childTurnId,
-        mutationCallId: `subsession-root-work:${packet?.delegation_id ?? relation.relation_id}:${packet?.task_id ?? "task"}:${child.childSessionId}`,
-        objective: child.objective,
-      });
-      if (work.workId !== expectedRootWorkId) throw new Error("subsession_root_work_identity_mismatch");
-      return work.workId;
+      return ensureRootWork(child);
     },
     async completeStewardResult(resultInput) {
-      const relation = input.store.relationByChildSessionId(resultInput.childSessionId);
-      if (!relation) throw new Error("subsession_relation_missing");
-      const expectedChildTurnId = childTurnIdFor(relation.relation_id);
-      if (resultInput.childTurnId !== expectedChildTurnId) {
-        throw new Error("subsession_child_turn_identity_mismatch");
-      }
-      const expectedResultId = subsessionResultId(relation.child_session_id, expectedChildTurnId);
-      if (resultInput.resultId !== expectedResultId) throw new Error("subsession_result_identity_mismatch");
-      const packet = input.store.packetByRelationId(relation.relation_id);
-      if (!packet) throw new Error("subsession_packet_missing");
-      const parent = input.sessionBindings.getBySessionId(relation.parent_session_id);
-      const parentChatId = parent?.transportBindings.find((binding) =>
-        binding.transport === "app" && binding.peerId.trim(),
-      )?.peerId;
-      if (!parentChatId) throw new Error("parent_app_binding_required");
-      const evidence = await validateStewardCompletion({
-        relation,
-        packet,
-        childTurnId: resultInput.childTurnId,
-        sessionBindings: input.sessionBindings,
-        durableWork: input.durableWork,
-        rootWorkId: input.store.rootWorkIdByRelationId(relation.relation_id),
-        toolJournal: input.toolJournal,
-        effectJournal: input.effectJournal,
-      });
-      const result = input.store.commitResult({
-        relation,
-        packet,
-        childTurnId: resultInput.childTurnId,
-        resultId: resultInput.resultId,
-        summary: evidence.summary,
-        acceptanceEvidence: evidence.acceptanceEvidence,
-        changedArtifacts: evidence.changedArtifacts,
-        parentChatId,
-      });
-      const pending = input.store.pendingParentInputForResult(result.result.result_id);
-      if (pending) {
-        await parentInputSink(pending);
-        input.store.markParentInputDelivered(result.result.result_id);
-      }
-      return {
-        status: result.inserted ? "committed" : "duplicate",
-        result: result.result,
-      } satisfies CompleteStewardResultOutcome;
+      return completeResult(resultInput);
+    },
+    async recoverPendingParentInputs() {
+      return recoverPendingParentInputs({ store: input.store, sink: parentInputSink });
     },
     relationForParent(parentSessionId) {
       return input.store.relationByParentSessionId(parentSessionId);
@@ -175,6 +153,7 @@ export function createSubsessionDelegationService(
     },
   };
 }
+
 function delegationIdentity(request: DelegationRequest): string {
   const identity = stableJson({
     parent_session_id: request.parent_session_id,
@@ -199,7 +178,7 @@ function recoverExistingDelegation(
   return {
     relation,
     packet,
-    child_turn_id: childTurnIdFor(relation.relation_id),
+    child_turn_id: subsessionChildTurnId(relation.relation_id),
     root_work_id: subsessionRootWorkId(packet.delegation_id, packet.task_id, relation.child_session_id),
     child_workspace_path: child.workspacePath,
   };
@@ -308,9 +287,6 @@ function enqueueChild(
     },
     raw: { source: "btcc-subsession-delegation" },
   });
-}
-function childTurnIdFor(relationId: string): string {
-  return `steward-turn-${digest(`btcc.subsession.child-turn.v1\0${relationId}`).slice(0, 32)}`;
 }
 function nextOrdinal(input: SubsessionDelegationDependencies, parentSessionId: string): number {
   const existing = input.store.relationByParentSessionId(parentSessionId);
