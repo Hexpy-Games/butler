@@ -19,7 +19,7 @@ interface MessageContentProps {
   message: MessageRecord;
   copied: boolean;
   footerMeta: AssistantFooterMeta | null;
-  onCopyAssistantMessage: (message: MessageRecord) => void;
+  onCopyAssistantMessage?: (message: MessageRecord) => void;
 }
 
 function MessageContentComponent({
@@ -69,7 +69,7 @@ function MessageContentComponent({
           attachments={message.attachments ?? []}
         />
       )}
-      {message.role === "assistant" && (
+      {message.role === "assistant" && onCopyAssistantMessage && (
         <AssistantResponseFooter
           copied={copied}
           meta={footerMeta}

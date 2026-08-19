@@ -114,6 +114,7 @@ export function createAppSessionInteractionModuleGraph(input: {
     (sessionId, runtimeSessionId, currentTurnId) =>
       host.listActiveWorkStreams(sessionId, runtimeSessionId, currentTurnId),
     () => host.latestEventCursor(),
+    host.stewardObserver,
   );
   const sessionQueue = new AppSessionQueueStore(
     db,

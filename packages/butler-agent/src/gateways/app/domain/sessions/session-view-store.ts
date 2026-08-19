@@ -30,6 +30,14 @@ import type {
   TurnRecord,
   WorkerActivityListView,
 } from "../../interface/protocol/app-protocol.ts";
+import {
+  emptyStewardProjection,
+  projectStewardSession,
+  type ProjectedStewardSession,
+  type StewardObserverReader,
+  type StewardObserverRelation,
+} from "./steward-observer.ts";
+import { sessionViewForStewardObserver } from "./steward-observer-view.ts";
 
 export class AppSessionViewStore {
   constructor(
@@ -74,9 +82,54 @@ export class AppSessionViewStore {
       currentTurnId?: string,
     ) => SessionView["work_streams"],
     private readonly latestEventCursor: () => AppEventEnvelope["id"],
+    private readonly stewardObserver: StewardObserverReader,
   ) {}
 
   getSessionSummary(sessionId: string): SessionSummaryView {
+    const childRelation = this.stewardObserver.relationForChild(sessionId);
+    if (childRelation) {
+      const snapshot = this.stewardObserver.snapshot(sessionId);
+      const projected = snapshot
+        ? projectStewardSession(childRelation, snapshot)
+        : emptyStewardProjection(childRelation);
+      const latestProgress = projected.latest_turn?.progress ?? {
+        summary: projected.result?.summary ?? "No progress yet",
+        updated_at: projected.updated_at,
+        state: "idle" as const,
+        safe_progress_rows: projected.activity_rows,
+      };
+      return {
+        session_id: projected.session_id,
+        latest_progress: latestProgress,
+        turn_state: projected.latest_turn?.state ?? "idle",
+        branch_info: {
+          available: false,
+          workspace_mode: "none",
+          safe_status: projected.status,
+        },
+        artifacts: projected.artifacts,
+        skills_used: [],
+        context_details: {
+          session_id: projected.session_id,
+          used_tokens: 0,
+          budget_tokens: 0,
+          ratio: 0,
+          status: "low",
+          categories: [],
+          token_count_source: "unavailable",
+          updated_at: projected.updated_at,
+        },
+        safe_errors: [],
+        automation_targets: [],
+        worker_activity: [],
+        work_streams: [],
+        staleness: {
+          state: "fresh",
+          updated_at: projected.updated_at,
+          source: "btcc-observer",
+        },
+      };
+    }
     const session = this.getSession(sessionId);
     const latestTurn = this.latestTurn(sessionId);
     const messages = this.listMessages(sessionId);
@@ -120,13 +173,37 @@ export class AppSessionViewStore {
         updated_at: new Date().toISOString(),
         source: "app-server",
       },
+      steward_children: this.projectStewardChildren(sessionId),
     };
+  }
+
+  listStewardChildSummaries(sessionId: string): SessionSummary[] {
+    return this.projectStewardChildren(sessionId).map((child) => ({
+      id: child.session_id,
+      kind: "chat",
+      title: child.title,
+      session_hint: `butler/steward-${child.session_id}`,
+      created_at: child.relation.created_at,
+      updated_at: child.updated_at,
+      last_activity_at: child.updated_at,
+      last_message_preview: child.result?.summary ?? child.active_turn?.progress.summary,
+      active_turn_state: child.active_turn?.state,
+      safe_status_label: child.active_turn?.progress.summary ?? child.result?.summary,
+      unread_count: 0,
+      pinned: false,
+      archived: false,
+      automation_target_count: 0,
+      parent_session_id: child.relation.parent_session_id,
+      is_steward_child: true,
+    }));
   }
 
   getSessionView(
     sessionId: string,
     options: SessionMessagePageOptions = {},
   ): SessionView {
+    const childRelation = this.stewardObserver.relationForChild(sessionId);
+    if (childRelation) return this.getStewardSessionView(childRelation);
     const session = this.getSession(sessionId);
     const latestTurn = this.latestTurn(sessionId);
     const messagePage = this.sessionViewMessages(sessionId, options);
@@ -165,7 +242,7 @@ export class AppSessionViewStore {
     const nextCursor = maxMessageCursor(messages) || requestedAfterCursor;
     const firstCursor = Number(messages[0]?.cursor ?? 0);
     const afterCursor = requestedAfterCursor;
-    return {
+    const view: SessionView = {
       protocol_version: APP_PROTOCOL_VERSION,
       session_id: session.id,
       kind: session.kind,
@@ -216,7 +293,9 @@ export class AppSessionViewStore {
         latestTurnView?.updated_at ??
         latestMessage?.updated_at ??
         session.updated_at,
+      steward_children: this.projectStewardChildren(sessionId),
     };
+    return view;
   }
 
   listArtifacts(sessionId: string): SessionArtifactSummary[] {
@@ -267,5 +346,28 @@ export class AppSessionViewStore {
         message: "A safe app-visible error occurred.",
         created_at: message.updated_at,
       }));
+  }
+
+  private projectStewardChildren(
+    parentSessionId: string,
+  ): ProjectedStewardSession[] {
+    const relation = this.stewardObserver.relationForParent(parentSessionId);
+    if (!relation) return [];
+    const snapshot = this.stewardObserver.snapshot(relation.child_session_id);
+    return [
+      snapshot
+        ? projectStewardSession(relation, snapshot)
+        : emptyStewardProjection(relation),
+    ];
+  }
+
+  private getStewardSessionView(
+    relation: StewardObserverRelation,
+  ): SessionView {
+    return sessionViewForStewardObserver(
+      relation,
+      this.stewardObserver.snapshot(relation.child_session_id),
+      this.latestEventCursor(),
+    );
   }
 }

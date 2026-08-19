@@ -40,7 +40,7 @@ class AppServerStoreRuntime {
   readonly db: Database;
   private readonly kernel: AppStoreKernel;
 
-  constructor(options: AppServerStoreOptions = {}) {
+  constructor(options: AppServerStoreOptions) {
     this.kernel = new AppStoreKernel(options);
     this.db = this.kernel.db;
     Object.assign(
@@ -52,5 +52,5 @@ class AppServerStoreRuntime {
 }
 
 export const AppServerStore = AppServerStoreRuntime as unknown as new (
-  options?: AppServerStoreOptions,
+  options: AppServerStoreOptions,
 ) => AppServerStore;

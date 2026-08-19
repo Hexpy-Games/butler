@@ -4,6 +4,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppServerStore } from "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
+import { EMPTY_STEWARD_OBSERVER } from "./support/steward-observer.ts";
 
 const root = process.cwd();
 
@@ -104,6 +105,7 @@ test("packaged App update checks use configured public App update manifest", asy
     appVersion: "0.0.12",
     appUpdateManifest: manifestPath,
     dbPath: join(workDir, "app.sqlite"),
+    stewardObserver: EMPTY_STEWARD_OBSERVER,
   });
   try {
     const view = await store.getUpdateStatus();
@@ -150,6 +152,7 @@ test("packaged App update checks default to the public latest App manifest", asy
       butlerHome: root,
       appVersion: "0.0.12",
       dbPath: join(workDir, "app.sqlite"),
+      stewardObserver: EMPTY_STEWARD_OBSERVER,
     });
     try {
       const view = await store.getUpdateStatus();

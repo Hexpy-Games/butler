@@ -81,6 +81,7 @@ const app = createAppServer({
   },
   localAuth,
   authority: authorityStore.authority,
+  stewardObserver: authorityStore.observer,
 });
 
 console.log(

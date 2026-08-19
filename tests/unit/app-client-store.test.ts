@@ -58,6 +58,8 @@ afterEach(() => {
     sessionQueue: [],
     settings: EMPTY_SETTINGS,
     modelCatalog: EMPTY_MODEL_CATALOG,
+    sessionViews: {},
+    observerSessionId: null,
     status: { label: "connecting", tone: "muted" },
     isSending: false,
     sendingChatId: null,
@@ -1508,6 +1510,57 @@ test("session view hydration does not remove already visible live messages", () 
   expect(
     useButlerStore.getState().messages.map((message) => message.id),
   ).toEqual(["user-a", "assistant-a"]);
+});
+
+test("observer session hydration stays keyed and cannot replace the active session", () => {
+  const mainView = sessionView("session-main", {
+    messages: [messageRecord("main-message", "session-main", "assistant", "Main", 1, "main-turn")],
+    turnState: "delivered",
+  });
+  const observerView = sessionView("steward-child", {
+    messages: [messageRecord("child-message", "steward-child", "assistant", "Child", 1, "child-turn")],
+    turnState: "thinking",
+    latestProgress: {
+      turn_id: "child-turn",
+      state: "thinking",
+      safe_progress_rows: [{
+        id: "child-activity",
+        kind: "message",
+        state: "running",
+        safe_label: "Child activity",
+      }],
+    },
+  });
+  observerView.parent_session_id = "session-main";
+  observerView.relation = {
+    relation_id: "relation-child",
+    parent_session_id: "session-main",
+    parent_turn_id: "main-turn",
+    child_session_id: "steward-child",
+    anchor_message_id: "main-message",
+    ordinal: 1,
+    safe_title: "Child",
+    created_at: "2026-05-05T00:00:00.000Z",
+  };
+
+  useButlerStore.setState({
+    activeChatId: "session-main",
+    messages: mainView.messages,
+    sessionView: null,
+    sessionViews: {},
+    summary: null,
+  });
+  useButlerStore.getState().setSessionView(mainView);
+  useButlerStore.getState().setSessionView(observerView);
+
+  const state = useButlerStore.getState();
+  expect(state.messages.map((message) => message.id)).toEqual(["main-message"]);
+  expect(state.sessionView?.session_id).toBe("session-main");
+  expect(state.sessionViews["session-main"]?.session_id).toBe("session-main");
+  expect(state.sessionViews["steward-child"]?.messages.map((message) => message.id))
+    .toEqual(["child-message"]);
+  expect(state.sessionViews["steward-child"]?.cursors.messages).toBe(1);
+  expect(state.summary?.latest_progress?.safe_progress_rows).toEqual([]);
 });
 
 test("session view hydration preserves live turn progress rows", () => {

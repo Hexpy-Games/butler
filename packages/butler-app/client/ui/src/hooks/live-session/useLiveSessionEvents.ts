@@ -10,7 +10,7 @@ import {
 import {
   createLiveSessionReconciliation,
   eventSessionId,
-  isSessionViewRefreshEvent,
+  eventBelongsToCanonicalSessionView,
 } from "./liveSessionReconciliation.ts";
 import {
   applyLiveNavigationEvent,
@@ -110,11 +110,21 @@ export function useLiveSessionEvents(): void {
       state.applyTimelineEvents([event]);
       advanceEventCursor(eventCursorRef, event.id);
       notifyDesktopEvent(event, notifiedMessageIdsRef, notifiedTurnIdsRef);
-      if (
-        isSessionViewRefreshEvent(event) &&
-        eventSessionId(event) === activeChatIdRef.current
-      ) {
+      const activeSessionId = activeChatIdRef.current;
+      const directChildSessionIds = directStewardChildSessionIds(
+        state,
+        activeSessionId,
+      );
+      const refreshesCanonicalParent = eventBelongsToCanonicalSessionView(
+        event,
+        activeSessionId,
+        directChildSessionIds,
+      );
+      if (refreshesCanonicalParent) {
         reconciliation.requestRefresh();
+        if (eventSessionId(event) !== activeSessionId) {
+          navigationReconciliation.requestRefresh();
+        }
       }
     };
 
@@ -160,6 +170,27 @@ export function useLiveSessionEvents(): void {
       navigationReconciliation.dispose();
     };
   }, []);
+}
+
+function directStewardChildSessionIds(
+  state: ReturnType<typeof useButlerStore.getState>,
+  parentSessionId: string,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const session of state.navigation.chats) {
+    if (session.id !== parentSessionId) continue;
+    for (const child of session.steward_children ?? []) ids.add(child.id);
+  }
+  for (const project of state.navigation.projects) {
+    for (const session of project.sessions ?? []) {
+      if (session.id !== parentSessionId) continue;
+      for (const child of session.steward_children ?? []) ids.add(child.id);
+    }
+  }
+  for (const child of state.summary?.steward_children ?? []) {
+    ids.add(child.session_id);
+  }
+  return ids;
 }
 
 function advanceEventCursor(cursorRef: { current: number }, id?: number): void {

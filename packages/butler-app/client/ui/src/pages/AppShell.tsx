@@ -22,6 +22,7 @@ import { CommandPalette } from "@/components/command/CommandPalette.tsx";
 import { ProjectRenameDialog } from "@/components/layout/ProjectRenameDialog.tsx";
 import { ProjectCreateDialog } from "@/components/layout/ProjectCreateDialog.tsx";
 import { SessionRenameDialog } from "@/components/layout/SessionRenameDialog.tsx";
+import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog.tsx";
 import { AppToaster } from "@/components/common/AppToaster.tsx";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { nativePlatform } from "@/app/nativeNotifications.ts";
@@ -227,6 +228,7 @@ function AppWorkspaceShell() {
       {projectCreateDialogOpen && <ProjectCreateDialog />}
       {renameProject && <ProjectRenameDialog />}
       {renameSession && <SessionRenameDialog />}
+      <SessionObserverDialog />
       <AppToaster />
     </AdaptiveShell>
   );

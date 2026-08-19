@@ -29,8 +29,10 @@ import type { TerminalTurnProjection } from "../../infrastructure/retention/term
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
 import type { TurnControlResolution } from "../../../core/turn-execution-controls.ts";
 import { buildContextDetailsRevision } from "./context-details-revision.ts";
+import type { StewardObserverReader } from "../../domain/sessions/steward-observer.ts";
 
 export interface AppStoreKernelSessionContextHost {
+  stewardObserver: StewardObserverReader;
   localModelMetadata(): ProviderModelMetadata[];
   registeredModelMetadata(): ProviderModelMetadata[];
   loadedSkillNamesForSession(sessionId: string, turnId?: string): string[];
@@ -94,6 +96,9 @@ export function createSessionContextHost(
   kernel: AppStoreKernel,
 ): AppStoreKernelSessionContextHost {
   return {
+    get stewardObserver() {
+      return kernel.stewardObserver;
+    },
     localModelMetadata() {
       return kernel.modelRegistry.localModelMetadata();
     },

@@ -43,7 +43,6 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
   );
   const files = useFileAttachments(session.activeChatId);
   const fileDrop = useComposerFileDrop((nextFiles) => void files.addFiles(nextFiles));
-
   usePendingProjectDocumentAttachment({
     activeChatId: session.activeChatId,
     clearPendingProjectDocumentAttachment:
@@ -117,7 +116,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     state,
     textAreaRef,
   });
-  const showAdjunct = composerHasAdjunct(queue.sessionQueue.length, state.workers.length, state.taskRows.length);
+  const showAdjunct = composerHasAdjunct(queue.sessionQueue.length, state.workers.length, state.taskRows.length, state.stewardChildren.length);
   const presentation = useComposerPresentation({
     activeChatId: session.activeChatId,
     containerRef: wrapRef,
@@ -140,6 +139,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
             showWorkers={state.workers.length > 0}
             taskRows={state.taskRows}
             taskTurnState={state.taskTurnState}
+            stewardChildren={state.stewardChildren}
           />
         ) : null
       }

@@ -19,6 +19,7 @@ export function Conversation() {
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const navigation = useButlerStore((state) => state.navigation);
   const messages = useButlerStore((state) => state.messages);
+  const summary = useButlerStore((state) => state.summary);
   const turnProgress = useButlerStore((state) => state.turnProgress);
   const messageLoadPending = useButlerStore(
     (state) => state.messageLoadPending,
@@ -59,7 +60,12 @@ export function Conversation() {
   }, [setRightOpen, setRightTab]);
 
   const hasMessages = messages.length > 0;
-  const showEmptyState = !hasMessages && !messageLoadPending;
+  const hasDurableActivity = Boolean(
+    summary?.steward_children?.some((child) => child.active_turn) ||
+    summary?.latest_progress?.safe_progress_rows?.length,
+  );
+  const showMessageList = hasMessages || hasDurableActivity;
+  const showEmptyState = !showMessageList && !messageLoadPending;
   const composerLarge = true;
   const newChatTitleIconSize = showEmptyState
     ? "clamp(40px, 5.333vw, 54px)"
@@ -76,7 +82,7 @@ export function Conversation() {
       titleIconGap={newChatTitleIconGap}
       titleIconSize={newChatTitleIconSize}
     >
-      {hasMessages ? (
+      {showMessageList ? (
         <MessageList
           messages={messages}
           turnProgress={turnProgress}

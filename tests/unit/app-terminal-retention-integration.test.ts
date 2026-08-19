@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppStoreKernel } from
   "../../packages/butler-agent/src/gateways/app/application/kernel/app-store-kernel.ts";
+import { EMPTY_STEWARD_OBSERVER } from "./support/steward-observer.ts";
 
 const roots: string[] = [];
 
@@ -20,6 +21,7 @@ test("a late terminal event re-enqueues retention through the App event store", 
     butlerData: join(root, "data"),
     butlerHome: root,
     dbPath: join(root, "app.sqlite"),
+    stewardObserver: EMPTY_STEWARD_OBSERVER,
   });
   const now = new Date().toISOString();
   try {

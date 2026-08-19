@@ -126,6 +126,8 @@ interface ButlerStore {
   navigationGeneration: number;
   messages: MessageRecord[];
   sessionView: SessionView | null;
+  sessionViews: Record<string, SessionView>;
+  observerSessionId: string | null;
   messageLoadPending: boolean;
   optimisticSessionStart: OptimisticSessionStart | null;
   pendingProjectDocumentAttachment: {
@@ -172,6 +174,8 @@ interface ButlerStore {
   setMessages: (messages: Updater<MessageRecord[]>) => void;
   setMessageListView: (view: MessageListView) => void;
   setSessionView: (view: SessionView) => void;
+  openSessionObserver: (sessionId: string) => void;
+  closeSessionObserver: () => void;
   setSummary: (summary: Updater<SessionSummaryView | null>) => void;
   setTurnProgress: (
     turnProgress: Updater<Record<string, TurnProgressSnapshot>>,
@@ -202,6 +206,7 @@ interface ButlerStore {
     chatId?: string,
     options?: SessionViewRefreshOptions,
   ) => Promise<boolean>;
+  refreshSessionObserver: (sessionId?: string) => Promise<boolean>;
   reloadMessages: (chatId?: string) => Promise<void>;
   refreshSessionSummary: (chatId?: string) => Promise<void>;
   sendMessage: (text: string, controls?: ComposerControls) => Promise<void>;
@@ -573,7 +578,23 @@ function summaryFromSessionView(view: SessionView): SessionSummaryView {
       isWorkerVisibleInComposer(worker),
     ),
     work_streams: view.work_streams,
+    steward_children: view.steward_children,
   };
+}
+
+function upsertSessionView(
+  views: Record<string, SessionView>,
+  view: SessionView,
+): Record<string, SessionView> {
+  const normalized = view.messages.length > view.cursors.messages
+    ? {
+        ...view,
+        cursors: { ...view.cursors, messages: view.messages.length },
+      }
+    : view;
+  const previous = views[normalized.session_id];
+  if (previous && structurallyEqual(previous, normalized)) return views;
+  return { ...views, [normalized.session_id]: normalized };
 }
 
 function mergeWorkerActivityForActiveSummary(
@@ -631,6 +652,10 @@ function applySessionView(
   state: ButlerStore,
   view: SessionView,
 ): ButlerStore | Partial<ButlerStore> {
+  const sessionViews = upsertSessionView(state.sessionViews, view);
+  if (state.activeChatId !== view.session_id) {
+    return sessionViews === state.sessionViews ? state : { sessionViews };
+  }
   const messageListView = messageListViewFromSessionView(view);
   const incomingSummary = summaryFromSessionView(view);
   const previousSummary =
@@ -700,6 +725,7 @@ function applySessionView(
     sessionView: structurallyEqual(state.sessionView, view)
       ? state.sessionView
       : view,
+    sessionViews,
     sessionMessageViews,
     messageLoadPending: false,
   };
@@ -713,13 +739,14 @@ function beginSessionViewRequest(
   chatId: string,
   get: () => ButlerStore,
   options?: SessionViewRefreshOptions,
+  allowInactive = false,
 ): () => boolean {
   const requestToken = ++nextSessionViewRequestToken;
   latestSessionViewRequestByChat.set(chatId, requestToken);
   const requestGeneration = activeSessionGeneration;
   return () =>
     options?.isCurrent?.() !== false &&
-    get().activeChatId === chatId &&
+    (allowInactive || get().activeChatId === chatId) &&
     activeSessionGeneration === requestGeneration &&
     latestSessionViewRequestByChat.get(chatId) === requestToken;
 }
@@ -745,6 +772,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   navigationGeneration: 0,
   messages: [],
   sessionView: null,
+  sessionViews: {},
+  observerSessionId: null,
   messageLoadPending: false,
   optimisticSessionStart: null,
   pendingProjectDocumentAttachment: null,
@@ -855,7 +884,12 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       view: state.settingsReturnView ?? { kind: "session" },
     })),
   setActiveChatId: (activeChatId) =>
-    set({ activeChatId, selectedArtifactId: null, selectedArtifact: null }),
+    set({
+      activeChatId,
+      observerSessionId: null,
+      selectedArtifactId: null,
+      selectedArtifact: null,
+    }),
   noteNavigationEvent: () =>
     set((state) => ({ navigationGeneration: state.navigationGeneration + 1 })),
   setNavigation: (navigation, options) =>
@@ -899,6 +933,10 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setMessageListView: (view) =>
     set((state) => applyMessageListView(state, view)),
   setSessionView: (view) => set((state) => applySessionView(state, view)),
+  openSessionObserver: (sessionId) => {
+    set({ observerSessionId: sessionId });
+  },
+  closeSessionObserver: () => set({ observerSessionId: null }),
   setSummary: (summary) =>
     set((state) => {
       const resolvedSummary = resolveUpdate(summary, state.summary);
@@ -1029,6 +1067,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         : sessionMessageViews;
       return {
         activeChatId: chatId,
+        observerSessionId: null,
         view: { kind: "session" },
         selectedArtifactId: null,
         selectedArtifact: null,
@@ -1095,6 +1134,23 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       return true;
     } catch {
       // Keep the last canonical snapshot visible on transient failures.
+      return false;
+    }
+  },
+
+  refreshSessionObserver: async (sessionId = get().observerSessionId ?? "") => {
+    if (!isServerBackedSessionId(sessionId)) return false;
+    const isCurrentRequest = beginSessionViewRequest(sessionId, get, undefined, true);
+    try {
+      const currentCursorToken =
+        get().sessionViews[sessionId]?.message_window.next_cursor_token;
+      const query = new URLSearchParams({ session_id: sessionId });
+      if (currentCursorToken) query.set("cursor_token", currentCursorToken);
+      const data = await api<SessionView>(`/session-view?${query.toString()}`);
+      if (!isCurrentRequest()) return false;
+      set((state) => applySessionView(state, data));
+      return true;
+    } catch {
       return false;
     }
   },

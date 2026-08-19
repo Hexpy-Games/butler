@@ -655,6 +655,9 @@ export interface SessionSummary {
   safe_status_label?: string;
   unread_count?: number;
   automation_target_count?: number;
+  parent_session_id?: string;
+  is_steward_child?: boolean;
+  steward_children?: SessionSummary[];
 }
 
 export interface CreateSessionResult {
@@ -917,6 +920,52 @@ export interface SessionViewCursors {
   events: number;
 }
 
+export interface SessionRelationView {
+  relation_id: string;
+  parent_session_id: string;
+  parent_turn_id: string;
+  child_session_id: string;
+  anchor_message_id: string;
+  ordinal: number;
+  safe_title: string;
+  created_at: string;
+}
+
+export interface StewardResultView {
+  result_id: string;
+  relation_id: string;
+  task_id: string;
+  child_session_id: string;
+  child_turn_id: string;
+  status: "success" | "blocked" | "failed" | "cancelled";
+  code:
+    | "delegation_context_incomplete"
+    | "steward_execution_failed"
+    | "steward_cancelled"
+    | null;
+  summary: string;
+  acceptance_evidence: string[];
+  changed_artifacts: string[];
+  created_at: string;
+}
+
+export interface StewardSessionSummaryView {
+  relation: SessionRelationView;
+  session_id: string;
+  title: string;
+  status: SessionViewStatus;
+  active_turn: SessionViewTurn | null;
+  latest_turn: SessionViewTurn | null;
+  activity_rows: ProgressRow[];
+  approved_plan_revision?: number;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
+  artifacts: SessionArtifactSummary[];
+  result: StewardResultView | null;
+  updated_at: string;
+  terminal: boolean;
+}
+
 export interface SessionView {
   protocol_version?: string;
   session_id: string;
@@ -936,6 +985,9 @@ export interface SessionView {
   automations: AutomationTargetSummary[];
   errors: SafeSessionError[];
   cursors: SessionViewCursors;
+  parent_session_id?: string;
+  relation?: SessionRelationView;
+  steward_children?: StewardSessionSummaryView[];
   generated_at: string;
   updated_at: string;
 }
@@ -1312,6 +1364,7 @@ export interface SessionSummaryView {
   skills_used?: string[];
   worker_activity?: WorkerActivitySummary[];
   work_streams?: WorkStreamSummary[];
+  steward_children?: StewardSessionSummaryView[];
 }
 
 export interface TimelineEvent {
