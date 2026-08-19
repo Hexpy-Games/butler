@@ -9,6 +9,7 @@ import type { GuidedSessionWorkspaceBindingStore } from
   "./guided-session-workspace-recovery.ts";
 import type { ContextDocumentReader } from "../../context/context-projection.ts";
 import type { PrincipalAuthority } from "../authority/index.ts";
+import type { SubsessionDelegationService } from "../subsessions/index.ts";
 
 export type ProductionGuidedTurnAgentInput = {
   butlerHome: string;
@@ -23,4 +24,5 @@ export type ProductionGuidedTurnAgentInput = {
   modelRound?: ModelRoundPort;
   sessionBindingStore?: GuidedSessionWorkspaceBindingStore;
   executionWindowSize?: number;
+  subsessionDelegation?: SubsessionDelegationService;
 };

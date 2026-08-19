@@ -48,6 +48,13 @@ export type ButlerExecutionPolicy = {
   requiredNativeTools: string[];
   workspacePath: string;
   projectId?: string;
+  subsession?: {
+    relationId: string;
+    delegationId: string;
+    taskId: string;
+    mutationScope: string[];
+    allowedToolsAndEffects: string[];
+  };
 };
 
 export type ButlerAttachmentRef = {

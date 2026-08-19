@@ -199,7 +199,7 @@ export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<st
   const seenTargets = new Set<string>();
   const safePaths = new Map<number, string | undefined>();
   for (const edit of edits) {
-    const guard = await resolveWorkspacePathGuard({ workspaceRoot, relativePath: edit.path, rejectProtectedProjectLedgerWrites: true, protectedProjectLedgerRoots: context.protectedProjectLedgerRoots });
+    const guard = await resolveWorkspacePathGuard({ workspaceRoot, relativePath: edit.path, relativeOnly: context.allowedToolsAndEffects !== undefined, rejectProtectedProjectLedgerWrites: true, protectedProjectLedgerRoots: context.protectedProjectLedgerRoots });
     if (!guard.ok) {
       const safePath = safeWorkspaceResultPath({
         workspaceRoot: guard.workspaceRoot,

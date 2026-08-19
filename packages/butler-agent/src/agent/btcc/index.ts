@@ -12,3 +12,9 @@ export type {
   GuidedToolJournalRecord,
   OperationResultDeliveryState,
 } from "./ports/guided-tool-journal.ts";
+export type {
+  DelegationPacket,
+  SessionRelation,
+  StewardResultEnvelope,
+  SubsessionDelegationStore,
+} from "./subsessions/index.ts";

@@ -5,6 +5,7 @@ import { BTCC_TERMINAL_SETTLEMENT_WAKE_SCHEMA } from
   "./schema/terminal-settlement-wake-schema.ts";
 import { BTCC_R3_LEGACY_TURN_CUTOVER_SCHEMA } from
   "./legacy-turn-cutover/index.ts";
+import { BTCC_SUBSESSION_SCHEMA } from "./schema/subsession-schema.ts";
 
 export const BTCC_SUCCESSOR_SCHEMA = `
 CREATE TABLE IF NOT EXISTS btcc_messages (
@@ -255,6 +256,7 @@ ON btcc_guided_tool_calls(turn_id, started_at);
 ${BTCC_GUIDED_WORK_SCHEMA}
 ${BTCC_GUIDED_EFFECT_SCHEMA}
 ${BTCC_AUTHORITY_SCHEMA}
+${BTCC_SUBSESSION_SCHEMA}
 ${BTCC_R3_LEGACY_TURN_CUTOVER_SCHEMA}
 
 CREATE TABLE IF NOT EXISTS btcc_canonical_deliveries (

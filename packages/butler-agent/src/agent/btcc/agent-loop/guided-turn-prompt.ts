@@ -7,7 +7,7 @@ import { projectGuidedToolContext } from
   "./guided-tool-context-projection.ts";
 import type { ModelContextSegmentKind } from "../ports/model-round.ts";
 import { renderPrivateModifyContinuationInput } from "./guided-authority-continuation.ts";
-
+import { guidedStewardInstructions } from "./guided-steward-instructions.ts";
 export interface GuidedTextSegmentSource {
   kind: ModelContextSegmentKind;
   stability: "stable" | "dynamic";
@@ -63,7 +63,6 @@ export function renderGuidedPrompt(
 ): string {
   return renderGuidedPromptAttribution(turn, input).text;
 }
-
 export function renderGuidedPromptAttribution(
   turn: TurnRecord,
   input: {
@@ -113,10 +112,13 @@ export function renderGuidedPromptAttribution(
 }
 
 export function guidedInstructions(
-  policy: Pick<ButlerExecutionPolicy, "accessMode" | "trackingMode">,
+  policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "trackingMode" | "subsession">,
   personaAndProfile = "",
   responseLanguage = "",
 ): string {
+  if (policy.role === "steward" && policy.subsession) {
+    return guidedStewardInstructions(policy);
+  }
   return [
     "You are Butler. Give the user a useful result, not an account of an internal protocol.",
     "Answer simple conversation and stable knowledge directly and briefly.",

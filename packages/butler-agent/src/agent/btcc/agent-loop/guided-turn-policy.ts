@@ -28,6 +28,7 @@ import {
 } from "./guided-session-workspace-policy.ts";
 import { readOperationResultsToolDefinition } from
   "../../tools/monitoring/read_operation_results/index.ts";
+import { subsessionToolNames } from "../subsessions/scope.ts";
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
   disabledReason:
@@ -118,6 +119,11 @@ export function authorizedToolDefinitions(
   });
   if (policy.accessMode === "full_access") names.add("call_mcp_tool");
   else names.delete("call_mcp_tool");
+  if (policy.role === "butler" && policy.accessMode === "full_access") {
+    names.add("delegate_to_steward");
+  } else {
+    names.delete("delegate_to_steward");
+  }
   for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
   const guidedLedgerEffects = new Set<string>(
     policy.accessMode === "full_access" &&
@@ -128,6 +134,20 @@ export function authorizedToolDefinitions(
   );
   for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
   for (const name of guidedLedgerEffects) names.add(name);
+  if (policy.role === "steward" && policy.subsession) {
+    const bounded = new Set([
+      "read_file",
+      "list_files",
+      "grep_files",
+      "replace_work_plan",
+      "record_work_review",
+      "record_work_disposition",
+      ...subsessionToolNames(policy.subsession.allowedToolsAndEffects),
+    ]);
+    for (const name of [...names]) {
+      if (!bounded.has(name)) names.delete(name);
+    }
+  }
   return [
     ...guidedNativeToolDefinitions(exactResultReplayEnabled)
       .filter((tool) => names.has(tool.name)),
@@ -148,7 +168,7 @@ export function hiddenNativeToolNamesForGuidedTurn(
   ];
 }
 
-export function visibleToolDefinitions(authorized: readonly FunctionToolDefinition[], policy: Pick<ButlerExecutionPolicy, "accessMode" | "trackingMode" | "projectId">, includeAttachedImageTool = false): FunctionToolDefinition[] {
+export function visibleToolDefinitions(authorized: readonly FunctionToolDefinition[], policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "trackingMode" | "projectId" | "subsession">, includeAttachedImageTool = false): FunctionToolDefinition[] {
   const projectLedgerWork =
     policy.trackingMode === "ledger" && Boolean(policy.projectId);
   const visible = new Set([
@@ -175,8 +195,23 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
           "project_ledger_work_complete",
         ]
       : []),
+    ...(policy.role === "butler" && policy.accessMode === "full_access"
+      ? ["delegate_to_steward"]
+      : []),
     ...guidedWorkspaceVisibleToolNames(policy),
   ]);
+  if (policy.role === "steward" && policy.subsession) {
+    visible.clear();
+    for (const name of [
+      "read_file",
+      "list_files",
+      "grep_files",
+      "replace_work_plan",
+      "record_work_review",
+      "record_work_disposition",
+      ...subsessionToolNames(policy.subsession.allowedToolsAndEffects),
+    ]) visible.add(name);
+  }
   return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
 }
 

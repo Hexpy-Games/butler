@@ -24,6 +24,12 @@ import {
   createRuntimeMemoryAttributionPort,
   type RuntimeMemoryAttributionPort,
 } from "../../operations/diagnostics/runtime-memory-attribution/index.ts";
+import {
+  createAppParentInputSink,
+  createSubsessionDelegationService,
+} from "../btcc/subsessions/index.ts";
+import { resolveAppGatewayRuntimeConfig } from "../../operations/gateway/registry.ts";
+import { readLocalAuthConfigFromEnvironment } from "../../gateways/app/interface/server/local-auth.ts";
 
 /**
  * Production wiring only.  Lifecycle policy lives in `agent/btcc/btcc.ts`
@@ -38,6 +44,8 @@ export function createProductionBtccComposition(input: {
   memoryAttribution?: RuntimeMemoryAttributionPort;
   sessionBindings?: SessionBindingStore;
   conversationStore?: AgentConversationStore;
+  appServerUrl?: string;
+  appLocalAuth?: import("../../gateways/app/interface/server/local-auth.ts").LocalAuthConfig;
 }) {
   let phaseContinuityKey: Buffer | undefined;
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
@@ -53,6 +61,20 @@ export function createProductionBtccComposition(input: {
   const bindings = input.sessionBindings ?? new SessionBindingStore(
     `${input.butlerData}/runtime/session-store.sqlite`,
   );
+  const subsessions = createSubsessionDelegationService({
+    butlerData: input.butlerData,
+    sessionBindings: bindings,
+    durableWork: stores.durableWork,
+    store: stores.subsessionStore,
+    parentInputSink: createAppParentInputSink({
+      appServerUrl: input.appServerUrl ?? resolveAppGatewayRuntimeConfig({
+        butlerData: input.butlerData,
+      }).serverUrl,
+      localAuth: input.appLocalAuth ?? readLocalAuthConfigFromEnvironment(),
+    }),
+    toolJournal: stores.guidedToolJournal,
+    effectJournal: stores.guidedEffectJournal,
+  });
   const conversations = input.conversationStore ?? new AgentConversationStore({
     butlerData: input.butlerData,
   });
@@ -90,6 +112,7 @@ export function createProductionBtccComposition(input: {
       authority: stores.authority,
       modelRound: input.modelRound,
       sessionBindingStore: bindings,
+      subsessionDelegation: subsessions,
     }),
   });
   const preparationDependencies: BtccTurnPreparationDependencies = {
@@ -118,6 +141,7 @@ export function createProductionBtccComposition(input: {
     host: assembly.host,
     ready: Promise.resolve(),
     authority: stores.authority,
+    subsessions,
   };
 }
 

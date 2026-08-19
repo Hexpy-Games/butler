@@ -77,6 +77,7 @@ export async function runNativeButlerMain(
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
   let btcc: Btcc | undefined = input.btcc;
   let btccHost: BtccComposition["host"] | undefined = input.btccHost;
+  let subsessionDelegation: BtccComposition["subsessions"] | undefined;
   let btccReady: Promise<void> | undefined;
   const shutdownFlagPath = join(butlerData, "locks", "butler-shutdown");
   const pollMs = input.shutdownPollMs ?? 500;
@@ -106,6 +107,7 @@ export async function runNativeButlerMain(
       });
       btcc = composition.btcc;
       btccHost = composition.host;
+      subsessionDelegation = composition.subsessions;
       btccReady = composition.ready;
     }
     if (!btcc) throw new Error("BTCC facade was not created");
@@ -138,6 +140,7 @@ export async function runNativeButlerMain(
       router,
       handlers: createBtccGatewayHandlers({
         btcc,
+        subsessionDelegation,
         generateSessionTitle: ({ route, envelope }) => {
           const activeBinding = store.getBySessionId(route.sessionId);
           if (!activeBinding) return Promise.resolve(null);

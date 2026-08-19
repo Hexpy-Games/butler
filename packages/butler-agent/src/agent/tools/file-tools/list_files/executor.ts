@@ -106,6 +106,7 @@ export async function executeListFilesTool(
   const guard = await resolveWorkspacePathGuard({
     workspaceRoot,
     relativePath: root,
+    relativeOnly: context.allowedToolsAndEffects !== undefined,
     allowDirectories: true,
     requireDirectory: true,
     rejectProtectedProjectLedgerPaths: true,
