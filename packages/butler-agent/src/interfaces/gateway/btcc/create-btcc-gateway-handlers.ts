@@ -3,9 +3,8 @@ import type {
   GatewayRoute,
   InboundEnvelope,
 } from "../../../gateways/core/contracts.ts";
-import type {
-  BtccTurnRequest,
-} from "../../../agent/btcc/index.ts";
+import type { BtccTurnRequest } from "../../../agent/btcc/index.ts";
+import { subsessionResultId } from "../../../agent/btcc/subsessions/index.ts";
 import { projectTurnOutcome } from "./project-turn-outcome.ts";
 import type { BtccGatewayHandlerOptions } from "./contracts.ts";
 
@@ -59,6 +58,15 @@ export function createBtccGatewayHandlers(
       throw new Error(`BTCC turn remains recoverable: ${outcome.kind}`);
     }
     const result = projectTurnOutcome(outcome);
+    if (route.role === "steward" && options.subsessionDelegation &&
+      (outcome.kind === "delivered" || outcome.kind === "already_delivered")) {
+      await options.subsessionDelegation.completeStewardResult({
+        childSessionId: route.sessionId,
+        childTurnId: outcome.turnId,
+        resultId: subsessionResultId(route.sessionId, outcome.turnId),
+        summary: result.text,
+      });
+    }
     const generatedSessionTitle = result.text && outcome.admission !== "replay"
       ? await safeTitle(options, envelope, route)
       : null;

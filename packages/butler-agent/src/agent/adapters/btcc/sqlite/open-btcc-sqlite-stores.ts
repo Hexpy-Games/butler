@@ -40,6 +40,7 @@ import { selectTurnContinuationBudget } from "../../../btcc/turn/index.ts";
 import { createPrincipalAuthority } from "../../../btcc/authority/index.ts";
 import { SqlitePrincipalAuthorityRepository } from "./authority-repository.ts";
 import { agentBtccStoragePaths } from "./storage-ownership/index.ts";
+import { SqliteSubsessionDelegationStore } from "./subsession-store.ts";
 
 export function openBtccSqliteStores(input: {
   dbPath: string;
@@ -69,6 +70,7 @@ export function openBtccSqliteStores(input: {
     db,
     input.legacyProjectWorkSource,
   ));
+  const subsessionStore = new SqliteSubsessionDelegationStore(db);
   const authority = createPrincipalAuthority(
     new SqlitePrincipalAuthorityRepository(db),
   );
@@ -88,6 +90,7 @@ export function openBtccSqliteStores(input: {
     guidedOperationResultReader: new SqliteGuidedOperationResultReader(db),
     guidedEffectJournal: new SqliteGuidedEffectJournal(db),
     durableWork,
+    subsessionStore,
     authority,
     legacyCutover,
     committedSuccessorReadiness: sqliteWriteReadiness,

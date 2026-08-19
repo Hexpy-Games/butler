@@ -1,5 +1,6 @@
 import { relative } from "node:path";
 import {
+  mutationScopeAllowsPath,
   resolveWorkspacePathGuard,
   safeWorkspaceGuardResult,
   safeWorkspaceResultPath,
@@ -91,6 +92,21 @@ export async function executeWriteFileTool(
       { message: "write_file requires path, content, and boolean overwrite.", recovery_hint: "Retry with path, content, and overwrite=false or true." },
     ));
   }
+  if (context.allowedToolsAndEffects &&
+      !context.allowedToolsAndEffects.includes("write_file:workspace")) {
+    const safePath = safeWorkspaceResultPath({ workspaceRoot, requestedPath });
+    return failedResult(workspaceMutationFailure(safePath ?? "", "tool_not_admitted", {
+      message: "The write effect is not admitted for this Steward task.",
+      recovery_hint: "Use only the exact mutation capability in the delegated packet.",
+    }));
+  }
+  if (!mutationScopeAllowsPath(requestedPath, context.mutationScope)) {
+    const safePath = safeWorkspaceResultPath({ workspaceRoot, requestedPath });
+    return failedResult(workspaceMutationFailure(safePath ?? "", "invalid_arguments", {
+      message: "The requested path is outside the delegated mutation scope.",
+      recovery_hint: "Retry only within the immutable Steward mutation scope.",
+    }));
+  }
   if (suppliedExpectedSha256 && expectedSha256 === undefined) {
     const safePath = safeWorkspaceResultPath({ workspaceRoot, requestedPath });
     return failedResult(workspaceMutationFailure(
@@ -106,6 +122,7 @@ export async function executeWriteFileTool(
   const guard = await resolveWorkspacePathGuard({
     workspaceRoot,
     relativePath: requestedPath,
+    relativeOnly: context.allowedToolsAndEffects !== undefined,
     allowMissingLeaf: true,
     rejectProtectedProjectLedgerWrites: true,
     protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,

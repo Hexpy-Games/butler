@@ -5,6 +5,8 @@ import { projectLedgerProtectedPath } from "./project-ledger-protection.ts";
 export interface WorkspacePathGuardInput {
   workspaceRoot: string;
   relativePath: string;
+  /** Child-session tools accept only workspace-relative paths. */
+  relativeOnly?: boolean;
   allowMissingLeaf?: boolean;
   allowDirectories?: boolean;
   /** Require the admitted path itself to be a directory. */
@@ -84,10 +86,27 @@ export function looksSensitiveWorkspacePath(pathValue: string): boolean {
   });
 }
 
+export function mutationScopeAllowsPath(
+  requestedPath: string,
+  mutationScope: readonly string[] | undefined,
+): boolean {
+  if (!mutationScope) return true;
+  const target = requestedPath.trim().replaceAll("\\", "/").replace(/^\.\//u, "");
+  if (!target || isAbsolute(target) || target.split("/").includes("..")) return false;
+  return mutationScope.some((scope) => {
+    const normalized = scope.trim().replaceAll("\\", "/").replace(/^\.\//u, "");
+    return Boolean(normalized) &&
+      (target === normalized || normalized.endsWith("/") && target.startsWith(normalized));
+  });
+}
+
 export async function resolveWorkspacePathGuard(input: WorkspacePathGuardInput): Promise<WorkspacePathGuardResult> {
   const requestedPath = input.relativePath;
   const workspaceRoot = resolve(input.workspaceRoot || ".");
   if (!requestedPath || typeof requestedPath !== "string") return { ok: false, workspaceRoot, requestedPath, reason: "missing_path" };
+  if (input.relativeOnly && isAbsolute(requestedPath)) {
+    return { ok: false, workspaceRoot, requestedPath, reason: "absolute_path_not_allowed" };
+  }
   const rootReal = await realpath(workspaceRoot);
   if (!isAbsolute(requestedPath) && requestedPath.split(/[\\/]+/).includes("..")) {
     return { ok: false, workspaceRoot: rootReal, requestedPath, reason: "parent_traversal_not_allowed" };

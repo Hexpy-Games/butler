@@ -1,5 +1,5 @@
 import { lstat, readFile } from "node:fs/promises";
-import { resolveWorkspacePathGuard } from "../shared/workspace-path-guard.ts";
+import { resolveWorkspacePathGuard, safeWorkspaceResultPath } from "../shared/workspace-path-guard.ts";
 import { sha256Hex } from "../shared/evidence.ts";
 import { isSafeRelativeCursorPath } from "../shared/cursor.ts";
 import type { FileToolExecutionContext } from "./executor.ts";
@@ -154,13 +154,21 @@ export async function readOneFile(
   const guard = await resolveWorkspacePathGuard({
     workspaceRoot,
     relativePath: request.path,
+    relativeOnly: context.allowedToolsAndEffects !== undefined,
     rejectProtectedProjectLedgerPaths: true,
     protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
   });
   if (!guard.ok) {
     const error = guard.reason === "directory_not_allowed" ? "not_a_file" : guard.reason ?? "path_rejected";
+    const safePath = context.allowedToolsAndEffects === undefined
+      ? request.path
+      : safeWorkspaceResultPath({
+          workspaceRoot: guard.workspaceRoot,
+          requestedPath: request.path,
+          absolutePath: guard.absolutePath,
+        }) ?? ".";
     return {
-      result: readFailure(request.path, error, "The file path is not an admitted workspace file.", "Choose a contained, non-sensitive regular file path."),
+      result: readFailure(safePath, error, "The file path is not an admitted workspace file.", "Choose a contained, non-sensitive regular file path."),
       outputBytes: 0,
       bytesRead: 0,
       hasMore: false,

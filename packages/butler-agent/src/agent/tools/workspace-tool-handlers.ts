@@ -11,6 +11,8 @@ export function createWorkspaceToolHandlers(input: {
   workspaceReference: WorkspaceReference;
   sessionId?: string;
   sessionBindingStore?: SessionWorkspaceBindingStore;
+  mutationScope?: readonly string[];
+  allowedToolsAndEffects?: readonly string[];
 }): ButlerToolExecutorRegistry {
   const workspacePath = input.workspacePath ?? input.butlerHome;
   return {
@@ -19,11 +21,14 @@ export function createWorkspaceToolHandlers(input: {
       butlerData: input.butlerData,
       workspacePath,
       workspaceReference: input.workspaceReference,
+      allowedToolsAndEffects: input.allowedToolsAndEffects,
     }),
     ...createFileToolHandlers({
       butlerData: input.butlerData,
       workspacePath,
       workspaceReference: input.workspaceReference,
+      mutationScope: input.mutationScope,
+      allowedToolsAndEffects: input.allowedToolsAndEffects,
     }),
     ...createSessionWorkspaceToolHandlers({
       butlerData: input.butlerData,

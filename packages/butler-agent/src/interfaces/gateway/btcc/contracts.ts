@@ -1,4 +1,5 @@
 import type { Btcc } from "../../../agent/btcc/index.ts";
+import type { SubsessionDelegationService } from "../../../agent/btcc/subsessions/index.ts";
 import type {
   GatewayRoute,
   InboundEnvelope,
@@ -10,4 +11,5 @@ export type BtccGatewayHandlerOptions = {
     envelope: InboundEnvelope;
     route: GatewayRoute;
   }) => Promise<string | null>;
+  subsessionDelegation?: SubsessionDelegationService;
 };

@@ -1,12 +1,13 @@
 import type { ButlerExecutionPolicy } from "../contracts.ts";
 import type { StableProviderCachePrefixContract } from "../ports/model-round.ts";
+import { guidedStewardInstructions } from "./guided-steward-instructions.ts";
 
 export const GUIDED_STABLE_PROVIDER_PREFIX_REVISION =
   "butler.btcc-stable-provider-prefix.v1" as const;
 
 export function phaseMinimalStableInstructionSurface(
   phase: "direct" | "read_only" | "execution",
-  policy: Pick<ButlerExecutionPolicy, "trackingMode">,
+  policy: Pick<ButlerExecutionPolicy, "role" | "trackingMode" | "subsession">,
   toolProfileRevision: string,
 ): {
   stableInstructionPrefix: string;
@@ -26,8 +27,11 @@ export function phaseMinimalStableInstructionSurface(
 
 export function phaseMinimalStableInstructions(
   phase: "direct" | "read_only" | "execution",
-  policy: Pick<ButlerExecutionPolicy, "trackingMode">,
+  policy: Pick<ButlerExecutionPolicy, "role" | "trackingMode" | "subsession">,
 ): string {
+  if (policy.role === "steward" && policy.subsession) {
+    return guidedStewardInstructions(policy);
+  }
   return [
     "You are Butler. Give the user a useful result, not an account of an internal protocol.",
     "Answer simple conversation and stable knowledge directly and briefly. Use tools only when current, external, workspace, attachment, memory, or project evidence is needed.",

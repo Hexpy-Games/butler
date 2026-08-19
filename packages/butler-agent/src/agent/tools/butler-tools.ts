@@ -31,6 +31,7 @@ import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
 import { createWorkspaceToolHandlers } from "./workspace-tool-handlers.ts";
+import { createSubsessionToolHandlers } from "./subsession/index.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
 import type {
   ButlerToolCall,
@@ -250,6 +251,16 @@ export function createButlerToolExecutor(
       workspaceReference,
       sessionId: input.sessionId,
       sessionBindingStore: input.sessionBindingStore,
+      mutationScope: input.subsessionMutationScope,
+      allowedToolsAndEffects: input.subsessionAllowedToolsAndEffects,
+    }),
+    ...createSubsessionToolHandlers({
+      service: input.subsessionDelegation,
+      parentSessionId: input.sessionId,
+      parentTurnId: input.turnId,
+      anchorMessageId: input.anchorMessageId,
+      modelRef: input.modelRef,
+      reasoningEffort: input.reasoningEffort,
     }),
   });
   toolExecutorRef.current = toolExecutors;

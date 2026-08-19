@@ -23,6 +23,7 @@ import type {
   ButlerToolDefinition,
   NativeToolAvailabilityOverrides,
 } from "./types.ts";
+import type { SubsessionDelegationService } from "../btcc/subsessions/index.ts";
 
 export type ButlerToolRuntimeContext = { effectOccurrenceId?: string };
 export type ContextualButlerToolExecutor = (
@@ -78,4 +79,10 @@ export type ButlerToolExecutorInput = {
   sessionBindingStore?: SessionWorkspaceBindingStore;
   memoryAttribution?: RuntimeMemoryAttributionPort;
   operationResultExactReader?: (args: Record<string, unknown>) => unknown;
+  subsessionDelegation?: SubsessionDelegationService;
+  anchorMessageId?: string;
+  modelRef?: string;
+  reasoningEffort?: string;
+  subsessionMutationScope?: readonly string[];
+  subsessionAllowedToolsAndEffects?: readonly string[];
 };

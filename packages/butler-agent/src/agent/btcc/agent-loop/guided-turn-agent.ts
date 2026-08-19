@@ -33,6 +33,7 @@ import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
 import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
 import { privateModifyContinuationPromptInput } from "./guided-authority-continuation.ts";
 import type { PrincipalAuthority } from "../authority/index.ts";
+import { ensureSubsessionChildRootWork, subsessionToolInput } from "../subsessions/index.ts";
 
 type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
 
@@ -80,6 +81,7 @@ export function createProductionGuidedTurnAgent(
       }
       const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
       const workScope = workScopeForTurn(turn, policy.trackingMode);
+      if (policy.role === "steward" && input.subsessionDelegation) await ensureSubsessionChildRootWork({ service: input.subsessionDelegation, turn });
       const { context: initialWork, bound: initialWorkBound } = await loadGuidedTurnWork({
         durableWork: input.durableWork,
         toolJournal: input.toolJournal,
@@ -115,6 +117,7 @@ export function createProductionGuidedTurnAgent(
         workspaceReference,
         sessionBindingStore: sessionWorkspace.bindingStore,
         operationResultExactReader: operationResults.read,
+        ...subsessionToolInput(input.subsessionDelegation, turn),
         turnId: turn.turnId,
         imageManifests: providerImageAttachments(turn).flatMap((a) => a.visualManifest ? [a.visualManifest] : []),
         ...(turn.context.imageAdmission ? { imageCarrier: turn.context.imageAdmission.tuple, imageCapability: turn.context.imageAdmission.capability } : {}),
@@ -341,7 +344,6 @@ export function createProductionGuidedTurnAgent(
     },
   };
 }
-
 function projectionAuthority(authority: PrincipalAuthority | undefined, sourceSessionId: string, clientMessageId: string | undefined): PrincipalAuthority | undefined {
   if (!authority || !clientMessageId) return authority;
   return { ...authority, execution: (input) => authority.execution({ ...input, sourceSessionId: input.sourceSessionId ?? sourceSessionId, clientMessageId: input.clientMessageId ?? clientMessageId }) };

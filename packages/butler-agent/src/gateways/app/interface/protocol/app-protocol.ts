@@ -18,6 +18,8 @@ export * from "./session-contract.ts";
 export * from "./automation-worker-contract.ts";
 export * from "./messaging-contract.ts";
 export * from "./message-guards.ts";
+export * from "./internal-result-contract.ts";
+export * from "./internal-result-guards.ts";
 export * from "./navigation-guards.ts";
 export * from "./settings-guards.ts";
 export * from "./update-guards.ts";

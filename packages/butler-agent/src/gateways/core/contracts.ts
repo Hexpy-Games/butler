@@ -105,6 +105,8 @@ export interface InboundEnvelope {
     version: 1;
     projectName: string;
     workspacePath: string;
+    modelRef?: ModelRef;
+    reasoningEffort?: string;
   };
   control?: {
     kind: "cancel_turn";
