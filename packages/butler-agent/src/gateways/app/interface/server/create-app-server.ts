@@ -6,6 +6,7 @@ import {
   AppStoreOperationError,
   type AppMessageResponder,
 } from "../../application/store/app-server-store.ts";
+import { retryDecidedAuthorityInputs } from "../../application/authority-handoff.ts";
 import { openBtccAuthorityStore } from "../../../../agent/adapters/index.ts";
 import { apiError } from "../protocol/app-protocol.ts";
 import {
@@ -116,6 +117,8 @@ function createComposedAppServer(
       automationSchedulerRunning = running;
     },
   });
+
+  void retryDecidedAuthorityInputs({ authority, store }).catch(() => undefined);
 
   return {
     url: server.url.toString(),

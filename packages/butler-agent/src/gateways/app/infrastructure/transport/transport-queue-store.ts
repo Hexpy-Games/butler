@@ -142,6 +142,9 @@ export class AppTransportQueueStore {
           ...(input.authorityRequestRef
             ? { authorityRequestRef: input.authorityRequestRef }
             : {}),
+          ...(input.authorityRequestRef
+            ? { authorityClientMessageId: input.message.id }
+            : {}),
         },
         attachments: this.messageFiles.attachmentsForTransport(
           input.message.id,

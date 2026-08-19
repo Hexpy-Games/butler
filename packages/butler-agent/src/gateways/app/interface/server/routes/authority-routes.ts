@@ -1,8 +1,9 @@
 import { AuthorityRequestError } from "../../../../../agent/btcc/authority/index.ts";
+import { apiEnvelope } from "../../protocol/app-protocol.ts";
 import {
-  apiEnvelope,
-  type MessageSendRequest,
-} from "../../protocol/app-protocol.ts";
+  AuthorityHandoffError,
+  decideAndAdmitAuthority,
+} from "../../../application/authority-handoff.ts";
 import { sessionHintForRow } from "../../../domain/sessions/session-read-model.ts";
 import { RequestError, json } from "../responses.ts";
 import type { AppRouteContext } from "../server-types.ts";
@@ -26,20 +27,20 @@ export async function handleAuthorityRoutes(
     : null;
   if (!match) return null;
   const requestRef = decodeURIComponent(match[1]!);
-  const decisionAction = match[2];
-  let decision;
+  const decisionAction = match[2] as "allow" | "deny" | "modify";
+  let handoff;
   try {
-    if (decisionAction === "modify") {
-      decision = input.authority.modify({
-        ownerSessionId,
-        requestRef,
-        alternativeInput: await modifyInput(input.request),
-      });
-    } else {
-      decision = decisionAction === "deny"
-        ? input.authority.deny({ ownerSessionId, requestRef })
-        : input.authority.allow({ ownerSessionId, requestRef });
-    }
+    handoff = await decideAndAdmitAuthority({
+      authority: input.authority,
+      store: input.store,
+      ownerSessionId,
+      requestRef,
+      sourceSessionId: ownerSessionId,
+      action: decisionAction,
+      ...(decisionAction === "modify"
+        ? { alternativeInput: await modifyInput(input.request) }
+        : {}),
+    });
   } catch (error) {
     if (error instanceof AuthorityRequestError) {
       if (error.code === "authority_modify_input_missing" ||
@@ -49,48 +50,20 @@ export async function handleAuthorityRoutes(
       if (error.code === "authority_modify_identity_mismatch") {
         throw new RequestError(409, error.code, "Modify instruction conflicts with the stored decision.");
       }
+      if (error.code === "authority_decision_conflict") {
+        throw new RequestError(409, error.code, "The authority request already has a different decision.");
+      }
       throw new RequestError(404, "authority_request_not_found", "Authority request not found.");
     }
-    throw error;
-  }
-
-  const chatId = chatIdFromSessionHint(decision.sourceSessionId);
-  if (!chatId) {
-    throw new RequestError(409, "authority_source_session_invalid", "Authority source session is not resumable.");
-  }
-  const queueInput: MessageSendRequest = {
-    chat_id: chatId,
-    text: decision.scheduleInputText,
-    client_message_id: decision.scheduleClientMessageId,
-    model: decision.modelRef,
-    reasoning_effort: decision.reasoningEffort as MessageSendRequest["reasoning_effort"],
-    access_mode: "ask_first",
-    authority_request_ref: decision.requestRef,
-  };
-  try {
-    const scheduled = await input.store.sendMessage(queueInput, undefined, {
-      deferResponderTurns: true,
-    });
-    const scheduledTurnId = scheduled.turn?.id ?? scheduled.queued?.turn_id;
-    if (!scheduledTurnId) {
-      throw new RequestError(409, "authority_source_turn_missing", "Authority source Turn could not be scheduled.");
-    }
-    input.authority.markScheduled({
-      ownerSessionId,
-      requestRef: decision.requestRef,
-      clientMessageId: decision.scheduleClientMessageId,
-      turnId: scheduledTurnId,
-    });
-  } catch (error) {
-    if (error instanceof AuthorityRequestError) {
-      throw new RequestError(409, "authority_schedule_identity_mismatch", "Authority schedule could not be recorded.");
+    if (error instanceof AuthorityHandoffError) {
+      throw new RequestError(409, error.code, "Authority queue admission could not be verified.");
     }
     throw error;
   }
   return json(apiEnvelope({
-    request_ref: decision.requestRef,
-    decision: decision.decision,
-    scheduled: true,
+    request_ref: handoff.decision.requestRef,
+    decision: handoff.decision.decision,
+    scheduled: handoff.admitted,
   }), 202);
 }
 
@@ -110,11 +83,4 @@ async function modifyInput(request: Request): Promise<string> {
     throw new RequestError(400, "authority_modify_input_missing", "Modify instruction is invalid.");
   }
   return alternative;
-}
-
-function chatIdFromSessionHint(sessionId: string): string | null {
-  const prefix = "butler/app-";
-  if (!sessionId.startsWith(prefix)) return null;
-  const chatId = sessionId.slice(prefix.length);
-  return chatId || null;
 }

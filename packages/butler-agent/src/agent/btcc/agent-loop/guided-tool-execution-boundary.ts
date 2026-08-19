@@ -58,6 +58,7 @@ type GuidedToolExecutionBoundaryInput = {
   reasoningEffort?: string;
   workspacePath?: string;
   authorityRequestRef?: string;
+  authorityClientMessageId?: string;
   toolJournal?: GuidedToolJournal;
   accessMode: GuidedEffectAccessMode;
   signal: AbortSignal;
@@ -119,6 +120,7 @@ export function createGuidedToolExecutionBoundary(
         requestRef: input.authorityRequestRef,
         ownerSessionId: input.ownerSessionId,
         sourceTurnId: input.sourceTurnId,
+        clientMessageId: input.authorityClientMessageId,
         workspacePath: input.workspacePath,
         sourceWorkId: work.workId,
         call,

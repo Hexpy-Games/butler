@@ -1,7 +1,7 @@
 export type AuthorityCategory = "command";
 export type AuthorityDecision = "pending" | "allowed" | "denied" | "modified";
-export type AuthorityScheduleState = "pending" | "scheduled";
 export type AuthorityOutcome = "pending" | "applied" | "failed";
+export type AuthorityDecisionAction = "allow" | "deny" | "modify";
 
 /** Fixed safe projection for a terminal self-session Deny decision. */
 export const AUTHORITY_DENIAL_TEXT =
@@ -65,7 +65,7 @@ export type AuthorityAdmissionResult =
       replacementPending: true;
     };
 
-export type AuthorityAllowResult = {
+export type AuthorityDecisionResult = {
   requestRef: string;
   sourceSessionId: string;
   sourceWorkId: string;
@@ -73,32 +73,7 @@ export type AuthorityAllowResult = {
   scheduleInputText: string;
   modelRef: string;
   reasoningEffort: string;
-  scheduleState: AuthorityScheduleState;
-  decision: "allowed";
-};
-
-export type AuthorityDenyResult = {
-  requestRef: string;
-  sourceSessionId: string;
-  sourceWorkId: string;
-  scheduleClientMessageId: string;
-  scheduleInputText: string;
-  modelRef: string;
-  reasoningEffort: string;
-  scheduleState: AuthorityScheduleState;
-  decision: "denied";
-};
-
-export type AuthorityModifyResult = {
-  requestRef: string;
-  sourceSessionId: string;
-  sourceWorkId: string;
-  scheduleClientMessageId: string;
-  scheduleInputText: string;
-  modelRef: string;
-  reasoningEffort: string;
-  scheduleState: AuthorityScheduleState;
-  decision: "modified";
+  decision: Exclude<AuthorityDecision, "pending">;
 };
 
 export type AuthorityStoredExecution = {
@@ -115,7 +90,6 @@ export type AuthorityStoredExecution = {
   normalizedInput: AuthorityCommandInput;
   decision: "allowed" | "denied" | "modified";
   alternativeInput?: string;
-  scheduleTurnId?: string;
   outcome: AuthorityOutcome;
 };
 
@@ -139,21 +113,19 @@ export interface PrincipalAuthorityRepository {
   insert(record: AuthorityRecord): void;
   findByPublicRef(requestRef: string): AuthorityRecord | null;
   listPending(ownerSessionId: string): AuthorityRecord[];
-  allow(requestRef: string, ownerSessionId: string, now: string): AuthorityRecord | null;
-  deny(requestRef: string, ownerSessionId: string, now: string): AuthorityRecord | null;
-  modify(
-    requestRef: string,
-    ownerSessionId: string,
-    alternativeInput: string,
-    now: string,
-  ): AuthorityRecord | null;
-  markScheduled(
-    requestRef: string,
-    ownerSessionId: string,
-    clientMessageId: string,
-    turnId: string,
-    now: string,
-  ): AuthorityRecord | null;
+  listDecided(): AuthorityRecord[];
+  isSourceWorkEligible(input: {
+    sourceSessionId: string;
+    sourceWorkId: string;
+  }): boolean;
+  decide(input: {
+    requestRef: string;
+    ownerSessionId: string;
+    sourceSessionId: string;
+    action: AuthorityDecisionAction;
+    alternativeInput?: string;
+    now: string;
+  }): AuthorityRecord | null;
   recordOutcome(input: {
     requestRef: string;
     sourceWorkId: string;
@@ -185,10 +157,8 @@ export type AuthorityRecord = {
   executable: string;
   commandCount: number;
   decision: AuthorityDecision;
-  scheduleState: AuthorityScheduleState;
   scheduleClientMessageId: string;
   scheduleInputText: string;
-  scheduleTurnId: string | null;
   privateAlternativeInput: string | null;
   outcome: AuthorityOutcome;
   outcomeReceiptJson: string | null;
@@ -199,28 +169,21 @@ export type AuthorityRecord = {
 export interface PrincipalAuthority {
   admit(input: AuthorityAdmissionInput): AuthorityAdmissionResult;
   list(input: { ownerSessionId: string }): AuthorityRequestProjection[];
-  allow(input: {
+  decide(input: {
     ownerSessionId: string;
     requestRef: string;
-  }): AuthorityAllowResult;
-  deny(input: {
-    ownerSessionId: string;
-    requestRef: string;
-  }): AuthorityDenyResult;
-  modify(input: {
-    ownerSessionId: string;
-    requestRef: string;
-    alternativeInput: string;
-  }): AuthorityModifyResult;
-  markScheduled(input: {
-    ownerSessionId: string;
-    requestRef: string;
-    clientMessageId: string;
-    turnId: string;
-  }): void;
+    sourceSessionId: string;
+    action: AuthorityDecisionAction;
+    alternativeInput?: string;
+  }): AuthorityDecisionResult;
+  listDecided(): AuthorityDecisionResult[];
   execution(input: {
     ownerSessionId: string;
     requestRef: string;
+    /** Optional only for legacy projection readers; execution fails closed when absent. */
+    sourceSessionId?: string;
+    /** Optional only for legacy projection readers; execution fails closed when absent. */
+    clientMessageId?: string;
     turnId: string;
   }): AuthorityStoredExecution;
   recordOutcome(input: AuthorityOutcomeInput): void;

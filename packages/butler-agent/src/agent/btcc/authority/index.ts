@@ -1,6 +1,8 @@
 export { AuthorityRequestError, createPrincipalAuthority } from "./principal-authority.ts";
 export type {
   AuthorityCommandInput,
+  AuthorityDecisionAction,
+  AuthorityDecisionResult,
   PrincipalAuthority,
   PrincipalAuthorityRepository,
 } from "./contracts.ts";

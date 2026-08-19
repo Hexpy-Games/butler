@@ -98,6 +98,8 @@ export interface InboundEnvelope {
     };
     /** Internal Allow adapter identity; never populated by arbitrary clients. */
     authorityRequestRef?: string;
+    /** Durable App queue identity paired with the stored authority request. */
+    authorityClientMessageId?: string;
   };
   nativeStewardContext?: {
     version: 1;
