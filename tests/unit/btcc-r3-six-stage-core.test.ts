@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   allowedNextWorkStages,
+  acceptedCurrentResultReview,
   createDurableWorkService,
   resolveWorkReviewTransition,
   type DurableWorkContext,
@@ -236,6 +237,41 @@ test("completion acceptance stays open when the accepted result Review is stale"
     entryStage: "validation",
   });
   expect(command?.expectedResultReviewRevisionId).toBeUndefined();
+});
+
+test("accepted result Review matches a unique current result-ref set regardless of order", () => {
+  const result = (resultRef: string, index: number) => ({
+    resultRef,
+    toolCallId: `tool-${index}`,
+    toolName: "read_file",
+    status: "completed" as const,
+    originTurnId: "turn-results",
+    attachedAt: "2026-08-02T00:00:00.000Z",
+  });
+  const currentResults = [result("result-a", 1), result("result-b", 2)];
+  const current = workView({
+    latestResultReview: acceptedResultReview(["result-b", "result-a"]),
+    resultRefs: currentResults,
+  });
+
+  expect(acceptedCurrentResultReview(current)?.reviewRevisionId)
+    .toBe("result-review-current");
+  expect(acceptedCurrentResultReview(workView({
+    latestResultReview: acceptedResultReview(["result-a", "result-a"]),
+    resultRefs: [result("result-a", 1), result("result-a", 2)],
+  }))).toBeUndefined();
+  expect(acceptedCurrentResultReview(workView({
+    latestResultReview: acceptedResultReview(["result-a", "result-b"]),
+    resultRefs: [result("result-a", 1), result("result-a", 2)],
+  }))).toBeUndefined();
+  expect(acceptedCurrentResultReview(workView({
+    latestResultReview: acceptedResultReview(["result-a"]),
+    resultRefs: currentResults,
+  }))).toBeUndefined();
+  expect(acceptedCurrentResultReview(workView({
+    latestResultReview: acceptedResultReview(["result-a", "result-b", "result-c"]),
+    resultRefs: currentResults,
+  }))).toBeUndefined();
 });
 
 function fakeService(input: {

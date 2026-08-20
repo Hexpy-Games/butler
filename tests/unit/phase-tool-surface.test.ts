@@ -7,6 +7,8 @@ import { snapshotTurnContext } from
   "../../packages/butler-agent/src/agent/btcc/turn/prepare-turn.ts";
 import { guidedInstructions, renderGuidedTurnRequestAttribution } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-prompt.ts";
+import { phaseMinimalStableInstructions } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-phase-instructions.ts";
 import { BUTLER_TOOLS } from
   "../../packages/butler-agent/src/agent/tools/registry.ts";
 import { appRuntimePolicy } from
@@ -318,6 +320,64 @@ test("feature selected stable prefix is the prefix of the real guided provider i
     .toBe(selection.stableInstructionPrefix.split("\n", 1)[0] + "\n");
 });
 
+test("SS-03B phase instructions define semantic delegation selection", () => {
+  const policy = {
+    role: "butler" as const,
+    trackingMode: "ledger" as const,
+    subsession: undefined,
+  };
+
+  for (const phase of ["read_only", "execution"] as const) {
+    const instructions = phaseMinimalStableInstructions(phase, policy);
+
+    expect(instructions).toContain(
+      "Select the path from the user's complete objective and constraints.",
+    );
+    expect(instructions).toContain(
+      "Keep simple conversation, stable knowledge, and one quick lookup in Butler.",
+    );
+    expect(instructions).toContain(
+      "Delegate bounded independent multi-step repository inspection, multi-source research or synthesis, persistent-artifact work, or execution-stage mutation with delegate_to_steward.",
+    );
+    expect(instructions).toContain(
+      "Honor explicit user direction to delegate or keep the work in Butler.",
+    );
+    expect(instructions).toContain(
+      "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
+    );
+    expect(instructions).toContain(
+      "Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",
+    );
+  }
+});
+
+test("read-only Steward Plan actions omit effects on legacy and phase tool surfaces", () => {
+  const readOnlyTurn = stewardTurnRecord("read_only");
+  for (const env of [{}, ENABLED]) {
+    const selection = selectGuidedTurnPhasePolicy(readOnlyTurn, env);
+    const actionSchema = planActionSchema(selection.providerTools);
+    expect(actionSchema.properties).not.toHaveProperty("effect");
+    expect(actionSchema.required ?? []).not.toContain("effect");
+  }
+
+  const mutationActionSchema = planActionSchema(
+    selectGuidedTurnPhasePolicy(stewardTurnRecord("mutation"), ENABLED).providerTools,
+  );
+  expect(mutationActionSchema.properties).toHaveProperty("effect");
+
+  const butlerActionSchema = planActionSchema(
+    selectGuidedTurnPhasePolicy(
+      turnRecord({
+        accessMode: "full_access",
+        trackingMode: "ledger",
+        projectRef: "butler",
+      }),
+      ENABLED,
+    ).providerTools,
+  );
+  expect(butlerActionSchema.properties).toHaveProperty("effect");
+});
+
 test("feature default-off path preserves legacy bytes and enabled policy reduces both stable and schema bytes", () => {
   const turn = turnRecord({
     accessMode: "full_access",
@@ -446,6 +506,45 @@ function turnRecord(options: {
     revision: 0,
     executionFence: 0,
   };
+}
+
+function stewardTurnRecord(executionMode: "read_only" | "mutation"): TurnRecord {
+  const turn = turnRecord({
+    accessMode: executionMode === "read_only" ? "read_only" : "full_access",
+    trackingMode: "ledger",
+    projectRef: "butler",
+  });
+  turn.context.executionPolicy = {
+    ...turn.context.executionPolicy!,
+    role: "steward",
+    subsession: {
+      relationId: "relation-phase-surface",
+      delegationId: "delegation-phase-surface",
+      taskId: "task-phase-surface",
+      executionMode,
+      mutationScope: executionMode === "mutation" ? ["bounded-result.txt"] : [],
+      allowedToolsAndEffects: executionMode === "mutation"
+        ? ["write_file:workspace"]
+        : [
+            "grep_files:workspace",
+            "list_files:workspace",
+            "read_file:workspace",
+            "web_read:network",
+            "web_search:network",
+          ],
+    },
+  };
+  return turn;
+}
+
+function planActionSchema(tools: readonly { name: string; parameters: Record<string, unknown> }[]) {
+  const plan = tools.find((tool) => tool.name === "replace_work_plan");
+  expect(plan).toBeDefined();
+  const properties = plan!.parameters.properties as {
+    actions?: { items?: Record<string, any> };
+  };
+  expect(properties.actions?.items).toBeDefined();
+  return properties.actions!.items!;
 }
 
 function byteLength(value: string): number {
