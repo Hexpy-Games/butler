@@ -44,6 +44,7 @@ export function phaseMinimalStableInstructions(
           "Choose read_only for inspection or research without effects, and mutation only for requested execution-stage changes.",
           "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
           "Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",
+          "When the user rejects or corrects a substantial delegated result and asks to investigate or execute it again, treat the corrected objective as a fresh delegation decision. If it remains substantial, call delegate_to_steward again as the first and only tool; do not inspect, plan, resume Work, or execute that corrected objective in Butler merely because an earlier Steward relation exists.",
         ]
       : []),
     "Preserve the user's exact intent, corrections, required evidence, safety boundaries, and admitted authority. Never claim a mutation or completed result without tool evidence.",
