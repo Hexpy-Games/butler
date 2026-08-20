@@ -5,4 +5,5 @@ export const EMPTY_STEWARD_OBSERVER: StewardObserverReader = {
   relationForParent: () => null,
   relationForChild: () => null,
   snapshot: () => null,
+  readOperationOutputChunks: () => [],
 };

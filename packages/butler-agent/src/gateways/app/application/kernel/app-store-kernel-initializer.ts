@@ -99,7 +99,7 @@ export function initializeAppStoreKernel(
     { create: true },
   );
   kernel.db = kernel.dbConnection.database;
-  kernel.operationOutputs = new SqliteOperationOutputReader(kernel.db);
+  kernel.operationOutputs = new SqliteOperationOutputReader(kernel.db, kernel.stewardObserver);
   coordinateSharedSqliteWriter(kernel.db);
   let wakeTerminalRetention = (
     _event: { turnId: string; eventId: number },

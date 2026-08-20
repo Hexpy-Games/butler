@@ -24,6 +24,7 @@ import { createAppTransportAdapter } from
 import { sessionHintForRow } from
   "../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
 import { join } from "node:path";
+import { EMPTY_STEWARD_OBSERVER } from "./support/steward-observer.ts";
 
 afterAll(cleanupTranscriptProjectionHarnesses);
 
@@ -130,7 +131,7 @@ test("App endpoint reader serves only delivered transcript projection and dedupe
   const projection = harness.createProjectionStore();
   drainProjection(projection);
 
-  const reader = new SqliteOperationOutputReader(harness.db);
+  const reader = new SqliteOperationOutputReader(harness.db, EMPTY_STEWARD_OBSERVER);
   let offset = 0;
   let assembled = "";
   while (true) {
@@ -225,7 +226,7 @@ test("transcript append is replayed safely when progress outbox ack crashes", as
   expect(await host.reconcile(replayPublisher)).toMatchObject({ published: 1, pending: 0 });
   const projection = harness.createProjectionStore();
   drainProjection(projection);
-  expect(new SqliteOperationOutputReader(harness.db).read({
+  expect(new SqliteOperationOutputReader(harness.db, EMPTY_STEWARD_OBSERVER).read({
     turnId,
     requestId,
     resultId,

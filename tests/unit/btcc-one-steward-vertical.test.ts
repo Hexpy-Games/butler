@@ -719,12 +719,27 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       );
       expect(childViewResponse.ok).toBe(true);
       const childView = await childViewResponse.json() as {
-        data?: { messages?: Array<{ role?: string; text?: string }> };
+        data?: {
+          messages?: Array<{ role?: string; text?: string }>;
+          latest_turn?: {
+            progress?: {
+              safe_progress_rows?: Array<{
+                safe_tool_name?: string;
+                tool_call_id?: string;
+                tool_result_id?: string;
+              }>;
+            };
+          };
+        };
       };
       const publicChildTranscript = JSON.stringify(childView.data?.messages ?? []);
       expect(publicChildTranscript).not.toMatch(
         /workspace_and_worktree|allowed_tools_and_effects|delegation_id:|hidden reasoning/iu,
       );
+      const readProgress = childView.data?.latest_turn?.progress?.safe_progress_rows?.find(
+        (row) => row.safe_tool_name === "read_file" && row.tool_call_id && row.tool_result_id,
+      );
+      expect(readProgress).toBeDefined();
 
       const result = btccDb.query<Record<string, unknown>, []>(
         `SELECT relation_id, status, result_id, child_turn_id, summary,
@@ -734,6 +749,62 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       ).get();
       expect(result?.status).toBe("success");
       expect(String(result?.summary)).toContain("source marker is present and verified");
+      const childOutputChunks = btccDb.query<{
+        event_json: string;
+      }, [string]>(`
+        SELECT event_json
+        FROM btcc_progress_events
+        WHERE turn_id = ? AND event_json LIKE '%operation.output.chunk%'
+        ORDER BY turn_sequence ASC, event_id ASC
+      `).all(String(result?.child_turn_id));
+      expect(childOutputChunks.length).toBeGreaterThan(0);
+      const firstChildOutput = childOutputChunks
+        .map((row) => JSON.parse(row.event_json) as {
+          payload?: {
+            requestId?: string;
+            resultId?: string;
+          };
+        })
+        .find((event) => event.payload?.requestId === readProgress?.tool_call_id &&
+          event.payload?.resultId === readProgress?.tool_result_id);
+      expect(firstChildOutput).toBeDefined();
+      expect(firstChildOutput?.payload?.requestId).toBe(readProgress?.tool_call_id);
+      expect(firstChildOutput?.payload?.resultId).toBe(readProgress?.tool_result_id);
+      const outputPath = `turns/${encodeURIComponent(String(result?.child_turn_id))}` +
+        `/operations/${encodeURIComponent(firstChildOutput?.payload?.requestId ?? "")}` +
+        `/output?result_id=${encodeURIComponent(firstChildOutput?.payload?.resultId ?? "")}`;
+      const outputResponse = await fetch(
+        `${app.url}${outputPath}`,
+        { headers: { authorization: `Bearer ${authToken}` } },
+      );
+      expect(outputResponse.status).toBe(200);
+      const outputBody = await outputResponse.json() as {
+        data?: {
+          turn_id?: string;
+          request_id?: string;
+          result_id?: string;
+          content?: string;
+          complete?: boolean;
+        };
+      };
+      expect(outputBody.data).toMatchObject({
+        turn_id: String(result?.child_turn_id),
+        request_id: firstChildOutput?.payload?.requestId,
+        result_id: firstChildOutput?.payload?.resultId,
+        complete: true,
+      });
+      expect(outputBody.data?.content).toContain("inspection-target.ts");
+      expect(app.store.db.query<{ count: number }, []>(
+        "SELECT COUNT(*) AS count FROM app_operation_output_chunks",
+      ).get()?.count).toBe(0);
+      const mismatchedOutputResponse = await fetch(
+        `${app.url}${outputPath.replace(
+          encodeURIComponent(firstChildOutput?.payload?.resultId ?? ""),
+          "0".repeat(64),
+        )}`,
+        { headers: { authorization: `Bearer ${authToken}` } },
+      );
+      expect(mismatchedOutputResponse.status).toBe(404);
       const childFinal = btccDb.query<{ final_payload_json: string }, [string]>(
         "SELECT final_payload_json FROM btcc_turns WHERE turn_id = ?",
       ).get(String(result?.child_turn_id))?.final_payload_json ?? "";
@@ -855,6 +926,29 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
           status: "failed", code: "steward_execution_failed",
           detail_refs_json: "[]", result_count: 1,
         });
+        if (rejected.key === "unusable") {
+          const failedToolEvent = rejectedDb.query<{ event_json: string }, [string]>(`
+            SELECT progress.event_json
+            FROM btcc_progress_events AS progress
+            JOIN btcc_session_relations AS relation
+              ON relation.child_session_id = progress.session_id
+            WHERE relation.parent_session_id = ?
+              AND progress.event_json LIKE '%tool.failed%'
+            ORDER BY progress.created_at ASC, progress.event_id ASC
+            LIMIT 1
+          `).get(parentSessionId);
+          expect(failedToolEvent).toBeDefined();
+          const failedTool = JSON.parse(failedToolEvent!.event_json) as {
+            kind?: string;
+            payload?: Record<string, unknown>;
+          };
+          expect(failedTool).toMatchObject({
+            kind: "tool.failed",
+            payload: { toolName: "read_file", operationStatus: "failed" },
+          });
+          expect(JSON.stringify(failedTool)).not.toContain(root);
+          expect(JSON.stringify(failedTool)).not.toContain(authToken);
+        }
       } finally {
         rejectedDb.close();
       }
@@ -1262,6 +1356,9 @@ function readOnlyStewardRound(
       const childKey = request.messages.map((message) => message.content).find((content) => content.includes("delegation_id")) ?? "child";
       const round = (childRounds.get(childKey) ?? 0) + 1;
       childRounds.set(childKey, round);
+      const simulateToolFailure = request.messages.some((message) =>
+        message.content.includes("unusable terminal report evidence"),
+      );
       if (round === 1) await holdFirstChildRound?.();
       if (round === 1) {
         return {
@@ -1287,6 +1384,13 @@ function readOnlyStewardRound(
         };
       }
       if (round === 3) {
+        if (simulateToolFailure) {
+          return {
+            toolCalls: [toolCall("read-missing-source", "read_file", {
+              requests: [{ path: "src/missing-inspection-target.ts" }],
+            })],
+          };
+        }
         return {
           toolCalls: [toolCall("list-files", "list_files", {
             root: ".",

@@ -6,10 +6,12 @@ import type {
   StewardObserverReader,
   StewardObserverRelation,
   StewardObserverSnapshot,
+  StewardObserverOperationOutputChunk,
   StewardObserverTurn,
 } from "../../../../gateways/app/domain/sessions/steward-observer.ts";
 import type { StewardResultView as StewardObserverResult } from
   "../../../../gateways/app/interface/protocol/app-protocol.ts";
+import { normalizeOperationOutputChunkPayload } from "../../../events/operation-output-event.ts";
 
 type RelationRow = StewardObserverRelation;
 
@@ -141,6 +143,51 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
     };
   }
 
+  readOperationOutputChunks(input: {
+    turnId: string;
+    requestId: string;
+    resultId: string;
+  }): StewardObserverOperationOutputChunk[] {
+    const rows = this.db.query<{ event_json: string }, [string]>(`
+      SELECT progress.event_json
+      FROM btcc_progress_events AS progress
+      JOIN btcc_turns AS turn
+        ON turn.turn_id = progress.turn_id
+       AND turn.session_id = progress.session_id
+      JOIN btcc_session_relations AS relation
+        ON relation.child_session_id = turn.session_id
+      WHERE progress.turn_id = ?
+        AND progress.session_id = relation.child_session_id
+      ORDER BY progress.turn_sequence ASC, progress.event_id ASC
+    `).all(input.turnId);
+    const chunks: StewardObserverOperationOutputChunk[] = [];
+    for (const row of rows) {
+      const event = parseOutputEvent(row.event_json);
+      if (!event) continue;
+      try {
+        const payload = normalizeOperationOutputChunkPayload(event.payload);
+        if (payload.requestId !== input.requestId || payload.resultId !== input.resultId) {
+          continue;
+        }
+        chunks.push({
+          request_id: payload.requestId,
+          result_id: payload.resultId,
+          result_sha256: payload.resultSha256,
+          chunk_index: payload.chunkIndex,
+          chunk_count: payload.chunkCount,
+          byte_start: payload.byteStart,
+          byte_end: payload.byteEnd,
+          byte_length: payload.byteLength,
+          content_base64: payload.contentBase64,
+          content_sha256: payload.contentSha256,
+        });
+      } catch {
+        // Invalid or private output is not an observer result.
+      }
+    }
+    return chunks;
+  }
+
   private relation(
     field: "parent_session_id" | "child_session_id",
     sessionId: string,
@@ -207,6 +254,25 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
     } catch {
       return [];
     }
+  }
+}
+
+function parseOutputEvent(value: string): {
+  kind: "operation.output.chunk";
+  visibility: "public";
+  payload: Record<string, unknown>;
+} | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!isRecord(parsed) || parsed.kind !== "operation.output.chunk" ||
+      parsed.visibility !== "public" || !isRecord(parsed.payload)) return null;
+    return {
+      kind: "operation.output.chunk",
+      visibility: "public",
+      payload: parsed.payload,
+    };
+  } catch {
+    return null;
   }
 }
 
