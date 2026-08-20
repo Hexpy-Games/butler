@@ -280,6 +280,9 @@ test("SS-03B guided instructions define semantic delegation selection", () => {
   expect(instructions).toContain(
     "Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",
   );
+  expect(instructions).toContain(
+    "When the user rejects or corrects a substantial delegated result and asks to investigate or execute it again, treat the corrected objective as a fresh delegation decision. If it remains substantial, call delegate_to_steward again as the first and only tool; do not inspect, plan, resume Work, or execute that corrected objective in Butler merely because an earlier Steward relation exists.",
+  );
 });
 
 test("SS-03B delegation tool contract exposes canonical execution surfaces", () => {
