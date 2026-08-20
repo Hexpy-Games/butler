@@ -15,12 +15,16 @@ import {
   renderGuidedPrompt,
 } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-prompt.ts";
+import { guidedStewardInstructions } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-steward-instructions.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tool-definitions.ts";
 import { workScopeForTurn } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { appRuntimePolicy } from
   "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
+import { delegateToStewardToolDefinition } from
+  "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
 
 test("R3 guided web_read keeps reader backend runtime-owned", () => {
   const webRead = guidedNativeToolDefinitions().find((tool) => tool.name === "web_read");
@@ -251,6 +255,103 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(projectInstructions).not.toContain(
     "Do not attempt to mutate the Project Ledger",
   );
+});
+
+test("SS-03B guided instructions define semantic delegation selection", () => {
+  const instructions = guidedInstructions(guidedPolicy(
+    turnRecord({ accessMode: "full_access", projectRef: "butler" }),
+  ));
+
+  expect(instructions).toContain(
+    "Select the path from the user's complete objective and constraints.",
+  );
+  expect(instructions).toContain(
+    "Keep simple conversation, stable knowledge, and one quick lookup in Butler.",
+  );
+  expect(instructions).toContain(
+    "Delegate bounded independent multi-step repository inspection, multi-source research or synthesis, persistent-artifact work, or execution-stage mutation with delegate_to_steward.",
+  );
+  expect(instructions).toContain(
+    "Honor explicit user direction to delegate or keep the work in Butler.",
+  );
+  expect(instructions).toContain(
+    "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
+  );
+  expect(instructions).toContain(
+    "Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",
+  );
+});
+
+test("SS-03B delegation tool contract exposes canonical execution surfaces", () => {
+  const parameters = delegateToStewardToolDefinition.parameters as {
+    oneOf?: Array<{ properties?: Record<string, any> }>;
+  };
+  const variants = parameters.oneOf ?? [];
+  const readOnly = variants.find((variant) =>
+    variant.properties?.execution_mode?.const === "read_only",
+  );
+  const mutation = variants.find((variant) =>
+    variant.properties?.execution_mode?.const === "mutation",
+  );
+  const readOnlySurface = [
+    "grep_files:workspace",
+    "list_files:workspace",
+    "read_file:workspace",
+    "web_read:network",
+    "web_search:network",
+  ];
+
+  expect(delegateToStewardToolDefinition.description).toContain(
+    "For read_only, allowed_tools_and_effects is exactly the complete five-value array",
+  );
+  expect(readOnly).toBeDefined();
+  expect(readOnly?.properties?.allowed_tools_and_effects).toMatchObject({
+    minItems: 5,
+    maxItems: 5,
+    uniqueItems: true,
+    items: { enum: readOnlySurface },
+  });
+  expect(readOnly?.properties?.mutation_scope).toMatchObject({ maxItems: 0 });
+  expect(mutation).toBeDefined();
+  expect(mutation?.properties?.allowed_tools_and_effects).toMatchObject({
+    minItems: 1,
+    items: { enum: ["edit_file:workspace", "write_file:workspace"] },
+  });
+  expect(mutation?.properties?.mutation_scope).toMatchObject({ minItems: 1 });
+});
+
+test("SS-03B Steward instructions require ordered result and completion evidence", () => {
+  const requiredOrder =
+    "Before calling record_work_disposition with disposition completed, call record_work_review for an accepted result Review bound to the current results, then call record_work_review for an accepted completion Validation bound to that accepted result Review and the current Plan/action states; only then settle the child Work as completed.";
+  const readOnlyPlanContract =
+    "For read_only, every Plan action must omit the effect field entirely; reads and synthesis are evidence actions, never effects.";
+  const common = {
+    relationId: "relation",
+    delegationId: "delegation",
+    taskId: "task",
+    mutationScope: [],
+    allowedToolsAndEffects: [
+      "grep_files:workspace",
+      "list_files:workspace",
+      "read_file:workspace",
+      "web_read:network",
+      "web_search:network",
+    ],
+  };
+
+  const readOnlyInstructions = guidedStewardInstructions({
+    subsession: { ...common, executionMode: "read_only" },
+  });
+  expect(readOnlyInstructions).toContain(requiredOrder);
+  expect(readOnlyInstructions).toContain(readOnlyPlanContract);
+  expect(guidedStewardInstructions({
+    subsession: {
+      ...common,
+      executionMode: "mutation",
+      mutationScope: ["bounded-result.txt"],
+      allowedToolsAndEffects: ["write_file:workspace"],
+    },
+  })).toContain(requiredOrder);
 });
 
 test("R3 continuation guidance repairs legacy Work labels and refreshes downstream results", () => {

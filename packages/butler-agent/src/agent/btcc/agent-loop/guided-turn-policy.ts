@@ -29,6 +29,7 @@ import {
 import { readOperationResultsToolDefinition } from
   "../../tools/monitoring/read_operation_results/index.ts";
 import { subsessionToolNames } from "../subsessions/scope.ts";
+import { boundedStewardTools } from "./guided-phase-policy-helpers.ts";
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
   disabledReason:
@@ -212,7 +213,9 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
       ...subsessionToolNames(policy.subsession.allowedToolsAndEffects),
     ]) visible.add(name);
   }
-  return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
+  return boundedStewardTools(policy, authorized)
+    .filter((tool) => visible.has(tool.name))
+    .map(guidedToolDefinition);
 }
 
 export function guidedNativeToolDefinitions(

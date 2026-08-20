@@ -19,7 +19,50 @@ export function boundedStewardTools(
     "record_work_disposition",
     ...subsessionToolNames(policy.subsession.allowedToolsAndEffects),
   ]);
-  return tools.filter((tool) => allowed.has(tool.name));
+  return tools
+    .filter((tool) => allowed.has(tool.name))
+    .map((tool) => policy.subsession?.executionMode === "read_only" &&
+        tool.name === "replace_work_plan"
+      ? readOnlyStewardPlanTool(tool)
+      : tool);
+}
+
+function readOnlyStewardPlanTool(tool: FunctionToolDefinition): FunctionToolDefinition {
+  const parameters = structuredClone(tool.parameters) as Record<string, unknown>;
+  const properties = objectRecord(parameters.properties);
+  const actions = objectRecord(properties?.actions);
+  const items = objectRecord(actions?.items);
+  const actionProperties = objectRecord(items?.properties);
+  if (!properties || !actions || !items || !actionProperties || !("effect" in actionProperties)) {
+    return tool;
+  }
+  const { effect: _effect, ...withoutEffect } = actionProperties;
+  const required = Array.isArray(items.required)
+    ? items.required.filter((name) => name !== "effect")
+    : items.required;
+  return {
+    ...tool,
+    parameters: {
+      ...parameters,
+      properties: {
+        ...properties,
+        actions: {
+          ...actions,
+          items: {
+            ...items,
+            properties: withoutEffect,
+            required,
+          },
+        },
+      },
+    },
+  };
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 export function phaseAllowsTool(
