@@ -38,6 +38,7 @@ function MessageListComponent({
     copyAssistantMessage,
     copyContextMenuText,
     assistantFooterMetaById,
+    anchoredStewardProgress,
   } = useMessageList(messages, summary, turnProgress, isSending);
 
   const { rowVirtualizer, topOffset, virtualListHeight, latestMessageVersion } =
@@ -96,6 +97,7 @@ function MessageListComponent({
                 onCopyAssistantMessage={copyAssistantMessage}
                 onCopyContextMenuText={copyContextMenuText}
                 rowVirtualizer={rowVirtualizer}
+                stewardProgress={anchoredStewardProgress.get(message.id)}
               />
             );
           })}

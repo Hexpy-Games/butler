@@ -14,23 +14,17 @@ function read(path: string): string {
 }
 
 test("Steward UI keeps the neutral capsule and adjunct ordering contract", () => {
-  const panel = read(
-    "packages/butler-app/client/ui/src/components/conversation/StewardComposerPanel.tsx",
-  );
   const adjunct = read(
     "packages/butler-app/client/ui/src/components/conversation/ComposerAdjunctPanels.tsx",
   );
 
-  expect(panel).toContain("작업 중 · ${Math.min(total, completed + 1)}/${total} ·");
-  expect(panel).not.toMatch(/percent|gauge|%/iu);
+  expect(adjunct).not.toContain("StewardComposerPanel");
+  expect(adjunct).not.toContain("stewardChildren");
   expect(adjunct.indexOf("<WorkProgressPanel")).toBeLessThan(
     adjunct.indexOf("<QueuedComposerPanel"),
   );
   expect(adjunct.indexOf("<QueuedComposerPanel")).toBeLessThan(
     adjunct.indexOf("<WorkerComposerPanel"),
-  );
-  expect(adjunct.indexOf("<WorkerComposerPanel")).toBeLessThan(
-    adjunct.indexOf("<StewardComposerPanel"),
   );
 });
 

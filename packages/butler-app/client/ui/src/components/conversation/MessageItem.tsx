@@ -13,6 +13,7 @@ function MessageItemComponent({
   onCopyAssistantMessage,
   onCopyContextMenuText,
   rowVirtualizer,
+  stewardProgress,
 }: MessageItemProps) {
   return (
     <VirtualMessageRow
@@ -27,6 +28,7 @@ function MessageItemComponent({
         copied={copied}
         footerMeta={footerMeta}
         onCopyAssistantMessage={onCopyAssistantMessage}
+        stewardProgress={stewardProgress}
       />
     </VirtualMessageRow>
   );

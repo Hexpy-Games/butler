@@ -42,6 +42,25 @@ const DETAILED_STEWARD_REPORT = [
   "Follow-up recommendation: run deployment validation only when that separate scope is authorized.",
 ].join("\n");
 
+type PublicSessionView = {
+  messages: Array<{
+    id: string;
+    role: string;
+    text: string;
+    chat_id?: string;
+    turn_id?: string;
+  }>;
+  steward_children?: Array<{
+    session_id: string;
+    active_turn: { id: string } | null;
+    relation: {
+      child_session_id: string;
+      parent_turn_id: string;
+      anchor_message_id: string;
+    };
+  }>;
+};
+
 function detailedMutationReport(receiptId: string): string {
   return [
   "Conclusion: the bounded Steward file was created and verified.",
@@ -373,7 +392,31 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
   });
   const childRequests: ModelRoundRequest[] = [];
   const parentSynthesisRequests: ModelRoundRequest[] = [];
-  const modelRound = readOnlyStewardRound(childRequests, parentSynthesisRequests);
+  let childRoundStartedResolve!: () => void;
+  let releaseChildRound!: () => void;
+  let childRoundGateConsumed = false;
+  let childRoundReleased = false;
+  const childRoundStarted = new Promise<void>((resolve) => {
+    childRoundStartedResolve = resolve;
+  });
+  const childRoundRelease = new Promise<void>((resolve) => {
+    releaseChildRound = resolve;
+  });
+  const releaseHeldChild = () => {
+    if (childRoundReleased) return;
+    childRoundReleased = true;
+    releaseChildRound();
+  };
+  const modelRound = readOnlyStewardRound(
+    childRequests,
+    parentSynthesisRequests,
+    async () => {
+      if (childRoundGateConsumed) return;
+      childRoundGateConsumed = true;
+      childRoundStartedResolve();
+      await childRoundRelease;
+    },
+  );
   let composition = createProductionBtccComposition({
     butlerHome: root,
     butlerData: root,
@@ -409,6 +452,161 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       limit: 1, maxConcurrentSessions: 1,
     });
     await inbound.waitForIdle();
+    inbound.poll({
+      queue, server: gateway, store: bindings, deliveryGuard,
+      limit: 8, maxConcurrentSessions: 2,
+    });
+    await childRoundStarted;
+    let activeParentData: PublicSessionView | undefined;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const activeParentViewResponse = await fetch(
+        `${app.url}session-view?session_id=general`,
+        { headers: { authorization: `Bearer ${authToken}` } },
+      );
+      expect(activeParentViewResponse.ok).toBe(true);
+      const candidate = (await activeParentViewResponse.json() as {
+        data?: PublicSessionView;
+      }).data;
+      const candidateChild = candidate?.steward_children?.find(
+        (child) => child.active_turn !== null,
+      );
+      const candidateParentAssistant = candidate?.messages.find(
+        (message) => message.role === "assistant" &&
+          message.turn_id === candidateChild?.relation.parent_turn_id,
+      );
+      if (candidateChild && candidateParentAssistant) {
+        activeParentData = candidate;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    const activeChild = activeParentData?.steward_children?.find(
+      (child) => child.active_turn !== null,
+    );
+    expect(activeChild).toBeDefined();
+    const activeMessages = activeParentData?.messages ?? [];
+    const activeRelation = activeChild!.relation;
+    const activeAnchor = activeMessages.find(
+      (message) => message.id === activeRelation.anchor_message_id,
+    );
+    expect(activeAnchor).toMatchObject({
+      role: "user",
+      text: readOnlyInput.text,
+      chat_id: "general",
+    });
+    const activeParentAssistant = activeMessages.find(
+      (message) =>
+        message.role === "assistant" &&
+        message.turn_id === activeRelation.parent_turn_id,
+    );
+    expect(activeParentAssistant).toBeDefined();
+    expect(activeMessages.some(
+      (message) => message.turn_id === activeChild!.active_turn?.id,
+    )).toBe(false);
+    const followUpInput = {
+      chat_id: "general",
+      text: "While the inspection runs, answer this short follow-up.",
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+      access_mode: "full_access",
+      client_message_id: "client-a3138a53-93e6-478e-8665-336b5662e5fa",
+    };
+    expect((await postAppMessage(app.url, authToken, followUpInput)).status).toBe(202);
+    let followUpQueueRow: {
+      client_message_id: string;
+      state: string;
+      turn_id: string | null;
+      dispatched_message_id: string | null;
+    } | undefined;
+    let followUpUserMessage: {
+      id: string;
+      turn_id: string | null;
+      role: string;
+    } | undefined;
+    let followUpAssistant: {
+      id: string;
+      turn_id: string | null;
+      role: string;
+    } | undefined;
+    let childStillActive = false;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      inbound.poll({
+        queue, server: gateway, store: bindings, deliveryGuard,
+        limit: 8, maxConcurrentSessions: 4,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const rawFollowUpQueueRow = app.store.db.query<{
+        client_message_id: string;
+        state: string;
+        turn_id: string | null;
+        dispatched_message_id: string | null;
+      }, [string, string]>(`
+        SELECT client_message_id, state, turn_id, dispatched_message_id
+        FROM session_queued_messages
+        WHERE chat_id = ? AND client_message_id = ?
+      `).get("general", followUpInput.client_message_id);
+      followUpQueueRow = rawFollowUpQueueRow
+        ? {
+          client_message_id: String(rawFollowUpQueueRow.client_message_id),
+          state: String(rawFollowUpQueueRow.state),
+          turn_id: rawFollowUpQueueRow.turn_id === null
+            ? null
+            : String(rawFollowUpQueueRow.turn_id),
+          dispatched_message_id: rawFollowUpQueueRow.dispatched_message_id === null
+            ? null
+            : String(rawFollowUpQueueRow.dispatched_message_id),
+        }
+        : undefined;
+      if (followUpQueueRow?.turn_id && followUpQueueRow.dispatched_message_id) {
+        followUpUserMessage = app.store.db.query<{
+          id: string;
+          turn_id: string | null;
+          role: string;
+        }, [string, string]>(`
+          SELECT id, turn_id, role
+          FROM messages
+          WHERE chat_id = ? AND id = ?
+        `).get("general", followUpQueueRow.dispatched_message_id) ?? undefined;
+        followUpAssistant = app.store.db.query<{
+          id: string;
+          turn_id: string | null;
+          role: string;
+        }, [string, string]>(`
+          SELECT id, turn_id, role
+          FROM messages
+          WHERE chat_id = ? AND role = 'assistant' AND turn_id = ?
+          ORDER BY rowid ASC
+          LIMIT 1
+        `).get("general", followUpQueueRow.turn_id) ?? undefined;
+      }
+      const checkpointResponse = await fetch(
+        app.url + "session-view?session_id=general",
+        { headers: { authorization: "Bearer " + authToken } },
+      );
+      expect(checkpointResponse.ok).toBe(true);
+      const checkpoint = (await checkpointResponse.json() as {
+        data?: PublicSessionView;
+      }).data;
+      childStillActive = Boolean(checkpoint?.steward_children?.some(
+        (child) => child.session_id === activeChild!.session_id &&
+          child.active_turn?.id === activeChild!.active_turn?.id,
+      ));
+      if (followUpAssistant && childStillActive) break;
+    }
+    expect(childStillActive).toBe(true);
+    expect(followUpQueueRow).toBeDefined();
+    const exactFollowUpQueueRow = followUpQueueRow!;
+    expect(exactFollowUpQueueRow.client_message_id).toBe(followUpInput.client_message_id);
+    expect(exactFollowUpQueueRow.state).toBe("dispatched");
+    expect(typeof exactFollowUpQueueRow.turn_id).toBe("string");
+    expect(typeof exactFollowUpQueueRow.dispatched_message_id).toBe("string");
+    expect(followUpUserMessage?.id).toBe(exactFollowUpQueueRow.dispatched_message_id!);
+    expect(followUpUserMessage?.role).toBe("user");
+    expect(followUpUserMessage?.turn_id).toBe(exactFollowUpQueueRow.turn_id!);
+    expect(followUpAssistant?.role).toBe("assistant");
+    expect(followUpAssistant?.turn_id).toBe(exactFollowUpQueueRow.turn_id!);
+    releaseHeldChild();
+    await inbound.waitForIdle();
     const beforeRestartDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
     const packetBeforeRestart = beforeRestartDb.query<{ packet_json: string }, []>(
       "SELECT packet_json FROM btcc_subsession_delegations",
@@ -439,6 +637,29 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     expect(appSnapshot.parentTurnCount).toBe(1);
     expect(appSnapshot.assistantResultCount).toBe(1);
     expect(appSnapshot.newestAssistantText).toBe(synthesizedReport);
+    const finalParentViewResponse = await fetch(
+      `${app.url}session-view?session_id=general`,
+      { headers: { authorization: `Bearer ${authToken}` } },
+    );
+    expect(finalParentViewResponse.ok).toBe(true);
+    const finalParentView = await finalParentViewResponse.json() as {
+      data?: PublicSessionView;
+    };
+    const finalParentData = finalParentView.data!;
+    expect(finalParentData.messages.at(-1)?.text).toBe(synthesizedReport);
+    expect(finalParentData.steward_children?.every(
+      (child) => child.active_turn === null,
+    )).toBe(true);
+    const followUpIndex = finalParentData.messages.findIndex(
+      (message) => message.id === exactFollowUpQueueRow.dispatched_message_id &&
+        message.role === "user" && message.text === followUpInput.text &&
+        message.turn_id === exactFollowUpQueueRow.turn_id,
+    );
+    expect(followUpIndex).toBeGreaterThan(-1);
+    expect(finalParentData.messages.some(
+      (message) => message.role === "assistant" &&
+        message.turn_id === exactFollowUpQueueRow.turn_id,
+    )).toBe(true);
     expect(parentSynthesisRequests).toHaveLength(1);
     const synthesisEvidence = parentSynthesisRequests[0]!.messages
       .map((message) => message.content).join("\n");
@@ -699,6 +920,7 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       missingDb.close();
     }
   } finally {
+    releaseHeldChild();
     app.stop();
     await composition.host.close();
     bindings.close();
@@ -950,6 +1172,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
 function readOnlyStewardRound(
   childRequests: ModelRoundRequest[],
   parentSynthesisRequests: ModelRoundRequest[],
+  holdFirstChildRound?: () => Promise<void>,
 ): ModelRoundPort {
   const parentRounds = new Map<string, number>();
   const childRounds = new Map<string, number>();
@@ -1039,6 +1262,7 @@ function readOnlyStewardRound(
       const childKey = request.messages.map((message) => message.content).find((content) => content.includes("delegation_id")) ?? "child";
       const round = (childRounds.get(childKey) ?? 0) + 1;
       childRounds.set(childKey, round);
+      if (round === 1) await holdFirstChildRound?.();
       if (round === 1) {
         return {
           toolCalls: [toolCall("plan-read-only", "replace_work_plan", {

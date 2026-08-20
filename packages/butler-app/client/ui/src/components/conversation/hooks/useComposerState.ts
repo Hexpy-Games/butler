@@ -10,7 +10,6 @@ import type {
   ModelCatalogView,
   ComposerModelState,
   SessionSummaryView,
-  StewardSessionSummaryView,
   SettingsView as SettingsData,
   TurnProgressSnapshot,
   WorkerActivitySummary,
@@ -35,12 +34,7 @@ export function useComposerState(
     (worker): worker is WorkerActivitySummary =>
       Boolean(worker && isWorkerVisibleInComposer(worker)),
   );
-  const stewardChildren = (summary?.steward_children ?? []).filter(
-    (child): child is StewardSessionSummaryView => Boolean(child?.active_turn),
-  );
-  const stewardProgress = stewardChildren[0]?.active_turn?.progress;
-  const activeProgress = stewardProgress ??
-    activeTurnProgressSnapshot(summary, turnProgress);
+  const activeProgress = activeTurnProgressSnapshot(summary, turnProgress);
   const taskRows = (activeProgress?.safe_progress_rows ?? []).filter(
     (row) => row.kind === "todo" && row.bridge_phase === "btcc_work_ledger",
   );
@@ -48,8 +42,7 @@ export function useComposerState(
   const activeTurn = Boolean(
     activeProgress ||
     (summary?.turn_state && ACTIVE_TURN_STATES.has(summary.turn_state)) ||
-    firstCancellableWorker(workers) ||
-    stewardChildren.length > 0,
+    firstCancellableWorker(workers),
   );
   const canSend =
     modelState === "ready" &&
@@ -76,7 +69,6 @@ export function useComposerState(
     activeTurn,
     taskRows,
     taskTurnState: activeProgress?.state,
-    stewardChildren,
     context,
     models,
     modelState,
