@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { SidebarItem } from "@/components/layout/SidebarItem.tsx";
 import { SidebarSessionActions } from "@/components/layout/SidebarSessionActions.tsx";
-import { SidebarStewardChildItem } from "@/components/layout/SidebarStewardChildItem.tsx";
 import { relativeAge } from "@/app/utils.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SessionSummary } from "@/app/types.ts";
@@ -50,17 +49,6 @@ export function SidebarProjectSessionItem({
           setMenuOpen(true);
         }}
       />
-      {session.steward_children?.length ? (
-        <div
-          aria-label={session.title}
-          data-test-class="sidebar-steward-children"
-          role="group"
-        >
-          {session.steward_children.map((child) => (
-            <SidebarStewardChildItem key={child.id} session={child} />
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

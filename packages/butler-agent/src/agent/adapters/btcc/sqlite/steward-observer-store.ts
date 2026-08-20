@@ -12,6 +12,7 @@ import type {
 import type { StewardResultView as StewardObserverResult } from
   "../../../../gateways/app/interface/protocol/app-protocol.ts";
 import { normalizeOperationOutputChunkPayload } from "../../../events/operation-output-event.ts";
+import { subsessionParentResultRefs } from "../../../btcc/subsessions/index.ts";
 
 type RelationRow = StewardObserverRelation;
 
@@ -63,12 +64,35 @@ type ResultRow = {
 export class SqliteStewardObserverStore implements StewardObserverReader {
   constructor(private readonly db: Database) {}
 
-  relationForParent(sessionId: string): StewardObserverRelation | null {
-    return this.relation("parent_session_id", sessionId);
+  relationsForParent(sessionId: string): StewardObserverRelation[] {
+    return this.db
+      .query<RelationRow, [string]>(`
+        SELECT relation_id, parent_session_id, parent_turn_id, child_session_id,
+          anchor_message_id, ordinal, safe_title, created_at
+        FROM btcc_session_relations
+        WHERE parent_session_id = ?
+        ORDER BY ordinal ASC
+      `)
+      .all(sessionId);
   }
 
   relationForChild(sessionId: string): StewardObserverRelation | null {
     return this.relation("child_session_id", sessionId);
+  }
+
+  isParentResultInput(sessionId: string, text: string): boolean {
+    const refs = subsessionParentResultRefs(text);
+    if (!refs) return false;
+    return Boolean(this.db.query<{ present: number }, [string, string, string]>(`
+      SELECT 1 AS present
+      FROM btcc_steward_results AS result
+      JOIN btcc_session_relations AS relation
+        ON relation.relation_id = result.relation_id
+      WHERE relation.parent_session_id = ?
+        AND relation.relation_id = ?
+        AND result.result_id = ?
+      LIMIT 1
+    `).get(sessionId, refs.relationId, refs.resultId));
   }
 
   snapshot(sessionId: string): StewardObserverSnapshot | null {
@@ -189,7 +213,7 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
   }
 
   private relation(
-    field: "parent_session_id" | "child_session_id",
+    field: "child_session_id",
     sessionId: string,
   ): StewardObserverRelation | null {
     const row = this.db

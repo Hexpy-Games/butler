@@ -67,7 +67,6 @@ export function createSubsessionDelegationService(
       if (typeof parentReasoning === "string" && parentReasoning !== normalizedRequest.reasoning_effort) throw new Error("subsession_parent_reasoning_mismatch");
       const delegationId = delegationIdentity(normalizedRequest);
       const existing = input.store.relationByDelegationId(delegationId); if (existing) return recoverExistingDelegation(input, existing);
-      if (input.store.relationByParentSessionId(normalizedRequest.parent_session_id)) throw new Error("subsession_parent_relation_exists");
       const relationId = `relation-${digest(`btcc.subsession.relation.v1\0${delegationId}`).slice(0, 40)}`;
       const taskId = `task-${digest(`btcc.subsession.task.v1\0${delegationId}`).slice(0, 40)}`;
       const childSessionId = `steward-${digest(`btcc.subsession.child-session.v1\0${relationId}`).slice(0, 32)}`;
@@ -134,9 +133,6 @@ export function createSubsessionDelegationService(
     },
     async resolveParentResultEvidence(parentInput) {
       return resolveParentResultEvidence({ ...parentInput, store: input.store, turns: input.parentTurns });
-    },
-    relationForParent(parentSessionId) {
-      return input.store.relationByParentSessionId(parentSessionId);
     },
     resultIdForRelation(relationId) {
       return input.store.resultIdForRelation(relationId);
@@ -296,8 +292,7 @@ function enqueueChild(
   });
 }
 function nextOrdinal(input: SubsessionDelegationDependencies, parentSessionId: string): number {
-  const existing = input.store.relationByParentSessionId(parentSessionId);
-  return existing ? existing.ordinal + 1 : 1;
+  return (input.store.relationsByParentSessionId(parentSessionId).at(-1)?.ordinal ?? 0) + 1;
 }
 function renderStewardInput(packet: DelegationPacket): string {
   return [

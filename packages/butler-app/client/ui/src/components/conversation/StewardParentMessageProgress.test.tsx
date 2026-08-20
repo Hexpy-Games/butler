@@ -11,7 +11,7 @@ import {
   HARNESS_MESSAGES,
   HARNESS_SS03_SUMMARY,
 } from "@/app/fixtures.ts";
-import type { SessionSummaryView } from "@/app/types.ts";
+import type { MessageRecord, SessionSummaryView } from "@/app/types.ts";
 import { MessageContent } from "./MessageContent";
 import { useMessageList } from "./hooks/useMessageList";
 import { useComposerState } from "./hooks/useComposerState";
@@ -44,6 +44,62 @@ test("active Steward progress is nested in its exact parent assistant row", () =
   );
   expect(html).not.toContain("assistant-terminal-status-row");
   expect(html).not.toContain("답변 완료");
+  expect(html).toContain("진행 상세 보기");
+});
+
+test("two active Stewards attach to their own Butler messages", () => {
+  const messages: MessageRecord[] = [
+    ...HARNESS_MESSAGES,
+    {
+      id: "m5",
+      chat_id: "butler-client",
+      role: "user",
+      text: "두 번째 조사를 진행해줘.",
+      status: "sent",
+      turn_id: "turn-3",
+      cursor: 5,
+      created_at: "2026-05-01T00:10:12.000Z",
+      updated_at: "2026-05-01T00:10:12.000Z",
+    },
+    {
+      id: "m6",
+      chat_id: "butler-client",
+      role: "assistant",
+      text: "두 번째 Steward 조사도 시작했습니다.",
+      status: "sent",
+      turn_id: "turn-3",
+      cursor: 6,
+      created_at: "2026-05-01T00:10:42.000Z",
+      updated_at: "2026-05-01T00:10:42.000Z",
+    },
+  ];
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const first = summary.steward_children![0]!;
+  summary.steward_children = [
+    first,
+    {
+      ...first,
+      session_id: "harness-steward-2",
+      title: "Second bounded inspection",
+      relation: {
+        ...first.relation,
+        relation_id: "harness-relation-2",
+        parent_turn_id: "turn-3",
+        child_session_id: "harness-steward-2",
+        anchor_message_id: "m5",
+        ordinal: 2,
+      },
+      active_turn: {
+        ...first.active_turn!,
+        id: "harness-steward-turn-2",
+      },
+    },
+  ];
+
+  const progress = anchoredStewardProgressByMessageId(messages, summary);
+  expect([...progress.keys()]).toEqual(["m4", "m6"]);
+  expect(progress.get("m4")?.child.session_id).toBe("harness-steward");
+  expect(progress.get("m6")?.child.session_id).toBe("harness-steward-2");
 });
 
 test("missing, mismatched, and duplicate relation anchors fail closed", () => {

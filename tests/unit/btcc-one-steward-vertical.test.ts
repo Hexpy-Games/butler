@@ -21,6 +21,8 @@ import { subsessionResultClientMessageId } from "../../packages/butler-agent/src
 import { createFileToolHandlers } from "../../packages/butler-agent/src/agent/tools/file-tools/index.ts";
 import { normalizeSubsessionAllowedToolsAndEffects } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
+import type { DelegationRequest } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/contracts.ts";
 import { distinctMaterialReadCount } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/read-only-material-evidence.ts";
 import type { GuidedToolJournalRecord } from
@@ -34,13 +36,20 @@ const READ_ONLY_SURFACE = [
   "web_search:network",
 ] as const;
 
-const DETAILED_STEWARD_REPORT = [
-  "Conclusion: the requested repository source marker is present and verified.",
-  "Evidence: README.md and src/inspection-target.ts were the two distinct material reads.",
-  "Tests: bounded read-only inspection proof passed.",
-  "Remaining risk: this bounded read-only inspection did not exercise runtime deployment.",
-  "Follow-up recommendation: run deployment validation only when that separate scope is authorized.",
-].join("\n");
+const DETAILED_STEWARD_REPORT = JSON.stringify({
+  status: "success",
+  version: 1,
+  summary: {
+    final_judgment: "verified",
+    conclusion: "The requested repository source marker is present and verified.",
+    evidence: [
+      "README.md and src/inspection-target.ts provide the two distinct material reads behind this conclusion.",
+    ],
+    remaining_risks: [
+      "Runtime deployment was outside this bounded read-only inspection.",
+    ],
+  },
+}, null, 2);
 
 type PublicSessionView = {
   messages: Array<{
@@ -283,35 +292,53 @@ test("App Turn delegates one bounded mutation to one Steward and synthesizes exa
     }
 
     const before = composition.subsessions?.pendingParentInputCount?.() ?? 0;
-    const relation = composition.subsessions?.relationForParent(parentSessionId);
+    const relationReader = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
+    const relation = relationReader.query<{
+      relation_id: string;
+      parent_turn_id: string;
+      child_session_id: string;
+      anchor_message_id: string;
+    }, [string]>(`
+      SELECT relation_id, parent_turn_id, child_session_id, anchor_message_id
+      FROM btcc_session_relations
+      WHERE parent_session_id = ?
+      ORDER BY ordinal ASC
+      LIMIT 1
+    `).get(parentSessionId);
+    relationReader.close();
     expect(relation).toBeDefined();
     const stewardSessionCountBeforeSecond = bindings.listSessions()
       .filter((session) => session.role === "steward").length;
-    await expect(composition.subsessions!.delegate({
+    const secondRequest = {
       parent_session_id: parentSessionId,
       parent_turn_id: relation!.parent_turn_id,
       anchor_message_id: `${relation!.anchor_message_id}-second`,
       execution_mode: "mutation",
-      safe_title: "Second Steward should be rejected",
+      safe_title: "Second Steward task",
       objective: "Create a second bounded Steward result file.",
-      acceptance_criteria: ["The second delegation must not be created."],
+      acceptance_criteria: ["The second delegation has an isolated relation."],
       task_or_plan_refs: [],
-      constraints_and_non_goals: ["Do not create a second relation or worktree."],
+      constraints_and_non_goals: ["Do not reuse the first relation or worktree."],
       allowed_tools_and_effects: ["write_file:workspace"],
       mutation_scope: ["second-steward-result.txt"],
       model_ref: "openai/gpt-5.5",
       reasoning_effort: "low",
-    })).rejects.toThrow("subsession_parent_relation_exists");
+    } satisfies DelegationRequest;
+    const second = await composition.subsessions!.delegate(secondRequest);
+    const secondReplay = await composition.subsessions!.delegate(secondRequest);
+    expect(secondReplay.relation.relation_id).toBe(second.relation.relation_id);
+    expect(second.relation.relation_id).not.toBe(relation!.relation_id);
+    expect(second.relation.ordinal).toBe(2);
     const relationDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
     try {
       expect(relationDb.query<{ count: number }, []>(
         "SELECT COUNT(*) AS count FROM btcc_session_relations",
-      ).get()?.count).toBe(1);
+      ).get()?.count).toBe(2);
     } finally {
       relationDb.close();
     }
     expect(bindings.listSessions().filter((session) => session.role === "steward"))
-      .toHaveLength(stewardSessionCountBeforeSecond);
+      .toHaveLength(stewardSessionCountBeforeSecond + 1);
     const resultId = relation ? composition.subsessions?.resultIdForRelation(relation.relation_id) : undefined;
     expect(resultId).toBeDefined();
     await composition.subsessions?.completeStewardResult({
@@ -614,6 +641,9 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     const childSessionBeforeRestart = beforeRestartDb.query<{ child_session_id: string }, []>(
       "SELECT child_session_id FROM btcc_session_relations",
     ).get()?.child_session_id ?? "";
+    expect(beforeRestartDb.query<{ status: string; code: string | null }, []>(
+      "SELECT status, code FROM btcc_steward_results",
+    ).get()).toEqual({ status: "success", code: null });
     beforeRestartDb.close();
     const bindingContextBeforeRestart = JSON.stringify(
       (bindings.getBySessionId(childSessionBeforeRestart)?.metadata?.subsession as
@@ -647,6 +677,9 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     };
     const finalParentData = finalParentView.data!;
     expect(finalParentData.messages.at(-1)?.text).toBe(synthesizedReport);
+    expect(finalParentData.messages.some(
+      (message) => message.role === "user" && message.text.startsWith("Subsession result\n"),
+    )).toBe(false);
     expect(finalParentData.steward_children?.every(
       (child) => child.active_turn === null,
     )).toBe(true);
@@ -661,6 +694,9 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
         message.turn_id === exactFollowUpQueueRow.turn_id,
     )).toBe(true);
     expect(parentSynthesisRequests).toHaveLength(1);
+    expect(parentSynthesisRequests[0]!.tools.some(
+      (tool) => tool.name === "delegate_to_steward",
+    )).toBe(false);
     const synthesisEvidence = parentSynthesisRequests[0]!.messages
       .map((message) => message.content).join("\n");
     expect(synthesisEvidence).toContain("Accepted child report evidence");
@@ -749,6 +785,7 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       ).get();
       expect(result?.status).toBe("success");
       expect(String(result?.summary)).toContain("source marker is present and verified");
+      expect(String(result?.summary)).not.toContain('"status"');
       const childOutputChunks = btccDb.query<{
         event_json: string;
       }, [string]>(`
@@ -813,15 +850,9 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
         "SELECT input_json FROM btcc_subsession_outbox WHERE result_id = ?",
       ).get(String(result?.result_id))?.input_json ?? "";
       expect(resultOutbox).not.toContain("Evidence: README.md establishes the repository root");
-      expect(JSON.parse(String(result?.tests_json))).toEqual([
-        "bounded read-only inspection proof passed.",
-      ]);
-      expect(JSON.parse(String(result?.remaining_risks_json))).toEqual([
-        "this bounded read-only inspection did not exercise runtime deployment.",
-      ]);
-      expect(JSON.parse(String(result?.follow_up_recommendations_json))).toEqual([
-        "run deployment validation only when that separate scope is authorized.",
-      ]);
+      expect(JSON.parse(String(result?.tests_json))).toEqual([]);
+      expect(JSON.parse(String(result?.remaining_risks_json))).toEqual([]);
+      expect(JSON.parse(String(result?.follow_up_recommendations_json))).toEqual([]);
       const detailRefs = JSON.parse(String(result?.detail_refs_json)) as string[];
       expect(detailRefs[0]?.startsWith(
         `btcc-final-payload:v1:${result?.relation_id}:${result?.result_id}:${result?.child_turn_id}:`,
@@ -1161,8 +1192,15 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
   const childRounds = new Map<string, number>();
   return {
     async runRound(request) {
+      const isSynthesis = request.messages.some((message) =>
+        message.content.includes("Canonical child result synthesis") ||
+        message.content.includes("Subsession result"),
+      );
       const isParent = request.tools.some((tool) => tool.name === "delegate_to_steward");
-      if (!isParent) childRequests.push(request);
+      if (!isParent && !isSynthesis) childRequests.push(request);
+      if (isSynthesis) {
+        return { text: "Steward result synthesized.", toolCalls: [] };
+      }
       if (isParent) {
         const key = request.messages.some((message) => message.content.includes("Subsession result"))
           ? "synthesis"
@@ -1272,8 +1310,24 @@ function readOnlyStewardRound(
   const childRounds = new Map<string, number>();
   return {
     async runRound(request) {
+      const isSynthesis = request.messages.some((message) =>
+        message.content.includes("Canonical child result synthesis") ||
+        message.content.includes("Subsession result"),
+      );
       const isParent = request.tools.some((tool) => tool.name === "delegate_to_steward");
-      if (!isParent) childRequests.push(request);
+      if (!isParent && !isSynthesis) childRequests.push(request);
+      if (isSynthesis) {
+        parentSynthesisRequests.push(request);
+        const unusableReport = request.messages.some((message) =>
+          message.content.includes("steward_execution_failed"),
+        );
+        return {
+          text: unusableReport
+            ? "Steward failed because terminal report evidence was unusable."
+            : "Read-only Steward report: source marker is present and verified.",
+          toolCalls: [],
+        };
+      }
       if (isParent) {
         const missingContext = request.messages.some((message) =>
           message.content.includes("requires verified project context") ||
@@ -1343,7 +1397,6 @@ function readOnlyStewardRound(
             })],
           };
         }
-        if (key.endsWith("synthesis")) parentSynthesisRequests.push(request);
         return {
           text: missingContext
             ? "Steward was blocked because required project context was unavailable."

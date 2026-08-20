@@ -177,27 +177,6 @@ export class AppSessionViewStore {
     };
   }
 
-  listStewardChildSummaries(sessionId: string): SessionSummary[] {
-    return this.projectStewardChildren(sessionId).map((child) => ({
-      id: child.session_id,
-      kind: "chat",
-      title: child.title,
-      session_hint: `butler/steward-${child.session_id}`,
-      created_at: child.relation.created_at,
-      updated_at: child.updated_at,
-      last_activity_at: child.updated_at,
-      last_message_preview: child.result?.summary ?? child.active_turn?.progress.summary,
-      active_turn_state: child.active_turn?.state,
-      safe_status_label: child.active_turn?.progress.summary ?? child.result?.summary,
-      unread_count: 0,
-      pinned: false,
-      archived: false,
-      automation_target_count: 0,
-      parent_session_id: child.relation.parent_session_id,
-      is_steward_child: true,
-    }));
-  }
-
   getSessionView(
     sessionId: string,
     options: SessionMessagePageOptions = {},
@@ -206,8 +185,12 @@ export class AppSessionViewStore {
     if (childRelation) return this.getStewardSessionView(childRelation);
     const session = this.getSession(sessionId);
     const latestTurn = this.latestTurn(sessionId);
+    const runtimeSessionId = sessionHintForRow(sessionId);
     const messagePage = this.sessionViewMessages(sessionId, options);
-    const messages = messagePage.items;
+    const messages = messagePage.items.filter((message) =>
+      message.role !== "user" ||
+      !this.stewardObserver.isParentResultInput(runtimeSessionId, message.text),
+    );
     const latestMessage = messages.at(-1);
     const latestTurnHasOutOfBandReport = Boolean(
       latestTurn &&
@@ -226,7 +209,6 @@ export class AppSessionViewStore {
       latestTurnView && isActiveSessionTurnState(latestTurnView.state)
         ? latestTurnView
         : null;
-    const runtimeSessionId = sessionHintForRow(sessionId);
     const activeWorkStreamTurnId = activeTurn?.id;
     const workStreams = this.listActiveWorkStreams(
       sessionId,
@@ -239,8 +221,8 @@ export class AppSessionViewStore {
     // silently shrinking the public artifact contract to the current page.
     const artifacts = this.listArtifacts(sessionId);
     const requestedAfterCursor = Number(options.afterCursor ?? 0);
-    const nextCursor = maxMessageCursor(messages) || requestedAfterCursor;
-    const firstCursor = Number(messages[0]?.cursor ?? 0);
+    const nextCursor = maxMessageCursor(messagePage.items) || requestedAfterCursor;
+    const firstCursor = Number(messagePage.items[0]?.cursor ?? 0);
     const afterCursor = requestedAfterCursor;
     const view: SessionView = {
       protocol_version: APP_PROTOCOL_VERSION,
@@ -351,16 +333,15 @@ export class AppSessionViewStore {
   private projectStewardChildren(
     parentSessionId: string,
   ): ProjectedStewardSession[] {
-    const relation = this.stewardObserver.relationForParent(
+    const relations = this.stewardObserver.relationsForParent(
       sessionHintForRow(parentSessionId),
     );
-    if (!relation) return [];
-    const snapshot = this.stewardObserver.snapshot(relation.child_session_id);
-    return [
-      snapshot
+    return relations.map((relation) => {
+      const snapshot = this.stewardObserver.snapshot(relation.child_session_id);
+      return snapshot
         ? projectStewardSession(relation, snapshot)
-        : emptyStewardProjection(relation),
-    ];
+        : emptyStewardProjection(relation);
+    });
   }
 
   private getStewardSessionView(

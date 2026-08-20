@@ -111,10 +111,10 @@ describe("App Steward observer projection", () => {
     expect(snapshot?.plan?.approved).toBe(true);
     expect(snapshot?.plan?.revision).toBe(3);
     expect(snapshot?.result?.changed_artifacts).toEqual(["src/review.ts"]);
-    expect(observer.relationForParent("parent-1")?.child_session_id).toBe("steward-1");
+    expect(observer.relationsForParent("parent-1")[0]?.child_session_id).toBe("steward-1");
 
     const projection = projectStewardSession(
-      observer.relationForParent("parent-1")!,
+      observer.relationsForParent("parent-1")[0]!,
       snapshot!,
     );
     expect(projection.status).toBe("delivered");
@@ -127,7 +127,7 @@ describe("App Steward observer projection", () => {
     expect(projection.approved_plan_total).toBe(2);
     expect(projection.approved_plan_completed).toBe(1);
     const publicView = sessionViewForStewardObserver(
-      observer.relationForParent("parent-1")!,
+      observer.relationsForParent("parent-1")[0]!,
       snapshot!,
       2,
     );
@@ -183,7 +183,7 @@ describe("App Steward observer projection", () => {
       );
     expect(snapshot?.progress_events).toHaveLength(1);
     const publicView = sessionViewForStewardObserver(
-      new SqliteStewardObserverStore(db).relationForParent("parent-2")!,
+      new SqliteStewardObserverStore(db).relationsForParent("parent-2")[0]!,
       snapshot!,
       1,
     );
@@ -191,7 +191,7 @@ describe("App Steward observer projection", () => {
     expect(publicView.relation?.safe_title).toBe("Private task");
     expect(JSON.stringify(publicView)).not.toContain("do not expose");
     expect(projectStewardSession(
-      new SqliteStewardObserverStore(db).relationForParent("parent-2")!,
+      new SqliteStewardObserverStore(db).relationsForParent("parent-2")[0]!,
       snapshot!,
     ).activity_rows).toEqual([]);
     db.close();
@@ -241,7 +241,7 @@ describe("App Steward observer projection", () => {
     const observer = new SqliteStewardObserverStore(db);
     const snapshot = observer.snapshot("steward-plan");
     const projection = projectStewardSession(
-      observer.relationForParent("parent-plan")!,
+      observer.relationsForParent("parent-plan")[0]!,
       snapshot!,
     );
     expect(snapshot?.plan?.approved).toBe(true);
@@ -269,7 +269,7 @@ describe("App Steward observer projection", () => {
       ]), "[]", "turn-unapproved", "2026-08-19T00:01:00.000Z");
     const observer = new SqliteStewardObserverStore(db);
     const projection = projectStewardSession(
-      observer.relationForParent("parent-unapproved")!,
+      observer.relationsForParent("parent-unapproved")[0]!,
       observer.snapshot("steward-unapproved")!,
     );
     expect(projection.approved_plan_total).toBeUndefined();

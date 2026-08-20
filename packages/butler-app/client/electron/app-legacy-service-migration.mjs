@@ -2,7 +2,11 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { writeAppForegroundMigration } from "./app-foreground-lifecycle.mjs";
+import {
+  APP_FOREGROUND_MIGRATION_SCHEMA,
+  appForegroundMigrationPath,
+  writeAppForegroundMigration,
+} from "./app-foreground-lifecycle.mjs";
 
 export const LEGACY_APP_SERVICE_LABELS = Object.freeze([
   "com.hexpy.butler",
@@ -56,6 +60,11 @@ export async function migrateLegacyAppService({
   remove = (path) => rmSync(path, { force: true }),
   now = () => new Date(),
 } = {}) {
+  const completedMigration = defaultReadJson(appForegroundMigrationPath(butlerData));
+  if (
+    completedMigration?.schema === APP_FOREGROUND_MIGRATION_SCHEMA &&
+    completedMigration.status === "complete"
+  ) return completedMigration;
   const state = inspect();
   const startedAt = now().toISOString();
   if (!state.required) {

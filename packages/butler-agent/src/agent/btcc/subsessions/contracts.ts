@@ -171,7 +171,7 @@ export interface SubsessionDelegationStore {
   }): void;
   relationById(relationId: string): SessionRelation | null;
   relationByDelegationId(delegationId: string): SessionRelation | null;
-  relationByParentSessionId(parentSessionId: string): SessionRelation | null;
+  relationsByParentSessionId(parentSessionId: string): SessionRelation[];
   relationByChildSessionId(childSessionId: string): SessionRelation | null;
   packetByRelationId(relationId: string): DelegationPacket | null;
   rootWorkIdByRelationId(relationId: string): string | null;
@@ -253,7 +253,6 @@ export type SubsessionDelegationService = {
     parentSessionId: string;
     parentInputText: string;
   }): Promise<string | null>;
-  relationForParent(parentSessionId: string): SessionRelation | null;
   resultIdForRelation(relationId: string): string | null;
   pendingParentInputCount(): number;
 };

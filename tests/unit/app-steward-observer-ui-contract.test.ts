@@ -32,8 +32,8 @@ test("observer UI is read-only, session-addressed, and accessible", () => {
   const dialog = read(
     "packages/butler-app/client/ui/src/components/layout/SessionObserverDialog.tsx",
   );
-  const sidebar = read(
-    "packages/butler-app/client/ui/src/components/layout/SidebarStewardChildItem.tsx",
+  const progress = read(
+    "packages/butler-app/client/ui/src/components/conversation/StewardParentProgress.tsx",
   );
 
   expect(dialog).toContain("state.sessionViews[sessionId]");
@@ -42,8 +42,8 @@ test("observer UI is read-only, session-addressed, and accessible", () => {
   expect(dialog).toContain("aria-describedby=\"steward-observer-description\"");
   expect(dialog).toContain("aria-label={appCopy.inspector.tabs.activity}");
   expect(dialog).not.toContain("<Composer");
-  expect(sidebar).toContain("openSessionObserver(session.id)");
-  expect(sidebar).not.toContain("Worker");
+  expect(progress).toContain("openSessionObserver(child.session_id)");
+  expect(progress).not.toContain("Worker");
 });
 
 test("SS-03 fixture data is isolated from the default harness surface", () => {
@@ -51,7 +51,7 @@ test("SS-03 fixture data is isolated from the default harness surface", () => {
   const ss03Session = HARNESS_SS03_NAVIGATION.projects[0]?.sessions?.[0];
 
   expect(HARNESS_SUMMARY.steward_children).toBeUndefined();
-  expect(defaultSession?.steward_children).toBeUndefined();
+  expect(defaultSession && "steward_children" in defaultSession).toBe(false);
   expect(HARNESS_SS03_SUMMARY.steward_children).toHaveLength(1);
-  expect(ss03Session?.steward_children).toHaveLength(1);
+  expect(ss03Session && "steward_children" in ss03Session).toBe(false);
 });

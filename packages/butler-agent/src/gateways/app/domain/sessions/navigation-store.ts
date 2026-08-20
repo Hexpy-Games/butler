@@ -15,29 +15,14 @@ export class AppNavigationStore {
     private readonly listChatSessions: () => SessionListView,
     private readonly listProjects: () => ProjectListView,
     private readonly listProjectsWithSessions: () => ProjectListView,
-    private readonly listStewardChildren: (parentSessionId: string) => SessionListView["sessions"],
   ) {}
-
-  private withStewardChildren(session: SessionListView["sessions"][number]) {
-    const children = this.listStewardChildren(session.id);
-    return children.length > 0
-      ? { ...session, steward_children: children }
-      : session;
-  }
 
   listNavigation(): NavigationView {
     const automations = this.listAutomations().automations;
     const settings = this.getSettings();
     return {
-      chats: this.listChatSessions().sessions.map((chat) =>
-        this.withStewardChildren(chat),
-      ),
-      projects: this.listProjectsWithSessions().projects.map((project) => ({
-        ...project,
-        ...(project.sessions
-          ? { sessions: project.sessions.map((session) => this.withStewardChildren(session)) }
-          : {}),
-      })),
+      chats: this.listChatSessions().sessions,
+      projects: this.listProjectsWithSessions().projects,
       automations_summary: {
         total_count: automations.length,
         enabled_count: automations.filter(

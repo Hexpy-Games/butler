@@ -169,6 +169,12 @@ export function hiddenNativeToolNamesForGuidedTurn(
   ];
 }
 
+export function directSynthesisToolDefinitions<T extends { name: string }>(
+  tools: readonly T[],
+): T[] {
+  return tools.filter((tool) => tool.name !== "delegate_to_steward");
+}
+
 export function visibleToolDefinitions(authorized: readonly FunctionToolDefinition[], policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "trackingMode" | "projectId" | "subsession">, includeAttachedImageTool = false): FunctionToolDefinition[] {
   const projectLedgerWork =
     policy.trackingMode === "ledger" && Boolean(policy.projectId);

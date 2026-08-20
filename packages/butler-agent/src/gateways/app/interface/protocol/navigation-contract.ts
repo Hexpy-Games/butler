@@ -29,9 +29,6 @@ export interface SessionSummary {
   pinned: boolean;
   archived: boolean;
   automation_target_count: number;
-  parent_session_id?: string;
-  is_steward_child?: boolean;
-  steward_children?: SessionSummary[];
 }
 
 export interface ProjectSummary {

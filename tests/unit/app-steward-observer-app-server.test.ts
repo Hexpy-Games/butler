@@ -68,37 +68,34 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
     const parent = navigation.chats.find(
       (session: { id: string }) => session.id === parentSessionId,
     );
-    expect(parent?.steward_children).toEqual([
-      expect.objectContaining({
-        id: childSessionId,
-        parent_session_id: sessionHintForRow(parentSessionId),
-        is_steward_child: true,
-      }),
-    ]);
+    expect(parent?.steward_children).toBeUndefined();
     const project = navigation.projects.find(
       (item: { id: string }) => item.id === "project-route",
     );
-    expect(project?.sessions?.[0]?.steward_children).toEqual([
-      expect.objectContaining({
-        parent_session_id: sessionHintForRow("project-parent-route"),
-        is_steward_child: true,
-        id: "project-child-route",
-      }),
-    ]);
+    expect(project?.sessions?.[0]?.steward_children).toBeUndefined();
 
     const parentSessionViewResponse = await fetch(
       `${server.url}session-view?session_id=${parentSessionId}`,
     );
     expect(parentSessionViewResponse.ok).toBe(true);
     const parentSessionView = (await parentSessionViewResponse.json()).data;
-    expect(parentSessionView.steward_children).toEqual([
+    expect(parentSessionView.steward_children).toHaveLength(2);
+    expect(parentSessionView.steward_children.map(
+      (child: { session_id: string }) => child.session_id,
+    )).toEqual([childSessionId, "steward-route-2"]);
+    expect(parentSessionView.steward_children[0]).toEqual(
       expect.objectContaining({
-        session_id: childSessionId,
         relation: expect.objectContaining({
           parent_session_id: sessionHintForRow(parentSessionId),
+          ordinal: 1,
         }),
       }),
-    ]);
+    );
+    expect(parentSessionView.steward_children[1]).toEqual(
+      expect.objectContaining({
+        relation: expect.objectContaining({ ordinal: 2 }),
+      }),
+    );
 
     const projectParentSessionViewResponse = await fetch(
       `${server.url}session-view?session_id=project-parent-route`,
@@ -170,6 +167,17 @@ function seedObserverDatabase(
       1,
       "Route child",
       "2026-08-19T00:00:00.000Z",
+    );
+  db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(
+      "relation-route-2",
+      parentSessionId,
+      "parent-turn-route-2",
+      "steward-route-2",
+      "anchor-route-2",
+      2,
+      "Second route child",
+      "2026-08-19T00:00:30.000Z",
     );
   db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
     .run(

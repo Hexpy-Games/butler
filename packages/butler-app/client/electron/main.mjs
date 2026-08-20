@@ -1925,10 +1925,8 @@ function safeString(value) {
 }
 
 async function createWindow() {
-  const eagerUnpackedForegroundStartup =
-    usesAppForegroundLifecycle && !app.isPackaged;
   if (
-    (rendererUrl === serverUrl || eagerUnpackedForegroundStartup) &&
+    (rendererUrl === serverUrl || usesAppForegroundLifecycle) &&
     !shouldUseAppAgentNativeServiceBridge()
   ) {
     recordAppStartupProgress("agent_starting");
