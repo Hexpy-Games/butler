@@ -12,6 +12,8 @@ import {
   resolveButlerMarkTheme,
 } from "./conversationUtils";
 import { ConversationScroll, ConversationShell } from "@/butler-ds";
+import { useSessionViewSubscription } from
+  "@/components/layout/hooks/useSessionViewSubscription.ts";
 
 void appCopy;
 
@@ -31,6 +33,7 @@ export function Conversation() {
   const sendingChatId = useButlerStore((state) => state.sendingChatId);
   const sendingOperations = useButlerStore((state) => state.sendingOperations);
   const sendMessage = useButlerStore((state) => state.sendMessage);
+  const refreshSessionView = useButlerStore((state) => state.refreshSessionView);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const setRightTab = useButlerStore((state) => state.setRightTab);
 
@@ -60,6 +63,10 @@ export function Conversation() {
   }, [setRightOpen, setRightTab]);
 
   const hasMessages = messages.length > 0;
+  const stewardParentSubscriptionId = summary?.steward_children?.some(
+    (child) => child.active_turn,
+  ) ? activeChatId : null;
+  useSessionViewSubscription(stewardParentSubscriptionId, refreshSessionView);
   const hasDurableActivity = Boolean(
     summary?.steward_children?.some((child) => child.active_turn) ||
     summary?.latest_progress?.safe_progress_rows?.length,

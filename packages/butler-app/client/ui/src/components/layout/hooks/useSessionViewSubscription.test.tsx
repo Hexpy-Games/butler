@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { useSessionObserverSubscription } from "./useSessionObserverSubscription";
+import { useSessionViewSubscription } from "./useSessionViewSubscription";
 
 let root: Root | undefined;
 
@@ -20,7 +20,7 @@ afterEach(async () => {
     .IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("observer hook performs one initial request and bounded cadence without a response loop", async () => {
+test("session view hook performs one initial request and bounded cadence without a response loop", async () => {
   const dom = new JSDOM("<div id=\"root\"></div>", { url: "http://localhost" });
   const callbacks: Array<() => void> = [];
   let cleared = false;
@@ -81,6 +81,6 @@ function Harness({
 }: {
   refresh: (sessionId: string) => Promise<unknown> | unknown;
 }) {
-  useSessionObserverSubscription("steward-1", refresh);
+  useSessionViewSubscription("steward-1", refresh);
   return null;
 }

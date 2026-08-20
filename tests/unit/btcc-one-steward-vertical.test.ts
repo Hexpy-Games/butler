@@ -62,6 +62,11 @@ type PublicSessionView = {
   steward_children?: Array<{
     session_id: string;
     active_turn: { id: string } | null;
+    latest_turn: {
+      id: string;
+      state: string;
+      progress: { safe_progress_rows: Array<{ kind?: string }> };
+    } | null;
     relation: {
       child_session_id: string;
       parent_turn_id: string;
@@ -682,6 +687,10 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     )).toBe(false);
     expect(finalParentData.steward_children?.every(
       (child) => child.active_turn === null,
+    )).toBe(true);
+    expect(finalParentData.steward_children?.every(
+      (child) => child.latest_turn?.state === "delivered" &&
+        child.latest_turn.progress.safe_progress_rows.length > 0,
     )).toBe(true);
     const followUpIndex = finalParentData.messages.findIndex(
       (message) => message.id === exactFollowUpQueueRow.dispatched_message_id &&

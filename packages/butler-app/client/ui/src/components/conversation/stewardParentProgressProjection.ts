@@ -13,9 +13,9 @@ export interface AnchoredStewardProgress {
 }
 
 /**
- * Resolve the one factual parent message that may host a live Steward child.
- * Both durable relation anchors are required; an active child is never
- * attached to the newest or merely same-session message.
+ * Resolve the one factual parent message that owns a Steward child activity
+ * card. Both durable relation anchors are required; neither a live nor a
+ * terminal child is attached to the newest or merely same-session message.
  */
 export function anchoredStewardProgressByMessageId(
   messages: MessageRecord[],
@@ -25,7 +25,7 @@ export function anchoredStewardProgressByMessageId(
   const ambiguousParents = new Set<string>();
   if (!summary?.session_id) return result;
   for (const child of summary.steward_children ?? []) {
-    const turn = child.active_turn;
+    const turn = child.active_turn ?? child.latest_turn;
     const relation = child.relation;
     if (!turn || relation.child_session_id !== child.session_id) continue;
 
