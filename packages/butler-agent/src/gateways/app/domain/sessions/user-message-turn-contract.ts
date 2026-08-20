@@ -115,6 +115,7 @@ export interface UserMessageTurnStoreInput {
   ) => MessageRecord;
   setTurnUserMessage: (turnId: string, messageId: string) => void;
   appendEvent: (type: string, payload: Record<string, unknown>) => void;
+  isPublicUserMessage: (chatId: string, text: string) => boolean;
   appendTurnAcknowledgedEvent: (chatId: string, turnId: string) => void;
   updateTurnState: (
     turnId: string,

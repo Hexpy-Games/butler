@@ -175,13 +175,15 @@ export class AppUserMessageTurnStore {
       return { turn, accepted, executionControls, thinkingTurn };
     });
     const { turn, accepted, executionControls, thinkingTurn } = admission;
-    this.input.appendEvent("message.created", { message: accepted });
-    this.appendCapturedFeedback(
-      input.queued.chat_id,
-      turn.id,
-      accepted.id,
-      input.text,
-    );
+    if (this.input.isPublicUserMessage(input.queued.chat_id, input.text)) {
+      this.input.appendEvent("message.created", { message: accepted });
+      this.appendCapturedFeedback(
+        input.queued.chat_id,
+        turn.id,
+        accepted.id,
+        input.text,
+      );
+    }
     this.input.appendTurnAcknowledgedEvent(input.queued.chat_id, turn.id);
     this.input.appendEvent("turn.state_changed", { turn: thinkingTurn });
     if (!input.responder) {

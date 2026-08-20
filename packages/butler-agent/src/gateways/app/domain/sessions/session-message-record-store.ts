@@ -23,7 +23,6 @@ import {
   normalizeSessionMessagePageOptions,
   type SessionMessagePage,
   type SessionMessagePageOptions,
-  type TranscriptMessagePage,
 } from "./session-message-page.ts";
 
 export class AppSessionMessageRecordStore {
@@ -199,35 +198,6 @@ export class AppSessionMessageRecordStore {
       `)
       .all(chatId);
     return rows.reverse().map(artifactSummaryFromRow);
-  }
-
-  listTranscriptMessagePage(
-    chatId: string,
-    options: SessionMessagePageOptions = {},
-  ): TranscriptMessagePage {
-    this.ensureChat(chatId);
-    const normalized = normalizeSessionMessagePageOptions(options);
-    const afterCursor = normalized.fromBeginning ? 0 : normalized.afterCursor ?? 0;
-    const rows = this.db.query<{
-      cursor: number;
-      role: string;
-      text: string;
-    }, [string, number]>(`
-      SELECT rowid AS cursor, role, text
-      FROM messages
-      WHERE chat_id = ?
-        AND rowid > ?
-        AND ${visibleMessageSqlPredicate()}
-      ORDER BY rowid ASC
-      LIMIT ${normalized.limit + 1}
-    `).all(chatId, afterCursor);
-    const hasMore = rows.length > normalized.limit;
-    const items = rows.slice(0, normalized.limit);
-    return {
-      items,
-      nextCursor: Number(items.at(-1)?.cursor ?? afterCursor),
-      hasMore,
-    };
   }
 
   getMessageRow(messageId: string): MessageRow | null {

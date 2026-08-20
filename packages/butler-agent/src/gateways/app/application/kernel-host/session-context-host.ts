@@ -144,7 +144,10 @@ export function createSessionContextHost(
       return buildContextDetailsRevision(kernel, sessionId);
     },
     transcriptMessagePage(sessionId, options) {
-      return kernel.sessionRecords.listTranscriptMessagePage(sessionId, options);
+      return kernel.sessionMessageProjection.transcriptMessagePage(
+        sessionId,
+        options,
+      );
     },
     latestTurn(sessionId) {
       return kernel.sessionRecords.latestTurn(sessionId);

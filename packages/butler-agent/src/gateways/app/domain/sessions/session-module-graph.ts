@@ -15,6 +15,7 @@ import type { ButlerServiceClient } from "../../../core/client.ts";
 import { resolveProviderVisualCapability } from
   "../../../../integrations/providers/registry.ts";
 import type { SessionMessagePageOptions } from "./session-message-page.ts";
+import { sessionHintForRow } from "./session-read-model.ts";
 
 export interface AppSessionModuleGraph {
   messageFiles: AppMessageFileStore;
@@ -91,6 +92,12 @@ export function createAppSessionModuleGraph(input: {
     listProgressRowsForTurn: (turnId) => host.listProgressRowsForTurn(turnId),
     explicitDeliveryMetadataForTurn: (turnId) =>
       host.explicitDeliveryMetadataForTurn(turnId),
+    isPublicMessage: (sessionId, message) =>
+      message.role !== "user" ||
+      !host.stewardObserver.isParentResultInput(
+        sessionHintForRow(sessionId),
+        message.text,
+      ),
   });
   const turnProgressView = new AppTurnProgressViewStore({
     getTurnRow: (turnId) => host.getTurnRow(turnId),
@@ -182,6 +189,11 @@ export function createAppSessionModuleGraph(input: {
     appendEvent: (type, payload) => {
       host.appendEvent(type, payload);
     },
+    isPublicUserMessage: (chatId, text) =>
+      !host.stewardObserver.isParentResultInput(
+        sessionHintForRow(chatId),
+        text,
+      ),
     appendTurnAcknowledgedEvent: (chatId, turnId) =>
       host.appendTurnAcknowledgedEvent(chatId, turnId),
     updateTurnState: (turnId, state, options) =>

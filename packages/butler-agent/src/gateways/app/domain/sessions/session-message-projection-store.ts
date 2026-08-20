@@ -18,6 +18,7 @@ import type {
 import type {
   SessionMessagePage,
   SessionMessagePageOptions,
+  TranscriptMessagePage,
 } from "./session-message-page.ts";
 
 export class AppSessionMessageProjectionStore {
@@ -36,6 +37,7 @@ export class AppSessionMessageProjectionStore {
       explicitDeliveryMetadataForTurn: (
         turnId: string,
       ) => DeliveryLimitationMetadata | null;
+      isPublicMessage: (sessionId: string, message: MessageRecord) => boolean;
     },
   ) {}
 
@@ -58,7 +60,9 @@ export class AppSessionMessageProjectionStore {
     };
     return {
       ...page,
-      items: page.items.map((message) => {
+      items: page.items.filter((message) =>
+        this.input.isPublicMessage(sessionId, message),
+      ).map((message) => {
         if (message.role !== "assistant" || !message.turn_id) return message;
         const turn = this.input.getTurnRow(message.turn_id);
         if (!turn || !isTerminalProgressState(turn.state)) return message;
@@ -90,6 +94,22 @@ export class AppSessionMessageProjectionStore {
             : {}),
         };
       }),
+    };
+  }
+
+  transcriptMessagePage(
+    sessionId: string,
+    options?: SessionMessagePageOptions,
+  ): TranscriptMessagePage {
+    const page = this.sessionViewMessagePage(sessionId, options);
+    return {
+      items: page.items.map((message) => ({
+        cursor: Number(message.cursor ?? 0),
+        role: message.role,
+        text: message.text,
+      })),
+      nextCursor: page.nextCursor,
+      hasMore: page.hasMore,
     };
   }
 
