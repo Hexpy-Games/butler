@@ -34,6 +34,23 @@ const READ_ONLY_SURFACE = [
   "web_search:network",
 ] as const;
 
+const DETAILED_STEWARD_REPORT = [
+  "Conclusion: the requested repository source marker is present and verified.",
+  "Evidence: README.md and src/inspection-target.ts were the two distinct material reads.",
+  "Tests: bounded read-only inspection proof passed.",
+  "Remaining risk: this bounded read-only inspection did not exercise runtime deployment.",
+  "Follow-up recommendation: run deployment validation only when that separate scope is authorized.",
+].join("\n");
+
+function detailedMutationReport(receiptId: string): string {
+  return [
+  "Conclusion: the bounded Steward file was created and verified.",
+  `Evidence: steward-result.txt and ${receiptId} match the accepted mutation.`,
+  "Tests: passed; file content and receipt identity were verified.",
+  "Remaining risks: none within the bounded mutation scope.",
+  ].join("\n");
+}
+
 const roots: string[] = [];
 
 afterEach(() => {
@@ -355,7 +372,8 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     localAuth: { required: true, token: authToken },
   });
   const childRequests: ModelRoundRequest[] = [];
-  const modelRound = readOnlyStewardRound(childRequests);
+  const parentSynthesisRequests: ModelRoundRequest[] = [];
+  const modelRound = readOnlyStewardRound(childRequests, parentSynthesisRequests);
   let composition = createProductionBtccComposition({
     butlerHome: root,
     butlerData: root,
@@ -414,12 +432,18 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     await composition.ready;
     gateway = createStewardGateway(composition, bindings, root);
     await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
-    const appSnapshot = await readAppSnapshot(app, authToken, "Read-only Steward result synthesized.");
+    const synthesizedReport = "Read-only Steward report: source marker is present and verified.";
+    const appSnapshot = await readAppSnapshot(app, authToken, synthesizedReport);
     expect(appSnapshot.queueCount).toBe(1);
     expect(appSnapshot.parentInputCount).toBe(1);
     expect(appSnapshot.parentTurnCount).toBe(1);
     expect(appSnapshot.assistantResultCount).toBe(1);
-    expect(appSnapshot.newestAssistantText).toBe("Read-only Steward result synthesized.");
+    expect(appSnapshot.newestAssistantText).toBe(synthesizedReport);
+    expect(parentSynthesisRequests).toHaveLength(1);
+    const synthesisEvidence = parentSynthesisRequests[0]!.messages
+      .map((message) => message.content).join("\n");
+    expect(synthesisEvidence).toContain("Accepted child report evidence");
+    expect(synthesisEvidence).toContain("source marker is present and verified");
 
     const btccDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
     try {
@@ -482,9 +506,35 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       );
 
       const result = btccDb.query<Record<string, unknown>, []>(
-        "SELECT relation_id, status, result_id, child_turn_id, changed_artifacts_json FROM btcc_steward_results",
+        `SELECT relation_id, status, result_id, child_turn_id, summary,
+          changed_artifacts_json, tests_json, remaining_risks_json,
+          follow_up_recommendations_json, detail_refs_json
+        FROM btcc_steward_results`,
       ).get();
       expect(result?.status).toBe("success");
+      expect(String(result?.summary)).toContain("source marker is present and verified");
+      const childFinal = btccDb.query<{ final_payload_json: string }, [string]>(
+        "SELECT final_payload_json FROM btcc_turns WHERE turn_id = ?",
+      ).get(String(result?.child_turn_id))?.final_payload_json ?? "";
+      expect(childFinal).toContain("source marker is present and verified");
+      const resultOutbox = btccDb.query<{ input_json: string }, [string]>(
+        "SELECT input_json FROM btcc_subsession_outbox WHERE result_id = ?",
+      ).get(String(result?.result_id))?.input_json ?? "";
+      expect(resultOutbox).not.toContain("Evidence: README.md establishes the repository root");
+      expect(JSON.parse(String(result?.tests_json))).toEqual([
+        "bounded read-only inspection proof passed.",
+      ]);
+      expect(JSON.parse(String(result?.remaining_risks_json))).toEqual([
+        "this bounded read-only inspection did not exercise runtime deployment.",
+      ]);
+      expect(JSON.parse(String(result?.follow_up_recommendations_json))).toEqual([
+        "run deployment validation only when that separate scope is authorized.",
+      ]);
+      const detailRefs = JSON.parse(String(result?.detail_refs_json)) as string[];
+      expect(detailRefs[0]?.startsWith(
+        `btcc-final-payload:v1:${result?.relation_id}:${result?.result_id}:${result?.child_turn_id}:`,
+      )).toBe(true);
+      expect(resultOutbox).toContain(detailRefs[0]!);
       expect(JSON.parse(String(result?.changed_artifacts_json))).toEqual([]);
       const rootWork = btccDb.query<{ work_id: string }, [string]>(
         "SELECT work_id FROM btcc_guided_works WHERE session_id = ?",
@@ -541,6 +591,56 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       ))).toHaveLength(0);
     } finally {
       btccDb.close();
+    }
+
+    for (const rejected of [
+      { key: "unusable", text: "simulate unusable terminal report evidence" },
+      { key: "private-path", text: "simulate private-path terminal report evidence" },
+    ]) {
+      const chatId = `${rejected.key}-steward-report`;
+      const parentSessionId = sessionHintForRow(chatId);
+      await fetch(`${app.url}sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ kind: "chat", title: "Rejected Steward report", session_hint: chatId }),
+      });
+      bindings.upsert({
+        sessionId: parentSessionId, role: "butler", projectId: "project-sandy",
+        workspacePath: root, runtimeAdapterId: "btcc-turn-runtime",
+        modelProviderId: "openai", modelRef: "openai/gpt-5.5",
+        transportBindings: [{ transport: "app", accountId: "local", peerId: chatId }],
+      });
+      const message = {
+        chat_id: chatId,
+        text: `Inspect the source marker, but ${rejected.text}.`,
+        model: "openai/gpt-5.5", reasoning_effort: "low", access_mode: "full_access",
+        client_message_id: `client-${rejected.key}-report-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+      };
+      expect((await postAppMessage(app.url, authToken, message)).status).toBe(202);
+      expect((await postAppMessage(app.url, authToken, message)).status).toBe(202);
+      await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
+      const rejectedDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
+      try {
+        expect(rejectedDb.query<{
+          status: string; code: string; detail_refs_json: string; result_count: number;
+        }, [string]>(`
+          SELECT result.status, result.code, result.detail_refs_json,
+            (SELECT COUNT(*) FROM btcc_steward_results AS all_results
+              WHERE all_results.relation_id = relation.relation_id) AS result_count
+          FROM btcc_session_relations AS relation
+          JOIN btcc_steward_results AS result ON result.relation_id = relation.relation_id
+          WHERE relation.parent_session_id = ?
+        `).get(parentSessionId)).toEqual({
+          status: "failed", code: "steward_execution_failed",
+          detail_refs_json: "[]", result_count: 1,
+        });
+      } finally {
+        rejectedDb.close();
+      }
+      expect(app.store.db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM session_queued_messages
+        WHERE chat_id = ? AND text LIKE 'Subsession result%'
+      `).get(chatId)?.count).toBe(1);
     }
 
     const missingChatId = "missing-project-context";
@@ -839,12 +939,18 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
           })],
         };
       }
-      return { text: "Steward mutation verified.", toolCalls: [] };
+      const receiptId = request.messages.map((message) => message.content).join("\n")
+        .match(/guided-effect-receipt-[a-f0-9]+/u)?.[0];
+      if (!receiptId) throw new Error("Mutation receipt was not projected to the final report round");
+      return { text: detailedMutationReport(receiptId), toolCalls: [] };
     },
   };
 }
 
-function readOnlyStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
+function readOnlyStewardRound(
+  childRequests: ModelRoundRequest[],
+  parentSynthesisRequests: ModelRoundRequest[],
+): ModelRoundPort {
   const parentRounds = new Map<string, number>();
   const childRounds = new Map<string, number>();
   return {
@@ -856,7 +962,13 @@ function readOnlyStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPor
           message.content.includes("requires verified project context") ||
           message.content.includes("delegation_context_incomplete"),
         );
-        const key = `${missingContext ? "missing-" : ""}${
+        const privatePathReport = request.messages.some((message) =>
+          message.content.includes("private-path terminal report evidence"));
+        const unusableReport = request.messages.some((message) =>
+          message.content.includes("unusable terminal report evidence") || privatePathReport ||
+          message.content.includes("steward_execution_failed"),
+        );
+        const key = `${missingContext ? "missing-" : privatePathReport ? "private-" : unusableReport ? "unusable-" : ""}${
           request.messages.some((message) => message.content.includes("Subsession result"))
             ? "synthesis"
             : "delegation"
@@ -874,6 +986,22 @@ function readOnlyStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPor
                 acceptance_criteria: ["Use the verified project context instead of guessing."],
                 task_or_plan_refs: ["W-SANDY-RELATIONSHIP-AUDIT-001"],
                 constraints_and_non_goals: ["Do not guess or scan when required context is unavailable."],
+                allowed_tools_and_effects: [...READ_ONLY_SURFACE],
+                mutation_scope: [],
+              })],
+            };
+          }
+          if (unusableReport) {
+            return {
+              toolCalls: [toolCall("delegate-unusable-report", "delegate_to_steward", {
+                execution_mode: "read_only",
+                safe_title: "Unusable report inspection",
+                objective: privatePathReport
+                  ? "Inspect the repository source marker with private-path terminal report evidence."
+                  : "Inspect the repository source marker with unusable terminal report evidence.",
+                acceptance_criteria: ["The source marker is inspected with material evidence."],
+                task_or_plan_refs: ["W-SANDY-RELATIONSHIP-AUDIT-001"],
+                constraints_and_non_goals: ["Do not mutate the workspace."],
                 allowed_tools_and_effects: [...READ_ONLY_SURFACE],
                 mutation_scope: [],
               })],
@@ -898,10 +1026,13 @@ function readOnlyStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPor
             })],
           };
         }
+        if (key.endsWith("synthesis")) parentSynthesisRequests.push(request);
         return {
           text: missingContext
             ? "Steward was blocked because required project context was unavailable."
-            : "Read-only Steward result synthesized.",
+            : unusableReport
+              ? "Steward failed because terminal report evidence was unusable."
+            : "Read-only Steward report: source marker is present and verified.",
           toolCalls: [],
         };
       }
@@ -981,7 +1112,15 @@ function readOnlyStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPor
           })],
         };
       }
-      return { text: "Read-only repository inspection verified.", toolCalls: [] };
+      const requestBody = request.messages.map((message) => message.content).join("\n");
+      return {
+        text: requestBody.includes("private-path terminal report evidence")
+          ? `${DETAILED_STEWARD_REPORT}\nEvidence detail: file:///private/var/secret.txt`
+          : requestBody.includes("unusable terminal report evidence")
+            ? "Steward completed the bounded read-only inspection with verified material evidence."
+            : DETAILED_STEWARD_REPORT,
+        toolCalls: [],
+      };
     },
   };
 }

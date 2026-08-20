@@ -12,7 +12,7 @@ import type {
   SubsessionDelegationDependencies,
 } from "./contracts.ts";
 import { subsessionRootWorkId } from "./identities.ts";
-import { distinctMaterialReadCount } from "./read-only-material-evidence.ts";
+import { distinctMaterialReadCount, materialReadReportAnchors } from "./read-only-material-evidence.ts";
 import { SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS } from "./scope.ts";
 
 type CompletionEvidenceInput = {
@@ -57,6 +57,7 @@ export async function validateStewardCompletion(input: CompletionEvidenceInput):
   summary: string;
   acceptanceEvidence: string[];
   changedArtifacts: string[];
+  reportEvidenceAnchors: string[];
 }> {
   const packet = input.packet;
   validatePacket(packet);
@@ -87,6 +88,7 @@ export async function validateStewardCompletion(input: CompletionEvidenceInput):
       `Session-owned worktree ${workspace.branch} contains the applied artifact.`,
     ],
     changedArtifacts: [target],
+    reportEvidenceAnchors: [target, effect.receipt!.receiptId],
   };
 }
 
@@ -128,6 +130,7 @@ async function validateReadOnlyCompletion(
   summary: string;
   acceptanceEvidence: string[];
   changedArtifacts: string[];
+  reportEvidenceAnchors: string[];
 }> {
   const records = input.toolJournal.list(input.childTurnId);
   const allowedTools = new Set([
@@ -148,7 +151,8 @@ async function validateReadOnlyCompletion(
     factualCompletionFailure("subsession_read_only_effect_planned");
   }
   const materialReadCount = distinctMaterialReadCount(records);
-  if (materialReadCount < 2) {
+  const reportEvidenceAnchors = materialReadReportAnchors(records);
+  if (materialReadCount < 2 || reportEvidenceAnchors.length < 2) {
     factualCompletionFailure("subsession_read_only_material_reads_missing");
   }
   const effects = await input.effectJournal.listForWork(work.workId, 20);
@@ -157,10 +161,11 @@ async function validateReadOnlyCompletion(
     summary: "Steward completed the bounded read-only inspection.",
     acceptanceEvidence: [
       "One child Work completed with accepted Plan, progress, result, and completion evidence.",
-      `${materialReadCount} distinct material read operations completed in the validated project workspace.`,
+      `Material read evidence: ${reportEvidenceAnchors.join("; ")}.`,
       "No effect journal row or applied receipt was recorded.",
     ],
     changedArtifacts: [],
+    reportEvidenceAnchors,
   };
 }
 

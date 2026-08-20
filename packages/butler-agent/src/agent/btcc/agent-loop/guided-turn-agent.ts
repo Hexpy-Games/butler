@@ -34,9 +34,7 @@ import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts
 import { privateModifyContinuationPromptInput } from "./guided-authority-continuation.ts";
 import type { PrincipalAuthority } from "../authority/index.ts";
 import { ensureSubsessionChildRootWork, subsessionToolInput } from "../subsessions/index.ts";
-
 type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
-
 export function createProductionGuidedTurnAgent(
   input: ProductionGuidedTurnAgentInput,
 ): BtccAgentLoop;
@@ -232,12 +230,14 @@ export function createProductionGuidedTurnAgent(
       const effectContext = initialWork
         ? renderGuidedEffectContext(input.effectJournal.listForWork(initialWork.work.workId))
         : "";
+      const subsessionResultEvidence = await input.subsessionDelegation?.resolveParentResultEvidence({ parentSessionId: turn.sessionId, parentInputText: turn.originalMessage });
       const requestAttribution = renderPhaseScopedGuidedTurnRequest({
         enabled: Boolean(continuationBudget), phase: phasePolicy.phase, turn,
         stableInstructionPrefix: phasePolicy.stableInstructionPrefix,
         responseLanguage,
         promptInput: {
           ...input, workContext: renderDurableWorkContext(initialWork), effectContext,
+          ...(subsessionResultEvidence ? { subsessionResultEvidence } : {}),
           ...privateModifyContinuationPromptInput(
             authority, turn.sessionId, turn.context.authorityRequestRef, turn.turnId,
             turn.context.authorityClientMessageId,

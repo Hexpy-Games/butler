@@ -14,6 +14,12 @@ import {
   pendingParentInputForResult as findPendingParentInput,
   pendingParentInputs as listPendingParentInputs,
 } from "./subsession-outbox-store.ts";
+import {
+  insertStewardResult,
+  readStewardResult,
+  renderParentResult,
+  safeStewardSummary,
+} from "./subsession-result-record.ts";
 
 type RelationRow = SessionRelation;
 type DelegationRow = {
@@ -23,19 +29,6 @@ type DelegationRow = {
   child_turn_id: string;
   root_work_id: string;
   packet_json: string;
-  created_at: string;
-};
-type ResultRow = {
-  result_id: string;
-  relation_id: string;
-  task_id: string;
-  child_session_id: string;
-  child_turn_id: string;
-  status: StewardResultStatus;
-  code: StewardResultCode | null;
-  summary: string;
-  acceptance_evidence_json: string;
-  changed_artifacts_json: string;
   created_at: string;
 };
 export class SqliteSubsessionDelegationStore implements SubsessionDelegationStore {
@@ -81,6 +74,15 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       );
     });
     tx.immediate();
+  }
+
+  relationById(relationId: string): SessionRelation | null {
+    const row = this.db.query<RelationRow, [string]>(`
+      SELECT relation_id, parent_session_id, parent_turn_id, child_session_id,
+        anchor_message_id, ordinal, safe_title, created_at
+      FROM btcc_session_relations WHERE relation_id = ?
+    `).get(relationId);
+    return row ?? null;
   }
 
   relationByDelegationId(delegationId: string): SessionRelation | null {
@@ -145,25 +147,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
   }
 
   resultByRelationId(relationId: string): StewardResultEnvelope | null {
-    const row = this.db.query<ResultRow, [string]>(`
-      SELECT result_id, relation_id, task_id, child_session_id, child_turn_id,
-        status, code, summary, acceptance_evidence_json, changed_artifacts_json, created_at
-      FROM btcc_steward_results WHERE relation_id = ?
-    `).get(relationId);
-    if (!row) return null;
-    return {
-      result_id: row.result_id,
-      relation_id: row.relation_id,
-      task_id: row.task_id,
-      child_session_id: row.child_session_id,
-      child_turn_id: row.child_turn_id,
-      status: row.status,
-      code: row.code ?? null,
-      summary: row.summary,
-      acceptance_evidence: JSON.parse(row.acceptance_evidence_json) as string[],
-      changed_artifacts: JSON.parse(row.changed_artifacts_json) as string[],
-      created_at: row.created_at,
-    };
+    return readStewardResult(this.db, relationId);
   }
 
   resultIdForRelation(relationId: string): string | null {
@@ -185,6 +169,11 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     summary: string;
     acceptanceEvidence: string[];
     changedArtifacts: string[];
+    commits: string[];
+    tests: string[];
+    remainingRisks: string[];
+    followUpRecommendations: string[];
+    detailRefs: string[];
     parentChatId: string;
   }): { result: StewardResultEnvelope; parentInput: {
     relation_id: string;
@@ -200,7 +189,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     timestamp: string;
   }; inserted: boolean } {
     const now = new Date().toISOString();
-    const summary = safeSummary(input.summary);
+    const summary = safeStewardSummary(input.summary);
     const parentMessageId = `subsession-result:${input.relation.relation_id}:${input.resultId}`;
     const parentText = renderParentResult({
       result_id: input.resultId,
@@ -213,6 +202,11 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       summary,
       acceptance_evidence: input.acceptanceEvidence,
       changed_artifacts: input.changedArtifacts,
+      commits: input.commits,
+      tests: input.tests,
+      remaining_risks: input.remainingRisks,
+      follow_up_recommendations: input.followUpRecommendations,
+      detail_refs: input.detailRefs,
       created_at: now,
     });
     const parentInput = {
@@ -244,26 +238,14 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
         summary,
         acceptance_evidence: input.acceptanceEvidence,
         changed_artifacts: input.changedArtifacts,
+        commits: input.commits,
+        tests: input.tests,
+        remaining_risks: input.remainingRisks,
+        follow_up_recommendations: input.followUpRecommendations,
+        detail_refs: input.detailRefs,
         created_at: now,
       };
-      this.db.query(`
-        INSERT INTO btcc_steward_results (
-          result_id, relation_id, task_id, child_session_id, child_turn_id,
-          status, code, summary, acceptance_evidence_json, changed_artifacts_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        result.result_id,
-        result.relation_id,
-        result.task_id,
-        result.child_session_id,
-        result.child_turn_id,
-        result.status,
-        result.code,
-        result.summary,
-        stableJson(result.acceptance_evidence),
-        stableJson(result.changed_artifacts),
-        result.created_at,
-      );
+      insertStewardResult(this.db, result);
       this.db.query(`
         INSERT INTO btcc_subsession_outbox (
           outbox_id, relation_id, result_id, parent_session_id, parent_turn_id,
@@ -327,19 +309,4 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
 
 function deterministicParentTurnId(relationId: string, resultId: string): string {
   return `synthesis-${digest(`btcc.subsession.synthesis.v1\0${relationId}\0${resultId}`).slice(0, 32)}`;
-}
-
-function safeSummary(value: string): string {
-  return value.replace(/\s+/gu, " ").replace(/[\\/]Users[\\/][^ ]+/gu, "workspace artifact").trim().slice(0, 240) || "Steward completed the bounded task.";
-}
-
-function renderParentResult(result: StewardResultEnvelope): string {
-  return [
-    "Subsession result",
-    `Status: ${result.status}`,
-    ...(result.code ? [`Code: ${result.code}`] : []),
-    `Summary: ${result.summary}`,
-    `Acceptance evidence: ${result.acceptance_evidence.join("; ")}`,
-    `Changed artifacts: ${result.changed_artifacts.join("; ") || "none"}`,
-  ].join("\n");
 }
