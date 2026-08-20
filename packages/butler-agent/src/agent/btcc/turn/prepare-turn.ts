@@ -182,13 +182,13 @@ export function snapshotTurnContext(input: {
     ...input.assembly.retrievedContext,
   ];
   const userRef = principalRef(input.binding);
-  const snapshot = subsession
-    ? {
+  const snapshot = subsession ? {
         userRef: "steward-role",
+        ...(subsession.projectContext?.projectId ? { projectRef: subsession.projectContext.projectId } : {}),
         profileRefs: [],
         recentFeedbackRefs: [],
-        mandatoryHotCacheRefs: [],
-        optionalHotCacheRefs: [],
+        mandatoryHotCacheRefs: [...(subsession.projectContext?.mandatoryHotCacheRefs ?? [])],
+        optionalHotCacheRefs: [...(subsession.projectContext?.optionalHotCacheRefs ?? [])],
         baselineObservationScopeRefs: [],
       }
     : snapshotContextDocuments({

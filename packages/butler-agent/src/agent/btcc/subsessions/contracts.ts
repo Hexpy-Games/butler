@@ -28,6 +28,22 @@ export type SubsessionWorkspaceAndWorktree =
       branch: string;
     };
 
+export type DelegationProjectContextRef = {
+  context_ref: string;
+  content_sha256: string;
+  source_id: "project-hot-cache" | "project-memory";
+  source_revision: string;
+  projection_class: "mandatory_hot_cache" | "optional_hot_cache";
+};
+
+export type DelegationProjectContextSnapshot = {
+  project_id: string;
+  required_source_ids: string[];
+  missing_source_ids: string[];
+  mandatory_refs: DelegationProjectContextRef[];
+  optional_refs: DelegationProjectContextRef[];
+};
+
 export type DelegationPacket = {
   delegation_id: string;
   task_id: string;
@@ -38,6 +54,7 @@ export type DelegationPacket = {
   objective: string;
   acceptance_criteria: string[];
   task_or_plan_refs: string[];
+  project_context?: DelegationProjectContextSnapshot;
   constraints_and_non_goals: string[];
   allowed_tools_and_effects: string[];
   mutation_scope: string[];
@@ -234,4 +251,6 @@ export type SubsessionDelegationDependencies = {
   parentInputSink: ParentInputSink;
   toolJournal: import("../ports/guided-tool-journal.ts").GuidedToolJournal;
   effectJournal: import("../effects/contracts.ts").GuidedEffectJournal;
+  parentTurns: Pick<import("../turn/index.ts").TurnStateRepository, "findTurn">;
+  contextDocuments: import("../../context/context-projection.ts").ContextDocumentReader;
 };

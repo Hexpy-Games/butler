@@ -55,6 +55,11 @@ export type ButlerExecutionPolicy = {
     executionMode: "read_only" | "mutation";
     mutationScope: string[];
     allowedToolsAndEffects: string[];
+    projectContext?: {
+      projectId: string;
+      mandatoryHotCacheRefs: string[];
+      optionalHotCacheRefs: string[];
+    };
   };
 };
 
