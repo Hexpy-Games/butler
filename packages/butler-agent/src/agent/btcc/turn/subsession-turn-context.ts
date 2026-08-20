@@ -22,17 +22,32 @@ export function readSubsessionMetadata(
   const relationId = optionalString(metadata.relation_id);
   const delegationId = optionalString(metadata.delegation_id);
   const taskId = optionalString(metadata.task_id);
+  // Persisted SS-02/SS-02B bindings predate the explicit mode field. This is
+  // the single binding-read compatibility boundary; new writers stay explicit.
+  const executionMode = metadata.execution_mode === undefined
+      ? "mutation"
+      : metadata.execution_mode === "read_only"
+      ? "read_only"
+      : metadata.execution_mode === "mutation"
+        ? "mutation"
+        : null;
   const mutationScope = stringArray(metadata.mutation_scope);
   const allowedToolsAndEffects = stringArray(metadata.allowed_tools_and_effects);
-  if (!relationId || !delegationId || !taskId) {
+  if (!relationId || !delegationId || !taskId || !executionMode) {
     throw new Error("subsession_context_invalid");
   }
   return {
     relationId,
     delegationId,
     taskId,
-    mutationScope: normalizeSubsessionMutationScope(mutationScope),
-    allowedToolsAndEffects: normalizeSubsessionAllowedToolsAndEffects(allowedToolsAndEffects),
+    executionMode,
+    mutationScope: executionMode === "mutation"
+      ? normalizeSubsessionMutationScope(mutationScope)
+      : [],
+    allowedToolsAndEffects: normalizeSubsessionAllowedToolsAndEffects(
+      allowedToolsAndEffects,
+      executionMode,
+    ),
   };
 }
 

@@ -25,6 +25,7 @@ export function createSubsessionToolHandlers(input: {
         parent_session_id: input.parentSessionId,
         parent_turn_id: input.parentTurnId,
         anchor_message_id: input.anchorMessageId,
+        execution_mode: args.execution_mode,
         safe_title: args.safe_title,
         objective: args.objective,
         acceptance_criteria: args.acceptance_criteria,
@@ -47,6 +48,7 @@ export function createSubsessionToolHandlers(input: {
 }
 
 function decodeDelegationArgs(args: Record<string, unknown>): {
+  execution_mode: "read_only" | "mutation";
   safe_title: string;
   objective: string;
   acceptance_criteria: string[];
@@ -56,14 +58,20 @@ function decodeDelegationArgs(args: Record<string, unknown>): {
   mutation_scope: string[];
 } {
   return {
+    execution_mode: executionMode(args.execution_mode),
     safe_title: requiredString(args.safe_title, "safe_title"),
     objective: requiredString(args.objective, "objective"),
     acceptance_criteria: stringArray(args.acceptance_criteria, "acceptance_criteria", true),
     task_or_plan_refs: stringArray(args.task_or_plan_refs, "task_or_plan_refs", false),
     constraints_and_non_goals: stringArray(args.constraints_and_non_goals, "constraints_and_non_goals", true),
     allowed_tools_and_effects: stringArray(args.allowed_tools_and_effects, "allowed_tools_and_effects", true),
-    mutation_scope: stringArray(args.mutation_scope, "mutation_scope", true),
+    mutation_scope: stringArray(args.mutation_scope, "mutation_scope", false),
   };
+}
+
+function executionMode(value: unknown): "read_only" | "mutation" {
+  if (value === "read_only" || value === "mutation") return value;
+  throw new Error("delegation_execution_mode_invalid");
 }
 
 function requiredString(value: unknown, name: string): string {

@@ -1,16 +1,24 @@
-/**
- * The SS-02 Steward effect surface is intentionally closed. New capabilities
- * must be admitted by a later Task with an explicit boundary and evidence.
- */
+/** The mutation Steward effect surface remains intentionally closed. */
 export const SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS = [
   "edit_file:workspace",
   "write_file:workspace",
 ] as const;
 
-const allowedEffects = new Set<string>(SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS);
+/** The read-only Steward surface is the complete effect-free native set. */
+export const SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS = [
+  "grep_files:workspace",
+  "list_files:workspace",
+  "read_file:workspace",
+  "web_read:network",
+  "web_search:network",
+] as const;
+
+const allowedMutationEffects = new Set<string>(SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS);
+const allowedReadOnlyEffects = new Set<string>(SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS);
 
 export function normalizeSubsessionAllowedToolsAndEffects(
   values: readonly string[],
+  mode: "read_only" | "mutation",
 ): string[] {
   if (!Array.isArray(values) || values.some((value) => typeof value !== "string")) {
     throw new Error("subsession_effect_not_allowed");
@@ -19,8 +27,12 @@ export function normalizeSubsessionAllowedToolsAndEffects(
     .filter(Boolean)
     .sort();
   if (!normalized.length) throw new Error("delegation_allowed_effects_required");
-  if (normalized.some((value) => !allowedEffects.has(value))) {
+  const allowed = mode === "read_only" ? allowedReadOnlyEffects : allowedMutationEffects;
+  if (normalized.some((value) => !allowed.has(value))) {
     throw new Error("subsession_effect_not_allowed");
+  }
+  if (mode === "read_only" && normalized.length !== allowedReadOnlyEffects.size) {
+    throw new Error("subsession_read_only_surface_incomplete");
   }
   return normalized;
 }
@@ -46,8 +58,9 @@ export function normalizeSubsessionMutationScope(
 export function subsessionToolNames(
   values: readonly string[],
 ): string[] {
-  return normalizeSubsessionAllowedToolsAndEffects(values)
-    .map((value) => value.slice(0, value.indexOf(":")));
+  return [...new Set(values.map((value) => value.slice(0, value.indexOf(":"))))]
+    .filter(Boolean)
+    .sort();
 }
 
 function normalizeScopePath(value: string): string | null {

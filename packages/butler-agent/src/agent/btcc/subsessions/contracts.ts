@@ -13,24 +13,35 @@ export type SessionRelation = {
   created_at: string;
 };
 
+export type SubsessionExecutionMode = "read_only" | "mutation";
+
+export type SubsessionWorkspaceAndWorktree =
+  | {
+      ownership: "project";
+      workspace_label: "Validated project workspace";
+      repository_anchor_ref: "parent-session-project";
+    }
+  | {
+      ownership: "session";
+      workspace_label: "Steward session worktree";
+      repository_anchor_ref: "parent-session-repository";
+      branch: string;
+    };
+
 export type DelegationPacket = {
   delegation_id: string;
   task_id: string;
   parent_session_id: string;
   parent_turn_id: string;
   relation_id: string;
+  execution_mode: SubsessionExecutionMode;
   objective: string;
   acceptance_criteria: string[];
   task_or_plan_refs: string[];
   constraints_and_non_goals: string[];
   allowed_tools_and_effects: string[];
   mutation_scope: string[];
-  workspace_and_worktree: {
-    ownership: "session";
-    workspace_label: string;
-    repository_anchor_ref: string;
-    branch: string;
-  };
+  workspace_and_worktree: SubsessionWorkspaceAndWorktree;
   expected_result_schema: {
     version: 1;
     status: "success" | "blocked" | "failed" | "cancelled";
@@ -38,7 +49,7 @@ export type DelegationPacket = {
   };
   work_creation_policy: "one_recoverable_child_work";
   access_and_budget_policy: {
-    access_mode: "full_access";
+    access_mode: "full_access" | "read_only";
     max_turns: number;
     model_ref: string;
     reasoning_effort: string;
@@ -90,6 +101,7 @@ export type DelegationRequest = {
   parent_session_id: string;
   parent_turn_id: string;
   anchor_message_id: string;
+  execution_mode: SubsessionExecutionMode;
   safe_title: string;
   objective: string;
   acceptance_criteria: string[];

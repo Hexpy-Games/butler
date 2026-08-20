@@ -52,6 +52,7 @@ export type ButlerExecutionPolicy = {
     relationId: string;
     delegationId: string;
     taskId: string;
+    executionMode: "read_only" | "mutation";
     mutationScope: string[];
     allowedToolsAndEffects: string[];
   };

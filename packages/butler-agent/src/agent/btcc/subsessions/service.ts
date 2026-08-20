@@ -1,12 +1,9 @@
 import { NativeInboundQueue } from "../../../gateways/core/inbound-queue.ts";
-import {
-  bindSessionGitWorktree,
-  createWorkspaceReference,
-} from "../../session-workspaces/index.ts";
 import { digest, stableJson } from "../identity/index.ts";
 import { subsessionChildTurnId, subsessionResultId, subsessionRootWorkId } from "./identities.ts";
 import { recoverPendingParentInputs } from "./outbox-recovery.ts";
 import { completeStewardResultForDependencies } from "./terminal-result-service.ts";
+import { createStewardWorktree } from "./worktree.ts";
 import {
   normalizeSubsessionAllowedToolsAndEffects,
   normalizeSubsessionMutationScope,
@@ -20,6 +17,7 @@ import type {
   DelegationRequest,
   ParentInputSink,
   SessionRelation,
+  SubsessionExecutionMode,
   SubsessionDelegationDependencies,
   SubsessionDelegationService,
 } from "./contracts.ts";
@@ -111,27 +109,19 @@ export function createSubsessionDelegationService(
         branch,
       });
       registerChildSession(input, parent.workspacePath, normalizedRequest, packet, childSessionId);
-      const worktree = await bindSessionGitWorktree({
-        action: "create",
-        branch,
-        sessionId: childSessionId,
-        butlerData: input.butlerData,
-        bindingStore: input.sessionBindings,
-        workspaceReference: createWorkspaceReference(parent.workspacePath),
-      });
-      if (!worktree.ok) {
-        input.sessionBindings.deleteSession(childSessionId);
-        throw new Error(`steward_worktree_unavailable:${worktree.error.code}`);
-      }
+      const childWorkspacePath = normalizedRequest.execution_mode === "read_only"
+        ? parent.workspacePath
+        : await createStewardWorktree(input, parent.workspacePath, branch, childSessionId);
       const storedChild = input.sessionBindings.getBySessionId(childSessionId);
-      if (!storedChild || storedChild.workspacePath === parent.workspacePath) {
+      if (!storedChild || (normalizedRequest.execution_mode === "mutation" &&
+        storedChild.workspacePath === parent.workspacePath)) {
         throw new Error("steward_isolated_workspace_missing");
       }
       input.store.create({ relation, packet, childTurnId, rootWorkId });
       enqueueChild(childQueue, packet, normalizedRequest.parent_session_id, childSessionId,
-        childTurnId, storedChild.workspacePath, now);
+        childTurnId, childWorkspacePath, now);
       return { relation, packet, child_turn_id: childTurnId, root_work_id: rootWorkId,
-        child_workspace_path: storedChild.workspacePath } satisfies CreatedDelegation;
+        child_workspace_path: childWorkspacePath } satisfies CreatedDelegation;
     },
     async ensureChildRootWork(child) {
       return ensureRootWork(child);
@@ -159,6 +149,7 @@ function delegationIdentity(request: DelegationRequest): string {
     parent_session_id: request.parent_session_id,
     parent_turn_id: request.parent_turn_id,
     anchor_message_id: request.anchor_message_id,
+    execution_mode: request.execution_mode,
     objective: request.objective,
     acceptance_criteria: request.acceptance_criteria,
     task_or_plan_refs: request.task_or_plan_refs,
@@ -193,18 +184,25 @@ function createPacket(
     parent_session_id: request.parent_session_id,
     parent_turn_id: request.parent_turn_id,
     relation_id: ids.relationId,
+    execution_mode: request.execution_mode,
     objective: request.objective,
     acceptance_criteria: [...request.acceptance_criteria],
     task_or_plan_refs: [...request.task_or_plan_refs],
     constraints_and_non_goals: [...request.constraints_and_non_goals],
     allowed_tools_and_effects: [...request.allowed_tools_and_effects],
     mutation_scope: [...request.mutation_scope],
-    workspace_and_worktree: {
-      ownership: "session",
-      workspace_label: "Steward session worktree",
-      repository_anchor_ref: "parent-session-repository",
-      branch: ids.branch,
-    },
+    workspace_and_worktree: request.execution_mode === "read_only"
+      ? {
+          ownership: "project",
+          workspace_label: "Validated project workspace",
+          repository_anchor_ref: "parent-session-project",
+        }
+      : {
+          ownership: "session",
+          workspace_label: "Steward session worktree",
+          repository_anchor_ref: "parent-session-repository",
+          branch: ids.branch,
+        },
     expected_result_schema: {
       version: 1,
       status: "success",
@@ -212,7 +210,7 @@ function createPacket(
     },
     work_creation_policy: "one_recoverable_child_work",
     access_and_budget_policy: {
-      access_mode: "full_access",
+      access_mode: request.execution_mode === "read_only" ? "read_only" : "full_access",
       max_turns: 12,
       model_ref: request.model_ref,
       reasoning_effort: request.reasoning_effort,
@@ -244,11 +242,12 @@ function registerChildSession(
         delegation_id: packet.delegation_id,
         task_id: packet.task_id,
         parent_session_id: request.parent_session_id,
+        execution_mode: packet.execution_mode,
         mutation_scope: [...packet.mutation_scope],
         allowed_tools_and_effects: [...packet.allowed_tools_and_effects],
       },
       runtimePolicy: {
-        accessMode: "full_access",
+        accessMode: packet.execution_mode === "read_only" ? "read_only" : "full_access",
         trackingMode: "local",
         requiredNativeToolProfiles: ["workspace"],
         requiredNativeTools: [],
@@ -294,18 +293,21 @@ function nextOrdinal(input: SubsessionDelegationDependencies, parentSessionId: s
 }
 function renderStewardInput(packet: DelegationPacket): string {
   return [
-    "Steward role contract: execute exactly one bounded mutation and verify it in the session-owned worktree.",
+    packet.execution_mode === "read_only"
+      ? "Steward role contract: execute exactly one bounded effect-free inspection in the validated project workspace."
+      : "Steward role contract: execute exactly one bounded mutation and verify it in the session-owned worktree.",
     `delegation_id: ${packet.delegation_id}`,
     `task_id: ${packet.task_id}`,
     `relation_id: ${packet.relation_id}`,
     `parent_session_id: ${packet.parent_session_id}`,
     `parent_turn_id: ${packet.parent_turn_id}`,
+    `execution_mode: ${packet.execution_mode}`,
     `objective: ${packet.objective}`,
     `acceptance_criteria: ${packet.acceptance_criteria.join("; ")}`,
     `task_or_plan_refs: ${packet.task_or_plan_refs.join("; ") || "none"}`,
     `constraints: ${packet.constraints_and_non_goals.join("; ")}`,
     `allowed_tools_and_effects: ${packet.allowed_tools_and_effects.join("; ")}`,
-    `mutation_scope: ${packet.mutation_scope.join("; ")}`,
+    `mutation_scope: ${packet.mutation_scope.join("; ") || "none"}`,
     `workspace_and_worktree: ${stableJson(packet.workspace_and_worktree)}`,
     `expected_result_schema: ${stableJson(packet.expected_result_schema)}`,
     `work_creation_policy: ${packet.work_creation_policy}`,
@@ -318,9 +320,22 @@ function normalizeDelegationRequest(input: DelegationRequest): DelegationRequest
     if (typeof value === "string" && !value.trim()) throw new Error(`delegation_${key}_required`);
   }
   if (!input.acceptance_criteria.length) throw new Error("delegation_acceptance_criteria_required");
+  const executionMode = normalizeExecutionMode(input.execution_mode);
+  const mutationScope = executionMode === "mutation"
+    ? normalizeSubsessionMutationScope(input.mutation_scope)
+    : [];
   return {
     ...input,
-    allowed_tools_and_effects: normalizeSubsessionAllowedToolsAndEffects(input.allowed_tools_and_effects),
-    mutation_scope: normalizeSubsessionMutationScope(input.mutation_scope),
+    execution_mode: executionMode,
+    allowed_tools_and_effects: normalizeSubsessionAllowedToolsAndEffects(
+      input.allowed_tools_and_effects,
+      executionMode,
+    ),
+    mutation_scope: mutationScope,
   };
+}
+
+function normalizeExecutionMode(value: unknown): SubsessionExecutionMode {
+  if (value === "read_only" || value === "mutation") return value;
+  throw new Error("delegation_execution_mode_invalid");
 }

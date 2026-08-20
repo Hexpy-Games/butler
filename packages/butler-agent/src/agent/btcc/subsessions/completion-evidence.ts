@@ -12,6 +12,8 @@ import type {
   SubsessionDelegationDependencies,
 } from "./contracts.ts";
 import { subsessionRootWorkId } from "./identities.ts";
+import { distinctMaterialReadCount } from "./read-only-material-evidence.ts";
+import { SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS } from "./scope.ts";
 
 type CompletionEvidenceInput = {
   relation: SessionRelation;
@@ -56,7 +58,8 @@ export async function validateStewardCompletion(input: CompletionEvidenceInput):
   acceptanceEvidence: string[];
   changedArtifacts: string[];
 }> {
-  validatePacket(input.packet);
+  const packet = input.packet;
+  validatePacket(packet);
   if (!input.rootWorkId) factualCompletionFailure("subsession_root_work_identity_missing");
   if (input.rootWorkId !== subsessionRootWorkId(
     input.packet.delegation_id,
@@ -67,30 +70,98 @@ export async function validateStewardCompletion(input: CompletionEvidenceInput):
   }
   const work = await input.durableWork.boundWorkForTurn(input.childTurnId);
   validateWork(work, input);
+  if (packet.execution_mode === "read_only") {
+    return await validateReadOnlyCompletion({ ...input, packet }, work);
+  }
   const action = mutationAction(work);
   const effect = await validateAppliedEffect(input, work, action);
-  const target = await validateWorktreeArtifact(input, effect);
-  validateMutationTool(input, effect.capability);
+  const normalizedInput = { ...input, packet };
+  const target = await validateWorktreeArtifact(normalizedInput, effect);
+  validateMutationTool(normalizedInput, effect.capability);
+  const workspace = mutationWorkspace(packet);
   return {
     summary: work.latestDisposition!.summary,
     acceptanceEvidence: [
       `Work ${work.workId} completed with accepted plan, result, and completion reviews.`,
       `Applied ${effect.capability} receipt ${effect.receipt!.receiptId} verified for ${target}.`,
-      `Session-owned worktree ${input.packet.workspace_and_worktree.branch} contains the applied artifact.`,
+      `Session-owned worktree ${workspace.branch} contains the applied artifact.`,
     ],
     changedArtifacts: [target],
   };
 }
 
 function validatePacket(packet: DelegationPacket): void {
-  if (packet.work_creation_policy !== "one_recoverable_child_work" ||
+  const executionMode = packet.execution_mode;
+  const workspace = packet.workspace_and_worktree;
+  const workspaceValid = executionMode === "read_only"
+    ? workspace.ownership === "project" &&
+      workspace.workspace_label === "Validated project workspace" &&
+      workspace.repository_anchor_ref === "parent-session-project"
+    : workspace.ownership === "session" &&
+      workspace.workspace_label === "Steward session worktree" &&
+      workspace.repository_anchor_ref === "parent-session-repository" &&
+      Boolean(workspace.branch);
+  const readOnlySurfaceValid = executionMode !== "read_only" ||
+    (Array.isArray(packet.mutation_scope) && Array.isArray(packet.allowed_tools_and_effects) &&
+      packet.mutation_scope.length === 0 &&
+      packet.allowed_tools_and_effects.length === SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS.length &&
+      packet.allowed_tools_and_effects.every((value) =>
+        SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS.includes(value as typeof SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS[number]),
+      ));
+  if ((executionMode !== "read_only" && executionMode !== "mutation") ||
+    !workspaceValid ||
+    !readOnlySurfaceValid ||
+    packet.work_creation_policy !== "one_recoverable_child_work" ||
     packet.expected_result_schema.version !== 1 ||
     packet.expected_result_schema.status !== "success" ||
-    packet.access_and_budget_policy.access_mode !== "full_access" ||
+    packet.access_and_budget_policy.access_mode !== (executionMode === "read_only" ? "read_only" : "full_access") ||
     packet.access_and_budget_policy.model_ref !== packet.model_ref ||
     packet.access_and_budget_policy.reasoning_effort !== packet.reasoning_effort) {
     factualCompletionFailure("subsession_packet_incomplete");
   }
+}
+
+async function validateReadOnlyCompletion(
+  input: CompletionEvidenceInput,
+  work: NonNullable<Awaited<ReturnType<SubsessionDelegationDependencies["durableWork"]["boundWorkForTurn"]>>>,
+): Promise<{
+  summary: string;
+  acceptanceEvidence: string[];
+  changedArtifacts: string[];
+}> {
+  const records = input.toolJournal.list(input.childTurnId);
+  const allowedTools = new Set([
+    "replace_work_plan",
+    "record_work_checkpoint",
+    "record_work_review",
+    "record_work_disposition",
+    "read_file",
+    "list_files",
+    "grep_files",
+    "web_search",
+    "web_read",
+  ]);
+  if (records.some((record) => !allowedTools.has(record.toolName))) {
+    factualCompletionFailure("subsession_read_only_tool_out_of_scope");
+  }
+  if (work.currentPlan?.actions.some((action) => action.effect)) {
+    factualCompletionFailure("subsession_read_only_effect_planned");
+  }
+  const materialReadCount = distinctMaterialReadCount(records);
+  if (materialReadCount < 2) {
+    factualCompletionFailure("subsession_read_only_material_reads_missing");
+  }
+  const effects = await input.effectJournal.listForWork(work.workId, 20);
+  if (effects.length > 0) factualCompletionFailure("subsession_read_only_effect_present");
+  return {
+    summary: "Steward completed the bounded read-only inspection.",
+    acceptanceEvidence: [
+      "One child Work completed with accepted Plan, progress, result, and completion evidence.",
+      `${materialReadCount} distinct material read operations completed in the validated project workspace.`,
+      "No effect journal row or applied receipt was recorded.",
+    ],
+    changedArtifacts: [],
+  };
 }
 
 function validateWork(
@@ -168,7 +239,8 @@ async function validateWorktreeArtifact(
   if (!child || !parent) retryableCompletionFailure("subsession_workspace_binding_unavailable");
   if (child.workspacePath === parent.workspacePath) factualCompletionFailure("subsession_isolated_workspace_missing");
   const authority = resolveSessionWorkspaceAuthority({ binding: child });
-  if (authority.kind !== "session_worktree" || authority.branch !== input.packet.workspace_and_worktree.branch) {
+  const workspace = mutationWorkspace(input.packet);
+  if (authority.kind !== "session_worktree" || authority.branch !== workspace.branch) {
     factualCompletionFailure("subsession_child_worktree_identity_invalid");
   }
   const validated = await validateSessionWorkspaceAuthority({
@@ -205,6 +277,15 @@ async function validateWorktreeArtifact(
     factualCompletionFailure("subsession_mutation_file_receipt_mismatch");
   }
   return target;
+}
+
+function mutationWorkspace(
+  packet: DelegationPacket,
+): Extract<DelegationPacket["workspace_and_worktree"], { ownership: "session" }> {
+  if (packet.execution_mode !== "mutation" || packet.workspace_and_worktree.ownership !== "session") {
+    factualCompletionFailure("subsession_mutation_workspace_invalid");
+  }
+  return packet.workspace_and_worktree;
 }
 
 function validateMutationTool(input: CompletionEvidenceInput, capability: string): void {
