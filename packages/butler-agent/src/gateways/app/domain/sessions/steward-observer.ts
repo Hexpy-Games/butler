@@ -64,10 +64,28 @@ export interface StewardObserverSnapshot {
   updated_at: string;
 }
 
+export interface StewardObserverOperationOutputChunk {
+  request_id: string;
+  result_id: string;
+  result_sha256: string;
+  chunk_index: number;
+  chunk_count: number;
+  byte_start: number;
+  byte_end: number;
+  byte_length: number;
+  content_base64: string;
+  content_sha256: string;
+}
+
 export interface StewardObserverReader {
   relationForParent(sessionId: string): StewardObserverRelation | null;
   relationForChild(sessionId: string): StewardObserverRelation | null;
   snapshot(sessionId: string): StewardObserverSnapshot | null;
+  readOperationOutputChunks(input: {
+    turnId: string;
+    requestId: string;
+    resultId: string;
+  }): StewardObserverOperationOutputChunk[];
 }
 
 export interface ProjectedStewardSession {

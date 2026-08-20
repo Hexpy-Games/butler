@@ -4,6 +4,8 @@ import { digest } from
   "../../../../agent/btcc/identity/index.ts";
 import type { OperationOutputView } from
   "../../interface/protocol/app-protocol.ts";
+import type { StewardObserverReader } from
+  "../../domain/sessions/steward-observer.ts";
 
 const OUTPUT_PAGE_BYTES = 64 * 1024;
 
@@ -21,7 +23,10 @@ type GuidedToolResult = {
 };
 
 export class SqliteOperationOutputReader {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly stewardObserver: StewardObserverReader,
+  ) {}
 
   read(input: {
     turnId: string;
@@ -31,11 +36,13 @@ export class SqliteOperationOutputReader {
     allowAliasedRequest?: boolean;
   }): OperationOutputView | null {
     const stored = this.readChunks(input.turnId, input.requestId, input.resultId);
-    const chunks = stored.length > 0
-      ? stored
-      : input.allowAliasedRequest === true
-        ? this.readAliasedChunks(input.turnId, input.resultId)
-        : [];
+    const aliased = stored.length === 0 && input.allowAliasedRequest === true
+      ? this.readAliasedChunks(input.turnId, input.resultId)
+      : [];
+    const child = stored.length === 0 && aliased.length === 0
+      ? this.stewardObserver.readOperationOutputChunks(input)
+      : [];
+    const chunks = stored.length > 0 ? stored : aliased.length > 0 ? aliased : child;
     const payload = completeOutput(chunks, input.resultId);
     if (!payload) return null;
     const byteStart = Math.max(0, Math.min(input.byteStart, payload.byteLength));
