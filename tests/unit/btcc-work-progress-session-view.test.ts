@@ -41,6 +41,7 @@ test("initial and reloaded terminal messages retain canonical Work progress", ()
     getTurnRow: () => ({ state: "delivered" }) as never,
     listProgressRowsForTurn: () => progressRows as never,
     explicitDeliveryMetadataForTurn: () => null,
+    isPublicMessage: () => true,
   });
 
   const first = store.sessionViewMessages("chat-1");
@@ -103,6 +104,7 @@ test("reloaded terminal messages retain R3 activity with optional detail omitted
     getTurnRow: () => ({ state: "delivered" }) as never,
     listProgressRowsForTurn: () => [activity] as never,
     explicitDeliveryMetadataForTurn: () => null,
+    isPublicMessage: () => true,
   });
 
   const completed = store.messageWithTerminalWorkBlocks(message as never, "turn-r3");

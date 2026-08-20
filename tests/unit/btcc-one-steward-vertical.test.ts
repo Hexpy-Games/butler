@@ -669,6 +669,8 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     const appSnapshot = await readAppSnapshot(app, authToken, synthesizedReport);
     expect(appSnapshot.queueCount).toBe(1);
     expect(appSnapshot.parentInputCount).toBe(1);
+    expect(appSnapshot.publicParentInputCount).toBe(0);
+    expect(appSnapshot.internalMessageCreatedEventCount).toBe(0);
     expect(appSnapshot.parentTurnCount).toBe(1);
     expect(appSnapshot.assistantResultCount).toBe(1);
     expect(appSnapshot.newestAssistantText).toBe(synthesizedReport);
@@ -685,6 +687,15 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     expect(finalParentData.messages.some(
       (message) => message.role === "user" && message.text.startsWith("Subsession result\n"),
     )).toBe(false);
+    const transcriptResponse = await fetch(
+      `${app.url}transcript-export?session_id=general`,
+      { headers: { authorization: `Bearer ${authToken}` } },
+    );
+    expect(transcriptResponse.ok).toBe(true);
+    const transcript = await transcriptResponse.json() as {
+      data?: { content?: string };
+    };
+    expect(transcript.data?.content).not.toContain("Subsession result\n");
     expect(finalParentData.steward_children?.every(
       (child) => child.active_turn === null,
     )).toBe(true);
@@ -1147,6 +1158,8 @@ async function readAppSnapshot(
 ): Promise<{
   queueCount: number;
   parentInputCount: number;
+  publicParentInputCount: number;
+  internalMessageCreatedEventCount: number;
   parentTurnCount: number;
   assistantResultCount: number;
   newestAssistantText: string | null;
@@ -1160,13 +1173,19 @@ async function readAppSnapshot(
     data?: { messages?: Array<{ role?: string; text?: string; turn_id?: string }> };
   };
   const messages = body.data?.messages ?? [];
-  const parentInput = messages.filter((message) =>
+  const publicParentInput = messages.filter((message) =>
     message.role === "user" && message.text?.startsWith("Subsession result"),
   );
   const assistantResults = messages.filter((message) =>
     message.role === "assistant" && message.text === expectedAssistantText,
   );
-  const parentTurnId = parentInput[0]?.turn_id;
+  const parentInputRows = app.store.db.query<{ turn_id: string }, [string]>(`
+    SELECT turn_id
+    FROM messages
+    WHERE chat_id = ? AND role = 'user' AND text LIKE 'Subsession result%'
+    ORDER BY rowid ASC
+  `).all("general");
+  const parentTurnId = parentInputRows[0]?.turn_id;
   const turnsResponse = await fetch(`${app.url}turns?chat_id=general`, {
     headers: { authorization: `Bearer ${authToken}` },
   });
@@ -1184,9 +1203,16 @@ async function readAppSnapshot(
   const queueClientMessageIds = app.store.db.query<{ client_message_id: string }, [string]>(
     "SELECT client_message_id FROM session_queued_messages WHERE chat_id = ? AND text LIKE 'Subsession result%' ORDER BY rowid ASC",
   ).all("general").map((row) => row.client_message_id);
+  const internalMessageCreatedEventCount = app.store.db.query<{ count: number }, []>(`
+    SELECT COUNT(*) AS count
+    FROM events
+    WHERE type = 'message.created' AND payload_json LIKE '%Subsession result%'
+  `).get()?.count ?? 0;
   return {
     queueCount,
-    parentInputCount: parentInput.length,
+    parentInputCount: parentInputRows.length,
+    publicParentInputCount: publicParentInput.length,
+    internalMessageCreatedEventCount,
     parentTurnCount,
     assistantResultCount: assistantResults.length,
     newestAssistantText: messages.at(-1)?.role === "assistant"

@@ -31,7 +31,6 @@ import { AppSessionMessageRecordStore } from "./session-message-record-store.ts"
 import type {
   SessionMessagePage,
   SessionMessagePageOptions,
-  TranscriptMessagePage,
 } from "./session-message-page.ts";
 
 export class AppSessionRecordStore {
@@ -278,13 +277,6 @@ export class AppSessionRecordStore {
 
   listArtifactSummaries(chatId: string): SessionArtifactSummary[] {
     return this.messages.listArtifactSummaries(chatId);
-  }
-
-  listTranscriptMessagePage(
-    chatId: string,
-    options?: SessionMessagePageOptions,
-  ): TranscriptMessagePage {
-    return this.messages.listTranscriptMessagePage(chatId, options);
   }
 
   getMessageRow(messageId: string): MessageRow | null {

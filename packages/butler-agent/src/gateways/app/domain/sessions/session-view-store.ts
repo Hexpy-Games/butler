@@ -187,10 +187,7 @@ export class AppSessionViewStore {
     const latestTurn = this.latestTurn(sessionId);
     const runtimeSessionId = sessionHintForRow(sessionId);
     const messagePage = this.sessionViewMessages(sessionId, options);
-    const messages = messagePage.items.filter((message) =>
-      message.role !== "user" ||
-      !this.stewardObserver.isParentResultInput(runtimeSessionId, message.text),
-    );
+    const messages = messagePage.items;
     const latestMessage = messages.at(-1);
     const latestTurnHasOutOfBandReport = Boolean(
       latestTurn &&
@@ -221,7 +218,11 @@ export class AppSessionViewStore {
     // silently shrinking the public artifact contract to the current page.
     const artifacts = this.listArtifacts(sessionId);
     const requestedAfterCursor = Number(options.afterCursor ?? 0);
-    const nextCursor = maxMessageCursor(messagePage.items) || requestedAfterCursor;
+    const nextCursor = Math.max(
+      Number(messagePage.nextCursor ?? 0),
+      maxMessageCursor(messagePage.items),
+      requestedAfterCursor,
+    );
     const firstCursor = Number(messagePage.items[0]?.cursor ?? 0);
     const afterCursor = requestedAfterCursor;
     const view: SessionView = {
