@@ -351,7 +351,9 @@ export class AppSessionViewStore {
   private projectStewardChildren(
     parentSessionId: string,
   ): ProjectedStewardSession[] {
-    const relation = this.stewardObserver.relationForParent(parentSessionId);
+    const relation = this.stewardObserver.relationForParent(
+      sessionHintForRow(parentSessionId),
+    );
     if (!relation) return [];
     const snapshot = this.stewardObserver.snapshot(relation.child_session_id);
     return [

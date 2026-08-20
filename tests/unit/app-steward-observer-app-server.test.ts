@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { agentBtccStoragePaths } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/storage-ownership/index.ts";
+import { sessionHintForRow } from "../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
 import { useButlerStore } from "../../packages/butler-app/client/ui/src/app/store.ts";
 
 test("createAppServer canonical navigation and SessionView feed the keyed frontend store", async () => {
@@ -13,7 +14,13 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
   const parentSessionId = "parent-route";
   const childSessionId = "steward-route";
   const childTurnId = "steward-route-turn";
-  seedObserverDatabase(root, parentSessionId, childSessionId, childTurnId);
+  seedObserverDatabase(
+    root,
+    sessionHintForRow(parentSessionId),
+    sessionHintForRow("project-parent-route"),
+    childSessionId,
+    childTurnId,
+  );
   const server = createAppServer({
     dbPath: join(root, "app.sqlite"),
     butlerData: root,
@@ -64,7 +71,7 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
     expect(parent?.steward_children).toEqual([
       expect.objectContaining({
         id: childSessionId,
-        parent_session_id: parentSessionId,
+        parent_session_id: sessionHintForRow(parentSessionId),
         is_steward_child: true,
       }),
     ]);
@@ -73,9 +80,38 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
     );
     expect(project?.sessions?.[0]?.steward_children).toEqual([
       expect.objectContaining({
-        parent_session_id: "project-parent-route",
+        parent_session_id: sessionHintForRow("project-parent-route"),
         is_steward_child: true,
         id: "project-child-route",
+      }),
+    ]);
+
+    const parentSessionViewResponse = await fetch(
+      `${server.url}session-view?session_id=${parentSessionId}`,
+    );
+    expect(parentSessionViewResponse.ok).toBe(true);
+    const parentSessionView = (await parentSessionViewResponse.json()).data;
+    expect(parentSessionView.steward_children).toEqual([
+      expect.objectContaining({
+        session_id: childSessionId,
+        relation: expect.objectContaining({
+          parent_session_id: sessionHintForRow(parentSessionId),
+        }),
+      }),
+    ]);
+
+    const projectParentSessionViewResponse = await fetch(
+      `${server.url}session-view?session_id=project-parent-route`,
+    );
+    expect(projectParentSessionViewResponse.ok).toBe(true);
+    const projectParentSessionView =
+      (await projectParentSessionViewResponse.json()).data;
+    expect(projectParentSessionView.steward_children).toEqual([
+      expect.objectContaining({
+        session_id: "project-child-route",
+        relation: expect.objectContaining({
+          parent_session_id: sessionHintForRow("project-parent-route"),
+        }),
       }),
     ]);
 
@@ -85,7 +121,7 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
     expect(sessionViewResponse.ok).toBe(true);
     const childView = (await sessionViewResponse.json()).data;
     expect(childView.relation).toMatchObject({
-      parent_session_id: parentSessionId,
+      parent_session_id: sessionHintForRow(parentSessionId),
       child_session_id: childSessionId,
     });
     expect(childView.latest_turn.id).toBe(childTurnId);
@@ -104,7 +140,7 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
     expect(state.activeChatId).toBe(parentSessionId);
     expect(state.observerSessionId).toBe(childSessionId);
     expect(state.sessionViews[childSessionId]?.relation?.parent_session_id).toBe(
-      parentSessionId,
+      sessionHintForRow(parentSessionId),
     );
     expect(state.sessionView).toBeNull();
   } finally {
@@ -116,6 +152,7 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
 function seedObserverDatabase(
   butlerData: string,
   parentSessionId: string,
+  projectParentSessionId: string,
   childSessionId: string,
   childTurnId: string,
 ): void {
@@ -137,7 +174,7 @@ function seedObserverDatabase(
   db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
     .run(
       "project-relation-route",
-      "project-parent-route",
+      projectParentSessionId,
       "project-parent-turn",
       "project-child-route",
       "project-anchor-route",
