@@ -1,5 +1,6 @@
 import type { ProgressRow } from "@/app/types.ts";
-import { Typo } from "@/butler-ds";
+import { useButlerStore } from "@/app/store.ts";
+import { Button, Typo } from "@/butler-ds";
 import { TurnActivityPanel } from "./TurnActivityPanel.tsx";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection.ts";
 
@@ -9,6 +10,9 @@ export function StewardParentProgress({
   progress: AnchoredStewardProgress;
 }) {
   const { child, turn, rows } = progress;
+  const openSessionObserver = useButlerStore(
+    (state) => state.openSessionObserver,
+  );
   return (
     <section
       aria-label={child.title}
@@ -26,6 +30,13 @@ export function StewardParentProgress({
         state={turn.state}
         startedAt={turn.created_at}
         turnId={turn.id}
+      />
+      <Button
+        size="xs"
+        text="진행 상세 보기"
+        type="button"
+        variant="borderless"
+        onClick={() => openSessionObserver(child.session_id)}
       />
     </section>
   );

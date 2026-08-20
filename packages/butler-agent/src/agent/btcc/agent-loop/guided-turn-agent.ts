@@ -4,7 +4,7 @@ import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
 import { ActiveProjectLedgerResolver } from "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { createProviderModelRoundPort } from "../../../integrations/providers/runtime.ts";
 import { providerImageAttachments, renderGuidedResponseLanguage } from "./guided-turn-prompt.ts";
-import { GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES, guidedNativeToolDefinitions, hiddenNativeToolNamesForGuidedTurn } from "./guided-turn-policy.ts";
+import { directSynthesisToolDefinitions, GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES, guidedNativeToolDefinitions, hiddenNativeToolNamesForGuidedTurn } from "./guided-turn-policy.ts";
 import { selectGuidedTurnPhasePolicy } from "./guided-phase-policy.ts";
 import { createGuidedToolExecutionBoundary } from "./guided-tool-execution-boundary.ts";
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
@@ -60,6 +60,7 @@ export function createProductionGuidedTurnAgent(
       transitionContinuationBudget,
       onProviderResponseIdentity,
     }): Promise<BtccAgentLoopResult> {
+      const subsessionResultEvidence = await input.subsessionDelegation?.resolveParentResultEvidence({ parentSessionId: turn.sessionId, parentInputText: turn.originalMessage });
       const phasePolicy = selectGuidedTurnPhasePolicy(turn);
       const policy = phasePolicy.executionPolicy;
       const askFirstTurn = policy.accessMode === "ask_first";
@@ -99,9 +100,9 @@ export function createProductionGuidedTurnAgent(
         sessionId: turn.sessionId,
         projectRef: policy.projectId ?? turn.context.projectRef,
       });
-      const authorizedTools = phasePolicy.authorizedTools;
+      const authorizedTools = subsessionResultEvidence ? directSynthesisToolDefinitions(phasePolicy.authorizedTools) : phasePolicy.authorizedTools;
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
-      const visibleTools = phasePolicy.providerTools;
+      const visibleTools = subsessionResultEvidence ? directSynthesisToolDefinitions(phasePolicy.providerTools) : phasePolicy.providerTools;
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
       const describedToolIds = new Set<string>();
       const effectService = createGuidedEffectService(input.effectJournal);
@@ -230,7 +231,6 @@ export function createProductionGuidedTurnAgent(
       const effectContext = initialWork
         ? renderGuidedEffectContext(input.effectJournal.listForWork(initialWork.work.workId))
         : "";
-      const subsessionResultEvidence = await input.subsessionDelegation?.resolveParentResultEvidence({ parentSessionId: turn.sessionId, parentInputText: turn.originalMessage });
       const requestAttribution = renderPhaseScopedGuidedTurnRequest({
         enabled: Boolean(continuationBudget), phase: phasePolicy.phase, turn,
         stableInstructionPrefix: phasePolicy.stableInstructionPrefix,

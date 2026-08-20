@@ -271,28 +271,9 @@ export const HARNESS_NAVIGATION: NavigationView = {
   settings_summary: { profile_label: "Local Butler" },
 };
 
-/** SS-03 navigation adds the direct Steward row only for its evidence surface. */
+/** SS-03 keeps Steward activity message-local; navigation stays unchanged. */
 export const HARNESS_SS03_NAVIGATION: NavigationView = {
   ...HARNESS_NAVIGATION,
-  projects: [
-    {
-      ...HARNESS_NAVIGATION.projects[0]!,
-      sessions: [{
-        ...HARNESS_NAVIGATION.projects[0]!.sessions![0]!,
-        steward_children: [{
-          id: "harness-steward",
-          kind: "chat",
-          title: HARNESS_STEWARD_CHILD.title,
-          last_activity_at: HARNESS_STEWARD_CHILD.updated_at,
-          pinned: false,
-          archived: false,
-          parent_session_id: "butler-client",
-          is_steward_child: true,
-        }],
-      }],
-    },
-    ...HARNESS_NAVIGATION.projects.slice(1),
-  ],
 };
 
 export const HARNESS_PROJECT_DASHBOARD: ProjectDashboardView = {

@@ -21,6 +21,37 @@ describe("legacy App service migration", () => {
     expect(result).toMatchObject({ status: "complete", detected_artifacts: [] });
   });
 
+  test("does not reinterpret current foreground services after migration completed", async () => {
+    const root = mkdtempSync(join(tmpdir(), "butler-migration-"));
+    roots.push(root);
+    const data = join(root, "data");
+    await migrateLegacyAppService({ butlerData: data, homeDir: join(root, "home") });
+    let inspected = false;
+    let confirmed = false;
+
+    const result = await migrateLegacyAppService({
+      butlerData: data,
+      inspect: () => {
+        inspected = true;
+        return {
+          required: true,
+          plists: [],
+          pidFiles: [],
+          serviceStates: [{ path: "current.json", processGroupId: 999 }],
+          detectedArtifacts: ["app_service_state"],
+        };
+      },
+      confirm: async () => {
+        confirmed = true;
+        return false;
+      },
+    });
+
+    expect(result).toMatchObject({ status: "complete", detected_artifacts: [] });
+    expect(inspected).toBeFalse();
+    expect(confirmed).toBeFalse();
+  });
+
   test("detects only App-owned service state", () => {
     const root = mkdtempSync(join(tmpdir(), "butler-migration-"));
     roots.push(root);

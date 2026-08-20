@@ -158,7 +158,6 @@ export function initializeAppStoreKernel(
     () => kernel.sessionCatalog.listSessions({ kind: "chat" }),
     () => kernel.projects.listProjects(),
     () => kernel.projects.listProjects({ includeSessions: true }),
-    (sessionId) => kernel.sessionViews.listStewardChildSummaries(sessionId),
   );
   kernel.workers = new AppWorkerActivityStore(
     kernel.butlerData,

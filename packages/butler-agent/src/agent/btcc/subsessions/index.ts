@@ -2,6 +2,7 @@ export {
   createSubsessionDelegationService,
 } from "./service.ts";
 export { createAppParentInputSink } from "./app-parent-input-sink.ts";
+export { subsessionParentResultRefs } from "./accepted-terminal-report.ts";
 export { ensureSubsessionChildRootWork, subsessionToolInput } from "./agent-hook.ts";
 export { subsessionResultId, subsessionRootWorkId } from "./identities.ts";
 export {

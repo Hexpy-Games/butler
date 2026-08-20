@@ -2,7 +2,6 @@ import { Collapse, Expand, MessageSquarePlus } from "@/butler-ds";
 import { ButtonContainer, IconButton } from "@/butler-ds";
 import { SidebarSection } from "@/components/layout/SidebarSection.tsx";
 import { SidebarChatItem } from "@/components/layout/SidebarChatItem.tsx";
-import { SidebarStewardChildItem } from "@/components/layout/SidebarStewardChildItem.tsx";
 import { SidebarSessionLoadMore } from "@/components/layout/SidebarSessionLoadMore.tsx";
 import { useSidebarSessionPaging } from "@/components/layout/useSidebarSessionPaging.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -48,20 +47,7 @@ export function SidebarChatsSection() {
       }
     >
       {paging.visibleSessions.map((chat) => (
-        <div key={chat.id} data-test-class="sidebar-session-group">
-          <SidebarChatItem chat={chat} />
-          {chat.steward_children?.length ? (
-            <div
-              aria-label={chat.title}
-              data-test-class="sidebar-steward-children"
-              role="group"
-            >
-              {chat.steward_children.map((child) => (
-                <SidebarStewardChildItem key={child.id} session={child} />
-              ))}
-            </div>
-          ) : null}
-        </div>
+        <SidebarChatItem key={chat.id} chat={chat} />
       ))}
       {paging.remainingCount > 0 ? (
         <SidebarSessionLoadMore

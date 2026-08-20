@@ -65,7 +65,7 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
 
   expect(main).not.toContain("async function createWindow() {\n  await ensureServer();");
   expect(main).not.toContain("if (rendererUrl === serverUrl) {\n    await ensureServer();");
-  expect(main).toContain("eagerUnpackedForegroundStartup");
+  expect(main).toContain("rendererUrl === serverUrl || usesAppForegroundLifecycle");
   expect(main).toContain("let appAgentLaunchReconcilePromise = null");
   expect(main).toContain("const launchReconcile = reconcileAppAgentServiceForLaunch();");
   expect(main).toContain("await launchReconcile;");

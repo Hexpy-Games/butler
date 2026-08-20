@@ -97,14 +97,13 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     return row ?? null;
   }
 
-  relationByParentSessionId(parentSessionId: string): SessionRelation | null {
-    const row = this.db.query<RelationRow, [string]>(`
+  relationsByParentSessionId(parentSessionId: string): SessionRelation[] {
+    return this.db.query<RelationRow, [string]>(`
       SELECT relation_id, parent_session_id, parent_turn_id, child_session_id,
         anchor_message_id, ordinal, safe_title, created_at
       FROM btcc_session_relations WHERE parent_session_id = ?
-      ORDER BY ordinal ASC LIMIT 1
-    `).get(parentSessionId);
-    return row ?? null;
+      ORDER BY ordinal ASC
+    `).all(parentSessionId);
   }
 
   relationByChildSessionId(childSessionId: string): SessionRelation | null {

@@ -336,19 +336,13 @@ test("typed Steward terminal results share the outbox and incomplete context blo
     { key: "failed", status: "failed" as const, code: "steward_execution_failed" as const },
     { key: "cancelled", status: "cancelled" as const, code: "steward_cancelled" as const },
   ];
-  for (const parentCase of parentCases) {
-    const parentSessionId = sessionHintForRow(`terminal-${parentCase.key}`);
-    bindings.upsert({
-      sessionId: parentSessionId,
-      role: "butler",
-      workspacePath: root,
-      runtimeAdapterId: "btcc-turn-runtime",
-      modelProviderId: "openai",
-      modelRef: "openai/gpt-5.5",
-      transportBindings: [{ transport: "app", accountId: "local", peerId: "general" }],
-    });
-  }
-  const incompleteParentSessionId = sessionHintForRow("terminal-incomplete");
+  bindings.upsert({
+    sessionId: sessionHintForRow("general"), role: "butler", workspacePath: root,
+    runtimeAdapterId: "btcc-turn-runtime", modelProviderId: "openai",
+    modelRef: "openai/gpt-5.5",
+    transportBindings: [{ transport: "app", accountId: "local", peerId: "general" }],
+  });
+  const incompleteParentSessionId = sessionHintForRow("general");
   bindings.upsert({
     sessionId: incompleteParentSessionId,
     role: "butler",
@@ -402,7 +396,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
   });
   try {
     for (const parentCase of parentCases) {
-      const parentSessionId = sessionHintForRow(`terminal-${parentCase.key}`);
+      const parentSessionId = sessionHintForRow("general");
       const created = await composition.subsessions.delegate({
         parent_session_id: parentSessionId,
         parent_turn_id: `terminal-parent-turn-${parentCase.key}`,
@@ -666,14 +660,16 @@ function recoveryRound(input: {
   const childRounds = new Map<string, number>();
   return {
     async runRound(request) {
+      const body = request.messages.map((message) => message.content).join("\n");
+      const isSynthesis = body.includes("Canonical child result synthesis") ||
+        body.includes("Subsession result");
       const isParent = request.tools.some((tool) => tool.name === "delegate_to_steward");
-      if (!isParent) input.childRequests.push(request);
+      if (!isParent && !isSynthesis) input.childRequests.push(request);
+      if (isSynthesis) {
+        input.synthesisEvidence.push(body);
+        return { text: "Steward result synthesized after busy parent.", toolCalls: [] };
+      }
       if (isParent) {
-        const body = request.messages.map((message) => message.content).join("\n");
-        if (body.includes("Subsession result")) {
-          input.synthesisEvidence.push(body);
-          return { text: "Steward result synthesized after busy parent.", toolCalls: [] };
-        }
         if (body.includes("Continue while Steward runs.")) {
           input.busyParentStarted.resolve();
           await input.releaseBusyParent.promise;

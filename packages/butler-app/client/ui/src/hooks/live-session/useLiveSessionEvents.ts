@@ -177,16 +177,7 @@ function directStewardChildSessionIds(
   parentSessionId: string,
 ): ReadonlySet<string> {
   const ids = new Set<string>();
-  for (const session of state.navigation.chats) {
-    if (session.id !== parentSessionId) continue;
-    for (const child of session.steward_children ?? []) ids.add(child.id);
-  }
-  for (const project of state.navigation.projects) {
-    for (const session of project.sessions ?? []) {
-      if (session.id !== parentSessionId) continue;
-      for (const child of session.steward_children ?? []) ids.add(child.id);
-    }
-  }
+  if (state.summary?.session_id !== parentSessionId) return ids;
   for (const child of state.summary?.steward_children ?? []) {
     ids.add(child.session_id);
   }
