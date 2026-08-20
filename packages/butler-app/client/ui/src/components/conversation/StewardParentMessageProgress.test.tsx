@@ -37,7 +37,7 @@ test("active Steward progress is nested in its exact parent assistant row", () =
   );
 
   expect(html).toContain("steward-parent-progress");
-  expect(html).toContain("Steward child · Validating the activity surface");
+  expect(html).toContain("Review the activity surface");
   expect(html).toContain("작업 중 · 2/3");
   expect(html.indexOf("최신 응답에는 캔버스 마크")).toBeLessThan(
     html.indexOf("steward-parent-progress"),
@@ -45,6 +45,43 @@ test("active Steward progress is nested in its exact parent assistant row", () =
   expect(html).not.toContain("assistant-terminal-status-row");
   expect(html).not.toContain("답변 완료");
   expect(html).toContain("진행 상세 보기");
+});
+
+test("terminal Steward activity stays attached to the factual parent message", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const child = summary.steward_children![0]!;
+  child.status = "delivered";
+  child.latest_turn = {
+    ...child.active_turn!,
+    state: "delivered",
+    delivery_state: "delivered",
+    cancellable: false,
+    progress: {
+      ...child.active_turn!.progress,
+      state: "delivered",
+    },
+  };
+  child.active_turn = null;
+
+  const progress = anchoredStewardProgressByMessageId(
+    HARNESS_MESSAGES,
+    summary,
+  ).get("m4");
+  expect(progress?.turn.state).toBe("delivered");
+
+  const html = renderToStaticMarkup(
+    <MessageContent
+      message={HARNESS_MESSAGES.find((message) => message.id === "m4")!}
+      copied={false}
+      footerMeta={null}
+      onCopyAssistantMessage={() => undefined}
+      stewardProgress={progress}
+    />,
+  );
+  expect(html).toContain("steward-parent-progress-card");
+  expect(html).toContain("Review the activity surface");
+  expect(html).toContain("완료됨");
+  expect(html).not.toContain("답변 완료");
 });
 
 test("two active Stewards attach to their own Butler messages", () => {

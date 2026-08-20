@@ -13,7 +13,7 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { MessageContent } from "@/components/conversation/MessageContent.tsx";
 import { TurnActivityPanel } from "@/components/conversation/TurnActivityPanel.tsx";
-import { useSessionObserverSubscription } from "./hooks/useSessionObserverSubscription.ts";
+import { useSessionViewSubscription } from "./hooks/useSessionViewSubscription.ts";
 
 export function SessionObserverDialog() {
   const sessionId = useButlerStore((state) => state.observerSessionId);
@@ -23,7 +23,7 @@ export function SessionObserverDialog() {
   const close = useButlerStore((state) => state.closeSessionObserver);
   const refresh = useButlerStore((state) => state.refreshSessionObserver);
 
-  useSessionObserverSubscription(sessionId, refresh);
+  useSessionViewSubscription(sessionId, refresh);
 
   const title = view?.relation?.safe_title ?? sessionId ?? "";
   return (

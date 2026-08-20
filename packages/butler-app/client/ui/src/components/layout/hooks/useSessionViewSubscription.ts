@@ -1,16 +1,16 @@
 import { useEffect } from "react";
 
-const SESSION_OBSERVER_REFRESH_INTERVAL_MS = 2_000;
+const SESSION_VIEW_REFRESH_INTERVAL_MS = 2_000;
 
-interface SessionObserverTimerApi {
+interface SessionViewTimerApi {
   setInterval(callback: () => void, delay: number): ReturnType<typeof setInterval>;
   clearInterval(timer: ReturnType<typeof setInterval>): void;
 }
 
-function createSessionObserverSubscription(
+function createSessionViewSubscription(
   sessionId: string,
   refresh: (sessionId: string) => Promise<unknown> | unknown,
-  timers: SessionObserverTimerApi = window,
+  timers: SessionViewTimerApi = window,
 ): () => void {
   let disposed = false;
   let requestInFlight = false;
@@ -30,19 +30,19 @@ function createSessionObserverSubscription(
       });
   };
   request();
-  const timer = timers.setInterval(request, SESSION_OBSERVER_REFRESH_INTERVAL_MS);
+  const timer = timers.setInterval(request, SESSION_VIEW_REFRESH_INTERVAL_MS);
   return () => {
     disposed = true;
     timers.clearInterval(timer);
   };
 }
 
-export function useSessionObserverSubscription(
+export function useSessionViewSubscription(
   sessionId: string | null,
   refresh: (sessionId: string) => Promise<unknown> | unknown,
 ): void {
   useEffect(() => {
     if (!sessionId) return;
-    return createSessionObserverSubscription(sessionId, refresh);
+    return createSessionViewSubscription(sessionId, refresh);
   }, [refresh, sessionId]);
 }
