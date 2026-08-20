@@ -28,6 +28,16 @@ export interface GuidedTurnRequestAttribution {
   };
 }
 
+type GuidedPromptInput = {
+  butlerData: string;
+  contextDocuments: { resolve(contextRef: string): string };
+  toolJournal: GuidedToolJournal;
+  workContext?: string | null;
+  effectContext?: string | null;
+  privateContinuationInput?: string;
+  subsessionResultEvidence?: string;
+};
+
 export function renderGuidedTurnRequestAttribution(
   turn: TurnRecord,
   stableInstructionPrefix: string,
@@ -52,27 +62,13 @@ export function renderGuidedTurnRequestAttribution(
 
 export function renderGuidedPrompt(
   turn: TurnRecord,
-  input: {
-    butlerData: string;
-    contextDocuments: { resolve(contextRef: string): string };
-    toolJournal: GuidedToolJournal;
-    workContext?: string | null;
-    effectContext?: string | null;
-    privateContinuationInput?: string;
-  },
+  input: GuidedPromptInput,
 ): string {
   return renderGuidedPromptAttribution(turn, input).text;
 }
 export function renderGuidedPromptAttribution(
   turn: TurnRecord,
-  input: {
-    butlerData: string;
-    contextDocuments: { resolve(contextRef: string): string };
-    toolJournal: GuidedToolJournal;
-    workContext?: string | null;
-    effectContext?: string | null;
-    privateContinuationInput?: string;
-  },
+  input: GuidedPromptInput,
 ): GuidedTextAttribution {
   const policy = guidedPolicy(turn);
   const context = renderContextDocuments(turn, input.contextDocuments);
@@ -96,6 +92,7 @@ export function renderGuidedPromptAttribution(
     { text: renderCurrentWork(input.workContext), kind: "project_ledger_and_work_authority" },
     { text: renderCurrentEffects(input.effectContext), kind: "phase_continuity" },
     { text: renderPrivateModifyContinuationInput(input.privateContinuationInput), kind: "phase_continuity" },
+    { text: input.subsessionResultEvidence ?? "", kind: "source_reference" },
     { text: context, kind: "memory_recall_context" },
     { text: attachments, kind: "source_reference" },
     { text: priorTools, kind: "older_tool_result_projection" },

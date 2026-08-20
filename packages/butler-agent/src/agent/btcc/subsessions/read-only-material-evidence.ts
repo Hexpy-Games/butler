@@ -1,11 +1,29 @@
 import { stableJson } from "../identity/index.ts";
 import type { GuidedToolJournalRecord } from "../ports/guided-tool-journal.ts";
+import { isAbsolute } from "node:path";
 
 export function distinctMaterialReadCount(records: readonly GuidedToolJournalRecord[]): number {
   return new Set(records.flatMap((record) => {
     const identity = materialReadIdentity(record);
     return identity ? [identity] : [];
   })).size;
+}
+
+export function materialReadReportAnchors(
+  records: readonly GuidedToolJournalRecord[],
+): string[] {
+  return [...new Set(records.flatMap((record) => {
+    if (!materialReadIdentity(record)) return [];
+    const result = record.result as Record<string, unknown>;
+    const candidates = record.toolName === "grep_files"
+      ? arrayRecordStrings(result.matches, "path")
+      : record.toolName === "web_search"
+        ? arrayRecordStrings(result.results, "url")
+        : record.toolName === "web_read"
+          ? [result.url, record.arguments.url]
+          : arrayRecordStrings(result.files, "path");
+    return candidates.flatMap((candidate) => safeReportAnchor(candidate)).slice(0, 1);
+  }))].slice(0, 2);
 }
 
 function materialReadIdentity(record: GuidedToolJournalRecord): string | null {
@@ -62,4 +80,20 @@ function resultSucceeded(value: unknown): boolean {
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function arrayRecordStrings(value: unknown, key: string): unknown[] {
+  return Array.isArray(value) ? value.map((item) =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? (item as Record<string, unknown>)[key]
+      : null) : [];
+}
+
+function safeReportAnchor(value: unknown): string[] {
+  if (!nonEmptyString(value)) return [];
+  const candidate = value.trim();
+  if (/^https?:\/\/[^\s]+$/u.test(candidate)) return [candidate];
+  return !isAbsolute(candidate) && !candidate.startsWith("../") && candidate !== "."
+    ? [candidate]
+    : [];
 }

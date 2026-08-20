@@ -11,11 +11,13 @@ export function migrateSubsessionResultSchema(db: Database): void {
     SELECT sql FROM sqlite_schema
     WHERE type = 'table' AND name = 'btcc_steward_results'
   `).get()?.sql ?? "";
-  if (!definition || (
+  if (!definition) return;
+  if (
     definition.includes("status IN ('success', 'blocked', 'failed', 'cancelled')") &&
     definition.includes("'delegation_context_incomplete'") &&
     !definition.includes("'task_needs_split'")
-  )) {
+  ) {
+    addDetailedResultColumns(db);
     return;
   }
   const legacyTable = "btcc_steward_results_ss02_success";
@@ -33,6 +35,22 @@ export function migrateSubsessionResultSchema(db: Database): void {
     FROM ${legacyTable}
   `);
   db.exec(`DROP TABLE ${legacyTable}`);
+  addDetailedResultColumns(db);
+}
+
+function addDetailedResultColumns(db: Database): void {
+  const columns = new Set(db.query<{ name: string }, []>(
+    "PRAGMA table_info(btcc_steward_results)",
+  ).all().map((column) => column.name));
+  for (const [name, definition] of [
+    ["commits_json", "TEXT NOT NULL DEFAULT '[]'"],
+    ["tests_json", "TEXT NOT NULL DEFAULT '[]'"],
+    ["remaining_risks_json", "TEXT NOT NULL DEFAULT '[]'"],
+    ["follow_up_recommendations_json", "TEXT NOT NULL DEFAULT '[]'"],
+    ["detail_refs_json", "TEXT NOT NULL DEFAULT '[]'"],
+  ] as const) {
+    if (!columns.has(name)) db.exec(`ALTER TABLE btcc_steward_results ADD COLUMN ${name} ${definition}`);
+  }
 }
 
 function resultTableSchema(): string {

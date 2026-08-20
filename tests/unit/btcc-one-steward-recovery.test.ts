@@ -20,8 +20,20 @@ import type { ModelRoundPort, ModelRoundRequest } from "../../packages/butler-ag
 import { subsessionResultId } from "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
 import { recoverPendingParentInputs } from "../../packages/butler-agent/src/agent/btcc/subsessions/outbox-recovery.ts";
 import type { SubsessionDelegationStore } from "../../packages/butler-agent/src/agent/btcc/subsessions/contracts.ts";
+import { BTCC_SUBSESSION_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/subsession-schema.ts";
+import { migrateSubsessionResultSchema } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/subsession-schema-migration.ts";
 
 const roots: string[] = [];
+function recoveryStewardReport(receiptId: string): string {
+  return [
+  "Conclusion: the Steward mutation survived restart and was verified.",
+  `Evidence: recovery-result.txt and ${receiptId} agree with the accepted Work.`,
+  "Commits: none required.",
+  "Tests: restart and busy-parent ordering passed.",
+  "Remaining risks: provider deployment was outside this bounded proof.",
+  "Follow-up recommendations: retain the canonical outbox replay path.",
+  ].join("\n");
+}
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -46,12 +58,14 @@ test("one Steward result survives restart and waits behind a busy Butler turn", 
     transportBindings: [{ transport: "app", accountId: "local", peerId: "general" }],
   });
   const childRequests: ModelRoundRequest[] = [];
+  const synthesisEvidence: string[] = [];
   const busyParentStarted = deferred<void>();
   const releaseBusyParent = deferred<void>();
   const childFinalStarted = deferred<void>();
   const releaseChildFinal = deferred<void>();
   const modelRound = recoveryRound({
     childRequests,
+    synthesisEvidence,
     busyParentStarted,
     releaseBusyParent,
     childFinalStarted,
@@ -186,7 +200,36 @@ test("one Steward result survives restart and waits behind a busy Butler turn", 
       expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM btcc_session_relations").get()?.count).toBe(1);
     expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM btcc_subsession_delegations").get()?.count).toBe(1);
     expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM btcc_steward_results").get()?.count).toBe(1);
-    expect(db.query<{ status: string }, []>("SELECT status FROM btcc_steward_results").get()?.status).toBe("success");
+    const durableResult = db.query<{
+      status: string;
+      summary: string;
+      acceptance_evidence_json: string;
+      changed_artifacts_json: string;
+      commits_json: string;
+      tests_json: string;
+      remaining_risks_json: string;
+      follow_up_recommendations_json: string;
+      detail_refs_json: string;
+    }, []>(`
+      SELECT status, summary, acceptance_evidence_json, changed_artifacts_json,
+        commits_json, tests_json, remaining_risks_json,
+        follow_up_recommendations_json, detail_refs_json
+      FROM btcc_steward_results
+    `).get();
+    expect(durableResult).toMatchObject({
+      status: "success",
+      summary: "the Steward mutation survived restart and was verified.",
+      commits_json: "[]",
+      tests_json: '["restart and busy-parent ordering passed."]',
+      remaining_risks_json: '["provider deployment was outside this bounded proof."]',
+      follow_up_recommendations_json: '["retain the canonical outbox replay path."]',
+    });
+    const detailRefs = JSON.parse(durableResult?.detail_refs_json ?? "[]") as string[];
+    expect(detailRefs).toEqual([expect.stringMatching(/^btcc-final-payload:v1:/u)]);
+    expect(JSON.parse(durableResult?.acceptance_evidence_json ?? "[]")).toHaveLength(3);
+    expect(JSON.parse(durableResult?.changed_artifacts_json ?? "[]")).toEqual([
+      "recovery-result.txt",
+    ]);
     expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM btcc_subsession_outbox WHERE status = 'delivered'").get()?.count).toBe(1);
     expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM btcc_guided_effects WHERE status = 'applied'").get()?.count).toBe(1);
     const identityAfterRestart = db.query<{
@@ -236,6 +279,15 @@ test("one Steward result survives restart and waits behind a busy Butler turn", 
         SELECT input_json FROM btcc_subsession_outbox LIMIT 1
       `).get()?.input_json;
       if (!inputJson) throw new Error("Steward outbox input was not persisted");
+      expect(inputJson).toContain(detailRefs[0]!);
+      expect(inputJson).not.toContain("agree with the accepted Work");
+      expect(inputJson).not.toMatch(
+        /workspace_and_worktree|mutation_scope|allowed_tools_and_effects|delegation_id:/u,
+      );
+      expect(synthesisEvidence).toEqual([expect.stringContaining(detailRefs[0]!) ]);
+      expect(synthesisEvidence[0]).toContain(
+        "the Steward mutation survived restart and was verified",
+      );
       const replay = await fetch(`${app.url}internal/subsession-result`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${authToken}` },
@@ -330,8 +382,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
           })],
         };
       }
-      const latest = request.messages.at(-1)?.content ?? "";
-      const status = latest.match(/Status: (blocked|failed|cancelled)/u)?.[1] ?? "unknown";
+      const status = requestBody.match(/Status: (blocked|failed|cancelled)/u)?.[1] ?? "unknown";
       return { text: `Terminal synthesis ${status}.`, toolCalls: [] };
     } },
   });
@@ -549,8 +600,63 @@ test("pending Steward outbox handoff failure rejects startup recovery and preser
   expect(store.pendingParentInputs()).toEqual([pending]);
 });
 
+test("populated current Steward results reopen through the additive detail migration", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-steward-result-migration-"));
+  roots.push(root);
+  const dbPath = join(root, "btcc.sqlite");
+  let db = new Database(dbPath);
+  db.exec(BTCC_SUBSESSION_SCHEMA);
+  db.query(`
+    INSERT INTO btcc_session_relations (
+      relation_id, parent_session_id, parent_turn_id, child_session_id,
+      anchor_message_id, ordinal, safe_title, created_at
+    ) VALUES ('relation-current', 'parent-current', 'turn-parent-current',
+      'child-current', 'message-current', 1, 'Current result', '2026-08-20T00:00:00.000Z')
+  `).run();
+  db.query(`
+    INSERT INTO btcc_steward_results (
+      result_id, relation_id, task_id, child_session_id, child_turn_id,
+      status, code, summary, acceptance_evidence_json, changed_artifacts_json, created_at
+    ) VALUES ('result-current', 'relation-current', 'task-current', 'child-current',
+      'turn-child-current', 'success', NULL, 'Preserved current result.',
+      '["evidence-current"]', '["artifact-current"]', '2026-08-20T00:00:01.000Z')
+  `).run();
+  for (const column of [
+    "detail_refs_json",
+    "follow_up_recommendations_json",
+    "remaining_risks_json",
+    "tests_json",
+    "commits_json",
+  ]) db.exec(`ALTER TABLE btcc_steward_results DROP COLUMN ${column}`);
+  db.close();
+
+  db = new Database(dbPath);
+  migrateSubsessionResultSchema(db);
+  expect(db.query<Record<string, unknown>, []>(`
+    SELECT summary, acceptance_evidence_json, changed_artifacts_json,
+      commits_json, tests_json, remaining_risks_json,
+      follow_up_recommendations_json, detail_refs_json
+    FROM btcc_steward_results
+  `).get()).toEqual({
+    summary: "Preserved current result.",
+    acceptance_evidence_json: '["evidence-current"]',
+    changed_artifacts_json: '["artifact-current"]',
+    commits_json: "[]",
+    tests_json: "[]",
+    remaining_risks_json: "[]",
+    follow_up_recommendations_json: "[]",
+    detail_refs_json: "[]",
+  });
+  migrateSubsessionResultSchema(db);
+  expect(db.query<{ count: number }, []>(
+    "SELECT COUNT(*) AS count FROM btcc_steward_results",
+  ).get()?.count).toBe(1);
+  db.close();
+});
+
 function recoveryRound(input: {
   childRequests: ModelRoundRequest[];
+  synthesisEvidence: string[];
   busyParentStarted: Deferred<void>;
   releaseBusyParent: Deferred<void>;
   childFinalStarted: Deferred<void>;
@@ -565,6 +671,7 @@ function recoveryRound(input: {
       if (isParent) {
         const body = request.messages.map((message) => message.content).join("\n");
         if (body.includes("Subsession result")) {
+          input.synthesisEvidence.push(body);
           return { text: "Steward result synthesized after busy parent.", toolCalls: [] };
         }
         if (body.includes("Continue while Steward runs.")) {
@@ -629,7 +736,10 @@ function recoveryRound(input: {
           work_id: workId, disposition: "completed", summary: "The recovery mutation completed.", action_updates: [{ action_key: "write-recovery-result", status: "done" }],
         })] };
       }
-      return { text: "Steward recovery mutation verified.", toolCalls: [] };
+      const receiptId = request.messages.map((message) => message.content).join("\n")
+        .match(/guided-effect-receipt-[a-f0-9]+/u)?.[0];
+      if (!receiptId) throw new Error("Recovery receipt was not projected to the final report round");
+      return { text: recoveryStewardReport(receiptId), toolCalls: [] };
     },
   };
 }

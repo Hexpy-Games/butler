@@ -36,6 +36,11 @@ CREATE TABLE IF NOT EXISTS btcc_steward_results (
   summary TEXT NOT NULL,
   acceptance_evidence_json TEXT NOT NULL,
   changed_artifacts_json TEXT NOT NULL,
+  commits_json TEXT NOT NULL DEFAULT '[]',
+  tests_json TEXT NOT NULL DEFAULT '[]',
+  remaining_risks_json TEXT NOT NULL DEFAULT '[]',
+  follow_up_recommendations_json TEXT NOT NULL DEFAULT '[]',
+  detail_refs_json TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL,
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)
 );

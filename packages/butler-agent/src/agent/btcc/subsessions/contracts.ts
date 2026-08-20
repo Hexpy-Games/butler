@@ -97,6 +97,11 @@ export type StewardResultEnvelope = {
   summary: string;
   acceptance_evidence: string[];
   changed_artifacts: string[];
+  commits: string[];
+  tests: string[];
+  remaining_risks: string[];
+  follow_up_recommendations: string[];
+  detail_refs: string[];
   created_at: string;
 };
 
@@ -164,6 +169,7 @@ export interface SubsessionDelegationStore {
     childTurnId: string;
     rootWorkId: string;
   }): void;
+  relationById(relationId: string): SessionRelation | null;
   relationByDelegationId(delegationId: string): SessionRelation | null;
   relationByParentSessionId(parentSessionId: string): SessionRelation | null;
   relationByChildSessionId(childSessionId: string): SessionRelation | null;
@@ -185,6 +191,11 @@ export interface SubsessionDelegationStore {
     summary: string;
     acceptanceEvidence: string[];
     changedArtifacts: string[];
+    commits: string[];
+    tests: string[];
+    remainingRisks: string[];
+    followUpRecommendations: string[];
+    detailRefs: string[];
     parentChatId: string;
   }): { result: StewardResultEnvelope; parentInput: {
     relation_id: string;
@@ -238,6 +249,10 @@ export type SubsessionDelegationService = {
   }): Promise<string>;
   completeStewardResult(input: CompleteStewardResultInput): Promise<CompleteStewardResultOutcome>;
   recoverPendingParentInputs(): Promise<{ attempted: number; delivered: number }>;
+  resolveParentResultEvidence(input: {
+    parentSessionId: string;
+    parentInputText: string;
+  }): Promise<string | null>;
   relationForParent(parentSessionId: string): SessionRelation | null;
   resultIdForRelation(relationId: string): string | null;
   pendingParentInputCount(): number;

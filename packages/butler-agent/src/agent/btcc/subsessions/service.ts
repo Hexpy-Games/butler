@@ -3,15 +3,11 @@ import { digest, stableJson } from "../identity/index.ts";
 import { subsessionChildTurnId, subsessionResultId, subsessionRootWorkId } from "./identities.ts";
 import { recoverPendingParentInputs } from "./outbox-recovery.ts";
 import { completeStewardResultForDependencies } from "./terminal-result-service.ts";
+import { resolveParentResultEvidence } from "./accepted-terminal-report.ts";
 import { createStewardWorktree } from "./worktree.ts";
 import { childProjectContextBinding, delegationProjectContextReady, snapshotDelegationProjectContext } from "./project-context.ts";
-import {
-  normalizeSubsessionAllowedToolsAndEffects,
-  normalizeSubsessionMutationScope,
-} from "./scope.ts";
-import {
-  completePacketContext,
-} from "./terminal-results.ts";
+import { normalizeSubsessionAllowedToolsAndEffects, normalizeSubsessionMutationScope } from "./scope.ts";
+import { completePacketContext } from "./terminal-results.ts";
 import type {
   CreatedDelegation,
   DelegationPacket,
@@ -135,6 +131,9 @@ export function createSubsessionDelegationService(
     },
     async recoverPendingParentInputs() {
       return recoverPendingParentInputs({ store: input.store, sink: parentInputSink });
+    },
+    async resolveParentResultEvidence(parentInput) {
+      return resolveParentResultEvidence({ ...parentInput, store: input.store, turns: input.parentTurns });
     },
     relationForParent(parentSessionId) {
       return input.store.relationByParentSessionId(parentSessionId);

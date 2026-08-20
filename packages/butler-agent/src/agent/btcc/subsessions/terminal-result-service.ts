@@ -2,6 +2,7 @@ import {
   isFactualCompletionFailure,
   validateStewardCompletion,
 } from "./completion-evidence.ts";
+import { resolveAcceptedStewardReport } from "./accepted-terminal-report.ts";
 import { subsessionChildTurnId, subsessionResultId } from "./identities.ts";
 import {
   completePacketContext,
@@ -61,6 +62,11 @@ export async function completeStewardResultForDependencies(
     summary: string;
     acceptanceEvidence: string[];
     changedArtifacts: string[];
+    commits: string[];
+    tests: string[];
+    remainingRisks: string[];
+    followUpRecommendations: string[];
+    detailRefs: string[];
   };
   if (terminalStatus === "success") {
     const work = await input.durableWork.boundWorkForTurn(resultInput.childTurnId);
@@ -74,10 +80,11 @@ export async function completeStewardResultForDependencies(
         summary: safeTerminalSummary("blocked", null),
         acceptanceEvidence: [],
         changedArtifacts: [],
+        ...emptyReportDetails(),
       };
     } else {
     try {
-      evidence = await validateStewardCompletion({
+      const completion = await validateStewardCompletion({
         relation,
         packet: packet!,
         childTurnId: resultInput.childTurnId,
@@ -87,6 +94,27 @@ export async function completeStewardResultForDependencies(
         toolJournal: input.toolJournal,
         effectJournal: input.effectJournal,
       });
+      const report = await resolveAcceptedStewardReport({
+        binding: {
+          relationId: relation.relation_id,
+          resultId: resultInput.resultId,
+          childSessionId: relation.child_session_id,
+          childTurnId: resultInput.childTurnId,
+        },
+        reportEvidenceAnchors: completion.reportEvidenceAnchors,
+        ...(resultInput.summary !== undefined ? { reportedContent: resultInput.summary } : {}),
+        turns: input.parentTurns,
+      });
+      evidence = {
+        summary: report.summary,
+        acceptanceEvidence: completion.acceptanceEvidence,
+        changedArtifacts: completion.changedArtifacts,
+        commits: report.commits,
+        tests: report.tests,
+        remainingRisks: report.remainingRisks,
+        followUpRecommendations: report.followUpRecommendations,
+        detailRefs: report.detailRefs,
+      };
     } catch (error) {
       if (!isFactualCompletionFailure(error)) throw error;
       terminalStatus = "failed";
@@ -95,6 +123,7 @@ export async function completeStewardResultForDependencies(
         summary: safeTerminalSummary("failed", terminalCode),
         acceptanceEvidence: [],
         changedArtifacts: [],
+        ...emptyReportDetails(),
       };
     }
     }
@@ -103,6 +132,7 @@ export async function completeStewardResultForDependencies(
       summary: safeTerminalSummary(terminalStatus, terminalCode),
       acceptanceEvidence: [],
       changedArtifacts: [],
+      ...emptyReportDetails(),
     };
   }
 
@@ -128,6 +158,11 @@ export async function completeStewardResultForDependencies(
     summary: evidence.summary,
     acceptanceEvidence: evidence.acceptanceEvidence,
     changedArtifacts: evidence.changedArtifacts,
+    commits: evidence.commits,
+    tests: evidence.tests,
+    remainingRisks: evidence.remainingRisks,
+    followUpRecommendations: evidence.followUpRecommendations,
+    detailRefs: evidence.detailRefs,
     parentChatId,
   });
   const pending = input.store.pendingParentInputForResult(result.result.result_id);
@@ -143,4 +178,14 @@ export async function completeStewardResultForDependencies(
 
 function nonEmpty(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function emptyReportDetails() {
+  return {
+    commits: [] as string[],
+    tests: [] as string[],
+    remainingRisks: [] as string[],
+    followUpRecommendations: [] as string[],
+    detailRefs: [] as string[],
+  };
 }
