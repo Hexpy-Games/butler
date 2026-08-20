@@ -74,6 +74,8 @@ export function createProductionBtccComposition(input: {
     }),
     toolJournal: stores.guidedToolJournal,
     effectJournal: stores.guidedEffectJournal,
+    parentTurns: stores.turns,
+    contextDocuments: stores.contextDocuments,
   });
   const conversations = input.conversationStore ?? new AgentConversationStore({
     butlerData: input.butlerData,

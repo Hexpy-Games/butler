@@ -4,6 +4,7 @@ import { subsessionChildTurnId, subsessionResultId, subsessionRootWorkId } from 
 import { recoverPendingParentInputs } from "./outbox-recovery.ts";
 import { completeStewardResultForDependencies } from "./terminal-result-service.ts";
 import { createStewardWorktree } from "./worktree.ts";
+import { childProjectContextBinding, delegationProjectContextReady, snapshotDelegationProjectContext } from "./project-context.ts";
 import {
   normalizeSubsessionAllowedToolsAndEffects,
   normalizeSubsessionMutationScope,
@@ -31,17 +32,10 @@ export function createSubsessionDelegationService(
   const ensureRootWork = async (child: Parameters<SubsessionDelegationService["ensureChildRootWork"]>[0]): Promise<string> => {
     const relation = input.store.relationByChildSessionId(child.childSessionId);
     if (!relation) throw new Error("subsession_relation_missing");
-    const existing = await input.durableWork.boundWorkForTurn(child.childTurnId);
     const expectedRootWorkId = input.store.rootWorkIdByRelationId(relation.relation_id);
     if (!expectedRootWorkId) throw new Error("subsession_root_work_identity_missing");
-    if (existing) {
-      if (existing.workId !== expectedRootWorkId || existing.sessionId !== child.childSessionId) {
-        throw new Error("subsession_root_work_identity_mismatch");
-      }
-      return existing.workId;
-    }
     const packet = input.store.packetByRelationId(relation.relation_id);
-    if (!packet || !completePacketContext(packet)) {
+    if (!packet || !completePacketContext(packet) || !await delegationProjectContextReady(packet.project_context, { sessionId: child.childSessionId, turnId: child.childTurnId }, input)) {
       await completeResult({
         childSessionId: child.childSessionId,
         childTurnId: child.childTurnId,
@@ -50,6 +44,13 @@ export function createSubsessionDelegationService(
         code: "delegation_context_incomplete",
       });
       throw new Error("delegation_context_incomplete");
+    }
+    const existing = await input.durableWork.boundWorkForTurn(child.childTurnId);
+    if (existing) {
+      if (existing.workId !== expectedRootWorkId || existing.sessionId !== child.childSessionId) {
+        throw new Error("subsession_root_work_identity_mismatch");
+      }
+      return existing.workId;
     }
     const work = await input.durableWork.startWork({
       sessionId: child.childSessionId,
@@ -99,15 +100,18 @@ export function createSubsessionDelegationService(
         safe_title: normalizedRequest.safe_title,
         created_at: now,
       };
+      const projectContext = await snapshotDelegationProjectContext({
+        parentSessionId: normalizedRequest.parent_session_id, parentTurnId: normalizedRequest.parent_turn_id,
+        projectId: parent.projectId,
+        turns: input.parentTurns, documents: input.contextDocuments,
+      });
       const packet = createPacket(normalizedRequest, {
-        delegationId,
-        relationId,
-        taskId,
+        delegationId, relationId, taskId,
         parentWorkRef: parentWork
           ? { work_id: parentWork.workId, session_id: parentWork.sessionId, turn_id: normalizedRequest.parent_turn_id }
           : undefined,
         branch,
-      });
+      }, projectContext);
       registerChildSession(input, parent.workspacePath, normalizedRequest, packet, childSessionId);
       const childWorkspacePath = normalizedRequest.execution_mode === "read_only"
         ? parent.workspacePath
@@ -177,6 +181,7 @@ function recoverExistingDelegation(
 function createPacket(
   request: DelegationRequest,
   ids: { delegationId: string; relationId: string; taskId: string; parentWorkRef?: DelegationPacket["parent_work_ref"]; branch: string },
+  projectContext: DelegationPacket["project_context"],
 ): DelegationPacket {
   return {
     delegation_id: ids.delegationId,
@@ -188,6 +193,7 @@ function createPacket(
     objective: request.objective,
     acceptance_criteria: [...request.acceptance_criteria],
     task_or_plan_refs: [...request.task_or_plan_refs],
+    ...(projectContext ? { project_context: projectContext } : {}),
     constraints_and_non_goals: [...request.constraints_and_non_goals],
     allowed_tools_and_effects: [...request.allowed_tools_and_effects],
     mutation_scope: [...request.mutation_scope],
@@ -227,9 +233,11 @@ function registerChildSession(
   packet: DelegationPacket,
   childSessionId: string,
 ): void {
+  const inheritedProject = childProjectContextBinding(packet.project_context);
   input.sessionBindings.upsert({
     sessionId: childSessionId,
     role: "steward",
+    ...(inheritedProject ? { projectId: inheritedProject.projectId } : {}),
     workspacePath: parentWorkspacePath,
     runtimeAdapterId: "btcc-turn-runtime",
     modelProviderId: input.sessionBindings.getBySessionId(request.parent_session_id)!.modelProviderId,
@@ -245,6 +253,7 @@ function registerChildSession(
         execution_mode: packet.execution_mode,
         mutation_scope: [...packet.mutation_scope],
         allowed_tools_and_effects: [...packet.allowed_tools_and_effects],
+        ...(inheritedProject ? { project_context: inheritedProject.metadata } : {}),
       },
       runtimePolicy: {
         accessMode: packet.execution_mode === "read_only" ? "read_only" : "full_access",
@@ -279,7 +288,7 @@ function enqueueChild(
     routingHints: { stewardId: childSessionId, turnId: childTurnId },
     nativeStewardContext: {
       version: 1,
-      projectName: "",
+      projectName: packet.project_context?.project_id ?? "",
       workspacePath,
       modelRef: packet.model_ref as `${string}/${string}`,
       reasoningEffort: packet.reasoning_effort,

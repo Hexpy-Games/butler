@@ -32,6 +32,7 @@ export function completePacketContext(packet: DelegationPacket): boolean {
       packet.allowed_tools_and_effects.every((value) =>
         SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS.includes(value as typeof SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS[number]),
       ));
+  const projectContextValid = validProjectContext(packet.project_context);
   return Boolean(
     stringValue(packet.delegation_id) &&
     stringValue(packet.task_id) &&
@@ -47,6 +48,7 @@ export function completePacketContext(packet: DelegationPacket): boolean {
     stringArray(packet.mutation_scope, executionMode === "mutation" ? 1 : 0) &&
     workspaceValid &&
     readOnlySurfaceValid &&
+    projectContextValid &&
     packet.work_creation_policy === "one_recoverable_child_work" &&
     expectedSchema?.version === 1 &&
     ["success", "blocked", "failed", "cancelled"].includes(expectedSchema.status) &&
@@ -60,6 +62,29 @@ export function completePacketContext(packet: DelegationPacket): boolean {
     stringValue(access.reasoning_effort) &&
     stringValue(packet.model_ref) &&
     stringValue(packet.reasoning_effort),
+  );
+}
+
+function validProjectContext(context: DelegationPacket["project_context"]): boolean {
+  if (!context) return true;
+  if (!Array.isArray(context.required_source_ids) ||
+      !Array.isArray(context.missing_source_ids) ||
+      !Array.isArray(context.mandatory_refs) ||
+      !Array.isArray(context.optional_refs)) return false;
+  if (!context.project_id.trim() || context.missing_source_ids.length > 0) return false;
+  if (!context.required_source_ids.every((source) =>
+    source === "project-hot-cache" || source === "project-memory")) return false;
+  const refs = [...context.mandatory_refs, ...context.optional_refs];
+  if (new Set(refs.map((ref) => ref.source_id)).size !== refs.length) return false;
+  if (!context.required_source_ids.every((source) => refs.some((ref) => ref.source_id === source))) return false;
+  return refs.every((ref) =>
+    /^[a-f0-9]{64}$/u.test(ref.context_ref) &&
+    /^[a-f0-9]{64}$/u.test(ref.content_sha256) &&
+    Boolean(ref.source_revision.trim()) &&
+    ((ref.source_id === "project-hot-cache" &&
+      ref.projection_class === "mandatory_hot_cache") ||
+     (ref.source_id === "project-memory" &&
+      ref.projection_class === "optional_hot_cache")),
   );
 }
 

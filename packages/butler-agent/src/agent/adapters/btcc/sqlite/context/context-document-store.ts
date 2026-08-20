@@ -103,6 +103,7 @@ export class SqliteContextDocumentStore {
       sourceId: row.source_id,
       projectionClass: row.projection_class,
       scopeKind: row.scope_kind,
+      scopeId: row.scope_id,
       sourceRevision: row.source_revision,
       content: row.content,
     };

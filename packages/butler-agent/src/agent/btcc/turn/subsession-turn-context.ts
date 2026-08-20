@@ -33,6 +33,7 @@ export function readSubsessionMetadata(
         : null;
   const mutationScope = stringArray(metadata.mutation_scope);
   const allowedToolsAndEffects = stringArray(metadata.allowed_tools_and_effects);
+  const projectContext = readProjectContext(metadata.project_context);
   if (!relationId || !delegationId || !taskId || !executionMode) {
     throw new Error("subsession_context_invalid");
   }
@@ -48,6 +49,24 @@ export function readSubsessionMetadata(
       allowedToolsAndEffects,
       executionMode,
     ),
+    ...(projectContext ? { projectContext } : {}),
+  };
+}
+
+function readProjectContext(value: unknown): NonNullable<
+  NonNullable<ButlerExecutionPolicy["subsession"]>["projectContext"]
+> | null {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("subsession_context_invalid");
+  }
+  const context = value as Record<string, unknown>;
+  const projectId = optionalString(context.project_id);
+  if (!projectId) throw new Error("subsession_context_invalid");
+  return {
+    projectId,
+    mandatoryHotCacheRefs: stringArray(context.mandatory_hot_cache_refs),
+    optionalHotCacheRefs: stringArray(context.optional_hot_cache_refs),
   };
 }
 

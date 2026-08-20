@@ -315,10 +315,24 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
   roots.push(root);
   initializeGitWorkspace(root);
   mkdirSync(join(root, "src"), { recursive: true });
+  mkdirSync(join(root, ".butler"), { recursive: true });
+  mkdirSync(join(root, "cognition", "memory", "projects"), { recursive: true });
+  mkdirSync(join(root, "cognition", "memory", "hot"), { recursive: true });
   writeFileSync(join(root, "src", "inspection-target.ts"), "export const inspected = true;\n", "utf8");
+  writeFileSync(join(root, ".butler", "hot-cache.md"), "SANDY_PROJECT_HOT_CONTEXT\n", "utf8");
+  writeFileSync(
+    join(root, "cognition", "memory", "projects", "project-sandy.md"),
+    "SANDY_PROJECT_MEMORY_CONTEXT\n",
+    "utf8",
+  );
+  writeFileSync(
+    join(root, "cognition", "memory", "hot", "cache.md"),
+    "PRIVATE_USER_HOT_CONTEXT\n",
+    "utf8",
+  );
   publishNativeReadiness(root);
   const authToken = "ss03a-local-auth-token-012345678901234567890123";
-  const bindings = new SessionBindingStore(
+  let bindings = new SessionBindingStore(
     join(root, "runtime", "session-store.sqlite"),
     "ephemeral",
   );
@@ -326,6 +340,7 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
   bindings.upsert({
     sessionId: parentSessionId,
     role: "butler",
+    projectId: "project-sandy",
     workspacePath: root,
     runtimeAdapterId: "btcc-turn-runtime",
     modelProviderId: "openai",
@@ -340,48 +355,64 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     localAuth: { required: true, token: authToken },
   });
   const childRequests: ModelRoundRequest[] = [];
-  const composition = createProductionBtccComposition({
+  const modelRound = readOnlyStewardRound(childRequests);
+  let composition = createProductionBtccComposition({
     butlerHome: root,
     butlerData: root,
     ownerId: "read-only-steward-vertical-test",
     sessionBindings: bindings,
     appServerUrl: app.url,
     appLocalAuth: { required: true, token: authToken },
-    modelRound: readOnlyStewardRound(childRequests),
+    modelRound,
   });
   const queue = new NativeInboundQueue(root);
   const inbound = new BtccInboundDispatcher();
-  const gateway = createGatewayServer({
-    router: new GatewayRouter({ store: bindings }),
-    handlers: createBtccGatewayHandlers({
-      btcc: composition.btcc,
-      subsessionDelegation: composition.subsessions,
-    }),
-    butlerData: root,
-  });
+  let gateway = createStewardGateway(composition, bindings, root);
   const deliveryGuard = new DeliveryGuard({
     adapters: [createAppTransportAdapter()],
     butlerData: root,
   });
   try {
-    const response = await fetch(`${app.url}messages`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify({
-        chat_id: "general",
-        text: "Inspect the repository layout and source marker, then summarize the findings.",
-        model: "openai/gpt-5.5",
-        reasoning_effort: "low",
-        access_mode: "full_access",
-        client_message_id: "client-read-only-steward-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      }),
-    });
+    const readOnlyInput = {
+      chat_id: "general",
+      text: "Inspect the repository layout and source marker, then summarize the findings.",
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+      access_mode: "full_access",
+      client_message_id: "client-read-only-steward-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    };
+    const response = await postAppMessage(app.url, authToken, readOnlyInput);
     expect(response.status).toBe(202);
+    const replay = await postAppMessage(app.url, authToken, readOnlyInput);
+    expect(replay.status).toBe(202);
 
-    await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
+    inbound.poll({
+      queue, server: gateway, store: bindings, deliveryGuard,
+      limit: 1, maxConcurrentSessions: 1,
+    });
+    await inbound.waitForIdle();
+    const beforeRestartDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
+    const packetBeforeRestart = beforeRestartDb.query<{ packet_json: string }, []>(
+      "SELECT packet_json FROM btcc_subsession_delegations",
+    ).get()?.packet_json ?? "";
+    const childSessionBeforeRestart = beforeRestartDb.query<{ child_session_id: string }, []>(
+      "SELECT child_session_id FROM btcc_session_relations",
+    ).get()?.child_session_id ?? "";
+    beforeRestartDb.close();
+    const bindingContextBeforeRestart = JSON.stringify(
+      (bindings.getBySessionId(childSessionBeforeRestart)?.metadata?.subsession as
+        Record<string, unknown> | undefined)?.project_context,
+    );
+    await composition.host.close();
+    bindings.close();
+    bindings = new SessionBindingStore(join(root, "runtime", "session-store.sqlite"), "ephemeral");
+    composition = createProductionBtccComposition({
+      butlerHome: root, butlerData: root, ownerId: "read-only-steward-vertical-test-restart",
+      sessionBindings: bindings, appServerUrl: app.url,
+      appLocalAuth: { required: true, token: authToken }, modelRound,
+    });
+    await composition.ready;
+    gateway = createStewardGateway(composition, bindings, root);
     await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
     const appSnapshot = await readAppSnapshot(app, authToken, "Read-only Steward result synthesized.");
     expect(appSnapshot.queueCount).toBe(1);
@@ -401,6 +432,11 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
         "SELECT packet_json FROM btcc_subsession_delegations",
       ).get()?.packet_json ?? "";
       const packet = JSON.parse(packetJson) as Record<string, unknown>;
+      expect(packetJson).toBe(packetBeforeRestart);
+      expect(JSON.stringify(
+        (bindings.getBySessionId(childSessionBeforeRestart)?.metadata?.subsession as
+          Record<string, unknown> | undefined)?.project_context,
+      )).toBe(bindingContextBeforeRestart);
       expect(packet.execution_mode).toBe("read_only");
       expect((packet.access_and_budget_policy as Record<string, unknown>).access_mode)
         .toBe("read_only");
@@ -411,6 +447,16 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       });
       expect(packetJson).not.toContain(authToken);
       expect(packetJson).not.toContain(root);
+      const packetContext = packet.project_context as {
+        project_id: string;
+        mandatory_refs: Array<{ context_ref: string; source_id: string }>;
+        optional_refs: Array<{ context_ref: string; source_id: string }>;
+      };
+      expect([
+        packetContext.project_id,
+        packetContext.mandatory_refs[0]?.source_id,
+        packetContext.optional_refs[0]?.source_id,
+      ]).toEqual(["project-sandy", "project-hot-cache", "project-memory"]);
       expect(relation).toMatchObject({
         parent_session_id: parentSessionId,
         ordinal: 1,
@@ -474,11 +520,83 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
         request.messages.map((message) => message.content),
       ).join("\n");
       expect(childPrompt).toContain("execution_mode: read_only");
+      expect(childPrompt).toContain("SANDY_PROJECT_HOT_CONTEXT");
+      expect(childPrompt).toContain("SANDY_PROJECT_MEMORY_CONTEXT");
+      expect(childPrompt).not.toContain("PRIVATE_USER_HOT_CONTEXT");
+      const childContextJson = btccDb.query<{ context_json: string }, [string]>(
+        "SELECT context_json FROM btcc_turns WHERE session_id = ? ORDER BY rowid ASC LIMIT 1",
+      ).get(childSessionId)?.context_json ?? "";
+      const childContext = JSON.parse(childContextJson) as {
+        projectRef?: string;
+        mandatoryHotCacheRefs?: string[];
+        optionalHotCacheRefs?: string[];
+      };
+      expect(childContext).toMatchObject({
+        projectRef: packetContext.project_id,
+        mandatoryHotCacheRefs: packetContext.mandatory_refs.map((ref) => ref.context_ref),
+        optionalHotCacheRefs: packetContext.optional_refs.map((ref) => ref.context_ref),
+      });
       expect(childRequests.filter((request) => request.tools.some((tool) =>
         ["write_file", "edit_file", "run_command", "call_mcp_tool"].includes(tool.name),
       ))).toHaveLength(0);
     } finally {
       btccDb.close();
+    }
+
+    const missingChatId = "missing-project-context";
+    const missingParentSessionId = sessionHintForRow(missingChatId);
+    const missingWorkspace = join(root, "missing-workspace");
+    mkdirSync(missingWorkspace, { recursive: true });
+    await fetch(`${app.url}sessions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        kind: "chat",
+        title: "Missing project context",
+        session_hint: missingChatId,
+      }),
+    });
+    bindings.upsert({
+      sessionId: missingParentSessionId,
+      role: "butler",
+      projectId: "project-without-memory",
+      workspacePath: missingWorkspace,
+      runtimeAdapterId: "btcc-turn-runtime",
+      modelProviderId: "openai",
+      modelRef: "openai/gpt-5.5",
+      transportBindings: [{ transport: "app", accountId: "local", peerId: missingChatId }],
+    });
+    const childRequestCountBeforeMissing = childRequests.length;
+    const missingResponse = await postAppMessage(app.url, authToken, {
+      chat_id: missingChatId,
+      text: "Delegate an audit that requires verified project context.",
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+      access_mode: "full_access",
+      client_message_id: "client-missing-context-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    expect(missingResponse.status).toBe(202);
+    await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
+    expect(childRequests).toHaveLength(childRequestCountBeforeMissing);
+    const missingDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
+    try {
+      expect(missingDb.query<{ status: string; code: string; work_count: number }, [string]>(`
+        SELECT result.status, result.code,
+          (SELECT COUNT(*) FROM btcc_guided_works WHERE session_id = relation.child_session_id)
+            AS work_count
+        FROM btcc_session_relations AS relation
+        JOIN btcc_steward_results AS result ON result.relation_id = relation.relation_id
+        WHERE relation.parent_session_id = ?
+      `).get(missingParentSessionId)).toEqual({
+        status: "blocked",
+        code: "delegation_context_incomplete",
+        work_count: 0,
+      });
+    } finally {
+      missingDb.close();
     }
   } finally {
     app.stop();
@@ -734,20 +852,40 @@ function readOnlyStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPor
       const isParent = request.tools.some((tool) => tool.name === "delegate_to_steward");
       if (!isParent) childRequests.push(request);
       if (isParent) {
-        const key = request.messages.some((message) => message.content.includes("Subsession result"))
-          ? "synthesis"
-          : "delegation";
+        const missingContext = request.messages.some((message) =>
+          message.content.includes("requires verified project context") ||
+          message.content.includes("delegation_context_incomplete"),
+        );
+        const key = `${missingContext ? "missing-" : ""}${
+          request.messages.some((message) => message.content.includes("Subsession result"))
+            ? "synthesis"
+            : "delegation"
+        }`;
         const round = (parentRounds.get(key) ?? 0) + 1;
         parentRounds.set(key, round);
-        if (key === "delegation") {
+        if (key.endsWith("delegation")) {
           if (round > 1) return { text: "Delegation accepted.", toolCalls: [] };
+          if (missingContext) {
+            return {
+              toolCalls: [toolCall("delegate-missing-context", "delegate_to_steward", {
+                execution_mode: "read_only",
+                safe_title: "Missing project context audit",
+                objective: "Audit the project using the required verified project context.",
+                acceptance_criteria: ["Use the verified project context instead of guessing."],
+                task_or_plan_refs: ["W-SANDY-RELATIONSHIP-AUDIT-001"],
+                constraints_and_non_goals: ["Do not guess or scan when required context is unavailable."],
+                allowed_tools_and_effects: [...READ_ONLY_SURFACE],
+                mutation_scope: [],
+              })],
+            };
+          }
           return {
             toolCalls: [toolCall("delegate-read-only", "delegate_to_steward", {
               execution_mode: "read_only",
               safe_title: "Read-only repository inspection",
               objective: "Inspect the repository layout and source marker, then summarize the findings.",
               acceptance_criteria: ["The layout and source marker are inspected with material read evidence."],
-              task_or_plan_refs: [],
+              task_or_plan_refs: ["W-SANDY-RELATIONSHIP-AUDIT-001"],
               constraints_and_non_goals: ["Do not mutate the workspace, run commands, call MCP, or change Project Ledger."],
               allowed_tools_and_effects: [
                 "read_file:workspace",
@@ -760,7 +898,12 @@ function readOnlyStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPor
             })],
           };
         }
-        return { text: "Read-only Steward result synthesized.", toolCalls: [] };
+        return {
+          text: missingContext
+            ? "Steward was blocked because required project context was unavailable."
+            : "Read-only Steward result synthesized.",
+          toolCalls: [],
+        };
       }
       const childKey = request.messages.map((message) => message.content).find((content) => content.includes("delegation_id")) ?? "child";
       const round = (childRounds.get(childKey) ?? 0) + 1;
@@ -845,6 +988,33 @@ function readOnlyStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPor
 
 function toolCall(id: string, name: string, args: Record<string, unknown>) {
   return { id, name, arguments: args, rawArguments: JSON.stringify(args) };
+}
+
+function createStewardGateway(
+  composition: ReturnType<typeof createProductionBtccComposition>,
+  bindings: SessionBindingStore,
+  butlerData: string,
+) {
+  return createGatewayServer({
+    router: new GatewayRouter({ store: bindings }),
+    handlers: createBtccGatewayHandlers({
+      btcc: composition.btcc,
+      subsessionDelegation: composition.subsessions,
+    }),
+    butlerData,
+  });
+}
+
+function postAppMessage(
+  appUrl: string,
+  authToken: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  return fetch(`${appUrl}messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${authToken}` },
+    body: JSON.stringify(body),
+  });
 }
 
 async function drain(

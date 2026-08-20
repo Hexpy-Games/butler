@@ -60,6 +60,7 @@ test("context document read returns verified typed metadata", () => {
       sourceId: "profile-source",
       projectionClass: "profile",
       scopeKind: "user",
+      scopeId: "user",
       sourceRevision: "revision-1",
       content: "profile body",
     });

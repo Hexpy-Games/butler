@@ -17,6 +17,7 @@ export type ContextDocumentRead = {
   sourceId: string;
   projectionClass: ContextProjectionClass;
   scopeKind: ContextScopeKind;
+  scopeId: string;
   sourceRevision: string;
   content: string;
 };
