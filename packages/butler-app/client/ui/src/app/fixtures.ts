@@ -118,7 +118,7 @@ const HARNESS_STEWARD_CHILD: StewardSessionSummaryView = {
     parent_session_id: "butler-client",
     parent_turn_id: "turn-2",
     child_session_id: "harness-steward",
-    anchor_message_id: "m4",
+    anchor_message_id: "m3",
     ordinal: 1,
     safe_title: "Review the activity surface",
     created_at: "2026-05-01T00:09:30.000Z",
@@ -760,12 +760,11 @@ export const HARNESS_SUMMARY: SessionSummaryView = {
 /** SS-03 render evidence keeps the frame focused on direct Steward activity. */
 export const HARNESS_SS03_SUMMARY: SessionSummaryView = {
   ...HARNESS_SUMMARY,
+  turn_state: "delivered",
   latest_progress: {
     ...HARNESS_SUMMARY.latest_progress!,
-    safe_progress_rows: [
-      HARNESS_SS03_CURRENT_ACTIVITY,
-      ...HARNESS_STEWARD_CHILD.active_turn!.progress.safe_progress_rows,
-    ],
+    state: "delivered",
+    safe_progress_rows: [],
   },
   steward_children: [HARNESS_SS03_STEWARD_CHILD],
   worker_activity: [],

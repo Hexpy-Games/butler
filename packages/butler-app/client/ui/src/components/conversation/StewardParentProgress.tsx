@@ -1,29 +1,25 @@
-import type { ProgressRow, StewardSessionSummaryView } from "@/app/types.ts";
-import { ComposerAdjunctPanel, Typo } from "@/butler-ds";
+import type { ProgressRow } from "@/app/types.ts";
+import { Typo } from "@/butler-ds";
 import { TurnActivityPanel } from "./TurnActivityPanel.tsx";
+import type { AnchoredStewardProgress } from "./stewardParentProgressProjection.ts";
 
-export function StewardComposerPanel({
-  child,
+export function StewardParentProgress({
+  progress,
 }: {
-  child: StewardSessionSummaryView;
+  progress: AnchoredStewardProgress;
 }) {
-  const turn = child.active_turn;
-  if (!turn) return null;
-  const rows = turn.progress.safe_progress_rows;
-  const capsule = stewardProgressCapsule(
-    child,
-    rows,
-    turn.progress.summary ?? "작업을 진행 중입니다.",
-  );
+  const { child, turn, rows } = progress;
   return (
-    <ComposerAdjunctPanel
+    <section
       aria-label={child.title}
-      data-test-class="steward-composer-panel"
-      heading={child.title}
-      collapsedSummary={capsule}
+      data-test-class="steward-parent-progress"
     >
       <Typo.Caption data-test-class="steward-progress-capsule">
-        {capsule}
+        {stewardProgressCapsule(
+          child,
+          rows,
+          turn.progress.summary ?? "작업을 진행 중입니다.",
+        )}
       </Typo.Caption>
       <TurnActivityPanel
         rows={rows}
@@ -31,12 +27,12 @@ export function StewardComposerPanel({
         startedAt={turn.created_at}
         turnId={turn.id}
       />
-    </ComposerAdjunctPanel>
+    </section>
   );
 }
 
 function stewardProgressCapsule(
-  child: Pick<StewardSessionSummaryView, "approved_plan_total" | "approved_plan_completed">,
+  child: Pick<AnchoredStewardProgress["child"], "approved_plan_total" | "approved_plan_completed">,
   rows: ProgressRow[],
   currentStage: string,
 ): string {

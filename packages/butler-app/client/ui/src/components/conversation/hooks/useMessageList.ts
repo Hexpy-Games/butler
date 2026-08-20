@@ -15,6 +15,7 @@ import type {
   WorkerActivitySummary,
 } from "@/app/types.ts";
 import { buildAssistantFooterMetaById } from "../messageFooterMeta";
+import { anchoredStewardProgressByMessageId } from "../stewardParentProgressProjection";
 
 export function useMessageList(
   messages: MessageRecord[],
@@ -35,6 +36,10 @@ export function useMessageList(
     [visibleMessages],
   );
 
+  const anchoredStewardProgress = useMemo(
+    () => anchoredStewardProgressByMessageId(visibleMessages, summary),
+    [summary, visibleMessages],
+  );
   const workers = (summary?.worker_activity ?? []).filter(
     (worker): worker is WorkerActivitySummary =>
       Boolean(worker && isWorkerVisibleInComposer(worker)),
@@ -44,29 +49,23 @@ export function useMessageList(
     () => activeTurnProgressSnapshot(summary, turnProgress),
     [summary, turnProgress],
   );
-  const stewardChild = summary?.steward_children?.find(
-    (child) => child.active_turn,
-  );
-  const stewardProgress = stewardChild?.active_turn?.progress;
-  const projectedSnapshot = stewardProgress ?? activeSnapshot;
   const activeTurn = Boolean(
-    projectedSnapshot ||
-      stewardChild?.active_turn ||
+    activeSnapshot ||
       (summary?.turn_state && ACTIVE_TURN_STATES.has(summary.turn_state)),
   );
 
   const progressRows = visibleProgressRows(
-    projectedSnapshot?.safe_progress_rows ??
+    activeSnapshot?.safe_progress_rows ??
     summary?.latest_progress?.safe_progress_rows ??
     [],
   );
   const timelineProgressRows = progressRows.filter((row) => row.kind !== "todo");
   const hasTodoProgress = progressRows.length !== timelineProgressRows.length;
   const turnState =
-    projectedSnapshot?.state ??
+    activeSnapshot?.state ??
     summary?.latest_progress?.state ??
     summary?.turn_state ??
-    stewardChild?.active_turn?.state;
+    undefined;
 
   const showTurnActivity = shouldShowTurnActivity({
     activeTurn,
@@ -116,11 +115,11 @@ export function useMessageList(
     progressRows,
     turnState,
     turnStartedAt:
-      projectedSnapshot?.started_at ?? stewardChild?.active_turn?.created_at,
+      activeSnapshot?.started_at,
     turnId:
-      projectedSnapshot?.turn_id ??
-      stewardChild?.active_turn?.id ??
+      activeSnapshot?.turn_id ??
       summary?.latest_progress?.turn_id,
+    anchoredStewardProgress,
     showTurnActivity,
     itemCount,
     copiedMessageId,

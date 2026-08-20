@@ -14,12 +14,15 @@ import { MessageArtifacts } from "./MessageArtifacts";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
+import { StewardParentProgress } from "./StewardParentProgress";
+import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
 
 interface MessageContentProps {
   message: MessageRecord;
   copied: boolean;
   footerMeta: AssistantFooterMeta | null;
   onCopyAssistantMessage?: (message: MessageRecord) => void;
+  stewardProgress?: AnchoredStewardProgress;
 }
 
 function MessageContentComponent({
@@ -27,6 +30,7 @@ function MessageContentComponent({
   copied,
   footerMeta,
   onCopyAssistantMessage,
+  stewardProgress,
 }: MessageContentProps) {
   return (
     <>
@@ -49,6 +53,7 @@ function MessageContentComponent({
               text={message.text}
             />
           )}
+          {stewardProgress ? <StewardParentProgress progress={stewardProgress} /> : null}
           {message.status === "cancelled" && (
             <div role="status">
               <Tag ariaLabel={appCopy.conversation.stoppedStatus}>
@@ -74,6 +79,7 @@ function MessageContentComponent({
           copied={copied}
           meta={footerMeta}
           status={message.status}
+          suppressTerminalStatus={Boolean(stewardProgress)}
           onCopy={() => onCopyAssistantMessage(message)}
         />
       )}
@@ -93,6 +99,7 @@ export const MessageContent = memo(
     previous.message === next.message &&
     previous.copied === next.copied &&
     previous.footerMeta === next.footerMeta &&
+    previous.stewardProgress === next.stewardProgress &&
     previous.onCopyAssistantMessage === next.onCopyAssistantMessage,
 );
 MessageContent.displayName = "MessageContent";

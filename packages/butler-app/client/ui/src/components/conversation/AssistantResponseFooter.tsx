@@ -21,11 +21,13 @@ export function AssistantResponseFooter({
   meta,
   onCopy,
   status,
+  suppressTerminalStatus = false,
 }: {
   copied: boolean;
   meta: AssistantFooterMeta | null;
   onCopy: () => void;
   status?: string;
+  suppressTerminalStatus?: boolean;
 }) {
   const markTheme = useButlerMarkTheme();
   const terminalStatus = terminalAssistantStatus(status);
@@ -45,7 +47,7 @@ export function AssistantResponseFooter({
           <time dateTime={meta.completedAtIso ?? undefined}>{meta.timeLabel}</time>
         )}
       </MessageFooter>
-      {terminalStatus ? (
+      {terminalStatus && !suppressTerminalStatus ? (
         <MessageStatusRow dataTestClass="assistant-terminal-status-row">
           <AssistantStatusLabel
             label={terminalStatus.label}
