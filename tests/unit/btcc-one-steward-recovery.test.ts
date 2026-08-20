@@ -110,6 +110,40 @@ test("one Steward result survives restart and waits behind a busy Butler turn", 
   await composition.host.close();
   bindings.close();
 
+  const legacyPacketDb = new Database(join(root, "agent-runtime", "btcc.sqlite"));
+  try {
+    const packetRow = legacyPacketDb.query<{ packet_json: string }, [string]>(`
+      SELECT packet_json FROM btcc_subsession_delegations WHERE relation_id = ?
+    `).get(persistedIdentity.relation_id);
+    const legacyPacket = JSON.parse(packetRow?.packet_json ?? "{}") as Record<string, unknown>;
+    delete legacyPacket.execution_mode;
+    expect((legacyPacket.access_and_budget_policy as Record<string, unknown>).access_mode)
+      .toBe("full_access");
+    legacyPacketDb.query(`
+      UPDATE btcc_subsession_delegations SET packet_json = ? WHERE relation_id = ?
+    `).run(JSON.stringify(legacyPacket), persistedIdentity.relation_id);
+  } finally {
+    legacyPacketDb.close();
+  }
+  const legacyBindingDb = new Database(bindingStorePath);
+  try {
+    const bindingRow = legacyBindingDb.query<{ metadata_json: string }, [string]>(`
+      SELECT metadata_json FROM session_bindings WHERE session_id = ?
+    `).get(persistedIdentity.child_session_id);
+    const metadata = JSON.parse(bindingRow?.metadata_json ?? "{}") as Record<string, unknown>;
+    const subsession = metadata.subsession;
+    if (!subsession || typeof subsession !== "object" || Array.isArray(subsession)) {
+      throw new Error("legacy Steward subsession metadata missing");
+    }
+    delete (subsession as Record<string, unknown>).execution_mode;
+    expect((subsession as Record<string, unknown>).execution_mode).toBeUndefined();
+    legacyBindingDb.query(`
+      UPDATE session_bindings SET metadata_json = ? WHERE session_id = ?
+    `).run(JSON.stringify(metadata), persistedIdentity.child_session_id);
+  } finally {
+    legacyBindingDb.close();
+  }
+
   app = createAppServer({
     dbPath: join(root, "app.sqlite"),
     butlerHome: root,
@@ -322,6 +356,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
         parent_session_id: parentSessionId,
         parent_turn_id: `terminal-parent-turn-${parentCase.key}`,
         anchor_message_id: `terminal-anchor-${parentCase.key}`,
+        execution_mode: "mutation",
         safe_title: `Terminal ${parentCase.key}`,
         objective: parentCase.key === "blocked"
           ? "Perform one blocked terminal result test."
@@ -351,6 +386,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
       parent_session_id: incompleteParentSessionId,
       parent_turn_id: "terminal-parent-turn-incomplete",
       anchor_message_id: "terminal-anchor-incomplete",
+      execution_mode: "mutation",
       safe_title: "Terminal incomplete context",
       objective: "This objective will be removed before Steward admission.",
       acceptance_criteria: ["The missing packet context is blocked safely."],
@@ -541,6 +577,7 @@ function recoveryRound(input: {
         if (round > 1) return { text: "Delegation accepted.", toolCalls: [] };
         return {
           toolCalls: [toolCall("delegate", "delegate_to_steward", {
+            execution_mode: "mutation",
             safe_title: "Bounded recovery task",
             objective: "Create and verify one bounded recovery result file.",
             acceptance_criteria: ["recovery-result.txt contains the expected mutation"],

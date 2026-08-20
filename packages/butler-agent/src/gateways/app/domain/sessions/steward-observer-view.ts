@@ -30,7 +30,7 @@ export function sessionViewForStewardObserver(
         chat_id: message.session_id,
         turn_id: message.turn_id,
         role: message.role,
-        text: message.text,
+        text: safeChildMessageText(message, relation, projected),
         status: projectedStatus(projected.status),
         retryable: false,
         cursor: index + 1,
@@ -100,6 +100,15 @@ export function sessionViewForStewardObserver(
     generated_at: new Date().toISOString(),
     updated_at: projected.updated_at,
   };
+}
+
+function safeChildMessageText(
+  message: StewardObserverSnapshot["messages"][number],
+  relation: StewardObserverRelation,
+  projected: ProjectedStewardSession,
+): string {
+  if (message.role === "user") return relation.safe_title;
+  return projected.result?.summary ?? "Steward progress is available in the activity view.";
 }
 
 function projectedStatus(

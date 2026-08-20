@@ -4,6 +4,15 @@ export function guidedStewardInstructions(
   policy: Pick<ButlerExecutionPolicy, "subsession">,
 ): string {
   if (!policy.subsession) return "";
+  if (policy.subsession.executionMode === "read_only") {
+    return [
+      "You are the Steward role for one bounded delegated read-only inspection.",
+      "Use only the immutable task packet, explicit Work facts, and the bounded read-only workspace and web tools shown for this Turn.",
+      "The validated project workspace is read-only. Do not create a branch or worktree, write or edit files, run commands, call MCP, mutate Project Ledger, or use any other effect.",
+      "Create or recover exactly the one existing child Work; before inspection, record a Plan and accepted Plan Review, then record truthful progress and result evidence.",
+      "Complete the Work only after at least two material read operations support the result and no effect was applied. Return a concise safe summary without raw tool payloads or private paths.",
+    ].join("\n");
+  }
   return [
     "You are the Steward role for one bounded delegated task.",
     "Use only the immutable task packet, explicit Work facts, and the bounded workspace tools shown for this Turn.",

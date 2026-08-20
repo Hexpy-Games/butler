@@ -302,7 +302,7 @@ describe("App Steward observer projection", () => {
         session_id: "steward-3",
         turn_id: "turn-3",
         role: "user",
-        text: "Do the work",
+        text: "RAW_TOOL_PAYLOAD:{\"secret\":true} credential=sk-test-123 /private/project/file.ts",
         created_at: "2026-08-19T00:01:00.000Z",
         updated_at: "2026-08-19T00:01:00.000Z",
       }, {
@@ -310,7 +310,7 @@ describe("App Steward observer projection", () => {
         session_id: "steward-3",
         turn_id: "turn-3",
         role: "assistant",
-        text: "Working notes",
+        text: "hidden reasoning: inspect raw tool payload before reporting",
         created_at: "2026-08-19T00:02:00.000Z",
         updated_at: "2026-08-19T00:02:00.000Z",
       }],
@@ -346,6 +346,10 @@ describe("App Steward observer projection", () => {
       "assistant-3",
       "result-3",
     ]);
+    const publicViewJson = JSON.stringify(view);
+    expect(publicViewJson).not.toMatch(/RAW_TOOL_PAYLOAD|sk-test-123|\/private\/project\/file\.ts|hidden reasoning/iu);
+    expect(view.messages[0]?.text).toBe("Terminal child");
+    expect(view.messages[1]?.text).toBe("Completed");
     expect(view.messages.at(-1)?.text).toBe("Completed");
     expect(view.messages.at(-1)?.artifacts?.[0]?.id).toBe("result-3:artifact:0");
     expect(view.message_window.complete).toBe(true);

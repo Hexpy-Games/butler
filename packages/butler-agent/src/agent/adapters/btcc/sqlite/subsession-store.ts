@@ -120,7 +120,11 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     `).get(relationId);
     if (!row) return null;
     try {
-      return JSON.parse(row.packet_json) as DelegationPacket;
+      const packet = JSON.parse(row.packet_json) as Record<string, unknown>;
+      return {
+        ...packet,
+        ...(packet.execution_mode === undefined ? { execution_mode: "mutation" } : {}),
+      } as DelegationPacket;
     } catch {
       // A factual relation with unreadable packet context must fail closed at
       // the Steward admission boundary; never manufacture replacement facts.
