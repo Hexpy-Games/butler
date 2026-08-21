@@ -181,6 +181,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     parent_turn_id: string;
     parent_chat_id: string;
     message_id: string;
+    safe_title: string;
     text: string;
     model_ref: string;
     reasoning_effort: string;
@@ -215,6 +216,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       parent_turn_id: deterministicParentTurnId(input.relation.relation_id, input.resultId),
       parent_chat_id: input.parentChatId,
       message_id: parentMessageId,
+      safe_title: input.relation.safe_title,
       text: parentText,
       model_ref: input.modelRef,
       reasoning_effort: input.reasoningEffort,
@@ -276,6 +278,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     parent_turn_id: string;
     parent_chat_id: string;
     message_id: string;
+    safe_title: string;
     text: string;
     model_ref: string;
     reasoning_effort: string;
@@ -292,6 +295,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     parent_turn_id: string;
     parent_chat_id: string;
     message_id: string;
+    safe_title: string;
     text: string;
     model_ref: string;
     reasoning_effort: string;

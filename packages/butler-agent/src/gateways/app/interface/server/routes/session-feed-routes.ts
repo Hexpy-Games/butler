@@ -75,6 +75,13 @@ export async function handleSessionFeedRoutes(
       "Authority decisions must use the Allow endpoint.",
     );
   }
+  if (Object.hasOwn(body, "subsession_result")) {
+    throw new RequestError(
+      400,
+      "invalid_request",
+      "Subsession results must use the internal result endpoint.",
+    );
+  }
 
   const chatId = body.chat_id?.trim() || "general";
   if (!input.messageRateLimiter.consume(`messages:${chatId}`)) {

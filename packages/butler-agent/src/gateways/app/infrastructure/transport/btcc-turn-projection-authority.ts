@@ -1,5 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { loadBoundedTurnPage } from "./bounded-turn-page.ts";
+import {
+  subsessionResultStatusLabel,
+  verifyTurnExecutionControls,
+} from "../../../core/turn-execution-controls.ts";
 
 type ProjectionAuthorityRow = {
   turn_id: string;
@@ -53,12 +57,20 @@ export function reconcileBtccTurnProjectionAuthorityBatch(
   db.transaction(() => {
     for (const row of batch) {
       const finalizing = row.semantic_state === "delivery_committed";
+      const synthesis = subsessionResultForTurn(db, row.turn_id);
       db.query(`
         UPDATE turns
         SET state = 'running', safe_status_label = ?, safe_error_code = NULL,
           retryable = 0, cancellable = ?, updated_at = ?
         WHERE id = ? AND state IN ('failed', 'runtime_fault')
-      `).run(finalizing ? "Finalizing" : "Working", finalizing ? 0 : 1, now, row.turn_id);
+      `).run(
+        synthesis
+          ? subsessionResultStatusLabel(synthesis)
+          : finalizing ? "Finalizing" : "Working",
+        synthesis || finalizing ? 0 : 1,
+        now,
+        row.turn_id,
+      );
       db.query(`
         UPDATE messages
         SET text = '', status = 'pending', safe_error_code = NULL,
@@ -72,6 +84,18 @@ export function reconcileBtccTurnProjectionAuthorityBatch(
     nextCursor: page.nextCursor,
     pending: page.pending,
   };
+}
+
+function subsessionResultForTurn(db: Database, turnId: string) {
+  const value = db.query<{ execution_controls_json: string | null }, [string]>(`
+    SELECT execution_controls_json FROM turns WHERE id = ?
+  `).get(turnId)?.execution_controls_json;
+  if (!value) return undefined;
+  try {
+    return verifyTurnExecutionControls(JSON.parse(value)).subsession_result;
+  } catch {
+    return undefined;
+  }
 }
 
 function activeBtccRows(db: Database, turnIds: string[]): ProjectionAuthorityRow[] {

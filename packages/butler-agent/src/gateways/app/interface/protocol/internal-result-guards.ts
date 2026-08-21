@@ -12,6 +12,7 @@ export function isSubsessionResultIngressRequest(
     "parent_session_id",
     "parent_turn_id",
     "message_id",
+    "safe_title",
     "text",
     "model_ref",
     "reasoning_effort",

@@ -53,6 +53,8 @@ export interface MessageSendRequest {
   queue_policy?: "send_now" | "enqueue_if_busy";
   /** @internal Durable authority Allow adapter identity. */
   authority_request_ref?: string;
+  /** @internal Trusted durable Steward-result synthesis origin. */
+  subsession_result?: import("../../../core/turn-execution-controls.ts").SubsessionResultTurnContext;
 }
 
 export interface MessageSendResult {
@@ -97,6 +99,8 @@ export interface QueueMessageRequest {
   plan_mode?: boolean;
   /** @internal Durable authority Allow adapter identity. */
   authority_request_ref?: string;
+  /** @internal Trusted durable Steward-result synthesis origin. */
+  subsession_result?: import("../../../core/turn-execution-controls.ts").SubsessionResultTurnContext;
 }
 
 export interface UpdateQueuedMessageRequest {
@@ -108,6 +112,8 @@ export interface UpdateQueuedMessageRequest {
   plan_mode?: boolean;
   /** @internal Durable authority Allow adapter identity. */
   authority_request_ref?: string;
+  /** @internal Trusted durable Steward-result synthesis origin. */
+  subsession_result?: import("../../../core/turn-execution-controls.ts").SubsessionResultTurnContext;
 }
 
 export interface TurnRecord {

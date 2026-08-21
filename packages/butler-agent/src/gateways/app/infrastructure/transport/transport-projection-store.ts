@@ -34,6 +34,7 @@ import { projectAppWorkerResult } from "./worker-result-projection.ts";
 import type {
   AppTransportProjectionStoreOptions,
 } from "./transport-projection-contract.ts";
+import { subsessionResultStatusLabel } from "../../../core/turn-execution-controls.ts";
 import { StagedTransportOutboundStore } from
   "./staged-transport-outbound-store.ts";
 import { OPERATION_OUTPUT_CHUNK_EVENT_KIND } from
@@ -283,12 +284,18 @@ export class AppTransportProjectionStore {
       terminalRecoverableCorrection = !sameDeliveredFinal;
     }
 
-    const progressRow = progressRowFromAppOutbound(
+    const rawProgressRow = progressRowFromAppOutbound(
       actionId,
       message,
       metadata,
       event.timestamp,
     );
+    const synthesis = this.options.getTurn(turnId).execution_controls
+      ?.subsession_result;
+    const progressRow = rawProgressRow && synthesis &&
+        rawProgressRow.kind === "message" && !rawProgressRow.safe_tool_name
+      ? { ...rawProgressRow, safe_label: subsessionResultStatusLabel(synthesis) }
+      : rawProgressRow;
     if (progressRow) {
       return projectClaimedOutbound(
         this.options,

@@ -150,6 +150,9 @@ export class AppSessionViewStore {
     return {
       session_id: session.id,
       latest_progress: latestProgress,
+      latest_turn_cancellable: latestTurn?.cancellable,
+      latest_turn_subsession_result:
+        latestTurn?.execution_controls?.subsession_result,
       turn_state: latestTurn?.state ?? "idle",
       branch_info: this.branchInfoForSession(sessionId),
       artifacts: messages

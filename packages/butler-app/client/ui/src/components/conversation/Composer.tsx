@@ -130,7 +130,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
       expanded={presentation.expanded}
       floating
       notice={<ComposerNotices
-        stewardChildren={session.summary?.steward_children ?? []}
+        summary={session.summary}
       />}
       adjunct={
         showAdjunct ? (

@@ -134,13 +134,18 @@ export class AppSessionQueueStore {
         .map((attachment) => this.messageFiles.row(attachment.file_id?.trim() ?? ""))
         .filter((file): file is import("../message-files/message-file-store.ts").MessageFileRow => Boolean(file));
       const replayDigest = queuedInputIdentityDigest(input, text, replayFiles);
+      const previousReplayMatches = existing.input_identity_digest ===
+        queuedInputIdentityDigest(input, text, replayFiles, {
+          includeSubsessionResult: false,
+        });
       const legacyReplayMatches = existing.input_identity_digest ===
         legacyQueuedInputIdentityDigest(input, text, replayFiles) &&
         sameAttachmentIdentityOrder(
           requestedAttachmentIds(input),
           queuedAttachmentIds(existing.attachments_json),
         );
-      if (existing.input_identity_digest !== replayDigest && !legacyReplayMatches) {
+      if (existing.input_identity_digest !== replayDigest &&
+        !previousReplayMatches && !legacyReplayMatches) {
         throw new AppStoreOperationError(
           409,
           "queued_message_identity_conflict",
@@ -171,9 +176,15 @@ export class AppSessionQueueStore {
         const concurrent = this.getQueuedMessageByClientId(chatId, clientMessageId);
         if (concurrent) return { concurrent };
         const resolvedControls = admittedControls ?? this.controlsForMessageSend(chatId, input);
-        const controlResolution = input.authority_request_ref
-          ? { ...resolvedControls, authority_request_ref: input.authority_request_ref }
-          : resolvedControls;
+        const controlResolution = {
+          ...resolvedControls,
+          ...(input.authority_request_ref
+            ? { authority_request_ref: input.authority_request_ref }
+            : {}),
+          ...(input.subsession_result
+            ? { subsession_result: input.subsession_result }
+            : {}),
+        };
         const now = new Date().toISOString();
         const queuedId = `queued-${crypto.randomUUID()}`;
         this.db
@@ -833,6 +844,7 @@ function queuedInputIdentityDigest(
   input: QueueMessageRequest | UpdateQueuedMessageRequest,
   text: string,
   files: readonly import("../message-files/message-file-store.ts").MessageFileRow[],
+  options: { includeSubsessionResult?: boolean } = {},
 ): string {
   const requestedIds = requestedAttachmentIds(input);
   return createHash("sha256").update(JSON.stringify({
@@ -844,6 +856,9 @@ function queuedInputIdentityDigest(
       access_mode: input.access_mode ?? null,
       plan_mode: input.plan_mode ?? null,
       authority_request_ref: input.authority_request_ref ?? null,
+      ...(options.includeSubsessionResult !== false && input.subsession_result
+        ? { subsession_result: input.subsession_result }
+        : {}),
     },
     admission_identity: files.map((file) => ({
       id: file.id,

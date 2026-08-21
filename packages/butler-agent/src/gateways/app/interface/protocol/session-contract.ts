@@ -69,7 +69,7 @@ export interface SessionViewTurn {
   updated_at: string;
   execution_controls?: Pick<
     NonNullable<TurnRecord["execution_controls"]>,
-    "model_ref" | "reasoning_effort" | "source"
+    "model_ref" | "reasoning_effort" | "source" | "subsession_result"
   >;
   execution_model?: NonNullable<TurnRecord["execution_model"]>;
 }
@@ -183,6 +183,8 @@ export interface SessionView {
 export interface SessionSummaryView {
   session_id: string;
   latest_progress: TurnProgressSnapshotView;
+  latest_turn_cancellable?: boolean;
+  latest_turn_subsession_result?: import("../../../core/turn-execution-controls.ts").SubsessionResultTurnContext;
   turn_state: TurnState | "idle";
   branch_info: {
     available: boolean;

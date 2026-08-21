@@ -28,6 +28,9 @@ test("active Steward work has one DS capsule above the Composer", () => {
   );
   expect(activeHtml).toContain('data-shape="pill"');
   expect(activeHtml).toContain('data-test-class="steward-progress-capsule"');
+  expect(activeHtml).toContain('data-alignment="center"');
+  expect(activeHtml).toContain('data-slot="button-icon"');
+  expect(activeHtml).toContain("<canvas");
   expect(activeHtml).toContain("작업 중 · 2/3 · Inspecting the activity surface");
   expect(activeHtml.match(/steward-progress-capsule/g)).toHaveLength(1);
 
@@ -39,6 +42,75 @@ test("active Steward work has one DS capsule above the Composer", () => {
   expect(renderToStaticMarkup(
     <StewardComposerCapsules children={[terminalChild]} />,
   )).toBe("");
+});
+
+test("Steward result synthesis capsule reports preparation and offers no Stop", () => {
+  const summary: SessionSummaryView = {
+    ...HARNESS_SS03_SUMMARY,
+    turn_state: "thinking",
+    latest_turn_cancellable: false,
+    latest_turn_subsession_result: {
+      relation_id: "harness-relation",
+      result_id: "harness-result",
+      safe_title: "Review the activity surface",
+    },
+    latest_progress: {
+      turn_id: "turn-synthesis",
+      state: "thinking",
+      summary: "Review the activity surface 작업에 대한 보고 준비 중",
+      safe_progress_rows: [],
+    },
+  };
+  const capsuleHtml = renderToStaticMarkup(
+    <StewardComposerCapsules
+      children={summary.steward_children ?? []}
+      synthesis={summary.latest_turn_subsession_result}
+    />,
+  );
+  expect(capsuleHtml).toContain(
+    "Review the activity surface 작업에 대한 보고 준비 중",
+  );
+  expect(capsuleHtml).toContain('data-alignment="center"');
+  expect(capsuleHtml).toContain("<canvas");
+
+  const synthesisState = useComposerState(
+    summary,
+    {},
+    EMPTY_SETTINGS,
+    {
+      ...EMPTY_MODEL_CATALOG,
+      models: [{
+        provider_id: "test",
+        provider_label: "Test",
+        model_id: "test",
+        model_ref: "test/model",
+        display_name: "Test",
+        status: "available",
+        default_reasoning_effort: "none",
+        reasoning_efforts: ["none"],
+        token_estimator: "none",
+        runtime_supported: true,
+      }],
+    },
+    "test/model",
+    "ready",
+    "",
+    [],
+    true,
+    0,
+  );
+  expect(synthesisState.activeTurn).toBe(true);
+  expect(synthesisState.canStop).toBe(false);
+
+  useComposerStore.getState().setSnapshot({
+    activeTurn: true,
+    canStop: false,
+    canSend: false,
+    isSending: true,
+  });
+  const toolbar = renderToStaticMarkup(<ComposerToolbar />);
+  expect(toolbar).not.toContain('aria-label="Stop"');
+  expect(toolbar).toContain('aria-label="Send"');
 });
 
 test("active Steward progress is nested in its exact parent assistant row", () => {

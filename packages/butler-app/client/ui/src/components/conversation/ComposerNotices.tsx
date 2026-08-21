@@ -1,15 +1,18 @@
-import type { StewardSessionSummaryView } from "@/app/types.ts";
+import type { SessionSummaryView } from "@/app/types.ts";
 import { GitDependencyNotice } from "./GitDependencyNotice";
 import { StewardComposerCapsules } from "./StewardComposerCapsules.tsx";
 
 export function ComposerNotices({
-  stewardChildren,
+  summary,
 }: {
-  stewardChildren: StewardSessionSummaryView[];
+  summary?: SessionSummaryView | null;
 }) {
   return (
     <>
-      <StewardComposerCapsules children={stewardChildren} />
+      <StewardComposerCapsules
+        children={summary?.steward_children ?? []}
+        synthesis={summary?.latest_turn_subsession_result}
+      />
       <GitDependencyNotice />
     </>
   );

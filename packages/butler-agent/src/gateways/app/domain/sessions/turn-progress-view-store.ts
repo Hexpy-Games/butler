@@ -17,6 +17,7 @@ import type {
   TurnProgressSnapshotView,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
+import { subsessionResultStatusLabel } from "../../../core/turn-execution-controls.ts";
 
 export class AppTurnProgressViewStore {
   constructor(
@@ -85,12 +86,18 @@ export class AppTurnProgressViewStore {
         this.input.deliveryMetadataForTurnRecord(turn),
       ),
     );
-    const progressRows = options.suppressProgressRows
+    const rawProgressRows = options.suppressProgressRows
       ? []
       : progressRowsForTurnState(
           this.input.listProgressRowsForTurn(turn.id),
           turn.state,
         );
+    const synthesis = turn.execution_controls?.subsession_result;
+    const progressRows = synthesis
+      ? rawProgressRows.map((row) => row.kind === "message" && !row.safe_tool_name
+        ? { ...row, safe_label: subsessionResultStatusLabel(synthesis) }
+        : row)
+      : rawProgressRows;
     const progressSummary = publicTurnStatusLabel(
       turn.safe_status_label,
       turn.state,
@@ -121,6 +128,9 @@ export class AppTurnProgressViewStore {
             model_ref: turn.execution_controls.model_ref,
             reasoning_effort: turn.execution_controls.reasoning_effort,
             source: turn.execution_controls.source,
+            ...(turn.execution_controls.subsession_result
+              ? { subsession_result: turn.execution_controls.subsession_result }
+              : {}),
           }
         : undefined,
       execution_model: turn.execution_model,

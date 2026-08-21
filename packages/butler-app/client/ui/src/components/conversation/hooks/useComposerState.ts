@@ -39,10 +39,16 @@ export function useComposerState(
     (row) => row.kind === "todo" && row.bridge_phase === "btcc_work_ledger",
   );
 
-  const activeTurn = Boolean(
+  const parentActive = Boolean(
     activeProgress ||
-    (summary?.turn_state && ACTIVE_TURN_STATES.has(summary.turn_state)) ||
-    firstCancellableWorker(workers),
+    (summary?.turn_state && ACTIVE_TURN_STATES.has(summary.turn_state)),
+  );
+  const activeWorker = firstCancellableWorker(workers);
+  const activeTurn = Boolean(parentActive || activeWorker);
+  const synthesisLocked = parentActive &&
+    summary?.latest_turn_cancellable === false;
+  const canStop = !synthesisLocked && Boolean(
+    isSending || parentActive || activeWorker,
   );
   const canSend =
     modelState === "ready" &&
@@ -67,6 +73,7 @@ export function useComposerState(
     canSend,
     workers,
     activeTurn,
+    canStop,
     taskRows,
     taskTurnState: activeProgress?.state,
     context,
