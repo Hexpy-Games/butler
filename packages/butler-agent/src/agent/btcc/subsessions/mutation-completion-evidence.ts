@@ -10,6 +10,7 @@ import {
 } from "./completion-evidence-errors.ts";
 import {
   mutationTargetWithinScope,
+  safeRelativeMutationTarget,
   validateMutationArtifactSet,
 } from "./mutation-artifact-evidence.ts";
 
@@ -144,7 +145,19 @@ async function validateAppliedMutationEvidence(
       mutationTool: validateMutationTool(input, effect),
     };
   });
-  const targets = await validateMutationArtifactSet(input, mutations);
+  const requiredFinalTargets = new Set(
+    work.currentPlan!.actions.flatMap((action) => {
+      const target = action.effect
+        ? safeRelativeMutationTarget(action.effect.target)
+        : null;
+      return target && !target.endsWith("/") ? [target] : [];
+    }),
+  );
+  const targets = await validateMutationArtifactSet(
+    input,
+    mutations,
+    requiredFinalTargets,
+  );
   return { effects: applied, targets };
 }
 

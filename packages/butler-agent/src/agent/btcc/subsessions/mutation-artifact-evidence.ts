@@ -21,9 +21,16 @@ type AppliedMutationEvidence = {
   mutationTool: GuidedToolJournalRecord;
 };
 
+type MutationArtifactEvidence = {
+  path: string;
+  afterSha256?: string;
+  createdFromAbsent: boolean;
+};
+
 export async function validateMutationArtifactSet(
   input: CompletionEvidenceInput,
   mutations: readonly AppliedMutationEvidence[],
+  requiredFinalTargets: ReadonlySet<string>,
 ): Promise<string[]> {
   const child = input.sessionBindings.getBySessionId(
     input.relation.child_session_id,
@@ -70,12 +77,16 @@ export async function validateMutationArtifactSet(
           receiptResult,
           mutation.sanitizedTarget,
         )
-      : singleArtifactEvidence(mutation.sanitizedTarget, receiptResult);
+      : singleArtifactEvidence(
+          mutation.sanitizedTarget,
+          receiptResult,
+          record(mutation.mutationTool.result),
+        );
   });
   if (artifacts.length === 0) {
     factualCompletionFailure("subsession_mutation_file_evidence_missing");
   }
-  const finalArtifacts = new Map<string, (typeof artifacts)[number]>();
+  const finalArtifacts = new Map<string, MutationArtifactEvidence>();
   for (const artifact of artifacts) {
     const target = safeRelativeMutationTarget(artifact.path);
     if (
@@ -84,7 +95,12 @@ export async function validateMutationArtifactSet(
     ) {
       factualCompletionFailure("subsession_mutation_target_out_of_scope");
     }
-    if (!finalArtifacts.has(target)) finalArtifacts.set(target, artifact);
+    const latest = finalArtifacts.get(target);
+    if (!latest) {
+      finalArtifacts.set(target, { ...artifact, path: target });
+    } else {
+      latest.createdFromAbsent = artifact.createdFromAbsent;
+    }
   }
   for (const [target, artifact] of finalArtifacts) {
     const absoluteTarget = join(validated.path, target);
@@ -104,6 +120,10 @@ export async function validateMutationArtifactSet(
         "code" in error &&
         error.code === "ENOENT"
       ) {
+        if (artifact.createdFromAbsent && !requiredFinalTargets.has(target)) {
+          finalArtifacts.delete(target);
+          continue;
+        }
         factualCompletionFailure("subsession_mutation_file_evidence_missing");
       }
       throw error;
@@ -151,7 +171,7 @@ function batchArtifactEvidence(
   toolResultValue: unknown,
   receiptResult: Record<string, unknown> | null,
   sanitizedTarget: string,
-): Array<{ path: string; afterSha256: string }> {
+): MutationArtifactEvidence[] {
   const toolArguments = record(toolArgumentsValue);
   const toolResult = record(toolResultValue);
   const argumentEntries = Array.isArray(toolArguments?.edits)
@@ -197,14 +217,19 @@ function batchArtifactEvidence(
     ) {
       factualCompletionFailure("subsession_mutation_batch_evidence_mismatch");
     }
-    return { path, afterSha256: receiptEntry.after_sha256 };
+    return {
+      path,
+      afterSha256: receiptEntry.after_sha256,
+      createdFromAbsent: false,
+    };
   });
 }
 
 function singleArtifactEvidence(
   sanitizedTarget: string,
   receiptResult: Record<string, unknown> | null,
-): Array<{ path: string; afterSha256?: string }> {
+  toolResult: Record<string, unknown> | null,
+): MutationArtifactEvidence[] {
   const target = safeRelativeMutationTarget(
     sanitizedTarget.replace(/^workspace:/u, ""),
   );
@@ -222,6 +247,9 @@ function singleArtifactEvidence(
       ...(typeof receiptResult?.after_sha256 === "string"
         ? { afterSha256: receiptResult.after_sha256 }
         : {}),
+      createdFromAbsent:
+        toolResult?.created_from_absent === true ||
+        receiptResult?.created_from_absent === true,
     },
   ];
 }
