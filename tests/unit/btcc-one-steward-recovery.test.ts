@@ -226,7 +226,7 @@ test("one Steward result survives restart and waits behind a busy Butler turn", 
     });
     const detailRefs = JSON.parse(durableResult?.detail_refs_json ?? "[]") as string[];
     expect(detailRefs).toEqual([expect.stringMatching(/^btcc-final-payload:v1:/u)]);
-    expect(JSON.parse(durableResult?.acceptance_evidence_json ?? "[]")).toHaveLength(3);
+    expect(JSON.parse(durableResult?.acceptance_evidence_json ?? "[]")).toHaveLength(4);
     expect(JSON.parse(durableResult?.changed_artifacts_json ?? "[]")).toEqual([
       "recovery-result.txt",
     ]);
@@ -330,6 +330,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
     port: 0,
     localAuth: { required: true, token: authToken },
   });
+  let blockedRound = 0;
   let blockedDispositionCalls = 0;
   const parentCases = [
     { key: "blocked", status: "blocked" as const },
@@ -361,20 +362,54 @@ test("typed Steward terminal results share the outbox and incomplete context blo
     appLocalAuth: { required: true, token: authToken },
     modelRound: { async runRound(request) {
       const requestBody = request.messages.map((message) => message.content).join("\n");
-      if (blockedDispositionCalls === 0 &&
-        request.tools.some((tool) => tool.name === "record_work_disposition") &&
-        requestBody.includes("blocked terminal result test")) {
+      if (requestBody.includes("blocked terminal result test") &&
+        request.tools.some((tool) => tool.name === "record_work_disposition")) {
+        blockedRound += 1;
+        if (blockedRound === 1) {
+          return { toolCalls: [toolCall("blocked-plan", "replace_work_plan", {
+            objective: "Apply the verified partial file before the external input blocks completion.",
+            actions: [{
+              action_key: "write-partial-file",
+              description: "Write the verified partial artifact.",
+              dependency_keys: [],
+              effect: { capability: "write_file", target: "terminal-result.txt" },
+            }, {
+              action_key: "await-required-input",
+              description: "Finish after the required external input is available.",
+              dependency_keys: ["write-partial-file"],
+            }],
+            checks: ["The partial artifact is preserved if completion blocks"],
+          })] };
+        }
+        if (blockedRound === 2) {
+          return { toolCalls: [toolCall("blocked-plan-review", "record_work_review", {
+            subject: "plan",
+            verdict: "accept",
+            summary: "The partial mutation is bounded before the external dependency.",
+          })] };
+        }
+        if (blockedRound === 3) {
+          return { toolCalls: [toolCall("blocked-write", "write_file", {
+            path: "terminal-result.txt",
+            content: "verified partial change\n",
+          })] };
+        }
+        if (blockedRound > 4) {
+          return { text: "Blocked Steward terminal report.", toolCalls: [] };
+        }
         const workId = requestBody.match(/guided-work-[a-f0-9]{64}/u)?.[0];
         if (!workId) throw new Error("blocked Steward Work id was not projected to the model");
         blockedDispositionCalls += 1;
-        return {
-          toolCalls: [toolCall("blocked", "record_work_disposition", {
-            work_id: workId,
-            disposition: "blocked",
-            summary: "The bounded Steward task is blocked.",
-            next_condition: "The required bounded input is unavailable.",
-          })],
-        };
+        return { toolCalls: [toolCall("blocked", "record_work_disposition", {
+          work_id: workId,
+          disposition: "blocked",
+          summary: "The bounded Steward task is blocked after one verified partial change.",
+          next_condition: "The required bounded input is unavailable.",
+          action_updates: [
+            { action_key: "write-partial-file", status: "done" },
+            { action_key: "await-required-input", status: "blocked" },
+          ],
+        })] };
       }
       const status = requestBody.match(/Status: (blocked|failed|cancelled)/u)?.[1] ?? "unknown";
       return { text: `Terminal synthesis ${status}.`, toolCalls: [] };
@@ -511,6 +546,20 @@ test("typed Steward terminal results share the outbox and incomplete context blo
         WHERE s.status = 'blocked' AND s.code IS NULL
       `).all();
       expect(blockedRelation).toHaveLength(1);
+      const blockedResult = finalDb.query<{
+        acceptance_evidence_json: string;
+        changed_artifacts_json: string;
+        remaining_risks_json: string;
+      }, [string]>(`
+        SELECT acceptance_evidence_json, changed_artifacts_json, remaining_risks_json
+        FROM btcc_steward_results WHERE relation_id = ?
+      `).get(blockedRelation[0]!.relation_id);
+      expect(JSON.parse(blockedResult?.changed_artifacts_json ?? "[]"))
+        .toEqual(["terminal-result.txt"]);
+      expect(JSON.parse(blockedResult?.acceptance_evidence_json ?? "[]").join(" "))
+        .toContain("verified applied mutation receipt");
+      expect(JSON.parse(blockedResult?.remaining_risks_json ?? "[]").join(" "))
+        .toContain("preserved partial changes");
       expect(finalDb.query<{ status: string }, [string]>(`
         SELECT status FROM btcc_guided_works WHERE session_id = ?
       `).all(blockedRelation[0]!.child_session_id)).toEqual([{ status: "blocked" }]);
@@ -709,7 +758,9 @@ function recoveryRound(input: {
       childRounds.set(childKey, round);
       if (round === 1) return { toolCalls: [toolCall("plan", "replace_work_plan", {
         objective: "Create and verify one bounded recovery result file.",
-        actions: [{ action_key: "write-recovery-result", description: "Write the recovery result file.", dependency_keys: [], effect: { capability: "write_file", target: "recovery-result.txt" } }],
+        actions: [{ action_key: "write-recovery-result", description: "Write the recovery result file.", dependency_keys: [], effect: { capability: "write_file", target: "recovery-result.txt" } }, {
+          action_key: "verify-recovery-result", description: "Verify the recovery result file.", dependency_keys: ["write-recovery-result"],
+        }],
         checks: ["recovery-result.txt contains the expected mutation"],
       })] };
       if (round === 2) return { toolCalls: [toolCall("review-plan", "record_work_review", {
@@ -717,10 +768,10 @@ function recoveryRound(input: {
       })] };
       if (round === 3) return { toolCalls: [toolCall("write", "write_file", { path: "recovery-result.txt", content: "recovery mutation\n" })] };
       if (round === 4) return { toolCalls: [toolCall("review-result", "record_work_review", {
-        subject: "result", verdict: "accept", summary: "The recovery mutation was verified.", action_updates: [{ action_key: "write-recovery-result", status: "done" }],
+        subject: "result", verdict: "accept", summary: "The recovery mutation was verified.", action_updates: [{ action_key: "write-recovery-result", status: "done" }, { action_key: "verify-recovery-result", status: "done" }],
       })] };
       if (round === 5) return { toolCalls: [toolCall("review-completion", "record_work_review", {
-        subject: "completion", verdict: "accept", summary: "The recovery mutation satisfies completion.", action_updates: [{ action_key: "write-recovery-result", status: "done" }],
+        subject: "completion", verdict: "accept", summary: "The recovery mutation satisfies completion.", action_updates: [{ action_key: "write-recovery-result", status: "done" }, { action_key: "verify-recovery-result", status: "done" }],
       })] };
       if (round === 6) {
         input.childFinalStarted.resolve();
@@ -730,7 +781,7 @@ function recoveryRound(input: {
         ).at(-1);
         if (!workId) throw new Error("Steward Work id was not projected to the model");
         return { toolCalls: [toolCall("complete", "record_work_disposition", {
-          work_id: workId, disposition: "completed", summary: "The recovery mutation completed.", action_updates: [{ action_key: "write-recovery-result", status: "done" }],
+          work_id: workId, disposition: "completed", summary: "The recovery mutation completed.", action_updates: [{ action_key: "write-recovery-result", status: "done" }, { action_key: "verify-recovery-result", status: "done" }],
         })] };
       }
       const receiptId = request.messages.map((message) => message.content).join("\n")

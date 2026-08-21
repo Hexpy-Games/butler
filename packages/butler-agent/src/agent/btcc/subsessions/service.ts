@@ -297,8 +297,8 @@ function nextOrdinal(input: SubsessionDelegationDependencies, parentSessionId: s
 function renderStewardInput(packet: DelegationPacket): string {
   return [
     packet.execution_mode === "read_only"
-      ? "Steward role contract: execute exactly one bounded effect-free inspection in the validated project workspace."
-      : "Steward role contract: execute exactly one bounded mutation and verify it in the session-owned worktree.",
+      ? "Steward role contract: execute the bounded delegated inspection through the ordinary BTCC plan, evidence, review, validation, and terminal lifecycle in the validated project workspace."
+      : "Steward role contract: execute the bounded delegated Work through the ordinary BTCC plan, mutation, validation, correction, review, and terminal lifecycle in the session-owned worktree.",
     `delegation_id: ${packet.delegation_id}`,
     `task_id: ${packet.task_id}`,
     `relation_id: ${packet.relation_id}`,

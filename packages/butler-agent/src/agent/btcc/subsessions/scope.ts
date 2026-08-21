@@ -1,6 +1,7 @@
-/** The mutation Steward effect surface remains intentionally closed. */
+/** The mutation Steward surface admits file effects plus bounded workspace commands. */
 export const SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS = [
   "edit_file:workspace",
+  "run_command:workspace",
   "write_file:workspace",
 ] as const;
 

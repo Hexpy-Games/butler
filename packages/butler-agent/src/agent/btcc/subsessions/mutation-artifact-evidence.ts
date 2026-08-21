@@ -14,16 +14,16 @@ import {
   retryableCompletionFailure,
 } from "./completion-evidence-errors.ts";
 
-type AppliedMutationEffect = {
+type AppliedMutationEvidence = {
   capability: string;
   sanitizedTarget: string;
   receipt: { result: unknown };
+  mutationTool: GuidedToolJournalRecord;
 };
 
-export async function validateMutationArtifacts(
+export async function validateMutationArtifactSet(
   input: CompletionEvidenceInput,
-  effect: AppliedMutationEffect,
-  mutationTool: GuidedToolJournalRecord,
+  mutations: readonly AppliedMutationEvidence[],
 ): Promise<string[]> {
   const child = input.sessionBindings.getBySessionId(
     input.relation.child_session_id,
@@ -60,24 +60,22 @@ export async function validateMutationArtifacts(
   ) {
     factualCompletionFailure("subsession_child_worktree_identity_invalid");
   }
-  const receiptResult = record(effect.receipt.result);
-  const artifacts =
-    effect.capability === "edit_file" &&
-    effect.sanitizedTarget.startsWith("workspace:batch:")
+  const artifacts = mutations.flatMap((mutation) => {
+    const receiptResult = record(mutation.receipt.result);
+    return mutation.capability === "edit_file" &&
+        mutation.sanitizedTarget.startsWith("workspace:batch:")
       ? batchArtifactEvidence(
-          mutationTool.arguments,
-          mutationTool.result,
+          mutation.mutationTool.arguments,
+          mutation.mutationTool.result,
           receiptResult,
-          effect.sanitizedTarget,
+          mutation.sanitizedTarget,
         )
-      : singleArtifactEvidence(effect.sanitizedTarget, receiptResult);
-  if (
-    artifacts.length === 0 ||
-    new Set(artifacts.map((artifact) => artifact.path)).size !==
-      artifacts.length
-  ) {
+      : singleArtifactEvidence(mutation.sanitizedTarget, receiptResult);
+  });
+  if (artifacts.length === 0) {
     factualCompletionFailure("subsession_mutation_file_evidence_missing");
   }
+  const finalArtifacts = new Map<string, (typeof artifacts)[number]>();
   for (const artifact of artifacts) {
     const target = safeRelativeMutationTarget(artifact.path);
     if (
@@ -86,6 +84,9 @@ export async function validateMutationArtifacts(
     ) {
       factualCompletionFailure("subsession_mutation_target_out_of_scope");
     }
+    if (!finalArtifacts.has(target)) finalArtifacts.set(target, artifact);
+  }
+  for (const [target, artifact] of finalArtifacts) {
     const absoluteTarget = join(validated.path, target);
     if (
       isAbsolute(target) ||
@@ -114,7 +115,7 @@ export async function validateMutationArtifacts(
       factualCompletionFailure("subsession_mutation_file_receipt_mismatch");
     }
   }
-  return artifacts.map((artifact) => artifact.path);
+  return [...finalArtifacts.keys()].sort();
 }
 
 export function mutationTargetWithinScope(

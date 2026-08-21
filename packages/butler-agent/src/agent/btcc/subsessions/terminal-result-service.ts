@@ -3,6 +3,7 @@ import {
   validateStewardCompletion,
 } from "./completion-evidence.ts";
 import { resolveAcceptedStewardReport } from "./accepted-terminal-report.ts";
+import { validateBlockedMutationEvidence } from "./mutation-completion-evidence.ts";
 import { subsessionChildTurnId, subsessionResultId } from "./identities.ts";
 import {
   completePacketContext,
@@ -76,56 +77,68 @@ export async function completeStewardResultForDependencies(
       // import the Worker-only task_needs_split code into this vertical.
       terminalStatus = "blocked";
       terminalCode = null;
+      const partial = packet?.execution_mode === "mutation"
+        ? await validateBlockedMutationEvidence({
+            relation,
+            packet,
+            childTurnId: resultInput.childTurnId,
+            sessionBindings: input.sessionBindings,
+            durableWork: input.durableWork,
+            rootWorkId: input.store.rootWorkIdByRelationId(relation.relation_id),
+            toolJournal: input.toolJournal,
+            effectJournal: input.effectJournal,
+          }, work)
+        : { acceptanceEvidence: [], changedArtifacts: [] };
       evidence = {
         summary: safeTerminalSummary("blocked", null),
-        acceptanceEvidence: [],
-        changedArtifacts: [],
-        ...emptyReportDetails(),
+        acceptanceEvidence: partial.acceptanceEvidence,
+        changedArtifacts: partial.changedArtifacts,
+        ...emptyReportDetails(partial.changedArtifacts.length > 0),
       };
     } else {
-    try {
-      const completion = await validateStewardCompletion({
-        relation,
-        packet: packet!,
-        childTurnId: resultInput.childTurnId,
-        sessionBindings: input.sessionBindings,
-        durableWork: input.durableWork,
-        rootWorkId: input.store.rootWorkIdByRelationId(relation.relation_id),
-        toolJournal: input.toolJournal,
-        effectJournal: input.effectJournal,
-      });
-      const report = await resolveAcceptedStewardReport({
-        binding: {
-          relationId: relation.relation_id,
-          resultId: resultInput.resultId,
-          childSessionId: relation.child_session_id,
+      try {
+        const completion = await validateStewardCompletion({
+          relation,
+          packet: packet!,
           childTurnId: resultInput.childTurnId,
-        },
-        reportEvidenceAnchors: completion.reportEvidenceAnchors,
-        ...(resultInput.summary !== undefined ? { reportedContent: resultInput.summary } : {}),
-        turns: input.parentTurns,
-      });
-      evidence = {
-        summary: report.summary,
-        acceptanceEvidence: completion.acceptanceEvidence,
-        changedArtifacts: completion.changedArtifacts,
-        commits: report.commits,
-        tests: report.tests,
-        remainingRisks: report.remainingRisks,
-        followUpRecommendations: report.followUpRecommendations,
-        detailRefs: report.detailRefs,
-      };
-    } catch (error) {
-      if (!isFactualCompletionFailure(error)) throw error;
-      terminalStatus = "failed";
-      terminalCode = "steward_execution_failed";
-      evidence = {
-        summary: safeTerminalSummary("failed", terminalCode),
-        acceptanceEvidence: [],
-        changedArtifacts: [],
-        ...emptyReportDetails(),
-      };
-    }
+          sessionBindings: input.sessionBindings,
+          durableWork: input.durableWork,
+          rootWorkId: input.store.rootWorkIdByRelationId(relation.relation_id),
+          toolJournal: input.toolJournal,
+          effectJournal: input.effectJournal,
+        });
+        const report = await resolveAcceptedStewardReport({
+          binding: {
+            relationId: relation.relation_id,
+            resultId: resultInput.resultId,
+            childSessionId: relation.child_session_id,
+            childTurnId: resultInput.childTurnId,
+          },
+          reportEvidenceAnchors: completion.reportEvidenceAnchors,
+          ...(resultInput.summary !== undefined ? { reportedContent: resultInput.summary } : {}),
+          turns: input.parentTurns,
+        });
+        evidence = {
+          summary: report.summary,
+          acceptanceEvidence: completion.acceptanceEvidence,
+          changedArtifacts: completion.changedArtifacts,
+          commits: report.commits,
+          tests: report.tests,
+          remainingRisks: report.remainingRisks,
+          followUpRecommendations: report.followUpRecommendations,
+          detailRefs: report.detailRefs,
+        };
+      } catch (error) {
+        if (!isFactualCompletionFailure(error)) throw error;
+        terminalStatus = "failed";
+        terminalCode = "steward_execution_failed";
+        evidence = {
+          summary: safeTerminalSummary("failed", terminalCode),
+          acceptanceEvidence: [],
+          changedArtifacts: [],
+          ...emptyReportDetails(),
+        };
+      }
     }
   } else {
     evidence = {
@@ -180,11 +193,13 @@ function nonEmpty(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function emptyReportDetails() {
+function emptyReportDetails(preservedPartialMutation = false) {
   return {
     commits: [] as string[],
     tests: [] as string[],
-    remainingRisks: [] as string[],
+    remainingRisks: preservedPartialMutation
+      ? ["The delegated Work stopped before completion; review the preserved partial changes before applying them."]
+      : [] as string[],
     followUpRecommendations: [] as string[],
     detailRefs: [] as string[],
   };

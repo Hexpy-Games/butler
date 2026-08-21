@@ -13,12 +13,12 @@ export const delegateToStewardToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "delegate_to_steward",
   description: [
-    "Delegate one bounded mutation or effect-free inspection to exactly one ordinary Steward session.",
+    "Delegate one bounded effect-free inspection or iterative mutation Work to exactly one ordinary Steward session.",
     "Provide the execution mode, minimal task packet, acceptance criteria, allowed native surface, and mutation scope for mutation only.",
     "For read_only, allowed_tools_and_effects is exactly the complete five-value array [grep_files:workspace, list_files:workspace, read_file:workspace, web_read:network, web_search:network], and mutation_scope is [].",
-    "Every mutation Steward can safely list, grep, and read the isolated worktree before applying an admitted effect.",
-    "For mutation, allowed_tools_and_effects may contain only edit_file:workspace or write_file:workspace, and mutation_scope must contain exact relative files or directory prefixes; terminal dir/** shorthand is canonicalized to dir/, while root or embedded wildcards remain forbidden.",
-    "The Steward receives no Butler persona or transcript and reports one success result for synthesis.",
+    "Every mutation Steward can list, grep, read, apply admitted edit/write effects, and run bounded workspace validation through the ordinary BTCC loop.",
+    "For mutation, allowed_tools_and_effects may contain edit_file:workspace, write_file:workspace, and run_command:workspace; mutation_scope must contain exact relative files or directory prefixes; terminal dir/** shorthand is canonicalized to dir/, while root or embedded wildcards remain forbidden.",
+    "The Steward receives bounded delegated context instead of Butler persona/transcript and returns one canonical terminal result for synthesis.",
   ].join(" "),
   parameters: {
     type: "object",
@@ -95,5 +95,6 @@ export const delegateToStewardToolMetadata: ToolCapabilityMetadata = {
   safetyNotes: [
     "Creates one ordinary Steward session with one immutable minimal packet.",
     "Mutation uses a validated session-owned isolated worktree; read-only inspection uses only the validated project workspace.",
+    "The delegated packet bounds authority and context; it does not replace the ordinary BTCC Work lifecycle.",
   ],
 };
