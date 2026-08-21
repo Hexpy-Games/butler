@@ -338,9 +338,9 @@ test("SS-03B delegation tool contract exposes canonical execution surfaces", () 
   }
 });
 
-test("SS-03B Steward instructions require ordered result and completion evidence", () => {
-  const requiredOrder =
-    "Before calling record_work_disposition with disposition completed, call record_work_review for an accepted result Review bound to the current results, then call record_work_review for an accepted completion Validation bound to that accepted result Review and the current Plan/action states; only then settle the child Work as completed.";
+test("Steward instructions use the ordinary BTCC closeout authority", () => {
+  const commonCloseout =
+    "Use record_work_disposition as the sole Work closeout authority, exactly as an ordinary Butler BTCC Turn does. Reviews and completion Validation are optional quality records, never Steward-only completion gates.";
   const readOnlyPlanContract =
     "For read_only, every Plan action must omit the effect field entirely; reads and synthesis are evidence actions, never effects.";
   const multiStepPlanContract =
@@ -362,7 +362,9 @@ test("SS-03B Steward instructions require ordered result and completion evidence
   const readOnlyInstructions = guidedStewardInstructions({
     subsession: { ...common, executionMode: "read_only" },
   });
-  expect(readOnlyInstructions).toContain(requiredOrder);
+  expect(readOnlyInstructions).toContain(commonCloseout);
+  expect(readOnlyInstructions).not.toContain("only then settle the child Work as completed");
+  expect(readOnlyInstructions).not.toContain("at least two material read operations");
   expect(readOnlyInstructions).toContain(readOnlyPlanContract);
   expect(readOnlyInstructions).toContain(multiStepPlanContract);
   const mutationInstructions = guidedStewardInstructions({
@@ -373,7 +375,8 @@ test("SS-03B Steward instructions require ordered result and completion evidence
       allowedToolsAndEffects: ["write_file:workspace"],
     },
   });
-  expect(mutationInstructions).toContain(requiredOrder);
+  expect(mutationInstructions).toContain(commonCloseout);
+  expect(mutationInstructions).not.toContain("only then settle the child Work as completed");
   expect(mutationInstructions).toContain(multiStepPlanContract);
   expect(mutationInstructions).toContain(
     "Use list_files, grep_files, and read_file to discover repository targets",

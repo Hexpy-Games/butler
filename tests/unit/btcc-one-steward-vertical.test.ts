@@ -23,10 +23,6 @@ import { normalizeSubsessionAllowedToolsAndEffects } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
 import type { DelegationRequest } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/contracts.ts";
-import { distinctMaterialReadCount } from
-  "../../packages/butler-agent/src/agent/btcc/subsessions/read-only-material-evidence.ts";
-import type { GuidedToolJournalRecord } from
-  "../../packages/butler-agent/src/agent/btcc/ports/guided-tool-journal.ts";
 
 const READ_ONLY_SURFACE = [
   "grep_files:workspace",
@@ -1017,16 +1013,15 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       btccDb.close();
     }
 
-    for (const rejected of [
-      { key: "unusable", text: "simulate unusable terminal report evidence" },
-      { key: "private-path", text: "simulate private-path terminal report evidence" },
+    for (const accepted of [
+      { key: "alternate-shape", text: "simulate unusable terminal report evidence" },
     ]) {
-      const chatId = `${rejected.key}-steward-report`;
+      const chatId = `${accepted.key}-steward-report`;
       const parentSessionId = sessionHintForRow(chatId);
       await fetch(`${app.url}sessions`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${authToken}` },
-        body: JSON.stringify({ kind: "chat", title: "Rejected Steward report", session_hint: chatId }),
+        body: JSON.stringify({ kind: "chat", title: "Accepted Steward report", session_hint: chatId }),
       });
       bindings.upsert({
         sessionId: parentSessionId, role: "butler", projectId: "project-sandy",
@@ -1036,17 +1031,17 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       });
       const message = {
         chat_id: chatId,
-        text: `Inspect the source marker, but ${rejected.text}.`,
+        text: `Inspect the source marker, but ${accepted.text}.`,
         model: "openai/gpt-5.5", reasoning_effort: "low", access_mode: "full_access",
-        client_message_id: `client-${rejected.key}-report-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+        client_message_id: `client-${accepted.key}-report-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
       };
       expect((await postAppMessage(app.url, authToken, message)).status).toBe(202);
       expect((await postAppMessage(app.url, authToken, message)).status).toBe(202);
       await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
       const rejectedDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
       try {
-        expect(rejectedDb.query<{
-          status: string; code: string; detail_refs_json: string; result_count: number;
+        const acceptedResult = rejectedDb.query<{
+          status: string; code: string | null; detail_refs_json: string; result_count: number;
         }, [string]>(`
           SELECT result.status, result.code, result.detail_refs_json,
             (SELECT COUNT(*) FROM btcc_steward_results AS all_results
@@ -1054,33 +1049,41 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
           FROM btcc_session_relations AS relation
           JOIN btcc_steward_results AS result ON result.relation_id = relation.relation_id
           WHERE relation.parent_session_id = ?
-        `).get(parentSessionId)).toEqual({
-          status: "failed", code: "steward_execution_failed",
-          detail_refs_json: "[]", result_count: 1,
+        `).get(parentSessionId);
+        expect(acceptedResult?.status).toBe("success");
+        expect(acceptedResult?.code).toBeNull();
+        expect(JSON.parse(acceptedResult?.detail_refs_json ?? "[]")).toHaveLength(1);
+        expect(acceptedResult?.result_count).toBe(1);
+        const failedToolEvent = rejectedDb.query<{ event_json: string }, [string]>(`
+          SELECT progress.event_json
+          FROM btcc_progress_events AS progress
+          JOIN btcc_session_relations AS relation
+            ON relation.child_session_id = progress.session_id
+          WHERE relation.parent_session_id = ?
+            AND progress.event_json LIKE '%tool.failed%'
+          ORDER BY progress.created_at ASC, progress.event_id ASC
+          LIMIT 1
+        `).get(parentSessionId);
+        expect(failedToolEvent).toBeDefined();
+        const failedTool = JSON.parse(failedToolEvent!.event_json) as {
+          kind?: string;
+          payload?: Record<string, unknown>;
+        };
+        expect(failedTool).toMatchObject({
+          kind: "tool.failed",
+          payload: { toolName: "read_file", operationStatus: "failed" },
         });
-        if (rejected.key === "unusable") {
-          const failedToolEvent = rejectedDb.query<{ event_json: string }, [string]>(`
-            SELECT progress.event_json
-            FROM btcc_progress_events AS progress
-            JOIN btcc_session_relations AS relation
-              ON relation.child_session_id = progress.session_id
-            WHERE relation.parent_session_id = ?
-              AND progress.event_json LIKE '%tool.failed%'
-            ORDER BY progress.created_at ASC, progress.event_id ASC
-            LIMIT 1
-          `).get(parentSessionId);
-          expect(failedToolEvent).toBeDefined();
-          const failedTool = JSON.parse(failedToolEvent!.event_json) as {
-            kind?: string;
-            payload?: Record<string, unknown>;
-          };
-          expect(failedTool).toMatchObject({
-            kind: "tool.failed",
-            payload: { toolName: "read_file", operationStatus: "failed" },
-          });
-          expect(JSON.stringify(failedTool)).not.toContain(root);
-          expect(JSON.stringify(failedTool)).not.toContain(authToken);
-        }
+        expect(JSON.stringify(failedTool)).not.toContain(root);
+        expect(JSON.stringify(failedTool)).not.toContain(authToken);
+        const delegatedResultText = rejectedDb.query<{ input_json: string }, [string]>(`
+          SELECT outbox.input_json
+          FROM btcc_subsession_outbox AS outbox
+          JOIN btcc_session_relations AS relation
+            ON relation.relation_id = outbox.relation_id
+          WHERE relation.parent_session_id = ?
+        `).get(parentSessionId)?.input_json ?? "";
+        expect(delegatedResultText).not.toContain("steward_execution_failed");
+        expect(delegatedResultText).not.toContain("Steward could not complete the bounded task.");
       } finally {
         rejectedDb.close();
       }
@@ -1209,29 +1212,6 @@ test("Steward scope rejects wildcard capabilities and file boundary escapes", as
   });
   expect(parentRead).toMatchObject({ ok: false });
   expect(JSON.stringify(parentRead)).not.toContain(outside);
-});
-
-test("read-only material evidence rejects empty and duplicate reads", () => {
-  const read = (callId: string, path: string, result: unknown): GuidedToolJournalRecord => ({
-    callId,
-    toolName: "read_file",
-    rawArguments: JSON.stringify({ requests: [{ path }] }),
-    arguments: { requests: [{ path }] },
-    status: "completed",
-    result,
-  });
-  expect(distinctMaterialReadCount([
-    read("empty-a", "src/a.ts", { files: [] }),
-    read("empty-b", "src/b.ts", { files: [] }),
-  ])).toBe(0);
-  expect(distinctMaterialReadCount([
-    read("duplicate-a", "src/a.ts", { files: [{ path: "src/a.ts", content: "marker" }] }),
-    read("duplicate-b", "src/a.ts", { files: [{ path: "src/a.ts", content: "marker" }] }),
-  ])).toBe(1);
-  expect(distinctMaterialReadCount([
-    read("material-a", "src/a.ts", { files: [{ path: "src/a.ts", content: "marker" }] }),
-    read("material-b", "src/b.ts", { files: [{ path: "src/b.ts", content: "marker" }] }),
-  ])).toBe(2);
 });
 
 async function readAppSnapshot(

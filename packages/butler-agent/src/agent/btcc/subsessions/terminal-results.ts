@@ -89,7 +89,6 @@ function validProjectContext(context: DelegationPacket["project_context"]): bool
 }
 
 export function defaultCode(status: StewardResultStatus): StewardResultCode | null {
-  if (status === "failed") return "steward_execution_failed";
   if (status === "cancelled") return "steward_cancelled";
   return null;
 }
@@ -99,8 +98,9 @@ export function safeTerminalSummary(
   code: StewardResultCode | null,
 ): string {
   if (code === "delegation_context_incomplete") {
-    return "Steward could not start because required task context was incomplete.";
+    return "Required project context is not available for this delegated work.";
   }
-  if (status === "cancelled") return "Steward task was stopped before completion.";
-  return "Steward could not complete the bounded task.";
+  if (status === "cancelled") return "The delegated work was stopped.";
+  if (status === "blocked") return "The delegated work requires additional input before it can continue.";
+  return "A confirmed system failure ended the delegated session.";
 }

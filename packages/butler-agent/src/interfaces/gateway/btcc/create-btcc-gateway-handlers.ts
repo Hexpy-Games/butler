@@ -67,6 +67,7 @@ export function createBtccGatewayHandlers(
         childTurnId: outcome.turnId,
         resultId: subsessionResultId(route.sessionId, outcome.turnId),
         summary: result.text,
+        status: result.workStatus === "blocked" ? "blocked" : "success",
       });
     }
     const generatedSessionTitle = result.text && outcome.admission !== "replay"

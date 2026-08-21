@@ -226,10 +226,8 @@ test("one Steward result survives restart and waits behind a busy Butler turn", 
     });
     const detailRefs = JSON.parse(durableResult?.detail_refs_json ?? "[]") as string[];
     expect(detailRefs).toEqual([expect.stringMatching(/^btcc-final-payload:v1:/u)]);
-    expect(JSON.parse(durableResult?.acceptance_evidence_json ?? "[]")).toHaveLength(4);
-    expect(JSON.parse(durableResult?.changed_artifacts_json ?? "[]")).toEqual([
-      "recovery-result.txt",
-    ]);
+    expect(JSON.parse(durableResult?.acceptance_evidence_json ?? "[]")).toEqual([]);
+    expect(JSON.parse(durableResult?.changed_artifacts_json ?? "[]")).toEqual([]);
     expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM btcc_subsession_outbox WHERE status = 'delivered'").get()?.count).toBe(1);
     expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM btcc_guided_effects WHERE status = 'applied'").get()?.count).toBe(1);
     const identityAfterRestart = db.query<{
@@ -334,7 +332,6 @@ test("typed Steward terminal results share the outbox and incomplete context blo
   let blockedDispositionCalls = 0;
   const parentCases = [
     { key: "blocked", status: "blocked" as const },
-    { key: "failed", status: "failed" as const, code: "steward_execution_failed" as const },
     { key: "cancelled", status: "cancelled" as const, code: "steward_cancelled" as const },
   ];
   bindings.upsert({
@@ -510,10 +507,9 @@ test("typed Steward terminal results share the outbox and incomplete context blo
       .filter((message) => message.role === "assistant")
       .map((message) => message.text ?? message.content ?? "")
       .filter((text) => text.startsWith("Terminal synthesis "));
-    expect(assistantTexts).toHaveLength(4);
+    expect(assistantTexts).toHaveLength(3);
     for (const expectedText of [
       "Terminal synthesis blocked.",
-      "Terminal synthesis failed.",
       "Terminal synthesis cancelled.",
       "Terminal synthesis blocked.",
     ]) {
@@ -526,10 +522,9 @@ test("typed Steward terminal results share the outbox and incomplete context blo
       const rows = finalDb.query<{ status: string; code: string | null }, []>(`
         SELECT status, code FROM btcc_steward_results ORDER BY created_at ASC
       `).all();
-      expect(rows).toHaveLength(4);
+      expect(rows).toHaveLength(3);
       for (const expected of [
         { status: "blocked", code: null },
-        { status: "failed", code: "steward_execution_failed" },
         { status: "cancelled", code: "steward_cancelled" },
         { status: "blocked", code: "delegation_context_incomplete" },
       ]) {
@@ -554,12 +549,15 @@ test("typed Steward terminal results share the outbox and incomplete context blo
         SELECT acceptance_evidence_json, changed_artifacts_json, remaining_risks_json
         FROM btcc_steward_results WHERE relation_id = ?
       `).get(blockedRelation[0]!.relation_id);
-      expect(JSON.parse(blockedResult?.changed_artifacts_json ?? "[]"))
-        .toEqual(["terminal-result.txt"]);
-      expect(JSON.parse(blockedResult?.acceptance_evidence_json ?? "[]").join(" "))
-        .toContain("verified applied mutation receipt");
-      expect(JSON.parse(blockedResult?.remaining_risks_json ?? "[]").join(" "))
-        .toContain("preserved partial changes");
+      expect(JSON.parse(blockedResult?.changed_artifacts_json ?? "[]")).toEqual([]);
+      expect(JSON.parse(blockedResult?.acceptance_evidence_json ?? "[]")).toEqual([]);
+      expect(JSON.parse(blockedResult?.remaining_risks_json ?? "[]")).toEqual([]);
+      expect(finalDb.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_effects
+        WHERE work_id IN (
+          SELECT work_id FROM btcc_guided_works WHERE session_id = ?
+        ) AND status = 'applied'
+      `).get(blockedRelation[0]!.child_session_id)?.count).toBe(1);
       expect(finalDb.query<{ status: string }, [string]>(`
         SELECT status FROM btcc_guided_works WHERE session_id = ?
       `).all(blockedRelation[0]!.child_session_id)).toEqual([{ status: "blocked" }]);
@@ -574,7 +572,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
         SELECT turn_id, canonical_assistant_message_id FROM btcc_turns
         WHERE session_id = ?
           AND original_message LIKE '%Status: blocked%'
-          AND original_message LIKE '%Summary: Steward could not complete the bounded task.%'
+          AND original_message NOT LIKE '%Code: delegation_context_incomplete%'
       `).all(parentSessionId);
       expect(blockedSynthesisTurns).toHaveLength(1);
       const blockedCanonicalMessageId = blockedSynthesisTurns[0]!.canonical_assistant_message_id;
@@ -598,7 +596,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
     try {
       expect(appDb.query<{ count: number }, []>(`
         SELECT COUNT(*) AS count FROM session_queued_messages WHERE text LIKE 'Subsession result%'
-      `).get()?.count).toBe(4);
+      `).get()?.count).toBe(3);
       expect(appDb.query<{ count: number }, []>(`
         SELECT COUNT(*) AS count FROM session_queued_messages
         WHERE text LIKE 'Subsession result%'

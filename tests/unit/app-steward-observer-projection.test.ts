@@ -197,6 +197,60 @@ describe("App Steward observer projection", () => {
     db.close();
   });
 
+  test("projects legacy Steward-only failures from the common BTCC terminal state", () => {
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("relation-legacy", "parent-legacy", "parent-turn-legacy", "steward-legacy", "anchor-legacy", 1, "Legacy child", "2026-08-21T00:00:00.000Z");
+    db.query(`
+      INSERT INTO btcc_turns (
+        turn_id, session_id, inbox_id, trigger_key, original_message_id,
+        original_message, admission_snapshot_ref, model_selection_json,
+        context_json, semantic_state, final_payload_json,
+        canonical_assistant_message_id, revision, execution_fence,
+        final_disposition
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "steward-turn-legacy", "steward-legacy", "inbox-legacy", "trigger-legacy",
+      "message-legacy", "Review", "snapshot-legacy", "{}", "{}", "delivered",
+      JSON.stringify({
+        content: JSON.stringify({
+          status: "success",
+          summary: { title: "Recovered common BTCC result" },
+        }),
+      }),
+      "assistant-legacy", 1, 0, "completed",
+    );
+    db.query("INSERT INTO btcc_guided_works VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("work-legacy", "steward-legacy", "session", "steward-legacy", "steward-turn-legacy", "message-legacy", "Review", "completed", null, "2026-08-21T00:00:00.000Z", "2026-08-21T00:01:00.000Z");
+    db.query("INSERT INTO btcc_guided_turn_work_bindings VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run("binding-legacy", "steward-turn-legacy", "steward-legacy", "work-legacy", 1, 1, "2026-08-21T00:00:00.000Z");
+    db.query(`
+      INSERT INTO btcc_steward_results (
+        result_id, relation_id, task_id, child_session_id, child_turn_id,
+        status, code, summary, acceptance_evidence_json,
+        changed_artifacts_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "result-legacy", "relation-legacy", "task-legacy", "steward-legacy",
+      "steward-turn-legacy", "failed", "steward_execution_failed",
+      "Steward could not complete the bounded task.", "[]", "[]",
+      "2026-08-21T00:02:00.000Z",
+    );
+
+    const observer = new SqliteStewardObserverStore(db);
+    const snapshot = observer.snapshot("steward-legacy");
+    expect(snapshot?.result).toMatchObject({
+      status: "success",
+      code: null,
+      summary: "Recovered common BTCC result",
+    });
+    expect(JSON.stringify(sessionViewForStewardObserver(
+      observer.relationsForParent("parent-legacy")[0]!, snapshot!, 0,
+    ))).not.toContain("Steward could not complete the bounded task.");
+    db.close();
+  });
+
   test("relation-only observer projection is safe when no child snapshot exists", () => {
     const relation = {
       relation_id: "relation-only",

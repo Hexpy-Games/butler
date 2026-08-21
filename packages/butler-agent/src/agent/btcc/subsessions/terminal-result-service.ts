@@ -1,12 +1,6 @@
-import {
-  isFactualCompletionFailure,
-  validateStewardCompletion,
-} from "./completion-evidence.ts";
 import { resolveAcceptedStewardReport } from "./accepted-terminal-report.ts";
-import { validateBlockedMutationEvidence } from "./mutation-completion-evidence.ts";
 import { subsessionChildTurnId, subsessionResultId } from "./identities.ts";
 import {
-  completePacketContext,
   defaultCode,
   safeTerminalSummary,
 } from "./terminal-results.ts";
@@ -57,11 +51,8 @@ export async function completeStewardResultForDependencies(
   if (!taskId?.trim()) throw new Error("subsession_task_context_missing");
 
   const status = resultInput.status ?? "success";
-  const contextReady = packet !== null && completePacketContext(packet);
-  let terminalStatus: StewardResultStatus = contextReady ? status : "blocked";
-  let terminalCode: StewardResultCode | null = contextReady
-    ? resultInput.code ?? defaultCode(status)
-    : "delegation_context_incomplete";
+  const terminalStatus: StewardResultStatus = status;
+  const terminalCode: StewardResultCode | null = resultInput.code ?? defaultCode(status);
   let evidence: {
     summary: string;
     acceptanceEvidence: string[];
@@ -72,78 +63,34 @@ export async function completeStewardResultForDependencies(
     followUpRecommendations: string[];
     detailRefs: string[];
   };
-  if (terminalStatus === "success") {
-    const work = await input.durableWork.boundWorkForTurn(resultInput.childTurnId);
-    if (work?.status === "blocked" || work?.latestDisposition?.disposition === "blocked") {
-      // A Steward's durable Work disposition is the production authority for
-      // a blocked outcome.  Do not leak its provider-authored explanation or
-      // import the Worker-only task_needs_split code into this vertical.
-      terminalStatus = "blocked";
-      terminalCode = null;
-      const partial = packet?.execution_mode === "mutation"
-        ? await validateBlockedMutationEvidence({
-            relation,
-            packet,
-            childTurnId: resultInput.childTurnId,
-            sessionBindings: input.sessionBindings,
-            durableWork: input.durableWork,
-            rootWorkId: input.store.rootWorkIdByRelationId(relation.relation_id),
-            toolJournal: input.toolJournal,
-            effectJournal: input.effectJournal,
-          }, work)
-        : { acceptanceEvidence: [], changedArtifacts: [] };
-      evidence = {
-        summary: safeTerminalSummary("blocked", null),
-        acceptanceEvidence: partial.acceptanceEvidence,
-        changedArtifacts: partial.changedArtifacts,
-        ...emptyReportDetails(partial.changedArtifacts.length > 0),
-      };
-    } else {
-      try {
-        const completion = await validateStewardCompletion({
-          relation,
-          packet: packet!,
-          childTurnId: resultInput.childTurnId,
-          sessionBindings: input.sessionBindings,
-          durableWork: input.durableWork,
-          rootWorkId: input.store.rootWorkIdByRelationId(relation.relation_id),
-          toolJournal: input.toolJournal,
-          effectJournal: input.effectJournal,
-        });
-        const report = await resolveAcceptedStewardReport({
-          binding: {
-            relationId: relation.relation_id,
-            resultId: resultInput.resultId,
-            childSessionId: relation.child_session_id,
-            childTurnId: resultInput.childTurnId,
-          },
-          reportEvidenceAnchors: completion.reportEvidenceAnchors,
-          ...(resultInput.summary !== undefined ? { reportedContent: resultInput.summary } : {}),
-          turns: input.parentTurns,
-        });
-        evidence = {
-          summary: report.summary,
-          acceptanceEvidence: completion.acceptanceEvidence,
-          changedArtifacts: completion.changedArtifacts,
-          commits: report.commits,
-          tests: report.tests,
-          remainingRisks: report.remainingRisks,
-          followUpRecommendations: report.followUpRecommendations,
-          detailRefs: report.detailRefs,
-        };
-      } catch (error) {
-        if (!isFactualCompletionFailure(error)) throw error;
-        terminalStatus = "failed";
-        terminalCode = "steward_execution_failed";
-        evidence = {
-          summary: safeTerminalSummary("failed", terminalCode),
-          acceptanceEvidence: [],
-          changedArtifacts: [],
-          ...emptyReportDetails(),
-        };
-      }
-    }
+  if (resultInput.summary?.trim()) {
+    const report = await resolveAcceptedStewardReport({
+      binding: {
+        relationId: relation.relation_id,
+        resultId: resultInput.resultId,
+        childSessionId: relation.child_session_id,
+        childTurnId: resultInput.childTurnId,
+      },
+      reportedContent: resultInput.summary,
+      turns: input.parentTurns,
+    });
+    evidence = {
+      summary: report.summary,
+      acceptanceEvidence: [],
+      changedArtifacts: report.changedArtifacts,
+      commits: report.commits,
+      tests: report.tests,
+      remainingRisks: report.remainingRisks,
+      followUpRecommendations: report.followUpRecommendations,
+      detailRefs: report.detailRefs,
+    };
   } else {
+    if (terminalStatus === "success") {
+      throw new Error("subsession_success_result_content_required");
+    }
+    if (terminalStatus === "failed") {
+      throw new Error("subsession_failed_result_summary_required");
+    }
     evidence = {
       summary: safeTerminalSummary(terminalStatus, terminalCode),
       acceptanceEvidence: [],
@@ -157,13 +104,9 @@ export async function completeStewardResultForDependencies(
   const reasoningEffort = nonEmpty(packet?.reasoning_effort) ??
     (typeof parentReasoning === "string" ? nonEmpty(parentReasoning) : null);
   if (!modelRef || !reasoningEffort) throw new Error("subsession_parent_model_context_missing");
-  if (packet && contextReady && packet.task_id !== taskId) {
-    throw new Error("subsession_task_identity_mismatch");
-  }
 
   const result = input.store.commitResult({
     relation,
-    packet,
     childTurnId: resultInput.childTurnId,
     resultId: resultInput.resultId,
     taskId,
@@ -196,13 +139,11 @@ function nonEmpty(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function emptyReportDetails(preservedPartialMutation = false) {
+function emptyReportDetails() {
   return {
     commits: [] as string[],
     tests: [] as string[],
-    remainingRisks: preservedPartialMutation
-      ? ["The delegated Work stopped before completion; review the preserved partial changes before applying them."]
-      : [] as string[],
+    remainingRisks: [] as string[],
     followUpRecommendations: [] as string[],
     detailRefs: [] as string[],
   };

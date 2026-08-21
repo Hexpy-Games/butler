@@ -1,10 +1,9 @@
 import type { SubsessionDelegationDependencies } from "./contracts.ts";
-import { factualCompletionFailure } from "./completion-evidence.ts";
 import { contentRef, digest } from "../identity/index.ts";
 import { subsessionChildTurnId, subsessionResultId } from "./identities.ts";
+import { terminalResultIntegrityFailure } from "./terminal-result-integrity.ts";
+import { projectBtccFinalContentSummary } from "../turn/final-content-summary.ts";
 
-const MAX_REPORT_LENGTH = 16_000;
-const MIN_REPORT_LENGTH = 40;
 const MAX_SUMMARY_LENGTH = 1_000;
 const MAX_LIST_ITEMS = 12;
 
@@ -16,6 +15,7 @@ type AcceptedStewardReport = {
   remainingRisks: string[];
   followUpRecommendations: string[];
   detailRefs: string[];
+  changedArtifacts: string[];
 };
 
 type ReportBinding = {
@@ -55,7 +55,6 @@ export async function resolveParentResultEvidence(input: {
       childSessionId: relation.child_session_id,
       childTurnId: result.child_turn_id,
     },
-    reportEvidenceAnchors: storedReportAnchors(result),
     turns: input.turns,
   });
   if (report.detailRefs[0] !== result.detail_refs[0]) {
@@ -73,7 +72,6 @@ export async function resolveParentResultEvidence(input: {
 /** Resolves the accepted child final payload; no transcript or tool payload is accepted. */
 export async function resolveAcceptedStewardReport(input: {
   binding: ReportBinding;
-  reportEvidenceAnchors: string[];
   reportedContent?: string;
   turns: SubsessionDelegationDependencies["parentTurns"];
 }): Promise<AcceptedStewardReport> {
@@ -86,7 +84,7 @@ export async function resolveAcceptedStewardReport(input: {
   }) | undefined;
   if (!turn || turn.turnId !== input.binding.childTurnId || turn.semanticState !== "delivered" ||
     turn.finalDisposition !== "completed" || !turn.canonicalAssistantMessageId || !payload) {
-    factualCompletionFailure("subsession_terminal_report_missing");
+    terminalResultIntegrityFailure("subsession_terminal_report_missing");
   }
   const content = payload.content.trim();
   const payloadBody = {
@@ -95,6 +93,7 @@ export async function resolveAcceptedStewardReport(input: {
     route: payload.route,
     disposition: payload.disposition,
     content: payload.content,
+    ...(payload.workStatus ? { workStatus: payload.workStatus } : {}),
     ...(payload.artifacts?.length ? { artifacts: payload.artifacts } : {}),
     ...(payload.modelIdentity ? { modelIdentity: payload.modelIdentity } : {}),
   };
@@ -102,12 +101,12 @@ export async function resolveAcceptedStewardReport(input: {
   if (payload.turnId !== input.binding.childTurnId || payload.disposition !== "completed" ||
     payload.content !== content || payload.contentSha256 !== digest(content) ||
     payload.ref.id !== expectedRef.id || payload.ref.sha256 !== expectedRef.sha256) {
-    factualCompletionFailure("subsession_terminal_report_identity_mismatch");
+    terminalResultIntegrityFailure("subsession_terminal_report_identity_mismatch");
   }
   if (input.reportedContent !== undefined && input.reportedContent.trim() !== content) {
-    factualCompletionFailure("subsession_terminal_report_identity_mismatch");
+    terminalResultIntegrityFailure("subsession_terminal_report_identity_mismatch");
   }
-  const parsed = parseUsablePublicReport(content, input.reportEvidenceAnchors);
+  const parsed = projectAcceptedPublicReport(content);
   return {
     content,
     summary: parsed.conclusion.slice(0, MAX_SUMMARY_LENGTH),
@@ -126,41 +125,16 @@ export async function resolveAcceptedStewardReport(input: {
         payload.contentSha256,
       ].join(":"),
     ],
+    changedArtifacts: (payload.artifacts ?? []).map((artifact) => artifact.safePathLabel),
   };
 }
 
-function parseUsablePublicReport(content: string, anchors: string[]): {
+function projectAcceptedPublicReport(content: string): {
   conclusion: string;
   tests: string;
 } {
-  if (content.length < MIN_REPORT_LENGTH || content.length > MAX_REPORT_LENGTH ||
-    [...content].some((character) => {
-      const codePoint = character.codePointAt(0) ?? 0;
-      return codePoint < 32 && character !== "\n" && character !== "\r" && character !== "\t";
-    })) {
-    factualCompletionFailure("subsession_terminal_report_unusable");
-  }
-  const privatePatterns = [
-    /(?:delegation_id|parent_session_id|parent_turn_id|workspace_and_worktree|mutation_scope|allowed_tools_and_effects|expected_result_schema)\s*:/iu,
-    /(?:authorization\s*:\s*bearer|api[_ -]?key|private[_ -]?key|client[_ -]?secret)\s*[:=]/iu,
-    /(?:rawArguments|tool_calls?|chain[ -]of[ -]thought|hidden reasoning)\s*[:=]/iu,
-  ];
-  if (privatePatterns.some((pattern) => pattern.test(content)) || hasPrivatePath(content)) {
-    factualCompletionFailure("subsession_terminal_report_private");
-  }
-  const normalized = content.replace(/\s+/gu, " ").trim();
-  if (/^Steward (?:completed|finished) the bounded .*(?:verified|material) evidence\.?$/iu.test(normalized) ||
-    anchors.length === 0) {
-    factualCompletionFailure("subsession_terminal_report_unusable");
-  }
-  const structuredConclusion = reportField(content, "conclusion") ??
-    structuredJsonConclusion(content);
   const structuredTests = reportField(content, "tests?");
-  if (structuredTests &&
-    !/(?:pass(?:ed)?|fail(?:ed)?|not (?:run|executed)|unavailable)/iu.test(structuredTests)) {
-    factualCompletionFailure("subsession_terminal_report_unusable");
-  }
-  const conclusion = structuredConclusion ?? firstPublicSummary(content);
+  const conclusion = projectBtccFinalContentSummary(content);
   const tests = structuredTests ?? "";
   return { conclusion, tests };
 }
@@ -189,64 +163,9 @@ function reportField(content: string, label: string): string | undefined {
     ?.replace(/\s+/gu, " ").trim();
 }
 
-function structuredJsonConclusion(content: string): string | undefined {
-  try {
-    const report = JSON.parse(content) as unknown;
-    if (!isPlainObject(report)) return undefined;
-    const summary = report.summary;
-    const conclusion = isPlainObject(summary) ? summary.conclusion : report.conclusion;
-    return typeof conclusion === "string"
-      ? conclusion.replace(/\s+/gu, " ").trim() || undefined
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function firstPublicSummary(content: string): string {
-  const line = content.split(/\r?\n/gu)
-    .map((value) => value.replace(/^\s*(?:#{1,6}|[-*])\s*/u, "")
-      .replace(/[*_`]/gu, "").replace(/\s+/gu, " ").trim())
-    .find((value) => value.length >= 20 &&
-      !["{", "}", "[", "]", ","].includes(value) &&
-      !/^(?:"[^"]+"\s*:|conclusion|evidence|tests?|remaining risks?)\s*:?/iu.test(value));
-  if (!line) factualCompletionFailure("subsession_terminal_report_unusable");
-  return line;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function validateReportBinding(binding: ReportBinding): void {
   if (subsessionChildTurnId(binding.relationId) !== binding.childTurnId ||
     subsessionResultId(binding.childSessionId, binding.childTurnId) !== binding.resultId) {
-    factualCompletionFailure("subsession_terminal_report_binding_mismatch");
+    terminalResultIntegrityFailure("subsession_terminal_report_binding_mismatch");
   }
-}
-
-function storedReportAnchors(result: {
-  acceptance_evidence: string[];
-  changed_artifacts: string[];
-}): string[] {
-  if (result.changed_artifacts.length > 0) {
-    const receipts = [...result.acceptance_evidence.join("\n")
-      .matchAll(/\b(guided-effect-receipt-[a-f0-9]+)\b/gu)]
-      .map((match) => match[1]!)
-      .filter((value, index, values) => values.indexOf(value) === index);
-    return receipts.length > 0 ? [...result.changed_artifacts, ...receipts] : [];
-  }
-  const material = result.acceptance_evidence.find((item) =>
-    item.startsWith("Material read evidence: "))?.slice("Material read evidence: ".length);
-  return material ? material.replace(/\.$/u, "").split("; ").filter(Boolean) : [];
-}
-
-function hasPrivatePath(content: string): boolean {
-  return (content.match(/\S+/gu) ?? []).some((rawToken) => {
-    const token = rawToken.replace(/^[('"`[{]+|[)'"`\]},.;]+$/gu, "");
-    if (/^https?:\/\/[^\s]+$/iu.test(token)) return false;
-    return /^file:\/\//iu.test(token) || /^~\//u.test(token) || /^\/(?!\/)/u.test(token) ||
-      /^[A-Za-z]:[\\/]/u.test(token) || /^\\\\[^\\]+\\[^\\]+/u.test(token) ||
-      /(?:^|[=(])\/(?!\/)[^\s]+/u.test(token);
-  });
 }
