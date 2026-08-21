@@ -1411,6 +1411,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         ? {
             ...state.summary,
             turn_state: "thinking",
+            latest_turn_subsession_result: undefined,
             latest_progress: {
               turn_id: clientTurnId,
               summary: "Thinking",

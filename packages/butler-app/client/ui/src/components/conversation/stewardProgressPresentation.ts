@@ -51,8 +51,38 @@ export function stewardPlanProgress(
 export function stewardCurrentActivityTitle(
   child: Pick<StewardSessionSummaryView, "active_turn">,
 ): string {
-  return child.active_turn?.progress.summary?.trim().replace(/\s+/gu, " ") ||
-    "작업 진행 중";
+  const rows = child.active_turn?.progress.safe_progress_rows ?? [];
+  const activeActivity = latestMatchingRow(rows, (row) =>
+    row.kind !== "todo" &&
+    (row.state === "running" || row.state === "thinking") &&
+    row.safe_label.trim().length > 0,
+  );
+  const activePlanStep = rows.find((row) =>
+    row.kind === "todo" &&
+    (row.state === "active" || row.state === "running") &&
+    row.safe_label.trim().length > 0,
+  );
+  const latestActivity = latestMatchingRow(rows, (row) =>
+    row.kind !== "todo" && row.safe_label.trim().length > 0,
+  );
+  return (
+    activeActivity?.safe_label ||
+    activePlanStep?.safe_label ||
+    latestActivity?.safe_label ||
+    child.active_turn?.progress.summary ||
+    "작업 진행 중"
+  ).trim().replace(/\s+/gu, " ");
+}
+
+function latestMatchingRow(
+  rows: ProgressRow[],
+  matches: (row: ProgressRow) => boolean,
+): ProgressRow | undefined {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (row && matches(row)) return row;
+  }
+  return undefined;
 }
 
 export function stewardToolRows(rows: ProgressRow[]): ProgressRow[] {
