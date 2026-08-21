@@ -1,7 +1,7 @@
 import { memo } from "react";
 import type { MessageRecord } from "@/app/types.ts";
 import { appCopy } from "@/app/copy.ts";
-import { Tag } from "@/butler-ds";
+import { Stack, Tag } from "@/butler-ds";
 import { isRuntimeFaultRetryableMessage } from "@/app/utils.ts";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
 import {
@@ -45,7 +45,19 @@ function MessageContentComponent({
             blocks={message.work_blocks}
             turnId={message.turn_id}
           />
-          {message.status === "failed" ? (
+          {stewardProgress ? (
+            <Stack data-test-class="steward-message-content" gap="md">
+              {message.status === "failed" ? (
+                <AssistantFailureNotice message={message} />
+              ) : (
+                <MessageMarkdown
+                  attachments={message.attachments}
+                  text={message.text}
+                />
+              )}
+              <StewardParentProgress progress={stewardProgress} />
+            </Stack>
+          ) : message.status === "failed" ? (
             <AssistantFailureNotice message={message} />
           ) : (
             <MessageMarkdown
@@ -53,7 +65,6 @@ function MessageContentComponent({
               text={message.text}
             />
           )}
-          {stewardProgress ? <StewardParentProgress progress={stewardProgress} /> : null}
           {message.status === "cancelled" && (
             <div role="status">
               <Tag ariaLabel={appCopy.conversation.stoppedStatus}>

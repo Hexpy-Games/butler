@@ -1,4 +1,5 @@
 import { isVisibleToolActivity } from "@/app/conversation-progress";
+import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import type {
   ProgressRow,
   StewardSessionSummaryView,
@@ -14,7 +15,8 @@ export function activeStewardChildren(
   children: StewardSessionSummaryView[] = [],
 ): StewardSessionSummaryView[] {
   return children.filter((child) =>
-    Boolean(child.active_turn) && !TERMINAL_STEWARD_STATES.has(child.status),
+    Boolean(child.active_turn && ACTIVE_TURN_STATES.has(child.active_turn.state)) &&
+      !TERMINAL_STEWARD_STATES.has(child.status),
   );
 }
 
@@ -41,14 +43,9 @@ export function stewardProgressStatus(
 export function stewardProgressCapsule(
   child: StewardSessionSummaryView,
 ): string {
-  const turn = child.active_turn;
-  if (!turn) return stewardProgressStatus(child);
-  const stage = currentStewardStage(
-    turn.progress.safe_progress_rows,
-    turn.progress.summary,
-  );
-  return stage
-    ? `${stewardProgressStatus(child)} · ${stage}`
+  const title = child.title.trim().replace(/\s+/gu, " ");
+  return title
+    ? `${stewardProgressStatus(child)} · ${title}`
     : stewardProgressStatus(child);
 }
 
@@ -62,24 +59,4 @@ export function stewardToolRows(rows: ProgressRow[]): ProgressRow[] {
     );
   }
   return [...byTool.values()];
-}
-
-function currentStewardStage(
-  rows: ProgressRow[],
-  fallback?: string,
-): string | undefined {
-  for (let index = rows.length - 1; index >= 0; index -= 1) {
-    const row = rows[index];
-    if (!row || ["completed", "delivered", "skipped"].includes(row.state)) {
-      continue;
-    }
-    if (row.kind === "todo" || row.bridge_phase === "btcc_operation") {
-      return boundedStage(row.safe_label);
-    }
-  }
-  return fallback ? boundedStage(fallback) : undefined;
-}
-
-function boundedStage(value: string): string {
-  return [...value.trim().replace(/\s+/gu, " ")].slice(0, 48).join("");
 }
