@@ -7,6 +7,7 @@ import {
   stewardProgressCapsule,
 } from "./stewardProgressPresentation.ts";
 import { useButlerMarkTheme } from "./hooks/useButlerMarkTheme.ts";
+import styles from "./StewardComposerCapsules.module.css";
 
 type SynthesisContext = {
   relation_id: string;
@@ -52,6 +53,8 @@ export function StewardComposerCapsules({
       {synthesis ? (
         <Button
           aria-label={`${synthesis.safe_title} 보고 준비 상태`}
+          className={styles.capsule}
+          data-truncation="ellipsis"
           data-test-class="steward-synthesis-capsule"
           disabled={!synthesisChild}
           iconStart={mark}
@@ -59,6 +62,7 @@ export function StewardComposerCapsules({
           shape="pill"
           size="xs"
           text={`${synthesis.safe_title} 작업에 대한 보고 준비 중`}
+          title={synthesis.safe_title}
           type="button"
           variant="outline"
         />
@@ -66,6 +70,8 @@ export function StewardComposerCapsules({
       {activeChildren.map((child) => (
         <Button
           aria-label={`${child.title} 진행 상세 보기`}
+          className={styles.capsule}
+          data-truncation="ellipsis"
           data-test-class="steward-progress-capsule"
           iconStart={mark}
           key={child.session_id}
@@ -73,6 +79,7 @@ export function StewardComposerCapsules({
           shape="pill"
           size="xs"
           text={stewardProgressCapsule(child)}
+          title={child.title}
           type="button"
           variant="outline"
         />

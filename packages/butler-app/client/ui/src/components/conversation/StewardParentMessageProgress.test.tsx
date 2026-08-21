@@ -16,6 +16,7 @@ import { MessageContent } from "./MessageContent";
 import { useMessageList } from "./hooks/useMessageList";
 import { useComposerState } from "./hooks/useComposerState";
 import { ComposerToolbar } from "./ComposerToolbar";
+import { ComposerNotices } from "./ComposerNotices";
 import { StewardComposerCapsules } from "./StewardComposerCapsules";
 import { useComposerStore } from "./composerStore";
 import { anchoredStewardProgressByMessageId } from "./stewardParentProgressProjection";
@@ -31,7 +32,9 @@ test("active Steward work has one DS capsule above the Composer", () => {
   expect(activeHtml).toContain('data-alignment="center"');
   expect(activeHtml).toContain('data-slot="button-icon"');
   expect(activeHtml).toContain("<canvas");
-  expect(activeHtml).toContain("작업 중 · 2/3 · Inspecting the activity surface");
+  expect(activeHtml).toContain("작업 중 · 2/3 · Review the activity surface");
+  expect(activeHtml).not.toContain("Inspecting the activity surface");
+  expect(activeHtml).toContain('data-truncation="ellipsis"');
   expect(activeHtml.match(/steward-progress-capsule/g)).toHaveLength(1);
 
   const terminalChild = structuredClone(
@@ -42,6 +45,30 @@ test("active Steward work has one DS capsule above the Composer", () => {
   expect(renderToStaticMarkup(
     <StewardComposerCapsules children={[terminalChild]} />,
   )).toBe("");
+
+  const staleTerminalChild = structuredClone(
+    HARNESS_SS03_SUMMARY.steward_children![0]!,
+  );
+  staleTerminalChild.active_turn = {
+    ...staleTerminalChild.active_turn!,
+    state: "delivered",
+  };
+  expect(renderToStaticMarkup(
+    <StewardComposerCapsules children={[staleTerminalChild]} />,
+  )).toBe("");
+
+  const terminalSummary = {
+    ...HARNESS_SS03_SUMMARY,
+    turn_state: "delivered",
+    latest_turn_subsession_result: {
+      relation_id: "harness-relation",
+      result_id: "harness-result",
+      safe_title: "Review the activity surface",
+    },
+  } satisfies SessionSummaryView;
+  expect(renderToStaticMarkup(
+    <ComposerNotices summary={terminalSummary} />,
+  )).not.toContain("steward-synthesis-capsule");
 });
 
 test("Steward result synthesis capsule reports preparation and offers no Stop", () => {
@@ -144,19 +171,23 @@ test("active Steward progress is nested in its exact parent assistant row", () =
   );
 
   expect(html).toContain("steward-parent-progress");
+  expect(html).toContain("steward-message-content");
   expect(html).toContain("Review the activity surface");
+  expect(html).toContain('title="Review the activity surface"');
   expect(html).toContain("작업 중 · 2/3");
   expect(html.indexOf("최신 응답에는 캔버스 마크")).toBeLessThan(
     html.indexOf("steward-parent-progress"),
   );
   expect(html).not.toContain("assistant-terminal-status-row");
   expect(html).not.toContain("답변 완료");
-  expect(html).toContain("진행 상세 보기");
-  expect(html).toContain("turn-work-tool-group");
-  expect(html).toContain('aria-expanded="false"');
+  expect(html).toContain('aria-label="진행 상세 보기"');
+  expect(html).not.toContain(">진행 상세 보기<");
+  expect(html).toContain("steward-tool-summary");
+  expect(html).not.toContain("turn-work-tool-group");
+  expect(html).not.toContain("aria-expanded");
   expect(html).toContain("2 검색");
   expect(html).not.toContain("실행 계획 수립");
-  expect(html.match(/turn-work-tool-row/g)).toHaveLength(1);
+  expect(html).not.toContain("turn-work-tool-row");
 });
 
 test("terminal Steward activity stays attached to the factual parent message", () => {

@@ -1,0 +1,14 @@
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolLabel {
+  color: var(--text-tertiary);
+}
+
+.toolSummary {
+  color: var(--text-secondary);
+}
