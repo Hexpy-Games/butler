@@ -230,9 +230,11 @@ function storedReportAnchors(result: {
   changed_artifacts: string[];
 }): string[] {
   if (result.changed_artifacts.length > 0) {
-    const receipt = result.acceptance_evidence.join("\n")
-      .match(/\breceipt (guided-effect-receipt-[a-f0-9]+)\b/u)?.[1];
-    return receipt ? [...result.changed_artifacts, receipt] : [];
+    const receipts = [...result.acceptance_evidence.join("\n")
+      .matchAll(/\b(guided-effect-receipt-[a-f0-9]+)\b/gu)]
+      .map((match) => match[1]!)
+      .filter((value, index, values) => values.indexOf(value) === index);
+    return receipts.length > 0 ? [...result.changed_artifacts, ...receipts] : [];
   }
   const material = result.acceptance_evidence.find((item) =>
     item.startsWith("Material read evidence: "))?.slice("Material read evidence: ".length);

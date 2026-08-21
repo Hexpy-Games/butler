@@ -15,7 +15,10 @@ export function boundedStewardTools(
     "read_file",
     "list_files",
     "grep_files",
+    "web_read",
+    "web_search",
     "replace_work_plan",
+    "record_work_checkpoint",
     "record_work_review",
     "record_work_disposition",
     ...subsessionToolNames(policy.subsession.allowedToolsAndEffects),
@@ -59,7 +62,7 @@ function stewardPlanTool(
           ...properties,
           actions: {
             ...boundedActions,
-            description: "Use at least two truthful top-level actions. Exactly one action may carry the admitted mutation effect. Inspection, verification, review, and reporting actions omit effect.",
+            description: "Use at least two truthful top-level actions. Any truthful mutation action may carry an admitted edit_file or write_file effect. Inspection, command validation, review, and reporting actions omit effect.",
             items: {
               ...items,
               properties: {

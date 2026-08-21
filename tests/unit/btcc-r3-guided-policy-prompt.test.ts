@@ -310,7 +310,7 @@ test("SS-03B delegation tool contract exposes canonical execution surfaces", () 
     "For read_only, allowed_tools_and_effects is exactly the complete five-value array",
   );
   expect(delegateToStewardToolDefinition.description).toContain(
-    "Every mutation Steward can safely list, grep, and read the isolated worktree",
+    "Every mutation Steward can list, grep, read, apply admitted edit/write effects, and run bounded workspace validation",
   );
   expect(readOnly).toBeDefined();
   expect(readOnly?.properties?.allowed_tools_and_effects).toMatchObject({
@@ -323,7 +323,7 @@ test("SS-03B delegation tool contract exposes canonical execution surfaces", () 
   expect(mutation).toBeDefined();
   expect(mutation?.properties?.allowed_tools_and_effects).toMatchObject({
     minItems: 1,
-    items: { enum: ["edit_file:workspace", "write_file:workspace"] },
+    items: { enum: ["edit_file:workspace", "run_command:workspace", "write_file:workspace"] },
   });
   expect(mutation?.properties?.mutation_scope).toMatchObject({ minItems: 1 });
   expect(mutation?.properties?.mutation_scope?.items?.description).toContain(
@@ -376,10 +376,10 @@ test("SS-03B Steward instructions require ordered result and completion evidence
   expect(mutationInstructions).toContain(requiredOrder);
   expect(mutationInstructions).toContain(multiStepPlanContract);
   expect(mutationInstructions).toContain(
-    "Use list_files, grep_files, and read_file to discover and verify repository targets",
+    "Use list_files, grep_files, and read_file to discover repository targets",
   );
   expect(mutationInstructions).toContain(
-    "Exactly one Plan action may include effect, and its capability must be one admitted native mutation tool name; omit effect from inspection, verification, review, and reporting actions.",
+    "Any number of truthful mutation Plan actions may include an admitted edit_file or write_file effect. Omit effect from inspection, run_command validation, review, and reporting actions.",
   );
 });
 
