@@ -585,6 +585,11 @@ test("pending client progress is not overwritten by stale summary polling", () =
     "Bash: old command",
     "2026-05-19T00:00:00.000Z",
   );
+  stale.latest_turn_subsession_result = {
+    relation_id: "completed-relation",
+    result_id: "completed-result",
+    safe_title: "Completed earlier work",
+  };
 
   const merged = mergeSessionSummaryForPendingTurn(pending, stale);
 
@@ -594,6 +599,7 @@ test("pending client progress is not overwritten by stale summary polling", () =
   expect(merged.latest_progress?.safe_progress_rows[0]?.safe_label).toBe(
     "Thinking",
   );
+  expect(merged.latest_turn_subsession_result).toBeUndefined();
 });
 
 test("real active server progress replaces pending client progress", () => {

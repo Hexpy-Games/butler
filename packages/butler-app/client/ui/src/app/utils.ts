@@ -104,6 +104,7 @@ export function mergeSessionSummaryForPendingTurn(
     ...incoming,
     latest_progress: current?.latest_progress,
     turn_state: current?.turn_state ?? incoming.turn_state,
+    latest_turn_subsession_result: undefined,
   };
 }
 

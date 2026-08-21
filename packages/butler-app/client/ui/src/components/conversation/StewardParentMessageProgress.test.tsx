@@ -65,6 +65,12 @@ test("each active Steward has an ordered DS capsule with factual Plan progress",
       ...second.active_turn!.progress,
       summary: "Checking the second result",
       turn_id: "harness-steward-turn-2",
+      safe_progress_rows: [{
+        id: "harness-steward-second-activity",
+        kind: "message",
+        state: "running",
+        safe_label: "Checking the second result",
+      }],
     },
   };
   const concurrentHtml = renderToStaticMarkup(
@@ -108,6 +114,80 @@ test("each active Steward has an ordered DS capsule with factual Plan progress",
   expect(renderToStaticMarkup(
     <ComposerNotices summary={terminalSummary} />,
   )).not.toContain("steward-synthesis-capsule");
+});
+
+test("a completed prior Steward capsule does not revive for a later Butler request", () => {
+  const nextRequest = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const completedChild = nextRequest.steward_children![0]!;
+  completedChild.status = "delivered";
+  completedChild.active_turn = null;
+  completedChild.terminal = true;
+  nextRequest.turn_state = "thinking";
+  nextRequest.latest_progress = {
+    turn_id: "client-turn-new-request",
+    state: "thinking",
+    summary: "Thinking",
+    safe_progress_rows: [],
+  };
+  nextRequest.latest_turn_subsession_result = {
+    relation_id: "harness-relation",
+    result_id: "harness-result",
+    safe_title: "Review the activity surface",
+  };
+
+  const html = renderToStaticMarkup(<ComposerNotices summary={nextRequest} />);
+
+  expect(html).not.toContain("steward-progress-capsule");
+  expect(html).not.toContain("steward-synthesis-capsule");
+});
+
+test("a genuinely active concurrent Steward stays visible during a later request", () => {
+  const nextRequest = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  nextRequest.turn_state = "thinking";
+  nextRequest.latest_progress = {
+    turn_id: "client-turn-new-request",
+    state: "thinking",
+    summary: "Thinking",
+    safe_progress_rows: [],
+  };
+  nextRequest.latest_turn_subsession_result = {
+    relation_id: "completed-relation",
+    result_id: "completed-result",
+    safe_title: "Completed earlier work",
+  };
+
+  const html = renderToStaticMarkup(<ComposerNotices summary={nextRequest} />);
+
+  expect(html).toContain("steward-progress-capsule");
+  expect(html).not.toContain("steward-synthesis-capsule");
+});
+
+test("the capsule activity follows the newest safe activity row", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const child = summary.steward_children![0]!;
+  child.active_turn = {
+    ...child.active_turn!,
+    progress: {
+      ...child.active_turn!.progress,
+      summary: "Earlier activity snapshot",
+      safe_progress_rows: [
+        ...child.active_turn!.progress.safe_progress_rows,
+        {
+          id: "latest-live-activity",
+          kind: "used_tool",
+          state: "running",
+          safe_label: "Checking the latest evidence",
+          safe_tool_name: "read_file",
+          tool_call_id: "latest-live-tool",
+        },
+      ],
+    },
+  };
+
+  const html = renderToStaticMarkup(<ComposerNotices summary={summary} />);
+
+  expect(html).toContain("Checking the latest evidence");
+  expect(html).not.toContain("Earlier activity snapshot");
 });
 
 test("Steward result synthesis capsule reports preparation and offers no Stop", () => {
