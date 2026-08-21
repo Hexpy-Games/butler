@@ -38,6 +38,7 @@ export type GuidedWorkspaceFileResult = {
   after_sha256: string;
   create_parents: boolean;
   target_observed: true;
+  created_from_absent?: true;
 };
 
 export type RegisteredWriteFile = (
@@ -107,7 +108,11 @@ export function createGuidedWorkspaceFileEffectAdapter(
         observation.sha256 ===
           expectedWorkspaceFileSha256(input.normalizedInput.content)
       ) {
-        return applied(input.normalizedInput, observation);
+        return applied(
+          input.normalizedInput,
+          observation,
+          before.status === "missing",
+        );
       }
       const rejection = registeredToolRejection(registeredResult);
       if (rejection) return notApplied(rejection);
@@ -218,6 +223,7 @@ function targetInputMismatch(
 function applied(
   input: GuidedWorkspaceFileInput,
   observation: Extract<ObservedWorkspaceFileTarget, { status: "file" }>,
+  createdFromAbsent = false,
 ): Extract<
   EffectDispatchOutcome<GuidedWorkspaceFileResult>,
   { status: "applied" }
@@ -232,6 +238,7 @@ function applied(
       after_sha256: observation.sha256,
       create_parents: input.create_parents,
       target_observed: true,
+      ...(createdFromAbsent ? { created_from_absent: true as const } : {}),
     },
   };
 }

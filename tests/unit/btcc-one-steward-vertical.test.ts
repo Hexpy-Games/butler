@@ -2,7 +2,7 @@
 
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
@@ -239,12 +239,14 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       }, [string]>(
         "SELECT status, capability, sanitized_target, receipt_id FROM btcc_guided_effects WHERE work_id = ? ORDER BY rowid ASC",
       ).all(String(rootWork?.work_id));
-      expect(appliedEffects).toHaveLength(2);
-      expect(appliedEffects.every((effect) =>
-        effect.status === "applied" && effect.capability === "edit_file",
-      )).toBe(true);
+      expect(appliedEffects).toHaveLength(3);
+      expect(appliedEffects.every((effect) => effect.status === "applied")).toBe(true);
       expect(appliedEffects[0]?.sanitized_target).toMatch(/^workspace:batch:[a-f0-9]{64}$/u);
       expect(appliedEffects[1]?.sanitized_target).toBe("workspace:fixtures/verification-target.txt");
+      expect(appliedEffects[2]).toMatchObject({
+        capability: "write_file",
+        sanitized_target: "workspace:fixtures/.steward-validation.tmp",
+      });
       const childTaskRequests = childRequests.filter((request) =>
         request.messages.some((message) => message.content.includes("delegation_id:")),
       );
@@ -280,6 +282,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
         "run_command",
         "web_read",
         "web_search",
+        "write_file",
       ]);
       const childToolRows = btccDb.query<{
         tool_name: string;
@@ -321,6 +324,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       const child = bindings.listSessions().find((session) => session.role === "steward");
       expect(child).toBeDefined();
       expect(child?.workspacePath).not.toBe(root);
+      expect(existsSync(join(child!.workspacePath, "fixtures", ".steward-validation.tmp"))).toBe(false);
       expect(await Bun.file(join(child!.workspacePath, "fixtures", "discovery-target.txt")).text()).toBe("discovered\n");
       expect(await Bun.file(join(child!.workspacePath, "fixtures", "verification-target.txt")).text()).toBe("verified\n");
       expect(await Bun.file(join(root, "fixtures", "discovery-target.txt")).text()).toBe("discover me\n");
@@ -1299,6 +1303,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
               constraints_and_non_goals: ["Do not mutate the Butler workspace or Project Ledger."],
               allowed_tools_and_effects: [
                 "edit_file:workspace",
+                "write_file:workspace",
                 "run_command:workspace",
               ],
               mutation_scope: ["fixtures/**"],
@@ -1428,6 +1433,17 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
                 description: "Run the bounded validation again.",
                 dependency_keys: ["correct-verification"],
               },
+              {
+                action_key: "prepare-validation-marker",
+                description: "Create a transient validation marker.",
+                dependency_keys: ["correct-verification"],
+                effect: { capability: "write_file", target: "fixtures/" },
+              },
+              {
+                action_key: "cleanup-validation-marker",
+                description: "Remove the transient marker after validation.",
+                dependency_keys: ["prepare-validation-marker"],
+              },
             ],
             checks: ["The validation command passes after correction"],
           })],
@@ -1454,15 +1470,23 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
       }
       if (round === 11) {
         return {
+          toolCalls: [toolCall("write-validation-marker", "write_file", {
+            path: "fixtures/.steward-validation.tmp",
+            content: "validation-only\n",
+          })],
+        };
+      }
+      if (round === 12) {
+        return {
           toolCalls: [toolCall("validate-passing", "run_command", {
-            command: "test \"$(cat fixtures/discovery-target.txt)\" = discovered && test \"$(cat fixtures/verification-target.txt)\" = verified",
+            command: "test \"$(cat fixtures/discovery-target.txt)\" = discovered && test \"$(cat fixtures/verification-target.txt)\" = verified && rm fixtures/.steward-validation.tmp",
             summary: "Verify fixture contents",
             state_effect: "validation",
             validation_suite: "steward-fixture-validation",
           })],
         };
       }
-      if (round === 12) {
+      if (round === 13) {
         return {
           toolCalls: [toolCall("review-result", "record_work_review", {
             subject: "result",
@@ -1472,11 +1496,13 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
               { action_key: "inspect-failed-validation", status: "done" },
               { action_key: "correct-verification", status: "done" },
               { action_key: "verify-correction", status: "done" },
+              { action_key: "prepare-validation-marker", status: "done" },
+              { action_key: "cleanup-validation-marker", status: "done" },
             ],
           })],
         };
       }
-      if (round === 13) {
+      if (round === 14) {
         return {
           toolCalls: [toolCall("review-completion", "record_work_review", {
             subject: "completion",
@@ -1486,11 +1512,13 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
               { action_key: "inspect-failed-validation", status: "done" },
               { action_key: "correct-verification", status: "done" },
               { action_key: "verify-correction", status: "done" },
+              { action_key: "prepare-validation-marker", status: "done" },
+              { action_key: "cleanup-validation-marker", status: "done" },
             ],
           })],
         };
       }
-      if (round === 14) {
+      if (round === 15) {
         const workId = request.messages
           .flatMap((message) => [...message.content.matchAll(/guided-work-[a-f0-9]{64}/gu)].map((match) => match[0]))
           .at(-1);
@@ -1504,6 +1532,8 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
               { action_key: "inspect-failed-validation", status: "done" },
               { action_key: "correct-verification", status: "done" },
               { action_key: "verify-correction", status: "done" },
+              { action_key: "prepare-validation-marker", status: "done" },
+              { action_key: "cleanup-validation-marker", status: "done" },
             ],
           })],
         };
@@ -1512,7 +1542,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
         .matchAll(/guided-effect-receipt-[a-f0-9]+/gu)]
         .map((match) => match[0])
         .filter((value, index, values) => values.indexOf(value) === index);
-      if (receiptIds.length !== 2) {
+      if (receiptIds.length !== 3) {
         throw new Error("All mutation receipts were not projected to the final report round");
       }
       return { text: detailedMutationReport(receiptIds), toolCalls: [] };
