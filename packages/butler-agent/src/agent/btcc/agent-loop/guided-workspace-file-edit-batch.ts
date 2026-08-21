@@ -45,7 +45,10 @@ export type DecodedGuidedWorkspaceFileEditEntry = {
 export function workspaceFileEditBatchTarget(
   input: GuidedWorkspaceFileEditBatchInput,
 ): string {
-  const paths = input.edits.map((entry) => entry.path);
+  return workspaceFileEditBatchTargetForPaths(input.edits.map((entry) => entry.path));
+}
+
+export function workspaceFileEditBatchTargetForPaths(paths: readonly string[]): string {
   return `${BATCH_TARGET_PREFIX}${createHash("sha256")
     .update(stableEffectJson({ version: 1, paths }), "utf8")
     .digest("hex")}`;

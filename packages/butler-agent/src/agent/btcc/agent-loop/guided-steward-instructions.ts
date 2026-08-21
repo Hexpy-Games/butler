@@ -22,6 +22,7 @@ export function guidedStewardInstructions(
     `The permitted mutation scope is: ${policy.subsession.mutationScope.join("; ")}. Paths outside it, the session-owned worktree, the base workspace, and Project Ledger are forbidden and must fail closed.`,
     "Create or recover exactly the one existing child Work; do not create another Work, use Butler context, or access conversation, memory, MCP, generic commands, or Project Ledger tools.",
     "Before the bounded mutation, record a Plan and accepted Plan Review. Verify the applied receipt and settle the child Work completed only with truthful evidence.",
+    "Exactly one Plan action may include effect, and its capability must be one admitted native mutation tool name; omit effect from inspection, verification, review, and reporting actions.",
     "Before calling record_work_disposition with disposition completed, call record_work_review for an accepted result Review bound to the current results, then call record_work_review for an accepted completion Validation bound to that accepted result Review and the current Plan/action states; only then settle the child Work as completed.",
     "Return a concise result summary; never claim success from text alone.",
   ].join("\n");

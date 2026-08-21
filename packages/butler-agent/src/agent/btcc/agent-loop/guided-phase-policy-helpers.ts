@@ -10,6 +10,7 @@ export function boundedStewardTools(
   tools: readonly FunctionToolDefinition[],
 ): FunctionToolDefinition[] {
   if (policy.role !== "steward" || !policy.subsession) return [...tools];
+  const subsession = policy.subsession;
   const allowed = new Set([
     "read_file",
     "list_files",
@@ -21,13 +22,15 @@ export function boundedStewardTools(
   ]);
   return tools
     .filter((tool) => allowed.has(tool.name))
-    .map((tool) => policy.subsession?.executionMode === "read_only" &&
-        tool.name === "replace_work_plan"
-      ? readOnlyStewardPlanTool(tool)
+    .map((tool) => tool.name === "replace_work_plan"
+      ? stewardPlanTool(tool, subsession)
       : tool);
 }
 
-function readOnlyStewardPlanTool(tool: FunctionToolDefinition): FunctionToolDefinition {
+function stewardPlanTool(
+  tool: FunctionToolDefinition,
+  subsession: NonNullable<ButlerExecutionPolicy["subsession"]>,
+): FunctionToolDefinition {
   const parameters = structuredClone(tool.parameters) as Record<string, unknown>;
   const properties = objectRecord(parameters.properties);
   const actions = objectRecord(properties?.actions);
@@ -35,6 +38,45 @@ function readOnlyStewardPlanTool(tool: FunctionToolDefinition): FunctionToolDefi
   const actionProperties = objectRecord(items?.properties);
   if (!properties || !actions || !items || !actionProperties || !("effect" in actionProperties)) {
     return tool;
+  }
+  if (subsession.executionMode === "mutation") {
+    const effect = objectRecord(actionProperties.effect);
+    const effectProperties = objectRecord(effect?.properties);
+    const capability = objectRecord(effectProperties?.capability);
+    if (!effect || !effectProperties || !capability) return tool;
+    const admittedCapabilities = subsessionToolNames(subsession.allowedToolsAndEffects)
+      .filter((name) => name === "edit_file" || name === "write_file")
+      .sort();
+    return {
+      ...tool,
+      parameters: {
+        ...parameters,
+        properties: {
+          ...properties,
+          actions: {
+            ...actions,
+            description: "Exactly one action may carry the admitted mutation effect. Inspection, verification, review, and reporting actions omit effect.",
+            items: {
+              ...items,
+              properties: {
+                ...actionProperties,
+                effect: {
+                  ...effect,
+                  properties: {
+                    ...effectProperties,
+                    capability: {
+                      ...capability,
+                      description: "Exact admitted native mutation tool name.",
+                      enum: admittedCapabilities,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
   }
   const { effect: _effect, ...withoutEffect } = actionProperties;
   const required = Array.isArray(items.required)

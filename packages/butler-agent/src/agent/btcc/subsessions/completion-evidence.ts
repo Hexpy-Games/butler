@@ -1,11 +1,3 @@
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { isAbsolute, join, relative } from "node:path";
-import {
-  resolveSessionWorkspaceAuthority,
-  validateSessionWorkspaceAuthority,
-} from "../../session-workspaces/index.ts";
-import { createPlatformCommandExecutor } from "../../../runtime/command/platform-command-executor.ts";
 import type {
   DelegationPacket,
   SessionRelation,
@@ -14,8 +6,17 @@ import type {
 import { subsessionRootWorkId } from "./identities.ts";
 import { distinctMaterialReadCount, materialReadReportAnchors } from "./read-only-material-evidence.ts";
 import { SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS } from "./scope.ts";
+import { factualCompletionFailure } from "./completion-evidence-errors.ts";
+import { validateMutationCompletion } from "./mutation-completion-evidence.ts";
 
-type CompletionEvidenceInput = {
+export {
+  StewardCompletionEvidenceError,
+  factualCompletionFailure,
+  isFactualCompletionFailure,
+  retryableCompletionFailure,
+} from "./completion-evidence-errors.ts";
+
+export type CompletionEvidenceInput = {
   relation: SessionRelation;
   packet: DelegationPacket;
   childTurnId: string;
@@ -25,33 +26,6 @@ type CompletionEvidenceInput = {
   toolJournal: SubsessionDelegationDependencies["toolJournal"];
   effectJournal: SubsessionDelegationDependencies["effectJournal"];
 };
-
-/**
- * A completion check can observe either a durable contradiction or a
- * temporary inability to inspect the evidence.  Only the former is a typed
- * terminal failure; the latter must escape so the existing outbox can retry.
- */
-export class StewardCompletionEvidenceError extends Error {
-  readonly kind: "factual" | "retryable";
-
-  constructor(code: string, kind: "factual" | "retryable") {
-    super(code);
-    this.name = "StewardCompletionEvidenceError";
-    this.kind = kind;
-  }
-}
-
-export function factualCompletionFailure(code: string): never {
-  throw new StewardCompletionEvidenceError(code, "factual");
-}
-
-export function retryableCompletionFailure(code: string): never {
-  throw new StewardCompletionEvidenceError(code, "retryable");
-}
-
-export function isFactualCompletionFailure(error: unknown): boolean {
-  return error instanceof StewardCompletionEvidenceError && error.kind === "factual";
-}
 
 export async function validateStewardCompletion(input: CompletionEvidenceInput): Promise<{
   summary: string;
@@ -74,22 +48,7 @@ export async function validateStewardCompletion(input: CompletionEvidenceInput):
   if (packet.execution_mode === "read_only") {
     return await validateReadOnlyCompletion({ ...input, packet }, work);
   }
-  const action = mutationAction(work);
-  const effect = await validateAppliedEffect(input, work, action);
-  const normalizedInput = { ...input, packet };
-  const target = await validateWorktreeArtifact(normalizedInput, effect);
-  validateMutationTool(normalizedInput, effect.capability);
-  const workspace = mutationWorkspace(packet);
-  return {
-    summary: work.latestDisposition!.summary,
-    acceptanceEvidence: [
-      `Work ${work.workId} completed with accepted plan, result, and completion reviews.`,
-      `Applied ${effect.capability} receipt ${effect.receipt!.receiptId} verified for ${target}.`,
-      `Session-owned worktree ${workspace.branch} contains the applied artifact.`,
-    ],
-    changedArtifacts: [target],
-    reportEvidenceAnchors: [target, effect.receipt!.receiptId],
-  };
+  return await validateMutationCompletion({ ...input, packet }, work);
 }
 
 function validatePacket(packet: DelegationPacket): void {
@@ -197,130 +156,6 @@ function validateWork(
   }
 }
 
-function mutationAction(work: NonNullable<Awaited<ReturnType<SubsessionDelegationDependencies["durableWork"]["boundWorkForTurn"]>>>): NonNullable<NonNullable<typeof work.currentPlan>["actions"][number]> & { effect: NonNullable<NonNullable<typeof work.currentPlan>["actions"][number]["effect"]> } {
-  const expectedActions = work.currentPlan!.actions.filter((action) => action.effect);
-  if (expectedActions.length !== 1) factualCompletionFailure("subsession_mutation_action_cardinality_invalid");
-  const action = expectedActions[0]!;
-  const actionProgress = work.actionProgress.find((item) => item.actionKey === action.actionKey);
-  if (!actionProgress || actionProgress.status !== "done") {
-    factualCompletionFailure("subsession_mutation_action_not_done");
-  }
-  return action as typeof action & { effect: NonNullable<typeof action.effect> };
-}
-
-async function validateAppliedEffect(
-  input: CompletionEvidenceInput,
-  work: NonNullable<Awaited<ReturnType<SubsessionDelegationDependencies["durableWork"]["boundWorkForTurn"]>>>,
-  action: ReturnType<typeof mutationAction>,
-) {
-  const effects = await input.effectJournal.listForWork(work.workId, 20);
-  const applied = effects.filter((effect) => effect.status === "applied" && effect.receipt);
-  if (applied.length !== 1) factualCompletionFailure("subsession_applied_effect_cardinality_invalid");
-  const effect = applied[0]!;
-  const effectTarget = effect.sanitizedTarget.replace(/^workspace:/u, "");
-  if (effect.workId !== work.workId || effect.capability !== action.effect.capability ||
-    (effect.actionKey !== action.actionKey && effect.actionKey !== "accepted-plan") ||
-    effectTarget !== action.effect.target) {
-    factualCompletionFailure("subsession_applied_effect_identity_mismatch");
-  }
-  if (effect.capability !== "write_file" && effect.capability !== "edit_file") {
-    factualCompletionFailure("subsession_mutation_capability_out_of_scope");
-  }
-  if (!input.packet.allowed_tools_and_effects.includes(`${effect.capability}:workspace`)) {
-    factualCompletionFailure("subsession_mutation_effect_not_in_packet");
-  }
-  if (!input.packet.mutation_scope.some((scope) => mutationTargetMatches(effectTarget, scope))) {
-    factualCompletionFailure("subsession_mutation_target_out_of_scope");
-  }
-  return effect;
-}
-
-async function validateWorktreeArtifact(
-  input: CompletionEvidenceInput,
-  effect: Awaited<ReturnType<typeof validateAppliedEffect>> extends infer T ? T : never,
-): Promise<string> {
-  const child = input.sessionBindings.getBySessionId(input.relation.child_session_id);
-  const parent = input.sessionBindings.getBySessionId(input.relation.parent_session_id);
-  if (!child || !parent) retryableCompletionFailure("subsession_workspace_binding_unavailable");
-  if (child.workspacePath === parent.workspacePath) factualCompletionFailure("subsession_isolated_workspace_missing");
-  const authority = resolveSessionWorkspaceAuthority({ binding: child });
-  const workspace = mutationWorkspace(input.packet);
-  if (authority.kind !== "session_worktree" || authority.branch !== workspace.branch) {
-    factualCompletionFailure("subsession_child_worktree_identity_invalid");
-  }
-  const validated = await validateSessionWorkspaceAuthority({
-    authority,
-    commandExecutor: createPlatformCommandExecutor(),
-  });
-  if (!validated.ok) retryableCompletionFailure("subsession_child_worktree_validation_unavailable");
-  if (validated.path !== child.workspacePath || validated.path === parent.workspacePath) {
-    factualCompletionFailure("subsession_child_worktree_identity_invalid");
-  }
-  const target = safeRelativeMutationTarget(effect.sanitizedTarget.replace(/^workspace:/u, ""));
-  if (!target) factualCompletionFailure("subsession_mutation_target_invalid");
-  const absoluteTarget = join(validated.path, target);
-  if (isAbsolute(target) || relative(validated.path, absoluteTarget).startsWith("..")) {
-    factualCompletionFailure("subsession_mutation_target_invalid");
-  }
-  let bytes: Buffer;
-  try {
-    bytes = await readFile(absoluteTarget);
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      factualCompletionFailure("subsession_mutation_file_evidence_missing");
-    }
-    throw error;
-  }
-  const receipt = effect.receipt!;
-  const receiptResult = record(receipt.result);
-  if (receiptResult && typeof receiptResult.path === "string" &&
-    !mutationTargetMatches(receiptResult.path, target)) {
-    factualCompletionFailure("subsession_receipt_target_mismatch");
-  }
-  if (receiptResult && typeof receiptResult.after_sha256 === "string" &&
-    createHash("sha256").update(bytes).digest("hex") !== receiptResult.after_sha256) {
-    factualCompletionFailure("subsession_mutation_file_receipt_mismatch");
-  }
-  return target;
-}
-
-function mutationWorkspace(
-  packet: DelegationPacket,
-): Extract<DelegationPacket["workspace_and_worktree"], { ownership: "session" }> {
-  if (packet.execution_mode !== "mutation" || packet.workspace_and_worktree.ownership !== "session") {
-    factualCompletionFailure("subsession_mutation_workspace_invalid");
-  }
-  return packet.workspace_and_worktree;
-}
-
-function validateMutationTool(input: CompletionEvidenceInput, capability: string): void {
-  const mutationTool = input.toolJournal.list(input.childTurnId).find((item) =>
-    item.toolName === capability && item.status === "completed" && resultSucceeded(item.result),
-  );
-  if (!mutationTool) retryableCompletionFailure("subsession_mutation_tool_evidence_unavailable");
-}
-
-function mutationTargetMatches(target: string, scope: string): boolean {
-  const normalizedTarget = safeRelativeMutationTarget(target);
-  const normalizedScope = safeRelativeMutationTarget(scope);
-  if (!normalizedTarget || !normalizedScope) return false;
-  return normalizedTarget === normalizedScope ||
-    normalizedScope.endsWith("/") && normalizedTarget.startsWith(normalizedScope);
-}
-
-function safeRelativeMutationTarget(value: string): string | null {
-  const normalized = value.trim().replaceAll("\\", "/").replace(/^\.\//u, "");
-  if (!normalized || normalized.startsWith("/") || normalized.split("/").includes("..")) return null;
-  return normalized;
-}
-
-function resultSucceeded(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return true;
-  return (value as Record<string, unknown>).ok !== false;
-}
-
-function record(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
+export type ValidatedStewardWork = NonNullable<Awaited<ReturnType<
+  SubsessionDelegationDependencies["durableWork"]["boundWorkForTurn"]
+>>>;
