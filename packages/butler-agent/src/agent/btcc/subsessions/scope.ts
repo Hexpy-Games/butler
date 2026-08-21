@@ -65,8 +65,9 @@ export function subsessionToolNames(
 
 function normalizeScopePath(value: string): string | null {
   const raw = value.trim().replaceAll("\\", "/").replace(/^\.\//u, "").replace(/\/{2,}/gu, "/");
-  const directory = raw.endsWith("/");
-  const normalized = raw.replace(/\/+$/u, "");
+  const terminalSubtree = raw.endsWith("/**");
+  const directory = terminalSubtree || raw.endsWith("/");
+  const normalized = (terminalSubtree ? raw.slice(0, -3) : raw).replace(/\/+$/u, "");
   const segments = normalized.split("/");
   if (!normalized || normalized === "." || normalized.startsWith("/") || segments.some((segment) => !segment || segment === "." || segment === "..")) {
     return null;

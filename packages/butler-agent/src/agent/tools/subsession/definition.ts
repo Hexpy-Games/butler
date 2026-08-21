@@ -16,7 +16,8 @@ export const delegateToStewardToolDefinition: ButlerToolDefinition = {
     "Delegate one bounded mutation or effect-free inspection to exactly one ordinary Steward session.",
     "Provide the execution mode, minimal task packet, acceptance criteria, allowed native surface, and mutation scope for mutation only.",
     "For read_only, allowed_tools_and_effects is exactly the complete five-value array [grep_files:workspace, list_files:workspace, read_file:workspace, web_read:network, web_search:network], and mutation_scope is [].",
-    "For mutation, allowed_tools_and_effects may contain only edit_file:workspace or write_file:workspace, and mutation_scope must be a bounded, non-empty relative target list.",
+    "Every mutation Steward can safely list, grep, and read the isolated worktree before applying an admitted effect.",
+    "For mutation, allowed_tools_and_effects may contain only edit_file:workspace or write_file:workspace, and mutation_scope must contain exact relative files or directory prefixes; terminal dir/** shorthand is canonicalized to dir/, while root or embedded wildcards remain forbidden.",
     "The Steward receives no Butler persona or transcript and reports one success result for synthesis.",
   ].join(" "),
   parameters: {
@@ -71,7 +72,12 @@ export const delegateToStewardToolDefinition: ButlerToolDefinition = {
           mutation_scope: {
             type: "array",
             minItems: 1,
-            items: { type: "string", minLength: 1, maxLength: 240 },
+            items: {
+              type: "string",
+              minLength: 1,
+              maxLength: 240,
+              description: "Exact relative file, directory prefix, or terminal dir/** shorthand. Other wildcards are forbidden.",
+            },
           },
         },
       },

@@ -94,6 +94,20 @@ test("App Turn delegates one bounded mutation to one Steward and synthesizes exa
   const root = mkdtempSync(join(tmpdir(), "butler-one-steward-vertical-"));
   roots.push(root);
   initializeGitWorkspace(root);
+  mkdirSync(join(root, "fixtures"), { recursive: true });
+  writeFileSync(join(root, "fixtures", "discovery-target.txt"), "discover me\n", "utf8");
+  expect(Bun.spawnSync({
+    cmd: ["git", "add", "fixtures/discovery-target.txt"],
+    cwd: root,
+    stdout: "ignore",
+    stderr: "pipe",
+  }).exitCode).toBe(0);
+  expect(Bun.spawnSync({
+    cmd: ["git", "commit", "-qm", "add discovery target"],
+    cwd: root,
+    stdout: "ignore",
+    stderr: "pipe",
+  }).exitCode).toBe(0);
   publishNativeReadiness(root);
   const authToken = "ss02-local-auth-token-012345678901234567890123";
   const bindings = new SessionBindingStore(
@@ -221,7 +235,7 @@ test("App Turn delegates one bounded mutation to one Steward and synthesizes exa
       ).get(String(rootWork?.work_id))).toEqual({
         status: "applied",
         capability: "write_file",
-        sanitized_target: "workspace:steward-result.txt",
+        sanitized_target: "workspace:fixtures/steward-result.txt",
       });
       const childTaskRequests = childRequests.filter((request) =>
         request.messages.some((message) => message.content.includes("delegation_id:")),
@@ -238,7 +252,7 @@ test("App Turn delegates one bounded mutation to one Steward and synthesizes exa
         "expected_result_schema",
         "work_creation_policy: one_recoverable_child_work",
         "access_and_budget_policy",
-        "mutation_scope: steward-result.txt",
+        "mutation_scope: fixtures/",
       ]) {
         expect(childPrompt).toContain(requiredPacketField);
       }
@@ -282,8 +296,8 @@ test("App Turn delegates one bounded mutation to one Steward and synthesizes exa
       const child = bindings.listSessions().find((session) => session.role === "steward");
       expect(child).toBeDefined();
       expect(child?.workspacePath).not.toBe(root);
-      expect(await Bun.file(join(child!.workspacePath, "steward-result.txt")).text()).toBe("steward mutation\n");
-      expect(await Bun.file(join(root, "steward-result.txt")).exists()).toBe(false);
+      expect(await Bun.file(join(child!.workspacePath, "fixtures", "steward-result.txt")).text()).toBe("steward mutation\n");
+      expect(await Bun.file(join(root, "fixtures", "steward-result.txt")).exists()).toBe(false);
       const newest = btccDb.query<{ content: string; session_id: string }, [string]>(
         "SELECT content, session_id FROM btcc_messages WHERE session_id = ? ORDER BY created_at DESC, message_id DESC LIMIT 1",
       ).get(parentSessionId);
@@ -1248,12 +1262,12 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
             toolCalls: [toolCall("delegate", "delegate_to_steward", {
               execution_mode: "mutation",
               safe_title: "Bounded Steward result",
-              objective: "Create and verify one bounded Steward result file.",
-              acceptance_criteria: ["steward-result.txt contains the expected mutation"],
+              objective: "Discover the fixture target, then create and verify one bounded Steward result file.",
+              acceptance_criteria: ["fixtures/steward-result.txt contains the expected mutation"],
               task_or_plan_refs: [],
               constraints_and_non_goals: ["Do not mutate the Butler workspace or Project Ledger."],
               allowed_tools_and_effects: ["write_file:workspace"],
-              mutation_scope: ["steward-result.txt"],
+              mutation_scope: ["fixtures/**"],
             })],
           };
         }
@@ -1265,14 +1279,14 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
       if (round === 1) {
         return {
           toolCalls: [toolCall("plan", "replace_work_plan", {
-            objective: "Create and verify one bounded Steward result file.",
+            objective: "Discover the fixture target, then create and verify one bounded Steward result file.",
             actions: [{
               action_key: "write-steward-result",
               description: "Write the bounded result file.",
               dependency_keys: [],
-              effect: { capability: "write_file", target: "steward-result.txt" },
+              effect: { capability: "write_file", target: "fixtures/steward-result.txt" },
             }],
-            checks: ["steward-result.txt contains the expected mutation"],
+            checks: ["fixtures/steward-result.txt contains the expected mutation"],
           })],
         };
       }
@@ -1288,13 +1302,28 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
       }
       if (round === 3) {
         return {
-          toolCalls: [toolCall("write", "write_file", {
-            path: "steward-result.txt",
-            content: "steward mutation\n",
+          toolCalls: [toolCall("list", "list_files", {
+            root: "fixtures",
           })],
         };
       }
       if (round === 4) {
+        return {
+          toolCalls: [toolCall("read", "read_file", {
+            requests: [{ path: "fixtures/discovery-target.txt" }],
+          })],
+        };
+      }
+      if (round === 5) {
+        return {
+          toolCalls: [toolCall("write", "write_file", {
+            path: "fixtures/steward-result.txt",
+            content: "steward mutation\n",
+            create_parents: true,
+          })],
+        };
+      }
+      if (round === 6) {
         return {
           toolCalls: [toolCall("review-result", "record_work_review", {
             subject: "result",
@@ -1304,7 +1333,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
           })],
         };
       }
-      if (round === 5) {
+      if (round === 7) {
         return {
           toolCalls: [toolCall("review-completion", "record_work_review", {
             subject: "completion",
@@ -1314,7 +1343,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
           })],
         };
       }
-      if (round === 6) {
+      if (round === 8) {
         const workId = request.messages
           .flatMap((message) => [...message.content.matchAll(/guided-work-[a-f0-9]{64}/gu)].map((match) => match[0]))
           .at(-1);
