@@ -47,7 +47,10 @@ export function sessionViewForStewardObserver(
       } satisfies MessageRecord))
     : [];
   const resultMessage = projected.result && !messages.some(
-    (message) => message.id === projected.result?.result_id,
+    (message) =>
+      message.id === projected.result?.result_id ||
+      (message.role === "assistant" &&
+        message.turn_id === projected.result?.child_turn_id),
   )
     ? {
         id: projected.result.result_id,

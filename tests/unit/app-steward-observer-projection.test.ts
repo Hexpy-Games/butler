@@ -277,7 +277,7 @@ describe("App Steward observer projection", () => {
     db.close();
   });
 
-  test("appends a durable terminal result after the child transcript", () => {
+  test("does not duplicate a terminal result already represented by the child assistant", () => {
     const relation = {
       relation_id: "relation-3",
       parent_session_id: "parent-3",
@@ -344,7 +344,6 @@ describe("App Steward observer projection", () => {
     expect(view.messages.map((message) => message.id)).toEqual([
       "user-3",
       "assistant-3",
-      "result-3",
     ]);
     const publicViewJson = JSON.stringify(view);
     expect(publicViewJson).not.toMatch(/RAW_TOOL_PAYLOAD|sk-test-123|\/private\/project\/file\.ts|hidden reasoning/iu);
@@ -352,6 +351,8 @@ describe("App Steward observer projection", () => {
     expect(view.messages[1]?.text).toBe("Completed");
     expect(view.messages.at(-1)?.text).toBe("Completed");
     expect(view.messages.at(-1)?.artifacts?.[0]?.id).toBe("result-3:artifact:0");
+    expect(view.messages.filter((message) => message.turn_activity_rows?.length))
+      .toHaveLength(1);
     expect(view.message_window.complete).toBe(true);
   });
 });
