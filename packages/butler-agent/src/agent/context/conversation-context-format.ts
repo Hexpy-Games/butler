@@ -40,6 +40,7 @@ export interface ConversationContextSummary {
 export interface PromptMaterialRenderOptions {
   maxTokens: number;
   excludeSourceRef?: string | null;
+  excludeTurnId?: string | null;
   includeSummaries?: boolean;
   includeTools?: boolean;
   currentRequest?: {
@@ -123,7 +124,11 @@ export function compilePromptMaterialContextPlan(
   const capacityTokens = Math.max(1, Math.floor(options.maxTokens));
   const currentRequest = options.currentRequest ? currentRequestAtom(options.currentRequest) : null;
   const messages = material.semantic_tail
-    .filter((message) => !options.excludeSourceRef || message.source_ref !== options.excludeSourceRef);
+    .filter((message) => !options.excludeSourceRef || message.source_ref !== options.excludeSourceRef)
+    .filter((message) =>
+      !options.excludeTurnId ||
+      message.turn_id !== options.excludeTurnId,
+    );
   const turns = semanticTurnAtoms(
     messages,
     material.turns ?? [],

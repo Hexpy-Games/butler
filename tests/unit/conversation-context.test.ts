@@ -163,3 +163,74 @@ test("recent context preserves the preceding complete Butler result across short
   expect(plan.rendered).toContain("공사 대응 근거를 보강해줘");
   expect(plan.rendered).toContain("진행해.");
 });
+
+test("recent context requires the same preceding eight semantic turns when the current request is separate", () => {
+  const messageIds: string[] = [];
+  for (let index = 1; index <= 9; index += 1) {
+    const turnId = `turn-history-${String(index).padStart(2, "0")}`;
+    store.beginTurn({
+      gateway: "app",
+      externalSessionId: runtimeSessionId,
+      sessionId: canonicalSessionId,
+      actor: "user",
+      turnId,
+      now: `2026-04-28T13:${String(index).padStart(2, "0")}:00.000Z`,
+    });
+    const user = store.appendUserMessage({
+      sessionId: canonicalSessionId,
+      turnId,
+      text: `history-user-${index}`,
+      sourceGateway: "app",
+      sourceRef: `history-user-${index}`,
+    });
+    store.appendAssistantMessage({
+      sessionId: canonicalSessionId,
+      turnId,
+      text: `history-assistant-${index}`,
+      sourceGateway: "app",
+      sourceRef: `history-assistant-${index}`,
+    });
+    store.finalizeTurn({ turnId, status: "complete" });
+    messageIds.push(user.id);
+  }
+
+  const currentTurnId = "turn-current-request";
+  store.beginTurn({
+    gateway: "app",
+    externalSessionId: runtimeSessionId,
+    sessionId: canonicalSessionId,
+    actor: "user",
+    turnId: currentTurnId,
+  });
+  const currentRequest = store.appendUserMessage({
+    sessionId: canonicalSessionId,
+    turnId: currentTurnId,
+    text: "current-request-must-be-separate",
+    sourceGateway: "app",
+    sourceRef: "current-request-source",
+  });
+
+  const material = store.readPromptMaterial({ sessionId: canonicalSessionId, tailLimit: 200 });
+  const byButlerSource = compilePromptMaterialContextPlan(material, {
+    maxTokens: 1,
+    excludeSourceRef: "current-request-source",
+  });
+  const byStewardAnchor = compilePromptMaterialContextPlan(material, {
+    maxTokens: 1,
+    excludeTurnId: currentTurnId,
+    includeTools: false,
+  });
+
+  const expectedTurnIds = Array.from(
+    { length: 8 },
+    (_, offset) => `turn-history-${String(offset + 2).padStart(2, "0")}`,
+  );
+  expect(messageIds).toHaveLength(9);
+  expect(currentRequest.turn_id).toBe(currentTurnId);
+  expect(byButlerSource.required_turns.map((turn) => turn.turn_id)).toEqual(expectedTurnIds);
+  expect(byStewardAnchor.required_turns.map((turn) => turn.turn_id)).toEqual(expectedTurnIds);
+  expect(byButlerSource.required_turns).toHaveLength(8);
+  expect(byStewardAnchor.required_turns).toHaveLength(8);
+  expect(byButlerSource.rendered).not.toContain("current-request-must-be-separate");
+  expect(byStewardAnchor.rendered).not.toContain("current-request-must-be-separate");
+});

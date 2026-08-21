@@ -290,12 +290,12 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
         expect(childPrompt).toContain(requiredPacketField);
       }
       expect(childPrompt).toContain("## Parent Conversation Context");
-      expect(childPrompt).toContain(
-        "Inspect, correct, and validate the bounded Steward fixture files.",
-      );
       expect(childPrompt).toContain("PREVIOUS_COMPLETE_RESULT");
       expect(childPrompt).toContain("household-noise requirements must remain");
       expect(childPrompt).toContain("construction-noise requirements must remain");
+      expect(childPrompt).not.toContain(
+        "Inspect, correct, and validate the bounded Steward fixture files.",
+      );
       expect(childPrompt).not.toMatch(/Butler persona|Hot Cache|recall_memory|MCP|memory:/iu);
       const childToolNames = [...new Set(childTaskRequests.flatMap((request) =>
         request.tools.map((tool) => tool.name),

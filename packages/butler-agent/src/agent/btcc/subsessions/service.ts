@@ -113,6 +113,7 @@ export function createSubsessionDelegationService(
       const parentConversationContext = renderDelegatedParentConversationContext({
         conversations: input.conversations,
         parentSessionId: normalizedRequest.parent_session_id,
+        parentTurnId: normalizedRequest.parent_turn_id,
         modelRef: normalizedRequest.model_ref,
       });
       registerChildSession(input, parent.workspacePath, normalizedRequest, packet, childSessionId);
