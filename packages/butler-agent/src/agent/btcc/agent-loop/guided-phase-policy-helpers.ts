@@ -39,6 +39,10 @@ function stewardPlanTool(
   if (!properties || !actions || !items || !actionProperties || !("effect" in actionProperties)) {
     return tool;
   }
+  const boundedActions = {
+    ...actions,
+    minItems: 2,
+  };
   if (subsession.executionMode === "mutation") {
     const effect = objectRecord(actionProperties.effect);
     const effectProperties = objectRecord(effect?.properties);
@@ -54,8 +58,8 @@ function stewardPlanTool(
         properties: {
           ...properties,
           actions: {
-            ...actions,
-            description: "Exactly one action may carry the admitted mutation effect. Inspection, verification, review, and reporting actions omit effect.",
+            ...boundedActions,
+            description: "Use at least two truthful top-level actions. Exactly one action may carry the admitted mutation effect. Inspection, verification, review, and reporting actions omit effect.",
             items: {
               ...items,
               properties: {
@@ -89,7 +93,8 @@ function stewardPlanTool(
       properties: {
         ...properties,
         actions: {
-          ...actions,
+          ...boundedActions,
+          description: "Use at least two truthful top-level evidence actions for this substantial delegated Work.",
           items: {
             ...items,
             properties: withoutEffect,

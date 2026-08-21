@@ -159,7 +159,7 @@ function projectStewardTurn(
     cancellable: !terminal,
     retryable: state === "failed",
     progress: {
-      summary: activityRows.at(-1)?.safe_label ?? stewardStateLabel(turn.state),
+      summary: currentStewardActivityLabel(activityRows) ?? stewardStateLabel(turn.state),
       updated_at: turn.updated_at,
       turn_id: turn.id,
       state: progressState,
@@ -168,6 +168,24 @@ function projectStewardTurn(
     created_at: turn.created_at,
     updated_at: turn.updated_at,
   };
+}
+
+function currentStewardActivityLabel(
+  rows: ProgressSummaryRow[],
+): string | undefined {
+  const currentActivity = rows.findLast((row) =>
+    row.kind !== "todo" &&
+    (row.state === "running" || row.state === "thinking") &&
+    row.safe_label.trim().length > 0,
+  );
+  if (currentActivity) return currentActivity.safe_label;
+  const currentPlanAction = rows.find((row) =>
+    row.kind === "todo" && row.state === "active" && row.safe_label.trim().length > 0,
+  );
+  if (currentPlanAction) return currentPlanAction.safe_label;
+  return rows.findLast((row) =>
+    row.kind !== "todo" && row.safe_label.trim().length > 0,
+  )?.safe_label;
 }
 
 export function projectStewardSession(
