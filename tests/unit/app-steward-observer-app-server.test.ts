@@ -8,6 +8,8 @@ import { BTCC_SUCCESSOR_SCHEMA } from "../../packages/butler-agent/src/agent/ada
 import { agentBtccStoragePaths } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/storage-ownership/index.ts";
 import { sessionHintForRow } from "../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
 import { useButlerStore } from "../../packages/butler-app/client/ui/src/app/store.ts";
+import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
+import { createAppCancellationEnvelope } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
 
 test("createAppServer canonical navigation and SessionView feed the keyed frontend store", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-steward-route-"));
@@ -140,6 +142,24 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
       sessionHintForRow(parentSessionId),
     );
     expect(state.sessionView).toBeNull();
+
+    const cancelResponse = await fetch(`${server.url}steward-relations/relation-route/cancel`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ parent_session_id: parentSessionId }),
+    });
+    expect(cancelResponse.status).toBe(202);
+    const queued = new NativeInboundQueue(root).findIdempotent(createAppCancellationEnvelope({
+      chatId: childSessionId,
+      sessionId: childSessionId,
+      turnId: childTurnId,
+      requestId: `app-steward-cancel:relation-route:${childTurnId}`,
+      requestedAt: "ignored-by-identity",
+    }));
+    expect(queued?.envelope.control).toMatchObject({
+      kind: "cancel_turn",
+      turnId: childTurnId,
+    });
   } finally {
     server.stop();
     rmSync(root, { recursive: true, force: true });

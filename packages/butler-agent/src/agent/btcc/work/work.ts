@@ -216,6 +216,10 @@ export function createDurableWorkService(
       requiredText(turnId, "turnId");
       return store.boundWorkForTurn(turnId);
     },
+    abandonBoundWorkForTurn(turnId) {
+      requiredText(turnId, "turnId");
+      return store.abandonBoundWorkForTurn(turnId);
+    },
   };
 }
 

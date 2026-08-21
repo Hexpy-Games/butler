@@ -97,6 +97,10 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     return this.reader.boundView(turnId);
   }
 
+  async abandonBoundWorkForTurn(turnId: string): Promise<DurableWorkView | null> {
+    return this.writeTransaction(() => this.sessions.abandonBoundTurn(turnId));
+  }
+
   async bindOpenWork(
     scope: WorkTurnScope,
     expectedWorkId?: string,

@@ -33,14 +33,11 @@ import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
 import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
 import { privateModifyContinuationPromptInput } from "./guided-authority-continuation.ts";
 import type { PrincipalAuthority } from "../authority/index.ts";
-import { ensureSubsessionChildRootWork, subsessionToolInput } from "../subsessions/index.ts";
+import { ensureSubsessionChildRootWork, stewardSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
+import { withStewardDirection } from "./guided-steward-direction.ts";
 type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
-export function createProductionGuidedTurnAgent(
-  input: ProductionGuidedTurnAgentInput,
-): BtccAgentLoop;
-export function createProductionGuidedTurnAgent(
-  input: TestGuidedTurnAgentInput,
-): BtccAgentLoop;
+export function createProductionGuidedTurnAgent(input: ProductionGuidedTurnAgentInput): BtccAgentLoop;
+export function createProductionGuidedTurnAgent(input: TestGuidedTurnAgentInput): BtccAgentLoop;
 export function createProductionGuidedTurnAgent(
   input: ProductionGuidedTurnAgentInput | TestGuidedTurnAgentInput,
 ): BtccAgentLoop {
@@ -251,6 +248,7 @@ export function createProductionGuidedTurnAgent(
         turnId: turn.turnId, originalRequest: turn.originalMessage,
         trackingMode: policy.trackingMode, responseLanguage,
       });
+      const directionAware = withStewardDirection({ modelRound, safeBoundary: stewardSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: closeout.reviewFinalCandidate });
       const loopOptions: BtccAgentLoopInput = {
         prompt: requestAttribution.prompt,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
@@ -291,7 +289,7 @@ export function createProductionGuidedTurnAgent(
         // This is an internal execution-window size. The same Turn remains
         // active across windows until the model reaches a final answer.
         maxIterations: Math.max(1, input.executionWindowSize ?? 60),
-        modelRound,
+        modelRound: directionAware.modelRound,
         operationResultReplay: operationResults.replay,
         ...(continuationBudget ? { continuationBudget } : {}),
         resolveOperationResultCallId: toolCalls.journalCallIdForProviderCall,
@@ -300,7 +298,7 @@ export function createProductionGuidedTurnAgent(
           trackingMode: policy.trackingMode, signal,
         }),
         ...authorityProjection.loopCallbacks,
-        reviewFinalCandidate: closeout.reviewFinalCandidate,
+        reviewFinalCandidate: directionAware.reviewFinalCandidate,
         executeTool: async (call) => await toolCalls.executeTool({
           name: call.name,
           args: call.arguments,

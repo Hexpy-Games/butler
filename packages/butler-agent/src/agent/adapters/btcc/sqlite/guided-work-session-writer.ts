@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type {
   ContinueWorkCommand,
+  DurableWorkView,
   ReplaceWorkPlanCommand,
   StartWorkCommand,
   WorkTurnScope,
@@ -247,6 +248,13 @@ export class GuidedWorkSessionWriter {
       throw new Error("Durable Work Turn scope does not match its bound Work");
     }
     return bound;
+  }
+
+  abandonBoundTurn(turnId: string): DurableWorkView | null {
+    const work = this.reader.boundView(turnId);
+    if (!work || work.status === "completed" || work.status === "abandoned") return work;
+    this.abandon(work.workId);
+    return this.reader.view(work.workId);
   }
 
   private createAndBind(

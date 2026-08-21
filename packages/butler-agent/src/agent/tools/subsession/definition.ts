@@ -98,3 +98,53 @@ export const delegateToStewardToolMetadata: ToolCapabilityMetadata = {
     "The delegated packet bounds authority and context; it does not replace the ordinary BTCC Work lifecycle.",
   ],
 };
+
+export const steerStewardToolDefinition: ButlerToolDefinition = {
+  type: "function",
+  name: "steer_steward",
+  description: "Send a bounded correction or added instruction to one active Steward relation. Continue the same relation and Work; never create a replacement delegation. Provide relation_id when more than one Steward is active.",
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      instruction: { type: "string", minLength: 1, maxLength: 1200 },
+      relation_id: { type: "string", minLength: 1, maxLength: 160 },
+      safe_title: { type: "string", minLength: 1, maxLength: 120 },
+    },
+    required: ["instruction"],
+  },
+  effectBoundary: "turn_local",
+  concurrencySafe: false,
+  interruptBehavior: "continue",
+  transcriptVisibility: "visible",
+};
+
+export const steerStewardToolMetadata: ToolCapabilityMetadata = {
+  category: "dispatch",
+  tags: ["subsession", "steward", "direction"],
+  safetyNotes: ["Persists one addressed direction and applies it only at the active Steward's next safe model boundary."],
+};
+
+export const cancelStewardToolDefinition: ButlerToolDefinition = {
+  type: "function",
+  name: "cancel_steward",
+  description: "Stop one active Steward relation through the existing durable cancel_turn queue. Provide relation_id when more than one Steward is active.",
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      relation_id: { type: "string", minLength: 1, maxLength: 160 },
+      safe_title: { type: "string", minLength: 1, maxLength: 120 },
+    },
+  },
+  effectBoundary: "turn_local",
+  concurrencySafe: false,
+  interruptBehavior: "continue",
+  transcriptVisibility: "visible",
+};
+
+export const cancelStewardToolMetadata: ToolCapabilityMetadata = {
+  category: "dispatch",
+  tags: ["subsession", "steward", "cancel"],
+  safetyNotes: ["Targets one exact active relation and reuses the canonical durable Turn cancellation path."],
+};

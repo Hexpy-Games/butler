@@ -300,6 +300,7 @@ function fakeStore(input: {
     claimCloseoutCorrection: () => Promise.resolve(false),
     attachToolResult: () => Promise.resolve(input.context.work),
     boundWorkForTurn: () => Promise.resolve(input.context.work),
+    abandonBoundWorkForTurn: () => Promise.resolve(input.context.work),
   };
 }
 

@@ -207,6 +207,7 @@ interface ButlerStore {
     options?: SessionViewRefreshOptions,
   ) => Promise<boolean>;
   refreshSessionObserver: (sessionId?: string) => Promise<boolean>;
+  cancelObservedSteward: (relationId: string) => Promise<boolean>;
   reloadMessages: (chatId?: string) => Promise<void>;
   refreshSessionSummary: (chatId?: string) => Promise<void>;
   sendMessage: (text: string, controls?: ComposerControls) => Promise<void>;
@@ -1154,6 +1155,23 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       set((state) => applySessionView(state, data));
       return true;
     } catch {
+      return false;
+    }
+  },
+
+  cancelObservedSteward: async (relationId) => {
+    const parentSessionId = get().activeChatId;
+    if (!isServerBackedSessionId(parentSessionId) || !relationId.trim()) return false;
+    try {
+      await api(`/steward-relations/${encodeURIComponent(relationId)}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ parent_session_id: parentSessionId }),
+      });
+      await get().refreshSessionObserver();
+      await get().refreshSessionView(parentSessionId);
+      return true;
+    } catch (error) {
+      notifyError(error, "Steward stop failed", { id: `steward-stop-${relationId}` });
       return false;
     }
   },

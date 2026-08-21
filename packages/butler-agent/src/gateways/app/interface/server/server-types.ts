@@ -75,6 +75,8 @@ export interface AppRouteRequest {
   localAuth: LocalAuthConfig;
   butlerData: string;
   authority: PrincipalAuthority;
+  stewardObserver: StewardObserverReader;
+  serviceClient: ButlerServiceClient;
 }
 
 export interface AppRouteContext extends Omit<AppRouteRequest, "localAuth"> {

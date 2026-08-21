@@ -45,6 +45,7 @@ export const AGENT_BTCC_STATEFUL_TABLES = [
   "btcc_steward_results",
   "btcc_stop_requests",
   "btcc_subsession_delegations",
+  "btcc_subsession_directions",
   "btcc_subsession_outbox",
   "btcc_terminal_settlement_wakes",
   "btcc_turns",
@@ -65,4 +66,5 @@ export const AGENT_BTCC_MIGRATION_MANIFEST_ID =
 export const ACCEPTED_HISTORICAL_MANIFEST_IDS = new Set([
   "0ccdc30dc007152084907cd49f55a79a611204aa0ed9446905e6719e9d1652ed",
   "24183c8511c1b3b326fad29f45ea4b30924d896c1e017baffe73564822821958",
+  "aca1243fa83f30fed101080d3cfd384dcf3a6160d9492ebfb768777529e940c1",
 ]);

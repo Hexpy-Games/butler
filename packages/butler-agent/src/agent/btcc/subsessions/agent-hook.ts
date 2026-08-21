@@ -33,3 +33,23 @@ export function subsessionToolInput(
       }
     : {};
 }
+
+export function stewardSafeBoundary(input: {
+  service?: SubsessionDelegationService;
+  turn: TurnRecord;
+}): (() => Promise<string | undefined>) | undefined {
+  if (!input.service || input.turn.context.executionPolicy?.role !== "steward") return undefined;
+  return async () => {
+    const direction = await input.service!.consumeStewardDirection({
+      childSessionId: input.turn.sessionId,
+      childTurnId: input.turn.turnId,
+    });
+    if (!direction) return undefined;
+    return [
+      "Butler direction update. Apply this at the next safe boundary without changing the immutable delegation packet, authority, workspace, or Work identity.",
+      `Direction revision: ${direction.revision}`,
+      `Instruction: ${direction.instruction}`,
+      "Continue the same Work and record truthful progress, review, validation, and terminal evidence.",
+    ].join("\n");
+  };
+}

@@ -283,7 +283,7 @@ test("SS-03B guided instructions define semantic delegation selection", () => {
     "Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",
   );
   expect(instructions).toContain(
-    "When the user rejects or corrects a substantial delegated result and asks to investigate or execute it again, treat the corrected objective as a fresh delegation decision. If it remains substantial, call delegate_to_steward again as the first and only tool; do not inspect, plan, resume Work, or execute that corrected objective in Butler merely because an earlier Steward relation exists.",
+    "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",
   );
 });
 

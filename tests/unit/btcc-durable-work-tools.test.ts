@@ -642,6 +642,7 @@ function fakeService(
     claimCloseoutCorrection: async () => false,
     attachToolResult: async () => workView(),
     boundWorkForTurn: async () => null,
+    abandonBoundWorkForTurn: async () => null,
     ...overrides,
   };
 }

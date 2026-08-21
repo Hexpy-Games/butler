@@ -22,6 +22,7 @@ const HISTORICAL_STATEFUL_TABLES = AGENT_BTCC_STATEFUL_TABLES.filter((table) =>
     "btcc_session_relations",
     "btcc_steward_results",
     "btcc_subsession_delegations",
+    "btcc_subsession_directions",
     "btcc_subsession_outbox",
   ].includes(table),
 );
@@ -64,6 +65,7 @@ function createPreviouslyActivatedDatabase(options: { additiveTables?: boolean }
   if (options.additiveTables === false) {
     db.exec(`
       DROP TABLE btcc_subsession_outbox;
+      DROP TABLE btcc_subsession_directions;
       DROP TABLE btcc_steward_results;
       DROP TABLE btcc_subsession_delegations;
       DROP TABLE btcc_session_relations;

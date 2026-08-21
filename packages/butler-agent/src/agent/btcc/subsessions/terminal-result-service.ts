@@ -33,6 +33,9 @@ export async function completeStewardResultForDependencies(
   }
   const expectedResultId = subsessionResultId(relation.child_session_id, expectedChildTurnId);
   if (resultInput.resultId !== expectedResultId) throw new Error("subsession_result_identity_mismatch");
+  if (resultInput.status === "cancelled") {
+    await input.durableWork.abandonBoundWorkForTurn(resultInput.childTurnId);
+  }
 
   const existing = input.store.resultByRelationId(relation.relation_id);
   if (existing) {

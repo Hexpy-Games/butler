@@ -76,6 +76,10 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       .all(sessionId);
   }
 
+  relationById(relationId: string): StewardObserverRelation | null {
+    return this.relation("relation_id", relationId);
+  }
+
   relationForChild(sessionId: string): StewardObserverRelation | null {
     return this.relation("child_session_id", sessionId);
   }
@@ -213,7 +217,7 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
   }
 
   private relation(
-    field: "child_session_id",
+    field: "child_session_id" | "relation_id",
     sessionId: string,
   ): StewardObserverRelation | null {
     const row = this.db

@@ -79,6 +79,7 @@ export interface StewardObserverOperationOutputChunk {
 
 export interface StewardObserverReader {
   relationsForParent(sessionId: string): StewardObserverRelation[];
+  relationById(relationId: string): StewardObserverRelation | null;
   relationForChild(sessionId: string): StewardObserverRelation | null;
   isParentResultInput(sessionId: string, text: string): boolean;
   snapshot(sessionId: string): StewardObserverSnapshot | null;

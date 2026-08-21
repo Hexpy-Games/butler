@@ -682,8 +682,42 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     expect(followUpUserMessage?.turn_id).toBe(exactFollowUpQueueRow.turn_id!);
     expect(followUpAssistant?.role).toBe("assistant");
     expect(followUpAssistant?.turn_id).toBe(exactFollowUpQueueRow.turn_id!);
+    const steerMarker = "STEWARD_DIRECTION_MARKER_20260821";
+    const steerInput = {
+      chat_id: "general",
+      text: `The active inspection needs a correction. Add the exact correction marker ${steerMarker} to the same work.`,
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+      access_mode: "full_access",
+      client_message_id: "client-steer-steward-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    };
+    expect((await postAppMessage(app.url, authToken, steerInput)).status).toBe(202);
+    const directionDb = new Database(join(root, "agent-runtime", "btcc.sqlite"));
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      inbound.poll({ queue, server: gateway, store: bindings, deliveryGuard, limit: 8, maxConcurrentSessions: 4 });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      if (directionDb.query<{ count: number }, []>(
+        "SELECT COUNT(*) AS count FROM btcc_subsession_directions WHERE status = 'pending'",
+      ).get()?.count === 1) break;
+    }
+    expect(directionDb.query<{ count: number }, []>(
+      "SELECT COUNT(*) AS count FROM btcc_subsession_directions WHERE status = 'pending'",
+    ).get()?.count).toBe(1);
     releaseHeldChild();
     await inbound.waitForIdle();
+    expect(childRequests.some((request) =>
+      request.messages.some((message) => message.content.includes(steerMarker)),
+    )).toBe(true);
+    expect(directionDb.query<{ status: string; applied_child_turn_id: string }, []>(`
+      SELECT status, applied_child_turn_id FROM btcc_subsession_directions
+    `).get()).toEqual({
+      status: "applied",
+      applied_child_turn_id: activeChild!.active_turn!.id,
+    });
+    expect(directionDb.query<{ count: number }, []>(
+      "SELECT COUNT(*) AS count FROM btcc_session_relations",
+    ).get()?.count).toBe(1);
+    directionDb.close();
     const beforeRestartDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
     const packetBeforeRestart = beforeRestartDb.query<{ packet_json: string }, []>(
       "SELECT packet_json FROM btcc_subsession_delegations",
@@ -1578,6 +1612,17 @@ function readOnlyStewardRound(
         };
       }
       if (isParent) {
+        const requestText = request.messages.map((message) => message.content).join("\n");
+        if (requestText.includes("Add the exact correction marker")) {
+          const alreadySteered = requestText.includes("instruction_id");
+          return alreadySteered
+            ? { text: "The active Steward received the correction.", toolCalls: [] }
+            : {
+                toolCalls: [toolCall("steer-active-steward", "steer_steward", {
+                  instruction: requestText.match(/STEWARD_DIRECTION_MARKER_\d+/u)?.[0] ?? "Apply the correction.",
+                })],
+              };
+        }
         const missingContext = request.messages.some((message) =>
           message.content.includes("requires verified project context") ||
           message.content.includes("delegation_context_incomplete"),

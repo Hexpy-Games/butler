@@ -10,6 +10,7 @@ import type { SessionView } from "@/app/types.ts";
 let root: Root | undefined;
 const initialObserverSessionId = useButlerStore.getState().observerSessionId;
 const initialSessionViews = useButlerStore.getState().sessionViews;
+const initialCancelObservedSteward = useButlerStore.getState().cancelObservedSteward;
 
 afterEach(async () => {
   if (root) await act(async () => root?.unmount());
@@ -17,6 +18,7 @@ afterEach(async () => {
   useButlerStore.setState({
     observerSessionId: initialObserverSessionId,
     sessionViews: initialSessionViews,
+    cancelObservedSteward: initialCancelObservedSteward,
   });
   delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: unknown })
     .IS_REACT_ACT_ENVIRONMENT;
@@ -82,9 +84,14 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
   const container = window.document.querySelector("#root");
   if (!(container instanceof window.HTMLElement)) throw new Error("Missing root.");
   const sessionId = "steward-observer-behavior";
+  const cancelledRelations: string[] = [];
   useButlerStore.setState({
     observerSessionId: sessionId,
     sessionViews: { [sessionId]: observerView(sessionId) },
+    cancelObservedSteward: async (relationId) => {
+      cancelledRelations.push(relationId);
+      return true;
+    },
   });
   expect(useButlerStore.getState().observerSessionId).toBe(sessionId);
   root = createRoot(container);
@@ -102,6 +109,12 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
     .not.toContain(expect.stringMatching(/copy/iu));
   expect(dialog.querySelector('[data-test-class*="composer"]')).toBeNull();
   expect(dialog.textContent).not.toContain("Composer");
+  const stopButton = Array.from(dialog.querySelectorAll("button")).find((button) =>
+    /중지|stop/iu.test(button.textContent ?? ""),
+  );
+  expect(stopButton).toBeDefined();
+  await act(async () => stopButton?.click());
+  expect(cancelledRelations).toEqual(["observer-relation"]);
 
   await act(async () => {
     dialog.dispatchEvent(new window.KeyboardEvent("keydown", {
@@ -117,8 +130,16 @@ function observerView(sessionId: string): SessionView {
   return {
     session_id: sessionId,
     kind: "chat",
-    status: "delivered",
-    active_turn: null,
+    status: "active",
+    active_turn: {
+      id: "observer-active-turn",
+      state: "thinking",
+      cancellable: true,
+      retryable: false,
+      created_at: "2026-08-19T00:00:30.000Z",
+      updated_at: "2026-08-19T00:00:30.000Z",
+      progress: { safe_progress_rows: [] },
+    },
     latest_turn: null,
     messages: [{
       id: "observer-assistant-message",
