@@ -8,6 +8,8 @@ import { createStewardWorktree } from "./worktree.ts";
 import { childProjectContextBinding, delegationProjectContextReady, snapshotDelegationProjectContext } from "./project-context.ts";
 import { normalizeSubsessionAllowedToolsAndEffects, normalizeSubsessionMutationScope } from "./scope.ts";
 import { completePacketContext } from "./terminal-results.ts";
+import { renderDelegatedParentConversationContext } from "./parent-conversation-context.ts";
+import { renderStewardInput } from "./steward-input.ts";
 import { createSubsessionControlService } from "./control.ts";
 import type {
   CreatedDelegation,
@@ -108,6 +110,11 @@ export function createSubsessionDelegationService(
           : undefined,
         branch,
       }, projectContext);
+      const parentConversationContext = renderDelegatedParentConversationContext({
+        conversations: input.conversations,
+        parentSessionId: normalizedRequest.parent_session_id,
+        modelRef: normalizedRequest.model_ref,
+      });
       registerChildSession(input, parent.workspacePath, normalizedRequest, packet, childSessionId);
       const childWorkspacePath = normalizedRequest.execution_mode === "read_only"
         ? parent.workspacePath
@@ -119,7 +126,7 @@ export function createSubsessionDelegationService(
       }
       input.store.create({ relation, packet, childTurnId, rootWorkId });
       enqueueChild(childQueue, packet, normalizedRequest.parent_session_id, childSessionId,
-        childTurnId, childWorkspacePath, now);
+        childTurnId, childWorkspacePath, now, parentConversationContext);
       return { relation, packet, child_turn_id: childTurnId, root_work_id: rootWorkId,
         child_workspace_path: childWorkspacePath } satisfies CreatedDelegation;
     },
@@ -270,6 +277,7 @@ function enqueueChild(
   childTurnId: string,
   workspacePath: string,
   timestamp: string,
+  parentConversationContext: string,
 ): void {
   childQueue.enqueueIdempotent({
     eventId: `steward:${packet.delegation_id}`,
@@ -279,7 +287,7 @@ function enqueueChild(
     sender: { id: "butler-steward-dispatch", displayName: "Butler Steward" },
     message: {
       id: `steward-message:${packet.delegation_id}`,
-      text: renderStewardInput(packet),
+      text: renderStewardInput(packet, parentConversationContext),
       timestamp,
     },
     routingHints: { stewardId: childSessionId, turnId: childTurnId },
@@ -295,30 +303,6 @@ function enqueueChild(
 }
 function nextOrdinal(input: SubsessionDelegationDependencies, parentSessionId: string): number {
   return (input.store.relationsByParentSessionId(parentSessionId).at(-1)?.ordinal ?? 0) + 1;
-}
-function renderStewardInput(packet: DelegationPacket): string {
-  return [
-    packet.execution_mode === "read_only"
-      ? "Steward role contract: execute the bounded delegated inspection through the ordinary BTCC plan, evidence, review, validation, and terminal lifecycle in the validated project workspace."
-      : "Steward role contract: execute the bounded delegated Work through the ordinary BTCC plan, mutation, validation, correction, review, and terminal lifecycle in the session-owned worktree.",
-    `delegation_id: ${packet.delegation_id}`,
-    `task_id: ${packet.task_id}`,
-    `relation_id: ${packet.relation_id}`,
-    `parent_session_id: ${packet.parent_session_id}`,
-    `parent_turn_id: ${packet.parent_turn_id}`,
-    `execution_mode: ${packet.execution_mode}`,
-    `objective: ${packet.objective}`,
-    `acceptance_criteria: ${packet.acceptance_criteria.join("; ")}`,
-    `task_or_plan_refs: ${packet.task_or_plan_refs.join("; ") || "none"}`,
-    `constraints: ${packet.constraints_and_non_goals.join("; ")}`,
-    `allowed_tools_and_effects: ${packet.allowed_tools_and_effects.join("; ")}`,
-    `mutation_scope: ${packet.mutation_scope.join("; ") || "none"}`,
-    `workspace_and_worktree: ${stableJson(packet.workspace_and_worktree)}`,
-    `expected_result_schema: ${stableJson(packet.expected_result_schema)}`,
-    `work_creation_policy: ${packet.work_creation_policy}`,
-    `access_and_budget_policy: ${stableJson(packet.access_and_budget_policy)}`,
-    ...(packet.parent_work_ref ? [`parent_work_ref: ${stableJson(packet.parent_work_ref)}`] : []),
-  ].join("\n");
 }
 function normalizeDelegationRequest(input: DelegationRequest): DelegationRequest {
   for (const [key, value] of Object.entries(input)) {

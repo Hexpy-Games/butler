@@ -47,6 +47,13 @@ const DETAILED_STEWARD_REPORT = JSON.stringify({
   },
 }, null, 2);
 
+const CONTEXT_PRESERVING_SYNTHESIS = [
+  "Complete replacement:",
+  "- household-noise requirements must remain in the replacement.",
+  "- construction-noise requirements must remain in the replacement.",
+  "- the newly requested bounded fixture correction was inspected, applied, and validated.",
+].join("\n");
+
 type PublicSessionView = {
   messages: Array<{
     id: string;
@@ -73,6 +80,8 @@ type PublicSessionView = {
 
 function detailedMutationReport(receiptIds: readonly string[]): string {
   return [
+  "Preserved requirement: household-noise requirements must remain in the replacement.",
+  "Preserved requirement: construction-noise requirements must remain in the replacement.",
   "Conclusion: the bounded Steward files were edited and verified.",
   `Evidence: fixtures/discovery-target.txt, fixtures/verification-target.txt, and ${receiptIds.join("; ")} match the accepted mutation and correction.`,
   "Tests: passed; validation failed before correction and passed afterward.",
@@ -156,6 +165,24 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
   let childTurnIdForDuplicate!: string;
   let parentMessageCount!: number;
   try {
+    const baselineResponse = await fetch(`${app.url}messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        chat_id: "general",
+        text: "State the existing household-noise and construction-noise requirements.",
+        model: "openai/gpt-5.5",
+        reasoning_effort: "low",
+        access_mode: "full_access",
+        client_message_id: "client-context-baseline-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      }),
+    });
+    expect(baselineResponse.status).toBe(202);
+    await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
+
     const response = await fetch(`${app.url}messages`, {
       method: "POST",
       headers: {
@@ -180,7 +207,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
     expect(appBeforeDuplicate.parentInputCount).toBe(1);
     expect(appBeforeDuplicate.parentTurnCount).toBe(1);
     expect(appBeforeDuplicate.assistantResultCount).toBe(1);
-    expect(appBeforeDuplicate.newestAssistantText).toBe("Steward result synthesized.");
+    expect(appBeforeDuplicate.newestAssistantText).toBe(CONTEXT_PRESERVING_SYNTHESIS);
 
     const btccDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
     try {
@@ -262,7 +289,14 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       ]) {
         expect(childPrompt).toContain(requiredPacketField);
       }
-      expect(childPrompt).not.toMatch(/Butler persona|Recent Conversation|Hot Cache|recall_memory|MCP|memory:/iu);
+      expect(childPrompt).toContain("## Parent Conversation Context");
+      expect(childPrompt).toContain(
+        "Inspect, correct, and validate the bounded Steward fixture files.",
+      );
+      expect(childPrompt).toContain("PREVIOUS_COMPLETE_RESULT");
+      expect(childPrompt).toContain("household-noise requirements must remain");
+      expect(childPrompt).toContain("construction-noise requirements must remain");
+      expect(childPrompt).not.toMatch(/Butler persona|Hot Cache|recall_memory|MCP|memory:/iu);
       const childToolNames = [...new Set(childTaskRequests.flatMap((request) =>
         request.tools.map((tool) => tool.name),
       ))].sort();
@@ -316,7 +350,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       const turnCount = btccDb.query<{ count: number }, [string]>(
         "SELECT COUNT(*) AS count FROM btcc_turns WHERE session_id = ?",
       ).get(parentSessionId)?.count ?? 0;
-      expect(turnCount).toBe(2);
+      expect(turnCount).toBe(3);
       const child = bindings.listSessions().find((session) => session.role === "steward");
       expect(child).toBeDefined();
       expect(child?.workspacePath).not.toBe(root);
@@ -328,7 +362,10 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       const newest = btccDb.query<{ content: string; session_id: string }, [string]>(
         "SELECT content, session_id FROM btcc_messages WHERE session_id = ? ORDER BY created_at DESC, message_id DESC LIMIT 1",
       ).get(parentSessionId);
-      expect(newest?.content).toBe("Steward result synthesized.");
+      expect(newest?.content).toBe(CONTEXT_PRESERVING_SYNTHESIS);
+      expect(newest?.content).toContain("household-noise requirements must remain");
+      expect(newest?.content).toContain("construction-noise requirements must remain");
+      expect(newest?.content).toContain("newly requested bounded fixture correction");
       expect(newest?.session_id).toBe(parentSessionId);
       parentMessageCount = btccDb.query<{ count: number }, [string]>(
         "SELECT COUNT(*) AS count FROM btcc_messages WHERE session_id = ?",
@@ -399,7 +436,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
     try {
       expect(afterDb.query<{ count: number }, [string]>(
         "SELECT COUNT(*) AS count FROM btcc_turns WHERE session_id = ?",
-      ).get(parentSessionId)?.count).toBe(2);
+      ).get(parentSessionId)?.count).toBe(3);
       expect(afterDb.query<{ count: number }, []>(
         "SELECT COUNT(*) AS count FROM btcc_steward_results",
       ).get()?.count).toBe(1);
@@ -1217,7 +1254,7 @@ test("Steward scope rejects wildcard capabilities and file boundary escapes", as
 async function readAppSnapshot(
   app: ReturnType<typeof createAppServer>,
   authToken: string,
-  expectedAssistantText = "Steward result synthesized.",
+  expectedAssistantText = CONTEXT_PRESERVING_SYNTHESIS,
 ): Promise<{
   queueCount: number;
   parentInputCount: number;
@@ -1288,8 +1325,20 @@ async function readAppSnapshot(
 function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
   const parentRounds = new Map<string, number>();
   const childRounds = new Map<string, number>();
+  let baselineDelivered = false;
   return {
     async runRound(request) {
+      if (!baselineDelivered) {
+        baselineDelivered = true;
+        return {
+          text: [
+            "PREVIOUS_COMPLETE_RESULT",
+            "household-noise requirements must remain in the replacement.",
+            "construction-noise requirements must remain in the replacement.",
+          ].join("\n"),
+          toolCalls: [],
+        };
+      }
       const isSynthesis = request.messages.some((message) =>
         message.content.includes("Canonical child result synthesis") ||
         message.content.includes("Subsession result"),
@@ -1297,7 +1346,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
       const isParent = request.tools.some((tool) => tool.name === "delegate_to_steward");
       if (!isParent && !isSynthesis) childRequests.push(request);
       if (isSynthesis) {
-        return { text: "Steward result synthesized.", toolCalls: [] };
+        return { text: CONTEXT_PRESERVING_SYNTHESIS, toolCalls: [] };
       }
       if (isParent) {
         const key = request.messages.some((message) => message.content.includes("Subsession result"))
@@ -1306,7 +1355,18 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
         const round = (parentRounds.get(key) ?? 0) + 1;
         parentRounds.set(key, round);
         if (key === "delegation") {
-          if (round > 1) return { text: "Delegation accepted.", toolCalls: [] };
+          if (round === 1) {
+            return { text: "I will inspect and revise the fixtures directly.", toolCalls: [] };
+          }
+          if (round > 2) return { text: "Delegation accepted.", toolCalls: [] };
+          expect(request.toolChoice).toBe("required");
+          expect(request.tools.map((tool) => tool.name)).toEqual(
+            expect.arrayContaining([
+              "cancel_steward",
+              "delegate_to_steward",
+              "steer_steward",
+            ]),
+          );
           return {
             toolCalls: [toolCall("delegate", "delegate_to_steward", {
               execution_mode: "mutation",
@@ -1324,7 +1384,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
             })],
           };
         }
-        return { text: "Steward result synthesized.", toolCalls: [] };
+        return { text: CONTEXT_PRESERVING_SYNTHESIS, toolCalls: [] };
       }
       const childKey = request.messages.map((message) => message.content).find((content) => content.includes("delegation_id")) ?? "child";
       const round = (childRounds.get(childKey) ?? 0) + 1;

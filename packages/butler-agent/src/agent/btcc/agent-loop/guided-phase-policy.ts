@@ -31,6 +31,7 @@ import {
   phaseAllowsTool,
   removeRuntimeOwnedSchemaDefaults,
 } from "./guided-phase-policy-helpers.ts";
+import { ordinaryChatPhaseForIntent } from "./guided-delegation-intent.ts";
 
 const FLAG_NAME = "BUTLER_PHASE_TOOL_SURFACE";
 const POLICY_REVISION = "butler.btcc-tool-instruction-policy.v1";
@@ -61,7 +62,7 @@ export function selectGuidedTurnPhasePolicy(
     turn, env, exactResultReplay.exactReadCapability,
   );
   const legacyProvider = visibleToolDefinitions(legacyAuthorized, executionPolicy);
-  const phase = guidedTurnPhase(executionPolicy);
+  const phase = guidedTurnPhase(executionPolicy, turn.originalMessage);
   if (!exactResultReplay.exactReadCapability &&
     executionPolicy.requiredNativeTools.some(isExactResultReadTool)) {
     const requiredExactTool = executionPolicy.requiredNativeTools
@@ -327,12 +328,17 @@ function isEnabled(env: Record<string, string | undefined>): boolean {
   return TRUE_FLAG_VALUES.has(env[FLAG_NAME]?.trim().toLowerCase() ?? "");
 }
 
-function guidedTurnPhase(policy: ButlerExecutionPolicy): GuidedTurnPhase {
+function guidedTurnPhase(
+  policy: ButlerExecutionPolicy,
+  originalMessage: string,
+): GuidedTurnPhase {
   const hasWorkspaceAuthority = policy.requiredNativeToolProfiles
     .includes("workspace") || policy.requiredNativeTools.some((name) => {
       const category = TOOL_CAPABILITY_METADATA[name]?.category;
       return category === "command" || category === "file";
     });
-  if (!policy.projectId && !hasWorkspaceAuthority) return "direct";
+  if (!policy.projectId && !hasWorkspaceAuthority) {
+    return ordinaryChatPhaseForIntent(policy, originalMessage);
+  }
   return policy.accessMode === "read_only" ? "read_only" : "execution";
 }

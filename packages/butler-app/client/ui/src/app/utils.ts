@@ -376,6 +376,7 @@ interface TimelineProgressBucket {
   label?: string;
   reviveForRetry?: boolean;
   replacesOptimisticClientTurn?: boolean;
+  subsessionResult?: SessionSummaryView["latest_turn_subsession_result"];
 }
 
 interface TimelineEventPatch {
@@ -488,6 +489,10 @@ function collectTimelineEventPatch(
         event.payload?.state ?? turn?.state,
         event.payload?.safe_status_label ?? turn?.safe_status_label,
       );
+      const subsessionResult = turn?.execution_controls?.subsession_result;
+      if (incomingTurnId && subsessionResult) {
+        progressBucket(incomingTurnId).subsessionResult = subsessionResult;
+      }
       continue;
     }
     if (
@@ -588,12 +593,15 @@ function mergeTimelineProgressIntoSummary(
     currentState ?? "",
     selected.state ?? "",
   );
+  const turnChanged = Boolean(
+    nextTurnId && latest.turn_id && nextTurnId !== latest.turn_id,
+  );
   const previousRows =
-    resetForRetry || (nextTurnId && latest.turn_id && nextTurnId !== latest.turn_id)
+    resetForRetry || turnChanged
       ? []
       : (latest.safe_progress_rows ?? []);
   const currentStateForMerge =
-    resetForRetry || reviveForRetry ? "" : (currentState ?? "");
+    resetForRetry || reviveForRetry || turnChanged ? "" : (currentState ?? "");
   const nextState = selected.state
     ? progressMergeState(currentStateForMerge, selected.state)
     : currentState;
@@ -608,6 +616,9 @@ function mergeTimelineProgressIntoSummary(
   return {
     ...current,
     turn_state: nextState ?? current.turn_state,
+    ...(selected.subsessionResult
+      ? { latest_turn_subsession_result: selected.subsessionResult }
+      : {}),
     latest_progress: {
       ...(resetForRetry ? {} : latest),
       turn_id: nextTurnId ?? latest.turn_id,

@@ -41,6 +41,7 @@ export interface PromptMaterialRenderOptions {
   maxTokens: number;
   excludeSourceRef?: string | null;
   includeSummaries?: boolean;
+  includeTools?: boolean;
   currentRequest?: {
     id: string;
     text: string;
@@ -85,6 +86,10 @@ export interface ConversationPromptContextPlan {
   rendered: string;
 }
 
+// Preserve a bounded run of complete user-Butler pairs so short corrections
+// and promise-like acknowledgements cannot evict the result they refer to.
+const REQUIRED_RECENT_SEMANTIC_TURNS = 8;
+
 export function emptyConversationPromptContextPlan(
   sessionId: string,
   capacityTokens: number,
@@ -119,8 +124,13 @@ export function compilePromptMaterialContextPlan(
   const currentRequest = options.currentRequest ? currentRequestAtom(options.currentRequest) : null;
   const messages = material.semantic_tail
     .filter((message) => !options.excludeSourceRef || message.source_ref !== options.excludeSourceRef);
-  const turns = semanticTurnAtoms(messages, material.turns ?? [], material.outcomes ?? []);
-  const requiredTurns = turns.length > 0 ? [turns.at(-1)!] : [];
+  const turns = semanticTurnAtoms(
+    messages,
+    material.turns ?? [],
+    material.outcomes ?? [],
+    options.includeTools !== false,
+  );
+  const requiredTurns = turns.slice(-REQUIRED_RECENT_SEMANTIC_TURNS);
   const optionalTurns = turns.slice(0, -requiredTurns.length).reverse();
   const header = "## Recent Conversation";
   let used = serializedUpperBound(header);
@@ -223,6 +233,7 @@ function semanticTurnAtoms(
   messages: ConversationMessageWithParts[],
   turns: ConversationTurn[],
   outcomes: TurnOutcomeCapsule[],
+  includeTools: boolean,
 ): ConversationSemanticTurnAtom[] {
   const statusByTurnId = new Map(turns.map((turn) => [turn.id, turn.status]));
   const outcomeByTurnId = new Map(outcomes.map((outcome) => [outcome.turn_id, outcome]));
@@ -238,7 +249,7 @@ function semanticTurnAtoms(
     const last = group.at(-1)!;
     const turnId = first.turn_id;
     const id = turnId ? `conversation_turn:${turnId}` : `conversation_message:${first.id}`;
-    const contextMessages = group.map((message) => toContextMessage(message, true));
+    const contextMessages = group.map((message) => toContextMessage(message, includeTools));
     const outcome = turnId ? outcomeByTurnId.get(turnId) ?? null : null;
     const rendered = renderSemanticTurnMessages({
       id,

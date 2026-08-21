@@ -313,4 +313,5 @@ export type SubsessionDelegationDependencies = {
   effectJournal: import("../effects/contracts.ts").GuidedEffectJournal;
   parentTurns: Pick<import("../turn/index.ts").TurnStateRepository, "findTurn">;
   contextDocuments: import("../../context/context-projection.ts").ContextDocumentReader;
+  conversations: import("../../conversation/index.ts").ConversationContextStoreReader;
 };

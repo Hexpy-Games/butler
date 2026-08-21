@@ -35,6 +35,7 @@ import { privateModifyContinuationPromptInput } from "./guided-authority-continu
 import type { PrincipalAuthority } from "../authority/index.ts";
 import { ensureSubsessionChildRootWork, stewardSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
 import { withStewardDirection } from "./guided-steward-direction.ts";
+import { guidedSubsessionRoutingLoopControls, requiresAppSubsessionRouting } from "./guided-subsession-routing.ts";
 type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
 export function createProductionGuidedTurnAgent(input: ProductionGuidedTurnAgentInput): BtccAgentLoop;
 export function createProductionGuidedTurnAgent(input: TestGuidedTurnAgentInput): BtccAgentLoop;
@@ -247,7 +248,14 @@ export function createProductionGuidedTurnAgent(
         durableWork: input.durableWork, toolJournal: input.toolJournal, workScope,
         turnId: turn.turnId, originalRequest: turn.originalMessage,
         trackingMode: policy.trackingMode, responseLanguage,
+        subsessionRoutingRequired: requiresAppSubsessionRouting({ turn, policy, hasSubsessionResultEvidence: Boolean(subsessionResultEvidence) }),
       });
+      const resolveGuidedTools = phasePolicy.mode === "phase_minimal"
+        ? createGuidedRoundToolSurfaceResolver({
+            turnId: turn.turnId, tools: visibleTools, workScope, durableWork: input.durableWork,
+            requiredToolNames: new Set(policy.requiredNativeTools), toolJournal: input.toolJournal, effectJournal: input.effectJournal,
+          })
+        : undefined;
       const directionAware = withStewardDirection({ modelRound, safeBoundary: stewardSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: closeout.reviewFinalCandidate });
       const loopOptions: BtccAgentLoopInput = {
         prompt: requestAttribution.prompt,
@@ -275,17 +283,10 @@ export function createProductionGuidedTurnAgent(
         onProviderResponseIdentity,
         onEvent: (event) => recordRuntimeMemoryEvent(memoryAttribution, event),
         tools: visibleTools,
-        ...(phasePolicy.mode === "phase_minimal"
-          ? {
-              resolveTools: createGuidedRoundToolSurfaceResolver({
-                turnId: turn.turnId, tools: visibleTools,
-                requiredToolNames: new Set(policy.requiredNativeTools), toolJournal: input.toolJournal,
-                durableWork: input.durableWork,
-                workScope,
-                effectJournal: input.effectJournal,
-              }),
-            }
-          : {}),
+        ...guidedSubsessionRoutingLoopControls({
+          repairRequired: closeout.subsessionRoutingRepairRequired,
+          resolveTools: resolveGuidedTools,
+        }),
         // This is an internal execution-window size. The same Turn remains
         // active across windows until the model reaches a final answer.
         maxIterations: Math.max(1, input.executionWindowSize ?? 60),

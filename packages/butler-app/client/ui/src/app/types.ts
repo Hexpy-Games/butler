@@ -1387,6 +1387,7 @@ export interface TimelineEvent {
       state: string;
       safe_status_label?: string;
       updated_at?: string;
+      execution_controls?: SessionViewTurn["execution_controls"];
     };
     message_id?: string;
     chat_id?: string;

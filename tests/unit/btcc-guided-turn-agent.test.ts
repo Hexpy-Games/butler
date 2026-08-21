@@ -82,6 +82,32 @@ import { buildModelRoute, ModelRouteDurabilityError } from
 import { runOpenAIModelRound } from
   "../../packages/butler-agent/src/integrations/providers/openai/model-round.ts";
 
+test("substantial Butler work cannot settle as a promise-only direct reply", async () => {
+  const records: Array<{ toolName: string }> = [];
+  const closeout = createGuidedTurnCloseout({
+    durableWork: {} as DurableWorkService,
+    toolJournal: { list: () => records } as never,
+    workScope: { turnId: "turn-delegation-gate", sessionId: "session-delegation-gate" },
+    turnId: "turn-delegation-gate",
+    trackingMode: "none",
+    responseLanguage: "Korean",
+    originalRequest: "이전 문서를 요구사항을 보존해서 수정해줘",
+    subsessionRoutingRequired: true,
+  });
+
+  await expect(closeout.reviewFinalCandidate({ text: "수정하겠습니다." }))
+    .resolves.toMatchObject({
+      status: "continue",
+      observation: expect.stringContaining("delegate_to_steward"),
+    });
+  expect(closeout.subsessionRoutingRepairRequired()).toBe(true);
+
+  records.push({ toolName: "delegate_to_steward" });
+  expect(closeout.subsessionRoutingRepairRequired()).toBe(false);
+  await expect(closeout.reviewFinalCandidate({ text: "위임했습니다." }))
+    .resolves.toEqual({ status: "accepted" });
+});
+
 type ScriptedModelRoundStep =
   | ModelRoundResult
   | ((request: ModelRoundRequest, index: number) =>
