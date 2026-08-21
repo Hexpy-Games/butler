@@ -211,6 +211,8 @@ function providerCandidateToolNames(
   }
   if (policy.role === "butler" && policy.accessMode === "full_access") {
     names.add("delegate_to_steward");
+    names.add("steer_steward");
+    names.add("cancel_steward");
   }
   return names;
 }

@@ -30,6 +30,7 @@ import { readOperationResultsToolDefinition } from
   "../../tools/monitoring/read_operation_results/index.ts";
 import { subsessionToolNames } from "../subsessions/scope.ts";
 import { boundedStewardTools } from "./guided-phase-policy-helpers.ts";
+const STEWARD_PARENT_TOOL_NAMES = ["delegate_to_steward", "steer_steward", "cancel_steward"];
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
   disabledReason:
@@ -121,9 +122,9 @@ export function authorizedToolDefinitions(
   if (policy.accessMode === "full_access") names.add("call_mcp_tool");
   else names.delete("call_mcp_tool");
   if (policy.role === "butler" && policy.accessMode === "full_access") {
-    names.add("delegate_to_steward");
+    for (const name of STEWARD_PARENT_TOOL_NAMES) names.add(name);
   } else {
-    names.delete("delegate_to_steward");
+    for (const name of STEWARD_PARENT_TOOL_NAMES) names.delete(name);
   }
   for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
   const guidedLedgerEffects = new Set<string>(
@@ -175,7 +176,7 @@ export function hiddenNativeToolNamesForGuidedTurn(
 export function directSynthesisToolDefinitions<T extends { name: string }>(
   tools: readonly T[],
 ): T[] {
-  return tools.filter((tool) => tool.name !== "delegate_to_steward");
+  return tools.filter((tool) => !STEWARD_PARENT_TOOL_NAMES.includes(tool.name));
 }
 
 export function visibleToolDefinitions(authorized: readonly FunctionToolDefinition[], policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "trackingMode" | "projectId" | "subsession">, includeAttachedImageTool = false): FunctionToolDefinition[] {
@@ -206,7 +207,7 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
         ]
       : []),
     ...(policy.role === "butler" && policy.accessMode === "full_access"
-      ? ["delegate_to_steward"]
+      ? ["delegate_to_steward", "steer_steward", "cancel_steward"]
       : []),
     ...guidedWorkspaceVisibleToolNames(policy),
   ]);

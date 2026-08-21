@@ -324,6 +324,7 @@ export interface DurableWorkService {
   claimCloseoutCorrection(input: ClaimWorkCloseoutCorrectionInput): Promise<boolean>;
   attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView>;
   boundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
+  abandonBoundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
 }
 
 export interface DurableWorkStore {
@@ -344,4 +345,5 @@ export interface DurableWorkStore {
   claimCloseoutCorrection(input: ClaimWorkCloseoutCorrectionInput): Promise<boolean>;
   attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView>;
   boundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
+  abandonBoundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
 }

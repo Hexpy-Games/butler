@@ -1,7 +1,7 @@
 import type { SubsessionDelegationService } from "../../btcc/subsessions/index.ts";
 import type { ButlerToolHandler } from "../tool-execution-contracts.ts";
 import type { ButlerToolCall } from "../types.ts";
-import { delegateToStewardToolDefinition } from "./definition.ts";
+import { cancelStewardToolDefinition, delegateToStewardToolDefinition, steerStewardToolDefinition } from "./definition.ts";
 
 export function createSubsessionToolHandlers(input: {
   service?: SubsessionDelegationService;
@@ -44,6 +44,63 @@ export function createSubsessionToolHandlers(input: {
         status: "queued",
       };
     },
+    [steerStewardToolDefinition.name]: async (call: ButlerToolCall) => {
+      const identity = requireParentIdentity(input);
+      const instruction = requiredString(call.args.instruction, "instruction");
+      const direction = await input.service!.steerSteward({
+        ...identity,
+        instruction,
+        ...optionalRelationSelector(call.args),
+      });
+      return {
+        ok: true,
+        relation_id: direction.relation_id,
+        instruction_id: direction.instruction_id,
+        revision: direction.revision,
+        status: direction.status,
+      };
+    },
+    [cancelStewardToolDefinition.name]: async (call: ButlerToolCall) => {
+      const result = await input.service!.cancelSteward({
+        ...requireParentIdentity(input),
+        ...optionalRelationSelector(call.args),
+      });
+      return {
+        ok: true,
+        relation_id: result.relation.relation_id,
+        child_turn_id: result.child_turn_id,
+        status: result.status,
+      };
+    },
+  };
+}
+
+function requireParentIdentity(input: {
+  parentSessionId?: string;
+  parentTurnId?: string;
+  anchorMessageId?: string;
+}): { parentSessionId: string; sourceParentTurnId: string; sourceMessageId: string } {
+  if (!input.parentSessionId || !input.parentTurnId || !input.anchorMessageId) {
+    throw new Error("subsession_parent_turn_identity_missing");
+  }
+  return {
+    parentSessionId: input.parentSessionId,
+    sourceParentTurnId: input.parentTurnId,
+    sourceMessageId: input.anchorMessageId,
+  };
+}
+
+function optionalRelationSelector(args: Record<string, unknown>): {
+  relationId?: string;
+  safeTitle?: string;
+} {
+  return {
+    ...(typeof args.relation_id === "string" && args.relation_id.trim()
+      ? { relationId: args.relation_id.trim() }
+      : {}),
+    ...(typeof args.safe_title === "string" && args.safe_title.trim()
+      ? { safeTitle: args.safe_title.trim() }
+      : {}),
   };
 }
 

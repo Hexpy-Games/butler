@@ -8,6 +8,7 @@ import { createStewardWorktree } from "./worktree.ts";
 import { childProjectContextBinding, delegationProjectContextReady, snapshotDelegationProjectContext } from "./project-context.ts";
 import { normalizeSubsessionAllowedToolsAndEffects, normalizeSubsessionMutationScope } from "./scope.ts";
 import { completePacketContext } from "./terminal-results.ts";
+import { createSubsessionControlService } from "./control.ts";
 import type {
   CreatedDelegation,
   DelegationPacket,
@@ -140,6 +141,7 @@ export function createSubsessionDelegationService(
     pendingParentInputCount() {
       return input.store.pendingParentInputCount();
     },
+    ...createSubsessionControlService(input, childQueue),
   };
 }
 

@@ -6,6 +6,8 @@ import type {
   StewardResultCode,
   StewardResultEnvelope,
   StewardResultStatus,
+  StewardDirection,
+  CreateStewardDirectionInput,
   SubsessionDelegationStore,
 } from "../../../btcc/subsessions/index.ts";
 import {
@@ -20,6 +22,7 @@ import {
   renderParentResult,
   safeStewardSummary,
 } from "./subsession-result-record.ts";
+import { createStewardDirection, consumePendingStewardDirection } from "./subsession-direction-store.ts";
 
 type RelationRow = SessionRelation;
 type DelegationRow = {
@@ -143,6 +146,23 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     return this.db.query<{ task_id: string }, [string]>(`
       SELECT task_id FROM btcc_subsession_delegations WHERE relation_id = ?
     `).get(relationId)?.task_id ?? null;
+  }
+
+  childTurnIdByRelationId(relationId: string): string | null {
+    return this.db.query<{ child_turn_id: string }, [string]>(`
+      SELECT child_turn_id FROM btcc_subsession_delegations WHERE relation_id = ?
+    `).get(relationId)?.child_turn_id ?? null;
+  }
+
+  createDirection(direction: CreateStewardDirectionInput): StewardDirection {
+    return createStewardDirection(this.db, direction);
+  }
+
+  consumePendingDirection(input: {
+    relationId: string;
+    childTurnId: string;
+  }): StewardDirection | null {
+    return consumePendingStewardDirection(this.db, input);
   }
 
   resultByRelationId(relationId: string): StewardResultEnvelope | null {

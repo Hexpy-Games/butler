@@ -149,6 +149,24 @@ export type CreatedDelegation = {
   child_workspace_path: string;
 };
 
+export type StewardDirection = {
+  instruction_id: string;
+  relation_id: string;
+  revision: number;
+  source_parent_turn_id: string;
+  source_message_id: string;
+  instruction: string;
+  status: "pending" | "applied";
+  created_at: string;
+  applied_at: string | null;
+  applied_child_turn_id: string | null;
+};
+
+export type CreateStewardDirectionInput = Omit<
+  StewardDirection,
+  "revision" | "status" | "applied_at" | "applied_child_turn_id"
+>;
+
 export type CompleteStewardResultInput = {
   childSessionId: string;
   childTurnId: string;
@@ -177,6 +195,12 @@ export interface SubsessionDelegationStore {
   packetByRelationId(relationId: string): DelegationPacket | null;
   rootWorkIdByRelationId(relationId: string): string | null;
   taskIdByRelationId(relationId: string): string | null;
+  childTurnIdByRelationId(relationId: string): string | null;
+  createDirection(direction: CreateStewardDirectionInput): StewardDirection;
+  consumePendingDirection(input: {
+    relationId: string;
+    childTurnId: string;
+  }): StewardDirection | null;
   resultByRelationId(relationId: string): StewardResultEnvelope | null;
   resultIdForRelation(relationId: string): string | null;
   commitResult(input: {
@@ -259,6 +283,25 @@ export type SubsessionDelegationService = {
   }): Promise<string | null>;
   resultIdForRelation(relationId: string): string | null;
   pendingParentInputCount(): number;
+  steerSteward(input: {
+    parentSessionId: string;
+    sourceParentTurnId: string;
+    sourceMessageId: string;
+    instruction: string;
+    relationId?: string;
+    safeTitle?: string;
+  }): Promise<StewardDirection>;
+  cancelSteward(input: {
+    parentSessionId: string;
+    sourceParentTurnId: string;
+    sourceMessageId: string;
+    relationId?: string;
+    safeTitle?: string;
+  }): Promise<{ relation: SessionRelation; child_turn_id: string; status: "cancelling" }>;
+  consumeStewardDirection(input: {
+    childSessionId: string;
+    childTurnId: string;
+  }): Promise<StewardDirection | null>;
 };
 
 export type SubsessionDelegationDependencies = {

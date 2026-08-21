@@ -22,6 +22,25 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_delegations (
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)
 );
 
+CREATE TABLE IF NOT EXISTS btcc_subsession_directions (
+  instruction_id TEXT PRIMARY KEY,
+  relation_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  source_parent_turn_id TEXT NOT NULL,
+  source_message_id TEXT NOT NULL,
+  instruction TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'applied')),
+  created_at TEXT NOT NULL,
+  applied_at TEXT,
+  applied_child_turn_id TEXT,
+  UNIQUE(relation_id, revision),
+  UNIQUE(relation_id, source_message_id),
+  FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_subsession_directions_pending
+ON btcc_subsession_directions(relation_id, status, revision);
+
 CREATE TABLE IF NOT EXISTS btcc_steward_results (
   result_id TEXT PRIMARY KEY,
   relation_id TEXT NOT NULL UNIQUE,

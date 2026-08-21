@@ -24,6 +24,7 @@ import type {
   CreateAppServerOptions,
 } from "./server-types.ts";
 import type { StewardObserverReader } from "../../domain/sessions/steward-observer.ts";
+import { FileQueueButlerServiceClient } from "../../../core/client.ts";
 
 export type {
   AppServerHandle,
@@ -80,9 +81,11 @@ function createComposedAppServer(
     authority = authorityStore.authority;
     stewardObserver = authorityStore.observer;
   }
+  const serviceClient = options.serviceClient ?? new FileQueueButlerServiceClient({ butlerData });
   const store = createStore({
     ...options,
     butlerData,
+    serviceClient,
   }, stewardObserver);
   const messageRateLimiter = new FixedWindowRateLimiter(
     options.messageRateLimit,
@@ -115,6 +118,8 @@ function createComposedAppServer(
           localAuth,
           butlerData,
           authority,
+          stewardObserver,
+          serviceClient,
           serverShutdownSignal: serverShutdownController.signal,
           setRequestIdleTimeout(seconds) {
             bunServer.timeout(request, seconds);

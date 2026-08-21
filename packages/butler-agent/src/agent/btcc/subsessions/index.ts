@@ -3,7 +3,7 @@ export {
 } from "./service.ts";
 export { createAppParentInputSink } from "./app-parent-input-sink.ts";
 export { subsessionParentResultRefs } from "./accepted-terminal-report.ts";
-export { ensureSubsessionChildRootWork, subsessionToolInput } from "./agent-hook.ts";
+export { ensureSubsessionChildRootWork, stewardSafeBoundary, subsessionToolInput } from "./agent-hook.ts";
 export { subsessionResultId, subsessionRootWorkId } from "./identities.ts";
 export {
   normalizeSubsessionAllowedToolsAndEffects,
@@ -14,6 +14,7 @@ export {
 export type {
   CompleteStewardResultInput,
   CompleteStewardResultOutcome,
+  CreateStewardDirectionInput,
   CreatedDelegation,
   DelegationPacket,
   DelegationRequest,
@@ -22,6 +23,7 @@ export type {
   StewardResultEnvelope,
   StewardResultCode,
   StewardResultStatus,
+  StewardDirection,
   SubsessionDelegationDependencies,
   SubsessionDelegationService,
   SubsessionDelegationStore,

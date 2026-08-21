@@ -1,4 +1,6 @@
+import { useState } from "react";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -16,12 +18,14 @@ import { TurnActivityPanel } from "@/components/conversation/TurnActivityPanel.t
 import { useSessionViewSubscription } from "./hooks/useSessionViewSubscription.ts";
 
 export function SessionObserverDialog() {
+  const [cancelling, setCancelling] = useState(false);
   const sessionId = useButlerStore((state) => state.observerSessionId);
   const view = useButlerStore((state) =>
     sessionId ? state.sessionViews[sessionId] : undefined,
   );
   const close = useButlerStore((state) => state.closeSessionObserver);
   const refresh = useButlerStore((state) => state.refreshSessionObserver);
+  const cancelObservedSteward = useButlerStore((state) => state.cancelObservedSteward);
 
   useSessionViewSubscription(sessionId, refresh);
 
@@ -78,6 +82,24 @@ export function SessionObserverDialog() {
             ) : null}
           </Stack>
         </ScrollArea>
+        {view?.active_turn && view.relation ? (
+          <Stack align="row" justify="end">
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={cancelling}
+              onClick={() => {
+                setCancelling(true);
+                void cancelObservedSteward(view.relation!.relation_id)
+                  .finally(() => setCancelling(false));
+              }}
+            >
+              {cancelling
+                ? appCopy.conversation.work.pendingStateLabels.cancelling
+                : appCopy.composer.stop}
+            </Button>
+          </Stack>
+        ) : null}
       </DialogContent>
     </Dialog>
   );
