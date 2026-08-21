@@ -44,6 +44,7 @@ export function StewardParentProgress({
             {child.title}
           </Typo.Label>
           <IconButton
+            className={styles.observerAction}
             data-test-class="steward-observer-action"
             label="진행 상세 보기"
             onClick={() => openSessionObserver(child.session_id)}

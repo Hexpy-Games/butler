@@ -12,3 +12,29 @@
 .toolSummary {
   color: var(--text-secondary);
 }
+
+.observerAction {
+  --steward-observer-icon-size: 16px;
+  --steward-observer-hit-size: var(--icon-button-size, 30px);
+}
+
+.observerAction > svg {
+  transform: translate(
+    calc(
+      (var(--steward-observer-hit-size) - var(--steward-observer-icon-size)) / 2
+    ),
+    calc(
+      (var(--steward-observer-hit-size) - var(--steward-observer-icon-size)) /
+        -2
+    )
+  );
+}
+
+@media (width <= 640px), (pointer: coarse) {
+  .observerAction {
+    --steward-observer-hit-size: max(
+      var(--icon-button-size, 30px),
+      var(--control-hit-target)
+    );
+  }
+}
