@@ -575,6 +575,7 @@ test("pending Steward outbox handoff failure rejects startup recovery and preser
     parent_turn_id: "turn-recovery-readiness",
     parent_chat_id: "general",
     message_id: "message-recovery-readiness",
+    safe_title: "Recover pending Steward result",
     text: "Steward result pending.",
     model_ref: "openai/gpt-5.5",
     reasoning_effort: "low",

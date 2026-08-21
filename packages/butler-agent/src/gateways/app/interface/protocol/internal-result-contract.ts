@@ -9,6 +9,7 @@ export interface SubsessionResultIngressRequest {
   parent_session_id: string;
   parent_turn_id: string;
   message_id: string;
+  safe_title: string;
   text: string;
   model_ref: string;
   reasoning_effort: SettingsView["reasoning_effort"];

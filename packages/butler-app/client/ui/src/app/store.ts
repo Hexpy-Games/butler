@@ -569,6 +569,9 @@ function summaryFromSessionView(view: SessionView): SessionSummaryView {
     session_id: view.session_id,
     turn_state: view.latest_turn?.state ?? "idle",
     latest_progress: latestProgress,
+    latest_turn_cancellable: view.latest_turn?.cancellable,
+    latest_turn_subsession_result:
+      view.latest_turn?.execution_controls?.subsession_result,
     branch_info: view.branch ?? undefined,
     context_details: view.context ?? undefined,
     artifacts: view.artifacts,

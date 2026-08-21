@@ -61,6 +61,7 @@ export function useComposerStoreBridge(props: UseComposerStoreBridgeProps) {
       attachments: files.attachments,
       availableReasoning: state.availableReasoning,
       canSend: state.canSend,
+      canStop: state.canStop,
       context: state.context,
       contextPopoverOpen,
       fileInputRef,

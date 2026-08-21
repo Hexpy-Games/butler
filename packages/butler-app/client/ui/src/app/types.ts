@@ -885,6 +885,11 @@ export interface SessionViewTurn {
     model_ref: string;
     reasoning_effort: ReasoningEffort;
     source: "message_override" | "session_override" | "global_default";
+    subsession_result?: {
+      relation_id: string;
+      result_id: string;
+      safe_title: string;
+    };
   };
   execution_model?: {
     requested_model_ref: string;
@@ -1344,6 +1349,12 @@ export interface SessionSummaryView {
   session_id?: string;
   turn_state?: string;
   latest_progress?: TurnProgressSnapshot;
+  latest_turn_cancellable?: boolean;
+  latest_turn_subsession_result?: {
+    relation_id: string;
+    result_id: string;
+    safe_title: string;
+  };
   branch_info?: {
     available?: boolean;
     workspace_mode?: "git" | "folder" | "none" | "unknown";

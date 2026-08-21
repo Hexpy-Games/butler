@@ -31,6 +31,11 @@ export async function handleInternalResultRoutes(
     reasoning_effort: body.reasoning_effort,
     access_mode: body.access_mode,
     queue_policy: "enqueue_if_busy",
+    subsession_result: {
+      relation_id: body.relation_id,
+      result_id: body.result_id,
+      safe_title: body.safe_title,
+    },
   }, undefined, {
     deferResponderTurns: true,
   });

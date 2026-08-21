@@ -112,6 +112,7 @@ export type ParentInputSink = (input: {
   parent_turn_id: string;
   parent_chat_id: string;
   message_id: string;
+  safe_title: string;
   text: string;
   model_ref: string;
   reasoning_effort: string;
@@ -204,6 +205,7 @@ export interface SubsessionDelegationStore {
     parent_turn_id: string;
     parent_chat_id: string;
     message_id: string;
+    safe_title: string;
     text: string;
     model_ref: string;
     reasoning_effort: string;
@@ -217,6 +219,7 @@ export interface SubsessionDelegationStore {
     parent_turn_id: string;
     parent_chat_id: string;
     message_id: string;
+    safe_title: string;
     text: string;
     model_ref: string;
     reasoning_effort: string;
@@ -232,6 +235,7 @@ export interface SubsessionDelegationStore {
     parent_turn_id: string;
     parent_chat_id: string;
     message_id: string;
+    safe_title: string;
     text: string;
     model_ref: string;
     reasoning_effort: string;

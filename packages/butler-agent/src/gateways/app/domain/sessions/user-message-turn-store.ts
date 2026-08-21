@@ -15,6 +15,7 @@ import type {
   UserResponderTurnInput,
 } from "./user-message-turn-contract.ts";
 import type { VisualImageAdmissionResult } from "../../../../agent/image-attachment/contracts.ts";
+import { subsessionResultStatusLabel } from "../../../core/turn-execution-controls.ts";
 
 type CapturedUserFeedback = {
   entry: {
@@ -168,9 +169,12 @@ export class AppUserMessageTurnStore {
         messageId: accepted.id,
         turnId: turn.id,
       })) throw new Error("queued_message_claim_lost");
+      const synthesis = input.controls.subsession_result;
       const thinkingTurn = this.input.updateTurnState(turn.id, "thinking", {
-        safeStatusLabel: "Thinking",
-        cancellable: true,
+        safeStatusLabel: synthesis
+          ? subsessionResultStatusLabel(synthesis)
+          : "Thinking",
+        cancellable: !synthesis,
       });
       return { turn, accepted, executionControls, thinkingTurn };
     });
