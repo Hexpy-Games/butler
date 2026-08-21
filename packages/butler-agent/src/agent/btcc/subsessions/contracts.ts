@@ -205,7 +205,6 @@ export interface SubsessionDelegationStore {
   resultIdForRelation(relationId: string): string | null;
   commitResult(input: {
     relation: SessionRelation;
-    packet: DelegationPacket | null;
     childTurnId: string;
     resultId: string;
     taskId: string;

@@ -720,7 +720,7 @@ const koKrCopy: AppCopy = {
     },
     failure: {
       regionLabel: "실패한 응답",
-      title: "요청을 끝까지 완료하지 못했습니다.",
+      title: "응답 처리 중 문제가 발생했습니다.",
       retry: "원래 설정으로 다시 시도",
       retryCurrent: "현재 설정으로 새로 시도",
       retrying: "다시 시도 중",

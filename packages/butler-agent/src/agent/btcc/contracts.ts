@@ -152,6 +152,7 @@ export type BtccTurnOutcome = (
       turnId: string;
       messageId: string;
       content: string;
+      workStatus?: "completed" | "blocked";
       artifacts?: BtccFinalArtifact[];
       modelIdentity?: {
         requestedModelRef: string;

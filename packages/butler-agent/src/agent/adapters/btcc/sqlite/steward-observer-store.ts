@@ -13,6 +13,7 @@ import type { StewardResultView as StewardObserverResult } from
   "../../../../gateways/app/interface/protocol/app-protocol.ts";
 import { normalizeOperationOutputChunkPayload } from "../../../events/operation-output-event.ts";
 import { subsessionParentResultRefs } from "../../../btcc/subsessions/index.ts";
+import { publicStewardTerminalFields } from "./steward-observer-terminal-result.ts";
 
 type RelationRow = StewardObserverRelation;
 
@@ -54,6 +55,8 @@ type ResultRow = {
   acceptance_evidence_json: string;
   changed_artifacts_json: string;
   created_at: string;
+  work_status: string | null;
+  final_payload_json: string | null;
 };
 
 /**
@@ -236,11 +239,17 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
   private resultForRelation(relationId: string): StewardObserverResult | null {
     const row = this.db
       .query<ResultRow, [string]>(`
-        SELECT result_id, relation_id, task_id, child_session_id, child_turn_id,
-          status, code, summary, acceptance_evidence_json,
-          changed_artifacts_json, created_at
-        FROM btcc_steward_results
-        WHERE relation_id = ?
+        SELECT result.result_id, result.relation_id, result.task_id,
+          result.child_session_id, result.child_turn_id, result.status,
+          result.code, result.summary, result.acceptance_evidence_json,
+          result.changed_artifacts_json, result.created_at,
+          work.status AS work_status, turn.final_payload_json
+        FROM btcc_steward_results AS result
+        LEFT JOIN btcc_guided_turn_work_bindings AS binding
+          ON binding.turn_id = result.child_turn_id AND binding.is_current = 1
+        LEFT JOIN btcc_guided_works AS work ON work.work_id = binding.work_id
+        LEFT JOIN btcc_turns AS turn ON turn.turn_id = result.child_turn_id
+        WHERE result.relation_id = ?
       `)
       .get(relationId);
     if (!row) return null;
@@ -250,9 +259,13 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       task_id: row.task_id,
       child_session_id: row.child_session_id,
       child_turn_id: row.child_turn_id,
-      status: row.status,
-      code: row.code ?? null,
-      summary: row.summary,
+      ...publicStewardTerminalFields({
+        status: row.status,
+        code: row.code,
+        summary: row.summary,
+        workStatus: row.work_status,
+        finalPayloadJson: row.final_payload_json,
+      }),
       acceptance_evidence: parseStringList(row.acceptance_evidence_json),
       changed_artifacts: parseStringList(row.changed_artifacts_json),
       created_at: row.created_at,

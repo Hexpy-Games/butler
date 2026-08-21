@@ -62,6 +62,7 @@ export type TurnRecord = {
     ref: ContentRef;
     content: string;
     contentSha256: string;
+    workStatus?: "completed" | "blocked";
     artifacts?: BtccFinalArtifact[];
     modelIdentity?: {
       requestedModelRef: string;
@@ -219,5 +220,6 @@ export type StopPersistenceOutcome =
       turnId: string;
       messageId: string;
       content: string;
+      workStatus?: "completed" | "blocked";
       artifacts?: BtccFinalArtifact[];
     };

@@ -39,6 +39,7 @@ export type BtccAgentLoopResult = {
   content: string;
   terminalOutcome?: "no_visible";
   route: "direct" | "assisted" | "managed";
+  workStatus?: "completed" | "blocked";
   artifacts?: BtccFinalArtifact[];
   modelIdentity?: {
     requestedModelRef: string;

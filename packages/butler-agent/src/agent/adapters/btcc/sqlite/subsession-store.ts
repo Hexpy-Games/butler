@@ -177,7 +177,6 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
 
   commitResult(input: {
     relation: SessionRelation;
-    packet: DelegationPacket | null;
     childTurnId: string;
     resultId: string;
     taskId: string;

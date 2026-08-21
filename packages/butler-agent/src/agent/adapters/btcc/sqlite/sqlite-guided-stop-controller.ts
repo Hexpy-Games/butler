@@ -60,6 +60,9 @@ export class SqliteGuidedStopController {
         turnId,
         messageId: turn.canonical_assistant_message_id,
         content: finalPayload.content,
+        ...(finalPayload.workStatus
+          ? { workStatus: finalPayload.workStatus }
+          : {}),
         ...(finalPayload.artifacts?.length
           ? { artifacts: finalPayload.artifacts }
           : {}),
