@@ -30,23 +30,29 @@ export function stewardProgressStatus(
   if (child.status === "failed") return "실패함";
   if (child.status === "cancelled") return "중단됨";
   if (child.status === "idle") return "대기 중";
-  const planTotal = child.approved_plan_total;
-  const planCompleted = child.approved_plan_completed;
-  if (planTotal !== undefined && planCompleted !== undefined) {
-    const total = Math.max(1, planTotal);
-    const completed = Math.min(total, Math.max(0, planCompleted));
-    return `작업 중 · ${Math.min(total, completed + 1)}/${total}`;
-  }
+  const progress = stewardPlanProgress(child);
+  if (progress) return `작업 중 · ${progress}`;
   return "작업 중";
 }
 
-export function stewardProgressCapsule(
-  child: StewardSessionSummaryView,
+export function stewardPlanProgress(
+  child: Pick<
+    StewardSessionSummaryView,
+    "approved_plan_total" | "approved_plan_completed"
+  >,
+): string | null {
+  const total = child.approved_plan_total;
+  const completed = child.approved_plan_completed;
+  if (total === undefined || completed === undefined || total < 1) return null;
+  const boundedCompleted = Math.min(total, Math.max(0, completed));
+  return `${Math.min(total, boundedCompleted + 1)}/${total}`;
+}
+
+export function stewardCurrentActivityTitle(
+  child: Pick<StewardSessionSummaryView, "active_turn">,
 ): string {
-  const title = child.title.trim().replace(/\s+/gu, " ");
-  return title
-    ? `${stewardProgressStatus(child)} · ${title}`
-    : stewardProgressStatus(child);
+  return child.active_turn?.progress.summary?.trim().replace(/\s+/gu, " ") ||
+    "작업 진행 중";
 }
 
 export function stewardToolRows(rows: ProgressRow[]): ProgressRow[] {

@@ -21,7 +21,7 @@ import { StewardComposerCapsules } from "./StewardComposerCapsules";
 import { useComposerStore } from "./composerStore";
 import { anchoredStewardProgressByMessageId } from "./stewardParentProgressProjection";
 
-test("active Steward work has one DS capsule above the Composer", () => {
+test("each active Steward has an ordered DS capsule with factual Plan progress", () => {
   const activeHtml = renderToStaticMarkup(
     <StewardComposerCapsules
       children={HARNESS_SS03_SUMMARY.steward_children ?? []}
@@ -32,10 +32,49 @@ test("active Steward work has one DS capsule above the Composer", () => {
   expect(activeHtml).toContain('data-alignment="center"');
   expect(activeHtml).toContain('data-slot="button-icon"');
   expect(activeHtml).toContain("<canvas");
-  expect(activeHtml).toContain("작업 중 · 2/3 · Review the activity surface");
-  expect(activeHtml).not.toContain("Inspecting the activity surface");
-  expect(activeHtml).toContain('data-truncation="ellipsis"');
+  expect(activeHtml).toContain('data-test-class="steward-capsule-task"');
+  expect(activeHtml).toContain('data-test-class="steward-capsule-activity"');
+  expect(activeHtml).toContain('data-test-class="steward-capsule-progress"');
+  expect(activeHtml).toContain("Review the activity surface");
+  expect(activeHtml).toContain("Validating the activity surface");
+  expect(activeHtml).toContain(">2/3<");
+  expect(activeHtml).not.toContain("작업 중 · 2/3");
+  expect(activeHtml.indexOf('data-slot="button-icon"')).toBeLessThan(
+    activeHtml.indexOf('data-test-class="steward-capsule-task"'),
+  );
+  expect(activeHtml.indexOf('data-test-class="steward-capsule-task"')).toBeLessThan(
+    activeHtml.indexOf('data-test-class="steward-capsule-activity"'),
+  );
+  expect(activeHtml.indexOf('data-test-class="steward-capsule-activity"')).toBeLessThan(
+    activeHtml.indexOf('data-test-class="steward-capsule-progress"'),
+  );
   expect(activeHtml.match(/steward-progress-capsule/g)).toHaveLength(1);
+
+  const second = structuredClone(HARNESS_SS03_SUMMARY.steward_children![0]!);
+  second.session_id = "harness-steward-2";
+  second.title = "Second active task";
+  second.relation = {
+    ...second.relation,
+    relation_id: "harness-relation-2",
+    child_session_id: second.session_id,
+  };
+  second.active_turn = {
+    ...second.active_turn!,
+    id: "harness-steward-turn-2",
+    progress: {
+      ...second.active_turn!.progress,
+      summary: "Checking the second result",
+      turn_id: "harness-steward-turn-2",
+    },
+  };
+  const concurrentHtml = renderToStaticMarkup(
+    <StewardComposerCapsules
+      children={[HARNESS_SS03_SUMMARY.steward_children![0]!, second]}
+    />,
+  );
+  expect(concurrentHtml.match(/steward-progress-capsule/g)).toHaveLength(2);
+  expect(concurrentHtml).toContain("Validating the activity surface");
+  expect(concurrentHtml).toContain("Checking the second result");
 
   const terminalChild = structuredClone(
     HARNESS_SS03_SUMMARY.steward_children![0]!,

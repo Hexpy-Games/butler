@@ -256,6 +256,61 @@ describe("App Steward observer projection", () => {
     db.close();
   });
 
+  test("active Turn summary uses current activity instead of the appended Plan tail", () => {
+    const relation = {
+      relation_id: "relation-current-activity",
+      parent_session_id: "parent-current-activity",
+      parent_turn_id: "parent-turn-current-activity",
+      child_session_id: "steward-current-activity",
+      anchor_message_id: "anchor-current-activity",
+      ordinal: 1,
+      safe_title: "Current activity child",
+      created_at: "2026-08-19T00:00:00.000Z",
+    };
+    const projection = projectStewardSession(relation, {
+      session_id: relation.child_session_id,
+      title: relation.safe_title,
+      turns: [{
+        id: "turn-current-activity",
+        state: "thinking",
+        created_at: "2026-08-19T00:01:00.000Z",
+        updated_at: "2026-08-19T00:02:00.000Z",
+      }],
+      messages: [],
+      progress_events: [{
+        id: "event-current-activity",
+        session_id: relation.child_session_id,
+        turn_id: "turn-current-activity",
+        session_sequence: 1,
+        turn_sequence: 1,
+        kind: "assistant.public_note",
+        visibility: "public",
+        payload: { note: "Validating the current implementation" },
+        created_at: "2026-08-19T00:02:00.000Z",
+      }],
+      plan: {
+        plan_revision_id: "plan-current-activity",
+        revision: 1,
+        actions: [{
+          action_key: "inspect",
+          description: "Inspect the implementation",
+        }, {
+          action_key: "report",
+          description: "Report the result",
+        }],
+        action_progress: [{ action_key: "inspect", status: "active" }],
+        approved: true,
+      },
+      result: null,
+      updated_at: "2026-08-19T00:02:00.000Z",
+    });
+
+    expect(projection.active_turn?.progress.summary)
+      .toBe("Validating the current implementation");
+    expect(projection.approved_plan_total).toBe(2);
+    expect(projection.approved_plan_completed).toBe(0);
+  });
+
   test("absent Plan approval does not fabricate n/j", () => {
     const db = new Database(":memory:");
     db.exec(BTCC_SUCCESSOR_SCHEMA);

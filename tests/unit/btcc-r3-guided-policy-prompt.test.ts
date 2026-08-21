@@ -343,6 +343,8 @@ test("SS-03B Steward instructions require ordered result and completion evidence
     "Before calling record_work_disposition with disposition completed, call record_work_review for an accepted result Review bound to the current results, then call record_work_review for an accepted completion Validation bound to that accepted result Review and the current Plan/action states; only then settle the child Work as completed.";
   const readOnlyPlanContract =
     "For read_only, every Plan action must omit the effect field entirely; reads and synthesis are evidence actions, never effects.";
+  const multiStepPlanContract =
+    "Use at least two truthful top-level Plan actions for this substantial delegated Work; do not collapse materially separate discovery, mutation, verification, or synthesis stages into one umbrella action.";
   const common = {
     relationId: "relation",
     delegationId: "delegation",
@@ -362,6 +364,7 @@ test("SS-03B Steward instructions require ordered result and completion evidence
   });
   expect(readOnlyInstructions).toContain(requiredOrder);
   expect(readOnlyInstructions).toContain(readOnlyPlanContract);
+  expect(readOnlyInstructions).toContain(multiStepPlanContract);
   const mutationInstructions = guidedStewardInstructions({
     subsession: {
       ...common,
@@ -371,6 +374,7 @@ test("SS-03B Steward instructions require ordered result and completion evidence
     },
   });
   expect(mutationInstructions).toContain(requiredOrder);
+  expect(mutationInstructions).toContain(multiStepPlanContract);
   expect(mutationInstructions).toContain(
     "Use list_files, grep_files, and read_file to discover and verify repository targets",
   );

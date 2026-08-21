@@ -359,6 +359,7 @@ test("read-only Steward Plan actions omit effects on legacy and phase tool surfa
   for (const env of [{}, ENABLED]) {
     const selection = selectGuidedTurnPhasePolicy(readOnlyTurn, env);
     const actionSchema = planActionSchema(selection.providerTools);
+    expect(planActionsSchema(selection.providerTools).minItems).toBe(2);
     expect(actionSchema.properties).not.toHaveProperty("effect");
     expect(actionSchema.required ?? []).not.toContain("effect");
   }
@@ -366,6 +367,9 @@ test("read-only Steward Plan actions omit effects on legacy and phase tool surfa
   const mutationActionSchema = planActionSchema(
     selectGuidedTurnPhasePolicy(stewardTurnRecord("mutation"), ENABLED).providerTools,
   );
+  expect(planActionsSchema(
+    selectGuidedTurnPhasePolicy(stewardTurnRecord("mutation"), ENABLED).providerTools,
+  ).minItems).toBe(2);
   expect(mutationActionSchema.properties).toHaveProperty("effect");
   expect(mutationActionSchema.properties.effect).toMatchObject({
     properties: {
@@ -384,6 +388,16 @@ test("read-only Steward Plan actions omit effects on legacy and phase tool surfa
     ).providerTools,
   );
   expect(butlerActionSchema.properties).toHaveProperty("effect");
+  expect(planActionsSchema(
+    selectGuidedTurnPhasePolicy(
+      turnRecord({
+        accessMode: "full_access",
+        trackingMode: "ledger",
+        projectRef: "butler",
+      }),
+      ENABLED,
+    ).providerTools,
+  ).minItems).not.toBe(2);
 });
 
 test("feature default-off path preserves legacy bytes and enabled policy reduces both stable and schema bytes", () => {
@@ -546,13 +560,19 @@ function stewardTurnRecord(executionMode: "read_only" | "mutation"): TurnRecord 
 }
 
 function planActionSchema(tools: readonly { name: string; parameters: Record<string, unknown> }[]) {
+  const actions = planActionsSchema(tools);
+  expect(actions.items).toBeDefined();
+  return actions.items!;
+}
+
+function planActionsSchema(tools: readonly { name: string; parameters: Record<string, unknown> }[]) {
   const plan = tools.find((tool) => tool.name === "replace_work_plan");
   expect(plan).toBeDefined();
   const properties = plan!.parameters.properties as {
-    actions?: { items?: Record<string, any> };
+    actions?: { items?: Record<string, any>; minItems?: number };
   };
-  expect(properties.actions?.items).toBeDefined();
-  return properties.actions!.items!;
+  expect(properties.actions).toBeDefined();
+  return properties.actions!;
 }
 
 function byteLength(value: string): number {
