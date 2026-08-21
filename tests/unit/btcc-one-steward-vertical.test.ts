@@ -77,9 +77,9 @@ type PublicSessionView = {
 
 function detailedMutationReport(receiptId: string): string {
   return [
-  "Conclusion: the bounded Steward file was created and verified.",
-  `Evidence: steward-result.txt and ${receiptId} match the accepted mutation.`,
-  "Tests: passed; file content and receipt identity were verified.",
+  "Conclusion: the bounded Steward files were edited and verified.",
+  `Evidence: fixtures/discovery-target.txt, fixtures/verification-target.txt, and ${receiptId} match the accepted mutation.`,
+  "Tests: passed; both file contents and the batch receipt identity were verified.",
   "Remaining risks: none within the bounded mutation scope.",
   ].join("\n");
 }
@@ -96,8 +96,9 @@ test("App Turn delegates one bounded mutation to one Steward and synthesizes exa
   initializeGitWorkspace(root);
   mkdirSync(join(root, "fixtures"), { recursive: true });
   writeFileSync(join(root, "fixtures", "discovery-target.txt"), "discover me\n", "utf8");
+  writeFileSync(join(root, "fixtures", "verification-target.txt"), "verify me\n", "utf8");
   expect(Bun.spawnSync({
-    cmd: ["git", "add", "fixtures/discovery-target.txt"],
+    cmd: ["git", "add", "fixtures/discovery-target.txt", "fixtures/verification-target.txt"],
     cwd: root,
     stdout: "ignore",
     stderr: "pipe",
@@ -219,10 +220,10 @@ test("App Turn delegates one bounded mutation to one Steward and synthesizes exa
       expect(publicChildTranscript).not.toContain("mutation_scope");
       expect(publicChildTranscript).not.toContain("delegation_id:");
     const result = btccDb.query<Record<string, unknown>, []>(
-        "SELECT relation_id, status, result_id, child_turn_id FROM btcc_steward_results",
+        "SELECT relation_id, status, code, result_id, child_turn_id FROM btcc_steward_results",
       ).get();
       childTurnIdForDuplicate = String(result?.child_turn_id ?? "");
-      expect(result?.status).toBe("success");
+      expect(result).toMatchObject({ status: "success", code: null });
       expect(appBeforeDuplicate.queueClientMessageIds).toEqual([
         subsessionResultClientMessageId(String(relation?.relation_id), String(result?.result_id)),
       ]);
@@ -230,13 +231,14 @@ test("App Turn delegates one bounded mutation to one Steward and synthesizes exa
         "SELECT work_id FROM btcc_guided_works WHERE session_id = ?",
       ).get(String(relation?.child_session_id));
       expect(rootWork?.work_id).toBeDefined();
-      expect(btccDb.query<{ status: string; capability: string; sanitized_target: string }, [string]>(
+      const appliedEffect = btccDb.query<{ status: string; capability: string; sanitized_target: string }, [string]>(
         "SELECT status, capability, sanitized_target FROM btcc_guided_effects WHERE work_id = ?",
-      ).get(String(rootWork?.work_id))).toEqual({
+      ).get(String(rootWork?.work_id));
+      expect(appliedEffect).toMatchObject({
         status: "applied",
-        capability: "write_file",
-        sanitized_target: "workspace:fixtures/steward-result.txt",
+        capability: "edit_file",
       });
+      expect(appliedEffect?.sanitized_target).toMatch(/^workspace:batch:[a-f0-9]{64}$/u);
       const childTaskRequests = childRequests.filter((request) =>
         request.messages.some((message) => message.content.includes("delegation_id:")),
       );
@@ -261,13 +263,13 @@ test("App Turn delegates one bounded mutation to one Steward and synthesizes exa
         request.tools.map((tool) => tool.name),
       ))].sort();
       expect(childToolNames).toEqual([
+        "edit_file",
         "grep_files",
         "list_files",
         "read_file",
         "record_work_disposition",
         "record_work_review",
         "replace_work_plan",
-        "write_file",
       ]);
       expect(btccDb.query<{ count: number }, []>(
         "SELECT COUNT(*) AS count FROM btcc_subsession_outbox",
@@ -296,8 +298,10 @@ test("App Turn delegates one bounded mutation to one Steward and synthesizes exa
       const child = bindings.listSessions().find((session) => session.role === "steward");
       expect(child).toBeDefined();
       expect(child?.workspacePath).not.toBe(root);
-      expect(await Bun.file(join(child!.workspacePath, "fixtures", "steward-result.txt")).text()).toBe("steward mutation\n");
-      expect(await Bun.file(join(root, "fixtures", "steward-result.txt")).exists()).toBe(false);
+      expect(await Bun.file(join(child!.workspacePath, "fixtures", "discovery-target.txt")).text()).toBe("discovered\n");
+      expect(await Bun.file(join(child!.workspacePath, "fixtures", "verification-target.txt")).text()).toBe("verified\n");
+      expect(await Bun.file(join(root, "fixtures", "discovery-target.txt")).text()).toBe("discover me\n");
+      expect(await Bun.file(join(root, "fixtures", "verification-target.txt")).text()).toBe("verify me\n");
       const newest = btccDb.query<{ content: string; session_id: string }, [string]>(
         "SELECT content, session_id FROM btcc_messages WHERE session_id = ? ORDER BY created_at DESC, message_id DESC LIMIT 1",
       ).get(parentSessionId);
@@ -1262,11 +1266,11 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
             toolCalls: [toolCall("delegate", "delegate_to_steward", {
               execution_mode: "mutation",
               safe_title: "Bounded Steward result",
-              objective: "Discover the fixture target, then create and verify one bounded Steward result file.",
-              acceptance_criteria: ["fixtures/steward-result.txt contains the expected mutation"],
+              objective: "Inspect and edit two bounded Steward fixture files in one batch.",
+              acceptance_criteria: ["Both fixture files contain their expected mutation"],
               task_or_plan_refs: [],
               constraints_and_non_goals: ["Do not mutate the Butler workspace or Project Ledger."],
-              allowed_tools_and_effects: ["write_file:workspace"],
+              allowed_tools_and_effects: ["edit_file:workspace"],
               mutation_scope: ["fixtures/**"],
             })],
           };
@@ -1279,14 +1283,26 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
       if (round === 1) {
         return {
           toolCalls: [toolCall("plan", "replace_work_plan", {
-            objective: "Discover the fixture target, then create and verify one bounded Steward result file.",
-            actions: [{
-              action_key: "write-steward-result",
-              description: "Write the bounded result file.",
-              dependency_keys: [],
-              effect: { capability: "write_file", target: "fixtures/steward-result.txt" },
-            }],
-            checks: ["fixtures/steward-result.txt contains the expected mutation"],
+            objective: "Inspect and edit two bounded Steward fixture files in one batch.",
+            actions: [
+              {
+                action_key: "inspect-fixtures",
+                description: "Inspect the two bounded fixture files.",
+                dependency_keys: [],
+              },
+              {
+                action_key: "edit-fixtures",
+                description: "Apply the accepted batch edit.",
+                dependency_keys: ["inspect-fixtures"],
+                effect: { capability: "edit_file", target: "fixtures/" },
+              },
+              {
+                action_key: "verify-fixtures",
+                description: "Verify the resulting fixture contents.",
+                dependency_keys: ["edit-fixtures"],
+              },
+            ],
+            checks: ["Both fixture files contain their expected mutation"],
           })],
         };
       }
@@ -1296,7 +1312,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
             subject: "plan",
             verdict: "accept",
             summary: "The bounded mutation is ready.",
-            action_updates: [{ action_key: "write-steward-result", status: "active" }],
+            action_updates: [{ action_key: "inspect-fixtures", status: "active" }],
           })],
         };
       }
@@ -1310,16 +1326,28 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
       if (round === 4) {
         return {
           toolCalls: [toolCall("read", "read_file", {
-            requests: [{ path: "fixtures/discovery-target.txt" }],
+            requests: [
+              { path: "fixtures/discovery-target.txt" },
+              { path: "fixtures/verification-target.txt" },
+            ],
           })],
         };
       }
       if (round === 5) {
         return {
-          toolCalls: [toolCall("write", "write_file", {
-            path: "fixtures/steward-result.txt",
-            content: "steward mutation\n",
-            create_parents: true,
+          toolCalls: [toolCall("edit", "edit_file", {
+            edits: [
+              {
+                path: "fixtures/discovery-target.txt",
+                old_text: "discover me\n",
+                new_text: "discovered\n",
+              },
+              {
+                path: "fixtures/verification-target.txt",
+                old_text: "verify me\n",
+                new_text: "verified\n",
+              },
+            ],
           })],
         };
       }
@@ -1329,7 +1357,11 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
             subject: "result",
             verdict: "accept",
             summary: "The bounded mutation was verified.",
-            action_updates: [{ action_key: "write-steward-result", status: "done" }],
+            action_updates: [
+              { action_key: "inspect-fixtures", status: "done" },
+              { action_key: "edit-fixtures", status: "done" },
+              { action_key: "verify-fixtures", status: "done" },
+            ],
           })],
         };
       }
@@ -1339,7 +1371,11 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
             subject: "completion",
             verdict: "accept",
             summary: "The applied mutation and file evidence satisfy completion.",
-            action_updates: [{ action_key: "write-steward-result", status: "done" }],
+            action_updates: [
+              { action_key: "inspect-fixtures", status: "done" },
+              { action_key: "edit-fixtures", status: "done" },
+              { action_key: "verify-fixtures", status: "done" },
+            ],
           })],
         };
       }
@@ -1353,7 +1389,11 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
             work_id: workId,
             disposition: "completed",
             summary: "The bounded Steward mutation completed.",
-            action_updates: [{ action_key: "write-steward-result", status: "done" }],
+            action_updates: [
+              { action_key: "inspect-fixtures", status: "done" },
+              { action_key: "edit-fixtures", status: "done" },
+              { action_key: "verify-fixtures", status: "done" },
+            ],
           })],
         };
       }

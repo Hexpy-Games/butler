@@ -374,6 +374,9 @@ test("SS-03B Steward instructions require ordered result and completion evidence
   expect(mutationInstructions).toContain(
     "Use list_files, grep_files, and read_file to discover and verify repository targets",
   );
+  expect(mutationInstructions).toContain(
+    "Exactly one Plan action may include effect, and its capability must be one admitted native mutation tool name; omit effect from inspection, verification, review, and reporting actions.",
+  );
 });
 
 test("R3 continuation guidance repairs legacy Work labels and refreshes downstream results", () => {

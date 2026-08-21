@@ -367,6 +367,11 @@ test("read-only Steward Plan actions omit effects on legacy and phase tool surfa
     selectGuidedTurnPhasePolicy(stewardTurnRecord("mutation"), ENABLED).providerTools,
   );
   expect(mutationActionSchema.properties).toHaveProperty("effect");
+  expect(mutationActionSchema.properties.effect).toMatchObject({
+    properties: {
+      capability: { enum: ["write_file"] },
+    },
+  });
 
   const butlerActionSchema = planActionSchema(
     selectGuidedTurnPhasePolicy(
