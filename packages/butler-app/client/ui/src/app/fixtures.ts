@@ -200,9 +200,32 @@ const HARNESS_SS03_CURRENT_ACTIVITY = {
   id: "harness-steward-current-activity",
   kind: "message" as const,
   state: "running",
-  safe_label: "Steward child · Validating the activity surface",
+  safe_label: "Validating the activity surface",
   created_at: "2026-05-01T00:10:05.000Z",
 };
+
+const HARNESS_SS03_TOOL_ACTIVITY = [
+  {
+    id: "harness-steward-search-1",
+    kind: "used_tool" as const,
+    state: "delivered",
+    safe_label: "웹 검색",
+    safe_tool_name: "web_search",
+    tool_call_id: "harness-search-1",
+    bridge_phase: "btcc_operation" as const,
+    created_at: "2026-05-01T00:10:06.000Z",
+  },
+  {
+    id: "harness-steward-search-2",
+    kind: "used_tool" as const,
+    state: "delivered",
+    safe_label: "웹 검색",
+    safe_tool_name: "web_search",
+    tool_call_id: "harness-search-2",
+    bridge_phase: "btcc_operation" as const,
+    created_at: "2026-05-01T00:10:07.000Z",
+  },
+];
 
 /** SS-03 uses the same live child projection in the current-message slot. */
 const HARNESS_SS03_STEWARD_CHILD: StewardSessionSummaryView = {
@@ -214,6 +237,7 @@ const HARNESS_SS03_STEWARD_CHILD: StewardSessionSummaryView = {
       summary: HARNESS_SS03_CURRENT_ACTIVITY.safe_label,
       safe_progress_rows: [
         HARNESS_SS03_CURRENT_ACTIVITY,
+        ...HARNESS_SS03_TOOL_ACTIVITY,
         ...HARNESS_STEWARD_CHILD.active_turn!.progress.safe_progress_rows,
       ],
     },
@@ -225,12 +249,14 @@ const HARNESS_SS03_STEWARD_CHILD: StewardSessionSummaryView = {
       summary: HARNESS_SS03_CURRENT_ACTIVITY.safe_label,
       safe_progress_rows: [
         HARNESS_SS03_CURRENT_ACTIVITY,
+        ...HARNESS_SS03_TOOL_ACTIVITY,
         ...HARNESS_STEWARD_CHILD.latest_turn!.progress.safe_progress_rows,
       ],
     },
   },
   activity_rows: [
     HARNESS_SS03_CURRENT_ACTIVITY,
+    ...HARNESS_SS03_TOOL_ACTIVITY,
     ...HARNESS_STEWARD_CHILD.activity_rows,
   ],
 };

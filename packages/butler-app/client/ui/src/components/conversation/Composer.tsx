@@ -15,7 +15,7 @@ import { useComposerPresentation } from "./hooks/useComposerPresentation";
 import { useComposerFileDrop } from "./hooks/useComposerFileDrop";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
-import { GitDependencyNotice } from "./GitDependencyNotice";
+import { ComposerNotices } from "./ComposerNotices.tsx";
 
 interface ComposerProps {
   onReserveChange: (height: number) => void;
@@ -129,7 +129,9 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
       large={large}
       expanded={presentation.expanded}
       floating
-      notice={<GitDependencyNotice />}
+      notice={<ComposerNotices
+        stewardChildren={session.summary?.steward_children ?? []}
+      />}
       adjunct={
         showAdjunct ? (
           <ComposerAdjunctPanels

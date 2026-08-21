@@ -86,9 +86,9 @@ test("SS-03 VisualHarness render installs only its keyed observer surface", asyn
   expect(useComposerStore.getState().engaged).toBe(true);
   expect(dialog).not.toBeNull();
   expect(dialog?.getAttribute("role")).toBe("dialog");
-  expect(rendered.container.textContent).toContain("Review the activity surface");
+  expect(rendered.document.body.textContent).toContain("Review the activity surface");
   expect(rendered.container.textContent).toContain(
-    "작업 중 · 2/3 · Steward child · Validating the activity surface",
+    "작업 중 · 2/3 · Inspecting the activity surface",
   );
   expect(dialog?.querySelector('[data-test-class*="composer"]')).toBeNull();
 });
