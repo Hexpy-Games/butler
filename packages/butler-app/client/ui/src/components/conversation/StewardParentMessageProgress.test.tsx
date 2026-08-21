@@ -16,8 +16,30 @@ import { MessageContent } from "./MessageContent";
 import { useMessageList } from "./hooks/useMessageList";
 import { useComposerState } from "./hooks/useComposerState";
 import { ComposerToolbar } from "./ComposerToolbar";
+import { StewardComposerCapsules } from "./StewardComposerCapsules";
 import { useComposerStore } from "./composerStore";
 import { anchoredStewardProgressByMessageId } from "./stewardParentProgressProjection";
+
+test("active Steward work has one DS capsule above the Composer", () => {
+  const activeHtml = renderToStaticMarkup(
+    <StewardComposerCapsules
+      children={HARNESS_SS03_SUMMARY.steward_children ?? []}
+    />,
+  );
+  expect(activeHtml).toContain('data-shape="pill"');
+  expect(activeHtml).toContain('data-test-class="steward-progress-capsule"');
+  expect(activeHtml).toContain("작업 중 · 2/3 · Inspecting the activity surface");
+  expect(activeHtml.match(/steward-progress-capsule/g)).toHaveLength(1);
+
+  const terminalChild = structuredClone(
+    HARNESS_SS03_SUMMARY.steward_children![0]!,
+  );
+  terminalChild.status = "delivered";
+  terminalChild.active_turn = null;
+  expect(renderToStaticMarkup(
+    <StewardComposerCapsules children={[terminalChild]} />,
+  )).toBe("");
+});
 
 test("active Steward progress is nested in its exact parent assistant row", () => {
   const progress = anchoredStewardProgressByMessageId(
@@ -25,6 +47,19 @@ test("active Steward progress is nested in its exact parent assistant row", () =
     HARNESS_SS03_SUMMARY,
   ).get("m4");
   expect(progress?.child.session_id).toBe("harness-steward");
+
+  progress!.rows = [
+    ...progress!.rows,
+    {
+      id: "steward-plan-operation",
+      kind: "used_tool",
+      state: "delivered",
+      bridge_phase: "btcc_operation",
+      safe_label: "실행 계획 수립",
+      safe_tool_name: "replace_work_plan",
+      tool_call_id: "plan-call",
+    },
+  ];
 
   const html = renderToStaticMarkup(
     <MessageContent
@@ -45,6 +80,11 @@ test("active Steward progress is nested in its exact parent assistant row", () =
   expect(html).not.toContain("assistant-terminal-status-row");
   expect(html).not.toContain("답변 완료");
   expect(html).toContain("진행 상세 보기");
+  expect(html).toContain("turn-work-tool-group");
+  expect(html).toContain('aria-expanded="false"');
+  expect(html).toContain("2 검색");
+  expect(html).not.toContain("실행 계획 수립");
+  expect(html.match(/turn-work-tool-row/g)).toHaveLength(1);
 });
 
 test("terminal Steward activity stays attached to the factual parent message", () => {

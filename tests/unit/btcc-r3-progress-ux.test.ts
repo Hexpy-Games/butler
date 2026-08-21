@@ -464,6 +464,18 @@ test("run_command model-authored action label is enforced by the native tool-cal
 test("progressive tool discovery and dispatch keep distinct product-facing titles", () => {
   expect(publicToolTitle("tool_search")).toBe("사용 가능한 도구 찾기");
   expect(publicToolTitle("tool_describe")).toBe("도구 사용법 확인");
+  expect(publicToolTitle("replace_work_plan")).toBe("실행 계획 수립");
+  expect(publicToolTitle("record_work_checkpoint")).toBe("진행 상태 기록");
+  expect(publicToolTitle("record_work_review", { subject: "plan" })).toBe(
+    "계획 검토",
+  );
+  expect(publicToolTitle("record_work_review", { subject: "result" })).toBe(
+    "결과 검토",
+  );
+  expect(publicToolTitle("record_work_review", { subject: "completion" })).toBe(
+    "완료 검토",
+  );
+  expect(publicToolTitle("record_work_disposition")).toBe("완료 상태 기록");
   expect(publicToolTitle("tool_call", {
     id: "native:project_ledger_create",
     arguments: {},

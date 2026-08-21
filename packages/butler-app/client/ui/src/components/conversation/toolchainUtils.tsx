@@ -10,6 +10,15 @@ import { activityIcon } from "./toolchainIcons";
 
 export { activityIcon } from "./toolchainIcons";
 
+const WORK_BOOKKEEPING_TOOL_NAMES = new Set([
+  "start_work",
+  "continue_work",
+  "replace_work_plan",
+  "record_work_checkpoint",
+  "record_work_review",
+  "record_work_disposition",
+]);
+
 export function toolchainRowsForBlock(block: WorkBlockView): ProgressRow[] {
   return block.rows.filter((row) => isVisibleToolchainRow(row, block.label));
 }
@@ -25,13 +34,17 @@ export function workActivityToolsFromRows(
   rows: ProgressRow[],
   turnId?: string,
 ): WorkActivityToolItem[] {
-  return rows.map((row, rowIndex) => ({
+  return rows
+    .filter((row) => !(
+      row.safe_tool_name && WORK_BOOKKEEPING_TOOL_NAMES.has(row.safe_tool_name)
+    ))
+    .map((row, rowIndex) => ({
     id: `${row.id}:${rowIndex}`,
     icon: activityIcon(row),
     title: toolchainSummaryLabel(row),
     summaryLabel: toolchainGroupLabel(row),
     details: toolDetails(row, turnId),
-  }));
+    }));
 }
 
 function toolDetails(row: ProgressRow, turnId?: string): ReactElement | string | undefined {
@@ -59,10 +72,6 @@ export function isVisibleToolchainRow(
 
 export function isTerminalActivityState(state: string): boolean {
   return ["delivered", "failed", "cancelled"].includes(state);
-}
-
-export function activityLabel(row: ProgressRow): string {
-  return toolchainLabel(row);
 }
 
 export function toolchainLabel(row: ProgressRow): string {
@@ -95,7 +104,13 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
 
 export function toolchainGroupLabel(row: ProgressRow): string {
   if (row.bridge_phase === "btcc_operation") {
-    if (row.safe_tool_name === "read_file" || row.safe_tool_name === "grep_files") {
+    if (row.safe_tool_name === "web_search") return "검색";
+    if (
+      row.safe_tool_name === "web_read" ||
+      row.safe_tool_name === "read_file" ||
+      row.safe_tool_name === "list_files" ||
+      row.safe_tool_name === "grep_files"
+    ) {
       return "조회";
     }
     if (row.safe_tool_name === "edit_file" || row.safe_tool_name === "write_file") {
