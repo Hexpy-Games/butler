@@ -6,6 +6,7 @@ import { recentConversationTailLimit } from "../turn/recent-conversation-context
 export function renderDelegatedParentConversationContext(input: {
   conversations: ConversationContextStoreReader;
   parentSessionId: string;
+  parentTurnId: string;
   modelRef: string;
 }): string {
   const session = input.conversations.getSessionByGatewayBinding(
@@ -20,6 +21,7 @@ export function renderDelegatedParentConversationContext(input: {
     }),
     {
       maxTokens: defaultRecentConversationTokenBudget(input.modelRef),
+      excludeTurnId: input.parentTurnId,
       includeTools: false,
     },
   );
