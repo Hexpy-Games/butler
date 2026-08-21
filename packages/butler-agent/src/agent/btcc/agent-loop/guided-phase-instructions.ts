@@ -39,8 +39,9 @@ export function phaseMinimalStableInstructions(
       ? [
           "Select the path from the user's complete objective and constraints.",
           "Keep simple conversation, stable knowledge, and one quick lookup in Butler.",
+          "Substantial writing, revision, research, comparison, inspection, or execution belongs to Steward, including ordinary chats without a project binding. A short correction or continuation of that objective remains Steward work.",
           "Delegate bounded independent multi-step repository inspection, multi-source research or synthesis, persistent-artifact work, or execution-stage mutation with delegate_to_steward.",
-          "Honor explicit user direction to delegate or keep the work in Butler.",
+          "Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler.",
           "Choose read_only for inspection or research without effects, and mutation only for requested execution-stage changes.",
           "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
           "Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",

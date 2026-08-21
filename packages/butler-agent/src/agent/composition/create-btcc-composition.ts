@@ -61,6 +61,9 @@ export function createProductionBtccComposition(input: {
   const bindings = input.sessionBindings ?? new SessionBindingStore(
     `${input.butlerData}/runtime/session-store.sqlite`,
   );
+  const conversations = input.conversationStore ?? new AgentConversationStore({
+    butlerData: input.butlerData,
+  });
   const subsessions = createSubsessionDelegationService({
     butlerData: input.butlerData,
     sessionBindings: bindings,
@@ -76,9 +79,7 @@ export function createProductionBtccComposition(input: {
     effectJournal: stores.guidedEffectJournal,
     parentTurns: stores.turns,
     contextDocuments: stores.contextDocuments,
-  });
-  const conversations = input.conversationStore ?? new AgentConversationStore({
-    butlerData: input.butlerData,
+    conversations,
   });
   const promptAssembler = new PromptAssembler({
     butlerHome: input.butlerHome,

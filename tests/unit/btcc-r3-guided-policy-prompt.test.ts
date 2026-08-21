@@ -274,7 +274,7 @@ test("SS-03B guided instructions define semantic delegation selection", () => {
     "Delegate bounded independent multi-step repository inspection, multi-source research or synthesis, persistent-artifact work, or execution-stage mutation with delegate_to_steward.",
   );
   expect(instructions).toContain(
-    "Honor explicit user direction to delegate or keep the work in Butler.",
+    "Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler.",
   );
   expect(instructions).toContain(
     "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",

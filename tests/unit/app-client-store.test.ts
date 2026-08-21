@@ -2092,6 +2092,60 @@ test("timeline store action applies progress and messages in one publication", (
   ]);
 });
 
+test("synthesis turn events retain the Steward relation before canonical refresh", () => {
+  useButlerStore.setState({
+    activeChatId: "session-a",
+    messages: [],
+    summary: {
+      session_id: "session-a",
+      turn_state: "delivered",
+      latest_progress: {
+        turn_id: "turn-child-parent",
+        state: "delivered",
+        safe_progress_rows: [],
+      },
+      steward_children: [],
+    },
+    turnProgress: {},
+  });
+
+  useButlerStore.getState().applyTimelineEvents([{
+    id: 12,
+    type: "turn.state_changed",
+    payload: {
+      session_id: "session-a",
+      turn_id: "turn-synthesis",
+      state: "thinking",
+      safe_status_label: "소음 대응 문서 작업에 대한 보고 준비 중",
+      turn: {
+        id: "turn-synthesis",
+        chat_id: "session-a",
+        state: "thinking",
+        safe_status_label: "소음 대응 문서 작업에 대한 보고 준비 중",
+        execution_controls: {
+          model_ref: "openai/gpt-5.6-sol",
+          reasoning_effort: "medium",
+          source: "global_default",
+          subsession_result: {
+            relation_id: "relation-context-revision",
+            result_id: "result-context-revision",
+            safe_title: "소음 대응 문서",
+          },
+        },
+      },
+    },
+  }]);
+
+  expect(useButlerStore.getState().summary).toMatchObject({
+    turn_state: "thinking",
+    latest_turn_subsession_result: {
+      relation_id: "relation-context-revision",
+      result_id: "result-context-revision",
+      safe_title: "소음 대응 문서",
+    },
+  });
+});
+
 test("store prunes optimistic client progress after server accepts the turn", () => {
   const clientMessageId = "client-accepted";
   const clientTurnId = `client-turn-${clientMessageId}`;

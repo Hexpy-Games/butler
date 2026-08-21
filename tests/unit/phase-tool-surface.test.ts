@@ -78,6 +78,32 @@ test("feature direct phase omits project, workspace, Work, and execution schemas
   ]) expect(names).not.toContain(name);
 });
 
+test("ordinary chat keeps greetings direct but admits delegation for substantial revision work", () => {
+  const greeting = turnRecord({
+    accessMode: "full_access",
+    trackingMode: "none",
+    originalMessage: "안녕하세요!",
+  });
+  const revision = turnRecord({
+    accessMode: "full_access",
+    trackingMode: "none",
+    originalMessage: "직전 답변의 요구사항을 모두 보존해서 문서 전체를 다시 수정해줘.",
+  });
+
+  const greetingSelection = selectGuidedTurnPhasePolicy(greeting, ENABLED);
+  const revisionSelection = selectGuidedTurnPhasePolicy(revision, ENABLED);
+
+  expect(greetingSelection.phase).toBe("direct");
+  expect(greetingSelection.providerTools.map((tool) => tool.name))
+    .not.toContain("delegate_to_steward");
+  expect(revisionSelection.phase).toBe("execution");
+  expect(revisionSelection.providerTools.map((tool) => tool.name))
+    .toContain("delegate_to_steward");
+  expect(revisionSelection.stableInstructionPrefix).toContain(
+    "Substantial writing, revision, research, comparison, inspection, or execution belongs to Steward",
+  );
+});
+
 test("feature read-only phase omits write and effect schemas", () => {
   const selection = selectGuidedTurnPhasePolicy(turnRecord({
     accessMode: "read_only",
@@ -340,7 +366,7 @@ test("SS-03B phase instructions define semantic delegation selection", () => {
       "Delegate bounded independent multi-step repository inspection, multi-source research or synthesis, persistent-artifact work, or execution-stage mutation with delegate_to_steward.",
     );
     expect(instructions).toContain(
-      "Honor explicit user direction to delegate or keep the work in Butler.",
+      "Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler.",
     );
     expect(instructions).toContain(
       "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
@@ -488,6 +514,7 @@ function turnRecord(options: {
   trackingMode?: "ledger" | "local" | "none";
   projectRef?: string;
   workspacePath?: string;
+  originalMessage?: string;
 } = {}): TurnRecord {
   const accessMode = options.accessMode ?? "read_only";
   const trackingMode = options.trackingMode ?? "local";
@@ -498,7 +525,7 @@ function turnRecord(options: {
     inboxId: "inbox-feature-tool-surface",
     triggerKey: "trigger-feature-tool-surface",
     originalMessageId: "message-feature-tool-surface",
-    originalMessage: "Please help",
+    originalMessage: options.originalMessage ?? "Please help",
     modelSelection: {
       provider: "openai",
       model: "gpt-5.6-sol",
