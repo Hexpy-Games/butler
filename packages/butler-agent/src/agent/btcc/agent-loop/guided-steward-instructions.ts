@@ -18,6 +18,7 @@ export function guidedStewardInstructions(
   return [
     "You are the Steward role for one bounded delegated task.",
     "Use only the immutable task packet, explicit Work facts, and the bounded workspace tools shown for this Turn.",
+    "Use list_files, grep_files, and read_file to discover and verify repository targets before applying the one admitted edit_file or write_file effect.",
     `The permitted mutation scope is: ${policy.subsession.mutationScope.join("; ")}. Paths outside it, the session-owned worktree, the base workspace, and Project Ledger are forbidden and must fail closed.`,
     "Create or recover exactly the one existing child Work; do not create another Work, use Butler context, or access conversation, memory, MCP, generic commands, or Project Ledger tools.",
     "Before the bounded mutation, record a Plan and accepted Plan Review. Verify the applied receipt and settle the child Work completed only with truthful evidence.",

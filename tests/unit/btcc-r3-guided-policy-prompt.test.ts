@@ -25,6 +25,8 @@ import { appRuntimePolicy } from
   "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
 import { delegateToStewardToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
+import { normalizeSubsessionMutationScope } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/scope.ts";
 
 test("R3 guided web_read keeps reader backend runtime-owned", () => {
   const webRead = guidedNativeToolDefinitions().find((tool) => tool.name === "web_read");
@@ -307,6 +309,9 @@ test("SS-03B delegation tool contract exposes canonical execution surfaces", () 
   expect(delegateToStewardToolDefinition.description).toContain(
     "For read_only, allowed_tools_and_effects is exactly the complete five-value array",
   );
+  expect(delegateToStewardToolDefinition.description).toContain(
+    "Every mutation Steward can safely list, grep, and read the isolated worktree",
+  );
   expect(readOnly).toBeDefined();
   expect(readOnly?.properties?.allowed_tools_and_effects).toMatchObject({
     minItems: 5,
@@ -321,6 +326,16 @@ test("SS-03B delegation tool contract exposes canonical execution surfaces", () 
     items: { enum: ["edit_file:workspace", "write_file:workspace"] },
   });
   expect(mutation?.properties?.mutation_scope).toMatchObject({ minItems: 1 });
+  expect(mutation?.properties?.mutation_scope?.items?.description).toContain(
+    "terminal dir/** shorthand",
+  );
+  expect(normalizeSubsessionMutationScope(["src/**", "package.json", "src/**"]))
+    .toEqual(["package.json", "src/"]);
+  for (const rejected of ["**", "src/*.ts", "src/?", "src/[ab]"]) {
+    expect(() => normalizeSubsessionMutationScope([rejected])).toThrow(
+      "subsession_mutation_scope_wildcard_not_allowed",
+    );
+  }
 });
 
 test("SS-03B Steward instructions require ordered result and completion evidence", () => {
@@ -347,14 +362,18 @@ test("SS-03B Steward instructions require ordered result and completion evidence
   });
   expect(readOnlyInstructions).toContain(requiredOrder);
   expect(readOnlyInstructions).toContain(readOnlyPlanContract);
-  expect(guidedStewardInstructions({
+  const mutationInstructions = guidedStewardInstructions({
     subsession: {
       ...common,
       executionMode: "mutation",
       mutationScope: ["bounded-result.txt"],
       allowedToolsAndEffects: ["write_file:workspace"],
     },
-  })).toContain(requiredOrder);
+  });
+  expect(mutationInstructions).toContain(requiredOrder);
+  expect(mutationInstructions).toContain(
+    "Use list_files, grep_files, and read_file to discover and verify repository targets",
+  );
 });
 
 test("R3 continuation guidance repairs legacy Work labels and refreshes downstream results", () => {
