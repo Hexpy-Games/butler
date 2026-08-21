@@ -16,6 +16,7 @@
 .observerAction {
   --steward-observer-icon-size: 16px;
   --steward-observer-hit-size: var(--icon-button-size, 30px);
+  overflow: visible;
 }
 
 .observerAction > svg {
