@@ -487,7 +487,6 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
   mkdirSync(join(root, "cognition", "memory", "projects"), { recursive: true });
   mkdirSync(join(root, "cognition", "memory", "hot"), { recursive: true });
   writeFileSync(join(root, "src", "inspection-target.ts"), "export const inspected = true;\n", "utf8");
-  writeFileSync(join(root, ".butler", "hot-cache.md"), "SANDY_PROJECT_HOT_CONTEXT\n", "utf8");
   writeFileSync(
     join(root, "cognition", "memory", "projects", "project-sandy.md"),
     "SANDY_PROJECT_MEMORY_CONTEXT\n",
@@ -888,11 +887,17 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
         mandatory_refs: Array<{ context_ref: string; source_id: string }>;
         optional_refs: Array<{ context_ref: string; source_id: string }>;
       };
-      expect([
-        packetContext.project_id,
-        packetContext.mandatory_refs[0]?.source_id,
-        packetContext.optional_refs[0]?.source_id,
-      ]).toEqual(["project-sandy", "project-hot-cache", "project-memory"]);
+      expect(packetContext.project_id).toBe("project-sandy");
+      expect(packetContext.mandatory_refs).toEqual([]);
+      expect(packetContext.optional_refs.map((ref) => ref.source_id))
+        .toEqual(["project-memory"]);
+      const parentContextJson = btccDb.query<{ context_json: string }, [string]>(
+        "SELECT context_json FROM btcc_turns WHERE turn_id = ?",
+      ).get(String(relation.parent_turn_id))?.context_json ?? "";
+      const parentContext = JSON.parse(parentContextJson) as {
+        mandatoryHotCacheRefs?: string[];
+      };
+      expect(parentContext.mandatoryHotCacheRefs?.length).toBeGreaterThan(0);
       expect(relation).toMatchObject({
         parent_session_id: parentSessionId,
         ordinal: 1,
@@ -1072,7 +1077,6 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
         request.messages.map((message) => message.content),
       ).join("\n");
       expect(childPrompt).toContain("execution_mode: read_only");
-      expect(childPrompt).toContain("SANDY_PROJECT_HOT_CONTEXT");
       expect(childPrompt).toContain("SANDY_PROJECT_MEMORY_CONTEXT");
       expect(childPrompt).not.toContain("PRIVATE_USER_HOT_CONTEXT");
       const childContextJson = btccDb.query<{ context_json: string }, [string]>(
@@ -1218,21 +1222,23 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     });
     expect(missingResponse.status).toBe(202);
     await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
-    expect(childRequests).toHaveLength(childRequestCountBeforeMissing);
+    expect(childRequests.length).toBeGreaterThan(childRequestCountBeforeMissing);
     const missingDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
     try {
-      expect(missingDb.query<{ status: string; code: string; work_count: number }, [string]>(`
+      const contextFreeResult = missingDb.query<{
+        status: string;
+        code: string;
+        work_count: number;
+      }, [string]>(`
         SELECT result.status, result.code,
           (SELECT COUNT(*) FROM btcc_guided_works WHERE session_id = relation.child_session_id)
             AS work_count
         FROM btcc_session_relations AS relation
         JOIN btcc_steward_results AS result ON result.relation_id = relation.relation_id
         WHERE relation.parent_session_id = ?
-      `).get(missingParentSessionId)).toEqual({
-        status: "blocked",
-        code: "delegation_context_incomplete",
-        work_count: 0,
-      });
+      `).get(missingParentSessionId);
+      expect(contextFreeResult?.code).not.toBe("delegation_context_incomplete");
+      expect(contextFreeResult?.work_count).toBe(1);
     } finally {
       missingDb.close();
     }

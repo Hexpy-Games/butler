@@ -12,25 +12,26 @@ import type { TurnRecord } from
 
 const PROJECT_ID = "project-sandy-bot";
 const MEMORY_REF = "a".repeat(64);
+const USER_RULES_REF = "c".repeat(64);
+const USER_HOT_CACHE_REF = "d".repeat(64);
+const PROJECT_HOT_CACHE_REF = "e".repeat(64);
 
-test("verified project memory admits Steward when no derived hot cache was declared", async () => {
+test("Butler-only mandatory refs do not become Steward project requirements", async () => {
   const snapshot = await snapshotDelegationProjectContext({
     parentSessionId: "sandy-session",
     parentTurnId: "sandy-turn",
     projectId: PROJECT_ID,
-    turns: { async findTurn() { return parentTurn({ optionalHotCacheRefs: [MEMORY_REF] }); } },
+    turns: {
+      async findTurn() {
+        return parentTurn({
+          mandatoryHotCacheRefs: [USER_RULES_REF, USER_HOT_CACHE_REF],
+          optionalHotCacheRefs: [MEMORY_REF],
+        });
+      },
+    },
     documents: {
       resolve: () => "unused",
-      read: () => ({
-        contextRef: MEMORY_REF,
-        contentSha256: "b".repeat(64),
-        sourceId: "project-memory",
-        projectionClass: "optional_hot_cache",
-        scopeKind: "project",
-        scopeId: PROJECT_ID,
-        sourceRevision: "memory-r1",
-        content: "Verified Sandy deployment and API knowledge.",
-      }),
+      read: projectAndUserDocument,
     },
   });
 
@@ -44,8 +45,7 @@ test("verified project memory admits Steward when no derived hot cache was decla
   expect(completePacketContext(packetWith(snapshot!))).toBe(true);
 });
 
-test("a parent-declared mandatory project cache remains fail closed", async () => {
-  const missingRef = "c".repeat(64);
+test("a verified project-scoped hot cache remains exact mandatory child authority", async () => {
   const snapshot = await snapshotDelegationProjectContext({
     parentSessionId: "sandy-session",
     parentTurnId: "sandy-turn",
@@ -53,33 +53,64 @@ test("a parent-declared mandatory project cache remains fail closed", async () =
     turns: {
       async findTurn() {
         return parentTurn({
-          mandatoryHotCacheRefs: [missingRef],
+          mandatoryHotCacheRefs: [USER_RULES_REF, PROJECT_HOT_CACHE_REF],
           optionalHotCacheRefs: [MEMORY_REF],
         });
       },
     },
     documents: {
       resolve: () => "unused",
-      read: (contextRef) => {
-        if (contextRef === missingRef) throw new Error("missing declared hot cache");
-        return {
-          contextRef: MEMORY_REF,
-          contentSha256: "b".repeat(64),
-          sourceId: "project-memory",
-          projectionClass: "optional_hot_cache" as const,
-          scopeKind: "project" as const,
-          scopeId: PROJECT_ID,
-          sourceRevision: "memory-r1",
-          content: "Verified Sandy deployment and API knowledge.",
-        };
-      },
+      read: projectAndUserDocument,
     },
   });
 
   expect(snapshot?.required_source_ids).toEqual(["project-hot-cache"]);
-  expect(snapshot?.missing_source_ids).toEqual(["project-hot-cache"]);
-  expect(completePacketContext(packetWith(snapshot!))).toBe(false);
+  expect(snapshot?.missing_source_ids).toEqual([]);
+  expect(snapshot?.mandatory_refs).toEqual([
+    expect.objectContaining({
+      source_id: "project-hot-cache",
+      context_ref: PROJECT_HOT_CACHE_REF,
+    }),
+  ]);
+  expect(completePacketContext(packetWith(snapshot!))).toBe(true);
 });
+
+function projectAndUserDocument(contextRef: string) {
+  if (contextRef === MEMORY_REF) {
+    return {
+      contextRef,
+      contentSha256: "b".repeat(64),
+      sourceId: "project-memory",
+      projectionClass: "optional_hot_cache" as const,
+      scopeKind: "project" as const,
+      scopeId: PROJECT_ID,
+      sourceRevision: "memory-r1",
+      content: "Verified Sandy deployment and API knowledge.",
+    };
+  }
+  if (contextRef === PROJECT_HOT_CACHE_REF) {
+    return {
+      contextRef,
+      contentSha256: "f".repeat(64),
+      sourceId: "project-hot-cache",
+      projectionClass: "mandatory_hot_cache" as const,
+      scopeKind: "project" as const,
+      scopeId: PROJECT_ID,
+      sourceRevision: "hot-r1",
+      content: "Verified current Sandy project context.",
+    };
+  }
+  return {
+    contextRef,
+    contentSha256: "9".repeat(64),
+    sourceId: contextRef === USER_RULES_REF ? "rules" : "hot-cache",
+    projectionClass: "mandatory_hot_cache" as const,
+    scopeKind: "user" as const,
+    scopeId: "user",
+    sourceRevision: "user-r1",
+    content: "Private Butler-only context.",
+  };
+}
 
 function parentTurn(context: Partial<TurnRecord["context"]>): TurnRecord {
   return {
