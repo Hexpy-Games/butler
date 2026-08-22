@@ -3,7 +3,7 @@ import type { StoredSessionBinding } from "../../../test-support/harness/contrac
 import type { ButlerExecutionPolicy } from "../contracts.ts";
 import {
   normalizeSubsessionAllowedToolsAndEffects,
-  normalizeSubsessionMutationScope,
+  normalizeSubsessionMutationScopeForEffects,
 } from "../subsessions/scope.ts";
 
 export function isSubsessionBinding(binding: StoredSessionBinding): boolean {
@@ -37,18 +37,22 @@ export function readSubsessionMetadata(
   if (!relationId || !delegationId || !taskId || !executionMode) {
     throw new Error("subsession_context_invalid");
   }
+  const normalizedAllowedToolsAndEffects = normalizeSubsessionAllowedToolsAndEffects(
+    allowedToolsAndEffects,
+    executionMode,
+  );
   return {
     relationId,
     delegationId,
     taskId,
     executionMode,
     mutationScope: executionMode === "mutation"
-      ? normalizeSubsessionMutationScope(mutationScope)
+      ? normalizeSubsessionMutationScopeForEffects(
+          mutationScope,
+          normalizedAllowedToolsAndEffects,
+        )
       : [],
-    allowedToolsAndEffects: normalizeSubsessionAllowedToolsAndEffects(
-      allowedToolsAndEffects,
-      executionMode,
-    ),
+    allowedToolsAndEffects: normalizedAllowedToolsAndEffects,
     ...(projectContext ? { projectContext } : {}),
   };
 }
