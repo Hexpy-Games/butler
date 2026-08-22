@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS btcc_authority_requests (
   schedule_client_message_id TEXT NOT NULL UNIQUE,
   schedule_input_text TEXT NOT NULL,
   private_alternative_input TEXT,
-  outcome TEXT NOT NULL CHECK (outcome IN ('pending', 'applied', 'failed')),
+  outcome TEXT NOT NULL CHECK (outcome IN ('pending', 'applied', 'failed', 'uncertain')),
   outcome_receipt_json TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

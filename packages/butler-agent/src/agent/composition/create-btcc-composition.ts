@@ -11,6 +11,7 @@ import {
 } from "../btcc/turn/index.ts";
 import { createProductionGuidedTurnAgent } from "../btcc/agent-loop/index.ts";
 import type { ModelRoundPort } from "../btcc/agent-loop/index.ts";
+import type { GuidedEffectFaultHook } from "../btcc/effects/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { AgentConversationStore } from "../conversation/index.ts";
@@ -43,6 +44,8 @@ export function createProductionBtccComposition(input: {
   ownerId: string;
   /** Test-only one-round provider seam; production callers omit it. */
   modelRound?: ModelRoundPort;
+  /** TEST-ONLY deterministic fault proof; default-omitted in production. */
+  guidedEffectFaultHook?: GuidedEffectFaultHook;
   memoryAttribution?: RuntimeMemoryAttributionPort;
   sessionBindings?: SessionBindingStore;
   conversationStore?: AgentConversationStore;
@@ -116,6 +119,7 @@ export function createProductionBtccComposition(input: {
       durableWork: stores.durableWork,
       authority: stores.authority,
       modelRound: input.modelRound,
+      guidedEffectFaultHook: input.guidedEffectFaultHook,
       sessionBindingStore: bindings,
       subsessionDelegation: subsessions,
     }),

@@ -103,7 +103,7 @@ export function createProductionGuidedTurnAgent(
       const visibleTools = subsessionResultEvidence ? directSynthesisToolDefinitions(phasePolicy.providerTools) : phasePolicy.providerTools;
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
       const describedToolIds = new Set<string>();
-      const effectService = createGuidedEffectService(input.effectJournal);
+      const effectService = createGuidedEffectService(input.effectJournal, input.guidedEffectFaultHook ? { faultHook: input.guidedEffectFaultHook } : {});
       const execute = createButlerToolExecutor({
         butlerHome: input.butlerHome,
         butlerData: input.butlerData,

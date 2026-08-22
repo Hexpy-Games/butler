@@ -41,12 +41,18 @@ export function migrateAuthoritySchema(db: Database): void {
 
 function requiresRewrite(db: Database, definition: string): boolean {
   return hasLegacyDecisionCheck(definition) ||
+    hasLegacyOutcomeCheck(definition) ||
     hasColumn(db, "btcc_authority_requests", "schedule_state") ||
     hasColumn(db, "btcc_authority_requests", "schedule_turn_id");
 }
 
 function hasLegacyDecisionCheck(definition: string): boolean {
   return /\bdecision\b/iu.test(definition) && !definition.includes("'modified'");
+}
+
+/** Detects the prior current schema whose outcome CHECK omits 'uncertain'. */
+function hasLegacyOutcomeCheck(definition: string): boolean {
+  return /\boutcome\b/iu.test(definition) && !definition.includes("'uncertain'");
 }
 
 function hasColumn(db: Database, table: string, column: string): boolean {
