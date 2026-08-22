@@ -8,6 +8,8 @@ import type { DurableWorkService } from "../work/index.ts";
 import type { GuidedSessionWorkspaceBindingStore } from
   "./guided-session-workspace-recovery.ts";
 import type { ContextDocumentReader } from "../../context/context-projection.ts";
+import type { PrincipalAuthority } from "../authority/index.ts";
+import type { SubsessionDelegationService } from "../subsessions/index.ts";
 
 export type ProductionGuidedTurnAgentInput = {
   butlerHome: string;
@@ -17,8 +19,10 @@ export type ProductionGuidedTurnAgentInput = {
   toolJournal: GuidedToolJournal;
   operationResultReader?: GuidedOperationResultReader;
   effectJournal: SqliteGuidedEffectJournal;
+  authority: PrincipalAuthority;
   durableWork: DurableWorkService;
   modelRound?: ModelRoundPort;
   sessionBindingStore?: GuidedSessionWorkspaceBindingStore;
   executionWindowSize?: number;
+  subsessionDelegation?: SubsessionDelegationService;
 };

@@ -4,10 +4,7 @@ import {
   type ConversationContextStoreReader,
   type ConversationWriter,
 } from "../../conversation/index.ts";
-import type {
-  ContextAssembly,
-  PromptAssembler,
-} from "../../prompt/prompt-assembler.ts";
+import type { ContextAssembly, PromptAssembler } from "../../prompt/prompt-assembler.ts";
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
 import type { StoredSessionBinding } from "../../../test-support/harness/contracts.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
@@ -40,7 +37,11 @@ import {
 } from "./prepare-turn-request.ts";
 import { includeRecentContext } from "./recent-conversation-context.ts";
 import { buildModelRoute } from "../model-route/index.ts";
-
+import {
+  emptySubsessionContextAssembly,
+  isSubsessionBinding,
+  readSubsessionMetadata,
+} from "./subsession-turn-context.ts";
 export type BtccTurnPreparationDependencies = {
   bindingStore: Pick<SessionBindingStore, "getBySessionId">;
   conversationStore: ConversationWriter & ConversationContextStoreReader;
@@ -50,10 +51,8 @@ export type BtccTurnPreparationDependencies = {
   turns: Pick<TurnStateRepository, "findTurn">;
   wakeAuthorizations: import("./contracts.ts").BtccWakeAuthorizationReader;
 };
-
 export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
   constructor(private readonly dependencies: BtccTurnPreparationDependencies) {}
-
   async prepare(request: BtccTurnRequest): Promise<BtccPreparedTurn> {
     const existingTurn = await this.dependencies.turns.findTurn(request.turnId).catch(() => null);
     if (existingTurn) {
@@ -65,7 +64,6 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
         false,
       );
     }
-
     if (request.trigger.kind === "authorized_wake") {
       const authorized = await this.dependencies.wakeAuthorizations.validateWake({
         sourceTurnId: request.trigger.sourceTurnId,
@@ -78,7 +76,6 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
         throw new Error("BTCC authorized wake denied");
       }
     }
-
     const binding = this.dependencies.bindingStore.getBySessionId(request.sessionId);
     if (!binding) {
       throw new Error(`Missing stored BTCC session binding: ${request.sessionId}`);
@@ -89,23 +86,25 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
       );
     }
     const envelope = inboundEnvelopeFor(request);
-
-    const assembly = includeRecentContext(
-      this.dependencies.conversationStore,
-      binding,
-      envelope,
-      this.dependencies.promptAssembler.buildButlerContextAssembly({
+    const subsession = isSubsessionBinding(binding);
+    const assembly = subsession
+      ? emptySubsessionContextAssembly()
+      : includeRecentContext(
+        this.dependencies.conversationStore,
         binding,
         envelope,
-        route: {
-          sessionId: request.sessionId,
-          role: request.route.role,
-          reason: request.route.reason ?? "transport-binding",
-          workspacePath: request.route.workspacePath,
-          ...(request.route.projectId ? { projectId: request.route.projectId } : {}),
-        },
-      }),
-    );
+        this.dependencies.promptAssembler.buildButlerContextAssembly({
+          binding,
+          envelope,
+          route: {
+            sessionId: request.sessionId,
+            role: request.route.role,
+            reason: request.route.reason ?? "transport-binding",
+            workspacePath: request.route.workspacePath,
+            ...(request.route.projectId ? { projectId: request.route.projectId } : {}),
+          },
+        }),
+      );
     const controls = request.executionControls
       ? verifyTurnExecutionControls(request.executionControls)
       : undefined;
@@ -115,6 +114,8 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
       documents: this.dependencies.contextDocuments,
       attachments: request.message.attachments,
       imageAdmission: request.message.imageAdmission,
+      authorityRequestRef: request.appTurnContext?.authorityRequestRef,
+      authorityClientMessageId: request.appTurnContext?.authorityClientMessageId,
       turnAccessMode: controls?.access_mode,
     });
     const modelSelection = admitModel(binding, controls);
@@ -122,7 +123,6 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
 
     return this.prepareConversationProjection(request, binding, command, true);
   }
-
   private prepareConversationProjection(
     request: BtccTurnRequest,
     binding: StoredSessionBinding,
@@ -163,15 +163,17 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
     };
   }
 }
-
 export function snapshotTurnContext(input: {
   binding: StoredSessionBinding;
   assembly: ContextAssembly;
   documents: BtccContextDocumentWriter;
   attachments?: AttachmentRef[];
   imageAdmission?: import("../../image-attachment/contracts.ts").VisualImageAdmissionResult;
+  authorityRequestRef?: string;
+  authorityClientMessageId?: string;
   turnAccessMode?: TurnAccessMode;
 }): ButlerContextInput {
+  const subsession = readSubsessionMetadata(input.binding.metadata?.subsession);
   const sections = [
     ...input.assembly.staticContext,
     ...input.assembly.liveConfiguration,
@@ -180,24 +182,33 @@ export function snapshotTurnContext(input: {
     ...input.assembly.retrievedContext,
   ];
   const userRef = principalRef(input.binding);
-  const snapshot = snapshotContextDocuments({
-    userRef,
-    sessionId: input.binding.sessionId,
-    ...(input.binding.projectId ? { projectRef: input.binding.projectId } : {}),
-    workspacePath: input.binding.workspacePath,
-    sections: sections.map((section) => ({
-      id: section.id,
-      content: `## ${section.title}\n\n${section.content}`,
-      sourceRevision: digest({
+  const snapshot = subsession ? {
+        userRef: "steward-role",
+        ...(subsession.projectContext?.projectId ? { projectRef: subsession.projectContext.projectId } : {}),
+        profileRefs: [],
+        recentFeedbackRefs: [],
+        mandatoryHotCacheRefs: [...(subsession.projectContext?.mandatoryHotCacheRefs ?? [])],
+        optionalHotCacheRefs: [...(subsession.projectContext?.optionalHotCacheRefs ?? [])],
+        baselineObservationScopeRefs: [],
+      }
+    : snapshotContextDocuments({
+      userRef,
+      sessionId: input.binding.sessionId,
+      ...(input.binding.projectId ? { projectRef: input.binding.projectId } : {}),
+      workspacePath: input.binding.workspacePath,
+      sections: sections.map((section) => ({
         id: section.id,
-        content: section.content,
+        content: `## ${section.title}\n\n${section.content}`,
+        sourceRevision: digest({
+          id: section.id,
+          content: section.content,
+          projectionClass: section.projectionClass,
+          scopeKind: section.scopeKind,
+        }),
         projectionClass: section.projectionClass,
         scopeKind: section.scopeKind,
-      }),
-      projectionClass: section.projectionClass,
-      scopeKind: section.scopeKind,
-    })),
-  }, input.documents);
+      })),
+    }, input.documents);
   return {
     ...snapshot,
     executionPolicy: {
@@ -219,8 +230,11 @@ export function snapshotTurnContext(input: {
         ...stringArray(record(input.binding.metadata?.runtimePolicy).required_tools),
       ]),
       workspacePath: input.binding.workspacePath,
+      ...(subsession ? { subsession } : {}),
       ...(input.binding.projectId ? { projectId: input.binding.projectId } : {}),
     },
+    ...(input.authorityRequestRef ? { authorityRequestRef: input.authorityRequestRef } : {}),
+    ...(input.authorityClientMessageId ? { authorityClientMessageId: input.authorityClientMessageId } : {}),
     ...(input.attachments?.length
       ? { attachments: input.attachments.map((attachment) => ({
           id: attachment.id,
@@ -238,7 +252,6 @@ export function snapshotTurnContext(input: {
     ...(input.imageAdmission ? { imageAdmission: input.imageAdmission } : {}),
   };
 }
-
 function admitModel(
   binding: StoredSessionBinding,
   controls?: ReturnType<typeof verifyTurnExecutionControls>,
@@ -287,7 +300,6 @@ function admitModel(
     }),
   };
 }
-
 function admittedContextWindow(binding: StoredSessionBinding, modelRef: string): number {
   const configured = binding.metadata?.context_window_tokens;
   if (typeof configured === "number" && Number.isFinite(configured) && configured > 0) {
@@ -295,48 +307,40 @@ function admittedContextWindow(binding: StoredSessionBinding, modelRef: string):
   }
   return resolveModelMetadata(modelRef).context_window_tokens ?? 200_000;
 }
-
 function accessMode(value: unknown): TurnAccessMode {
   if (value === "full_access" || value === "ask_first" || value === "read_only") return value;
   return "read_only";
 }
-
 function trackingMode(binding: StoredSessionBinding): "ledger" | "local" | "none" {
   const value = record(binding.metadata?.runtimePolicy).trackingMode ??
     record(binding.metadata?.runtimePolicy).tracking_mode;
   if (value === "ledger" || value === "local" || value === "none") return value;
   return binding.projectId ? "ledger" : "local";
 }
-
 function principalRef(binding: StoredSessionBinding): string {
   const configured = binding.metadata?.userRef;
   return typeof configured === "string" && configured.trim()
     ? configured.trim()
     : "local-principal";
 }
-
 function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
       .map((item) => item.trim())
     : [];
 }
-
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
 }
-
 function requiredText(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim()) throw new Error(`${label} is missing`);
   return value;
 }
-
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
 }
-
 function isReasoningEffort(value: string): value is ReasoningEffort {
   return ["none", "low", "medium", "high", "xhigh", "max"].includes(value);
 }

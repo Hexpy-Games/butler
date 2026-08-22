@@ -27,6 +27,8 @@ export interface FileToolExecutionContext {
   workspacePath?: string;
   workspaceReference?: WorkspaceReference;
   protectedProjectLedgerRoots?: string[];
+  mutationScope?: readonly string[];
+  allowedToolsAndEffects?: readonly string[];
 }
 
 const MAX_BATCH_REQUESTS = 20;
@@ -85,6 +87,7 @@ export async function executeReadFileTool(
       const suppliedGuard = await resolveWorkspacePathGuard({
         workspaceRoot: suppliedWorkspaceRoot,
         relativePath: request.path,
+        relativeOnly: context.allowedToolsAndEffects !== undefined,
         rejectProtectedProjectLedgerPaths: true,
         protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
       });

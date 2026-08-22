@@ -37,6 +37,11 @@ import { SqliteBtccProgressEventRepository } from
 import { SqliteBtccWakeAuthorizationRepository } from
   "./sqlite-btcc-wake-authorization-repository.ts";
 import { selectTurnContinuationBudget } from "../../../btcc/turn/index.ts";
+import { createPrincipalAuthority } from "../../../btcc/authority/index.ts";
+import { SqlitePrincipalAuthorityRepository } from "./authority-repository.ts";
+import { agentBtccStoragePaths } from "./storage-ownership/index.ts";
+import { SqliteSubsessionDelegationStore } from "./subsession-store.ts";
+import { SqliteStewardObserverStore } from "./steward-observer-store.ts";
 
 export function openBtccSqliteStores(input: {
   dbPath: string;
@@ -66,6 +71,10 @@ export function openBtccSqliteStores(input: {
     db,
     input.legacyProjectWorkSource,
   ));
+  const subsessionStore = new SqliteSubsessionDelegationStore(db);
+  const authority = createPrincipalAuthority(
+    new SqlitePrincipalAuthorityRepository(db),
+  );
   return {
     admission: new SqliteTurnAdmissionRepository(
       db,
@@ -82,10 +91,38 @@ export function openBtccSqliteStores(input: {
     guidedOperationResultReader: new SqliteGuidedOperationResultReader(db),
     guidedEffectJournal: new SqliteGuidedEffectJournal(db),
     durableWork,
+    subsessionStore,
+    authority,
     legacyCutover,
     committedSuccessorReadiness: sqliteWriteReadiness,
     close: () => {
       owner.close();
+      if (db.inTransaction) throw new Error("BTCC database transaction remained open at close");
+      connection.close();
+    },
+  };
+}
+
+export function openBtccAuthorityStore(input: { butlerData: string }) {
+  const dbPath = agentBtccStoragePaths(input.butlerData).agentBtccDbPath;
+  mkdirSync(dirname(dbPath), { recursive: true });
+  const connection = openOwnedSqliteConnection(dbPath);
+  const db = connection.database;
+  coordinateSharedSqliteWriter(db);
+  db.exec("PRAGMA synchronous=NORMAL");
+  db.exec(BTCC_SUCCESSOR_SCHEMA);
+  migrateBtccSchema(db);
+  const authority = createPrincipalAuthority(
+    new SqlitePrincipalAuthorityRepository(db),
+  );
+  const observer = new SqliteStewardObserverStore(db);
+  let closed = false;
+  return {
+    authority,
+    observer,
+    close() {
+      if (closed) return;
+      closed = true;
       if (db.inTransaction) throw new Error("BTCC database transaction remained open at close");
       connection.close();
     },

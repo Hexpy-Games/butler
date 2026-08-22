@@ -29,8 +29,10 @@ import type { TerminalTurnProjection } from "../../infrastructure/retention/term
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
 import type { TurnControlResolution } from "../../../core/turn-execution-controls.ts";
 import { buildContextDetailsRevision } from "./context-details-revision.ts";
+import type { StewardObserverReader } from "../../domain/sessions/steward-observer.ts";
 
 export interface AppStoreKernelSessionContextHost {
+  stewardObserver: StewardObserverReader;
   localModelMetadata(): ProviderModelMetadata[];
   registeredModelMetadata(): ProviderModelMetadata[];
   loadedSkillNamesForSession(sessionId: string, turnId?: string): string[];
@@ -94,6 +96,9 @@ export function createSessionContextHost(
   kernel: AppStoreKernel,
 ): AppStoreKernelSessionContextHost {
   return {
+    get stewardObserver() {
+      return kernel.stewardObserver;
+    },
     localModelMetadata() {
       return kernel.modelRegistry.localModelMetadata();
     },
@@ -139,7 +144,10 @@ export function createSessionContextHost(
       return buildContextDetailsRevision(kernel, sessionId);
     },
     transcriptMessagePage(sessionId, options) {
-      return kernel.sessionRecords.listTranscriptMessagePage(sessionId, options);
+      return kernel.sessionMessageProjection.transcriptMessagePage(
+        sessionId,
+        options,
+      );
     },
     latestTurn(sessionId) {
       return kernel.sessionRecords.latestTurn(sessionId);
@@ -212,6 +220,9 @@ export function createSessionContextHost(
     branchInfoForSession(sessionId) {
       const project = kernel.getProjectForSession(sessionId);
       const authority = resolveSessionWorkspaceAuthority({
+        binding: kernel.sessionBindings.getBySessionId(
+          sessionHintForRow(sessionId),
+        ),
         projectWorkspacePath: project?.workspace_path,
       });
       if (authority.kind === "unavailable") {

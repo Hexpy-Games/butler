@@ -10,6 +10,9 @@ import type {
   WorkTurnScope,
 } from "../work/index.ts";
 import type { TurnRecord } from "../turn/index.ts";
+import type {
+  PrincipalAuthority,
+} from "../authority/index.ts";
 import type { GuidedToolJournal } from "../ports/index.ts";
 import { sanitizePublicText } from "../../events/turn-events.ts";
 import { isDurableWorkTool } from "../work/index.ts";
@@ -97,6 +100,60 @@ export async function loadInitialGuidedWork(
     context: await safeLoadWorkContext(input.durableWork, scope),
     bound: true,
   };
+}
+
+export async function loadGuidedTurnWork(input: {
+  durableWork: DurableWorkService;
+  toolJournal: GuidedToolJournal;
+  scope: WorkTurnScope;
+  trackingMode: "ledger" | "local" | "none";
+  authority?: PrincipalAuthority;
+  authorityRequestRef?: string;
+  authorityClientMessageId?: string;
+  workspacePath: string;
+}): Promise<{
+  context: DurableWorkContext | null;
+  bound: boolean;
+}> {
+  const storedAuthority = input.authorityRequestRef && input.authority &&
+    input.authorityClientMessageId
+    ? input.authority.execution({
+        ownerSessionId: input.scope.sessionId,
+        requestRef: input.authorityRequestRef,
+        sourceSessionId: input.scope.sessionId,
+        clientMessageId: input.authorityClientMessageId,
+        turnId: input.scope.turnId,
+      })
+    : undefined;
+  if (input.authorityRequestRef && !storedAuthority) {
+    throw new Error("authority_context_missing");
+  }
+  if (storedAuthority) {
+    if (storedAuthority.sourceSessionId !== input.scope.sessionId ||
+        storedAuthority.sourceTurnId === input.scope.turnId ||
+        storedAuthority.workspacePath !== input.workspacePath) {
+      throw new Error("authority_request_identity_mismatch");
+    }
+    const bound = await safeBindOpenWork(
+      input.durableWork,
+      input.scope,
+      storedAuthority.sourceWorkId,
+    );
+    if (!bound || bound.workId !== storedAuthority.sourceWorkId) {
+      throw new Error("authority_source_work_unavailable");
+    }
+  }
+  const initial = input.trackingMode === "none"
+    ? { context: null, bound: false }
+    : await loadInitialGuidedWork({
+        durableWork: input.durableWork,
+        toolJournal: input.toolJournal,
+      }, input.scope);
+  if (storedAuthority && (!initial.bound ||
+      initial.context?.work.workId !== storedAuthority.sourceWorkId)) {
+    throw new Error("authority_source_work_unavailable");
+  }
+  return initial;
 }
 
 export async function safeAttachToolResult(

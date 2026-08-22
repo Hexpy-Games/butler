@@ -47,10 +47,14 @@ import { createOpenAIQuotaAdapter } from
   "../../../../integrations/providers/openai/provider-quota.ts";
 import { createZaiQuotaAdapter } from
   "../../../../integrations/providers/zai/provider-quota.ts";
+import { AppProjectSessionWorktreeProvisioner } from
+  "../../domain/sessions/project-session-worktree-provisioner.ts";
+import { LazyAppSessionBindingStore } from
+  "../../infrastructure/core/lazy-session-binding-store.ts";
 
 export function initializeAppStoreKernel(
   kernel: AppStoreKernel,
-  options: AppServerStoreOptions = {},
+  options: AppServerStoreOptions,
 ): void {
   kernel.closed = false;
   kernel.projectWorkspaceRoot = resolve(
@@ -65,6 +69,16 @@ export function initializeAppStoreKernel(
   kernel.butlerHome = resolve(
     options.butlerHome ?? process.env.BUTLER_HOME ?? process.cwd(),
   );
+  kernel.stewardObserver = options.stewardObserver;
+  if (options.sessionBindings) {
+    kernel.sessionBindings = options.sessionBindings;
+  } else {
+    const sessionBindings = new LazyAppSessionBindingStore(
+      join(kernel.butlerData, "runtime", "session-store.sqlite"),
+    );
+    kernel.sessionBindings = sessionBindings;
+    kernel.ownedSessionBindings = sessionBindings;
+  }
   kernel.appVersion = safeString(options.appVersion);
   kernel.appUpdateManifest =
     safeString(options.appUpdateManifest) ??
@@ -98,7 +112,7 @@ export function initializeAppStoreKernel(
     { create: true },
   );
   kernel.db = kernel.dbConnection.database;
-  kernel.operationOutputs = new SqliteOperationOutputReader(kernel.db);
+  kernel.operationOutputs = new SqliteOperationOutputReader(kernel.db, kernel.stewardObserver);
   coordinateSharedSqliteWriter(kernel.db);
   let wakeTerminalRetention = (
     _event: { turnId: string; eventId: number },
@@ -215,6 +229,13 @@ export function initializeAppStoreKernel(
   });
   kernel.messageFiles = sessionModules.messageFiles;
   kernel.sessionRecords = sessionModules.sessionRecords;
+  kernel.projectSessionWorktrees = new AppProjectSessionWorktreeProvisioner({
+    butlerData: kernel.butlerData,
+    bindings: kernel.sessionBindings,
+    getSession: (sessionId) => kernel.sessionRecords.getSession(sessionId),
+    getProject: (projectId) => kernel.projects.getProjectRow(projectId),
+    getSettings: () => kernel.preferences.getSettings(),
+  });
   kernel.assistantMessages = sessionModules.assistantMessages;
   kernel.sessionMessageProjection = sessionModules.sessionMessageProjection;
   kernel.turnProgressView = sessionModules.turnProgressView;
@@ -309,6 +330,7 @@ export function initializeAppStoreKernel(
     kernel.settingsPersistence.readStoredProjectWorkspaceRoot() ??
     kernel.projectWorkspaceRoot;
   seedAppStoreDefaults(kernel.db);
+  void kernel.sessionQueueDispatcher.recoverAndDrain().catch(() => undefined);
   kernel.transportProjectionOwner.start();
   kernel.turnActions.reconcileCancellationSettlements();
   kernel.reconcileCancelledTurnActivityMessages();

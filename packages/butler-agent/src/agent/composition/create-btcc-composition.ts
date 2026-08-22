@@ -24,6 +24,17 @@ import {
   createRuntimeMemoryAttributionPort,
   type RuntimeMemoryAttributionPort,
 } from "../../operations/diagnostics/runtime-memory-attribution/index.ts";
+import {
+  createDefaultDeveloperDiagnosticsGate,
+  createTurnDeveloperLogCapturePort,
+} from "../../operations/diagnostics/developer-log-turn-capture/index.ts";
+import { DeveloperLogStore } from "../../operations/diagnostics/developer-log-store.ts";
+import {
+  createAppParentInputSink,
+  createSubsessionDelegationService,
+} from "../btcc/subsessions/index.ts";
+import { resolveAppGatewayRuntimeConfig } from "../../operations/gateway/registry.ts";
+import { readLocalAuthConfigFromEnvironment } from "../../gateways/app/interface/server/local-auth.ts";
 
 /**
  * Production wiring only.  Lifecycle policy lives in `agent/btcc/btcc.ts`
@@ -36,8 +47,15 @@ export function createProductionBtccComposition(input: {
   /** Test-only one-round provider seam; production callers omit it. */
   modelRound?: ModelRoundPort;
   memoryAttribution?: RuntimeMemoryAttributionPort;
+  /**
+   * Developer-diagnostics gate; defaults to reading the app settings
+   * database per capture call so a toggle takes effect on the next turn.
+   */
+  developerDiagnosticsEnabled?: () => boolean;
   sessionBindings?: SessionBindingStore;
   conversationStore?: AgentConversationStore;
+  appServerUrl?: string;
+  appLocalAuth?: import("../../gateways/app/interface/server/local-auth.ts").LocalAuthConfig;
 }) {
   let phaseContinuityKey: Buffer | undefined;
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
@@ -56,6 +74,23 @@ export function createProductionBtccComposition(input: {
   const conversations = input.conversationStore ?? new AgentConversationStore({
     butlerData: input.butlerData,
   });
+  const subsessions = createSubsessionDelegationService({
+    butlerData: input.butlerData,
+    sessionBindings: bindings,
+    durableWork: stores.durableWork,
+    store: stores.subsessionStore,
+    parentInputSink: createAppParentInputSink({
+      appServerUrl: input.appServerUrl ?? resolveAppGatewayRuntimeConfig({
+        butlerData: input.butlerData,
+      }).serverUrl,
+      localAuth: input.appLocalAuth ?? readLocalAuthConfigFromEnvironment(),
+    }),
+    toolJournal: stores.guidedToolJournal,
+    effectJournal: stores.guidedEffectJournal,
+    parentTurns: stores.turns,
+    contextDocuments: stores.contextDocuments,
+    conversations,
+  });
   const promptAssembler = new PromptAssembler({
     butlerHome: input.butlerHome,
     butlerData: input.butlerData,
@@ -63,12 +98,18 @@ export function createProductionBtccComposition(input: {
   const memoryAttribution = input.memoryAttribution ?? createRuntimeMemoryAttributionPort({
     butlerData: input.butlerData,
   });
+  const developerLogCapture = createTurnDeveloperLogCapturePort({
+    store: new DeveloperLogStore({ butlerData: input.butlerData }),
+    gate: input.developerDiagnosticsEnabled ??
+      createDefaultDeveloperDiagnosticsGate(input.butlerData),
+  });
   const runtime = createTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
     messages: stores.messages,
     committedSuccessorReadiness: stores.committedSuccessorReadiness,
     memoryAttribution,
+    developerLogCapture,
     agent: createProductionGuidedTurnAgent({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
@@ -87,8 +128,10 @@ export function createProductionBtccComposition(input: {
       operationResultReader: stores.guidedOperationResultReader,
       effectJournal: stores.guidedEffectJournal,
       durableWork: stores.durableWork,
+      authority: stores.authority,
       modelRound: input.modelRound,
       sessionBindingStore: bindings,
+      subsessionDelegation: subsessions,
     }),
   });
   const preparationDependencies: BtccTurnPreparationDependencies = {
@@ -115,7 +158,12 @@ export function createProductionBtccComposition(input: {
   return {
     btcc: assembly.btcc,
     host: assembly.host,
-    ready: Promise.resolve(),
+    // A persisted Steward result may have committed its outbox just before
+    // process loss. Re-enter that same durable handoff once at composition
+    // startup; the App queue remains the sole owner after admission.
+    ready: subsessions.recoverPendingParentInputs().then(() => undefined),
+    authority: stores.authority,
+    subsessions,
   };
 }
 

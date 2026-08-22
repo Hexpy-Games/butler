@@ -1,7 +1,7 @@
 import { memo } from "react";
 import type { MessageRecord } from "@/app/types.ts";
 import { appCopy } from "@/app/copy.ts";
-import { Tag } from "@/butler-ds";
+import { Stack, Tag } from "@/butler-ds";
 import { isRuntimeFaultRetryableMessage } from "@/app/utils.ts";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
 import {
@@ -14,12 +14,15 @@ import { MessageArtifacts } from "./MessageArtifacts";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
+import { StewardParentProgress } from "./StewardParentProgress";
+import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
 
 interface MessageContentProps {
   message: MessageRecord;
   copied: boolean;
   footerMeta: AssistantFooterMeta | null;
-  onCopyAssistantMessage: (message: MessageRecord) => void;
+  onCopyAssistantMessage?: (message: MessageRecord) => void;
+  stewardProgress?: AnchoredStewardProgress;
 }
 
 function MessageContentComponent({
@@ -27,6 +30,7 @@ function MessageContentComponent({
   copied,
   footerMeta,
   onCopyAssistantMessage,
+  stewardProgress,
 }: MessageContentProps) {
   return (
     <>
@@ -41,7 +45,19 @@ function MessageContentComponent({
             blocks={message.work_blocks}
             turnId={message.turn_id}
           />
-          {message.status === "failed" ? (
+          {stewardProgress ? (
+            <Stack data-test-class="steward-message-content" gap="md">
+              {message.status === "failed" ? (
+                <AssistantFailureNotice message={message} />
+              ) : (
+                <MessageMarkdown
+                  attachments={message.attachments}
+                  text={message.text}
+                />
+              )}
+              <StewardParentProgress progress={stewardProgress} />
+            </Stack>
+          ) : message.status === "failed" ? (
             <AssistantFailureNotice message={message} />
           ) : (
             <MessageMarkdown
@@ -69,11 +85,12 @@ function MessageContentComponent({
           attachments={message.attachments ?? []}
         />
       )}
-      {message.role === "assistant" && (
+      {message.role === "assistant" && onCopyAssistantMessage && (
         <AssistantResponseFooter
           copied={copied}
           meta={footerMeta}
           status={message.status}
+          suppressTerminalStatus={Boolean(stewardProgress)}
           onCopy={() => onCopyAssistantMessage(message)}
         />
       )}
@@ -93,6 +110,7 @@ export const MessageContent = memo(
     previous.message === next.message &&
     previous.copied === next.copied &&
     previous.footerMeta === next.footerMeta &&
+    previous.stewardProgress === next.stewardProgress &&
     previous.onCopyAssistantMessage === next.onCopyAssistantMessage,
 );
 MessageContent.displayName = "MessageContent";

@@ -124,12 +124,20 @@ export class AppTurnCancellation {
       WHERE turn_id = ? AND state = 'pending' AND queue_id IS NULL
     `).get(turnId);
     if (!pending) return;
+    const queueClaimId = this.input.db.query<{
+      claim_id: string | null;
+    }, [string, string]>(`
+      SELECT claim_id
+      FROM session_queued_messages
+      WHERE chat_id = ? AND turn_id = ? AND state = 'dispatching'
+    `).get(chatId, turnId)?.claim_id ?? undefined;
     const queued = this.input.serviceClient.enqueueAppCancellation({
       chatId,
       sessionId: sessionHintForRow(chatId),
       turnId,
       requestId: `cancel:${turnId}`,
       requestedAt: pending.created_at,
+      ...(queueClaimId ? { appQueueClaimId: queueClaimId } : {}),
     }, { source: "app-turn-cancellation" });
     this.input.db.query(`
       UPDATE app_turn_cancel_outbox SET queue_id = ?

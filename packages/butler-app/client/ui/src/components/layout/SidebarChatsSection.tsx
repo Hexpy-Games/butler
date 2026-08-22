@@ -47,7 +47,7 @@ export function SidebarChatsSection() {
       }
     >
       {paging.visibleSessions.map((chat) => (
-        <SidebarChatItem chat={chat} key={chat.id} />
+        <SidebarChatItem key={chat.id} chat={chat} />
       ))}
       {paging.remainingCount > 0 ? (
         <SidebarSessionLoadMore

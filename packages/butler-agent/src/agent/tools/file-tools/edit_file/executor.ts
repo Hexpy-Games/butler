@@ -14,6 +14,7 @@ import {
   fileToolEvidenceReceipt,
 } from "../shared/evidence.ts";
 import {
+  mutationScopeAllowsPath,
   resolveWorkspacePathGuard,
   safeWorkspaceGuardResult,
   safeWorkspaceResultPath,
@@ -149,9 +150,25 @@ async function executeSingleEdit(
     args,
     context.workspaceReference?.get() ?? context.workspacePath,
   );
+  if (!mutationScopeAllowsPath(edit.path, context.mutationScope)) {
+    const safePath = safeWorkspaceResultPath({ workspaceRoot, requestedPath: edit.path });
+    return mutationFailureResult(workspaceMutationFailure(safePath ?? "", "invalid_arguments", {
+      message: "The requested path is outside the delegated mutation scope.",
+      recovery_hint: "Retry only within the immutable Steward mutation scope.",
+    }));
+  }
+  if (context.allowedToolsAndEffects &&
+      !context.allowedToolsAndEffects.includes("edit_file:workspace")) {
+    const safePath = safeWorkspaceResultPath({ workspaceRoot, requestedPath: edit.path });
+    return mutationFailureResult(workspaceMutationFailure(safePath ?? "", "tool_not_admitted", {
+      message: "The edit effect is not admitted for this Steward task.",
+      recovery_hint: "Use only the exact mutation capability in the delegated packet.",
+    }));
+  }
   const guard = await resolveWorkspacePathGuard({
     workspaceRoot,
     relativePath: edit.path,
+    relativeOnly: context.allowedToolsAndEffects !== undefined,
     rejectProtectedProjectLedgerWrites: true,
     protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
   });
@@ -289,6 +306,21 @@ export async function executeEditFileTool(call: ToolCall, context: FileToolExecu
   if (hasBatch) {
     const normalized = normalizeBatchEdits(args.edits);
     if (!normalized.ok) return normalized.result;
+    if (context.allowedToolsAndEffects &&
+        !context.allowedToolsAndEffects.includes("edit_file:workspace")) {
+      return failure({
+        error: "tool_not_admitted",
+        message: "The edit effect is not admitted for this Steward task.",
+        recoveryHint: "Use only the exact mutation capability in the delegated packet.",
+      });
+    }
+    if (normalized.edits.some((edit) => !mutationScopeAllowsPath(edit.path, context.mutationScope))) {
+      return failure({
+        error: "invalid_arguments",
+        message: "The requested path is outside the delegated mutation scope.",
+        recoveryHint: "Retry only within the immutable Steward mutation scope.",
+      });
+    }
     return executeBatchEdits(normalized.edits, args, context);
   }
   const normalized = normalizeSingleEdit(args);

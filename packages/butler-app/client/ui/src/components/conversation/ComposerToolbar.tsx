@@ -16,6 +16,7 @@ export function ComposerToolbar() {
   const isSending = useComposerStore((store) => store.isSending);
   const activeTurn = useComposerStore((store) => store.activeTurn);
   const canSend = useComposerStore((store) => store.canSend);
+  const canStop = useComposerStore((store) => store.canStop);
   const onStop = useComposerStore((store) => store.onStop);
 
   return (
@@ -28,7 +29,7 @@ export function ComposerToolbar() {
         <ComposerContextControl />
         <ModelMenu />
       </ComposerCardExpandedControls>
-      {(isSending || activeTurn) && !canSend ? (
+      {(isSending || activeTurn) && canStop && !canSend ? (
         <ComposerSendButton
           mode="stop"
           aria-label={appCopy.composer.stop}

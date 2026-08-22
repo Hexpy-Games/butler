@@ -3,9 +3,8 @@ import type {
   GatewayRoute,
   InboundEnvelope,
 } from "../../../gateways/core/contracts.ts";
-import type {
-  BtccTurnRequest,
-} from "../../../agent/btcc/index.ts";
+import type { BtccTurnRequest } from "../../../agent/btcc/index.ts";
+import { subsessionResultId } from "../../../agent/btcc/subsessions/index.ts";
 import { projectTurnOutcome } from "./project-turn-outcome.ts";
 import type { BtccGatewayHandlerOptions } from "./contracts.ts";
 
@@ -19,12 +18,19 @@ export function createBtccGatewayHandlers(
         throw new Error("BTCC cancellation identity mismatch");
       }
       const outcome = await options.btcc.stopTurn({ turnId });
+      if (outcome.kind !== "cancelled" && outcome.kind !== "already_cancelled") {
+        throw new Error(`BTCC cancellation remains recoverable: ${outcome.kind}`);
+      }
+      await completeStewardTerminalResult(options, route, turnId, "cancelled", "steward_cancelled");
       return {
         ok: true,
         handledBy: "btcc/turn-stop",
         metadata: {
           text: "",
+          kind: "turn_cancelled",
           turnId,
+          appQueueClaimId: envelope.routingHints?.appQueueClaimId,
+          safeErrorCode: "turn_cancelled",
           controlAck: {
             kind: "cancel_turn",
             requestId: envelope.control.requestId,
@@ -36,7 +42,34 @@ export function createBtccGatewayHandlers(
     }
     const request = toBtccRequest(route, envelope, turnId);
     const outcome = await options.btcc.runTurn(request);
+    if (outcome.kind === "cancelled" || outcome.kind === "already_cancelled") {
+      await completeStewardTerminalResult(options, route, turnId, "cancelled", "steward_cancelled");
+      return {
+        ok: true,
+        handledBy: "btcc/turn-cancelled",
+        metadata: {
+          kind: "turn_cancelled",
+          text: "",
+          turnId,
+          appQueueClaimId: envelope.routingHints?.appQueueClaimId,
+          safeErrorCode: "turn_cancelled",
+        },
+      };
+    }
+    if (outcome.kind === "already_finalizing" || outcome.kind === "fenced_pending_persistence") {
+      throw new Error(`BTCC turn remains recoverable: ${outcome.kind}`);
+    }
     const result = projectTurnOutcome(outcome);
+    if (route.role === "steward" && options.subsessionDelegation &&
+      (outcome.kind === "delivered" || outcome.kind === "already_delivered")) {
+      await options.subsessionDelegation.completeStewardResult({
+        childSessionId: route.sessionId,
+        childTurnId: outcome.turnId,
+        resultId: subsessionResultId(route.sessionId, outcome.turnId),
+        summary: result.text,
+        status: result.workStatus === "blocked" ? "blocked" : "success",
+      });
+    }
     const generatedSessionTitle = result.text && outcome.admission !== "replay"
       ? await safeTitle(options, envelope, route)
       : null;
@@ -55,6 +88,7 @@ export function createBtccGatewayHandlers(
         ...(outcome.kind === "delivered" || outcome.kind === "already_delivered"
           ? { canonicalMessageId: outcome.messageId, turnId: outcome.turnId }
           : { turnId }),
+        appQueueClaimId: envelope.routingHints?.appQueueClaimId,
       },
     };
   };
@@ -63,6 +97,23 @@ export function createBtccGatewayHandlers(
     butler: ({ route, envelope }) => handle(route, envelope),
     steward: ({ route, envelope }) => handle(route, envelope),
   };
+}
+
+async function completeStewardTerminalResult(
+  options: BtccGatewayHandlerOptions,
+  route: GatewayRoute,
+  childTurnId: string,
+  status: "cancelled",
+  code: "steward_cancelled",
+): Promise<void> {
+  if (route.role !== "steward" || !options.subsessionDelegation) return;
+  await options.subsessionDelegation.completeStewardResult({
+    childSessionId: route.sessionId,
+    childTurnId,
+    resultId: subsessionResultId(route.sessionId, childTurnId),
+    status,
+    code,
+  });
 }
 
 function toBtccRequest(
@@ -77,7 +128,10 @@ function toBtccRequest(
     turnId,
     recoveryAttempt: envelope.routingHints?.turnAttempt,
     sessionId: route.sessionId,
-    eventId: envelope.eventId,
+    // A reclaimed App claim is represented by a reconciliation envelope.  Keep
+    // the original durable input event as the BTCC identity so the replay can
+    // reconcile the existing Turn/result instead of creating a second one.
+    eventId: envelope.routingHints?.canonicalEventId ?? envelope.eventId,
     transport: envelope.transport,
     accountId: envelope.accountId,
     peer: envelope.peer,
@@ -113,8 +167,13 @@ function toBtccRequest(
     },
     ...(envelope.executionControls
       ? { executionControls: envelope.executionControls } : {}),
+    emptyResponsePolicy: envelope.routingHints?.appQueueClaimId
+      ? "typed_terminal"
+      : "safe_fallback",
     ...(envelope.appTurnContext
       ? { appTurnContext: envelope.appTurnContext } : {}),
+    ...(envelope.routingHints?.appQueueClaimId
+      ? { appQueueClaimId: envelope.routingHints.appQueueClaimId } : {}),
     ...(envelope.signal ? { signal: envelope.signal } : {}),
   };
 }

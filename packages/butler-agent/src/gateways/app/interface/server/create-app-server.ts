@@ -6,6 +6,8 @@ import {
   AppStoreOperationError,
   type AppMessageResponder,
 } from "../../application/store/app-server-store.ts";
+import { retryDecidedAuthorityInputs } from "../../application/authority-handoff.ts";
+import { openBtccAuthorityStore } from "../../../../agent/adapters/index.ts";
 import { apiError } from "../protocol/app-protocol.ts";
 import {
   devCorsHeaders,
@@ -17,9 +19,12 @@ import { FixedWindowRateLimiter } from "./rate-limiter.ts";
 import { routeRequest } from "./route-request.ts";
 import { json, RequestError } from "./responses.ts";
 import type {
+  AppRouteRequest,
   AppServerHandle,
   CreateAppServerOptions,
 } from "./server-types.ts";
+import type { StewardObserverReader } from "../../domain/sessions/steward-observer.ts";
+import { FileQueueButlerServiceClient } from "../../../core/client.ts";
 
 export type {
   AppServerHandle,
@@ -55,9 +60,33 @@ function createComposedAppServer(
   const butlerData = resolve(
     options.butlerData ?? process.env.BUTLER_DATA ?? join(homedir(), ".butler"),
   );
-  const store = createStore(
-    { ...options, butlerData },
-  );
+  let authorityStore: ReturnType<typeof openBtccAuthorityStore> | undefined;
+  let authority: AppRouteRequest["authority"];
+  let stewardObserver: StewardObserverReader;
+  if (options.authority !== undefined) {
+    if (options.stewardObserver === undefined) {
+      throw new Error(
+        "App server composition requires both authority and steward observer.",
+      );
+    }
+    authority = options.authority;
+    stewardObserver = options.stewardObserver;
+  } else {
+    if (options.stewardObserver !== undefined) {
+      throw new Error(
+        "App server composition rejects a partial authority/observer pair.",
+      );
+    }
+    authorityStore = openBtccAuthorityStore({ butlerData });
+    authority = authorityStore.authority;
+    stewardObserver = authorityStore.observer;
+  }
+  const serviceClient = options.serviceClient ?? new FileQueueButlerServiceClient({ butlerData });
+  const store = createStore({
+    ...options,
+    butlerData,
+    serviceClient,
+  }, stewardObserver);
   const messageRateLimiter = new FixedWindowRateLimiter(
     options.messageRateLimit,
   );
@@ -88,6 +117,9 @@ function createComposedAppServer(
           messageRateLimiter,
           localAuth,
           butlerData,
+          authority,
+          stewardObserver,
+          serviceClient,
           serverShutdownSignal: serverShutdownController.signal,
           setRequestIdleTimeout(seconds) {
             bunServer.timeout(request, seconds);
@@ -111,6 +143,8 @@ function createComposedAppServer(
     },
   });
 
+  void retryDecidedAuthorityInputs({ authority, store }).catch(() => undefined);
+
   return {
     url: server.url.toString(),
     store,
@@ -119,12 +153,14 @@ function createComposedAppServer(
       serverShutdownController.abort();
       server.stop();
       store.close();
+      authorityStore?.close();
     },
   };
 }
 
 function createStore(
   options: CreateAppServerOptions,
+  stewardObserver: StewardObserverReader,
 ): AppServerStore {
   return new AppServerStore({
     dbPath: options.dbPath,
@@ -138,6 +174,7 @@ function createStore(
     folderSelectionSecret: options.folderSelectionSecret,
     serviceClient: options.serviceClient,
     providerQuotaMonitor: options.providerQuotaMonitor,
+    stewardObserver,
   });
 }
 

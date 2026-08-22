@@ -31,7 +31,6 @@ import { AppSessionMessageRecordStore } from "./session-message-record-store.ts"
 import type {
   SessionMessagePage,
   SessionMessagePageOptions,
-  TranscriptMessagePage,
 } from "./session-message-page.ts";
 
 export class AppSessionRecordStore {
@@ -62,7 +61,10 @@ export class AppSessionRecordStore {
     if (!row) throw new Error(`Unknown chat: ${chatId}`);
   }
 
-  createSession(input: CreateSessionRequest): CreateSessionResult {
+  createSession(
+    input: CreateSessionRequest,
+    options: { emitCreated?: boolean } = {},
+  ): CreateSessionResult {
     const kind = input.kind;
     const projectId = kind === "project" ? input.project_id?.trim() : undefined;
     if (kind === "project") {
@@ -97,8 +99,18 @@ export class AppSessionRecordStore {
       )
       .run(id, title, kind, projectId ?? null, now, now);
     const session = this.getSession(id);
-    this.appendEvent("session.created", { session });
+    if (options.emitCreated !== false) {
+      this.appendEvent("session.created", { session });
+    }
     return { session };
+  }
+
+  publishSessionCreated(sessionId: string): void {
+    this.appendEvent("session.created", { session: this.getSession(sessionId) });
+  }
+
+  rollbackSessionCreation(sessionId: string): void {
+    this.db.query("DELETE FROM chats WHERE id = ?").run(sessionId);
   }
 
   updateSession(
@@ -278,13 +290,6 @@ export class AppSessionRecordStore {
 
   listArtifactSummaries(chatId: string): SessionArtifactSummary[] {
     return this.messages.listArtifactSummaries(chatId);
-  }
-
-  listTranscriptMessagePage(
-    chatId: string,
-    options?: SessionMessagePageOptions,
-  ): TranscriptMessagePage {
-    return this.messages.listTranscriptMessagePage(chatId, options);
   }
 
   getMessageRow(messageId: string): MessageRow | null {

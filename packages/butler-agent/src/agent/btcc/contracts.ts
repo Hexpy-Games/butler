@@ -11,6 +11,7 @@ export type {
   WorkProgressTask,
 } from "./projection/progress-observer-contract.ts";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
+export type BtccEmptyResponsePolicy = "safe_fallback" | "typed_terminal";
 
 export type AdmittedModelSelection = {
   provider: string;
@@ -29,9 +30,14 @@ export type ButlerContextInput = {
   mandatoryHotCacheRefs: string[];
   optionalHotCacheRefs: string[];
   baselineObservationScopeRefs: string[];
+  emptyResponsePolicy?: BtccEmptyResponsePolicy;
   executionPolicy?: ButlerExecutionPolicy;
   attachments?: ButlerAttachmentRef[];
   imageAdmission?: VisualImageAdmissionResult;
+  /** Internal App Allow identity bound to this fresh source Turn. */
+  authorityRequestRef?: string;
+  /** Durable App queue identity paired with the stored authority request. */
+  authorityClientMessageId?: string;
 };
 
 export type ButlerExecutionPolicy = {
@@ -42,6 +48,19 @@ export type ButlerExecutionPolicy = {
   requiredNativeTools: string[];
   workspacePath: string;
   projectId?: string;
+  subsession?: {
+    relationId: string;
+    delegationId: string;
+    taskId: string;
+    executionMode: "read_only" | "mutation";
+    mutationScope: string[];
+    allowedToolsAndEffects: string[];
+    projectContext?: {
+      projectId: string;
+      mandatoryHotCacheRefs: string[];
+      optionalHotCacheRefs: string[];
+    };
+  };
 };
 
 export type ButlerAttachmentRef = {
@@ -99,6 +118,7 @@ export type BtccTurnCommand =
       message: { messageId: string; content: string };
       modelSelection: AdmittedModelSelection;
       context: ButlerContextInput;
+      emptyResponsePolicy?: BtccEmptyResponsePolicy;
       progressDestination?: BtccProgressDestination;
     }
   | { kind: "resume"; turnId: string; recoveryAttempt?: number }
@@ -117,6 +137,7 @@ export type BtccTurnCommand =
       };
       modelSelection: AdmittedModelSelection;
       context: ButlerContextInput;
+      emptyResponsePolicy?: BtccEmptyResponsePolicy;
       progressDestination?: BtccProgressDestination;
     }
   | { kind: "stop"; turnId: string };
@@ -131,6 +152,7 @@ export type BtccTurnOutcome = (
       turnId: string;
       messageId: string;
       content: string;
+      workStatus?: "completed" | "blocked";
       artifacts?: BtccFinalArtifact[];
       modelIdentity?: {
         requestedModelRef: string;
@@ -157,6 +179,7 @@ export type BtccProgressDestination = {
     parentId?: string;
   };
   replyToMessageId: string;
+  appQueueClaimId?: string;
 };
 
 export type BtccCommittedProgressEvent = {
@@ -243,7 +266,9 @@ export type BtccTurnRequest = {
   };
   progressDestination?: BtccProgressDestination;
   executionControls?: BtccTurnExecutionControls;
+  emptyResponsePolicy?: BtccEmptyResponsePolicy;
   appTurnContext?: InboundEnvelope["appTurnContext"];
+  appQueueClaimId?: string;
   signal?: AbortSignal;
 };
 

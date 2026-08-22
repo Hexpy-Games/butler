@@ -47,9 +47,8 @@ function* transcriptChunks(input: {
       ...(pageCount > 0 ? { afterCursor } : {}),
       limit: MAX_SESSION_MESSAGE_PAGE_SIZE,
     });
-    if (page.items.length === 0) break;
-    yield* formatPage(page);
     const nextCursor = Number(page.nextCursor ?? 0);
+    if (page.items.length > 0) yield* formatPage(page);
     if (!page.hasMore || nextCursor <= afterCursor) break;
     afterCursor = nextCursor;
     pageCount += 1;

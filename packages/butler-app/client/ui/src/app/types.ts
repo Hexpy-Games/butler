@@ -885,6 +885,11 @@ export interface SessionViewTurn {
     model_ref: string;
     reasoning_effort: ReasoningEffort;
     source: "message_override" | "session_override" | "global_default";
+    subsession_result?: {
+      relation_id: string;
+      result_id: string;
+      safe_title: string;
+    };
   };
   execution_model?: {
     requested_model_ref: string;
@@ -917,6 +922,52 @@ export interface SessionViewCursors {
   events: number;
 }
 
+export interface SessionRelationView {
+  relation_id: string;
+  parent_session_id: string;
+  parent_turn_id: string;
+  child_session_id: string;
+  anchor_message_id: string;
+  ordinal: number;
+  safe_title: string;
+  created_at: string;
+}
+
+export interface StewardResultView {
+  result_id: string;
+  relation_id: string;
+  task_id: string;
+  child_session_id: string;
+  child_turn_id: string;
+  status: "success" | "blocked" | "failed" | "cancelled";
+  code:
+    | "delegation_context_incomplete"
+    | "steward_execution_failed"
+    | "steward_cancelled"
+    | null;
+  summary: string;
+  acceptance_evidence: string[];
+  changed_artifacts: string[];
+  created_at: string;
+}
+
+export interface StewardSessionSummaryView {
+  relation: SessionRelationView;
+  session_id: string;
+  title: string;
+  status: SessionViewStatus;
+  active_turn: SessionViewTurn | null;
+  latest_turn: SessionViewTurn | null;
+  activity_rows: ProgressRow[];
+  approved_plan_revision?: number;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
+  artifacts: SessionArtifactSummary[];
+  result: StewardResultView | null;
+  updated_at: string;
+  terminal: boolean;
+}
+
 export interface SessionView {
   protocol_version?: string;
   session_id: string;
@@ -936,6 +987,9 @@ export interface SessionView {
   automations: AutomationTargetSummary[];
   errors: SafeSessionError[];
   cursors: SessionViewCursors;
+  parent_session_id?: string;
+  relation?: SessionRelationView;
+  steward_children?: StewardSessionSummaryView[];
   generated_at: string;
   updated_at: string;
 }
@@ -1295,6 +1349,12 @@ export interface SessionSummaryView {
   session_id?: string;
   turn_state?: string;
   latest_progress?: TurnProgressSnapshot;
+  latest_turn_cancellable?: boolean;
+  latest_turn_subsession_result?: {
+    relation_id: string;
+    result_id: string;
+    safe_title: string;
+  };
   branch_info?: {
     available?: boolean;
     workspace_mode?: "git" | "folder" | "none" | "unknown";
@@ -1312,6 +1372,7 @@ export interface SessionSummaryView {
   skills_used?: string[];
   worker_activity?: WorkerActivitySummary[];
   work_streams?: WorkStreamSummary[];
+  steward_children?: StewardSessionSummaryView[];
 }
 
 export interface TimelineEvent {
@@ -1326,6 +1387,7 @@ export interface TimelineEvent {
       state: string;
       safe_status_label?: string;
       updated_at?: string;
+      execution_controls?: SessionViewTurn["execution_controls"];
     };
     message_id?: string;
     chat_id?: string;

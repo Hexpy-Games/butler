@@ -5,11 +5,15 @@ import {
   BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA,
 } from "./guided-work-schema.ts";
 import { BTCC_GUIDED_EFFECT_RECOVERY_PAYLOAD_TABLE_SCHEMA } from "./guided-effect-schema.ts";
+import { migrateAuthoritySchema } from "./authority-schema-migration.ts";
+import { migrateSubsessionResultSchema } from "./subsession-schema-migration.ts";
 
 type ColumnRow = { name: string };
 
 export function migrateBtccSchema(db: Database): void {
   db.transaction(() => {
+    migrateAuthoritySchema(db);
+    migrateSubsessionResultSchema(db);
     ensureLegacyWorkImportProvenance(db);
     ensureGuidedToolJournalOrder(db);
     ensureGuidedWorkResultOrder(db);

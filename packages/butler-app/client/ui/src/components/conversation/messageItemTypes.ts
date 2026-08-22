@@ -1,6 +1,7 @@
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 import type { MessageRecord } from "@/app/types.ts";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
+import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
 
 export interface MessageItemProps {
   message: MessageRecord;
@@ -11,4 +12,5 @@ export interface MessageItemProps {
   onCopyAssistantMessage: (message: MessageRecord) => void;
   onCopyContextMenuText: (message: MessageRecord) => void;
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
+  stewardProgress?: AnchoredStewardProgress;
 }

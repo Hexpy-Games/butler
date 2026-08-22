@@ -51,6 +51,10 @@ export interface MessageSendRequest {
   access_mode?: SettingsView["access_mode"];
   plan_mode?: boolean;
   queue_policy?: "send_now" | "enqueue_if_busy";
+  /** @internal Durable authority Allow adapter identity. */
+  authority_request_ref?: string;
+  /** @internal Trusted durable Steward-result synthesis origin. */
+  subsession_result?: import("../../../core/turn-execution-controls.ts").SubsessionResultTurnContext;
 }
 
 export interface MessageSendResult {
@@ -66,12 +70,14 @@ export interface QueuedMessageRecord {
   id: string;
   chat_id: string;
   text: string;
+  client_message_id?: string;
   attachments?: MessageFileRef[];
   controls: SessionControlState;
   state: "queued" | "dispatching" | "dispatched" | "deleted" | "failed";
   safe_error_code?: string;
   dispatched_message_id?: string;
   turn_id?: string;
+  terminal_result_message_id?: string;
   cursor: number;
   created_at: string;
   updated_at: string;
@@ -85,11 +91,16 @@ export interface SessionQueueView {
 export interface QueueMessageRequest {
   chat_id?: string;
   text?: string;
+  client_message_id?: string;
   attachments?: MessageAttachmentInput[];
   model?: string;
   reasoning_effort?: SettingsView["reasoning_effort"];
   access_mode?: SettingsView["access_mode"];
   plan_mode?: boolean;
+  /** @internal Durable authority Allow adapter identity. */
+  authority_request_ref?: string;
+  /** @internal Trusted durable Steward-result synthesis origin. */
+  subsession_result?: import("../../../core/turn-execution-controls.ts").SubsessionResultTurnContext;
 }
 
 export interface UpdateQueuedMessageRequest {
@@ -99,6 +110,10 @@ export interface UpdateQueuedMessageRequest {
   reasoning_effort?: SettingsView["reasoning_effort"];
   access_mode?: SettingsView["access_mode"];
   plan_mode?: boolean;
+  /** @internal Durable authority Allow adapter identity. */
+  authority_request_ref?: string;
+  /** @internal Trusted durable Steward-result synthesis origin. */
+  subsession_result?: import("../../../core/turn-execution-controls.ts").SubsessionResultTurnContext;
 }
 
 export interface TurnRecord {

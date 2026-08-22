@@ -6,6 +6,8 @@ import type {
   NavigationView,
   ProjectDashboardView,
   SessionSummaryView,
+  SessionView,
+  StewardSessionSummaryView,
 } from "./types.ts";
 
 export const HARNESS_PRIMARY_MODEL: AppModelSummary = {
@@ -110,6 +112,155 @@ export const HARNESS_MODEL_CATALOG: ModelCatalogView = {
   ],
 };
 
+const HARNESS_STEWARD_CHILD: StewardSessionSummaryView = {
+  relation: {
+    relation_id: "harness-relation",
+    parent_session_id: "butler-client",
+    parent_turn_id: "turn-2",
+    child_session_id: "harness-steward",
+    anchor_message_id: "m3",
+    ordinal: 1,
+    safe_title: "Review the activity surface",
+    created_at: "2026-05-01T00:09:30.000Z",
+  },
+  session_id: "harness-steward",
+  title: "Review the activity surface",
+  status: "active",
+  active_turn: {
+    id: "harness-steward-turn",
+    state: "thinking",
+    delivery_state: "running",
+    limitations: [],
+    limitation_codes: [],
+    cancellable: true,
+    retryable: false,
+    progress: {
+      summary: "Inspecting the activity surface",
+      updated_at: "2026-05-01T00:10:00.000Z",
+      turn_id: "harness-steward-turn",
+      state: "thinking",
+      safe_progress_rows: [{
+        id: "harness-steward-action",
+        kind: "todo",
+        state: "active",
+        safe_label: "Inspecting the activity surface",
+        safe_input_label: "activity-surface",
+        safe_order: 1,
+        bridge_phase: "btcc_work_ledger",
+      }],
+    },
+    created_at: "2026-05-01T00:09:45.000Z",
+    updated_at: "2026-05-01T00:10:00.000Z",
+  },
+  latest_turn: {
+    id: "harness-steward-turn",
+    state: "thinking",
+    delivery_state: "running",
+    limitations: [],
+    limitation_codes: [],
+    cancellable: true,
+    retryable: false,
+    progress: {
+      summary: "Inspecting the activity surface",
+      updated_at: "2026-05-01T00:10:00.000Z",
+      turn_id: "harness-steward-turn",
+      state: "thinking",
+      safe_progress_rows: [{
+        id: "harness-steward-action",
+        kind: "todo",
+        state: "active",
+        safe_label: "Inspecting the activity surface",
+        safe_input_label: "activity-surface",
+        safe_order: 1,
+        bridge_phase: "btcc_work_ledger",
+      }],
+    },
+    created_at: "2026-05-01T00:09:45.000Z",
+    updated_at: "2026-05-01T00:10:00.000Z",
+  },
+  activity_rows: [{
+    id: "harness-steward-action",
+    kind: "todo",
+    state: "active",
+    safe_label: "Inspecting the activity surface",
+    safe_input_label: "activity-surface",
+    safe_order: 1,
+    bridge_phase: "btcc_work_ledger",
+  }],
+  approved_plan_revision: 7,
+  approved_plan_total: 3,
+  approved_plan_completed: 1,
+  artifacts: [],
+  result: null,
+  updated_at: "2026-05-01T00:10:00.000Z",
+  terminal: false,
+};
+
+const HARNESS_SS03_CURRENT_ACTIVITY = {
+  id: "harness-steward-current-activity",
+  kind: "message" as const,
+  state: "running",
+  safe_label: "Validating the activity surface",
+  created_at: "2026-05-01T00:10:05.000Z",
+};
+
+const HARNESS_SS03_TOOL_ACTIVITY = [
+  {
+    id: "harness-steward-search-1",
+    kind: "used_tool" as const,
+    state: "delivered",
+    safe_label: "웹 검색",
+    safe_tool_name: "web_search",
+    tool_call_id: "harness-search-1",
+    bridge_phase: "btcc_operation" as const,
+    created_at: "2026-05-01T00:10:06.000Z",
+  },
+  {
+    id: "harness-steward-search-2",
+    kind: "used_tool" as const,
+    state: "delivered",
+    safe_label: "웹 검색",
+    safe_tool_name: "web_search",
+    tool_call_id: "harness-search-2",
+    bridge_phase: "btcc_operation" as const,
+    created_at: "2026-05-01T00:10:07.000Z",
+  },
+];
+
+/** SS-03 uses the same live child projection in the current-message slot. */
+const HARNESS_SS03_STEWARD_CHILD: StewardSessionSummaryView = {
+  ...HARNESS_STEWARD_CHILD,
+  active_turn: {
+    ...HARNESS_STEWARD_CHILD.active_turn!,
+    progress: {
+      ...HARNESS_STEWARD_CHILD.active_turn!.progress,
+      summary: HARNESS_SS03_CURRENT_ACTIVITY.safe_label,
+      safe_progress_rows: [
+        HARNESS_SS03_CURRENT_ACTIVITY,
+        ...HARNESS_SS03_TOOL_ACTIVITY,
+        ...HARNESS_STEWARD_CHILD.active_turn!.progress.safe_progress_rows,
+      ],
+    },
+  },
+  latest_turn: {
+    ...HARNESS_STEWARD_CHILD.latest_turn!,
+    progress: {
+      ...HARNESS_STEWARD_CHILD.latest_turn!.progress,
+      summary: HARNESS_SS03_CURRENT_ACTIVITY.safe_label,
+      safe_progress_rows: [
+        HARNESS_SS03_CURRENT_ACTIVITY,
+        ...HARNESS_SS03_TOOL_ACTIVITY,
+        ...HARNESS_STEWARD_CHILD.latest_turn!.progress.safe_progress_rows,
+      ],
+    },
+  },
+  activity_rows: [
+    HARNESS_SS03_CURRENT_ACTIVITY,
+    ...HARNESS_SS03_TOOL_ACTIVITY,
+    ...HARNESS_STEWARD_CHILD.activity_rows,
+  ],
+};
+
 export const HARNESS_NAVIGATION: NavigationView = {
   chats: [
     {
@@ -144,6 +295,11 @@ export const HARNESS_NAVIGATION: NavigationView = {
   ],
   automations_summary: { total_count: 1, enabled_count: 1 },
   settings_summary: { profile_label: "Local Butler" },
+};
+
+/** SS-03 keeps Steward activity message-local; navigation stays unchanged. */
+export const HARNESS_SS03_NAVIGATION: NavigationView = {
+  ...HARNESS_NAVIGATION,
 };
 
 export const HARNESS_PROJECT_DASHBOARD: ProjectDashboardView = {
@@ -270,6 +426,56 @@ export const HARNESS_MESSAGES: MessageRecord[] = [
     updated_at: "2026-05-01T00:09:42.000Z",
   },
 ];
+
+const HARNESS_OBSERVER_VIEW: SessionView = {
+  protocol_version: "butler.app.v1",
+  session_id: "harness-steward",
+  kind: "chat",
+  status: "active",
+  active_turn: HARNESS_STEWARD_CHILD.active_turn,
+  latest_turn: HARNESS_STEWARD_CHILD.latest_turn,
+  messages: [{
+    id: "harness-steward-message",
+    chat_id: "harness-steward",
+    turn_id: "harness-steward-turn",
+    role: "assistant",
+    text: "검토를 시작했습니다.",
+    status: "streaming",
+    cursor: 1,
+    created_at: "2026-05-01T00:09:50.000Z",
+    updated_at: "2026-05-01T00:09:50.000Z",
+  }],
+  message_window: {
+    next_cursor: 1,
+    complete: true,
+    next_cursor_token: "session:harness-steward:1",
+  },
+  workers: [],
+  work_streams: [],
+  artifacts: [],
+  context: null,
+  branch: null,
+  skills_used: [],
+  automations: [],
+  errors: [],
+  cursors: { messages: 1, events: 1 },
+  parent_session_id: "butler-client",
+  relation: HARNESS_STEWARD_CHILD.relation,
+  steward_children: [],
+  generated_at: "2026-05-01T00:10:00.000Z",
+  updated_at: "2026-05-01T00:10:00.000Z",
+};
+
+export const HARNESS_SS03_OBSERVER_VIEW: SessionView = {
+  ...HARNESS_OBSERVER_VIEW,
+  active_turn: HARNESS_SS03_STEWARD_CHILD.active_turn,
+  latest_turn: HARNESS_SS03_STEWARD_CHILD.latest_turn,
+  messages: [{
+    ...HARNESS_OBSERVER_VIEW.messages[0]!,
+    text: HARNESS_SS03_CURRENT_ACTIVITY.safe_label,
+  }],
+  relation: HARNESS_SS03_STEWARD_CHILD.relation,
+};
 
 export const HARNESS_SUMMARY: SessionSummaryView = {
   session_id: "butler-client",
@@ -556,4 +762,17 @@ export const HARNESS_SUMMARY: SessionSummaryView = {
       supported_controls: [],
     },
   ],
+};
+
+/** SS-03 render evidence keeps the frame focused on direct Steward activity. */
+export const HARNESS_SS03_SUMMARY: SessionSummaryView = {
+  ...HARNESS_SUMMARY,
+  turn_state: "delivered",
+  latest_progress: {
+    ...HARNESS_SUMMARY.latest_progress!,
+    state: "delivered",
+    safe_progress_rows: [],
+  },
+  steward_children: [HARNESS_SS03_STEWARD_CHILD],
+  worker_activity: [],
 };

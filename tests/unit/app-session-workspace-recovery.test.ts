@@ -22,8 +22,197 @@ import {
 } from "../../packages/butler-agent/src/operations/service/native-service-supervisor.ts";
 import { createPlatformCommandExecutor } from "../../packages/butler-agent/src/runtime/command/platform-command-executor.ts";
 import type { ButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
+import { bindQueuedInboundSession } from
+  "../../packages/butler-agent/src/interfaces/gateway/btcc/queued-inbound-session-binder.ts";
 
-test("Agent relaunch preserves its worktree while App reads only App-owned workspace facts", async () => {
+test("public project-session creation binds a checked-out session worktree before acknowledgement", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-app-worktree-create-"));
+  const bindingStorePath = join(root, "runtime", "session-store.sqlite");
+  const server = createTestAppServer({
+    dbPath: join(root, "app.sqlite"),
+    butlerData: root,
+    butlerHome: process.cwd(),
+    projectWorkspaceRoot: join(root, "projects"),
+    port: 0,
+  });
+  let bindings: SessionBindingStore | undefined;
+  try {
+    const project = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "Automatic worktree project",
+    });
+    const projectId = project.data.project.id as string;
+    const projectRow = server.store.db
+      .query<{ workspace_path: string }, [string]>(
+        "SELECT workspace_path FROM projects WHERE id = ?",
+      )
+      .get(projectId);
+    expect(projectRow?.workspace_path).toBeTruthy();
+    initRepository(projectRow!.workspace_path);
+
+    const created = await postJson(`${server.url}sessions`, {
+      kind: "project",
+      project_id: projectId,
+      title: "Automatic worktree session",
+    });
+    const chatId = created.data.session.id as string;
+    const runtimeSessionId = sessionHintForRow(chatId);
+    bindings = new SessionBindingStore(bindingStorePath);
+    const binding = bindings.getBySessionId(runtimeSessionId);
+    expect(binding).toBeTruthy();
+    expect(binding?.workspacePath).not.toBe(projectRow!.workspace_path);
+    expect(binding?.metadata?.sessionWorkspace).toMatchObject({
+      schema: "butler.session-workspace-binding.v1",
+      ownership: "session",
+      branch: `butler/session/${chatId}`,
+    });
+    expect(
+      gitText(binding!.workspacePath, [
+        "symbolic-ref",
+        "--quiet",
+        "--short",
+        "HEAD",
+      ]),
+    ).toBe(`butler/session/${chatId}`);
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=${encodeURIComponent(chatId)}`,
+    );
+    expect(view.data.branch).toMatchObject({
+      workspace_binding: "session_worktree",
+      workspace_status: "available",
+      branch_name: `butler/session/${chatId}`,
+      dirty: false,
+    });
+    expect(JSON.stringify(view.data.branch)).not.toContain(
+      projectRow!.workspace_path,
+    );
+
+    bindQueuedInboundSession({
+      eventId: "automatic-worktree-first-turn",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: chatId },
+      sender: { id: "app" },
+      message: {
+        id: "automatic-worktree-message",
+        text: "first turn",
+        timestamp: new Date().toISOString(),
+      },
+      routingHints: { sessionId: runtimeSessionId },
+      executionControls: {
+        schema_version: "butler.turn-execution-controls.v1",
+        turn_id: "automatic-worktree-turn",
+        session_id: chatId,
+        model_ref: "openai/gpt-5.6-sol",
+        reasoning_effort: "medium",
+        access_mode: "full_access",
+        plan_mode: false,
+        source: "session_override",
+        session_control_revision: 1,
+        catalog_generation: "automatic-worktree-test",
+        resolved_at: new Date().toISOString(),
+        model_fallback: { enabled: false, models: [] },
+        integrity_hash: "automatic-worktree-test",
+      },
+      appTurnContext: {
+        version: 1,
+        session: { id: chatId, kind: "project" },
+        conversation: {
+          chatId,
+          userMessageId: "automatic-worktree-message",
+          turnId: "automatic-worktree-turn",
+          turnAttempt: 1,
+        },
+        project: { id: projectId, workspacePath: projectRow!.workspace_path },
+        model: {
+          requestedModelRef: "openai/gpt-5.6-sol",
+          reasoningEffort: "medium",
+        },
+      },
+    }, bindings);
+    const rebound = bindings.getBySessionId(runtimeSessionId);
+    expect(rebound?.workspacePath).toBe(binding!.workspacePath);
+    expect(rebound?.metadata?.sessionWorkspace).toEqual(
+      binding!.metadata?.sessionWorkspace,
+    );
+  } finally {
+    bindings?.close();
+    server.stop();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("project-session creation fails closed and removes provisional state when a Git worktree cannot be provisioned", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-app-worktree-failure-"));
+  const server = createTestAppServer({
+    dbPath: join(root, "app.sqlite"),
+    butlerData: root,
+    butlerHome: process.cwd(),
+    projectWorkspaceRoot: join(root, "projects"),
+    port: 0,
+  });
+  let bindings: SessionBindingStore | undefined;
+  try {
+    const project = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "Conflicting worktree project",
+    });
+    const projectId = project.data.project.id as string;
+    const projectRow = server.store.db
+      .query<{ workspace_path: string }, [string]>(
+        "SELECT workspace_path FROM projects WHERE id = ?",
+      )
+      .get(projectId);
+    expect(projectRow?.workspace_path).toBeTruthy();
+    initRepository(projectRow!.workspace_path);
+    expect(
+      spawnSync(
+        process.env.BUTLER_GIT_EXECUTABLE?.trim() || "git",
+        [
+          "worktree",
+          "add",
+          "-b",
+          "butler/session/conflicting-session",
+          join(root, "conflicting-worktree"),
+        ],
+        { cwd: projectRow!.workspace_path, encoding: "utf8" },
+      ).status,
+    ).toBe(0);
+    const response = await fetch(`${server.url}sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "project",
+        project_id: projectId,
+        title: "Must not fall back",
+        session_hint: "conflicting-session",
+      }),
+    });
+    const body = await response.json() as Record<string, any>;
+    expect(response.status).toBe(409);
+    expect(body.error?.code).toBe("session_worktree_creation_failed");
+    expect(
+      server.store.db
+        .query<{ count: number }, [string]>(
+          "SELECT COUNT(*) AS count FROM chats WHERE project_id = ?",
+        )
+        .get(projectId)?.count,
+    ).toBe(0);
+    bindings = new SessionBindingStore(
+      join(root, "runtime", "session-store.sqlite"),
+    );
+    expect(
+      bindings.listSessions().filter((item) => item.projectId === projectId),
+    ).toHaveLength(0);
+  } finally {
+    bindings?.close();
+    server.stop();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Agent relaunch preserves its worktree while App projects safe binding facts", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-app-worktree-relaunch-"));
   const dbPath = join(root, "app.sqlite");
   const bindingStorePath = join(root, "runtime", "session-store.sqlite");
@@ -99,13 +288,17 @@ test("Agent relaunch preserves its worktree while App reads only App-owned works
       ownership: "session",
       branch: "feature/relaunch",
     });
+    expect(
+      gitText(marked.workspacePath, ["symbolic-ref", "--quiet", "--short", "HEAD"]),
+    ).toBe("feature/relaunch");
 
     const firstView = await getJson(
       `${server.url}session-view?session_id=${encodeURIComponent(chatId)}`,
     );
     expect(firstView.data.branch).toMatchObject({
-      workspace_binding: "project",
-      workspace_label: "Relaunch project",
+      workspace_binding: "session_worktree",
+      branch_name: "feature/relaunch",
+      workspace_label: "session-worktree/feature/relaunch",
       workspace_status: "available",
       dirty: false,
     });
@@ -187,10 +380,11 @@ test("Agent relaunch preserves its worktree while App reads only App-owned works
       `${relaunched.url}session-summary?session_id=${encodeURIComponent(chatId)}`,
     );
     expect(relaunchedView.data.branch_info).toMatchObject({
-      workspace_binding: "project",
-      workspace_label: "Relaunch project",
+      workspace_binding: "session_worktree",
+      branch_name: "feature/relaunch",
+      workspace_label: "session-worktree/feature/relaunch",
       workspace_status: "available",
-      dirty: false,
+      dirty: true,
     });
     expect(JSON.stringify(relaunchedView.data.branch_info)).not.toContain(sourcePath);
 
@@ -198,7 +392,7 @@ test("Agent relaunch preserves its worktree while App reads only App-owned works
       chat_id: chatId,
       text: "queue after relaunch",
     });
-    expect(queuedAfterRelaunch.turn?.id).toBeTruthy();
+    expect(queuedAfterRelaunch.queued?.id).toBeTruthy();
     expect(bindingStore.getBySessionId(runtimeSessionId)?.workspacePath).toBe(
       marked.workspacePath,
     );
@@ -260,9 +454,10 @@ test("Agent relaunch preserves its worktree while App reads only App-owned works
         `${staleServer.url}session-summary?session_id=${encodeURIComponent(chatId)}`,
       );
       expect(staleView.data.branch_info).toMatchObject({
-        workspace_binding: "project",
-        workspace_status: "available",
-        workspace_label: "Relaunch project",
+        workspace_binding: "session_worktree",
+        workspace_status: "unavailable",
+        workspace_label: "session-worktree/feature/relaunch",
+        safe_error_code: "session_workspace_unavailable",
       });
       expect(JSON.stringify(staleView.data.branch_info)).not.toContain(
         sourcePath,
@@ -483,6 +678,9 @@ function gitText(cwd: string, args: string[]): string {
 
 function queueClient(): ButlerServiceClient {
   return {
+    findAppTurn() {
+      return null;
+    },
     enqueueAppCancellation() {
       throw new Error("unexpected cancellation");
     },

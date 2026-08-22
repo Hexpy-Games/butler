@@ -36,7 +36,8 @@ export type WorkspaceMutationError =
   | "parent_directory_missing"
   | "parent_directory_unwritable"
   | "permission_denied"
-  | "io_error";
+  | "io_error"
+  | "tool_not_admitted";
 
 export interface WorkspaceMutationFailure {
   ok: false;

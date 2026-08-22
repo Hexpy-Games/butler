@@ -14,7 +14,7 @@ export { grepFilesToolDefinition, grepFilesToolMetadata } from "./grep_files/ind
 export { listFilesToolDefinition, listFilesToolMetadata } from "./list_files/index.ts";
 export { resolveWorkspacePathGuard, looksSensitiveWorkspacePath } from "./shared/workspace-path-guard.ts";
 
-export function createFileToolHandlers(input: { butlerData?: string; workspacePath?: string; workspaceReference?: WorkspaceReference } = {}): ButlerToolExecutorRegistry {
+export function createFileToolHandlers(input: { butlerData?: string; workspacePath?: string; workspaceReference?: WorkspaceReference; mutationScope?: readonly string[]; allowedToolsAndEffects?: readonly string[] } = {}): ButlerToolExecutorRegistry {
   const context = {
     ...input,
     protectedProjectLedgerRoots: input.butlerData

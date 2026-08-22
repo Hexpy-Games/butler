@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   clearAppGatewayPid,
@@ -8,6 +8,8 @@ import {
 } from "../../../../operations/gateway/registry.ts";
 import { reclaimStaleAppGatewayPort } from "../../domain/runtime/port-claim.ts";
 import { createAppServer } from "../server/create-app-server.ts";
+import { openBtccAuthorityStore } from "../../../../agent/adapters/index.ts";
+import { readLocalAuthConfigFromEnvironment } from "../server/local-auth.ts";
 
 const dataRoot =
   process.env.BUTLER_DATA ?? join(process.env.HOME ?? process.cwd(), ".butler");
@@ -39,12 +41,13 @@ const dbPath =
   join(dataRoot, "app-server", "butler-client.sqlite");
 const projectWorkspaceRoot = process.env.BUTLER_PROJECT_WORKSPACE;
 const folderSelectionSecret = process.env.BUTLER_PROJECT_FOLDER_TOKEN_SECRET;
-const localAuth = readLocalAuthConfig(process.env);
+const localAuth = readLocalAuthConfigFromEnvironment(process.env);
 const devCorsOrigin = process.env.BUTLER_APP_DEV_ORIGIN;
 const bridgeMode =
   process.env.BUTLER_APP_SERVER_BRIDGE === "off" ? "external" : "local";
 const shouldWritePidFile = process.env.BUTLER_APP_GATEWAY_PID_FILE !== "off";
 mkdirSync(dirname(dbPath), { recursive: true });
+const authorityStore = openBtccAuthorityStore({ butlerData: dataRoot });
 
 const portClaim = reclaimStaleAppGatewayPort({
   port: Number.isFinite(port) ? port : 18765,
@@ -77,6 +80,8 @@ const app = createAppServer({
       : 60000,
   },
   localAuth,
+  authority: authorityStore.authority,
+  stewardObserver: authorityStore.observer,
 });
 
 console.log(
@@ -96,35 +101,17 @@ process.on("SIGINT", () => {
   clearInterval(keepAliveInterval);
   if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
   app.stop();
+  authorityStore.close();
   process.exit(0);
 });
 process.on("SIGTERM", () => {
   clearInterval(keepAliveInterval);
   if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
   app.stop();
+  authorityStore.close();
   process.exit(0);
 });
 process.on("exit", () => {
   if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
+  authorityStore.close();
 });
-
-function readLocalAuthConfig(env: NodeJS.ProcessEnv): {
-  required: boolean;
-  token: string | null;
-} {
-  const required = env.BUTLER_APP_LOCAL_AUTH_REQUIRED === "1";
-  if (!required) return { required: false, token: null };
-  const path = env.BUTLER_APP_LOCAL_AUTH_FILE?.trim();
-  if (!path) return { required: true, token: null };
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8"));
-    return {
-      required: true,
-      token: typeof parsed?.token === "string" && parsed.token.trim()
-        ? parsed.token.trim()
-        : null,
-    };
-  } catch {
-    return { required: true, token: null };
-  }
-}

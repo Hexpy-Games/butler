@@ -4,19 +4,23 @@ import { enforceLocalAuth } from "./local-auth.ts";
 import { json } from "./responses.ts";
 import type { AppRouteContext, AppRouteHandler, AppRouteRequest } from "./server-types.ts";
 import { handleAutomationWorkerRoutes } from "./routes/automation-worker-routes.ts";
+import { handleAuthorityRoutes } from "./routes/authority-routes.ts";
 import { handleMessageRoutes } from "./routes/message-routes.ts";
 import { handlePersonalizationRoutes } from "./routes/personalization-routes.ts";
 import { handleProjectSessionRoutes } from "./routes/project-session-routes.ts";
 import { handleRuntimeRoutes } from "./routes/runtime-routes.ts";
 import { handleSettingsRoutes } from "./routes/settings-routes.ts";
+import { handleInternalResultRoutes } from "./routes/internal-result-routes.ts";
 
 const ROUTE_HANDLERS: AppRouteHandler[] = [
+  handleInternalResultRoutes,
   handleRuntimeRoutes,
   handleSettingsRoutes,
   handlePersonalizationRoutes,
   handleProjectSessionRoutes,
   handleMessageRoutes,
   handleAutomationWorkerRoutes,
+  handleAuthorityRoutes,
 ];
 
 export async function routeRequest(input: AppRouteRequest): Promise<Response> {

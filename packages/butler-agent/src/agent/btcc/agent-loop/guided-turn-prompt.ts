@@ -6,7 +6,8 @@ import { guidedPolicy } from "./guided-turn-policy.ts";
 import { projectGuidedToolContext } from
   "./guided-tool-context-projection.ts";
 import type { ModelContextSegmentKind } from "../ports/model-round.ts";
-
+import { renderPrivateModifyContinuationInput } from "./guided-authority-continuation.ts";
+import { guidedStewardInstructions } from "./guided-steward-instructions.ts";
 export interface GuidedTextSegmentSource {
   kind: ModelContextSegmentKind;
   stability: "stable" | "dynamic";
@@ -26,6 +27,16 @@ export interface GuidedTurnRequestAttribution {
     instructions: readonly GuidedTextSegmentSource[];
   };
 }
+
+type GuidedPromptInput = {
+  butlerData: string;
+  contextDocuments: { resolve(contextRef: string): string };
+  toolJournal: GuidedToolJournal;
+  workContext?: string | null;
+  effectContext?: string | null;
+  privateContinuationInput?: string;
+  subsessionResultEvidence?: string;
+};
 
 export function renderGuidedTurnRequestAttribution(
   turn: TurnRecord,
@@ -51,26 +62,13 @@ export function renderGuidedTurnRequestAttribution(
 
 export function renderGuidedPrompt(
   turn: TurnRecord,
-  input: {
-    butlerData: string;
-    contextDocuments: { resolve(contextRef: string): string };
-    toolJournal: GuidedToolJournal;
-    workContext?: string | null;
-    effectContext?: string | null;
-  },
+  input: GuidedPromptInput,
 ): string {
   return renderGuidedPromptAttribution(turn, input).text;
 }
-
 export function renderGuidedPromptAttribution(
   turn: TurnRecord,
-  input: {
-    butlerData: string;
-    contextDocuments: { resolve(contextRef: string): string };
-    toolJournal: GuidedToolJournal;
-    workContext?: string | null;
-    effectContext?: string | null;
-  },
+  input: GuidedPromptInput,
 ): GuidedTextAttribution {
   const policy = guidedPolicy(turn);
   const context = renderContextDocuments(turn, input.contextDocuments);
@@ -93,6 +91,8 @@ export function renderGuidedPromptAttribution(
         : "other_typed_context" },
     { text: renderCurrentWork(input.workContext), kind: "project_ledger_and_work_authority" },
     { text: renderCurrentEffects(input.effectContext), kind: "phase_continuity" },
+    { text: renderPrivateModifyContinuationInput(input.privateContinuationInput), kind: "phase_continuity" },
+    { text: input.subsessionResultEvidence ?? "", kind: "source_reference" },
     { text: context, kind: "memory_recall_context" },
     { text: attachments, kind: "source_reference" },
     { text: priorTools, kind: "older_tool_result_projection" },
@@ -109,14 +109,19 @@ export function renderGuidedPromptAttribution(
 }
 
 export function guidedInstructions(
-  policy: Pick<ButlerExecutionPolicy, "accessMode" | "trackingMode">,
+  policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "trackingMode" | "subsession">,
   personaAndProfile = "",
   responseLanguage = "",
 ): string {
+  if (policy.role === "steward" && policy.subsession) {
+    return guidedStewardInstructions(policy);
+  }
   return [
     "You are Butler. Give the user a useful result, not an account of an internal protocol.",
-    "Answer simple conversation and stable knowledge directly and briefly.",
-    "Use tools when current, external, workspace, attachment, or project facts are needed.",
+    "Answer simple conversation and stable knowledge directly and briefly. Select the path from the user's complete objective and constraints. Keep simple conversation, stable knowledge, and one quick lookup in Butler.",
+    "Substantial writing, revision, research, comparison, inspection, or execution belongs to Steward, including ordinary chats without a project binding. A short correction or continuation of that objective remains Steward work.",
+    "Use tools when current, external, workspace, attachment, or project facts are needed. Delegate bounded independent multi-step repository inspection, multi-source research or synthesis, persistent-artifact work, or execution-stage mutation with delegate_to_steward. Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler. Choose read_only for inspection or research without effects, and mutation only for requested execution-stage changes. After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn. Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",
+    "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",
     "During Conception, treat injected profile, recent feedback, and Hot Cache as a bounded baseline, not exhaustive memory. Before closing a substantial goal, actively use recall_memory when durable user preferences, corrections, prior decisions, related work outcomes, or relationship context could materially improve personalization or goal fidelity. Preserve the fast path when current context is genuinely sufficient; this is your semantic choice, not a runtime keyword rule.",
     "When the user refers to a particular other Butler conversation, use list_conversation_sessions and then read_conversation_session. Use all_sessions only when that reference is outside the active project. Use query_memory for exact wording and recall_memory for associative personalization; do not substitute Hot Cache for either when the needed evidence is absent.",
     "For substantial work: understand the goal, make a concise plan when useful, execute it, and report a truthful result. Optional Plan/result Reviews and completion Validation can improve quality but are never runtime closeout requirements.",

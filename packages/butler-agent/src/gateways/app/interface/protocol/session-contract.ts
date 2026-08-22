@@ -69,7 +69,7 @@ export interface SessionViewTurn {
   updated_at: string;
   execution_controls?: Pick<
     NonNullable<TurnRecord["execution_controls"]>,
-    "model_ref" | "reasoning_effort" | "source"
+    "model_ref" | "reasoning_effort" | "source" | "subsession_result"
   >;
   execution_model?: NonNullable<TurnRecord["execution_model"]>;
 }
@@ -108,6 +108,52 @@ export interface SessionViewCursors {
   events: number;
 }
 
+export interface SessionRelationView {
+  relation_id: string;
+  parent_session_id: string;
+  parent_turn_id: string;
+  child_session_id: string;
+  anchor_message_id: string;
+  ordinal: number;
+  safe_title: string;
+  created_at: string;
+}
+
+export interface StewardResultView {
+  result_id: string;
+  relation_id: string;
+  task_id: string;
+  child_session_id: string;
+  child_turn_id: string;
+  status: "success" | "blocked" | "failed" | "cancelled";
+  code:
+    | "delegation_context_incomplete"
+    | "steward_execution_failed"
+    | "steward_cancelled"
+    | null;
+  summary: string;
+  acceptance_evidence: string[];
+  changed_artifacts: string[];
+  created_at: string;
+}
+
+export interface StewardSessionSummaryView {
+  relation: SessionRelationView;
+  session_id: string;
+  title: string;
+  status: SessionViewStatus;
+  active_turn: SessionViewTurn | null;
+  latest_turn: SessionViewTurn | null;
+  activity_rows: ProgressSummaryRow[];
+  approved_plan_revision?: number;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
+  artifacts: SessionArtifactSummary[];
+  result: StewardResultView | null;
+  updated_at: string;
+  terminal: boolean;
+}
+
 export interface SessionView {
   protocol_version: typeof APP_PROTOCOL_VERSION;
   session_id: string;
@@ -127,6 +173,9 @@ export interface SessionView {
   automations: AutomationTargetSummary[];
   errors: SafeSessionError[];
   cursors: SessionViewCursors;
+  parent_session_id?: string;
+  relation?: SessionRelationView;
+  steward_children?: StewardSessionSummaryView[];
   generated_at: string;
   updated_at: string;
 }
@@ -134,6 +183,8 @@ export interface SessionView {
 export interface SessionSummaryView {
   session_id: string;
   latest_progress: TurnProgressSnapshotView;
+  latest_turn_cancellable?: boolean;
+  latest_turn_subsession_result?: import("../../../core/turn-execution-controls.ts").SubsessionResultTurnContext;
   turn_state: TurnState | "idle";
   branch_info: {
     available: boolean;
@@ -153,6 +204,7 @@ export interface SessionSummaryView {
   automation_targets: AutomationTargetSummary[];
   worker_activity: WorkerActivitySummary[];
   work_streams: WorkStreamSummaryView[];
+  steward_children?: StewardSessionSummaryView[];
   staleness: {
     state: "fresh" | "stale" | "unavailable" | "failed";
     updated_at: string;

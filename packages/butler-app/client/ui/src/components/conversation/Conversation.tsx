@@ -12,6 +12,8 @@ import {
   resolveButlerMarkTheme,
 } from "./conversationUtils";
 import { ConversationScroll, ConversationShell } from "@/butler-ds";
+import { useSessionViewSubscription } from
+  "@/components/layout/hooks/useSessionViewSubscription.ts";
 
 void appCopy;
 
@@ -19,6 +21,7 @@ export function Conversation() {
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const navigation = useButlerStore((state) => state.navigation);
   const messages = useButlerStore((state) => state.messages);
+  const summary = useButlerStore((state) => state.summary);
   const turnProgress = useButlerStore((state) => state.turnProgress);
   const messageLoadPending = useButlerStore(
     (state) => state.messageLoadPending,
@@ -30,6 +33,7 @@ export function Conversation() {
   const sendingChatId = useButlerStore((state) => state.sendingChatId);
   const sendingOperations = useButlerStore((state) => state.sendingOperations);
   const sendMessage = useButlerStore((state) => state.sendMessage);
+  const refreshSessionView = useButlerStore((state) => state.refreshSessionView);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const setRightTab = useButlerStore((state) => state.setRightTab);
 
@@ -59,7 +63,16 @@ export function Conversation() {
   }, [setRightOpen, setRightTab]);
 
   const hasMessages = messages.length > 0;
-  const showEmptyState = !hasMessages && !messageLoadPending;
+  const stewardParentSubscriptionId = summary?.steward_children?.some(
+    (child) => child.active_turn,
+  ) ? activeChatId : null;
+  useSessionViewSubscription(stewardParentSubscriptionId, refreshSessionView);
+  const hasDurableActivity = Boolean(
+    summary?.steward_children?.some((child) => child.active_turn) ||
+    summary?.latest_progress?.safe_progress_rows?.length,
+  );
+  const showMessageList = hasMessages || hasDurableActivity;
+  const showEmptyState = !showMessageList && !messageLoadPending;
   const composerLarge = true;
   const newChatTitleIconSize = showEmptyState
     ? "clamp(40px, 5.333vw, 54px)"
@@ -76,7 +89,7 @@ export function Conversation() {
       titleIconGap={newChatTitleIconGap}
       titleIconSize={newChatTitleIconSize}
     >
-      {hasMessages ? (
+      {showMessageList ? (
         <MessageList
           messages={messages}
           turnProgress={turnProgress}

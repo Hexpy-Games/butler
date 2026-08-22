@@ -103,9 +103,14 @@ export function acceptedCurrentResultReview(
   const review = work.latestResultReview;
   if (!work.currentPlan || review?.verdict !== "accept") return undefined;
   const resultRefs = work.resultRefs.map(({ resultRef }) => resultRef);
-  if (review.boundResultRefs.length !== resultRefs.length) return undefined;
-  return review.boundResultRefs.every((resultRef, index) =>
-      resultRef === resultRefs[index])
+  const boundResultRefs = new Set(review.boundResultRefs);
+  const currentResultRefs = new Set(resultRefs);
+  if (boundResultRefs.size !== review.boundResultRefs.length ||
+    currentResultRefs.size !== resultRefs.length ||
+    boundResultRefs.size !== currentResultRefs.size) {
+    return undefined;
+  }
+  return [...boundResultRefs].every((resultRef) => currentResultRefs.has(resultRef))
     ? review
     : undefined;
 }

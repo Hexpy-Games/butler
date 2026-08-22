@@ -1,10 +1,95 @@
-import type { BtccTurnProgressObserver } from "../contracts.ts";
+import type { BtccTurnProgressObserver, ReasoningEffort } from "../contracts.ts";
+import type {
+  BtccAgentLoop,
+  BtccAgentLoopResult,
+} from "./contracts.ts";
+import type { ModelRoundPort } from "../ports/model-round.ts";
+import type { TurnRecord } from "../turn/index.ts";
 import type {
   ModelRouteEvent,
   ModelRouteEventResult,
   ModelRouteRecoveryUpdate,
 } from "../model-route/index.ts";
+import {
+  createModelRoutePort,
+  currentModelRouteCandidate,
+} from "../model-route/index.ts";
+import { selectedModelRef } from "./guided-turn-policy.ts";
 import { publishOperationalNotice } from "../projection/index.ts";
+
+type GuidedTurnRunInput = Parameters<BtccAgentLoop["run"]>[0];
+
+export function createGuidedModelRouteRuntime(input: {
+  turn: TurnRecord;
+  baseModelRound: ModelRoundPort;
+  progress?: BtccTurnProgressObserver;
+  nextSourceRevision: () => number;
+  recordModelRouteEvent?: GuidedTurnRunInput["recordModelRouteEvent"];
+  loadModelRouteAttemptHistory?: GuidedTurnRunInput["loadModelRouteAttemptHistory"];
+  loadModelRoundAcceptance?: GuidedTurnRunInput["loadModelRoundAcceptance"];
+  recordModelRoundAcceptance?: GuidedTurnRunInput["recordModelRoundAcceptance"];
+}): {
+  modelRound: ModelRoundPort;
+  activeModelRef: () => string;
+  selectedReasoningEffort: ReasoningEffort;
+  acceptedModelIdentity: () => BtccAgentLoopResult["modelIdentity"];
+} {
+  let activeModelRef = selectedModelRef(input.turn);
+  let acceptedModelIdentity: BtccAgentLoopResult["modelIdentity"];
+  const routedCandidate = input.turn.modelRoute
+    ? currentModelRouteCandidate(input.turn.modelRoute)
+    : undefined;
+  const selectedReasoningEffort = routedCandidate?.reasoningEffort ??
+    input.turn.modelSelection.reasoningEffort;
+  const onRouteEvent = createGuidedRouteEventHandler({
+    turnId: input.turn.turnId,
+    semanticState: input.turn.semanticState,
+    progress: input.progress,
+    nextSourceRevision: input.nextSourceRevision,
+    recordModelRouteEvent: input.recordModelRouteEvent,
+    setActiveModelRef(modelRef) {
+      activeModelRef = modelRef;
+    },
+  });
+  const modelRound = input.turn.modelRoute
+    ? createModelRoutePort({
+        base: input.baseModelRound,
+        turnId: input.turn.turnId,
+        route: input.turn.modelRoute,
+        onRouteEvent,
+        loadAttemptHistory: input.loadModelRouteAttemptHistory,
+        loadAcceptedResponse: input.loadModelRoundAcceptance,
+        recordAcceptedResponse: input.recordModelRoundAcceptance
+          ? async (accepted) => {
+              await input.recordModelRoundAcceptance!(accepted);
+              acceptedModelIdentity = {
+                requestedModelRef: `${input.turn.modelSelection.provider}/${input.turn.modelSelection.model}`,
+                effectiveModelRef: accepted.modelRef,
+                ...(accepted.result.providerIdentity
+                  ? {
+                      providerReportedModelRef:
+                        accepted.result.providerIdentity.reportedModel.includes("/")
+                          ? accepted.result.providerIdentity.reportedModel
+                          : `${accepted.result.providerIdentity.provider}/${accepted.result.providerIdentity.reportedModel}`,
+                    }
+                  : {}),
+              };
+            }
+          : undefined,
+        onRecoveryChanged: createGuidedRouteRecoveryHandler({
+          turnId: input.turn.turnId,
+          semanticState: input.turn.semanticState,
+          progress: input.progress,
+        }),
+      })
+    : input.baseModelRound;
+  return {
+    modelRound,
+    activeModelRef: () => activeModelRef,
+    selectedReasoningEffort,
+    acceptedModelIdentity: () => acceptedModelIdentity,
+  };
+}
 
 type GuidedRouteEventInput = {
   turnId: string;

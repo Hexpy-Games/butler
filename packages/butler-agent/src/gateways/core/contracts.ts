@@ -74,6 +74,8 @@ export interface InboundEnvelope {
     stewardId?: string;
     turnId?: string;
     turnAttempt?: number;
+    appQueueClaimId?: string;
+    canonicalEventId?: string;
   };
   executionControls?: TurnExecutionControlsV1;
   appTurnContext?: {
@@ -94,11 +96,17 @@ export interface InboundEnvelope {
       requestedModelRef: ModelRef;
       reasoningEffort: string;
     };
+    /** Internal Allow adapter identity; never populated by arbitrary clients. */
+    authorityRequestRef?: string;
+    /** Durable App queue identity paired with the stored authority request. */
+    authorityClientMessageId?: string;
   };
   nativeStewardContext?: {
     version: 1;
     projectName: string;
     workspacePath: string;
+    modelRef?: ModelRef;
+    reasoningEffort?: string;
   };
   control?: {
     kind: "cancel_turn";

@@ -29,7 +29,7 @@ export async function runBtccAgentLoop(
   const modelPreviewContext = createToolResultModelPreviewContext();
   let continuation: unknown;
   let emptyResponseRecoveryUsed = false;
-  let modelRoundIndex = 0;
+  let consecutiveEmptyResponses = 0, modelRoundIndex = 0;
   let windowIndex = 0;
   let iteration = 0;
   const runModelRound = async (request: {
@@ -168,6 +168,7 @@ export async function runBtccAgentLoop(
     });
 
     const { text, calls } = appendAssistantResponse(messages, response);
+    if (calls.length > 0 || text) consecutiveEmptyResponses = 0;
     if (calls.length === 0 && response.textToolCallNames?.length) {
       const lastMessage = messages.at(-1);
       if (lastMessage?.role === "assistant") messages.pop();
@@ -193,6 +194,7 @@ export async function runBtccAgentLoop(
     }
 
     if (calls.length === 0) {
+      if (!text) consecutiveEmptyResponses += 1;
       const candidateAccepted = text && input.finalSynthesis?.acceptCandidate
         ? await input.finalSynthesis.acceptCandidate({ text, response })
         : false;
@@ -223,6 +225,8 @@ export async function runBtccAgentLoop(
         continuationItems.push({ role: "user", content: recoveryObservation });
         continue;
       }
+      if (!text && consecutiveEmptyResponses >= 2)
+        return { finalText: "", messages, events, stoppedByLimit: false };
       if (!text && input.onExecutionWindowBoundary) {
         break;
       }

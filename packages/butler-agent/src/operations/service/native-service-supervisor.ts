@@ -403,6 +403,12 @@ function nativeServiceSpecsForRuntime(
     ...(appManaged.runtimeHome
       ? { BUTLER_APP_MANAGED_RUNTIME_HOME: appManaged.runtimeHome }
       : {}),
+    ...(appManaged.localAuthFile
+      ? {
+          BUTLER_APP_LOCAL_AUTH_REQUIRED: "1",
+          BUTLER_APP_LOCAL_AUTH_FILE: appManaged.localAuthFile,
+        }
+      : {}),
   };
   const butlerMainDiagnosticEnv = butlerMainMemoryDiagnosticEnvironment();
   const runtimeMetadata = appManaged.runtimePointerPath && appManaged.runtimeHome

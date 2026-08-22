@@ -1,4 +1,14 @@
 import type { BtccTurnProgressObserver } from "../contracts.ts";
+import type { GuidedEffectAccessMode } from "../effects/index.ts";
+import {
+  AUTHORITY_DENIAL_TEXT,
+  type PrincipalAuthority,
+} from "../authority/index.ts";
+import type {
+  GuidedActivityBinding,
+  GuidedActivityProjection,
+} from "../projection/index.ts";
+import type { BtccAgentLoopInput } from "./contracts.ts";
 
 /**
  * Captures only user-facing progress text for operational fallback.  The
@@ -50,4 +60,151 @@ function isCurrentMaterialUpdate(update: {
   return update.originTurnId === update.turnId &&
     typeof update.sourceRevision === "number" &&
     Number.isInteger(update.sourceRevision) && update.sourceRevision > 0;
+}
+
+export function createGuidedAskFirstProgress(
+  progress: BtccTurnProgressObserver | undefined,
+): BtccTurnProgressObserver | undefined {
+  if (!progress) return undefined;
+  return { stateChanged: (update) => progress.stateChanged(update) };
+}
+
+export function createGuidedAuthorityProjection(input: {
+  accessMode: GuidedEffectAccessMode;
+  activity: GuidedActivityProjection;
+  authority?: PrincipalAuthority;
+  ownerSessionId: string;
+  turnId: string;
+  requestRef?: string;
+}): {
+  publicActivity: GuidedActivityProjection;
+  loopCallbacks: Pick<
+    BtccAgentLoopInput,
+    "onAssistantTextBeforeTools" | "finalTextFromToolResult"
+  >;
+  continuation: boolean;
+  project(text: string): string;
+} {
+  const authorityDecision = authorityDecisionForContinuation(input);
+  const publicActivity = createGuidedPublicActivity({
+    accessMode: input.accessMode,
+    activity: input.activity,
+    ...(authorityDecision ? { authorityDecision } : {}),
+  });
+  return {
+    publicActivity,
+    loopCallbacks: createGuidedPublicLoopCallbacks({
+      accessMode: input.accessMode,
+      activity: publicActivity,
+      ...(authorityDecision ? { authorityDecision } : {}),
+    }),
+    continuation: Boolean(input.requestRef),
+    project: (text) => input.requestRef
+      ? projectGuidedAuthorityOutcome({
+          authority: input.authority,
+          ownerSessionId: input.ownerSessionId,
+          turnId: input.turnId,
+          requestRef: input.requestRef,
+        })
+      : text,
+  };
+}
+
+function authorityDecisionForContinuation(input: {
+  authority?: PrincipalAuthority;
+  ownerSessionId: string;
+  turnId: string;
+  requestRef?: string;
+}): "allowed" | "denied" | "modified" | undefined {
+  if (!input.authority || !input.requestRef) return undefined;
+  try {
+    return input.authority.execution({
+      ownerSessionId: input.ownerSessionId,
+      requestRef: input.requestRef,
+      turnId: input.turnId,
+    }).decision;
+  } catch {
+    return undefined;
+  }
+}
+
+function createGuidedPublicActivity(input: {
+  accessMode: GuidedEffectAccessMode;
+  activity: GuidedActivityProjection;
+  authorityDecision?: "allowed" | "denied" | "modified";
+}): GuidedActivityProjection {
+  if (input.accessMode !== "ask_first") return input.activity;
+  const pendingText = input.authorityDecision === "denied"
+    ? AUTHORITY_DENIAL_TEXT
+    : input.authorityDecision === "modified"
+      ? "Replacement command is waiting for Allow."
+    : "Reviewed command pending Allow.";
+  return {
+    observeToolBatch: (batch) => input.activity.observeToolBatch({
+      text: pendingText,
+      toolCalls: batch.toolCalls.map((call) => ({ name: call.name, args: {} })),
+    }),
+    observeTool: (call) => input.activity.observeTool({ ...call, args: {} }),
+    markManaged: (binding?: GuidedActivityBinding) => input.activity.markManaged(binding),
+    publishAccepted: (binding: GuidedActivityBinding) => input.activity.publishAccepted(binding),
+  };
+}
+
+function createGuidedPublicLoopCallbacks(input: {
+  accessMode: GuidedEffectAccessMode;
+  activity: GuidedActivityProjection;
+  authorityDecision?: "allowed" | "denied" | "modified";
+}): Pick<BtccAgentLoopInput, "onAssistantTextBeforeTools" | "finalTextFromToolResult"> {
+  return {
+    onAssistantTextBeforeTools: ({ text, toolCalls }) => input.activity.observeToolBatch({
+      text: input.accessMode !== "ask_first"
+        ? text
+        : input.authorityDecision === "denied"
+          ? AUTHORITY_DENIAL_TEXT
+          : input.authorityDecision === "modified"
+            ? "Replacement command is waiting for Allow."
+          : "Reviewed command pending Allow.",
+      toolCalls: toolCalls.map((call) => ({
+        name: call.name,
+        args: input.accessMode === "ask_first" ? {} : call.arguments,
+      })),
+    }),
+    finalTextFromToolResult: ({ toolResult }) => {
+      if (input.authorityDecision === "denied") return AUTHORITY_DENIAL_TEXT;
+      if (input.authorityDecision === "modified" && authorityPending(toolResult.output)) {
+        return "Replacement command is waiting for Allow.";
+      }
+      return authorityPending(toolResult.output)
+        ? "This reviewed command is waiting for Allow."
+        : null;
+    },
+  };
+}
+
+function projectGuidedAuthorityOutcome(input: {
+  authority?: PrincipalAuthority;
+  ownerSessionId: string;
+  turnId: string;
+  requestRef: string;
+}): string {
+  if (!input.authority) return "Approved command outcome could not be verified.";
+  try {
+    const execution = input.authority.execution({
+      ownerSessionId: input.ownerSessionId,
+      requestRef: input.requestRef,
+      turnId: input.turnId,
+    });
+    if (execution.decision === "denied") return AUTHORITY_DENIAL_TEXT;
+    if (execution.decision === "modified") return "Replacement command is waiting for Allow.";
+    if (execution.outcome === "applied") return "Approved command completed once.";
+    if (execution.outcome === "failed") return "Approved command failed to complete.";
+    return "Approved command outcome is pending.";
+  } catch {
+    return "Approved command outcome could not be verified.";
+  }
+}
+
+function authorityPending(value: unknown): boolean {
+  return value !== null && typeof value === "object" && !Array.isArray(value) &&
+    (value as Record<string, unknown>).authority_pending === true;
 }

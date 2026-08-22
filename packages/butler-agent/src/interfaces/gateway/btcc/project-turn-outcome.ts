@@ -5,9 +5,17 @@ import type {
 
 export function projectTurnOutcome(
   outcome: BtccTurnOutcome,
-): { text: string; artifacts: BtccFinalArtifact[] } {
+): {
+  text: string;
+  artifacts: BtccFinalArtifact[];
+  workStatus?: "completed" | "blocked";
+} {
   if (outcome.kind === "delivered" || outcome.kind === "already_delivered") {
-    return { text: outcome.content, artifacts: outcome.artifacts ?? [] };
+    return {
+      text: outcome.content,
+      artifacts: outcome.artifacts ?? [],
+      ...(outcome.workStatus ? { workStatus: outcome.workStatus } : {}),
+    };
   }
   if (outcome.kind === "cancelled" || outcome.kind === "already_cancelled") {
     return { text: "", artifacts: [] };

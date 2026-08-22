@@ -26,6 +26,12 @@ import {
   type ExactResultReplayPhaseSelection,
 } from "../operation-result-replay/index.ts";
 import { phaseMinimalStableInstructionSurface } from "./guided-phase-instructions.ts";
+import {
+  applyStewardTaskEffectBoundary,
+  phaseAllowsTool,
+  removeRuntimeOwnedSchemaDefaults,
+} from "./guided-phase-policy-helpers.ts";
+import { ordinaryChatPhaseForIntent } from "./guided-delegation-intent.ts";
 
 const FLAG_NAME = "BUTLER_PHASE_TOOL_SURFACE";
 const POLICY_REVISION = "butler.btcc-tool-instruction-policy.v1";
@@ -56,7 +62,7 @@ export function selectGuidedTurnPhasePolicy(
     turn, env, exactResultReplay.exactReadCapability,
   );
   const legacyProvider = visibleToolDefinitions(legacyAuthorized, executionPolicy);
-  const phase = guidedTurnPhase(executionPolicy);
+  const phase = guidedTurnPhase(executionPolicy, turn.originalMessage);
   if (!exactResultReplay.exactReadCapability &&
     executionPolicy.requiredNativeTools.some(isExactResultReadTool)) {
     const requiredExactTool = executionPolicy.requiredNativeTools
@@ -93,9 +99,24 @@ export function selectGuidedTurnPhasePolicy(
     ...legacyAuthorized,
     ...admittedProfileTools,
   ].map((tool) => [tool.name, tool]));
-  const authorizedTools = admitExactResultReadTool(
-    [...admittedAuthority.values()].filter((tool) => phaseAllowsTool(phase, tool)),
+  const phaseAuthority = new Map([
+    ...admittedAuthority.values(),
+    ...(executionPolicy.role === "steward" && executionPolicy.subsession
+      ? DURABLE_WORK_TOOL_DEFINITIONS
+      : []),
+  ].map((tool) => [tool.name, tool] as const));
+  const admittedAuthorizedTools = admitExactResultReadTool(
+    [...phaseAuthority.values()].filter((tool) =>
+      executionPolicy.role === "steward" && executionPolicy.subsession &&
+        DURABLE_WORK_TOOL_DEFINITIONS.some((candidate) => candidate.name === tool.name)
+        ? true
+        : phaseAllowsTool(phase, tool),
+    ),
     exactResultReplay,
+  );
+  const authorizedTools = applyStewardTaskEffectBoundary(
+    executionPolicy,
+    admittedAuthorizedTools,
   );
   const admittedRequiredToolNames = new Set([
     ...executionPolicy.requiredNativeTools,
@@ -112,6 +133,7 @@ export function selectGuidedTurnPhasePolicy(
     phase,
     authorizedTools,
     admittedRequiredToolNames,
+    executionPolicy,
   );
   const providerTools = authorizedTools
     .filter((tool) =>
@@ -157,6 +179,7 @@ function providerCandidateToolNames(
   phase: GuidedTurnPhase,
   authorizedTools: readonly FunctionToolDefinition[],
   admittedRequiredToolNames: ReadonlySet<string>,
+  policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "subsession">,
 ): Set<string> {
   const baselineProfiles = [
     "public-web",
@@ -186,8 +209,13 @@ function providerCandidateToolNames(
       names.add(tool.name);
     }
   }
-  if (phase === "execution") {
+  if (phase === "execution" || (policy.role === "steward" && policy.subsession)) {
     for (const tool of DURABLE_WORK_TOOL_DEFINITIONS) names.add(tool.name);
+  }
+  if (policy.role === "butler" && policy.accessMode === "full_access") {
+    names.add("delegate_to_steward");
+    names.add("steer_steward");
+    names.add("cancel_steward");
   }
   return names;
 }
@@ -298,52 +326,17 @@ function isEnabled(env: Record<string, string | undefined>): boolean {
   return TRUE_FLAG_VALUES.has(env[FLAG_NAME]?.trim().toLowerCase() ?? "");
 }
 
-function guidedTurnPhase(policy: ButlerExecutionPolicy): GuidedTurnPhase {
+function guidedTurnPhase(
+  policy: ButlerExecutionPolicy,
+  originalMessage: string,
+): GuidedTurnPhase {
   const hasWorkspaceAuthority = policy.requiredNativeToolProfiles
     .includes("workspace") || policy.requiredNativeTools.some((name) => {
       const category = TOOL_CAPABILITY_METADATA[name]?.category;
       return category === "command" || category === "file";
     });
-  if (!policy.projectId && !hasWorkspaceAuthority) return "direct";
+  if (!policy.projectId && !hasWorkspaceAuthority) {
+    return ordinaryChatPhaseForIntent(policy, originalMessage);
+  }
   return policy.accessMode === "read_only" ? "read_only" : "execution";
-}
-
-function phaseAllowsTool(
-  phase: GuidedTurnPhase,
-  tool: FunctionToolDefinition,
-): boolean {
-  if (phase === "execution") return true;
-  const capability = TOOL_CAPABILITY_METADATA[tool.name];
-  if (phase === "direct") {
-    const native = BUTLER_TOOLS.find((candidate) => candidate.name === tool.name);
-    return native?.effectBoundary === "none" &&
-      capability?.category !== "project" &&
-      capability?.category !== "command" &&
-      capability?.category !== "file" &&
-      capability?.category !== "work";
-  }
-  if (DURABLE_WORK_TOOL_DEFINITIONS.some((candidate) => candidate.name === tool.name)) {
-    return false;
-  }
-  const native = BUTLER_TOOLS.find((candidate) => candidate.name === tool.name);
-  return native?.effectBoundary === "none";
-}
-
-function removeRuntimeOwnedSchemaDefaults(
-  tool: FunctionToolDefinition,
-): FunctionToolDefinition {
-  return {
-    ...tool,
-    parameters: removeSchemaDefaults(tool.parameters) as Record<string, unknown>,
-  };
-}
-
-function removeSchemaDefaults(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(removeSchemaDefaults);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([key]) => key !== "default")
-      .map(([key, nested]) => [key, removeSchemaDefaults(nested)]),
-  );
 }

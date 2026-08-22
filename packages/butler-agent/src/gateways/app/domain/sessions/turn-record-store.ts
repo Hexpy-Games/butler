@@ -9,6 +9,7 @@ import { isTerminalTurnState, turnFromRow } from "./message-read-model.ts";
 import type { TurnRecord, TurnState } from "../../interface/protocol/app-protocol.ts";
 import {
   createTurnExecutionControls,
+  subsessionResultStatusLabel,
   type TurnControlResolution,
 } from "../../../core/turn-execution-controls.ts";
 
@@ -112,17 +113,24 @@ export class AppTurnRecordStore {
   }
 
   claimRetryTurn(turnId: string, attempt: number): TurnRecord {
+    const current = this.getTurnRow(turnId);
+    const synthesis = current && turnFromRow(current).execution_controls
+      ?.subsession_result;
+    const cancellable = synthesis ? 0 : 1;
+    const safeStatusLabel = synthesis
+      ? subsessionResultStatusLabel(synthesis)
+      : "Retrying";
     const now = new Date().toISOString();
     const result = this.db
       .query(
         `
       UPDATE turns
-      SET state = 'retrying', safe_status_label = 'Retrying', safe_error_code = NULL,
-        retryable = 0, cancellable = 1, attempt = ?, updated_at = ?
+      SET state = 'retrying', safe_status_label = ?, safe_error_code = NULL,
+        retryable = 0, cancellable = ?, attempt = ?, updated_at = ?
       WHERE id = ? AND state = 'runtime_fault' AND retryable = 1
     `,
       )
-      .run(attempt, now, turnId) as { changes: number };
+      .run(safeStatusLabel, cancellable, attempt, now, turnId) as { changes: number };
     if (result.changes !== 1) {
       throw new AppStoreOperationError(
         409,

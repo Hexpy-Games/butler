@@ -19,6 +19,12 @@ export type TurnExecutionControlSource =
   | "session_override"
   | "global_default";
 
+export interface SubsessionResultTurnContext {
+  relation_id: string;
+  result_id: string;
+  safe_title: string;
+}
+
 export interface TurnControlResolution {
   controls: {
     model: ModelRef;
@@ -33,6 +39,10 @@ export interface TurnControlResolution {
     enabled: boolean;
     models: ModelRef[];
   };
+  /** Internal App Allow adapter identity; excluded from signed execution controls. */
+  authority_request_ref?: string;
+  /** Trusted durable Steward-result origin; persisted into signed Turn controls. */
+  subsession_result?: SubsessionResultTurnContext;
 }
 
 export interface TurnExecutionControlsV1 {
@@ -52,6 +62,7 @@ export interface TurnExecutionControlsV1 {
     enabled: boolean;
     models: ModelRef[];
   };
+  subsession_result?: SubsessionResultTurnContext;
 }
 
 type UnsignedTurnExecutionControls = Omit<
@@ -81,6 +92,11 @@ export function createTurnExecutionControls(input: {
       enabled: input.resolution.model_fallback?.enabled === true,
       models: [...(input.resolution.model_fallback?.models ?? [])],
     },
+    ...(input.resolution.subsession_result
+      ? { subsession_result: normalizedSubsessionResultContext(
+          input.resolution.subsession_result,
+        ) }
+      : {}),
   };
   return {
     ...unsigned,
@@ -135,7 +151,42 @@ function isTurnExecutionControls(
     nonEmptyString(input.resolved_at) &&
     nonEmptyString(input.integrity_hash)
     && (input.model_fallback === undefined || isModelFallback(input.model_fallback))
+    && (input.subsession_result === undefined ||
+      isSubsessionResultTurnContext(input.subsession_result))
   );
+}
+
+export function subsessionResultStatusLabel(
+  context: SubsessionResultTurnContext,
+): string {
+  return `${normalizedSubsessionResultContext(context).safe_title} 작업에 대한 보고 준비 중`;
+}
+
+function normalizedSubsessionResultContext(
+  input: SubsessionResultTurnContext,
+): SubsessionResultTurnContext {
+  if (!isSubsessionResultTurnContext(input)) {
+    throw new Error("subsession_result_turn_context_invalid");
+  }
+  return {
+    relation_id: input.relation_id.trim(),
+    result_id: input.result_id.trim(),
+    safe_title: input.safe_title.replace(/\s+/gu, " ").trim(),
+  };
+}
+
+function isSubsessionResultTurnContext(
+  value: unknown,
+): value is SubsessionResultTurnContext {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const input = value as Partial<SubsessionResultTurnContext>;
+  return nonEmptyString(input.relation_id) && input.relation_id.length <= 160 &&
+    nonEmptyString(input.result_id) && input.result_id.length <= 160 &&
+    nonEmptyString(input.safe_title) && input.safe_title.length <= 160 &&
+    ![...input.safe_title].some((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint < 32 || codePoint === 127;
+    });
 }
 
 function isModelFallback(value: unknown): value is { enabled: boolean; models: ModelRef[] } {

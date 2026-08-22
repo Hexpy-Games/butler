@@ -1,0 +1,41 @@
+.capsule {
+  max-width: 100%;
+}
+
+.content {
+  display: inline-flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.taskTitle,
+.activityTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskTitle {
+  flex: 1 1 auto;
+  max-width: min(34vw, 240px);
+}
+
+.activityTitle {
+  flex: 0 0 auto;
+  max-width: min(30vw, 220px);
+  color: var(--text-secondary);
+}
+
+.separator,
+.progress {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+.progress {
+  font-variant-numeric: tabular-nums;
+}

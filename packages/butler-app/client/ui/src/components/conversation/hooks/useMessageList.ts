@@ -15,6 +15,7 @@ import type {
   WorkerActivitySummary,
 } from "@/app/types.ts";
 import { buildAssistantFooterMetaById } from "../messageFooterMeta";
+import { anchoredStewardProgressByMessageId } from "../stewardParentProgressProjection";
 
 export function useMessageList(
   messages: MessageRecord[],
@@ -35,6 +36,10 @@ export function useMessageList(
     [visibleMessages],
   );
 
+  const anchoredStewardProgress = useMemo(
+    () => anchoredStewardProgressByMessageId(visibleMessages, summary),
+    [summary, visibleMessages],
+  );
   const workers = (summary?.worker_activity ?? []).filter(
     (worker): worker is WorkerActivitySummary =>
       Boolean(worker && isWorkerVisibleInComposer(worker)),
@@ -59,7 +64,8 @@ export function useMessageList(
   const turnState =
     activeSnapshot?.state ??
     summary?.latest_progress?.state ??
-    summary?.turn_state;
+    summary?.turn_state ??
+    undefined;
 
   const showTurnActivity = shouldShowTurnActivity({
     activeTurn,
@@ -108,8 +114,12 @@ export function useMessageList(
     activeTurn,
     progressRows,
     turnState,
-    turnStartedAt: activeSnapshot?.started_at,
-    turnId: activeSnapshot?.turn_id ?? summary?.latest_progress?.turn_id,
+    turnStartedAt:
+      activeSnapshot?.started_at,
+    turnId:
+      activeSnapshot?.turn_id ??
+      summary?.latest_progress?.turn_id,
+    anchoredStewardProgress,
     showTurnActivity,
     itemCount,
     copiedMessageId,

@@ -60,6 +60,12 @@ export class AppTransportQueueStore {
     private readonly appendTerminalTurnStateChanged: (
       turn: TurnRecord,
     ) => void,
+    private readonly runInTransaction: <T>(callback: () => T) => T,
+    private readonly fenceQueuedTurnClaim: (input: {
+      chatId: string;
+      turnId: string;
+      claimId: string;
+    }) => boolean,
   ) {}
 
   enqueueAppTransportTurn(input: {
@@ -68,10 +74,16 @@ export class AppTransportQueueStore {
     message: MessageRecord;
     text: string;
     executionControls: TurnExecutionControlsV1;
+    queueClaimId?: string;
+    queueReplay?: boolean;
     visualAdmission?: VisualImageAdmissionResult;
+    authorityRequestRef?: string;
   }): TurnRecord {
+    let transportInput: Parameters<ButlerServiceClient["enqueueAppTurn"]>[0];
+    let turnBeforeEnqueue: TurnRecord;
+    let executionControls: TurnExecutionControlsV1;
     try {
-      const executionControls = verifyTurnExecutionControls(
+      executionControls = verifyTurnExecutionControls(
         input.executionControls,
       );
       if (
@@ -86,71 +98,110 @@ export class AppTransportQueueStore {
         ? this.getProjectRow(chat.project_id)
         : null;
       const sessionId = sessionHintForRow(input.chatId);
-      const queued = this.serviceClient.enqueueAppTurn(
-        {
-          chatId: input.chatId,
-          messageId: input.message.id,
-          turnId: input.turnId,
-          turnAttempt: this.getTurn(input.turnId).attempt,
-          text: input.text,
-          timestamp: input.message.created_at,
-          sessionId,
-          accountId: APP_ACCOUNT,
-          peerKind: "dm",
-          senderId: APP_SENDER_ID,
-          senderDisplayName: "Butler App",
-          projectId: chat?.project_id ?? undefined,
-          executionControls,
-          appTurnContext: {
-            version: 1,
-            session: {
-              id: input.chatId,
-              kind: chat?.kind === "project" ? "project" : "chat",
-            },
-            conversation: {
-              chatId: input.chatId,
-              userMessageId: input.message.id,
-              turnId: input.turnId,
-              turnAttempt: this.getTurn(input.turnId).attempt,
-            },
-            ...(project ? {
-              project: {
-                id: project.id,
-                workspacePath: project.workspace_path,
-                ...(project.ledger_project_id
-                  ? { ledgerProjectId: project.ledger_project_id }
-                  : {}),
-              },
-            } : {}),
-            model: {
-              requestedModelRef: executionControls.model_ref,
-              reasoningEffort: executionControls.reasoning_effort,
-            },
+      turnBeforeEnqueue = this.getTurn(input.turnId);
+      transportInput = {
+        chatId: input.chatId,
+        messageId: input.message.id,
+        turnId: input.turnId,
+        turnAttempt: turnBeforeEnqueue.attempt,
+        text: input.text,
+        timestamp: input.message.created_at,
+        sessionId,
+        accountId: APP_ACCOUNT,
+        peerKind: "dm",
+        senderId: APP_SENDER_ID,
+        senderDisplayName: "Butler App",
+        projectId: chat?.project_id ?? undefined,
+        executionControls,
+        appQueueClaimId: input.queueClaimId,
+        appTurnContext: {
+          version: 1,
+          session: {
+            id: input.chatId,
+            kind: chat?.kind === "project" ? "project" : "chat",
           },
-          attachments: this.messageFiles.attachmentsForTransport(
-            input.message.id,
-            input.visualAdmission,
-          ),
-          imageAdmission: input.visualAdmission,
-          rawSource: "app-server",
+          conversation: {
+            chatId: input.chatId,
+            userMessageId: input.message.id,
+            turnId: input.turnId,
+            turnAttempt: turnBeforeEnqueue.attempt,
+          },
+          ...(project ? {
+            project: {
+              id: project.id,
+              workspacePath: project.workspace_path,
+              ...(project.ledger_project_id
+                ? { ledgerProjectId: project.ledger_project_id }
+                : {}),
+            },
+          } : {}),
+          model: {
+            requestedModelRef: executionControls.model_ref,
+            reasoningEffort: executionControls.reasoning_effort,
+          },
+          ...(input.authorityRequestRef
+            ? { authorityRequestRef: input.authorityRequestRef }
+            : {}),
+          ...(input.authorityRequestRef
+            ? { authorityClientMessageId: input.message.id }
+            : {}),
         },
+        attachments: this.messageFiles.attachmentsForTransport(
+          input.message.id,
+          input.visualAdmission,
+        ),
+        imageAdmission: input.visualAdmission,
+        rawSource: "app-server",
+      };
+    } catch (error) {
+      return this.failAppTransportQueueHandoff(input, error);
+    }
+
+    let queued: ReturnType<ButlerServiceClient["enqueueAppTurn"]>;
+    try {
+      queued = this.serviceClient.enqueueAppTurn(
+        transportInput,
         {
           source: "app-server",
           chatId: input.chatId,
           turnId: input.turnId,
         },
       );
-      this.appendEvent("turn.queued", {
-        session_id: input.chatId,
-        turn_id: input.turnId,
-        transport: APP_TRANSPORT,
-        queue_id: queued.queueId,
-        requested_model_ref: executionControls.model_ref,
-        reasoning_effort: executionControls.reasoning_effort,
-      });
+    } catch (firstError) {
+      // The existing production client exposes the canonical idempotent Native
+      // lookup so a client exception after commit cannot be mistaken for a
+      // pre-commit failure. A lost App claim is fenced before this
+      // reconciliation so a stale owner cannot inspect or enqueue it.
+      if (input.queueClaimId && !this.fenceQueuedTurnClaim({
+        chatId: input.chatId,
+        turnId: input.turnId,
+        claimId: input.queueClaimId,
+      })) throw new Error("queued_message_claim_lost", { cause: firstError });
+      const committed = this.serviceClient.findAppTurn(transportInput);
+      if (committed) {
+        queued = committed;
+      } else {
+        return this.failAppTransportQueueHandoff(input, firstError);
+      }
+    }
+
+    try {
+      if (!input.queueReplay) {
+        this.appendEvent("turn.queued", {
+          session_id: input.chatId,
+          turn_id: input.turnId,
+          transport: APP_TRANSPORT,
+          queue_id: queued.queueId,
+          requested_model_ref: executionControls.model_ref,
+          reasoning_effort: executionControls.reasoning_effort,
+        });
+      }
       return this.getTurn(input.turnId);
-    } catch (error) {
-      return this.failAppTransportQueueHandoff(input, error);
+    } catch {
+      // Native enqueue is already durable. Leave the exact App claim and
+      // thinking Turn recoverable; the production transcript/projection path
+      // is the canonical source of the eventual terminal result.
+      return turnBeforeEnqueue;
     }
   }
 
@@ -173,33 +224,41 @@ export class AppTransportQueueStore {
     input: {
       chatId: string;
       turnId: string;
+      queueClaimId?: string;
     },
     error: unknown,
   ): TurnRecord {
-    const safeError = appSafeResponderError(error);
-    this.appendTurnEvent(input.chatId, input.turnId, {
-      kind: "turn.failed",
-      payload: safeTurnFailureEventPayload({
-        code: APP_TURN_QUEUE_FAILED_CODE,
-        message:
-          "Butler could not queue this request for execution. Retry the turn.",
-        cause: safeError.cause ?? safeError.message,
-      }),
+    return this.runInTransaction(() => {
+      if (input.queueClaimId && !this.fenceQueuedTurnClaim({
+        chatId: input.chatId,
+        turnId: input.turnId,
+        claimId: input.queueClaimId,
+      })) throw new Error("queued_message_claim_lost");
+      const safeError = appSafeResponderError(error);
+      this.appendTurnEvent(input.chatId, input.turnId, {
+        kind: "turn.failed",
+        payload: safeTurnFailureEventPayload({
+          code: APP_TURN_QUEUE_FAILED_CODE,
+          message:
+            "Butler could not queue this request for execution. Retry the turn.",
+          cause: safeError.cause ?? safeError.message,
+        }),
+      });
+      const failedTurn = this.updateTurnState(input.turnId, "failed", {
+        safeStatusLabel: "Failed",
+        retryable: false,
+        cancellable: false,
+        safeErrorCode: APP_TURN_QUEUE_FAILED_CODE,
+      });
+      this.appendTerminalTurnStateChanged(failedTurn);
+      this.appendEvent("turn.queue_failed", {
+        session_id: input.chatId,
+        turn_id: input.turnId,
+        transport: APP_TRANSPORT,
+        safe_error_code: APP_TURN_QUEUE_FAILED_CODE,
+      });
+      return failedTurn;
     });
-    const failedTurn = this.updateTurnState(input.turnId, "failed", {
-      safeStatusLabel: "Failed",
-      retryable: false,
-      cancellable: false,
-      safeErrorCode: APP_TURN_QUEUE_FAILED_CODE,
-    });
-    this.appendTerminalTurnStateChanged(failedTurn);
-    this.appendEvent("turn.queue_failed", {
-      session_id: input.chatId,
-      turn_id: input.turnId,
-      transport: APP_TRANSPORT,
-      safe_error_code: APP_TURN_QUEUE_FAILED_CODE,
-    });
-    return failedTurn;
   }
 
 }

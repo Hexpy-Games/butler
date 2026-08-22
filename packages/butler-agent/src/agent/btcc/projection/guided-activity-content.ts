@@ -40,7 +40,13 @@ export function publicToolTitle(
   if (name.startsWith("project_ledger")) {
     return isProjectLedgerMutation(name) ? "프로젝트 기록 변경" : "프로젝트 기록 확인";
   }
-  if (isDurableWorkTool(name)) return "작업 진행 기록";
+  if (name === "start_work") return "작업 시작";
+  if (name === "continue_work") return "작업 이어가기";
+  if (name === "replace_work_plan") return "실행 계획 수립";
+  if (name === "record_work_checkpoint") return "진행 상태 기록";
+  if (name === "record_work_review") return reviewTitle(args.subject);
+  if (name === "record_work_disposition") return "완료 상태 기록";
+  if (isDurableWorkTool(name)) return "작업 상태 변경";
   return "도구 사용";
 }
 

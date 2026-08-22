@@ -70,12 +70,20 @@ export interface QueuedMessageRow {
   id: string;
   chat_id: string;
   text: string;
+  client_message_id: string | null;
+  input_identity_digest: string | null;
+  control_resolution_json: string | null;
   controls_json: string;
   attachments_json: string;
   state: QueuedMessageRecord["state"];
   safe_error_code: string | null;
   dispatched_message_id: string | null;
   turn_id: string | null;
+  claim_id: string | null;
+  claim_owner: string | null;
+  claimed_at: string | null;
+  lease_expires_at: string | null;
+  terminal_result_message_id: string | null;
   created_at: string;
   updated_at: string;
 }

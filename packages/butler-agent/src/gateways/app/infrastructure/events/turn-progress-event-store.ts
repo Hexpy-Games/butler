@@ -28,6 +28,10 @@ import {
 import type { AppEventEnvelope, ProgressSummaryRow } from "../../interface/protocol/app-protocol.ts";
 import type { TerminalTurnProjection } from
   "../retention/terminal-turn-retention.ts";
+import {
+  subsessionResultStatusLabel,
+  verifyTurnExecutionControls,
+} from "../../../core/turn-execution-controls.ts";
 import { eventTurnMatchSql } from "./event-turn-query.ts";
 
 export class AppTurnProgressEventStore {
@@ -58,7 +62,7 @@ export class AppTurnProgressEventStore {
     );
     const nextSessionSequence = this.input.nextSessionTurnEventSequence(sessionId);
     const nextTurnSequence = this.input.nextTurnEventSequence(turnId);
-    const event = createAgentTurnEvent({
+    const initialEvent = createAgentTurnEvent({
       id: input.id,
       sessionId,
       turnId,
@@ -69,6 +73,23 @@ export class AppTurnProgressEventStore {
       payload: input.payload,
       createdAt: input.createdAt,
     });
+    const initialProgress = progressRowFromTurnEvent(initialEvent);
+    const synthesis = subsessionResultContext(
+      this.input.getTurnRow(turnId)?.execution_controls_json,
+    );
+    const event = synthesis && initialProgress?.kind === "message" &&
+        !initialProgress.safe_tool_name
+      ? {
+          ...initialEvent,
+          payload: {
+            ...initialEvent.payload,
+            safeLabel: subsessionResultStatusLabel(synthesis),
+            ...(typeof initialEvent.payload.note === "string"
+              ? { note: subsessionResultStatusLabel(synthesis) }
+              : {}),
+          },
+        }
+      : initialEvent;
     if (!shouldPersist || event.visibility !== "public") return event;
     const progressRow = progressRowFromTurnEvent(event);
     this.input.db.transaction(() => {
@@ -235,7 +256,11 @@ export class AppTurnProgressEventStore {
     row: ProgressSummaryRow,
   ): void {
     if (isTerminalProgressState(row.state)) return;
-    const label = progressSummaryStatusLabel(row);
+    const turn = this.input.getTurnRow(turnId);
+    const synthesis = subsessionResultContext(turn?.execution_controls_json);
+    const label = synthesis
+      ? subsessionResultStatusLabel(synthesis)
+      : progressSummaryStatusLabel(row);
     if (!label) return;
     this.input.db
       .query(
@@ -274,6 +299,15 @@ export class AppTurnProgressEventStore {
       INSERT OR IGNORE INTO app_progress_row_identities (turn_id, row_json)
       VALUES (?, ?)
     `).run(turnId, JSON.stringify(row));
+  }
+}
+
+function subsessionResultContext(value: string | null | undefined) {
+  if (!value) return undefined;
+  try {
+    return verifyTurnExecutionControls(JSON.parse(value)).subsession_result;
+  } catch {
+    return undefined;
   }
 }
 

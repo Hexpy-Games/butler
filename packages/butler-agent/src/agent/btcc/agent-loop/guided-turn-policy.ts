@@ -28,6 +28,8 @@ import {
 } from "./guided-session-workspace-policy.ts";
 import { readOperationResultsToolDefinition } from
   "../../tools/monitoring/read_operation_results/index.ts";
+import { applyStewardTaskEffectBoundary } from "./guided-phase-policy-helpers.ts";
+const STEWARD_PARENT_TOOL_NAMES = ["delegate_to_steward", "steer_steward", "cancel_steward"];
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
   disabledReason:
@@ -118,6 +120,11 @@ export function authorizedToolDefinitions(
   });
   if (policy.accessMode === "full_access") names.add("call_mcp_tool");
   else names.delete("call_mcp_tool");
+  if (policy.role === "butler" && policy.accessMode === "full_access") {
+    for (const name of STEWARD_PARENT_TOOL_NAMES) names.add(name);
+  } else {
+    for (const name of STEWARD_PARENT_TOOL_NAMES) names.delete(name);
+  }
   for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
   const guidedLedgerEffects = new Set<string>(
     policy.accessMode === "full_access" &&
@@ -148,7 +155,13 @@ export function hiddenNativeToolNamesForGuidedTurn(
   ];
 }
 
-export function visibleToolDefinitions(authorized: readonly FunctionToolDefinition[], policy: Pick<ButlerExecutionPolicy, "accessMode" | "trackingMode" | "projectId">, includeAttachedImageTool = false): FunctionToolDefinition[] {
+export function directSynthesisToolDefinitions<T extends { name: string }>(
+  tools: readonly T[],
+): T[] {
+  return tools.filter((tool) => !STEWARD_PARENT_TOOL_NAMES.includes(tool.name));
+}
+
+export function visibleToolDefinitions(authorized: readonly FunctionToolDefinition[], policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "trackingMode" | "projectId" | "subsession">, includeAttachedImageTool = false): FunctionToolDefinition[] {
   const projectLedgerWork =
     policy.trackingMode === "ledger" && Boolean(policy.projectId);
   const visible = new Set([
@@ -175,9 +188,14 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
           "project_ledger_work_complete",
         ]
       : []),
+    ...(policy.role === "butler" && policy.accessMode === "full_access"
+      ? ["delegate_to_steward", "steer_steward", "cancel_steward"]
+      : []),
     ...guidedWorkspaceVisibleToolNames(policy),
   ]);
-  return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
+  return applyStewardTaskEffectBoundary(policy, authorized)
+    .filter((tool) => visible.has(tool.name))
+    .map(guidedToolDefinition);
 }
 
 export function guidedNativeToolDefinitions(

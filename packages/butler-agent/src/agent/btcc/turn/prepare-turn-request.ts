@@ -12,6 +12,8 @@ import type {
 import type { StoredSessionBinding } from
   "../../../test-support/harness/contracts.ts";
 import type { TurnRecord } from "./contracts.ts";
+import { storedBindingFromTurnRecord } from
+  "../../../operations/diagnostics/developer-log-turn-capture/index.ts";
 import type { StableTurnRequestIdentity } from "./load-or-admit-turn.ts";
 
 export function requestIdentityForRequest(
@@ -46,19 +48,8 @@ export function replayBinding(
   request: BtccTurnRequest,
 ): StoredSessionBinding {
   const executionPolicy = turn.context.executionPolicy;
-  const modelRef = `${turn.modelSelection.provider}/${turn.modelSelection.model}` as StoredSessionBinding["modelRef"];
   return {
-    sessionId: turn.sessionId,
-    role: executionPolicy?.role === "steward" ? "steward" : "butler",
-    ...(turn.context.projectRef ? { projectId: turn.context.projectRef } : {}),
-    workspacePath: executionPolicy?.workspacePath ?? "",
-    runtimeAdapterId: "btcc-turn-runtime",
-    modelProviderId: turn.modelSelection.provider,
-    modelRef,
-    transportBindings: [],
-    lifecycleState: "active",
-    createdAt: request.message.timestamp,
-    updatedAt: request.message.timestamp,
+    ...storedBindingFromTurnRecord(turn, request.message.timestamp),
     metadata: {
       accessMode: executionPolicy?.accessMode ?? "read_only",
       reasoning_effort: turn.modelSelection.reasoningEffort,
@@ -91,7 +82,7 @@ export function commandFor(
       },
       modelSelection,
       progressDestination: destinationForRequest(request),
-      context: request.trigger.resultScopeRef
+      context: contextForRequest(request, request.trigger.resultScopeRef
         ? {
             ...context,
             baselineObservationScopeRefs: [
@@ -101,7 +92,7 @@ export function commandFor(
               ]),
             ],
           }
-        : context,
+        : context),
     };
   }
   return {
@@ -116,17 +107,29 @@ export function commandFor(
     },
     modelSelection,
     progressDestination: destinationForRequest(request),
-    context,
+    context: contextForRequest(request, context),
   };
 }
 
+function contextForRequest(
+  request: BtccTurnRequest,
+  context: ButlerContextInput,
+): ButlerContextInput {
+  return request.emptyResponsePolicy
+    ? { ...context, emptyResponsePolicy: request.emptyResponsePolicy }
+    : context;
+}
+
 function destinationForRequest(request: BtccTurnRequest): BtccProgressDestination {
-  return request.progressDestination ?? {
+  const destination = request.progressDestination ?? {
     transport: request.transport,
     accountId: request.accountId,
     peer: { ...request.peer },
     replyToMessageId: request.message.id,
   };
+  return request.appQueueClaimId
+    ? { ...destination, appQueueClaimId: request.appQueueClaimId }
+    : destination;
 }
 
 export function inboundEnvelopeFor(request: BtccTurnRequest): InboundEnvelope {

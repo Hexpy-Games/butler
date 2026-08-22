@@ -649,6 +649,7 @@ export interface AppCopy {
   };
   titlebar: {
     commandPalette: string;
+    sessionWorktree: (branch: string) => string;
     hideRightPanel: string;
     showRightPanel: string;
     minimizeWindow: string;
@@ -720,7 +721,7 @@ const koKrCopy: AppCopy = {
     },
     failure: {
       regionLabel: "실패한 응답",
-      title: "요청을 끝까지 완료하지 못했습니다.",
+      title: "응답 처리 중 문제가 발생했습니다.",
       retry: "원래 설정으로 다시 시도",
       retryCurrent: "현재 설정으로 새로 시도",
       retrying: "다시 시도 중",
@@ -1389,6 +1390,7 @@ const koKrCopy: AppCopy = {
   },
   titlebar: {
     commandPalette: "명령 팔레트",
+    sessionWorktree: (branch) => `워크트리 · ${branch}`,
     hideRightPanel: "오른쪽 패널 숨기기",
     showRightPanel: "오른쪽 패널 보기",
     minimizeWindow: "창 최소화",
@@ -2121,6 +2123,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
   },
   titlebar: {
     commandPalette: "Command palette",
+    sessionWorktree: (branch) => `Worktree · ${branch}`,
     hideRightPanel: "Hide right panel",
     showRightPanel: "Show right panel",
     minimizeWindow: "Minimize window",

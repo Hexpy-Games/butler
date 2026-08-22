@@ -17,6 +17,8 @@ import { Conversation } from "@/components/conversation/Conversation.tsx";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { SettingsView } from "@/components/settings/SettingsView.tsx";
+import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog.tsx";
+import { useComposerStore } from "@/components/conversation/composerStore.ts";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { EMPTY_SETTINGS } from "@/app/constants.ts";
 import { nativePlatform } from "@/app/nativeNotifications.ts";
@@ -25,6 +27,9 @@ import {
   HARNESS_MESSAGES,
   HARNESS_NAVIGATION,
   HARNESS_PROJECT_DASHBOARD,
+  HARNESS_SS03_NAVIGATION,
+  HARNESS_SS03_OBSERVER_VIEW,
+  HARNESS_SS03_SUMMARY,
   HARNESS_SUMMARY,
 } from "@/app/fixtures.ts";
 import { appThemeClasses, isDraftChatId, projectDraftId } from "@/app/utils.ts";
@@ -55,12 +60,43 @@ export function VisualHarness() {
   const setSettings = useButlerStore((state) => state.setSettings);
   const setModelCatalog = useButlerStore((state) => state.setModelCatalog);
   const setSummary = useButlerStore((state) => state.setSummary);
+  const setSessionView = useButlerStore((state) => state.setSessionView);
+  const openSessionObserver = useButlerStore(
+    (state) => state.openSessionObserver,
+  );
   const setTurnProgress = useButlerStore((state) => state.setTurnProgress);
   const setStatus = useButlerStore((state) => state.setStatus);
   const visualTheme =
     new URLSearchParams(window.location.search).get("theme") === "dark"
       ? "dark"
       : EMPTY_SETTINGS.appearance_theme;
+  const ss03Surface =
+    new URLSearchParams(window.location.search).get("surface") === "ss03";
+  const worktreeSurface =
+    new URLSearchParams(window.location.search).get("surface") === "worktree";
+  const harnessNavigation = ss03Surface
+    ? HARNESS_SS03_NAVIGATION
+    : HARNESS_NAVIGATION;
+  const harnessSummary = useMemo(
+    () => ss03Surface
+      ? HARNESS_SS03_SUMMARY
+      : worktreeSurface
+        ? {
+            ...HARNESS_SUMMARY,
+            branch_info: {
+              available: true,
+              workspace_mode: "git" as const,
+              branch_name: "codex/session-worktree-visibility-with-a-long-branch",
+              safe_status: "Git branch codex/session-worktree-visibility-with-a-long-branch",
+              workspace_binding: "session_worktree" as const,
+              workspace_label: "session-worktree/codex/session-worktree-visibility-with-a-long-branch",
+              workspace_status: "available" as const,
+              dirty: true,
+            },
+          }
+        : HARNESS_SUMMARY,
+    [ss03Surface, worktreeSurface],
+  );
   const harnessSettings = useMemo(
     () =>
       visualTheme === EMPTY_SETTINGS.appearance_theme
@@ -94,22 +130,30 @@ export function VisualHarness() {
     setRightOpen,
   });
   useEffect(() => {
-    setLeftOpen(false);
+    if (ss03Surface) {
+      setLeftOpen(true);
+    } else {
+      setLeftOpen(false);
+    }
     setRightOpen(true);
     setRightTab("summary");
     setView({ kind: "session" });
     setActiveChatId("butler-client");
-    setNavigation(HARNESS_NAVIGATION);
+    setNavigation(harnessNavigation);
     setMessages(HARNESS_MESSAGES);
     setSettings(harnessSettings);
     setModelCatalog(HARNESS_MODEL_CATALOG);
-    setSummary(HARNESS_SUMMARY);
+    setSummary(harnessSummary);
+    if (ss03Surface) {
+      setSessionView(HARNESS_SS03_OBSERVER_VIEW);
+      openSessionObserver(HARNESS_SS03_OBSERVER_VIEW.session_id);
+    }
     setTurnProgress(
-      HARNESS_SUMMARY.latest_progress?.turn_id
+      harnessSummary.latest_progress?.turn_id
         ? {
-            [HARNESS_SUMMARY.latest_progress.turn_id]: {
-              ...HARNESS_SUMMARY.latest_progress,
-              state: HARNESS_SUMMARY.turn_state,
+            [harnessSummary.latest_progress.turn_id]: {
+              ...harnessSummary.latest_progress,
+              state: harnessSummary.turn_state,
             },
           }
         : {},
@@ -126,10 +170,22 @@ export function VisualHarness() {
     setRightTab,
     setSettings,
     setStatus,
+    setSessionView,
     setView,
     setSummary,
     setTurnProgress,
+    openSessionObserver,
+    harnessSummary,
+    harnessNavigation,
+    ss03Surface,
   ]);
+  useEffect(() => {
+    if (!ss03Surface) return;
+    const timer = window.setTimeout(() => {
+      useComposerStore.getState().setEngaged(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [ss03Surface]);
   return (
     <AdaptiveShell
       className={`mac-window visual-harness ${appThemeClasses(harnessSettings, systemPrefersDark)}`}
@@ -176,7 +232,7 @@ export function VisualHarness() {
             {view.kind === "project-dashboard" ? (
               <ProjectDashboardView
                 initialDashboard={HARNESS_PROJECT_DASHBOARD}
-                project={HARNESS_NAVIGATION.projects.find(
+                project={harnessNavigation.projects.find(
                   (project) => project.id === view.projectId,
                 )}
                 onOpenSession={(chatId) => {
@@ -236,12 +292,13 @@ export function VisualHarness() {
           label={
             effectiveRightOpen ? appCopy.titlebar.hideRightPanel : "Hide sidebar"
           }
-          open={leftOpen || effectiveRightOpen}
+          open={!ss03Surface && (leftOpen || effectiveRightOpen)}
           onDismiss={() =>
             effectiveRightOpen ? setRightOpen(false) : setLeftOpen(false)
           }
         />
       )}
+      {ss03Surface && <SessionObserverDialog />}
     </AdaptiveShell>
   );
 }

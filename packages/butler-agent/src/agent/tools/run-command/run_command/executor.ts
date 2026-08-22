@@ -21,6 +21,7 @@ export function createRunCommandToolHandlers(input: {
   butlerData: string;
   workspacePath: string;
   workspaceReference?: WorkspaceReference;
+  allowedToolsAndEffects?: readonly string[];
   commandExecutor?: CommandExecutor;
 }) {
   const commandExecutor = input.commandExecutor ?? createPlatformCommandExecutor();
@@ -30,6 +31,7 @@ export function createRunCommandToolHandlers(input: {
       butlerData: input.butlerData,
       workspacePath: input.workspacePath,
       workspaceReference: input.workspaceReference,
+      allowedToolsAndEffects: input.allowedToolsAndEffects,
       args: call.args,
       signal: call.signal,
       commandExecutor,
@@ -600,11 +602,21 @@ export async function runCommandTool(input: {
   butlerData: string;
   workspacePath: string;
   workspaceReference?: WorkspaceReference;
+  allowedToolsAndEffects?: readonly string[];
   args: Record<string, unknown>;
   signal?: AbortSignal;
   commandExecutor?: CommandExecutor;
 }): Promise<Record<string, unknown>> {
   throwIfCommandAborted(input.signal);
+  if (input.allowedToolsAndEffects &&
+      !input.allowedToolsAndEffects.includes("run_command:workspace")) {
+    return {
+      ok: false,
+      error: "tool_not_admitted",
+      message: "Command execution is not admitted for this Steward task.",
+      recovery_hint: "Use only the exact mutation capability in the delegated packet.",
+    };
+  }
   const command = typeof input.args.command === "string" ? input.args.command.trim() : "";
   if (!command) throw new Error("run_command requires command");
   const workspacePath = input.workspaceReference?.get() ?? input.workspacePath;

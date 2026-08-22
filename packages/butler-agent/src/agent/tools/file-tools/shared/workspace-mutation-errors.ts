@@ -25,6 +25,7 @@ export function workspaceMutationFailure(
     parent_directory_unwritable: "The target parent directory is not writable.",
     permission_denied: "The file mutation was denied by filesystem permissions.",
     io_error: "The filesystem could not complete the file mutation.",
+    tool_not_admitted: "The file mutation is not admitted for this Steward task.",
   };
   const recoveryHints: Record<WorkspaceMutationError, string> = {
     invalid_arguments: "Retry with the canonical file mutation fields.",
@@ -39,6 +40,7 @@ export function workspaceMutationFailure(
     parent_directory_unwritable: "Choose a writable workspace directory or adjust its permissions.",
     permission_denied: "Choose a writable workspace path or adjust its permissions.",
     io_error: "Retry after checking the workspace filesystem and permissions.",
+    tool_not_admitted: "Use only the exact mutation capability in the delegated packet.",
   };
   return {
     ok: false,

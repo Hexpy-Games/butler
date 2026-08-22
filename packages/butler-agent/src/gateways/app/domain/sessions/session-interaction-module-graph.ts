@@ -114,12 +114,13 @@ export function createAppSessionInteractionModuleGraph(input: {
     (sessionId, runtimeSessionId, currentTurnId) =>
       host.listActiveWorkStreams(sessionId, runtimeSessionId, currentTurnId),
     () => host.latestEventCursor(),
+    host.stewardObserver,
   );
   const sessionQueue = new AppSessionQueueStore(
     db,
     messageFiles,
     (sessionId) => host.ensureChat(sessionId),
-    (sessionId, request) => host.controlsForMessageSend(sessionId, request),
+    (sessionId, request) => host.resolveControlsForMessageSend(sessionId, request),
     async (files, model) => await messageFiles.admitVisualAttachments(
       files,
       model,
@@ -133,20 +134,42 @@ export function createAppSessionInteractionModuleGraph(input: {
   );
   const sessionQueueDispatcher = new AppSessionQueueDispatcher({
     db,
-    messageFiles,
     sessionHasActiveTurn: (sessionId) => host.sessionHasActiveTurn(sessionId),
     queuedControlsFromRow: (row) => host.queuedControlsFromRow(row),
-    sendMessage: (request, responder, options, visualAdmission) =>
-      host.userMessageTurns.sendMessage(request, responder, options, visualAdmission),
+    controlResolutionFromRow: (row) => host.sessionQueue.controlResolutionFromRow(row),
+    sendQueuedMessage: (row, responder, options, visualAdmission) =>
+      host.userMessageTurns.dispatchQueuedMessage(row, responder, options, visualAdmission),
+      recoverExpiredDispatches: (chatId, now, currentOwner) =>
+        host.sessionQueue.recoverExpiredDispatches(chatId, now, currentOwner),
+      nextDispatchLeaseDeadline: (currentOwner, now) =>
+        host.sessionQueue.nextDispatchLeaseDeadline(currentOwner, now),
+    claimDispatch: (chatId, queuedMessageId, claimId, claimOwner, now, leaseMs) =>
+      host.sessionQueue.claimDispatch(
+        chatId,
+        queuedMessageId,
+        claimId,
+        claimOwner,
+        now,
+        leaseMs,
+      ),
+    recordDispatchResult: (chatId, queuedMessageId, claimId, result) =>
+      host.sessionQueue.recordDispatchResult(chatId, queuedMessageId, claimId, result),
+    getTurn: (turnId) => host.getTurn(turnId),
+    acknowledgeQueuedMessageForTurn: (input) =>
+      host.sessionQueue.acknowledgeForTurn(input),
+    terminalResultMessageIdForTurn: (chatId, turnId) =>
+      host.listMessages(chatId).find(
+        (message: { role: string; turn_id?: string }) =>
+          message.role === "assistant" && message.turn_id === turnId,
+      )?.id,
+    failDispatch: (chatId, queuedMessageId, claimId, safeErrorCode) =>
+      host.sessionQueue.failDispatch(chatId, queuedMessageId, claimId, safeErrorCode),
     validateVisualAdmission: (admission, model) =>
       messageFiles.validateVisualAdmission(
         admission,
         model,
         host.registeredModelMetadata(),
       ),
-    appendEvent: (type, payload) => {
-      host.appendEvent(type, payload);
-    },
   });
   return {
     generatedSessionTitles,

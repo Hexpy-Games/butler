@@ -88,8 +88,8 @@ test("summary exposes session worktree identity and dirty state without paths", 
       dirty: false,
     },
   });
-  expect(clean).toContain("Linked worktree");
-  expect(clean).toContain("session-worktree/feature/demo");
+  expect(clean).toContain("Session worktree");
+  expect(clean).toContain("feature/demo");
   expect(clean).toContain("Clean");
   expect(clean).not.toContain("/tmp/");
 

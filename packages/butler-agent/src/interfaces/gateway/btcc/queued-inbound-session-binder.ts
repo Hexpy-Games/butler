@@ -2,6 +2,8 @@ import type { InboundEnvelope, SessionTransportBinding } from
   "../../../test-support/harness/contracts.ts";
 import type { SessionBindingStore } from
   "../../../test-support/harness/session-store.ts";
+import { resolveSessionWorkspaceAuthority } from
+  "../../../agent/session-workspaces/index.ts";
 
 export function bindQueuedInboundSession(
   envelope: InboundEnvelope,
@@ -18,11 +20,18 @@ function bindAppTurn(envelope: InboundEnvelope, store: SessionBindingStore): voi
   if (!sessionId || !controls) throw new Error("queued_app_turn_context_missing");
   const existing = store.getBySessionId(sessionId);
   const modelRef = controls.model_ref;
+  const workspaceAuthority = resolveSessionWorkspaceAuthority({
+    binding: existing,
+    projectWorkspacePath: context.project?.workspacePath,
+  });
   store.upsert({
     sessionId,
     role: existing?.role ?? "butler",
     projectId: context.project?.id ?? existing?.projectId,
-    workspacePath: context.project?.workspacePath ?? existing?.workspacePath ?? process.cwd(),
+    workspacePath:
+      workspaceAuthority.kind === "project"
+        ? workspaceAuthority.workspacePath ?? process.cwd()
+        : existing?.workspacePath ?? process.cwd(),
     runtimeAdapterId: "btcc-turn-runtime",
     modelProviderId: modelRef.split("/", 1)[0] || "openai",
     modelRef,
@@ -52,14 +61,16 @@ function bindStewardTurn(envelope: InboundEnvelope, store: SessionBindingStore):
   const sessionId = envelope.routingHints?.stewardId?.trim();
   if (!sessionId) throw new Error("queued_steward_context_missing");
   const existing = store.getBySessionId(sessionId);
+  const modelRef = context.modelRef ?? existing?.modelRef ?? "openai/auto:codex-latest";
+  const reasoningEffort = context.reasoningEffort ?? existing?.metadata?.reasoning_effort;
   store.upsert({
     sessionId,
     role: "steward",
-    projectId: context.projectName,
+    ...(context.projectName.trim() ? { projectId: context.projectName.trim() } : {}),
     workspacePath: context.workspacePath,
     runtimeAdapterId: "btcc-turn-runtime",
-    modelProviderId: existing?.modelProviderId ?? "openai",
-    modelRef: existing?.modelRef ?? "openai/auto:codex-latest",
+    modelProviderId: modelRef.split("/", 1)[0] || (existing?.modelProviderId ?? "openai"),
+    modelRef,
     runtimeSessionRef: existing?.runtimeSessionRef,
     providerThreadRef: existing?.providerThreadRef,
     lifecycleState: "active",
@@ -69,7 +80,11 @@ function bindStewardTurn(envelope: InboundEnvelope, store: SessionBindingStore):
       peerId: envelope.peer.parentId ?? envelope.peer.id,
       threadId: envelope.peer.kind === "thread" ? envelope.peer.id : undefined,
     }),
-    metadata: { ...(existing?.metadata ?? {}), source: "native-butler-queued-steward-context" },
+    metadata: {
+      ...(existing?.metadata ?? {}),
+      source: "native-butler-queued-steward-context",
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    },
   });
 }
 

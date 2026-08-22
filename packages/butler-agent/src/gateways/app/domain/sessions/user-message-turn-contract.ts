@@ -6,8 +6,10 @@ import type {
 import type {
   MessageRecord,
   MessageSendRequest,
+  MessageSendResult,
   ProgressSummaryRow,
   QueueMessageRequest,
+  QueuedMessageRecord,
   SessionControlState,
   SessionQueueView,
   TurnRecord,
@@ -33,8 +35,55 @@ export interface UserMessageTurnStoreInput {
   createQueuedMessage: (
     input: QueueMessageRequest,
     visualAdmission?: VisualImageAdmissionResult,
+    controlResolution?: TurnControlResolution,
   ) => Promise<SessionQueueView>;
+  findQueuedMessageByClientId: (
+    chatId: string,
+    clientMessageId: string,
+  ) => QueuedMessageRecord | null;
+  queuedControlsFromRow: (
+    row: import("../../infrastructure/core/records.ts").QueuedMessageRow,
+  ) => SessionControlState;
+  controlResolutionFromRow: (
+    row: import("../../infrastructure/core/records.ts").QueuedMessageRow,
+  ) => TurnControlResolution | null;
+  messageFilesForQueuedRow: (
+    row: import("../../infrastructure/core/records.ts").QueuedMessageRow,
+  ) => MessageFileRow[];
+  dispatchQueuedSessionMessage: (
+    chatId: string,
+    queuedMessageId: string,
+    responder?: AppMessageResponder,
+    options?: SendMessageOptions,
+  ) => Promise<MessageSendResult | undefined>;
+  acknowledgeQueuedMessageForTurn: (input: {
+    chatId: string;
+    turnId: string;
+    claimId: string;
+    resultMessageId?: string;
+    safeErrorCode?: string | null;
+  }) => boolean;
+  assertQueuedMessageClaim: (
+    chatId: string,
+    queuedMessageId: string,
+    claimId: string,
+  ) => boolean;
+  fenceQueuedTurnClaim: (input: {
+    chatId: string;
+    turnId: string;
+    claimId: string;
+  }) => boolean;
+  recordDispatchResult: (
+    chatId: string,
+    queuedMessageId: string,
+    claimId: string,
+    result: { messageId?: string; turnId?: string },
+  ) => boolean;
+  runInTransaction: <T>(callback: () => T) => T;
+  getTurn: (turnId: string) => TurnRecord;
+  messageRecordById: (messageId: string) => MessageRecord;
   listMessages: (chatId: string) => MessageRecord[];
+  terminalResultMessageIdForTurn: (chatId: string, turnId: string) => string | undefined;
   validateAttachable: (
     chatId: string,
     attachments: MessageSendRequest["attachments"],
@@ -66,6 +115,7 @@ export interface UserMessageTurnStoreInput {
   ) => MessageRecord;
   setTurnUserMessage: (turnId: string, messageId: string) => void;
   appendEvent: (type: string, payload: Record<string, unknown>) => void;
+  isPublicUserMessage: (chatId: string, text: string) => boolean;
   appendTurnAcknowledgedEvent: (chatId: string, turnId: string) => void;
   updateTurnState: (
     turnId: string,
@@ -84,7 +134,10 @@ export interface UserMessageTurnStoreInput {
     message: MessageRecord;
     text: string;
     executionControls: TurnExecutionControlsV1;
+    queueClaimId?: string;
+    queueReplay?: boolean;
     visualAdmission?: VisualImageAdmissionResult;
+    authorityRequestRef?: string;
   }) => TurnRecord;
   appendProgressSummaryEvent: (
     chatId: string,
@@ -135,6 +188,7 @@ export interface UserMessageTurnStoreInput {
     safeError: { code: string; message: string },
     options?: { retryable?: boolean },
   ) => MessageRecord;
+  assertQueueClaim?: () => void;
 }
 
 export interface UserResponderTurnInput {
@@ -144,4 +198,6 @@ export interface UserResponderTurnInput {
   text: string;
   responder: AppMessageResponder;
   options: SendMessageOptions;
+  queuedMessageId?: string;
+  queueClaimId?: string;
 }

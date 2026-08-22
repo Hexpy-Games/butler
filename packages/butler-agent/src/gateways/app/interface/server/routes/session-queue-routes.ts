@@ -57,6 +57,9 @@ function strictQueueMessageRequest(
   return {
     ...(typeof body.chat_id === "string" ? { chat_id: body.chat_id } : {}),
     ...(typeof body.text === "string" ? { text: body.text } : {}),
+    ...(typeof body.client_message_id === "string"
+      ? { client_message_id: body.client_message_id }
+      : {}),
     ...(Array.isArray(body.attachments) ? { attachments: body.attachments.map((item) => ({ file_id: item.file_id })) } : {}),
     ...(typeof body.model === "string" ? { model: body.model } : {}),
     ...(body.reasoning_effort !== undefined ? { reasoning_effort: body.reasoning_effort } : {}),

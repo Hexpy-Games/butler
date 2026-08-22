@@ -11,6 +11,7 @@ export function areMessageItemPropsEqual(
     previous.onCopyAssistantMessage === next.onCopyAssistantMessage &&
     previous.onCopyContextMenuText === next.onCopyContextMenuText &&
     previous.rowVirtualizer === next.rowVirtualizer &&
+    previous.stewardProgress === next.stewardProgress &&
     previous.virtualRow.index === next.virtualRow.index &&
     previous.virtualRow.start === next.virtualRow.start &&
     previous.virtualRow.size === next.virtualRow.size;

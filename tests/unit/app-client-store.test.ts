@@ -58,6 +58,8 @@ afterEach(() => {
     sessionQueue: [],
     settings: EMPTY_SETTINGS,
     modelCatalog: EMPTY_MODEL_CATALOG,
+    sessionViews: {},
+    observerSessionId: null,
     status: { label: "connecting", tone: "muted" },
     isSending: false,
     sendingChatId: null,
@@ -1510,6 +1512,57 @@ test("session view hydration does not remove already visible live messages", () 
   ).toEqual(["user-a", "assistant-a"]);
 });
 
+test("observer session hydration stays keyed and cannot replace the active session", () => {
+  const mainView = sessionView("session-main", {
+    messages: [messageRecord("main-message", "session-main", "assistant", "Main", 1, "main-turn")],
+    turnState: "delivered",
+  });
+  const observerView = sessionView("steward-child", {
+    messages: [messageRecord("child-message", "steward-child", "assistant", "Child", 1, "child-turn")],
+    turnState: "thinking",
+    latestProgress: {
+      turn_id: "child-turn",
+      state: "thinking",
+      safe_progress_rows: [{
+        id: "child-activity",
+        kind: "message",
+        state: "running",
+        safe_label: "Child activity",
+      }],
+    },
+  });
+  observerView.parent_session_id = "session-main";
+  observerView.relation = {
+    relation_id: "relation-child",
+    parent_session_id: "session-main",
+    parent_turn_id: "main-turn",
+    child_session_id: "steward-child",
+    anchor_message_id: "main-message",
+    ordinal: 1,
+    safe_title: "Child",
+    created_at: "2026-05-05T00:00:00.000Z",
+  };
+
+  useButlerStore.setState({
+    activeChatId: "session-main",
+    messages: mainView.messages,
+    sessionView: null,
+    sessionViews: {},
+    summary: null,
+  });
+  useButlerStore.getState().setSessionView(mainView);
+  useButlerStore.getState().setSessionView(observerView);
+
+  const state = useButlerStore.getState();
+  expect(state.messages.map((message) => message.id)).toEqual(["main-message"]);
+  expect(state.sessionView?.session_id).toBe("session-main");
+  expect(state.sessionViews["session-main"]?.session_id).toBe("session-main");
+  expect(state.sessionViews["steward-child"]?.messages.map((message) => message.id))
+    .toEqual(["child-message"]);
+  expect(state.sessionViews["steward-child"]?.cursors.messages).toBe(1);
+  expect(state.summary?.latest_progress?.safe_progress_rows).toEqual([]);
+});
+
 test("session view hydration preserves live turn progress rows", () => {
   const liveProgress: TurnProgressSnapshot = {
     turn_id: "turn-a",
@@ -2037,6 +2090,60 @@ test("timeline store action applies progress and messages in one publication", (
   expect(publishedStates).toEqual([
     { messages: 1, workBlocks: 1, progressRows: 1 },
   ]);
+});
+
+test("synthesis turn events retain the Steward relation before canonical refresh", () => {
+  useButlerStore.setState({
+    activeChatId: "session-a",
+    messages: [],
+    summary: {
+      session_id: "session-a",
+      turn_state: "delivered",
+      latest_progress: {
+        turn_id: "turn-child-parent",
+        state: "delivered",
+        safe_progress_rows: [],
+      },
+      steward_children: [],
+    },
+    turnProgress: {},
+  });
+
+  useButlerStore.getState().applyTimelineEvents([{
+    id: 12,
+    type: "turn.state_changed",
+    payload: {
+      session_id: "session-a",
+      turn_id: "turn-synthesis",
+      state: "thinking",
+      safe_status_label: "소음 대응 문서 작업에 대한 보고 준비 중",
+      turn: {
+        id: "turn-synthesis",
+        chat_id: "session-a",
+        state: "thinking",
+        safe_status_label: "소음 대응 문서 작업에 대한 보고 준비 중",
+        execution_controls: {
+          model_ref: "openai/gpt-5.6-sol",
+          reasoning_effort: "medium",
+          source: "global_default",
+          subsession_result: {
+            relation_id: "relation-context-revision",
+            result_id: "result-context-revision",
+            safe_title: "소음 대응 문서",
+          },
+        },
+      },
+    },
+  }]);
+
+  expect(useButlerStore.getState().summary).toMatchObject({
+    turn_state: "thinking",
+    latest_turn_subsession_result: {
+      relation_id: "relation-context-revision",
+      result_id: "result-context-revision",
+      safe_title: "소음 대응 문서",
+    },
+  });
 });
 
 test("store prunes optimistic client progress after server accepts the turn", () => {

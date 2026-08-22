@@ -36,6 +36,25 @@ export class DeliveryGuard {
   ): Promise<DeliveryAttemptResult> {
     const dedupeKey = `${sessionId}\u0000${action.actionId}`;
     if (this.deliveredKeys.has(dedupeKey)) {
+      // A replay can carry a newly reclaimed App queue claim while retaining
+      // the canonical result/action identity.  Keep transport delivery
+      // idempotent, but append the immutable replay claim to the durable
+      // transcript so App projection can fence the old event and settle the
+      // current claim.  The projection receipt remains the duplicate guard.
+      if (isClaimBearingAppAction(action)) {
+        recordDurableOutbound({
+          sessionId,
+          action,
+          delivery: { ok: true, transportMessageId: `${action.transport}:${action.actionId}` },
+          butlerData: this.butlerData,
+          metadata: {
+            source: "transport/delivery-guard.ts",
+            attempts: 0,
+            duplicate: true,
+            ...(metadata ?? {}),
+          },
+        });
+      }
       return {
         actionId: action.actionId,
         ok: true,
@@ -136,4 +155,12 @@ function isMetadataOnlyActivity(action: OutboundAction): boolean {
     !hasAttachments &&
     !action.presence &&
     (kind === "tool_progress" || kind === "turn_event");
+}
+
+function isClaimBearingAppAction(action: OutboundAction): boolean {
+  if (action.transport !== "app") return false;
+  const claimId = action.metadata?.appQueueClaimId;
+  return typeof claimId === "string" &&
+    /^[\w:./-]{1,96}$/u.test(claimId.trim()) &&
+    action.metadata?.appQueueClaimProvenance === "matching_app_target";
 }

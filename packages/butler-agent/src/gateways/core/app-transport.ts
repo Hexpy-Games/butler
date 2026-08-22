@@ -25,6 +25,7 @@ export interface AppInboundInput {
   senderDisplayName?: string;
   projectId?: string;
   executionControls?: TurnExecutionControlsV1;
+  appQueueClaimId?: string;
   attachments?: InboundEnvelope["message"]["attachments"];
   imageAdmission?: VisualImageAdmissionResult;
   raw?: InboundEnvelope["raw"];
@@ -38,6 +39,7 @@ export interface AppCancellationInput {
   turnId: string;
   requestId: string;
   requestedAt: string;
+  appQueueClaimId?: string;
 }
 
 export function createAppInboundEnvelope(input: AppInboundInput): InboundEnvelope {
@@ -73,6 +75,7 @@ export function createAppInboundEnvelope(input: AppInboundInput): InboundEnvelop
       projectId: input.projectId,
       turnId: input.turnId,
       ...(input.turnAttempt ? { turnAttempt: input.turnAttempt } : {}),
+      ...(input.appQueueClaimId ? { appQueueClaimId: input.appQueueClaimId } : {}),
     },
     executionControls,
     appTurnContext: input.appTurnContext,
@@ -119,6 +122,12 @@ function verifyAppTurnContext(
   )) {
     throw new Error("app_turn_context_workspace_invalid");
   }
+  if (
+    context.authorityRequestRef !== undefined &&
+    (!context.authorityRequestRef.trim() || context.authorityRequestRef.length > 256)
+  ) {
+    throw new Error("app_turn_context_authority_ref_invalid");
+  }
 }
 
 export function createAppCancellationEnvelope(
@@ -134,7 +143,11 @@ export function createAppCancellationEnvelope(
       id: input.requestId,
       timestamp: input.requestedAt,
     },
-    routingHints: { sessionId: input.sessionId, turnId: input.turnId },
+    routingHints: {
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      ...(input.appQueueClaimId ? { appQueueClaimId: input.appQueueClaimId } : {}),
+    },
     control: {
       kind: "cancel_turn",
       requestId: input.requestId,

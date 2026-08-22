@@ -5,6 +5,7 @@ import { join } from "path";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import { conversationSessionIdForDurableSession } from "../../packages/butler-agent/src/agent/conversation/session-admission.ts";
 import { readConversationContext } from "../../packages/butler-agent/src/agent/context/conversation-context.ts";
+import { compilePromptMaterialContextPlan } from "../../packages/butler-agent/src/agent/context/conversation-context-format.ts";
 
 let tempDir = "";
 let store: AgentConversationStore;
@@ -102,4 +103,134 @@ test("readConversationContext supports canonical and legacy anchors", () => {
   expect(byMessage.messages.map((message) => message.conversation_message_id)).toEqual([second.id, third.id]);
   expect(byEvent.anchor_message_id).toBe(third.id);
   expect(byEvent.truncated).toBe(false);
+});
+
+test("recent context preserves the preceding complete Butler result across short correction turns", () => {
+  const longResultMarker = "COMPLETE_PREVIOUS_DOCUMENT";
+  const begin = (turnId: string, minute: number) => store.beginTurn({
+    gateway: "app",
+    externalSessionId: runtimeSessionId,
+    sessionId: canonicalSessionId,
+    actor: "user",
+    turnId,
+    now: `2026-04-28T12:${String(minute).padStart(2, "0")}:00.000Z`,
+  });
+  const append = (
+    role: "user" | "assistant",
+    turnId: string,
+    text: string,
+    sourceRef: string,
+  ) => store[role === "user" ? "appendUserMessage" : "appendAssistantMessage"]({
+    sessionId: canonicalSessionId,
+    turnId,
+    text,
+    sourceGateway: "app",
+    sourceRef,
+  });
+
+  begin("turn-long-result", 1);
+  append("user", "turn-long-result", "생활소음과 공사소음을 함께 다루는 전체 문서를 작성해줘.", "long-user");
+  append("assistant", "turn-long-result", `${longResultMarker}\n${"본문".repeat(8_000)}`, "long-assistant");
+  store.finalizeTurn({
+    turnId: "turn-long-result",
+    status: "complete",
+    completedAt: "2026-04-28T12:01:59.000Z",
+  });
+  begin("turn-correction-one", 2);
+  append("user", "turn-correction-one", "공사 대응 근거를 보강해줘.", "correction-one-user");
+  append("assistant", "turn-correction-one", "수정하겠습니다.", "correction-one-assistant");
+  store.finalizeTurn({
+    turnId: "turn-correction-one",
+    status: "complete",
+    completedAt: "2026-04-28T12:02:59.000Z",
+  });
+  begin("turn-correction-two", 3);
+  append("user", "turn-correction-two", "진행해.", "correction-two-user");
+  append("assistant", "turn-correction-two", "진행하겠습니다.", "correction-two-assistant");
+  store.finalizeTurn({
+    turnId: "turn-correction-two",
+    status: "complete",
+    completedAt: "2026-04-28T12:03:59.000Z",
+  });
+
+  const plan = compilePromptMaterialContextPlan(
+    store.readPromptMaterial({ sessionId: canonicalSessionId, tailLimit: 200 }),
+    { maxTokens: 1_000 },
+  );
+
+  expect(plan.rendered).toContain(longResultMarker);
+  expect(plan.rendered).toContain("생활소음과 공사소음을 함께");
+  expect(plan.rendered).toContain("공사 대응 근거를 보강해줘");
+  expect(plan.rendered).toContain("진행해.");
+});
+
+test("recent context requires the same preceding eight semantic turns when the current request is separate", () => {
+  const messageIds: string[] = [];
+  for (let index = 1; index <= 9; index += 1) {
+    const turnId = `turn-history-${String(index).padStart(2, "0")}`;
+    store.beginTurn({
+      gateway: "app",
+      externalSessionId: runtimeSessionId,
+      sessionId: canonicalSessionId,
+      actor: "user",
+      turnId,
+      now: `2026-04-28T13:${String(index).padStart(2, "0")}:00.000Z`,
+    });
+    const user = store.appendUserMessage({
+      sessionId: canonicalSessionId,
+      turnId,
+      text: `history-user-${index}`,
+      sourceGateway: "app",
+      sourceRef: `history-user-${index}`,
+    });
+    store.appendAssistantMessage({
+      sessionId: canonicalSessionId,
+      turnId,
+      text: `history-assistant-${index}`,
+      sourceGateway: "app",
+      sourceRef: `history-assistant-${index}`,
+    });
+    store.finalizeTurn({ turnId, status: "complete" });
+    messageIds.push(user.id);
+  }
+
+  const currentTurnId = "turn-current-request";
+  store.beginTurn({
+    gateway: "app",
+    externalSessionId: runtimeSessionId,
+    sessionId: canonicalSessionId,
+    actor: "user",
+    turnId: currentTurnId,
+  });
+  const currentRequest = store.appendUserMessage({
+    sessionId: canonicalSessionId,
+    turnId: currentTurnId,
+    text: "current-request-must-be-separate",
+    sourceGateway: "app",
+    sourceRef: "current-request-source",
+  });
+
+  const material = store.readPromptMaterial({ sessionId: canonicalSessionId, tailLimit: 200 });
+  const byButlerSource = compilePromptMaterialContextPlan(material, {
+    maxTokens: 1,
+    excludeSourceRef: "current-request-source",
+  });
+  const byStewardAnchor = compilePromptMaterialContextPlan(material, {
+    maxTokens: 1,
+    excludeTurnId: currentTurnId,
+    includeTools: false,
+  });
+
+  const expectedTurnIds = Array.from(
+    { length: 8 },
+    (_, offset) => `turn-history-${String(offset + 2).padStart(2, "0")}`,
+  );
+  expect(messageIds).toHaveLength(9);
+  expect(currentRequest.turn_id).toBe(currentTurnId);
+  expect(byButlerSource.required_turns.map((turn) => turn.turn_id)).toEqual(expectedTurnIds);
+  expect(byStewardAnchor.required_turns.map((turn) => turn.turn_id)).toEqual(expectedTurnIds);
+  expect(byButlerSource.required_turns).toHaveLength(8);
+  expect(byStewardAnchor.required_turns).toHaveLength(8);
+  expect(byButlerSource.rendered).not.toContain("current-request-must-be-separate");
+  expect(byStewardAnchor.rendered).not.toContain("current-request-must-be-separate");
 });

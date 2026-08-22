@@ -140,7 +140,7 @@ export async function executeGrepFilesTool(
   if (cursorInput !== undefined && (!cursor || cursor.tool !== "grep_files" || cursor.query !== query)) {
     return { ok: false, error: "invalid_cursor", message: "The grep_files cursor is malformed or does not match the current search options.", recovery_hint: "Restart grep_files with the same pattern/root/globs and omit cursor.", metrics: { elapsed_ms: Math.max(0, Date.now() - startedAt) }, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: "invalid_cursor" }) };
   }
-  const guard = await resolveWorkspacePathGuard({ workspaceRoot, relativePath: root, allowDirectories: true, requireDirectory: true, rejectProtectedProjectLedgerPaths: true, protectedProjectLedgerRoots: context.protectedProjectLedgerRoots });
+  const guard = await resolveWorkspacePathGuard({ workspaceRoot, relativePath: root, relativeOnly: context.allowedToolsAndEffects !== undefined, allowDirectories: true, requireDirectory: true, rejectProtectedProjectLedgerPaths: true, protectedProjectLedgerRoots: context.protectedProjectLedgerRoots });
   if (!guard.ok) {
     const error = guard.reason === "directory_not_allowed" || guard.reason === "not_a_directory" ? "not_a_directory" : guard.reason;
     const searchedRoot = root.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(root) || root.split(/[\\/]+/u).includes("..") ? "." : root;

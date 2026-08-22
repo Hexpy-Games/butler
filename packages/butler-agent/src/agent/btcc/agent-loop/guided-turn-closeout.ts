@@ -17,6 +17,7 @@ type GuidedTurnCloseoutInput = {
   trackingMode: "ledger" | "local" | "none";
   responseLanguage: string;
   originalRequest: string;
+  subsessionRoutingRequired?: boolean;
 };
 
 type GuidedTurnCloseoutReview =
@@ -53,9 +54,24 @@ export function isFreshCurrentDisposition(
 export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
   reviewFinalCandidate(candidate: { text: string }): Promise<GuidedTurnCloseoutReview>;
   reconcileAfterLoop(text: string): Promise<string>;
+  subsessionRoutingRepairRequired(): boolean;
 } {
+  let subsessionRoutingCorrectionIssued = false;
+  const hasSubsessionRoutingCall = () => input.toolJournal.list(input.turnId).some(
+    (record) => SUBSESSION_ROUTING_TOOLS.has(record.toolName),
+  );
   return {
     async reviewFinalCandidate(candidate) {
+      if (input.subsessionRoutingRequired && !hasSubsessionRoutingCall()) {
+        subsessionRoutingCorrectionIssued = true;
+        return {
+          status: "continue" as const,
+          observation: [
+            "This objective cannot finish as a direct Butler reply.",
+            "Call exactly one of delegate_to_steward, steer_steward, or cancel_steward now, using the current relation state and the user's complete objective.",
+          ].join(" "),
+        };
+      }
       if (input.trackingMode === "none") {
         return { status: "accepted" as const };
       }
@@ -94,8 +110,22 @@ export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
       }
       return settleOpen(input, bound, text);
     },
+
+    subsessionRoutingRepairRequired() {
+      return Boolean(
+        input.subsessionRoutingRequired &&
+        subsessionRoutingCorrectionIssued &&
+        !hasSubsessionRoutingCall(),
+      );
+    },
   };
 }
+
+const SUBSESSION_ROUTING_TOOLS = new Set([
+  "delegate_to_steward",
+  "steer_steward",
+  "cancel_steward",
+]);
 
 async function claimCloseoutCorrection(
   input: GuidedTurnCloseoutInput,

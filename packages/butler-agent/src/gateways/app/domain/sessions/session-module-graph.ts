@@ -15,6 +15,7 @@ import type { ButlerServiceClient } from "../../../core/client.ts";
 import { resolveProviderVisualCapability } from
   "../../../../integrations/providers/registry.ts";
 import type { SessionMessagePageOptions } from "./session-message-page.ts";
+import { sessionHintForRow } from "./session-read-model.ts";
 
 export interface AppSessionModuleGraph {
   messageFiles: AppMessageFileStore;
@@ -91,6 +92,12 @@ export function createAppSessionModuleGraph(input: {
     listProgressRowsForTurn: (turnId) => host.listProgressRowsForTurn(turnId),
     explicitDeliveryMetadataForTurn: (turnId) =>
       host.explicitDeliveryMetadataForTurn(turnId),
+    isPublicMessage: (sessionId, message) =>
+      message.role !== "user" ||
+      !host.stewardObserver.isParentResultInput(
+        sessionHintForRow(sessionId),
+        message.text,
+      ),
   });
   const turnProgressView = new AppTurnProgressViewStore({
     getTurnRow: (turnId) => host.getTurnRow(turnId),
@@ -127,9 +134,42 @@ export function createAppSessionModuleGraph(input: {
     defaultChatId,
     ensureChat: (chatId) => host.ensureChat(chatId),
     sessionHasActiveTurn: (chatId) => host.sessionHasActiveTurn(chatId),
-    createQueuedMessage: (queueInput, visualAdmission) =>
-      host.sessionQueue.createQueuedMessage(queueInput, visualAdmission),
+    createQueuedMessage: (queueInput, visualAdmission, controlResolution) =>
+      host.sessionQueue.createQueuedMessage(
+        queueInput,
+        visualAdmission,
+        controlResolution,
+      ),
+    findQueuedMessageByClientId: (chatId, clientMessageId) => {
+      const row = host.sessionQueue.getQueuedMessageByClientId(
+        chatId,
+        clientMessageId,
+      );
+      return row ? host.sessionQueue.queuedMessageFromRow(row) : null;
+    },
+    queuedControlsFromRow: (row) => host.queuedControlsFromRow(row),
+    controlResolutionFromRow: (row) =>
+      host.sessionQueue.controlResolutionFromRow(row),
+    messageFilesForQueuedRow: (row) => messageFiles.queuedRows(row),
+    dispatchQueuedSessionMessage: (chatId, queuedMessageId, responder, options) =>
+      host.dispatchQueuedSessionMessage(chatId, queuedMessageId, responder, options),
+    acknowledgeQueuedMessageForTurn: (input) =>
+      host.sessionQueue.acknowledgeForTurn(input),
+    assertQueuedMessageClaim: (chatId, queuedMessageId, claimId) =>
+      host.sessionQueue.assertQueuedMessageClaim(chatId, queuedMessageId, claimId),
+    fenceQueuedTurnClaim: (input) =>
+      host.sessionQueue.fenceQueuedTurnClaim(input),
+    recordDispatchResult: (chatId, queuedMessageId, claimId, result) =>
+      host.sessionQueue.recordDispatchResult(chatId, queuedMessageId, claimId, result),
+    runInTransaction: <T>(callback: () => T) => host.db.transaction(callback)(),
+    getTurn: (turnId) => host.getTurn(turnId),
+    messageRecordById: (messageId) => host.messageRecordById(messageId),
     listMessages: (chatId) => host.listMessages(chatId),
+    terminalResultMessageIdForTurn: (chatId, turnId) =>
+      host.listMessages(chatId).find(
+        (message: { role: string; turn_id?: string }) =>
+          message.role === "assistant" && message.turn_id === turnId,
+      )?.id,
     validateAttachable: (chatId, attachments) =>
       messageFiles.validateAttachable(chatId, attachments ?? []),
     admitVisualAttachments: async (files, model) =>
@@ -149,6 +189,11 @@ export function createAppSessionModuleGraph(input: {
     appendEvent: (type, payload) => {
       host.appendEvent(type, payload);
     },
+    isPublicUserMessage: (chatId, text) =>
+      !host.stewardObserver.isParentResultInput(
+        sessionHintForRow(chatId),
+        text,
+      ),
     appendTurnAcknowledgedEvent: (chatId, turnId) =>
       host.appendTurnAcknowledgedEvent(chatId, turnId),
     updateTurnState: (turnId, state, options) =>

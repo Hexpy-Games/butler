@@ -15,7 +15,7 @@ import { useComposerPresentation } from "./hooks/useComposerPresentation";
 import { useComposerFileDrop } from "./hooks/useComposerFileDrop";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
-import { GitDependencyNotice } from "./GitDependencyNotice";
+import { ComposerNotices } from "./ComposerNotices.tsx";
 
 interface ComposerProps {
   onReserveChange: (height: number) => void;
@@ -43,7 +43,6 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
   );
   const files = useFileAttachments(session.activeChatId);
   const fileDrop = useComposerFileDrop((nextFiles) => void files.addFiles(nextFiles));
-
   usePendingProjectDocumentAttachment({
     activeChatId: session.activeChatId,
     clearPendingProjectDocumentAttachment:
@@ -130,7 +129,9 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
       large={large}
       expanded={presentation.expanded}
       floating
-      notice={<GitDependencyNotice />}
+      notice={<ComposerNotices
+        summary={session.summary}
+      />}
       adjunct={
         showAdjunct ? (
           <ComposerAdjunctPanels

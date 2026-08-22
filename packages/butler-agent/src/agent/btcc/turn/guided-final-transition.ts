@@ -7,13 +7,16 @@ export function guidedFinalTransition(
   turn: TurnRecord,
   result: BtccAgentLoopResult,
 ) {
-  const content = result.content.trim() || operationalFailureMessage(turn.originalMessage);
+  const content = result.terminalOutcome === "no_visible"
+    ? ""
+    : result.content.trim() || operationalFailureMessage(turn.originalMessage);
   const finalPayloadBody = {
     turnId: turn.turnId,
     contentSha256: digest(content),
     route: result.route,
     disposition: "completed" as const,
     content,
+    ...(result.workStatus ? { workStatus: result.workStatus } : {}),
     ...(result.artifacts?.length ? { artifacts: result.artifacts } : {}),
     ...(result.modelIdentity ? { modelIdentity: result.modelIdentity } : {}),
   };

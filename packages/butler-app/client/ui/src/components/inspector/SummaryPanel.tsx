@@ -95,7 +95,7 @@ function workspaceValue(
     return "Session worktree unavailable";
   }
   if (branch.workspace_binding === "session_worktree") {
-    return `Linked worktree · ${branch.workspace_label?.trim() || "Session worktree"}`;
+    return "Session worktree";
   }
   if (branch.workspace_binding === "project") {
     return `Project · ${branch.workspace_label?.trim() || "Project workspace"}`;

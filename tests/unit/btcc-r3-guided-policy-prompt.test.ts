@@ -15,12 +15,21 @@ import {
   renderGuidedPrompt,
 } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-prompt.ts";
+import { guidedStewardInstructions } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-steward-instructions.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tool-definitions.ts";
 import { workScopeForTurn } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { appRuntimePolicy } from
   "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
+import { delegateToStewardToolDefinition } from
+  "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
+import {
+  normalizeSubsessionMutationScope,
+  normalizeSubsessionMutationScopeForEffects,
+} from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/scope.ts";
 
 test("R3 guided web_read keeps reader backend runtime-owned", () => {
   const webRead = guidedNativeToolDefinitions().find((tool) => tool.name === "web_read");
@@ -250,6 +259,142 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     .toBeLessThan(projectInstructions.indexOf("If useful, record a result Review or completion Validation"));
   expect(projectInstructions).not.toContain(
     "Do not attempt to mutate the Project Ledger",
+  );
+});
+
+test("SS-03B guided instructions define semantic delegation selection", () => {
+  const instructions = guidedInstructions(guidedPolicy(
+    turnRecord({ accessMode: "full_access", projectRef: "butler" }),
+  ));
+
+  expect(instructions).toContain(
+    "Select the path from the user's complete objective and constraints.",
+  );
+  expect(instructions).toContain(
+    "Keep simple conversation, stable knowledge, and one quick lookup in Butler.",
+  );
+  expect(instructions).toContain(
+    "Delegate bounded independent multi-step repository inspection, multi-source research or synthesis, persistent-artifact work, or execution-stage mutation with delegate_to_steward.",
+  );
+  expect(instructions).toContain(
+    "Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler.",
+  );
+  expect(instructions).toContain(
+    "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
+  );
+  expect(instructions).toContain(
+    "Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",
+  );
+  expect(instructions).toContain(
+    "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",
+  );
+});
+
+test("SS-03B delegation tool contract exposes canonical execution surfaces", () => {
+  const parameters = delegateToStewardToolDefinition.parameters as {
+    oneOf?: Array<{ properties?: Record<string, any> }>;
+  };
+  const variants = parameters.oneOf ?? [];
+  const readOnly = variants.find((variant) =>
+    variant.properties?.execution_mode?.const === "read_only",
+  );
+  const mutation = variants.find((variant) =>
+    variant.properties?.execution_mode?.const === "mutation",
+  );
+  const readOnlySurface = [
+    "grep_files:workspace",
+    "list_files:workspace",
+    "read_file:workspace",
+    "web_read:network",
+    "web_search:network",
+  ];
+
+  expect(delegateToStewardToolDefinition.description).toContain(
+    "For read_only, allowed_tools_and_effects is exactly the complete five-value array",
+  );
+  expect(delegateToStewardToolDefinition.description).toContain(
+    "Every mutation Steward can list, grep, read, apply admitted edit/write effects, and run bounded workspace validation",
+  );
+  expect(readOnly).toBeDefined();
+  expect(readOnly?.properties?.allowed_tools_and_effects).toMatchObject({
+    minItems: 5,
+    maxItems: 5,
+    uniqueItems: true,
+    items: { enum: readOnlySurface },
+  });
+  expect(readOnly?.properties?.mutation_scope).toMatchObject({ maxItems: 0 });
+  expect(mutation).toBeDefined();
+  expect(mutation?.properties?.allowed_tools_and_effects).toMatchObject({
+    minItems: 1,
+    items: { enum: ["edit_file:workspace", "run_command:workspace", "write_file:workspace"] },
+  });
+  expect(mutation?.properties?.mutation_scope).toMatchObject({ minItems: 0 });
+  expect(mutation?.properties?.mutation_scope?.items?.description).toContain(
+    "whole session worktree",
+  );
+  expect(normalizeSubsessionMutationScope(["."])).toEqual(["."]);
+  expect(normalizeSubsessionMutationScopeForEffects(
+    ["/Users/example/project"],
+    ["run_command:workspace"],
+  )).toEqual([]);
+  expect(normalizeSubsessionMutationScope(["src/**", "package.json", "src/**"]))
+    .toEqual(["package.json", "src/"]);
+  for (const rejected of ["**", "src/*.ts", "src/?", "src/[ab]"]) {
+    expect(() => normalizeSubsessionMutationScope([rejected])).toThrow(
+      "subsession_mutation_scope_wildcard_not_allowed",
+    );
+  }
+});
+
+test("Steward instructions keep ordinary BTCC memory, authority, and closeout", () => {
+  const commonCloseout =
+    "Use record_work_disposition as the sole Work closeout authority, exactly as an ordinary Butler BTCC Turn does. Reviews and completion Validation are optional quality records, never Steward-only completion gates.";
+  const readOnlyPlanContract =
+    "For read_only, every Plan action must omit the effect field entirely; reads and synthesis are evidence actions, never effects.";
+  const multiStepPlanContract =
+    "Use at least two truthful top-level Plan actions for this substantial delegated Work; do not collapse materially separate discovery, mutation, verification, or synthesis stages into one umbrella action.";
+  const common = {
+    relationId: "relation",
+    delegationId: "delegation",
+    taskId: "task",
+    mutationScope: [],
+    allowedToolsAndEffects: [
+      "grep_files:workspace",
+      "list_files:workspace",
+      "read_file:workspace",
+      "web_read:network",
+      "web_search:network",
+    ],
+  };
+
+  const readOnlyInstructions = guidedStewardInstructions({
+    subsession: { ...common, executionMode: "read_only" },
+  });
+  expect(readOnlyInstructions).toContain(commonCloseout);
+  expect(readOnlyInstructions).not.toContain("only then settle the child Work as completed");
+  expect(readOnlyInstructions).not.toContain("at least two material read operations");
+  expect(readOnlyInstructions).toContain(readOnlyPlanContract);
+  expect(readOnlyInstructions).toContain(multiStepPlanContract);
+  const mutationInstructions = guidedStewardInstructions({
+    subsession: {
+      ...common,
+      executionMode: "mutation",
+      mutationScope: ["bounded-result.txt"],
+      allowedToolsAndEffects: ["write_file:workspace"],
+    },
+  });
+  expect(mutationInstructions).toContain(commonCloseout);
+  expect(mutationInstructions).not.toContain("only then settle the child Work as completed");
+  expect(mutationInstructions).toContain(multiStepPlanContract);
+  expect(mutationInstructions).toContain(
+    "project Hot Cache, Project Memory, durable feedback and corrections",
+  );
+  expect(mutationInstructions).toContain(
+    "actively use recall_memory",
+  );
+  expect(mutationInstructions).toContain("same reviewed Plan and effect contract as Butler");
+  expect(mutationInstructions).not.toMatch(
+    /access conversation or memory tools|call MCP|mutate Project Ledger|omit effect from .*run_command/iu,
   );
 });
 

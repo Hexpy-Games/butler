@@ -63,6 +63,7 @@ interface ComposerStore {
   popoverThemeClass: string;
   isSending: boolean;
   activeTurn: boolean;
+  canStop: boolean;
   canSend: boolean;
   workers: WorkerActivitySummary[];
   submit: (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => void;
@@ -142,6 +143,7 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
   popoverThemeClass: "",
   isSending: false,
   activeTurn: false,
+  canStop: false,
   canSend: false,
   workers: [],
   submit: noopSubmit,
