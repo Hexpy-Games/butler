@@ -1056,11 +1056,15 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   openSession: (chatId) =>
     set((state) => {
       const sessionMessageViews = snapshotActiveSessionView(state);
+      const storedSessionView = state.sessionViews[chatId] ?? null;
+      const storedMessageView = storedSessionView
+        ? messageListViewFromSessionView(storedSessionView)
+        : null;
       const memoryView = sessionMessageViews[chatId];
       const cached =
         memoryView && messageListSyncCursor(memoryView) > 0
           ? memoryView
-          : readCachedMessageListSync(chatId);
+          : (storedMessageView ?? readCachedMessageListSync(chatId));
       const completeCached = cached && messageListSyncCursor(cached) > 0;
       const turnProgress = cached?.turn_progress ?? {};
       const nextSessionMessageViews = completeCached
@@ -1075,8 +1079,10 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         view: { kind: "session" },
         selectedArtifactId: null,
         selectedArtifact: null,
-        summary: null,
-        sessionView: null,
+        summary: storedSessionView
+          ? summaryFromSessionView(storedSessionView)
+          : null,
+        sessionView: storedSessionView,
         sessionQueue: [],
         messages: completeCached
           ? freezeMessageWorkBlocks(cached.messages, turnProgress)
@@ -1084,7 +1090,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         turnProgress: completeCached ? turnProgress : {},
         sessionMessageViews: nextSessionMessageViews,
         messageLoadPending:
-          isServerBackedSessionId(chatId) && !completeCached,
+          isServerBackedSessionId(chatId) &&
+          !completeCached &&
+          !storedSessionView,
         status: state.status,
       };
     }),

@@ -13,7 +13,10 @@ import {
 import { completePacketContext } from "./terminal-results.ts";
 import { renderDelegatedParentConversationContext } from "./parent-conversation-context.ts";
 import { renderStewardInput } from "./steward-input.ts";
-import { inheritedStewardRuntimePolicy } from "./runtime-policy.ts";
+import {
+  inheritedStewardRuntimePolicy,
+  stewardRootWorkScope,
+} from "./runtime-policy.ts";
 import { createSubsessionControlService } from "./control.ts";
 import type {
   CreatedDelegation,
@@ -49,6 +52,11 @@ export function createSubsessionDelegationService(
       });
       throw new Error("delegation_context_incomplete");
     }
+    const childBinding = input.sessionBindings.getBySessionId(child.childSessionId);
+    if (!childBinding || childBinding.role !== "steward") {
+      throw new Error("subsession_child_binding_missing");
+    }
+    const rootWorkScope = stewardRootWorkScope(childBinding);
     const existing = await input.durableWork.boundWorkForTurn(child.childTurnId);
     if (existing) {
       if (existing.workId !== expectedRootWorkId || existing.sessionId !== child.childSessionId) {
@@ -59,6 +67,7 @@ export function createSubsessionDelegationService(
     const work = await input.durableWork.startWork({
       sessionId: child.childSessionId,
       turnId: child.childTurnId,
+      ...rootWorkScope,
       mutationCallId: `subsession-root-work:${packet.delegation_id}:${packet.task_id}:${child.childSessionId}`,
       objective: child.objective,
     });

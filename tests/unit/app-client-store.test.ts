@@ -2587,6 +2587,117 @@ test("openSession restores an already opened session from in-memory view", () =>
   ).toBe("Bash: cached in memory");
 });
 
+test("openSession immediately restores active Steward state from the keyed SessionView", () => {
+  const parentView = sessionView("session-a", {
+    messages: [
+      messageRecord("user-a", "session-a", "user", "deploy again", 1),
+      messageRecord(
+        "assistant-a",
+        "session-a",
+        "assistant",
+        "I delegated the deployment.",
+        2,
+        "parent-turn",
+      ),
+    ],
+  });
+  const childTurn = {
+    id: "child-turn",
+    state: "thinking",
+    safe_status_label: "Deploying the service",
+    cancellable: true,
+    retryable: false,
+    progress: {
+      turn_id: "child-turn",
+      state: "thinking",
+      safe_progress_rows: [
+        {
+          id: "child-row",
+          kind: "activity",
+          state: "thinking",
+          safe_label: "Restarting the service",
+        },
+      ],
+    },
+    created_at: "2026-05-05T00:00:01.000Z",
+    updated_at: "2026-05-05T00:00:02.000Z",
+  };
+  parentView.steward_children = [{
+    relation: {
+      relation_id: "relation-a",
+      parent_session_id: "session-a",
+      parent_turn_id: "parent-turn",
+      child_session_id: "steward-a",
+      anchor_message_id: "user-a",
+      ordinal: 1,
+      safe_title: "Pi deployment retry",
+      created_at: "2026-05-05T00:00:01.000Z",
+    },
+    session_id: "steward-a",
+    title: "Pi deployment retry",
+    status: "active",
+    active_turn: childTurn,
+    latest_turn: childTurn,
+    activity_rows: childTurn.progress.safe_progress_rows,
+    approved_plan_total: 3,
+    approved_plan_completed: 1,
+    artifacts: [],
+    result: null,
+    updated_at: "2026-05-05T00:00:02.000Z",
+    terminal: false,
+  }];
+
+  useButlerStore.setState({ activeChatId: "session-a" });
+  useButlerStore.getState().setSessionView(parentView);
+  useButlerStore.getState().openSession("session-b");
+  useButlerStore.getState().openSession("session-a");
+
+  const restored = useButlerStore.getState();
+  expect(restored.sessionView).toBe(restored.sessionViews["session-a"]);
+  expect(restored.summary?.steward_children?.[0]?.session_id).toBe(
+    "steward-a",
+  );
+  expect(restored.summary?.steward_children?.[0]?.active_turn?.id).toBe(
+    "child-turn",
+  );
+  expect(restored.messages.map((message) => message.id)).toEqual([
+    "user-a",
+    "assistant-a",
+  ]);
+  expect(restored.messageLoadPending).toBe(false);
+});
+
+test("cancelObservedSteward uses the Electron bridge with the exact relation and parent session", async () => {
+  const parentSessionId = "project-parent-session";
+  const calls: unknown[] = [];
+  const view = sessionView(parentSessionId);
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      location: { origin: "http://butler.local" },
+      butlerApp: {
+        cancelSteward: async (input: unknown) => {
+          calls.push(input);
+          return { relation_id: "relation-a", status: "cancelling" };
+        },
+        getSessionView: async () => ({ ok: true, data: view }),
+      },
+    },
+    writable: true,
+  });
+  useButlerStore.setState({
+    activeChatId: parentSessionId,
+    observerSessionId: null,
+  });
+
+  expect(await useButlerStore.getState().cancelObservedSteward("relation-a"))
+    .toBe(true);
+  expect(calls).toEqual([{
+    relationId: "relation-a",
+    parentSessionId,
+  }]);
+});
+
 test("openSession restores a server-loaded session before debounce cache writes", () => {
   useButlerStore.setState({
     activeChatId: "session-a",
