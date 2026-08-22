@@ -547,6 +547,16 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       parentSessionId: body.parent_session_id,
     });
   }
+  const stewardResumeMatch = method === "POST"
+    ? url.pathname.match(/^\/steward-relations\/([^/]+)\/resume$/)
+    : null;
+  if (stewardResumeMatch) {
+    const body = parseBody(options.body);
+    return await callBridge<T>(bridge, "resumeSteward", {
+      relationId: decodeURIComponent(stewardResumeMatch[1]!),
+      parentSessionId: body.parent_session_id,
+    });
+  }
   const operationOutputMatch = method === "GET"
     ? url.pathname.match(/^\/turns\/([^/]+)\/operations\/([^/]+)\/output$/u)
     : null;

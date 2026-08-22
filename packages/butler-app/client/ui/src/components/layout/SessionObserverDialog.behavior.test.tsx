@@ -11,6 +11,7 @@ let root: Root | undefined;
 const initialObserverSessionId = useButlerStore.getState().observerSessionId;
 const initialSessionViews = useButlerStore.getState().sessionViews;
 const initialCancelObservedSteward = useButlerStore.getState().cancelObservedSteward;
+const initialResumeObservedSteward = useButlerStore.getState().resumeObservedSteward;
 
 afterEach(async () => {
   if (root) await act(async () => root?.unmount());
@@ -19,6 +20,7 @@ afterEach(async () => {
     observerSessionId: initialObserverSessionId,
     sessionViews: initialSessionViews,
     cancelObservedSteward: initialCancelObservedSteward,
+    resumeObservedSteward: initialResumeObservedSteward,
   });
   delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: unknown })
     .IS_REACT_ACT_ENVIRONMENT;
@@ -85,11 +87,16 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
   if (!(container instanceof window.HTMLElement)) throw new Error("Missing root.");
   const sessionId = "steward-observer-behavior";
   const cancelledRelations: string[] = [];
+  const resumedRelations: string[] = [];
   useButlerStore.setState({
     observerSessionId: sessionId,
     sessionViews: { [sessionId]: observerView(sessionId) },
     cancelObservedSteward: async (relationId) => {
       cancelledRelations.push(relationId);
+      return true;
+    },
+    resumeObservedSteward: async (relationId) => {
+      resumedRelations.push(relationId);
       return true;
     },
   });
@@ -115,6 +122,21 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
   expect(stopButton).toBeDefined();
   await act(async () => stopButton?.click());
   expect(cancelledRelations).toEqual(["observer-relation"]);
+
+  await act(async () => {
+    useButlerStore.setState({
+      sessionViews: { [sessionId]: recoverableObserverView(sessionId) },
+    });
+  });
+  const resumeButton = Array.from(dialog.querySelectorAll("button")).find((button) =>
+    /이어서 진행|resume/iu.test(button.textContent ?? ""),
+  );
+  expect(resumeButton).toBeDefined();
+  expect(Array.from(dialog.querySelectorAll("button")).some((button) =>
+    /중지|stop/iu.test(button.textContent ?? ""),
+  )).toBe(false);
+  await act(async () => resumeButton?.click());
+  expect(resumedRelations).toEqual(["observer-relation"]);
 
   await act(async () => {
     dialog.dispatchEvent(new window.KeyboardEvent("keydown", {
@@ -168,5 +190,20 @@ function observerView(sessionId: string): SessionView {
     },
     generated_at: "2026-08-19T00:01:00.000Z",
     updated_at: "2026-08-19T00:01:00.000Z",
+  };
+}
+
+function recoverableObserverView(sessionId: string): SessionView {
+  const view = observerView(sessionId);
+  return {
+    ...view,
+    status: "failed",
+    active_turn: null,
+    latest_turn: {
+      ...view.active_turn!,
+      state: "runtime_fault",
+      cancellable: false,
+      retryable: true,
+    },
   };
 }

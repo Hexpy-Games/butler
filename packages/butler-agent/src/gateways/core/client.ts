@@ -2,8 +2,10 @@ import type { InboundEnvelope } from "./contracts.ts";
 import {
   createAppCancellationEnvelope,
   createAppInboundEnvelope,
+  createAppResumeEnvelope,
   type AppCancellationInput,
   type AppInboundInput,
+  type AppResumeInput,
 } from "./app-transport.ts";
 import { NativeInboundQueue, type QueuedInboundEvent } from "./inbound-queue.ts";
 
@@ -23,6 +25,10 @@ export interface ButlerServiceClient {
     input: AppCancellationInput,
     metadata?: Record<string, unknown>,
   ): QueuedInboundEvent;
+  enqueueAppResume(
+    input: AppResumeInput,
+    metadata?: Record<string, unknown>,
+  ): QueuedInboundEvent;
 }
 
 export interface FileQueueButlerServiceClientOptions {
@@ -40,6 +46,10 @@ export class FileQueueButlerServiceClient implements ButlerServiceClient {
     return this.queue.findIdempotent(createAppInboundEnvelope(input));
   }
 
+  hasPendingEvent(eventId: string): boolean {
+    return this.queue.hasPendingOrProcessingEvent(eventId);
+  }
+
   enqueueAppTurn(
     input: AppInboundInput,
     metadata: Record<string, unknown> = {},
@@ -52,6 +62,13 @@ export class FileQueueButlerServiceClient implements ButlerServiceClient {
     metadata: Record<string, unknown> = {},
   ): QueuedInboundEvent {
     return this.queue.enqueueIdempotent(createAppCancellationEnvelope(input), metadata);
+  }
+
+  enqueueAppResume(
+    input: AppResumeInput,
+    metadata: Record<string, unknown> = {},
+  ): QueuedInboundEvent {
+    return this.queue.enqueueIdempotent(createAppResumeEnvelope(input), metadata);
   }
 }
 

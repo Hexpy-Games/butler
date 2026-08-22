@@ -36,7 +36,7 @@ import {
 } from "./support/fake-btcc-gateway-runtime.ts";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/contracts.ts";
-import { createAppCancellationEnvelope } from
+import { createAppCancellationEnvelope, createAppResumeEnvelope } from
   "../../packages/butler-agent/src/gateways/core/app-transport.ts";
 import type { Btcc } from
   "../../packages/butler-agent/src/agent/btcc/contracts.ts";
@@ -85,6 +85,52 @@ test("typed cancellation invokes only BTCC stop and returns a durable ack", asyn
       outcome: "cancelled",
     },
   });
+});
+
+test("typed resume re-enters the exact admitted BTCC request identity", async () => {
+  const requests: Parameters<Btcc["runTurn"]>[0][] = [];
+  const btcc: Btcc = {
+    runTurn: async (request) => {
+      requests.push(request);
+      return {
+        kind: "delivered",
+        turnId: request.turnId,
+        messageId: "assistant-resumed",
+        content: "resumed",
+      };
+    },
+    stopTurn: async ({ turnId }) => ({ kind: "already_cancelled", turnId }),
+  };
+  const result = await createBtccGatewayHandlers({ btcc }).steward!({
+    route: {
+      sessionId: "steward/resume",
+      role: "steward",
+      reason: "steward-hint",
+      workspacePath: process.cwd(),
+    },
+    envelope: createAppResumeEnvelope({
+      chatId: "steward/resume",
+      sessionId: "steward/resume",
+      turnId: "turn-resume",
+      requestId: "resume-request",
+      requestedAt: "2026-08-22T00:00:00.000Z",
+      originalEventId: "app:steward-original",
+      originalMessageId: "steward-message:original",
+      originalMessage: "original private delegated input",
+    }),
+  });
+
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({
+    turnId: "turn-resume",
+    eventId: "app:steward-original",
+    sessionId: "steward/resume",
+    message: {
+      id: "steward-message:original",
+      content: "original private delegated input",
+    },
+  });
+  expect(result.handledBy).toBe("btcc/turn-resume");
 });
 
 test("BTCC facade commits each Turn and gives the next Turn recent conversation", async () => {
@@ -509,7 +555,19 @@ test("a durable replay resumes frozen facts despite current binding and conversa
       metadata: { accessMode: "read_only", reasoning_effort: "none" },
     });
 
-    const replay = await handlers.butler!({ envelope: input, route });
+    const replay = await handlers.butler!({
+      envelope: createAppResumeEnvelope({
+        chatId: binding.sessionId,
+        sessionId: binding.sessionId,
+        turnId: "turn-frozen",
+        requestId: "resume-frozen",
+        requestedAt: "2026-08-03T00:02:00.000Z",
+        originalEventId: input.eventId,
+        originalMessageId: input.message.id,
+        originalMessage: input.message.text!,
+      }),
+      route,
+    });
     expect(replay.metadata?.text).toBe("stored answer");
     expect(runtime.commands.map((command) => command.kind)).toEqual(["run", "resume"]);
     expect(runtime.modelCalls).toBe(1);

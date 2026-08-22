@@ -615,6 +615,9 @@ test("a stale App handoff cannot terminalize a replacement claim", async () => {
     enqueueAppCancellation(input, metadata) {
       return delegate.enqueueAppCancellation(input, metadata);
     },
+    enqueueAppResume(input, metadata) {
+      return delegate.enqueueAppResume(input, metadata);
+    },
   };
   const server = createTestAppServer({
     dbPath,
@@ -751,6 +754,9 @@ test("a post-enqueue exception keeps the durable Native event recoverable", asyn
     },
     enqueueAppCancellation(input, metadata) {
       return delegate.enqueueAppCancellation(input, metadata);
+    },
+    enqueueAppResume(input, metadata) {
+      return delegate.enqueueAppResume(input, metadata);
     },
   };
   let server: ReturnType<typeof createTestAppServer> | undefined = createTestAppServer({

@@ -201,6 +201,13 @@ export class NativeInboundQueue {
     return canonical;
   }
 
+  hasPendingOrProcessingEvent(eventId: string): boolean {
+    const queueId = `idempotent-${safeQueueId(eventId)}`;
+    return (["pending", "processing"] as const).some((state) =>
+      existsSync(join(this.dir(state), `${queueId}.json`)),
+    );
+  }
+
   private enqueueClaimReconciliation(
     envelope: InboundEnvelope,
     canonicalEventId: string,

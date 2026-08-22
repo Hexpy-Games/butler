@@ -15,6 +15,10 @@ export interface StewardObserverTurn {
   state: string;
   created_at: string;
   updated_at: string;
+  recovery?: {
+    state: "live" | "recoverable" | "unknown";
+    recovery_id?: string;
+  };
 }
 
 export interface StewardObserverMessage {
@@ -83,6 +87,14 @@ export interface StewardObserverReader {
   relationForChild(sessionId: string): StewardObserverRelation | null;
   isParentResultInput(sessionId: string, text: string): boolean;
   snapshot(sessionId: string): StewardObserverSnapshot | null;
+  recoverableTurns(): Array<{
+    relation: StewardObserverRelation;
+    turn_id: string;
+    recovery_id: string;
+    original_event_id: string;
+    original_message_id: string;
+    original_message: string;
+  }>;
   readOperationOutputChunks(input: {
     turnId: string;
     requestId: string;
@@ -148,6 +160,27 @@ function projectStewardTurn(
   activityRows: ProgressSummaryRow[],
 ): SessionViewTurn | null {
   if (!turn) return null;
+  if (turn.recovery?.state === "recoverable") {
+    return {
+      id: turn.id,
+      state: "runtime_fault",
+      delivery_state: "failed_system",
+      limitations: [],
+      limitation_codes: [],
+      safe_status_label: "작업이 중단되었습니다. 이어서 진행할 수 있습니다.",
+      cancellable: false,
+      retryable: true,
+      progress: {
+        summary: "작업이 중단되었습니다. 이어서 진행할 수 있습니다.",
+        updated_at: turn.updated_at,
+        turn_id: turn.id,
+        state: "runtime_fault",
+        safe_progress_rows: activityRows,
+      },
+      created_at: turn.created_at,
+      updated_at: turn.updated_at,
+    };
+  }
   const state = observerTurnState(turn.state);
   const terminal = ["delivered", "failed", "cancelled"].includes(state);
   const progressState = terminal ? state : state === "accepted" ? "accepted" : "thinking";
@@ -213,12 +246,16 @@ export function projectStewardSession(
       approvedPlan.action_progress.find((item) => item.action_key === action.action_key)?.status ?? "pending",
     )
     : [];
-  const activeTurn = latestTurn && !snapshot.result && !isTerminalObserverState(latestTurn.state)
+  const recoverable = latestTurn?.recovery?.state === "recoverable";
+  const activeTurn = latestTurn && !snapshot.result && !recoverable &&
+    !isTerminalObserverState(latestTurn.state)
     ? projectStewardTurn(latestTurn, activityRows)
     : null;
   const latestTurnView = projectStewardTurn(latestTurn, activityRows);
   const status = snapshot.result
     ? observerResultStatus(snapshot.result.status)
+    : recoverable
+      ? "failed"
     : observerSessionStatus(latestTurn?.state);
   return {
     relation,
@@ -252,7 +289,7 @@ export function projectStewardSession(
       : [],
     result: snapshot.result,
     updated_at: snapshot.updated_at,
-    terminal: !activeTurn,
+    terminal: Boolean(snapshot.result) || isTerminalObserverState(latestTurn?.state ?? ""),
   };
 }
 

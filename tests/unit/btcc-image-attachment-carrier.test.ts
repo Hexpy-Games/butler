@@ -498,6 +498,9 @@ test("carries a supported visual tuple from upload through both queues to the na
     enqueueAppCancellation() {
       throw new Error("cancellation is not expected in this fixture");
     },
+    enqueueAppResume() {
+      throw new Error("resume is not expected in this fixture");
+    },
     enqueueAppTurn(input) {
       transportInputs.push({ attachments: input.attachments });
       return {

@@ -60,10 +60,11 @@ export function openBtccSqliteStores(input: {
   migrateBtccSchema(db);
   const legacyCutover = cutoverLegacyBtccTurns(db);
 
+  const processLiveness = input.processLiveness ?? new LocalProcessLiveness();
   const owner = new SqliteRuntimeOwnerRegistry(
     db,
     input.runtimeOwnerIdentity ?? currentRuntimeOwnerIdentity(input.ownerId),
-    input.processLiveness ?? new LocalProcessLiveness(),
+    processLiveness,
   );
   const turns = new SqliteGuidedTurnStateRepository(db, owner);
   const sqliteWriteReadiness = createSqliteWriteReadiness(input.dbPath);
@@ -93,6 +94,7 @@ export function openBtccSqliteStores(input: {
     durableWork,
     subsessionStore,
     authority,
+    stewardObserver: new SqliteStewardObserverStore(db, processLiveness),
     legacyCutover,
     committedSuccessorReadiness: sqliteWriteReadiness,
     close: () => {

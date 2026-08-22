@@ -15,3 +15,10 @@ export function subsessionResultId(childSessionId: string, childTurnId: string):
 export function subsessionChildTurnId(relationId: string): string {
   return `steward-turn-${digest(`btcc.subsession.child-turn.v1\0${relationId}`).slice(0, 32)}`;
 }
+
+export function stewardResumeRequestId(
+  relationId: string,
+  recoveryId: string,
+): string {
+  return `app-steward-resume:${relationId}:${recoveryId}`;
+}

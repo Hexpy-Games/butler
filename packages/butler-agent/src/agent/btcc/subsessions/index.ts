@@ -4,7 +4,11 @@ export {
 export { createAppParentInputSink } from "./app-parent-input-sink.ts";
 export { subsessionParentResultRefs } from "./accepted-terminal-report.ts";
 export { ensureSubsessionChildRootWork, stewardSafeBoundary, subsessionToolInput } from "./agent-hook.ts";
-export { subsessionResultId, subsessionRootWorkId } from "./identities.ts";
+export {
+  stewardResumeRequestId,
+  subsessionResultId,
+  subsessionRootWorkId,
+} from "./identities.ts";
 export {
   normalizeSubsessionAllowedToolsAndEffects,
   normalizeSubsessionMutationScope,

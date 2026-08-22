@@ -691,6 +691,9 @@ function queueClient(): ButlerServiceClient {
     enqueueAppCancellation() {
       throw new Error("unexpected cancellation");
     },
+    enqueueAppResume() {
+      throw new Error("unexpected resume");
+    },
     enqueueAppTurn(input, metadata = {}) {
       return {
         version: 1,
