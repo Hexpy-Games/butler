@@ -209,7 +209,7 @@ export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRep
   recordOutcome(input: {
     requestRef: string;
     sourceWorkId: string;
-    status: "applied" | "failed";
+    status: "applied" | "failed" | "uncertain";
     receiptJson?: string;
     now: string;
   }): AuthorityRecord | null {

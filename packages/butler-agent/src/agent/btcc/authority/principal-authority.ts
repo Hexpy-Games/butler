@@ -13,6 +13,7 @@ import {
   admissionResult,
   authorityProjection,
 } from "./admission-projection.ts";
+import { parseAuthorityOutcomeReceipt } from "./outcome-receipt.ts";
 
 const ALLOW_SCHEDULE_INPUT_TEXT = "Continue the approved operation exactly once.";
 const MAX_ALTERNATIVE_INPUT_BYTES = 16 * 1024;
@@ -164,6 +165,12 @@ export function createPrincipalAuthority(
       } catch {
         throw new AuthorityRequestError("authority_request_corrupt");
       }
+      const outcomeReceipt = record.outcomeReceiptJson === null
+        ? undefined
+        : parseAuthorityOutcomeReceipt(record.outcomeReceiptJson);
+      if (record.outcomeReceiptJson !== null && !outcomeReceipt) {
+        throw new AuthorityRequestError("authority_request_corrupt");
+      }
       return {
         requestRef: record.requestRef,
         sourceSessionId: record.sourceSessionId,
@@ -181,6 +188,7 @@ export function createPrincipalAuthority(
           ? { alternativeInput: record.privateAlternativeInput }
           : {}),
         outcome: record.outcome,
+        ...(outcomeReceipt ? { outcomeReceipt } : {}),
       };
     },
 

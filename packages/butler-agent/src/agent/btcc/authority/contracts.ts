@@ -1,6 +1,8 @@
+import type { GuidedEffectError } from "../effects/index.ts";
+
 export type AuthorityCategory = "command";
 export type AuthorityDecision = "pending" | "allowed" | "denied" | "modified";
-export type AuthorityOutcome = "pending" | "applied" | "failed";
+export type AuthorityOutcome = "pending" | "applied" | "failed" | "uncertain";
 export type AuthorityDecisionAction = "allow" | "deny" | "modify";
 
 /** Fixed safe projection for a terminal self-session Deny decision. */
@@ -76,6 +78,27 @@ export type AuthorityDecisionResult = {
   decision: Exclude<AuthorityDecision, "pending">;
 };
 
+/**
+ * Bounded, opaque receipt for a terminal authority outcome.
+ * Carries only reconciliation pointers; never command, input, output, or path data.
+ */
+export type AuthorityOutcomeReceipt =
+  | {
+      schema: "butler.authority-outcome-receipt.v1";
+      outcome: "applied";
+      evidenceRef: string;
+      journalEffectId: string;
+      dispatchAttempt: number;
+    }
+  | {
+      schema: "butler.authority-outcome-receipt.v1";
+      outcome: "uncertain";
+      evidenceRef: string;
+      journalEffectId: string;
+      dispatchAttempt: number;
+      errorCode: GuidedEffectError["code"];
+    };
+
 export type AuthorityStoredExecution = {
   requestRef: string;
   sourceSessionId: string;
@@ -91,15 +114,31 @@ export type AuthorityStoredExecution = {
   decision: "allowed" | "denied" | "modified";
   alternativeInput?: string;
   outcome: AuthorityOutcome;
+  outcomeReceipt?: AuthorityOutcomeReceipt;
 };
 
-export type AuthorityOutcomeInput = {
-  requestRef: string;
-  ownerSessionId: string;
-  sourceWorkId: string;
-  status: "applied" | "failed";
-  receipt?: unknown;
-};
+export type AuthorityOutcomeInput =
+  | {
+      requestRef: string;
+      ownerSessionId: string;
+      sourceWorkId: string;
+      status: "applied";
+      receipt: Extract<AuthorityOutcomeReceipt, { outcome: "applied" }>;
+    }
+  | {
+      requestRef: string;
+      ownerSessionId: string;
+      sourceWorkId: string;
+      status: "uncertain";
+      receipt: Extract<AuthorityOutcomeReceipt, { outcome: "uncertain" }>;
+    }
+  | {
+      requestRef: string;
+      ownerSessionId: string;
+      sourceWorkId: string;
+      status: "failed";
+      receipt?: never;
+    };
 
 export interface PrincipalAuthorityRepository {
   findByIdentity(identitySha256: string): AuthorityRecord | null;
@@ -129,7 +168,7 @@ export interface PrincipalAuthorityRepository {
   recordOutcome(input: {
     requestRef: string;
     sourceWorkId: string;
-    status: "applied" | "failed";
+    status: "applied" | "failed" | "uncertain";
     receiptJson?: string;
     now: string;
   }): AuthorityRecord | null;

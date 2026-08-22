@@ -15,15 +15,20 @@ import {
   effectError,
   errorMessage,
   failed,
-  journalConflict,
   reconciliationError,
   rejected,
   uncertain,
+  uncertainEvidenceFromRecord,
 } from "./effect-outcomes.ts";
 import {
   recordAppliedEffect,
-  replayAppliedEffect,
 } from "./effect-receipt.ts";
+import {
+  replayAppliedEffect,
+  resolveJournalConflict,
+  sameIdentityCore,
+  storedUncertainOutcome,
+} from "./effect-journal-conflict.ts";
 import { resolveReviewedEffect } from "./resolve-reviewed-effect.ts";
 import { reconcileWorkEffectBlockers } from
   "./reconcile-work-effect-blockers.ts";
@@ -45,7 +50,12 @@ export function createGuidedEffectService(
       input: ExecuteGuidedEffectInput<TNormalizedInput, TResult>,
     ): Promise<GuidedEffectOutcome<TResult>> {
       const denied = dispatchPermission(input);
-      if (denied) return rejected(denied);
+      if (denied) {
+        if (!input.signal.aborted) return rejected(denied);
+        const replay = await storedUncertainReplay<TNormalizedInput, TResult>(input, journal);
+        if (replay) return replay;
+        return rejected(denied);
+      }
       const resolved = resolveReviewedEffect(input);
       if (!resolved.ok) return rejected(resolved.error);
 
@@ -73,6 +83,9 @@ export function createGuidedEffectService(
       if (prepared.created) await faultHook("after_intent", identity);
       if (prepared.record.status === "applied") {
         return replayAppliedEffect<TResult>(prepared.record);
+      }
+      if (prepared.record.status === "uncertain") {
+        return storedUncertainOutcome<TResult>(prepared.record);
       }
 
       const context = {
@@ -121,7 +134,7 @@ async function continueEffect<TNormalizedInput, TResult>(
   }
   if (context.input.signal.aborted) return cancelled();
 
-  if (initial.status === "dispatching" || initial.status === "uncertain") {
+  if (initial.status === "dispatching") {
     return reconcileEffect(context, initial);
   }
   if (initial.status === "prepared" && initial.dispatchAttempts === 0) {
@@ -152,12 +165,17 @@ async function reconcileEffect<TNormalizedInput, TResult>(
       "effect_reconciliation_required",
       errorMessage(error, "The effect could not be reconciled safely."),
     );
-    await context.journal.recordUncertain(
+    const recorded = await context.journal.recordUncertain(
       current.effectId,
       current.journalRevision,
       diagnostic,
     );
-    return uncertain(diagnostic);
+    return recorded
+      ? uncertain(diagnostic, uncertainEvidenceFromRecord(recorded))
+      : await resolveJournalConflict({
+        journal: context.journal,
+        identity: context.identity,
+      });
   }
   if (reconciliation.status === "applied") {
     return recordAppliedEffect({
@@ -176,7 +194,12 @@ async function reconcileEffect<TNormalizedInput, TResult>(
       current.journalRevision,
       diagnostic,
     );
-    return recorded ? uncertain(diagnostic) : journalConflict();
+    return recorded
+      ? uncertain(diagnostic, uncertainEvidenceFromRecord(recorded))
+      : await resolveJournalConflict({
+        journal: context.journal,
+        identity: context.identity,
+      });
   }
   return dispatchEffect(context, current);
 }
@@ -192,7 +215,12 @@ async function dispatchEffect<TNormalizedInput, TResult>(
     current.effectId,
     current.journalRevision,
   );
-  if (!claimed) return journalConflict();
+  if (!claimed) {
+    return await resolveJournalConflict({
+      journal: context.journal,
+      identity: context.identity,
+    });
+  }
   await context.faultHook("after_dispatch_marker", context.identity);
 
   const finalDenial = dispatchPermission(context.input);
@@ -201,7 +229,12 @@ async function dispatchEffect<TNormalizedInput, TResult>(
       claimed.effectId,
       claimed.journalRevision,
     );
-    return restored ? rejected(finalDenial) : journalConflict();
+    return restored
+      ? rejected(finalDenial)
+      : await resolveJournalConflict({
+        journal: context.journal,
+        identity: context.identity,
+      });
   }
 
   let dispatched;
@@ -222,7 +255,12 @@ async function dispatchEffect<TNormalizedInput, TResult>(
       claimed.journalRevision,
       diagnostic,
     );
-    return recorded ? uncertain(diagnostic) : journalConflict();
+    return recorded
+      ? uncertain(diagnostic, uncertainEvidenceFromRecord(recorded))
+      : await resolveJournalConflict({
+        journal: context.journal,
+        identity: context.identity,
+      });
   }
 
   if (dispatched.status === "not_applied") {
@@ -232,7 +270,12 @@ async function dispatchEffect<TNormalizedInput, TResult>(
       claimed.journalRevision,
       diagnostic,
     );
-    return recorded ? failed(diagnostic) : journalConflict();
+    return recorded
+      ? failed(diagnostic)
+      : await resolveJournalConflict({
+        journal: context.journal,
+        identity: context.identity,
+      });
   }
   if (dispatched.status === "uncertain") {
     const diagnostic = reconciliationError(dispatched.error);
@@ -241,7 +284,12 @@ async function dispatchEffect<TNormalizedInput, TResult>(
       claimed.journalRevision,
       diagnostic,
     );
-    return recorded ? uncertain(diagnostic) : journalConflict();
+    return recorded
+      ? uncertain(diagnostic, uncertainEvidenceFromRecord(recorded))
+      : await resolveJournalConflict({
+        journal: context.journal,
+        identity: context.identity,
+      });
   }
 
   await context.faultHook("after_dispatch", context.identity);
@@ -253,4 +301,22 @@ async function dispatchEffect<TNormalizedInput, TResult>(
     now: context.now,
     faultHook: context.faultHook,
   });
+}
+
+async function storedUncertainReplay<TNormalizedInput, TResult>(
+  input: ExecuteGuidedEffectInput<TNormalizedInput, TResult>,
+  journal: GuidedEffectJournal,
+): Promise<GuidedEffectOutcome<TResult> | null> {
+  const resolved = resolveReviewedEffect(input);
+  if (!resolved.ok) return null;
+  let identity: GuidedEffectIdentity;
+  try {
+    identity = createGuidedEffectIdentity(resolved.value);
+  } catch {
+    return null;
+  }
+  const stored = await journal.find(identity.effectId);
+  if (!stored || stored.status !== "uncertain") return null;
+  if (!sameIdentityCore(stored, identity)) return null;
+  return storedUncertainOutcome<TResult>(stored);
 }
