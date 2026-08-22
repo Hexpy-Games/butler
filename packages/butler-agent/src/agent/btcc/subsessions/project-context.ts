@@ -22,13 +22,20 @@ export async function snapshotDelegationProjectContext(input: {
 }): Promise<DelegationProjectContextSnapshot | undefined> {
   const projectId = input.projectId?.trim();
   if (!projectId) return undefined;
-  const requiredSourceIds: ProjectContextSourceId[] = ["project-hot-cache"];
   const parentTurn = await input.turns.findTurn(input.parentTurnId).catch(() => null);
   if (!parentTurn || parentTurn.sessionId !== input.parentSessionId ||
       parentTurn.context.projectRef !== projectId ||
       parentTurn.context.executionPolicy?.projectId !== projectId) {
-    return incompleteSnapshot(projectId, requiredSourceIds, requiredSourceIds);
+    return incompleteSnapshot(
+      projectId,
+      ["project-hot-cache"],
+      ["project-hot-cache"],
+    );
   }
+  const requiredSourceIds: ProjectContextSourceId[] =
+    parentTurn.context.mandatoryHotCacheRefs.length > 0
+      ? ["project-hot-cache"]
+      : [];
 
   const selected = new Map<ProjectContextSourceId, DelegationProjectContextRef>();
   const candidates = [
