@@ -380,6 +380,35 @@ test("terminal Steward activity stays attached to the factual parent message", (
   expect(html).not.toContain("답변 완료");
 });
 
+test("recoverable Steward card shows replay without appearing active", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const child = summary.steward_children![0]!;
+  child.status = "failed";
+  child.latest_turn = {
+    ...child.active_turn!,
+    state: "runtime_fault",
+    cancellable: false,
+    retryable: true,
+  };
+  child.active_turn = null;
+  child.terminal = false;
+  const progress = anchoredStewardProgressByMessageId(
+    HARNESS_MESSAGES,
+    summary,
+  ).get("m4");
+  const html = renderToStaticMarkup(
+    <MessageContent
+      message={HARNESS_MESSAGES.find((message) => message.id === "m4")!}
+      copied={false}
+      footerMeta={null}
+      onCopyAssistantMessage={() => undefined}
+      stewardProgress={progress}
+    />,
+  );
+  expect(html).toMatch(/aria-label="(?:이어서 진행|Resume)"/u);
+  expect(html).toContain('data-test-class="steward-resume-action"');
+});
+
 test("two active Stewards attach to their own Butler messages", () => {
   const messages: MessageRecord[] = [
     ...HARNESS_MESSAGES,

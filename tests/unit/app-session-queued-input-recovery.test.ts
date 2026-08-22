@@ -222,6 +222,9 @@ test("transport handoff failure is a safe terminal queue result visible to the A
     enqueueAppCancellation() {
       throw new Error("unexpected cancellation");
     },
+    enqueueAppResume() {
+      throw new Error("unexpected resume");
+    },
     enqueueAppTurn() {
       throw new Error("simulated queue write failure");
     },

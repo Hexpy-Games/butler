@@ -27,9 +27,11 @@ import {
 import {
   createAppParentInputSink,
   createSubsessionDelegationService,
+  stewardResumeRequestId,
 } from "../btcc/subsessions/index.ts";
 import { resolveAppGatewayRuntimeConfig } from "../../operations/gateway/registry.ts";
 import { readLocalAuthConfigFromEnvironment } from "../../gateways/app/interface/server/local-auth.ts";
+import { FileQueueButlerServiceClient } from "../../gateways/core/client.ts";
 
 /**
  * Production wiring only.  Lifecycle policy lives in `agent/btcc/btcc.ts`
@@ -139,13 +141,43 @@ export function createProductionBtccComposition(input: {
       if (!input.sessionBindings) bindings.close();
     },
   });
+  const serviceClient = new FileQueueButlerServiceClient({
+    butlerData: input.butlerData,
+  });
+  const recoverInterruptedStewards = () => {
+    const requestedAt = new Date().toISOString();
+    for (const recovery of stores.stewardObserver.recoverableTurns()) {
+      // Native queue process-replacement recovery already owns an interrupted
+      // original event. Only synthesize the explicit resume when that canonical
+      // queue record is absent, avoiding two physical deliveries for one Turn.
+      if (serviceClient.hasPendingEvent(recovery.original_event_id)) continue;
+      serviceClient.enqueueAppResume({
+        chatId: recovery.relation.child_session_id,
+        sessionId: recovery.relation.child_session_id,
+        turnId: recovery.turn_id,
+        requestId: stewardResumeRequestId(
+          recovery.relation.relation_id,
+          recovery.recovery_id,
+        ),
+        requestedAt,
+        originalEventId: recovery.original_event_id,
+        originalMessageId: recovery.original_message_id,
+        originalMessage: recovery.original_message,
+      }, {
+        source: "btcc-steward-startup-recovery",
+        relation_id: recovery.relation.relation_id,
+      });
+    }
+  };
   return {
     btcc: assembly.btcc,
     host: assembly.host,
     // A persisted Steward result may have committed its outbox just before
     // process loss. Re-enter that same durable handoff once at composition
     // startup; the App queue remains the sole owner after admission.
-    ready: subsessions.recoverPendingParentInputs().then(() => undefined),
+    ready: subsessions.recoverPendingParentInputs().then(() => {
+      recoverInterruptedStewards();
+    }),
     authority: stores.authority,
     subsessions,
   };

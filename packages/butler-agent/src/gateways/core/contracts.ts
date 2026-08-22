@@ -109,7 +109,7 @@ export interface InboundEnvelope {
     reasoningEffort?: string;
   };
   control?: {
-    kind: "cancel_turn";
+    kind: "cancel_turn" | "resume_turn";
     requestId: string;
     turnId: string;
     requestedAt: string;

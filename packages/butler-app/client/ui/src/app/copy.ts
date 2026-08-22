@@ -12,6 +12,7 @@ interface ConversationWorkCopy {
   historyRegionLabel: string;
   pendingLabel: string;
   pendingStateLabels: Record<string, string>;
+  resumeInterrupted: string;
   todoListRegionLabel: string;
   todoListTitle: string;
   todoItemPendingLabel: string;
@@ -681,6 +682,7 @@ const koKrCopy: AppCopy = {
         retrying: "다시 시도하고 있습니다.",
         cancelling: "중지하고 있습니다.",
       },
+      resumeInterrupted: "이어서 진행",
       todoListRegionLabel: "진행 단계",
       todoListTitle: "진행 단계",
       todoItemPendingLabel: "대기",
@@ -1449,6 +1451,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
         retrying: "Retrying.",
         cancelling: "Stopping.",
       },
+      resumeInterrupted: "Resume",
       todoListRegionLabel: "Steps",
       todoListTitle: "Steps",
       todoItemPendingLabel: "Pending",

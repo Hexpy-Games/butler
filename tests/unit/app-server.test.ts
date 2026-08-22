@@ -7547,6 +7547,9 @@ test("app transport send fails the turn instead of leaving thinking when queue h
     enqueueAppCancellation() {
       throw new Error("unexpected cancellation");
     },
+    enqueueAppResume() {
+      throw new Error("unexpected resume");
+    },
     enqueueAppTurn() {
       throw new Error("simulated queue write failure");
     },
@@ -13871,6 +13874,7 @@ test("pending cancellation outbox dispatches after App restart", async () => {
       queue.enqueueAppCancellation(input, metadata);
       throw new Error("simulated crash after cancellation queue write");
     },
+    enqueueAppResume: (input, metadata) => queue.enqueueAppResume(input, metadata),
   };
   let server = createAppServer({
     dbPath, butlerData: tempDir, port: 0, serviceClient: failingClient,

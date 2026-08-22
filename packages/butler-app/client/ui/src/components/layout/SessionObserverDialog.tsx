@@ -19,6 +19,7 @@ import { useSessionViewSubscription } from "./hooks/useSessionViewSubscription.t
 
 export function SessionObserverDialog() {
   const [cancelling, setCancelling] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const sessionId = useButlerStore((state) => state.observerSessionId);
   const view = useButlerStore((state) =>
     sessionId ? state.sessionViews[sessionId] : undefined,
@@ -26,6 +27,7 @@ export function SessionObserverDialog() {
   const close = useButlerStore((state) => state.closeSessionObserver);
   const refresh = useButlerStore((state) => state.refreshSessionObserver);
   const cancelObservedSteward = useButlerStore((state) => state.cancelObservedSteward);
+  const resumeObservedSteward = useButlerStore((state) => state.resumeObservedSteward);
 
   useSessionViewSubscription(sessionId, refresh);
 
@@ -82,7 +84,23 @@ export function SessionObserverDialog() {
             ) : null}
           </Stack>
         </ScrollArea>
-        {view?.active_turn && view.relation ? (
+        {view?.latest_turn?.retryable && !view.active_turn && view.relation ? (
+          <Stack align="row" justify="end">
+            <Button
+              type="button"
+              disabled={resuming}
+              onClick={() => {
+                setResuming(true);
+                void resumeObservedSteward(view.relation!.relation_id)
+                  .finally(() => setResuming(false));
+              }}
+            >
+              {resuming
+                ? appCopy.conversation.work.pendingStateLabels.retrying
+                : appCopy.conversation.work.resumeInterrupted}
+            </Button>
+          </Stack>
+        ) : view?.active_turn && view.relation ? (
           <Stack align="row" justify="end">
             <Button
               type="button"

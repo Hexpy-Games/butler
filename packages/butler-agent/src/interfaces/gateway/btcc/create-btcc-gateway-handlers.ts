@@ -40,8 +40,7 @@ export function createBtccGatewayHandlers(
         },
       };
     }
-    const request = toBtccRequest(route, envelope, turnId);
-    const outcome = await options.btcc.runTurn(request);
+    const outcome = await options.btcc.runTurn(toBtccRequest(route, envelope, turnId));
     if (outcome.kind === "cancelled" || outcome.kind === "already_cancelled") {
       await completeStewardTerminalResult(options, route, turnId, "cancelled", "steward_cancelled");
       return {
@@ -75,7 +74,9 @@ export function createBtccGatewayHandlers(
       : null;
     return {
       ok: true,
-      handledBy: "btcc/turn",
+      handledBy: envelope.control?.kind === "resume_turn"
+        ? "btcc/turn-resume"
+        : "btcc/turn",
       metadata: {
         text: result.text,
         artifacts: result.artifacts,
