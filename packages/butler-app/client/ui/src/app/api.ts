@@ -537,6 +537,16 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (retryCurrentMatch) return await callBridge<T>(bridge, "retryTurnWithCurrentControls", { turnId: decodeURIComponent(retryCurrentMatch[1]) });
   const cancelMatch = method === "POST" ? url.pathname.match(/^\/turns\/([^/]+)\/cancel$/) : null;
   if (cancelMatch) return await callBridge<T>(bridge, "cancelTurn", { turnId: decodeURIComponent(cancelMatch[1]) });
+  const stewardCancelMatch = method === "POST"
+    ? url.pathname.match(/^\/steward-relations\/([^/]+)\/cancel$/)
+    : null;
+  if (stewardCancelMatch) {
+    const body = parseBody(options.body);
+    return await callBridge<T>(bridge, "cancelSteward", {
+      relationId: decodeURIComponent(stewardCancelMatch[1]!),
+      parentSessionId: body.parent_session_id,
+    });
+  }
   const operationOutputMatch = method === "GET"
     ? url.pathname.match(/^\/turns\/([^/]+)\/operations\/([^/]+)\/output$/u)
     : null;

@@ -725,6 +725,13 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({}),
   }),
+  cancelSteward: ({ relationId, parentSessionId }) => requestJson(
+    `/steward-relations/${encodeURIComponent(relationId)}/cancel`,
+    {
+      method: "POST",
+      body: JSON.stringify({ parent_session_id: parentSessionId }),
+    },
+  ),
   getOperationOutput: ({ turnId, requestId, resultId, offset = 0 }) => {
     const params = new URLSearchParams({
       result_id: resultId,

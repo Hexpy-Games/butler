@@ -21,7 +21,7 @@ import { modelFacingFunctionTools } from
   "../../packages/butler-agent/src/integrations/providers/shared/tools.ts";
 import { guidedNativeToolDefinitions } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
-import { inheritedStewardRuntimePolicy } from
+import { inheritedStewardRuntimePolicy, stewardRootWorkScope } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/runtime-policy.ts";
 
 const ENABLED = { BUTLER_PHASE_TOOL_SURFACE: "on" };
@@ -486,6 +486,25 @@ test("read-only Steward inherits every safe parent capability instead of a role 
     "run_command",
     "write_file",
   ]) expect(inherited.requiredNativeTools).not.toContain(effectful);
+});
+
+test("Steward root Work uses the same project scope as a ledger-backed child Turn", () => {
+  const projectChild = {
+    ...appProjectBinding({ trackingMode: "ledger" }),
+    role: "steward" as const,
+  };
+  expect(stewardRootWorkScope(projectChild)).toEqual({ projectRef: "butler" });
+
+  const localChild = {
+    ...projectChild,
+    metadata: { runtimePolicy: { trackingMode: "local" } },
+  };
+  expect(stewardRootWorkScope(localChild)).toEqual({});
+
+  expect(() => stewardRootWorkScope({
+    ...projectChild,
+    projectId: undefined,
+  })).toThrow("steward_project_binding_missing");
 });
 
 test("feature default-off path preserves legacy bytes and enabled policy reduces both stable and schema bytes", () => {

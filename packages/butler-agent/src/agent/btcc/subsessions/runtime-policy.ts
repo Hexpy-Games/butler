@@ -34,6 +34,20 @@ export function inheritedStewardRuntimePolicy(
   };
 }
 
+/** Keep the Steward root Work scope identical to its ordinary Turn scope. */
+export function stewardRootWorkScope(
+  binding: StoredSessionBinding,
+): { projectRef?: string } {
+  const source = objectRecord(binding.metadata?.runtimePolicy);
+  const trackingMode = trackingModeValue(
+    source.trackingMode ?? source.tracking_mode,
+  ) ?? (binding.projectId ? "ledger" : "local");
+  if (trackingMode !== "ledger") return {};
+  const projectRef = binding.projectId?.trim();
+  if (!projectRef) throw new Error("steward_project_binding_missing");
+  return { projectRef };
+}
+
 function readOnlyAuthority(
   profiles: readonly string[],
   tools: readonly string[],
