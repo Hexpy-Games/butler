@@ -338,7 +338,7 @@ test("SS-03B delegation tool contract exposes canonical execution surfaces", () 
   }
 });
 
-test("Steward instructions use the ordinary BTCC closeout authority", () => {
+test("Steward instructions keep ordinary BTCC memory, authority, and closeout", () => {
   const commonCloseout =
     "Use record_work_disposition as the sole Work closeout authority, exactly as an ordinary Butler BTCC Turn does. Reviews and completion Validation are optional quality records, never Steward-only completion gates.";
   const readOnlyPlanContract =
@@ -379,10 +379,14 @@ test("Steward instructions use the ordinary BTCC closeout authority", () => {
   expect(mutationInstructions).not.toContain("only then settle the child Work as completed");
   expect(mutationInstructions).toContain(multiStepPlanContract);
   expect(mutationInstructions).toContain(
-    "Use list_files, grep_files, and read_file to discover repository targets",
+    "project Hot Cache, Project Memory, durable feedback and corrections",
   );
   expect(mutationInstructions).toContain(
-    "Any number of truthful mutation Plan actions may include an admitted edit_file or write_file effect. Omit effect from inspection, run_command validation, review, and reporting actions.",
+    "actively use recall_memory",
+  );
+  expect(mutationInstructions).toContain("same reviewed Plan and effect contract as Butler");
+  expect(mutationInstructions).not.toMatch(
+    /access conversation or memory tools|call MCP|mutate Project Ledger|omit effect from .*run_command/iu,
   );
 });
 

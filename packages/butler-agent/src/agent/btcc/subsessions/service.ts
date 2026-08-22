@@ -10,6 +10,7 @@ import { normalizeSubsessionAllowedToolsAndEffects, normalizeSubsessionMutationS
 import { completePacketContext } from "./terminal-results.ts";
 import { renderDelegatedParentConversationContext } from "./parent-conversation-context.ts";
 import { renderStewardInput } from "./steward-input.ts";
+import { inheritedStewardRuntimePolicy } from "./runtime-policy.ts";
 import { createSubsessionControlService } from "./control.ts";
 import type {
   CreatedDelegation,
@@ -21,6 +22,7 @@ import type {
   SubsessionDelegationDependencies,
   SubsessionDelegationService,
 } from "./contracts.ts";
+import type { StoredSessionBinding } from "../../../test-support/harness/contracts.ts";
 export function createSubsessionDelegationService(
   input: SubsessionDelegationDependencies,
 ): SubsessionDelegationService {
@@ -116,7 +118,7 @@ export function createSubsessionDelegationService(
         parentTurnId: normalizedRequest.parent_turn_id,
         modelRef: normalizedRequest.model_ref,
       });
-      registerChildSession(input, parent.workspacePath, normalizedRequest, packet, childSessionId);
+      registerChildSession(input, parent, normalizedRequest, packet, childSessionId);
       const childWorkspacePath = normalizedRequest.execution_mode === "read_only"
         ? parent.workspacePath
         : await createStewardWorktree(input, parent.workspacePath, branch, childSessionId);
@@ -233,7 +235,7 @@ function createPacket(
 }
 function registerChildSession(
   input: SubsessionDelegationDependencies,
-  parentWorkspacePath: string,
+  parent: StoredSessionBinding,
   request: DelegationRequest,
   packet: DelegationPacket,
   childSessionId: string,
@@ -243,9 +245,9 @@ function registerChildSession(
     sessionId: childSessionId,
     role: "steward",
     ...(inheritedProject ? { projectId: inheritedProject.projectId } : {}),
-    workspacePath: parentWorkspacePath,
+    workspacePath: parent.workspacePath,
     runtimeAdapterId: "btcc-turn-runtime",
-    modelProviderId: input.sessionBindings.getBySessionId(request.parent_session_id)!.modelProviderId,
+    modelProviderId: parent.modelProviderId,
     modelRef: packet.model_ref as `${string}/${string}`,
     transportBindings: [],
     metadata: {
@@ -260,16 +262,12 @@ function registerChildSession(
         allowed_tools_and_effects: [...packet.allowed_tools_and_effects],
         ...(inheritedProject ? { project_context: inheritedProject.metadata } : {}),
       },
-      runtimePolicy: {
-        accessMode: packet.execution_mode === "read_only" ? "read_only" : "full_access",
-        trackingMode: "local",
-        requiredNativeToolProfiles: ["workspace"],
-        requiredNativeTools: [],
-      },
+      runtimePolicy: inheritedStewardRuntimePolicy(parent, packet.execution_mode),
       reasoning_effort: packet.reasoning_effort,
     },
   });
 }
+
 function enqueueChild(
   childQueue: NativeInboundQueue,
   packet: DelegationPacket,

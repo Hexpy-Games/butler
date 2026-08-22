@@ -296,15 +296,21 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       expect(childPrompt).not.toContain(
         "Inspect, correct, and validate the bounded Steward fixture files.",
       );
-      expect(childPrompt).not.toMatch(/Butler persona|Hot Cache|recall_memory|MCP|memory:/iu);
+      expect(childRequest?.instructions).toContain("project Hot Cache");
+      expect(childRequest?.instructions).toContain("Project Memory");
+      expect(childRequest?.instructions).toContain("recall_memory");
+      expect(childRequest?.instructions).not.toMatch(/You are Butler|full transcript/iu);
       const childToolNames = [...new Set(childTaskRequests.flatMap((request) =>
         request.tools.map((tool) => tool.name),
       ))].sort();
-      expect(childToolNames).toEqual([
+      expect(childToolNames).toEqual(expect.arrayContaining([
         "edit_file",
         "grep_files",
         "list_files",
+        "recall_memory",
         "read_file",
+        "list_conversation_sessions",
+        "read_conversation_session",
         "record_work_checkpoint",
         "record_work_disposition",
         "record_work_review",
@@ -313,7 +319,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
         "web_read",
         "web_search",
         "write_file",
-      ]);
+      ]));
       const childToolRows = btccDb.query<{
         tool_name: string;
         status: string;
@@ -353,6 +359,15 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       expect(turnCount).toBe(3);
       const child = bindings.listSessions().find((session) => session.role === "steward");
       expect(child).toBeDefined();
+      const parentRuntimePolicy = bindings.getBySessionId(parentSessionId)
+        ?.metadata?.runtimePolicy as Record<string, unknown> | undefined;
+      expect(child?.metadata?.runtimePolicy).toMatchObject({
+        accessMode: "full_access",
+        trackingMode: parentRuntimePolicy?.trackingMode,
+        requiredNativeToolProfiles: parentRuntimePolicy?.requiredNativeToolProfiles,
+        requiredNativeTools: parentRuntimePolicy?.requiredNativeTools,
+        authoritySource: "parent_session",
+      });
       expect(child?.workspacePath).not.toBe(root);
       expect(existsSync(join(child!.workspacePath, "fixtures", ".steward-validation.tmp"))).toBe(false);
       expect(await Bun.file(join(child!.workspacePath, "fixtures", "discovery-target.txt")).text()).toBe("discovered\n");
@@ -480,7 +495,7 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
   const authToken = "ss03a-local-auth-token-012345678901234567890123";
   let bindings = new SessionBindingStore(
     join(root, "runtime", "session-store.sqlite"),
-    "ephemeral",
+    "durable",
   );
   const parentSessionId = sessionHintForRow("general");
   bindings.upsert({
@@ -769,7 +784,7 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
     );
     await composition.host.close();
     bindings.close();
-    bindings = new SessionBindingStore(join(root, "runtime", "session-store.sqlite"), "ephemeral");
+    bindings = new SessionBindingStore(join(root, "runtime", "session-store.sqlite"), "durable");
     composition = createProductionBtccComposition({
       butlerHome: root, butlerData: root, ownerId: "read-only-steward-vertical-test-restart",
       sessionBindings: bindings, appServerUrl: app.url,
@@ -882,6 +897,14 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       expect(child?.workspacePath).toBe(root);
       expect(child?.metadata?.sessionWorkspace).toBeUndefined();
       expect(child?.metadata?.subsession).toMatchObject({ execution_mode: "read_only" });
+      const readOnlyParentPolicy = bindings.getBySessionId(parentSessionId)
+        ?.metadata?.runtimePolicy as Record<string, unknown> | undefined;
+      expect(child?.projectId).toBe("project-sandy");
+      expect(child?.metadata?.runtimePolicy).toMatchObject({
+        accessMode: "read_only",
+        trackingMode: readOnlyParentPolicy?.trackingMode,
+        authoritySource: "parent_session",
+      });
       const childViewResponse = await fetch(
         `${app.url}session-view?session_id=${encodeURIComponent(childSessionId)}`,
         { headers: { authorization: `Bearer ${authToken}` } },
@@ -1005,6 +1028,18 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       expect(btccDb.query<{ count: number }, [string]>(
         "SELECT COUNT(*) AS count FROM btcc_guided_effects WHERE work_id = ? AND status = 'applied' AND receipt_json IS NOT NULL",
       ).get(String(rootWork?.work_id))?.count).toBe(0);
+      const recallRow = btccDb.query<{
+        status: string;
+        result_json: string | null;
+      }, [string]>(`
+        SELECT status, result_json
+        FROM btcc_guided_tool_calls
+        WHERE turn_id = ? AND tool_name = 'recall_memory'
+        ORDER BY rowid ASC
+        LIMIT 1
+      `).get(String(result?.child_turn_id));
+      expect(recallRow?.status).toBe("completed");
+      expect(recallRow?.result_json).toContain("SANDY_PROJECT_MEMORY_CONTEXT");
       const childTaskRequests = childRequests.filter((request) =>
         request.messages.some((message) => message.content.includes("delegation_id:")),
       );
@@ -1012,17 +1047,20 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       const childToolNames = [...new Set(childTaskRequests.flatMap((request) =>
         request.tools.map((tool) => tool.name),
       ))].sort();
-      expect(childToolNames).toEqual([
+      expect(childToolNames).toEqual(expect.arrayContaining([
         "grep_files",
+        "list_conversation_sessions",
         "list_files",
+        "read_conversation_session",
         "read_file",
+        "recall_memory",
         "record_work_checkpoint",
         "record_work_disposition",
         "record_work_review",
         "replace_work_plan",
         "web_read",
         "web_search",
-      ]);
+      ]));
       const childPrompt = childTaskRequests.flatMap((request) =>
         request.messages.map((message) => message.content),
       ).join("\n");
@@ -1046,6 +1084,12 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       expect(childRequests.filter((request) => request.tools.some((tool) =>
         ["write_file", "edit_file", "run_command", "call_mcp_tool"].includes(tool.name),
       ))).toHaveLength(0);
+      const readOnlyChildToolNames = new Set(childRequests.flatMap((request) =>
+        request.tools.map((tool) => tool.name),
+      ));
+      expect(readOnlyChildToolNames).toContain("recall_memory");
+      expect(readOnlyChildToolNames).toContain("list_conversation_sessions");
+      expect(readOnlyChildToolNames).toContain("read_conversation_session");
     } finally {
       btccDb.close();
     }
@@ -1783,6 +1827,17 @@ function readOnlyStewardRound(
           };
         }
         return {
+          toolCalls: [toolCall("recall-project-context", "recall_memory", {
+            cue: "SANDY_PROJECT_MEMORY_CONTEXT",
+            strategies: ["search_lexical_memory", "read_graph_memory"],
+            evidence_required: ["project_memory_hit"],
+            include_vector: false,
+            limit: 8,
+          })],
+        };
+      }
+      if (round === 4) {
+        return {
           toolCalls: [toolCall("list-files", "list_files", {
             root: ".",
             include_globs: ["README.md", "src/**"],
@@ -1790,14 +1845,14 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 4) {
+      if (round === 5) {
         return {
           toolCalls: [toolCall("read-source-marker", "read_file", {
             requests: [{ path: "src/inspection-target.ts" }],
           })],
         };
       }
-      if (round === 5) {
+      if (round === 6) {
         return {
           toolCalls: [toolCall("review-read-only-result", "record_work_review", {
             subject: "result",
@@ -1810,7 +1865,7 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 6) {
+      if (round === 7) {
         return {
           toolCalls: [toolCall("review-read-only-completion", "record_work_review", {
             subject: "completion",
@@ -1823,7 +1878,7 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 7) {
+      if (round === 8) {
         const workId = request.messages
           .flatMap((message) => [...message.content.matchAll(/guided-work-[a-f0-9]{64}/gu)].map((match) => match[0]))
           .at(-1);

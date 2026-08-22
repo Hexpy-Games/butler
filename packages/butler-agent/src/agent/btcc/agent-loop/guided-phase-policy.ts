@@ -27,7 +27,7 @@ import {
 } from "../operation-result-replay/index.ts";
 import { phaseMinimalStableInstructionSurface } from "./guided-phase-instructions.ts";
 import {
-  boundedStewardTools,
+  applyStewardTaskEffectBoundary,
   phaseAllowsTool,
   removeRuntimeOwnedSchemaDefaults,
 } from "./guided-phase-policy-helpers.ts";
@@ -114,7 +114,10 @@ export function selectGuidedTurnPhasePolicy(
     ),
     exactResultReplay,
   );
-  const authorizedTools = boundedStewardTools(executionPolicy, admittedAuthorizedTools);
+  const authorizedTools = applyStewardTaskEffectBoundary(
+    executionPolicy,
+    admittedAuthorizedTools,
+  );
   const admittedRequiredToolNames = new Set([
     ...executionPolicy.requiredNativeTools,
     ...executionPolicy.requiredNativeToolProfiles.flatMap((profile) =>
@@ -148,7 +151,6 @@ export function selectGuidedTurnPhasePolicy(
     authorizedTools,
     providerTools,
     phase,
-    executionPolicy,
   );
   const stableInstructions = phaseMinimalStableInstructionSurface(
     phase, executionPolicy, POLICY_REVISION,
@@ -251,14 +253,10 @@ function assertRequiredProfileAuthorityRetained(
   authorizedTools: readonly FunctionToolDefinition[],
   providerTools: readonly FunctionToolDefinition[],
   phase: GuidedTurnPhase,
-  policy: Pick<ButlerExecutionPolicy, "role" | "subsession">,
 ): void {
   const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
   const retainedNames = new Set(providerTools.map((tool) => tool.name));
   for (const profile of profiles) {
-    if (profile === "workspace" && policy.role === "steward" && policy.subsession) {
-      continue;
-    }
     if (profile === "project-lifecycle") {
       if (
         phase !== "execution" ||

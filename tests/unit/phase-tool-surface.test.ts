@@ -21,6 +21,8 @@ import { modelFacingFunctionTools } from
   "../../packages/butler-agent/src/integrations/providers/shared/tools.ts";
 import { guidedNativeToolDefinitions } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
+import { inheritedStewardRuntimePolicy } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/runtime-policy.ts";
 
 const ENABLED = { BUTLER_PHASE_TOOL_SURFACE: "on" };
 
@@ -380,7 +382,7 @@ test("SS-03B phase instructions define semantic delegation selection", () => {
   }
 });
 
-test("read-only Steward Plan actions omit effects on legacy and phase tool surfaces", () => {
+test("Steward keeps ordinary BTCC authority while read-only still omits effects", () => {
   const readOnlyTurn = stewardTurnRecord("read_only");
   for (const env of [{}, ENABLED]) {
     const selection = selectGuidedTurnPhasePolicy(readOnlyTurn, env);
@@ -393,16 +395,6 @@ test("read-only Steward Plan actions omit effects on legacy and phase tool surfa
   const mutationActionSchema = planActionSchema(
     selectGuidedTurnPhasePolicy(stewardTurnRecord("mutation"), ENABLED).providerTools,
   );
-  expect(planActionsSchema(
-    selectGuidedTurnPhasePolicy(stewardTurnRecord("mutation"), ENABLED).providerTools,
-  ).minItems).toBe(2);
-  expect(mutationActionSchema.properties).toHaveProperty("effect");
-  expect(mutationActionSchema.properties.effect).toMatchObject({
-    properties: {
-      capability: { enum: ["write_file"] },
-    },
-  });
-
   const butlerActionSchema = planActionSchema(
     selectGuidedTurnPhasePolicy(
       turnRecord({
@@ -413,6 +405,23 @@ test("read-only Steward Plan actions omit effects on legacy and phase tool surfa
       ENABLED,
     ).providerTools,
   );
+  expect(planActionsSchema(
+    selectGuidedTurnPhasePolicy(stewardTurnRecord("mutation"), ENABLED).providerTools,
+  ).minItems).toBe(planActionsSchema(
+    selectGuidedTurnPhasePolicy(
+      turnRecord({
+        accessMode: "full_access",
+        trackingMode: "ledger",
+        projectRef: "butler",
+      }),
+      ENABLED,
+    ).providerTools,
+  ).minItems);
+  expect(mutationActionSchema.properties).toHaveProperty("effect");
+  expect(mutationActionSchema.properties.effect).toEqual(
+    butlerActionSchema.properties.effect,
+  );
+
   expect(butlerActionSchema.properties).toHaveProperty("effect");
   expect(planActionsSchema(
     selectGuidedTurnPhasePolicy(
@@ -424,6 +433,59 @@ test("read-only Steward Plan actions omit effects on legacy and phase tool surfa
       ENABLED,
     ).providerTools,
   ).minItems).not.toBe(2);
+
+  const mutationSelection = selectGuidedTurnPhasePolicy(
+    stewardTurnRecord("mutation"),
+    ENABLED,
+  );
+  const mutationNames = mutationSelection.providerTools.map((tool) => tool.name);
+  for (const name of [
+    "recall_memory",
+    "query_memory",
+    "list_conversation_sessions",
+    "read_conversation_session",
+    "list_mcp_capabilities",
+    "read_mcp_resource",
+    "call_mcp_tool",
+    "project_ledger_status",
+    "run_command",
+    "replace_work_plan",
+    "record_work_disposition",
+  ]) expect(mutationNames).toContain(name);
+});
+
+test("read-only Steward inherits every safe parent capability instead of a role whitelist", () => {
+  const parent = appProjectBinding({
+    accessMode: "full_access",
+    trackingMode: "ledger",
+    requiredNativeToolProfiles: [
+      "project",
+      "memory-read",
+      "mcp",
+      "workspace",
+      "automation",
+    ],
+    requiredNativeTools: ["read_tool_evidence_artifact", "write_file"],
+  });
+  const inherited = inheritedStewardRuntimePolicy(parent, "read_only");
+
+  expect(inherited.requiredNativeToolProfiles).toEqual(["project", "memory-read"]);
+  expect(inherited.requiredNativeTools).toEqual(expect.arrayContaining([
+    "grep_files",
+    "list_automations",
+    "list_files",
+    "list_mcp_capabilities",
+    "read_file",
+    "read_mcp_resource",
+    "read_tool_evidence_artifact",
+    "read_tool_output_artifact",
+  ]));
+  for (const effectful of [
+    "call_mcp_tool",
+    "create_automation",
+    "run_command",
+    "write_file",
+  ]) expect(inherited.requiredNativeTools).not.toContain(effectful);
 });
 
 test("feature default-off path preserves legacy bytes and enabled policy reduces both stable and schema bytes", () => {
@@ -566,6 +628,9 @@ function stewardTurnRecord(executionMode: "read_only" | "mutation"): TurnRecord 
   turn.context.executionPolicy = {
     ...turn.context.executionPolicy!,
     role: "steward",
+    requiredNativeToolProfiles: executionMode === "mutation"
+      ? ["workspace", "project", "project-lifecycle", "mcp", "memory-read"]
+      : ["project", "memory-read"],
     subsession: {
       relationId: "relation-phase-surface",
       delegationId: "delegation-phase-surface",

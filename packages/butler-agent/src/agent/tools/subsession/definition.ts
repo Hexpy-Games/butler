@@ -14,11 +14,12 @@ export const delegateToStewardToolDefinition: ButlerToolDefinition = {
   name: "delegate_to_steward",
   description: [
     "Delegate one bounded effect-free inspection or iterative mutation Work to exactly one ordinary Steward session.",
-    "Provide the execution mode, minimal task packet, acceptance criteria, allowed native surface, and mutation scope for mutation only.",
+    "Provide the execution mode, minimal task packet, acceptance criteria, local workspace effect guard, and mutation scope for mutation only.",
     "For read_only, allowed_tools_and_effects is exactly the complete five-value array [grep_files:workspace, list_files:workspace, read_file:workspace, web_read:network, web_search:network], and mutation_scope is [].",
+    "Every Steward keeps the parent's admitted project knowledge, memory recall, conversation, web, MCP, Project Ledger, and ordinary BTCC task capabilities. This field is not the Steward tool catalog.",
     "Every mutation Steward can list, grep, read, apply admitted edit/write effects, and run bounded workspace validation through the ordinary BTCC loop.",
     "For mutation, allowed_tools_and_effects may contain edit_file:workspace, write_file:workspace, and run_command:workspace; mutation_scope must contain exact relative files or directory prefixes; terminal dir/** shorthand is canonicalized to dir/, while root or embedded wildcards remain forbidden.",
-    "The Steward receives bounded delegated context instead of Butler persona/transcript and returns one canonical terminal result for synthesis.",
+    "The Steward excludes Butler persona and direct-user presentation prompting, receives the immutable project context and bounded parent conversation projection, and returns one canonical terminal result for synthesis.",
   ].join(" "),
   parameters: {
     type: "object",
