@@ -95,10 +95,10 @@ function workspaceValue(
     return "Session worktree unavailable";
   }
   if (branch.workspace_binding === "session_worktree") {
-    return "Session worktree";
+    return "Worktree";
   }
   if (branch.workspace_binding === "project") {
-    return `Project · ${branch.workspace_label?.trim() || "Project workspace"}`;
+    return "Local";
   }
   if (branch.workspace_mode === "none") return "No project workspace";
   if (branch.workspace_mode === "folder") return "Project folder";

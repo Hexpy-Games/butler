@@ -61,13 +61,14 @@ export function Titlebar() {
       ? state.summary.branch_info
       : undefined,
   );
-  const hasWorktree = branchInfo?.workspace_binding === "session_worktree";
+  const hasWorkspaceIdentity = branchInfo?.workspace_binding === "session_worktree" ||
+    branchInfo?.workspace_binding === "project";
 
   return (
     <TitlebarShell
       title={<span data-test-class="titlebar-title">{title}</span>}
       subtitle={
-        subtitle || hasWorktree ? (
+        subtitle || hasWorkspaceIdentity ? (
           <TitlebarWorkspaceSubtitle
             branchInfo={branchInfo}
             projectLabel={subtitle}

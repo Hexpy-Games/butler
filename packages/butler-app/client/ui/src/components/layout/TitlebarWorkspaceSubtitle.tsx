@@ -12,12 +12,12 @@ export function TitlebarWorkspaceSubtitle({
   branchInfo,
   projectLabel,
 }: TitlebarWorkspaceSubtitleProps) {
-  const branch = branchInfo?.workspace_binding === "session_worktree"
-    ? branchInfo.branch_name?.trim() || branchInfo.workspace_label?.trim()
-    : undefined;
-  const worktreeLabel = branch
+  const branch = branchInfo?.branch_name?.trim() || undefined;
+  const workspaceLabel = branchInfo?.workspace_binding === "session_worktree"
     ? appCopy.titlebar.sessionWorktree(branch)
-    : undefined;
+    : branchInfo?.workspace_binding === "project"
+      ? appCopy.titlebar.localWorkspace(branch)
+      : undefined;
   return (
     <span
       className={styles.subtitleContent}
@@ -26,15 +26,15 @@ export function TitlebarWorkspaceSubtitle({
       {projectLabel ? (
         <span className={styles.projectSubtitle}>{projectLabel}</span>
       ) : null}
-      {worktreeLabel ? (
+      {workspaceLabel ? (
         <span
-          aria-label={worktreeLabel}
+          aria-label={workspaceLabel}
           className={styles.worktree}
-          data-test-class="titlebar-worktree"
-          title={worktreeLabel}
+          data-test-class="titlebar-workspace"
+          title={workspaceLabel}
         >
           <GitBranch size={12} aria-hidden="true" />
-          <span className={styles.worktreeLabel}>{worktreeLabel}</span>
+          <span className={styles.worktreeLabel}>{workspaceLabel}</span>
         </span>
       ) : null}
     </span>
