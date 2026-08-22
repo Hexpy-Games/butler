@@ -72,10 +72,31 @@ export function VisualHarness() {
       : EMPTY_SETTINGS.appearance_theme;
   const ss03Surface =
     new URLSearchParams(window.location.search).get("surface") === "ss03";
+  const worktreeSurface =
+    new URLSearchParams(window.location.search).get("surface") === "worktree";
   const harnessNavigation = ss03Surface
     ? HARNESS_SS03_NAVIGATION
     : HARNESS_NAVIGATION;
-  const harnessSummary = ss03Surface ? HARNESS_SS03_SUMMARY : HARNESS_SUMMARY;
+  const harnessSummary = useMemo(
+    () => ss03Surface
+      ? HARNESS_SS03_SUMMARY
+      : worktreeSurface
+        ? {
+            ...HARNESS_SUMMARY,
+            branch_info: {
+              available: true,
+              workspace_mode: "git" as const,
+              branch_name: "codex/session-worktree-visibility-with-a-long-branch",
+              safe_status: "Git branch codex/session-worktree-visibility-with-a-long-branch",
+              workspace_binding: "session_worktree" as const,
+              workspace_label: "session-worktree/codex/session-worktree-visibility-with-a-long-branch",
+              workspace_status: "available" as const,
+              dirty: true,
+            },
+          }
+        : HARNESS_SUMMARY,
+    [ss03Surface, worktreeSurface],
+  );
   const harnessSettings = useMemo(
     () =>
       visualTheme === EMPTY_SETTINGS.appearance_theme

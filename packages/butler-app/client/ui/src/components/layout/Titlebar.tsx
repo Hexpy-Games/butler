@@ -27,6 +27,7 @@ import {
 } from "@/app/utils.ts";
 import type { ActiveChatView } from "@/app/types.ts";
 import { TitlebarShell } from "@/butler-ds";
+import { TitlebarWorkspaceSubtitle } from "./TitlebarWorkspaceSubtitle";
 import { WindowControls } from "./WindowControls";
 
 export function Titlebar() {
@@ -55,13 +56,22 @@ export function Titlebar() {
     storeView.kind === "session" && isServerBackedSessionId(storeActiveChatId)
       ? sessionFromNavigation(storeNavigation, storeActiveChatId)
       : null;
+  const branchInfo = useButlerStore((state) =>
+    state.summary?.session_id === storeActiveChatId
+      ? state.summary.branch_info
+      : undefined,
+  );
+  const hasWorktree = branchInfo?.workspace_binding === "session_worktree";
 
   return (
     <TitlebarShell
       title={<span data-test-class="titlebar-title">{title}</span>}
       subtitle={
-        subtitle ? (
-          <span data-test-class="titlebar-subtitle">{subtitle}</span>
+        subtitle || hasWorktree ? (
+          <TitlebarWorkspaceSubtitle
+            branchInfo={branchInfo}
+            projectLabel={subtitle}
+          />
         ) : undefined
       }
       collapsed={!leftOpen}

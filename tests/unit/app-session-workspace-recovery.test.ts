@@ -23,7 +23,7 @@ import {
 import { createPlatformCommandExecutor } from "../../packages/butler-agent/src/runtime/command/platform-command-executor.ts";
 import type { ButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
 
-test("Agent relaunch preserves its worktree while App reads only App-owned workspace facts", async () => {
+test("Agent relaunch preserves its worktree while App projects safe binding facts", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-app-worktree-relaunch-"));
   const dbPath = join(root, "app.sqlite");
   const bindingStorePath = join(root, "runtime", "session-store.sqlite");
@@ -99,13 +99,17 @@ test("Agent relaunch preserves its worktree while App reads only App-owned works
       ownership: "session",
       branch: "feature/relaunch",
     });
+    expect(
+      gitText(marked.workspacePath, ["symbolic-ref", "--quiet", "--short", "HEAD"]),
+    ).toBe("feature/relaunch");
 
     const firstView = await getJson(
       `${server.url}session-view?session_id=${encodeURIComponent(chatId)}`,
     );
     expect(firstView.data.branch).toMatchObject({
-      workspace_binding: "project",
-      workspace_label: "Relaunch project",
+      workspace_binding: "session_worktree",
+      branch_name: "feature/relaunch",
+      workspace_label: "session-worktree/feature/relaunch",
       workspace_status: "available",
       dirty: false,
     });
@@ -187,10 +191,11 @@ test("Agent relaunch preserves its worktree while App reads only App-owned works
       `${relaunched.url}session-summary?session_id=${encodeURIComponent(chatId)}`,
     );
     expect(relaunchedView.data.branch_info).toMatchObject({
-      workspace_binding: "project",
-      workspace_label: "Relaunch project",
+      workspace_binding: "session_worktree",
+      branch_name: "feature/relaunch",
+      workspace_label: "session-worktree/feature/relaunch",
       workspace_status: "available",
-      dirty: false,
+      dirty: true,
     });
     expect(JSON.stringify(relaunchedView.data.branch_info)).not.toContain(sourcePath);
 
@@ -198,7 +203,7 @@ test("Agent relaunch preserves its worktree while App reads only App-owned works
       chat_id: chatId,
       text: "queue after relaunch",
     });
-    expect(queuedAfterRelaunch.turn?.id).toBeTruthy();
+    expect(queuedAfterRelaunch.queued?.id).toBeTruthy();
     expect(bindingStore.getBySessionId(runtimeSessionId)?.workspacePath).toBe(
       marked.workspacePath,
     );
@@ -260,9 +265,10 @@ test("Agent relaunch preserves its worktree while App reads only App-owned works
         `${staleServer.url}session-summary?session_id=${encodeURIComponent(chatId)}`,
       );
       expect(staleView.data.branch_info).toMatchObject({
-        workspace_binding: "project",
-        workspace_status: "available",
-        workspace_label: "Relaunch project",
+        workspace_binding: "session_worktree",
+        workspace_status: "unavailable",
+        workspace_label: "session-worktree/feature/relaunch",
+        safe_error_code: "session_workspace_unavailable",
       });
       expect(JSON.stringify(staleView.data.branch_info)).not.toContain(
         sourcePath,

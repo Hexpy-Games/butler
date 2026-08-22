@@ -47,6 +47,8 @@ import { createOpenAIQuotaAdapter } from
   "../../../../integrations/providers/openai/provider-quota.ts";
 import { createZaiQuotaAdapter } from
   "../../../../integrations/providers/zai/provider-quota.ts";
+import { SessionBindingStore } from
+  "../../../../test-support/harness/session-store.ts";
 
 export function initializeAppStoreKernel(
   kernel: AppStoreKernel,
@@ -66,6 +68,15 @@ export function initializeAppStoreKernel(
     options.butlerHome ?? process.env.BUTLER_HOME ?? process.cwd(),
   );
   kernel.stewardObserver = options.stewardObserver;
+  if (options.sessionBindings) {
+    kernel.sessionBindings = options.sessionBindings;
+  } else {
+    const sessionBindings = new SessionBindingStore(
+      join(kernel.butlerData, "runtime", "session-store.sqlite"),
+    );
+    kernel.sessionBindings = sessionBindings;
+    kernel.ownedSessionBindings = sessionBindings;
+  }
   kernel.appVersion = safeString(options.appVersion);
   kernel.appUpdateManifest =
     safeString(options.appUpdateManifest) ??

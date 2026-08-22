@@ -1,0 +1,36 @@
+.subtitleContent {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.projectSubtitle,
+.worktreeLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectSubtitle {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.worktree {
+  display: inline-flex;
+  overflow: hidden;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+}
+
+.worktree svg {
+  flex: 0 0 auto;
+}
+
+.worktreeLabel {
+  min-width: 0;
+}
