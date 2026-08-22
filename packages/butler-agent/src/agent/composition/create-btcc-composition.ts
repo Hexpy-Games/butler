@@ -25,6 +25,11 @@ import {
   type RuntimeMemoryAttributionPort,
 } from "../../operations/diagnostics/runtime-memory-attribution/index.ts";
 import {
+  createDefaultDeveloperDiagnosticsGate,
+  createTurnDeveloperLogCapturePort,
+} from "../../operations/diagnostics/developer-log-turn-capture/index.ts";
+import { DeveloperLogStore } from "../../operations/diagnostics/developer-log-store.ts";
+import {
   createAppParentInputSink,
   createSubsessionDelegationService,
 } from "../btcc/subsessions/index.ts";
@@ -42,6 +47,11 @@ export function createProductionBtccComposition(input: {
   /** Test-only one-round provider seam; production callers omit it. */
   modelRound?: ModelRoundPort;
   memoryAttribution?: RuntimeMemoryAttributionPort;
+  /**
+   * Developer-diagnostics gate; defaults to reading the app settings
+   * database per capture call so a toggle takes effect on the next turn.
+   */
+  developerDiagnosticsEnabled?: () => boolean;
   sessionBindings?: SessionBindingStore;
   conversationStore?: AgentConversationStore;
   appServerUrl?: string;
@@ -88,12 +98,18 @@ export function createProductionBtccComposition(input: {
   const memoryAttribution = input.memoryAttribution ?? createRuntimeMemoryAttributionPort({
     butlerData: input.butlerData,
   });
+  const developerLogCapture = createTurnDeveloperLogCapturePort({
+    store: new DeveloperLogStore({ butlerData: input.butlerData }),
+    gate: input.developerDiagnosticsEnabled ??
+      createDefaultDeveloperDiagnosticsGate(input.butlerData),
+  });
   const runtime = createTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
     messages: stores.messages,
     committedSuccessorReadiness: stores.committedSuccessorReadiness,
     memoryAttribution,
+    developerLogCapture,
     agent: createProductionGuidedTurnAgent({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,

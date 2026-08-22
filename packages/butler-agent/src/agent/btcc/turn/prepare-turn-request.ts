@@ -12,6 +12,8 @@ import type {
 import type { StoredSessionBinding } from
   "../../../test-support/harness/contracts.ts";
 import type { TurnRecord } from "./contracts.ts";
+import { storedBindingFromTurnRecord } from
+  "../../../operations/diagnostics/developer-log-turn-capture/index.ts";
 import type { StableTurnRequestIdentity } from "./load-or-admit-turn.ts";
 
 export function requestIdentityForRequest(
@@ -46,19 +48,8 @@ export function replayBinding(
   request: BtccTurnRequest,
 ): StoredSessionBinding {
   const executionPolicy = turn.context.executionPolicy;
-  const modelRef = `${turn.modelSelection.provider}/${turn.modelSelection.model}` as StoredSessionBinding["modelRef"];
   return {
-    sessionId: turn.sessionId,
-    role: executionPolicy?.role === "steward" ? "steward" : "butler",
-    ...(turn.context.projectRef ? { projectId: turn.context.projectRef } : {}),
-    workspacePath: executionPolicy?.workspacePath ?? "",
-    runtimeAdapterId: "btcc-turn-runtime",
-    modelProviderId: turn.modelSelection.provider,
-    modelRef,
-    transportBindings: [],
-    lifecycleState: "active",
-    createdAt: request.message.timestamp,
-    updatedAt: request.message.timestamp,
+    ...storedBindingFromTurnRecord(turn, request.message.timestamp),
     metadata: {
       accessMode: executionPolicy?.accessMode ?? "read_only",
       reasoning_effort: turn.modelSelection.reasoningEffort,
