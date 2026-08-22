@@ -190,6 +190,40 @@ test("the capsule activity follows the newest safe activity row", () => {
   expect(html).not.toContain("Earlier activity snapshot");
 });
 
+test("generic model waiting does not replace the latest substantive Steward activity", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const child = summary.steward_children![0]!;
+  child.active_turn = {
+    ...child.active_turn!,
+    progress: {
+      ...child.active_turn!.progress,
+      summary: "응답 생성 중",
+      safe_progress_rows: [{
+        id: "project-records-complete",
+        kind: "used_tool",
+        state: "delivered",
+        safe_label: "프로젝트 기록 확인",
+        safe_tool_name: "project_ledger_list",
+        tool_call_id: "project-records",
+        bridge_phase: "btcc_operation",
+      }, {
+        id: "next-model-round",
+        kind: "message",
+        state: "running",
+        safe_label: "응답 생성 중",
+        safe_tool_name: "model_round",
+        tool_call_id: "model-round-next",
+        bridge_phase: "model_round_waiting",
+      }],
+    },
+  };
+
+  const html = renderToStaticMarkup(<ComposerNotices summary={summary} />);
+
+  expect(html).toContain("프로젝트 기록 확인");
+  expect(html).not.toContain("응답 생성 중");
+});
+
 test("Steward result synthesis capsule reports preparation and offers no Stop", () => {
   const summary: SessionSummaryView = {
     ...HARNESS_SS03_SUMMARY,

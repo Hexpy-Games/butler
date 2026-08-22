@@ -54,7 +54,13 @@ export function stewardCurrentActivityTitle(
   const rows = child.active_turn?.progress.safe_progress_rows ?? [];
   const activeActivity = latestMatchingRow(rows, (row) =>
     row.kind !== "todo" &&
+    !isGenericModelRoundActivity(row) &&
     (row.state === "running" || row.state === "thinking") &&
+    row.safe_label.trim().length > 0,
+  );
+  const latestActivity = latestMatchingRow(rows, (row) =>
+    row.kind !== "todo" &&
+    !isGenericModelRoundActivity(row) &&
     row.safe_label.trim().length > 0,
   );
   const activePlanStep = rows.find((row) =>
@@ -62,16 +68,24 @@ export function stewardCurrentActivityTitle(
     (row.state === "active" || row.state === "running") &&
     row.safe_label.trim().length > 0,
   );
-  const latestActivity = latestMatchingRow(rows, (row) =>
-    row.kind !== "todo" && row.safe_label.trim().length > 0,
+  const genericActivity = latestMatchingRow(rows, (row) =>
+    row.kind !== "todo" &&
+    isGenericModelRoundActivity(row) &&
+    row.safe_label.trim().length > 0,
   );
   return (
     activeActivity?.safe_label ||
-    activePlanStep?.safe_label ||
     latestActivity?.safe_label ||
+    activePlanStep?.safe_label ||
+    genericActivity?.safe_label ||
     child.active_turn?.progress.summary ||
     "작업 진행 중"
   ).trim().replace(/\s+/gu, " ");
+}
+
+function isGenericModelRoundActivity(row: ProgressRow): boolean {
+  return row.bridge_phase === "model_round_waiting" ||
+    row.safe_tool_name === "model_round";
 }
 
 function latestMatchingRow(

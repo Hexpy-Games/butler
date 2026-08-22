@@ -176,10 +176,17 @@ function currentStewardActivityLabel(
 ): string | undefined {
   const currentActivity = rows.findLast((row) =>
     row.kind !== "todo" &&
+    !isGenericModelRoundActivity(row) &&
     (row.state === "running" || row.state === "thinking") &&
     row.safe_label.trim().length > 0,
   );
   if (currentActivity) return currentActivity.safe_label;
+  const latestActivity = rows.findLast((row) =>
+    row.kind !== "todo" &&
+    !isGenericModelRoundActivity(row) &&
+    row.safe_label.trim().length > 0,
+  );
+  if (latestActivity) return latestActivity.safe_label;
   const currentPlanAction = rows.find((row) =>
     row.kind === "todo" && row.state === "active" && row.safe_label.trim().length > 0,
   );
@@ -187,6 +194,11 @@ function currentStewardActivityLabel(
   return rows.findLast((row) =>
     row.kind !== "todo" && row.safe_label.trim().length > 0,
   )?.safe_label;
+}
+
+function isGenericModelRoundActivity(row: ProgressSummaryRow): boolean {
+  return row.bridge_phase === "model_round_waiting" ||
+    row.safe_tool_name === "model_round";
 }
 
 export function projectStewardSession(
