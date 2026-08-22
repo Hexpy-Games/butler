@@ -220,6 +220,9 @@ export function createSessionContextHost(
     branchInfoForSession(sessionId) {
       const project = kernel.getProjectForSession(sessionId);
       const authority = resolveSessionWorkspaceAuthority({
+        binding: kernel.sessionBindings.getBySessionId(
+          sessionHintForRow(sessionId),
+        ),
         projectWorkspacePath: project?.workspace_path,
       });
       if (authority.kind === "unavailable") {

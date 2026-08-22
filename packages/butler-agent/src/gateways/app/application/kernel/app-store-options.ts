@@ -2,6 +2,8 @@ import type { SettingsView } from "../../interface/protocol/app-protocol.ts";
 import type { ButlerServiceClient } from "../../../core/client.ts";
 import type { ProviderQuotaMonitor } from "../../../../operations/metrics/provider-quota.ts";
 import type { StewardObserverReader } from "../../domain/sessions/steward-observer.ts";
+import type { SessionWorkspaceBindingStore } from
+  "../../../../agent/session-workspaces/index.ts";
 
 export const DEFAULT_CHAT_ID = "general";
 export const DEFAULT_CHAT_TITLE = "Onboarding";
@@ -20,5 +22,6 @@ export interface AppServerStoreOptions {
   bridgeMode?: SettingsView["bridge_mode"];
   serviceClient?: ButlerServiceClient;
   providerQuotaMonitor?: ProviderQuotaMonitor;
+  sessionBindings?: Pick<SessionWorkspaceBindingStore, "getBySessionId">;
   stewardObserver: StewardObserverReader;
 }

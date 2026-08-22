@@ -35,6 +35,8 @@ import type { TerminalTurnRetentionQueue } from
 import type { OwnedSqliteConnection } from
   "../../../../foundation/sqlite/owned-sqlite-connection.ts";
 import type { StewardObserverReader } from "../../domain/sessions/steward-observer.ts";
+import type { SessionWorkspaceBindingStore } from
+  "../../../../agent/session-workspaces/index.ts";
 
 export interface AppStoreKernelState {
   db: Database;
@@ -94,4 +96,6 @@ export interface AppStoreKernelState {
   messageFiles: AppMessageFileStore;
   integrations: AppIntegrationStore;
   stewardObserver: StewardObserverReader;
+  sessionBindings: Pick<SessionWorkspaceBindingStore, "getBySessionId">;
+  ownedSessionBindings?: { close(): void };
 }
