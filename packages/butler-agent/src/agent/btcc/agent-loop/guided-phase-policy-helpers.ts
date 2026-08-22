@@ -3,28 +3,14 @@ import { TOOL_CAPABILITY_METADATA } from "../../tools/registry.ts";
 import type { ButlerExecutionPolicy } from "../contracts.ts";
 import type { FunctionToolDefinition } from "../../../integrations/providers/runtime-contracts.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from "./durable-work-tools.ts";
-import { subsessionToolNames } from "../subsessions/scope.ts";
 
-export function boundedStewardTools(
+export function applyStewardTaskEffectBoundary(
   policy: Pick<ButlerExecutionPolicy, "role" | "subsession">,
   tools: readonly FunctionToolDefinition[],
 ): FunctionToolDefinition[] {
   if (policy.role !== "steward" || !policy.subsession) return [...tools];
   const subsession = policy.subsession;
-  const allowed = new Set([
-    "read_file",
-    "list_files",
-    "grep_files",
-    "web_read",
-    "web_search",
-    "replace_work_plan",
-    "record_work_checkpoint",
-    "record_work_review",
-    "record_work_disposition",
-    ...subsessionToolNames(policy.subsession.allowedToolsAndEffects),
-  ]);
   return tools
-    .filter((tool) => allowed.has(tool.name))
     .map((tool) => tool.name === "replace_work_plan"
       ? stewardPlanTool(tool, subsession)
       : tool);
@@ -42,48 +28,8 @@ function stewardPlanTool(
   if (!properties || !actions || !items || !actionProperties || !("effect" in actionProperties)) {
     return tool;
   }
-  const boundedActions = {
-    ...actions,
-    minItems: 2,
-  };
   if (subsession.executionMode === "mutation") {
-    const effect = objectRecord(actionProperties.effect);
-    const effectProperties = objectRecord(effect?.properties);
-    const capability = objectRecord(effectProperties?.capability);
-    if (!effect || !effectProperties || !capability) return tool;
-    const admittedCapabilities = subsessionToolNames(subsession.allowedToolsAndEffects)
-      .filter((name) => name === "edit_file" || name === "write_file")
-      .sort();
-    return {
-      ...tool,
-      parameters: {
-        ...parameters,
-        properties: {
-          ...properties,
-          actions: {
-            ...boundedActions,
-            description: "Use at least two truthful top-level actions. Any truthful mutation action may carry an admitted edit_file or write_file effect. Inspection, command validation, review, and reporting actions omit effect.",
-            items: {
-              ...items,
-              properties: {
-                ...actionProperties,
-                effect: {
-                  ...effect,
-                  properties: {
-                    ...effectProperties,
-                    capability: {
-                      ...capability,
-                      description: "Exact admitted native mutation tool name.",
-                      enum: admittedCapabilities,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    };
+    return tool;
   }
   const { effect: _effect, ...withoutEffect } = actionProperties;
   const required = Array.isArray(items.required)
@@ -96,7 +42,8 @@ function stewardPlanTool(
       properties: {
         ...properties,
         actions: {
-          ...boundedActions,
+          ...actions,
+          minItems: 2,
           description: "Use at least two truthful top-level evidence actions for this substantial delegated Work.",
           items: {
             ...items,

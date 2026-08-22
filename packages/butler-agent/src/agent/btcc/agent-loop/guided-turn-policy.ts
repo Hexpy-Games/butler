@@ -28,8 +28,7 @@ import {
 } from "./guided-session-workspace-policy.ts";
 import { readOperationResultsToolDefinition } from
   "../../tools/monitoring/read_operation_results/index.ts";
-import { subsessionToolNames } from "../subsessions/scope.ts";
-import { boundedStewardTools } from "./guided-phase-policy-helpers.ts";
+import { applyStewardTaskEffectBoundary } from "./guided-phase-policy-helpers.ts";
 const STEWARD_PARENT_TOOL_NAMES = ["delegate_to_steward", "steer_steward", "cancel_steward"];
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
@@ -136,23 +135,6 @@ export function authorizedToolDefinitions(
   );
   for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
   for (const name of guidedLedgerEffects) names.add(name);
-  if (policy.role === "steward" && policy.subsession) {
-    const bounded = new Set([
-      "read_file",
-      "list_files",
-      "grep_files",
-      "web_read",
-      "web_search",
-      "replace_work_plan",
-      "record_work_checkpoint",
-      "record_work_review",
-      "record_work_disposition",
-      ...subsessionToolNames(policy.subsession.allowedToolsAndEffects),
-    ]);
-    for (const name of [...names]) {
-      if (!bounded.has(name)) names.delete(name);
-    }
-  }
   return [
     ...guidedNativeToolDefinitions(exactResultReplayEnabled)
       .filter((tool) => names.has(tool.name)),
@@ -211,22 +193,7 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
       : []),
     ...guidedWorkspaceVisibleToolNames(policy),
   ]);
-  if (policy.role === "steward" && policy.subsession) {
-    visible.clear();
-    for (const name of [
-      "read_file",
-      "list_files",
-      "grep_files",
-      "web_read",
-      "web_search",
-      "replace_work_plan",
-      "record_work_checkpoint",
-      "record_work_review",
-      "record_work_disposition",
-      ...subsessionToolNames(policy.subsession.allowedToolsAndEffects),
-    ]) visible.add(name);
-  }
-  return boundedStewardTools(policy, authorized)
+  return applyStewardTaskEffectBoundary(policy, authorized)
     .filter((tool) => visible.has(tool.name))
     .map(guidedToolDefinition);
 }

@@ -19,7 +19,7 @@ export function renderStewardInput(
     `acceptance_criteria: ${packet.acceptance_criteria.join("; ")}`,
     `task_or_plan_refs: ${packet.task_or_plan_refs.join("; ") || "none"}`,
     `constraints: ${packet.constraints_and_non_goals.join("; ")}`,
-    `allowed_tools_and_effects: ${packet.allowed_tools_and_effects.join("; ")}`,
+    `local_workspace_effect_guards: ${packet.allowed_tools_and_effects.join("; ")}`,
     `mutation_scope: ${packet.mutation_scope.join("; ") || "none"}`,
     `workspace_and_worktree: ${stableJson(packet.workspace_and_worktree)}`,
     `expected_result_schema: ${stableJson(packet.expected_result_schema)}`,
