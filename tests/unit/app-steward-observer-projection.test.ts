@@ -365,6 +365,70 @@ describe("App Steward observer projection", () => {
     expect(projection.approved_plan_completed).toBe(0);
   });
 
+  test("generic model waiting does not replace the latest substantive activity summary", () => {
+    const relation = {
+      relation_id: "relation-substantive-activity",
+      parent_session_id: "parent-substantive-activity",
+      parent_turn_id: "parent-turn-substantive-activity",
+      child_session_id: "steward-substantive-activity",
+      anchor_message_id: "anchor-substantive-activity",
+      ordinal: 1,
+      safe_title: "Substantive activity child",
+      created_at: "2026-08-22T08:00:00.000Z",
+    };
+    const projection = projectStewardSession(relation, {
+      session_id: relation.child_session_id,
+      title: relation.safe_title,
+      turns: [{
+        id: "turn-substantive-activity",
+        state: "thinking",
+        created_at: "2026-08-22T08:01:00.000Z",
+        updated_at: "2026-08-22T08:02:00.000Z",
+      }],
+      messages: [],
+      progress_events: [{
+        id: "event-project-records",
+        session_id: relation.child_session_id,
+        turn_id: "turn-substantive-activity",
+        session_sequence: 1,
+        turn_sequence: 1,
+        kind: "tool.completed",
+        visibility: "public",
+        payload: {
+          activityKind: "used_tool",
+          safeLabel: "프로젝트 기록 확인",
+          safeToolName: "project_ledger_list",
+          toolCallId: "project-records",
+          bridgePhase: "btcc_operation",
+          state: "delivered",
+        },
+        created_at: "2026-08-22T08:01:30.000Z",
+      }, {
+        id: "event-next-model-round",
+        session_id: relation.child_session_id,
+        turn_id: "turn-substantive-activity",
+        session_sequence: 2,
+        turn_sequence: 2,
+        kind: "tool.started",
+        visibility: "public",
+        payload: {
+          activityKind: "message",
+          safeLabel: "응답 생성 중",
+          safeToolName: "model_round",
+          toolCallId: "model-round-next",
+          bridgePhase: "model_round_waiting",
+          state: "running",
+        },
+        created_at: "2026-08-22T08:02:00.000Z",
+      }],
+      plan: null,
+      result: null,
+      updated_at: "2026-08-22T08:02:00.000Z",
+    });
+
+    expect(projection.active_turn?.progress.summary).toBe("프로젝트 기록 확인");
+  });
+
   test("absent Plan approval does not fabricate n/j", () => {
     const db = new Database(":memory:");
     db.exec(BTCC_SUCCESSOR_SCHEMA);
