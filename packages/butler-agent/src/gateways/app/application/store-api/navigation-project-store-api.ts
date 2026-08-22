@@ -43,7 +43,16 @@ export interface AppStoreNavigationProjectApi {
   listArchives(options?: { limit?: number; offset?: number }): ArchiveListView;
   listProjectSessions(projectId?: string): ProjectSessionListView;
   searchCommandPalette(query: string): CommandPaletteView;
-  createSession(input: CreateSessionRequest): CreateSessionResult;
+  createSession(
+    input: CreateSessionRequest,
+    options?: { emitCreated?: boolean },
+  ): CreateSessionResult;
+  publishSessionCreated(sessionId: string): void;
+  rollbackSessionCreation(sessionId: string): void;
+  provisionProjectSessionWorktree(
+    sessionId: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
   updateSession(
     sessionId: string,
     input: UpdateSessionRequest,
@@ -102,8 +111,17 @@ export function createNavigationProjectStoreApi(
     searchCommandPalette(query) {
       return kernel.navigation.searchCommandPalette(query);
     },
-    createSession(input) {
-      return kernel.sessionRecords.createSession(input);
+    createSession(input, options) {
+      return kernel.sessionRecords.createSession(input, options);
+    },
+    publishSessionCreated(sessionId) {
+      kernel.sessionRecords.publishSessionCreated(sessionId);
+    },
+    rollbackSessionCreation(sessionId) {
+      kernel.sessionRecords.rollbackSessionCreation(sessionId);
+    },
+    async provisionProjectSessionWorktree(sessionId, signal) {
+      await kernel.projectSessionWorktrees.provision(sessionId, signal);
     },
     updateSession(sessionId, input) {
       return kernel.sessionRecords.updateSession(sessionId, input);

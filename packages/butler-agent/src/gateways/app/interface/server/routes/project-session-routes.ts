@@ -157,10 +157,18 @@ export async function handleProjectSessionRoutes(
         "invalid_request",
         "Session kind is required.",
       );
-    return json(
-      apiEnvelope<CreateSessionResult>(input.store.createSession(body)),
-      201,
-    );
+    const created = input.store.createSession(body, { emitCreated: false });
+    try {
+      await input.store.provisionProjectSessionWorktree(
+        created.session.id,
+        input.serverShutdownSignal,
+      );
+    } catch (error) {
+      input.store.rollbackSessionCreation(created.session.id);
+      throw error;
+    }
+    input.store.publishSessionCreated(created.session.id);
+    return json(apiEnvelope<CreateSessionResult>(created), 201);
   }
   const sessionMatch = url.pathname.match(/^\/sessions\/([^/]+)$/u);
   if (input.request.method === "PATCH" && sessionMatch) {

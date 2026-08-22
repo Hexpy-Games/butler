@@ -47,8 +47,10 @@ import { createOpenAIQuotaAdapter } from
   "../../../../integrations/providers/openai/provider-quota.ts";
 import { createZaiQuotaAdapter } from
   "../../../../integrations/providers/zai/provider-quota.ts";
-import { SessionBindingStore } from
-  "../../../../test-support/harness/session-store.ts";
+import { AppProjectSessionWorktreeProvisioner } from
+  "../../domain/sessions/project-session-worktree-provisioner.ts";
+import { LazyAppSessionBindingStore } from
+  "../../infrastructure/core/lazy-session-binding-store.ts";
 
 export function initializeAppStoreKernel(
   kernel: AppStoreKernel,
@@ -71,7 +73,7 @@ export function initializeAppStoreKernel(
   if (options.sessionBindings) {
     kernel.sessionBindings = options.sessionBindings;
   } else {
-    const sessionBindings = new SessionBindingStore(
+    const sessionBindings = new LazyAppSessionBindingStore(
       join(kernel.butlerData, "runtime", "session-store.sqlite"),
     );
     kernel.sessionBindings = sessionBindings;
@@ -227,6 +229,13 @@ export function initializeAppStoreKernel(
   });
   kernel.messageFiles = sessionModules.messageFiles;
   kernel.sessionRecords = sessionModules.sessionRecords;
+  kernel.projectSessionWorktrees = new AppProjectSessionWorktreeProvisioner({
+    butlerData: kernel.butlerData,
+    bindings: kernel.sessionBindings,
+    getSession: (sessionId) => kernel.sessionRecords.getSession(sessionId),
+    getProject: (projectId) => kernel.projects.getProjectRow(projectId),
+    getSettings: () => kernel.preferences.getSettings(),
+  });
   kernel.assistantMessages = sessionModules.assistantMessages;
   kernel.sessionMessageProjection = sessionModules.sessionMessageProjection;
   kernel.turnProgressView = sessionModules.turnProgressView;

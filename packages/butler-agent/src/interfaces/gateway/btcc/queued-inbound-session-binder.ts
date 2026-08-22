@@ -2,6 +2,8 @@ import type { InboundEnvelope, SessionTransportBinding } from
   "../../../test-support/harness/contracts.ts";
 import type { SessionBindingStore } from
   "../../../test-support/harness/session-store.ts";
+import { resolveSessionWorkspaceAuthority } from
+  "../../../agent/session-workspaces/index.ts";
 
 export function bindQueuedInboundSession(
   envelope: InboundEnvelope,
@@ -18,11 +20,18 @@ function bindAppTurn(envelope: InboundEnvelope, store: SessionBindingStore): voi
   if (!sessionId || !controls) throw new Error("queued_app_turn_context_missing");
   const existing = store.getBySessionId(sessionId);
   const modelRef = controls.model_ref;
+  const workspaceAuthority = resolveSessionWorkspaceAuthority({
+    binding: existing,
+    projectWorkspacePath: context.project?.workspacePath,
+  });
   store.upsert({
     sessionId,
     role: existing?.role ?? "butler",
     projectId: context.project?.id ?? existing?.projectId,
-    workspacePath: context.project?.workspacePath ?? existing?.workspacePath ?? process.cwd(),
+    workspacePath:
+      workspaceAuthority.kind === "project"
+        ? workspaceAuthority.workspacePath ?? process.cwd()
+        : existing?.workspacePath ?? process.cwd(),
     runtimeAdapterId: "btcc-turn-runtime",
     modelProviderId: modelRef.split("/", 1)[0] || "openai",
     modelRef,
