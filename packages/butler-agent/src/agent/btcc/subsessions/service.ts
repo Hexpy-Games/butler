@@ -6,7 +6,10 @@ import { completeStewardResultForDependencies } from "./terminal-result-service.
 import { resolveParentResultEvidence } from "./accepted-terminal-report.ts";
 import { createStewardWorktree } from "./worktree.ts";
 import { childProjectContextBinding, delegationProjectContextReady, snapshotDelegationProjectContext } from "./project-context.ts";
-import { normalizeSubsessionAllowedToolsAndEffects, normalizeSubsessionMutationScope } from "./scope.ts";
+import {
+  normalizeSubsessionAllowedToolsAndEffects,
+  normalizeSubsessionMutationScopeForEffects,
+} from "./scope.ts";
 import { completePacketContext } from "./terminal-results.ts";
 import { renderDelegatedParentConversationContext } from "./parent-conversation-context.ts";
 import { renderStewardInput } from "./steward-input.ts";
@@ -309,16 +312,20 @@ function normalizeDelegationRequest(input: DelegationRequest): DelegationRequest
   }
   if (!input.acceptance_criteria.length) throw new Error("delegation_acceptance_criteria_required");
   const executionMode = normalizeExecutionMode(input.execution_mode);
+  const allowedToolsAndEffects = normalizeSubsessionAllowedToolsAndEffects(
+    input.allowed_tools_and_effects,
+    executionMode,
+  );
   const mutationScope = executionMode === "mutation"
-    ? normalizeSubsessionMutationScope(input.mutation_scope)
+    ? normalizeSubsessionMutationScopeForEffects(
+        input.mutation_scope,
+        allowedToolsAndEffects,
+      )
     : [];
   return {
     ...input,
     execution_mode: executionMode,
-    allowed_tools_and_effects: normalizeSubsessionAllowedToolsAndEffects(
-      input.allowed_tools_and_effects,
-      executionMode,
-    ),
+    allowed_tools_and_effects: allowedToolsAndEffects,
     mutation_scope: mutationScope,
   };
 }

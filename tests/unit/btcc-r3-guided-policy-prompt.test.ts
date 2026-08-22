@@ -25,7 +25,10 @@ import { appRuntimePolicy } from
   "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
 import { delegateToStewardToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
-import { normalizeSubsessionMutationScope } from
+import {
+  normalizeSubsessionMutationScope,
+  normalizeSubsessionMutationScopeForEffects,
+} from
   "../../packages/butler-agent/src/agent/btcc/subsessions/scope.ts";
 
 test("R3 guided web_read keeps reader backend runtime-owned", () => {
@@ -325,10 +328,15 @@ test("SS-03B delegation tool contract exposes canonical execution surfaces", () 
     minItems: 1,
     items: { enum: ["edit_file:workspace", "run_command:workspace", "write_file:workspace"] },
   });
-  expect(mutation?.properties?.mutation_scope).toMatchObject({ minItems: 1 });
+  expect(mutation?.properties?.mutation_scope).toMatchObject({ minItems: 0 });
   expect(mutation?.properties?.mutation_scope?.items?.description).toContain(
-    "terminal dir/** shorthand",
+    "whole session worktree",
   );
+  expect(normalizeSubsessionMutationScope(["."])).toEqual(["."]);
+  expect(normalizeSubsessionMutationScopeForEffects(
+    ["/Users/example/project"],
+    ["run_command:workspace"],
+  )).toEqual([]);
   expect(normalizeSubsessionMutationScope(["src/**", "package.json", "src/**"]))
     .toEqual(["package.json", "src/"]);
   for (const rejected of ["**", "src/*.ts", "src/?", "src/[ab]"]) {

@@ -3,7 +3,10 @@ import type {
   StewardResultCode,
   StewardResultStatus,
 } from "./contracts.ts";
-import { SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS } from "./scope.ts";
+import {
+  SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS,
+  subsessionFileMutationScopeRequired,
+} from "./scope.ts";
 
 export function completePacketContext(packet: DelegationPacket): boolean {
   if (!packet || typeof packet !== "object") return false;
@@ -32,6 +35,13 @@ export function completePacketContext(packet: DelegationPacket): boolean {
       packet.allowed_tools_and_effects.every((value) =>
         SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS.includes(value as typeof SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS[number]),
       ));
+  const fileMutationScopeRequired = executionMode === "mutation" &&
+    Array.isArray(packet.allowed_tools_and_effects) &&
+    subsessionFileMutationScopeRequired(packet.allowed_tools_and_effects);
+  const mutationScopeValid = Array.isArray(packet.mutation_scope) &&
+    (fileMutationScopeRequired
+      ? stringArray(packet.mutation_scope, 1)
+      : packet.mutation_scope.length === 0);
   const projectContextValid = validProjectContext(packet.project_context);
   return Boolean(
     stringValue(packet.delegation_id) &&
@@ -45,7 +55,7 @@ export function completePacketContext(packet: DelegationPacket): boolean {
     stringArray(packet.task_or_plan_refs) &&
     stringArray(packet.constraints_and_non_goals) &&
     stringArray(packet.allowed_tools_and_effects, 1) &&
-    stringArray(packet.mutation_scope, executionMode === "mutation" ? 1 : 0) &&
+    mutationScopeValid &&
     workspaceValid &&
     readOnlySurfaceValid &&
     projectContextValid &&

@@ -16,6 +16,10 @@ export const SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS = [
 
 const allowedMutationEffects = new Set<string>(SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS);
 const allowedReadOnlyEffects = new Set<string>(SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS);
+const fileMutationEffects = new Set<string>([
+  "edit_file:workspace",
+  "write_file:workspace",
+]);
 
 export function normalizeSubsessionAllowedToolsAndEffects(
   values: readonly string[],
@@ -65,7 +69,9 @@ export function subsessionToolNames(
 }
 
 function normalizeScopePath(value: string): string | null {
-  const raw = value.trim().replaceAll("\\", "/").replace(/^\.\//u, "").replace(/\/{2,}/gu, "/");
+  const supplied = value.trim().replaceAll("\\", "/");
+  if (supplied === "." || supplied === "./") return ".";
+  const raw = supplied.replace(/^\.\//u, "").replace(/\/{2,}/gu, "/");
   const terminalSubtree = raw.endsWith("/**");
   const directory = terminalSubtree || raw.endsWith("/");
   const normalized = (terminalSubtree ? raw.slice(0, -3) : raw).replace(/\/+$/u, "");
@@ -74,4 +80,19 @@ function normalizeScopePath(value: string): string | null {
     return null;
   }
   return directory ? `${normalized}/` : normalized;
+}
+
+export function subsessionFileMutationScopeRequired(
+  allowedToolsAndEffects: readonly string[],
+): boolean {
+  return allowedToolsAndEffects.some((value) => fileMutationEffects.has(value));
+}
+
+export function normalizeSubsessionMutationScopeForEffects(
+  values: readonly string[],
+  allowedToolsAndEffects: readonly string[],
+): string[] {
+  return subsessionFileMutationScopeRequired(allowedToolsAndEffects)
+    ? normalizeSubsessionMutationScope(values)
+    : [];
 }

@@ -95,7 +95,7 @@ export function mutationScopeAllowsPath(
   if (!target || isAbsolute(target) || target.split("/").includes("..")) return false;
   return mutationScope.some((scope) => {
     const normalized = scope.trim().replaceAll("\\", "/").replace(/^\.\//u, "");
-    return Boolean(normalized) &&
+    return scope.trim() === "." || scope.trim() === "./" || Boolean(normalized) &&
       (target === normalized || normalized.endsWith("/") && target.startsWith(normalized));
   });
 }

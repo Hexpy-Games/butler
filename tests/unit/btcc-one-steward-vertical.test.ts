@@ -285,7 +285,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
         "expected_result_schema",
         "work_creation_policy: one_recoverable_child_work",
         "access_and_budget_policy",
-        "mutation_scope: fixtures/",
+        "mutation_scope: .",
       ]) {
         expect(childPrompt).toContain(requiredPacketField);
       }
@@ -1424,7 +1424,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
                 "write_file:workspace",
                 "run_command:workspace",
               ],
-              mutation_scope: ["fixtures/**"],
+              mutation_scope: ["."],
             })],
           };
         }
