@@ -88,7 +88,7 @@ test("summary exposes session worktree identity and dirty state without paths", 
       dirty: false,
     },
   });
-  expect(clean).toContain("Session worktree");
+  expect(clean).toContain("Worktree");
   expect(clean).toContain("feature/demo");
   expect(clean).toContain("Clean");
   expect(clean).not.toContain("/tmp/");
@@ -134,7 +134,7 @@ test("summary keeps project Git dependency status distinct from worktree failure
       workspace_status: "unavailable",
     },
   });
-  expect(html).toContain("Project · Project workspace");
+  expect(html).toContain("Local");
   expect(html).not.toContain("Session worktree unavailable");
   expect(html).toContain("Git is not installed");
 });

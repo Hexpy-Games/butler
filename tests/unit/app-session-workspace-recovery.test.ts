@@ -13,6 +13,7 @@ import {
   createWorkspaceReference,
   recoverSessionWorkspaceReference,
   resolveSessionWorkspaceAuthority,
+  shortSessionWorktreeBranch,
   validateSessionWorkspaceAuthority,
 } from "../../packages/butler-agent/src/agent/session-workspaces/index.ts";
 import { createButlerToolExecutor as createAgentToolExecutor } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
@@ -61,10 +62,16 @@ test("public project-session creation binds a checked-out session worktree befor
     const binding = bindings.getBySessionId(runtimeSessionId);
     expect(binding).toBeTruthy();
     expect(binding?.workspacePath).not.toBe(projectRow!.workspace_path);
+    const workspaceMarker = binding?.metadata?.sessionWorkspace as
+      Record<string, unknown> | undefined;
+    const branch = String(workspaceMarker?.branch ?? "");
+    expect(branch.startsWith("butler/s/")).toBe(true);
+    expect(branch.length).toBeLessThanOrEqual(21);
+    expect(branch).not.toContain(chatId);
     expect(binding?.metadata?.sessionWorkspace).toMatchObject({
       schema: "butler.session-workspace-binding.v1",
       ownership: "session",
-      branch: `butler/session/${chatId}`,
+      branch,
     });
     expect(
       gitText(binding!.workspacePath, [
@@ -73,7 +80,7 @@ test("public project-session creation binds a checked-out session worktree befor
         "--short",
         "HEAD",
       ]),
-    ).toBe(`butler/session/${chatId}`);
+    ).toBe(branch);
 
     const view = await getJson(
       `${server.url}session-view?session_id=${encodeURIComponent(chatId)}`,
@@ -81,7 +88,7 @@ test("public project-session creation binds a checked-out session worktree befor
     expect(view.data.branch).toMatchObject({
       workspace_binding: "session_worktree",
       workspace_status: "available",
-      branch_name: `butler/session/${chatId}`,
+      branch_name: branch,
       dirty: false,
     });
     expect(JSON.stringify(view.data.branch)).not.toContain(
@@ -173,7 +180,7 @@ test("project-session creation fails closed and removes provisional state when a
           "worktree",
           "add",
           "-b",
-          "butler/session/conflicting-session",
+          shortSessionWorktreeBranch("conflicting-session"),
           join(root, "conflicting-worktree"),
         ],
         { cwd: projectRow!.workspace_path, encoding: "utf8" },

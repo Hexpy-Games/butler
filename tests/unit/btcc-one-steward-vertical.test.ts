@@ -218,6 +218,13 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
         "SELECT packet_json FROM btcc_subsession_delegations",
       ).get()?.packet_json ?? "";
       expect(packetJson).not.toContain(authToken);
+      const packet = JSON.parse(packetJson) as {
+        workspace_and_worktree?: { branch?: string };
+      };
+      const stewardBranch = packet.workspace_and_worktree?.branch ?? "";
+      expect(stewardBranch.startsWith("butler/st/")).toBe(true);
+      expect(stewardBranch.length).toBeLessThanOrEqual(22);
+      expect(stewardBranch).not.toContain(String(relation?.relation_id ?? ""));
       expect(relation).toMatchObject({
         parent_session_id: parentSessionId,
         ordinal: 1,

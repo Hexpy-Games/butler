@@ -67,11 +67,52 @@ test("active session worktree is visible in the titlebar without exposing a path
   await act(async () => root?.render(<Titlebar />));
 
   const indicator = container.querySelector(
-    '[data-test-class="titlebar-worktree"]',
+    '[data-test-class="titlebar-workspace"]',
   );
   expect(indicator?.textContent).toContain("codex/worktree-visibility");
   expect(indicator?.getAttribute("aria-label")).toContain("worktree");
   expect(container.innerHTML).not.toContain("/Users/");
+});
+
+test("local project workspace and its Git branch stay visible in the titlebar", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", { url: "http://localhost" });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  useButlerStore.setState({
+    view: { kind: "session" },
+    activeChatId: "session-titlebar",
+    navigation: navigation("Local session"),
+    summary: {
+      session_id: "session-titlebar",
+      branch_info: {
+        available: true,
+        workspace_mode: "git",
+        branch_name: "main",
+        safe_status: "Git branch main",
+        workspace_binding: "project",
+        workspace_label: "Project workspace",
+        workspace_status: "available",
+        dirty: false,
+      },
+    },
+    leftOpen: true,
+    rightOpen: false,
+  });
+  const container = dom.window.document.querySelector("#root");
+  if (!(container instanceof dom.window.HTMLElement)) throw new Error("Missing root.");
+  root = createRoot(container);
+  await act(async () => root?.render(<Titlebar />));
+
+  const indicator = container.querySelector(
+    '[data-test-class="titlebar-workspace"]',
+  );
+  expect(indicator?.textContent).toBe("Local · main");
 });
 
 test("live navigation title updates the active titlebar and selectors without remount", async () => {

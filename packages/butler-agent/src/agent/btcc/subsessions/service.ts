@@ -1,4 +1,5 @@
 import { NativeInboundQueue } from "../../../gateways/core/inbound-queue.ts";
+import { shortStewardWorktreeBranch } from "../../session-workspaces/index.ts";
 import { digest, stableJson } from "../identity/index.ts";
 import { subsessionChildTurnId, subsessionResultId, subsessionRootWorkId } from "./identities.ts";
 import { recoverPendingParentInputs } from "./outbox-recovery.ts";
@@ -89,7 +90,7 @@ export function createSubsessionDelegationService(
       const childSessionId = `steward-${digest(`btcc.subsession.child-session.v1\0${relationId}`).slice(0, 32)}`;
       const childTurnId = `steward-turn-${digest(`btcc.subsession.child-turn.v1\0${relationId}`).slice(0, 32)}`;
       const rootWorkId = subsessionRootWorkId(delegationId, taskId, childSessionId);
-      const branch = `butler/steward/${relationId.slice(-20)}`;
+      const branch = shortStewardWorktreeBranch(relationId);
       const parentWork = await input.durableWork.boundWorkForTurn(normalizedRequest.parent_turn_id);
       if (normalizedRequest.parent_work_ref && (!parentWork ||
         parentWork.workId !== normalizedRequest.parent_work_ref.work_id ||

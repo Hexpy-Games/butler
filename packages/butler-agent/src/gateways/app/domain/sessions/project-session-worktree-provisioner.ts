@@ -6,6 +6,7 @@ import type { SettingsView, SessionSummary } from
 import {
   bindSessionGitWorktree,
   createWorkspaceReference,
+  shortSessionWorktreeBranch,
 } from "../../../../agent/session-workspaces/index.ts";
 import type { AppSessionWorkspaceBindingStore } from
   "./session-workspace-binding-store.ts";
@@ -55,7 +56,7 @@ export class AppProjectSessionWorktreeProvisioner {
         plan_mode: settings.plan_mode_default,
       },
     });
-    const branch = `butler/session/${session.id}`;
+    const branch = shortSessionWorktreeBranch(session.id);
     const result = await bindSessionGitWorktree({
       action: "create",
       branch,
