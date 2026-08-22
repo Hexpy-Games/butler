@@ -32,11 +32,6 @@ export async function snapshotDelegationProjectContext(input: {
       ["project-hot-cache"],
     );
   }
-  const requiredSourceIds: ProjectContextSourceId[] =
-    parentTurn.context.mandatoryHotCacheRefs.length > 0
-      ? ["project-hot-cache"]
-      : [];
-
   const selected = new Map<ProjectContextSourceId, DelegationProjectContextRef>();
   const candidates = [
     ...parentTurn.context.mandatoryHotCacheRefs,
@@ -64,6 +59,9 @@ export async function snapshotDelegationProjectContext(input: {
     }
   }
 
+  const requiredSourceIds: ProjectContextSourceId[] = selected.has("project-hot-cache")
+    ? ["project-hot-cache"]
+    : [];
   const missingSourceIds = requiredSourceIds.filter((sourceId) => !selected.has(sourceId));
   const refs = [...selected.values()];
   return {
