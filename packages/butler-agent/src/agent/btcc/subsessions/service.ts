@@ -16,6 +16,7 @@ import { renderDelegatedParentConversationContext } from "./parent-conversation-
 import { renderStewardInput } from "./steward-input.ts";
 import {
   inheritedStewardRuntimePolicy,
+  normalizeStewardAccessMode,
   stewardRootWorkScope,
 } from "./runtime-policy.ts";
 import { createSubsessionControlService } from "./control.ts";
@@ -173,6 +174,7 @@ function delegationIdentity(request: DelegationRequest): string {
     parent_session_id: request.parent_session_id,
     parent_turn_id: request.parent_turn_id,
     anchor_message_id: request.anchor_message_id,
+    parent_access_mode: request.parent_access_mode,
     execution_mode: request.execution_mode,
     objective: request.objective,
     acceptance_criteria: request.acceptance_criteria,
@@ -236,7 +238,7 @@ function createPacket(
     },
     work_creation_policy: "one_recoverable_child_work",
     access_and_budget_policy: {
-      access_mode: request.execution_mode === "read_only" ? "read_only" : "full_access",
+      access_mode: request.parent_access_mode,
       max_turns: 12,
       model_ref: request.model_ref,
       reasoning_effort: request.reasoning_effort,
@@ -275,7 +277,7 @@ function registerChildSession(
         allowed_tools_and_effects: [...packet.allowed_tools_and_effects],
         ...(inheritedProject ? { project_context: inheritedProject.metadata } : {}),
       },
-      runtimePolicy: inheritedStewardRuntimePolicy(parent, packet.execution_mode),
+      runtimePolicy: inheritedStewardRuntimePolicy(parent, request.parent_access_mode),
       reasoning_effort: packet.reasoning_effort,
     },
   });
@@ -321,6 +323,7 @@ function normalizeDelegationRequest(input: DelegationRequest): DelegationRequest
     if (typeof value === "string" && !value.trim()) throw new Error(`delegation_${key}_required`);
   }
   if (!input.acceptance_criteria.length) throw new Error("delegation_acceptance_criteria_required");
+  const parentAccessMode = normalizeStewardAccessMode(input.parent_access_mode);
   const executionMode = normalizeExecutionMode(input.execution_mode);
   const allowedToolsAndEffects = normalizeSubsessionAllowedToolsAndEffects(
     input.allowed_tools_and_effects,
@@ -334,6 +337,7 @@ function normalizeDelegationRequest(input: DelegationRequest): DelegationRequest
     : [];
   return {
     ...input,
+    parent_access_mode: parentAccessMode,
     execution_mode: executionMode,
     allowed_tools_and_effects: allowedToolsAndEffects,
     mutation_scope: mutationScope,

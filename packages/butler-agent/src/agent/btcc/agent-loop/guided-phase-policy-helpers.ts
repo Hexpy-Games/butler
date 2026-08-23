@@ -1,66 +1,7 @@
 import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
 import { TOOL_CAPABILITY_METADATA } from "../../tools/registry.ts";
-import type { ButlerExecutionPolicy } from "../contracts.ts";
 import type { FunctionToolDefinition } from "../../../integrations/providers/runtime-contracts.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from "./durable-work-tools.ts";
-
-export function applyStewardTaskEffectBoundary(
-  policy: Pick<ButlerExecutionPolicy, "role" | "subsession">,
-  tools: readonly FunctionToolDefinition[],
-): FunctionToolDefinition[] {
-  if (policy.role !== "steward" || !policy.subsession) return [...tools];
-  const subsession = policy.subsession;
-  return tools
-    .map((tool) => tool.name === "replace_work_plan"
-      ? stewardPlanTool(tool, subsession)
-      : tool);
-}
-
-function stewardPlanTool(
-  tool: FunctionToolDefinition,
-  subsession: NonNullable<ButlerExecutionPolicy["subsession"]>,
-): FunctionToolDefinition {
-  const parameters = structuredClone(tool.parameters) as Record<string, unknown>;
-  const properties = objectRecord(parameters.properties);
-  const actions = objectRecord(properties?.actions);
-  const items = objectRecord(actions?.items);
-  const actionProperties = objectRecord(items?.properties);
-  if (!properties || !actions || !items || !actionProperties || !("effect" in actionProperties)) {
-    return tool;
-  }
-  if (subsession.executionMode === "mutation") {
-    return tool;
-  }
-  const { effect: _effect, ...withoutEffect } = actionProperties;
-  const required = Array.isArray(items.required)
-    ? items.required.filter((name) => name !== "effect")
-    : items.required;
-  return {
-    ...tool,
-    parameters: {
-      ...parameters,
-      properties: {
-        ...properties,
-        actions: {
-          ...actions,
-          minItems: 2,
-          description: "Use at least two truthful top-level evidence actions for this substantial delegated Work.",
-          items: {
-            ...items,
-            properties: withoutEffect,
-            required,
-          },
-        },
-      },
-    },
-  };
-}
-
-function objectRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
 
 export function phaseAllowsTool(
   phase: "direct" | "read_only" | "execution",

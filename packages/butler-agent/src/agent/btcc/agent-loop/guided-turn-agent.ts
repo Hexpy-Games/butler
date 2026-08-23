@@ -114,7 +114,7 @@ export function createProductionGuidedTurnAgent(
         workspaceReference,
         sessionBindingStore: sessionWorkspace.bindingStore,
         operationResultExactReader: operationResults.read,
-        ...subsessionToolInput(input.subsessionDelegation, turn),
+        ...subsessionToolInput(input.subsessionDelegation, turn, policy.accessMode),
         turnId: turn.turnId,
         imageManifests: providerImageAttachments(turn).flatMap((a) => a.visualManifest ? [a.visualManifest] : []),
         ...(turn.context.imageAdmission ? { imageCarrier: turn.context.imageAdmission.tuple, imageCapability: turn.context.imageAdmission.capability } : {}),

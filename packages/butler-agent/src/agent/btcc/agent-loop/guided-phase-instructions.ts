@@ -7,7 +7,7 @@ export const GUIDED_STABLE_PROVIDER_PREFIX_REVISION =
 
 export function phaseMinimalStableInstructionSurface(
   phase: "direct" | "read_only" | "execution",
-  policy: Pick<ButlerExecutionPolicy, "role" | "trackingMode" | "subsession">,
+  policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "trackingMode" | "subsession">,
   toolProfileRevision: string,
 ): {
   stableInstructionPrefix: string;
@@ -27,7 +27,7 @@ export function phaseMinimalStableInstructionSurface(
 
 export function phaseMinimalStableInstructions(
   phase: "direct" | "read_only" | "execution",
-  policy: Pick<ButlerExecutionPolicy, "role" | "trackingMode" | "subsession">,
+  policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "trackingMode" | "subsession">,
 ): string {
   if (policy.role === "steward" && policy.subsession) {
     return guidedStewardInstructions(policy);
@@ -42,7 +42,7 @@ export function phaseMinimalStableInstructions(
           "Substantial writing, revision, research, comparison, inspection, or execution belongs to Steward, including ordinary chats without a project binding. A short correction or continuation of that objective remains Steward work.",
           "Delegate bounded independent multi-step repository inspection, multi-source research or synthesis, persistent-artifact work, or execution-stage mutation with delegate_to_steward.",
           "Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler.",
-          "Choose read_only for inspection or research without effects, and mutation only for requested execution-stage changes.",
+          "Choose read_only for inspection or research without expected workspace effects, and mutation only for requested execution-stage changes; this describes task and workspace intent and never changes the Composer access mode inherited by Steward.",
           "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
           "Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",
           "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",

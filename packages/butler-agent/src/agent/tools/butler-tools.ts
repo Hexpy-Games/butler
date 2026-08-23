@@ -252,7 +252,6 @@ export function createButlerToolExecutor(
       sessionId: input.sessionId,
       sessionBindingStore: input.sessionBindingStore,
       mutationScope: input.subsessionMutationScope,
-      allowedToolsAndEffects: input.subsessionAllowedToolsAndEffects,
     }),
     ...createSubsessionToolHandlers({
       service: input.subsessionDelegation,
@@ -261,6 +260,7 @@ export function createButlerToolExecutor(
       anchorMessageId: input.anchorMessageId,
       modelRef: input.modelRef,
       reasoningEffort: input.reasoningEffort,
+      parentAccessMode: input.parentAccessMode,
     }),
   });
   toolExecutorRef.current = toolExecutors;

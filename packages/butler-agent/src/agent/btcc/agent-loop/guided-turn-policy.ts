@@ -28,7 +28,6 @@ import {
 } from "./guided-session-workspace-policy.ts";
 import { readOperationResultsToolDefinition } from
   "../../tools/monitoring/read_operation_results/index.ts";
-import { applyStewardTaskEffectBoundary } from "./guided-phase-policy-helpers.ts";
 const STEWARD_PARENT_TOOL_NAMES = ["delegate_to_steward", "steer_steward", "cancel_steward"];
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
@@ -193,8 +192,7 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
       : []),
     ...guidedWorkspaceVisibleToolNames(policy),
   ]);
-  return applyStewardTaskEffectBoundary(policy, authorized)
-    .filter((tool) => visible.has(tool.name))
+  return authorized.filter((tool) => visible.has(tool.name))
     .map(guidedToolDefinition);
 }
 

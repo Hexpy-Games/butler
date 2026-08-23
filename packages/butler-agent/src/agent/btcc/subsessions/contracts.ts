@@ -66,7 +66,7 @@ export type DelegationPacket = {
   };
   work_creation_policy: "one_recoverable_child_work";
   access_and_budget_policy: {
-    access_mode: "full_access" | "read_only";
+    access_mode: "full_access" | "ask_first" | "read_only";
     max_turns: number;
     model_ref: string;
     reasoning_effort: string;
@@ -124,6 +124,7 @@ export type DelegationRequest = {
   parent_session_id: string;
   parent_turn_id: string;
   anchor_message_id: string;
+  parent_access_mode: "full_access" | "ask_first" | "read_only";
   execution_mode: SubsessionExecutionMode;
   safe_title: string;
   objective: string;
