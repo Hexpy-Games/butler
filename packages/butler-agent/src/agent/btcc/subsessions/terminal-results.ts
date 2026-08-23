@@ -66,7 +66,7 @@ export function completePacketContext(packet: DelegationPacket): boolean {
     expectedSchema.required_fields.includes("summary") &&
     expectedSchema.required_fields.includes("acceptance_evidence") &&
     expectedSchema.required_fields.includes("changed_artifacts") &&
-    access?.access_mode === (executionMode === "read_only" ? "read_only" : "full_access") &&
+    ["read_only", "ask_first", "full_access"].includes(String(access?.access_mode)) &&
     Number.isInteger(access.max_turns) && access.max_turns > 0 &&
     stringValue(access.model_ref) &&
     stringValue(access.reasoning_effort) &&

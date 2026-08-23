@@ -433,6 +433,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
         parent_session_id: parentSessionId,
         parent_turn_id: `terminal-parent-turn-${parentCase.key}`,
         anchor_message_id: `terminal-anchor-${parentCase.key}`,
+        parent_access_mode: "full_access",
         execution_mode: "mutation",
         safe_title: `Terminal ${parentCase.key}`,
         objective: parentCase.key === "blocked"
@@ -463,6 +464,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
       parent_session_id: incompleteParentSessionId,
       parent_turn_id: "terminal-parent-turn-incomplete",
       anchor_message_id: "terminal-anchor-incomplete",
+      parent_access_mode: "full_access",
       execution_mode: "mutation",
       safe_title: "Terminal incomplete context",
       objective: "This objective will be removed before Steward admission.",

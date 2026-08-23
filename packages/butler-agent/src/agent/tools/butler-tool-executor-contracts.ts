@@ -83,6 +83,6 @@ export type ButlerToolExecutorInput = {
   anchorMessageId?: string;
   modelRef?: string;
   reasoningEffort?: string;
+  parentAccessMode?: "full_access" | "ask_first" | "read_only";
   subsessionMutationScope?: readonly string[];
-  subsessionAllowedToolsAndEffects?: readonly string[];
 };

@@ -27,7 +27,6 @@ import {
 } from "../operation-result-replay/index.ts";
 import { phaseMinimalStableInstructionSurface } from "./guided-phase-instructions.ts";
 import {
-  applyStewardTaskEffectBoundary,
   phaseAllowsTool,
   removeRuntimeOwnedSchemaDefaults,
 } from "./guided-phase-policy-helpers.ts";
@@ -114,10 +113,7 @@ export function selectGuidedTurnPhasePolicy(
     ),
     exactResultReplay,
   );
-  const authorizedTools = applyStewardTaskEffectBoundary(
-    executionPolicy,
-    admittedAuthorizedTools,
-  );
+  const authorizedTools = admittedAuthorizedTools;
   const admittedRequiredToolNames = new Set([
     ...executionPolicy.requiredNativeTools,
     ...executionPolicy.requiredNativeToolProfiles.flatMap((profile) =>

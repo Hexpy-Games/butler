@@ -351,6 +351,7 @@ test("feature selected stable prefix is the prefix of the real guided provider i
 test("SS-03B phase instructions define semantic delegation selection", () => {
   const policy = {
     role: "butler" as const,
+    accessMode: "full_access" as const,
     trackingMode: "ledger" as const,
     subsession: undefined,
   };
@@ -382,16 +383,7 @@ test("SS-03B phase instructions define semantic delegation selection", () => {
   }
 });
 
-test("Steward keeps ordinary BTCC authority while read-only still omits effects", () => {
-  const readOnlyTurn = stewardTurnRecord("read_only");
-  for (const env of [{}, ENABLED]) {
-    const selection = selectGuidedTurnPhasePolicy(readOnlyTurn, env);
-    const actionSchema = planActionSchema(selection.providerTools);
-    expect(planActionsSchema(selection.providerTools).minItems).toBe(2);
-    expect(actionSchema.properties).not.toHaveProperty("effect");
-    expect(actionSchema.required ?? []).not.toContain("effect");
-  }
-
+test("Steward task intent cannot narrow Composer Plan or effect authority", () => {
   const mutationActionSchema = planActionSchema(
     selectGuidedTurnPhasePolicy(stewardTurnRecord("mutation"), ENABLED).providerTools,
   );
@@ -405,6 +397,13 @@ test("Steward keeps ordinary BTCC authority while read-only still omits effects"
       ENABLED,
     ).providerTools,
   );
+  for (const env of [{}, ENABLED]) {
+    const selection = selectGuidedTurnPhasePolicy(stewardTurnRecord("read_only"), env);
+    const actionSchema = planActionSchema(selection.providerTools);
+    expect(actionSchema.properties.effect).toEqual(
+      butlerActionSchema.properties.effect,
+    );
+  }
   expect(planActionsSchema(
     selectGuidedTurnPhasePolicy(stewardTurnRecord("mutation"), ENABLED).providerTools,
   ).minItems).toBe(planActionsSchema(
@@ -454,7 +453,7 @@ test("Steward keeps ordinary BTCC authority while read-only still omits effects"
   ]) expect(mutationNames).toContain(name);
 });
 
-test("read-only Steward inherits every safe parent capability instead of a role whitelist", () => {
+test("Steward runtime inherits Composer access and capabilities without task-mode narrowing", () => {
   const parent = appProjectBinding({
     accessMode: "full_access",
     trackingMode: "ledger",
@@ -467,25 +466,24 @@ test("read-only Steward inherits every safe parent capability instead of a role 
     ],
     requiredNativeTools: ["read_tool_evidence_artifact", "write_file"],
   });
-  const inherited = inheritedStewardRuntimePolicy(parent, "read_only");
+  const inherited = inheritedStewardRuntimePolicy(parent, "full_access");
 
-  expect(inherited.requiredNativeToolProfiles).toEqual(["project", "memory-read"]);
-  expect(inherited.requiredNativeTools).toEqual(expect.arrayContaining([
-    "grep_files",
-    "list_automations",
-    "list_files",
-    "list_mcp_capabilities",
-    "read_file",
-    "read_mcp_resource",
+  expect(inherited.accessMode).toBe("full_access");
+  expect(inherited.requiredNativeToolProfiles).toEqual([
+    "project",
+    "memory-read",
+    "mcp",
+    "workspace",
+    "automation",
+  ]);
+  expect(inherited.requiredNativeTools).toEqual([
     "read_tool_evidence_artifact",
-    "read_tool_output_artifact",
-  ]));
-  for (const effectful of [
-    "call_mcp_tool",
-    "create_automation",
-    "run_command",
     "write_file",
-  ]) expect(inherited.requiredNativeTools).not.toContain(effectful);
+  ]);
+  expect(inheritedStewardRuntimePolicy(parent, "ask_first").accessMode)
+    .toBe("ask_first");
+  expect(inheritedStewardRuntimePolicy(parent, "read_only").accessMode)
+    .toBe("read_only");
 });
 
 test("Steward root Work uses the same project scope as a ledger-backed child Turn", () => {
@@ -640,7 +638,7 @@ function turnRecord(options: {
 
 function stewardTurnRecord(executionMode: "read_only" | "mutation"): TurnRecord {
   const turn = turnRecord({
-    accessMode: executionMode === "read_only" ? "read_only" : "full_access",
+    accessMode: "full_access",
     trackingMode: "ledger",
     projectRef: "butler",
   });

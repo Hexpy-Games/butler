@@ -14,7 +14,8 @@ export const delegateToStewardToolDefinition: ButlerToolDefinition = {
   name: "delegate_to_steward",
   description: [
     "Delegate one bounded effect-free inspection or iterative mutation Work to exactly one ordinary Steward session.",
-    "Provide the execution mode, minimal task packet, acceptance criteria, local workspace effect guard, and file mutation scope only when edit_file or write_file is admitted.",
+    "Provide the task execution intent, minimal task packet, acceptance criteria, local workspace effect evidence, and file mutation scope only when edit_file or write_file is expected.",
+    "The Steward always inherits the Composer Turn's admitted access mode and ordinary BTCC tool policy exactly; execution_mode and allowed_tools_and_effects never choose, upgrade, or downgrade authority.",
     "For read_only, allowed_tools_and_effects is exactly the complete five-value array [grep_files:workspace, list_files:workspace, read_file:workspace, web_read:network, web_search:network], and mutation_scope is [].",
     "Every Steward keeps the parent's admitted project knowledge, memory recall, conversation, web, MCP, Project Ledger, and ordinary BTCC task capabilities. This field is not the Steward tool catalog.",
     "Every mutation Steward can list, grep, read, apply admitted edit/write effects, and run bounded workspace validation through the ordinary BTCC loop.",
@@ -96,7 +97,7 @@ export const delegateToStewardToolMetadata: ToolCapabilityMetadata = {
   safetyNotes: [
     "Creates one ordinary Steward session with one immutable minimal packet.",
     "Mutation uses a validated session-owned isolated worktree; read-only inspection uses only the validated project workspace.",
-    "The delegated packet bounds authority and context; it does not replace the ordinary BTCC Work lifecycle.",
+    "The delegated packet bounds the objective and context; Composer access remains the sole authority and the packet does not replace the ordinary BTCC Work lifecycle.",
   ],
 };
 

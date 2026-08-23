@@ -292,6 +292,7 @@ test("SS-03B guided instructions define semantic delegation selection", () => {
 
 test("SS-03B delegation tool contract exposes canonical execution surfaces", () => {
   const parameters = delegateToStewardToolDefinition.parameters as {
+    properties?: Record<string, unknown>;
     oneOf?: Array<{ properties?: Record<string, any> }>;
   };
   const variants = parameters.oneOf ?? [];
@@ -315,6 +316,10 @@ test("SS-03B delegation tool contract exposes canonical execution surfaces", () 
   expect(delegateToStewardToolDefinition.description).toContain(
     "Every mutation Steward can list, grep, read, apply admitted edit/write effects, and run bounded workspace validation",
   );
+  expect(delegateToStewardToolDefinition.description).toContain(
+    "inherits the Composer Turn's admitted access mode",
+  );
+  expect(parameters.properties).not.toHaveProperty("parent_access_mode");
   expect(readOnly).toBeDefined();
   expect(readOnly?.properties?.allowed_tools_and_effects).toMatchObject({
     minItems: 5,
@@ -349,8 +354,8 @@ test("SS-03B delegation tool contract exposes canonical execution surfaces", () 
 test("Steward instructions keep ordinary BTCC memory, authority, and closeout", () => {
   const commonCloseout =
     "Use record_work_disposition as the sole Work closeout authority, exactly as an ordinary Butler BTCC Turn does. Reviews and completion Validation are optional quality records, never Steward-only completion gates.";
-  const readOnlyPlanContract =
-    "For read_only, every Plan action must omit the effect field entirely; reads and synthesis are evidence actions, never effects.";
+  const inheritedAccessContract =
+    "You inherit the Composer Turn's admitted full_access access mode exactly.";
   const multiStepPlanContract =
     "Use at least two truthful top-level Plan actions for this substantial delegated Work; do not collapse materially separate discovery, mutation, verification, or synthesis stages into one umbrella action.";
   const common = {
@@ -368,14 +373,19 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
   };
 
   const readOnlyInstructions = guidedStewardInstructions({
+    accessMode: "full_access",
     subsession: { ...common, executionMode: "read_only" },
   });
   expect(readOnlyInstructions).toContain(commonCloseout);
   expect(readOnlyInstructions).not.toContain("only then settle the child Work as completed");
   expect(readOnlyInstructions).not.toContain("at least two material read operations");
-  expect(readOnlyInstructions).toContain(readOnlyPlanContract);
+  expect(readOnlyInstructions).toContain(inheritedAccessContract);
+  expect(readOnlyInstructions).toContain(
+    "do not treat this task label as an access mode or tool restriction",
+  );
   expect(readOnlyInstructions).toContain(multiStepPlanContract);
   const mutationInstructions = guidedStewardInstructions({
+    accessMode: "full_access",
     subsession: {
       ...common,
       executionMode: "mutation",

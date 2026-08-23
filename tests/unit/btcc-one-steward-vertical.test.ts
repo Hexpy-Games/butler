@@ -327,6 +327,10 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
         "web_search",
         "write_file",
       ]));
+      const inheritedPlanTool = childTaskRequests
+        .flatMap((request) => request.tools)
+        .find((tool) => tool.name === "replace_work_plan");
+      expect(JSON.stringify(inheritedPlanTool?.parameters)).toContain('"effect"');
       const childToolRows = btccDb.query<{
         tool_name: string;
         status: string;
@@ -418,6 +422,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       parent_session_id: parentSessionId,
       parent_turn_id: relation!.parent_turn_id,
       anchor_message_id: `${relation!.anchor_message_id}-second`,
+      parent_access_mode: "full_access",
       execution_mode: "mutation",
       safe_title: "Second Steward task",
       objective: "Create a second bounded Steward result file.",
@@ -478,7 +483,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
   }
 });
 
-test("App Turn delegates one bounded read-only inspection to one Steward and synthesizes exactly once", async () => {
+test("full-access Composer delegation keeps Steward access while inspection stays bounded", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-read-only-steward-vertical-"));
   roots.push(root);
   initializeGitWorkspace(root);
@@ -874,7 +879,7 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       )).toBe(bindingContextBeforeRestart);
       expect(packet.execution_mode).toBe("read_only");
       expect((packet.access_and_budget_policy as Record<string, unknown>).access_mode)
-        .toBe("read_only");
+        .toBe("full_access");
       expect(packet.workspace_and_worktree).toEqual({
         ownership: "project",
         workspace_label: "Validated project workspace",
@@ -913,7 +918,7 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
         ?.metadata?.runtimePolicy as Record<string, unknown> | undefined;
       expect(child?.projectId).toBe("project-sandy");
       expect(child?.metadata?.runtimePolicy).toMatchObject({
-        accessMode: "read_only",
+        accessMode: "full_access",
         trackingMode: readOnlyParentPolicy?.trackingMode,
         authoritySource: "parent_session",
       });
@@ -1052,6 +1057,10 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
       `).get(String(result?.child_turn_id));
       expect(recallRow?.status).toBe("completed");
       expect(recallRow?.result_json).toContain("SANDY_PROJECT_MEMORY_CONTEXT");
+      expect(btccDb.query<{ status: string }, [string]>(`
+        SELECT status FROM btcc_guided_tool_calls
+        WHERE turn_id = ? AND tool_name = 'run_command'
+      `).get(String(result?.child_turn_id))?.status).toBe("completed");
       const childTaskRequests = childRequests.filter((request) =>
         request.messages.some((message) => message.content.includes("delegation_id:")),
       );
@@ -1060,11 +1069,13 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
         request.tools.map((tool) => tool.name),
       ))].sort();
       expect(childToolNames).toEqual(expect.arrayContaining([
+        "edit_file",
         "grep_files",
         "list_conversation_sessions",
         "list_files",
         "read_conversation_session",
         "read_file",
+        "run_command",
         "recall_memory",
         "record_work_checkpoint",
         "record_work_disposition",
@@ -1072,6 +1083,7 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
         "replace_work_plan",
         "web_read",
         "web_search",
+        "write_file",
       ]));
       const childPrompt = childTaskRequests.flatMap((request) =>
         request.messages.map((message) => message.content),
@@ -1092,9 +1104,9 @@ test("App Turn delegates one bounded read-only inspection to one Steward and syn
         mandatoryHotCacheRefs: packetContext.mandatory_refs.map((ref) => ref.context_ref),
         optionalHotCacheRefs: packetContext.optional_refs.map((ref) => ref.context_ref),
       });
-      expect(childRequests.filter((request) => request.tools.some((tool) =>
-        ["write_file", "edit_file", "run_command", "call_mcp_tool"].includes(tool.name),
-      ))).toHaveLength(0);
+      expect(childRequests.some((request) => request.tools.some((tool) =>
+        tool.name === "run_command",
+      ))).toBe(true);
       const readOnlyChildToolNames = new Set(childRequests.flatMap((request) =>
         request.tools.map((tool) => tool.name),
       ));
@@ -1851,6 +1863,15 @@ function readOnlyStewardRound(
       }
       if (round === 4) {
         return {
+          toolCalls: [toolCall("inspect-command-access", "run_command", {
+            command: "pwd",
+            summary: "Verify inherited command access",
+            state_effect: "read_only",
+          })],
+        };
+      }
+      if (round === 5) {
+        return {
           toolCalls: [toolCall("list-files", "list_files", {
             root: ".",
             include_globs: ["README.md", "src/**"],
@@ -1858,14 +1879,14 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 5) {
+      if (round === 6) {
         return {
           toolCalls: [toolCall("read-source-marker", "read_file", {
             requests: [{ path: "src/inspection-target.ts" }],
           })],
         };
       }
-      if (round === 6) {
+      if (round === 7) {
         return {
           toolCalls: [toolCall("review-read-only-result", "record_work_review", {
             subject: "result",
@@ -1878,7 +1899,7 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 7) {
+      if (round === 8) {
         return {
           toolCalls: [toolCall("review-read-only-completion", "record_work_review", {
             subject: "completion",
@@ -1891,7 +1912,7 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 8) {
+      if (round === 9) {
         const workId = request.messages
           .flatMap((message) => [...message.content.matchAll(/guided-work-[a-f0-9]{64}/gu)].map((match) => match[0]))
           .at(-1);

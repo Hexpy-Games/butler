@@ -17,6 +17,7 @@ export async function ensureSubsessionChildRootWork(input: {
 export function subsessionToolInput(
   service: SubsessionDelegationService | undefined,
   turn: TurnRecord,
+  parentAccessMode: "full_access" | "ask_first" | "read_only",
 ): Record<string, unknown> {
   return service
     ? {
@@ -24,11 +25,9 @@ export function subsessionToolInput(
         anchorMessageId: turn.originalMessageId,
         modelRef: `${turn.modelSelection.provider}/${turn.modelSelection.model}`,
         reasoningEffort: turn.modelSelection.reasoningEffort,
+        parentAccessMode,
         ...(turn.context.executionPolicy?.subsession
-          ? {
-              subsessionMutationScope: turn.context.executionPolicy.subsession.mutationScope,
-              subsessionAllowedToolsAndEffects: turn.context.executionPolicy.subsession.allowedToolsAndEffects,
-            }
+          ? { subsessionMutationScope: turn.context.executionPolicy.subsession.mutationScope }
           : {}),
       }
     : {};

@@ -10,6 +10,7 @@ export function createSubsessionToolHandlers(input: {
   anchorMessageId?: string;
   modelRef?: string;
   reasoningEffort?: string;
+  parentAccessMode?: "full_access" | "ask_first" | "read_only";
 }): Record<string, ButlerToolHandler> {
   if (!input.service) return {};
   return {
@@ -20,11 +21,15 @@ export function createSubsessionToolHandlers(input: {
       if (!input.modelRef || !input.reasoningEffort) {
         throw new Error("subsession_parent_model_snapshot_missing");
       }
+      if (!input.parentAccessMode) {
+        throw new Error("subsession_parent_access_snapshot_missing");
+      }
       const args = decodeDelegationArgs(call.args);
       const created = await input.service!.delegate({
         parent_session_id: input.parentSessionId,
         parent_turn_id: input.parentTurnId,
         anchor_message_id: input.anchorMessageId,
+        parent_access_mode: input.parentAccessMode,
         execution_mode: args.execution_mode,
         safe_title: args.safe_title,
         objective: args.objective,
