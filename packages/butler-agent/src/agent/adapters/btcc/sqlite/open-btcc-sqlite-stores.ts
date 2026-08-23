@@ -66,16 +66,23 @@ export function openBtccSqliteStores(input: {
     input.runtimeOwnerIdentity ?? currentRuntimeOwnerIdentity(input.ownerId),
     processLiveness,
   );
-  const turns = new SqliteGuidedTurnStateRepository(db, owner);
-  const sqliteWriteReadiness = createSqliteWriteReadiness(input.dbPath);
-  const durableWork = createDurableWorkService(new SqliteGuidedWorkStore(
-    db,
-    input.legacyProjectWorkSource,
-  ));
-  const subsessionStore = new SqliteSubsessionDelegationStore(db);
+  // The one PrincipalAuthority aggregate/repository instance is constructed
+  // before the Turn repository so Turn-stop persistence can reuse its narrow
+  // closeSelfSession capability inside the same SQLite stop transaction, and
+  // before the Guided Work store so factual Work abandonment can reuse its
+  // narrow closeAbandonedWork capability inside the same SQLite Work
+  // transaction. Every authority path shares this single instance.
   const authority = createPrincipalAuthority(
     new SqlitePrincipalAuthorityRepository(db),
   );
+  const turns = new SqliteGuidedTurnStateRepository(db, owner, authority);
+  const sqliteWriteReadiness = createSqliteWriteReadiness(input.dbPath);
+  const durableWork = createDurableWorkService(new SqliteGuidedWorkStore(
+    db,
+    authority,
+    input.legacyProjectWorkSource,
+  ));
+  const subsessionStore = new SqliteSubsessionDelegationStore(db);
   return {
     admission: new SqliteTurnAdmissionRepository(
       db,

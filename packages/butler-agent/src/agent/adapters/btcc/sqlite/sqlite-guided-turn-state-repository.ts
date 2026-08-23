@@ -9,6 +9,8 @@ import {
   assertGuidedTurnSemanticState,
 } from "./guided-turn-state.ts";
 import type { RuntimeOwnerAuthority } from "./runtime-owner/index.ts";
+import type { AuthoritySelfSessionCloseCapability } from
+  "../../../btcc/authority/index.ts";
 import { SqliteGuidedStopController } from
   "./sqlite-guided-stop-controller.ts";
 import { SqliteGuidedTransitionWriter } from
@@ -40,9 +42,10 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
   constructor(
     private readonly db: Database,
     owner: RuntimeOwnerAuthority,
+    authorityClose: AuthoritySelfSessionCloseCapability,
   ) {
     this.transitions = new SqliteGuidedTransitionWriter(db);
-    this.stops = new SqliteGuidedStopController(db);
+    this.stops = new SqliteGuidedStopController(db, authorityClose);
     this.stateClaims = new SqliteStateExecutionClaims(db, owner);
     this.modelRoute = new SqliteModelRouteRepository(db);
     this.hydration = new SqliteGuidedTurnHydration(db);

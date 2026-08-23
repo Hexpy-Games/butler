@@ -1,6 +1,8 @@
 import type { Database } from "bun:sqlite";
 import type { AttachToolResultInput, ClaimWorkCloseoutCorrectionInput, ContinueWorkCommand, DurableWorkContext, DurableWorkStore, DurableWorkView, LegacyOpenWorkImportResult, LegacyProjectWorkSource, RecordWorkCheckpointCommand, RecordWorkDispositionCommand, RecordWorkReviewCommand, ReplaceWorkPlanCommand, StartWorkCommand, WorkTurnScope } from
   "../../../btcc/work/index.ts";
+import type { AuthorityAbandonedWorkCloseCapability } from
+  "../../../btcc/authority/index.ts";
 import { stableJson } from "./identity.ts";
 import {
   GuidedWorkMutationJournal,
@@ -35,10 +37,11 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
 
   constructor(
     private readonly db: Database,
+    abandonedWorkClose: AuthorityAbandonedWorkCloseCapability,
     private readonly legacyProjectWork?: LegacyProjectWorkSource,
   ) {
     this.reader = new GuidedWorkViewReader(db);
-    this.sessions = new GuidedWorkSessionWriter(db, this.reader);
+    this.sessions = new GuidedWorkSessionWriter(db, this.reader, abandonedWorkClose);
     this.mutations = new GuidedWorkMutationJournal(db);
     this.progress = new GuidedWorkProgressWriter(db);
     this.reviews = new GuidedWorkReviewWriter(

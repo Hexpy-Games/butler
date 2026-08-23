@@ -25,6 +25,10 @@ import {
   seedProjectLocator,
   seedStaleLocalProjectProgram,
 } from "./support/btcc-r3-project-legacy-import-fixture.ts";
+import { SqlitePrincipalAuthorityRepository } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
+import { createPrincipalAuthority } from
+  "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
 
 const temporaryRoots: string[] = [];
 
@@ -52,7 +56,11 @@ test("imports only the stable canonical Project Program into one concise R3 Work
     const source = createProjectLedgerLegacyWorkSource({
       butlerData: join(fixture.root, "data"),
     });
-    const service = createDurableWorkService(new SqliteGuidedWorkStore(db, source));
+    const service = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+      source,
+    ));
     const scope = {
       turnId: "turn-r3-import",
       sessionId: "session-project",
@@ -127,7 +135,11 @@ test("refuses local fallback when the canonical Program manifest is missing", as
     const source = createProjectLedgerLegacyWorkSource({
       butlerData: join(fixture.root, "data"),
     });
-    const service = createDurableWorkService(new SqliteGuidedWorkStore(db, source));
+    const service = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+      source,
+    ));
 
     expect(await service.importOpenLegacyWork({
       turnId: "turn-r3-import",
@@ -190,7 +202,11 @@ test("rejects multiple open Programs and a repeatedly drifting canonical head", 
       messageId: "message-r3-import",
       message: "이어 주세요.",
     });
-    const service = createDurableWorkService(new SqliteGuidedWorkStore(db, source));
+    const service = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+      source,
+    ));
     await expect(service.importOpenLegacyWork({
       turnId: "turn-r3-import",
       sessionId: "session-project",

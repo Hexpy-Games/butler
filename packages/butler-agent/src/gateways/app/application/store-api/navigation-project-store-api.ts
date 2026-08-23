@@ -34,7 +34,10 @@ export interface AppStoreNavigationProjectApi {
     projectId: string,
     input: UpdateProjectRequest,
   ): ProjectActionResult;
-  archiveProject(projectId: string): ProjectActionResult;
+  archiveProject(
+    projectId: string,
+    metadata?: { displayName?: string; pinned?: boolean },
+  ): ProjectActionResult;
   pinProject(projectId: string, pinned?: boolean): ProjectActionResult;
   deleteProject(projectId: string): ProjectActionResult;
   deleteProjectPermanent(projectId: string): ProjectActionResult;
@@ -42,6 +45,7 @@ export interface AppStoreNavigationProjectApi {
   listSessions(options?: { kind?: ChatKind; projectId?: string }): SessionListView;
   listArchives(options?: { limit?: number; offset?: number }): ArchiveListView;
   listProjectSessions(projectId?: string): ProjectSessionListView;
+  projectSessionIdsForLifecycle(projectId: string): string[];
   searchCommandPalette(query: string): CommandPaletteView;
   createSession(
     input: CreateSessionRequest,
@@ -57,7 +61,10 @@ export interface AppStoreNavigationProjectApi {
     sessionId: string,
     input: UpdateSessionRequest,
   ): SessionActionResult;
-  archiveSession(sessionId: string): SessionActionResult;
+  archiveSession(
+    sessionId: string,
+    metadata?: { title?: string },
+  ): SessionActionResult;
   deleteSessionPermanent(sessionId: string): SessionActionResult;
   getSession(sessionId: string): SessionSummary;
 }
@@ -84,8 +91,8 @@ export function createNavigationProjectStoreApi(
     updateProject(projectId, input) {
       return kernel.projects.updateProject(projectId, input);
     },
-    archiveProject(projectId) {
-      return kernel.projects.archiveProject(projectId);
+    archiveProject(projectId, metadata) {
+      return kernel.projects.archiveProject(projectId, metadata);
     },
     pinProject(projectId, pinned) {
       return kernel.projects.pinProject(projectId, pinned);
@@ -108,6 +115,9 @@ export function createNavigationProjectStoreApi(
     listProjectSessions(projectId) {
       return kernel.sessionCatalog.listProjectSessions(projectId);
     },
+    projectSessionIdsForLifecycle(projectId) {
+      return kernel.sessionCatalog.projectSessionIdsForLifecycle(projectId);
+    },
     searchCommandPalette(query) {
       return kernel.navigation.searchCommandPalette(query);
     },
@@ -126,9 +136,10 @@ export function createNavigationProjectStoreApi(
     updateSession(sessionId, input) {
       return kernel.sessionRecords.updateSession(sessionId, input);
     },
-    archiveSession(sessionId) {
+    archiveSession(sessionId, metadata) {
       return kernel.sessionRecords.updateSession(sessionId, {
         archived: true,
+        title: metadata?.title,
       });
     },
     deleteSessionPermanent(sessionId) {

@@ -26,6 +26,10 @@ import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { SqliteGuidedTurnStateRepository } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/sqlite-guided-turn-state-repository.ts";
+import { SqlitePrincipalAuthorityRepository } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
+import { createPrincipalAuthority } from
+  "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
 import { SqliteRuntimeOwnerRegistry } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/runtime-owner/index.ts";
 import { agentBtccStoragePaths } from
@@ -164,7 +168,7 @@ test("SQLite atomically retains terminal exhaustion across repository restart", 
   let db = new Database(dbPath);
   db.exec(BTCC_SUCCESSOR_SCHEMA);
   let owner = sqliteOwner(db, "owner-1");
-  let turns = new SqliteGuidedTurnStateRepository(db, owner);
+  let turns = guidedTurns(db, owner);
   const state = createTurnContinuationBudgetState({ turnId: "turn", limits, nowMs: 1_000 });
   insertBudgetTurn(db, state);
   const turn = await turns.findTurn("turn");
@@ -182,7 +186,7 @@ test("SQLite atomically retains terminal exhaustion across repository restart", 
 
   db = new Database(dbPath);
   owner = sqliteOwner(db, "owner-2");
-  turns = new SqliteGuidedTurnStateRepository(db, owner);
+  turns = guidedTurns(db, owner);
   expect((await turns.findTurn("turn"))?.continuationBudget?.terminal).toMatchObject({
     code: "turn_continuation_budget_exhausted", reason: "model_facing_bytes",
   });
@@ -197,7 +201,7 @@ test("SQLite restart preserves admitted request tool-round and output accounting
   let db = new Database(dbPath);
   db.exec(BTCC_SUCCESSOR_SCHEMA);
   let owner = sqliteOwner(db, "progress-1");
-  let turns = new SqliteGuidedTurnStateRepository(db, owner);
+  let turns = guidedTurns(db, owner);
   insertBudgetTurn(db, createTurnContinuationBudgetState({ turnId: "turn", limits, nowMs: 1_000 }));
   const turn = await turns.findTurn("turn");
   const claim = await turns.acquireStateExecutionClaim(turn!);
@@ -222,7 +226,7 @@ test("SQLite restart preserves admitted request tool-round and output accounting
 
   db = new Database(dbPath);
   owner = sqliteOwner(db, "progress-2");
-  turns = new SqliteGuidedTurnStateRepository(db, owner);
+  turns = guidedTurns(db, owner);
   expect((await turns.findTurn("turn"))?.continuationBudget).toMatchObject({
     admittedRequests: [{ roundId: "round", modelFacingBytes: 700 }],
     completedToolRounds: ["tool-round"], completedOutputRounds: ["round"],
@@ -240,7 +244,7 @@ test("accepted response output overflow terminalizes once and survives restart",
   let db = new Database(dbPath);
   db.exec(BTCC_SUCCESSOR_SCHEMA);
   let owner = sqliteOwner(db, "output-terminal-1");
-  let turns = new SqliteGuidedTurnStateRepository(db, owner);
+  let turns = guidedTurns(db, owner);
   insertBudgetTurn(db, createTurnContinuationBudgetState({ turnId: "turn", limits, nowMs: 1_000 }));
   const turn = await turns.findTurn("turn");
   const claim = await turns.acquireStateExecutionClaim(turn!);
@@ -261,7 +265,7 @@ test("accepted response output overflow terminalizes once and survives restart",
 
   db = new Database(dbPath);
   owner = sqliteOwner(db, "output-terminal-2");
-  turns = new SqliteGuidedTurnStateRepository(db, owner);
+  turns = guidedTurns(db, owner);
   expect((await turns.findTurn("turn"))?.continuationBudget?.terminal).toEqual(firstTerminal);
   owner.close();
   db.close();
@@ -1226,6 +1230,12 @@ test("flag-off does not create private identity state", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+function guidedTurns(db: Database, owner: SqliteRuntimeOwnerRegistry) {
+  return new SqliteGuidedTurnStateRepository(db, owner, createPrincipalAuthority(
+    new SqlitePrincipalAuthorityRepository(db),
+  ));
+}
 
 function sqliteOwner(db: Database, ownerId: string): SqliteRuntimeOwnerRegistry {
   return new SqliteRuntimeOwnerRegistry(db, {
