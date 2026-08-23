@@ -1,11 +1,14 @@
 import type { Database } from "bun:sqlite";
 import type { StopPersistenceOutcome } from
   "../../../btcc/turn/index.ts";
+import type { AuthoritySelfSessionCloseCapability } from
+  "../../../btcc/authority/index.ts";
 import { assertGuidedTurnSemanticState } from "./guided-turn-state.ts";
 import { digest } from "./identity.ts";
 import { hydrateFinalPayload } from "./sqlite-guided-turn-hydration.ts";
 
 type TurnControlRow = {
+  session_id: string;
   semantic_state: string;
   revision: number;
   execution_fence: number;
@@ -14,7 +17,10 @@ type TurnControlRow = {
 };
 
 export class SqliteGuidedStopController {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly authorityClose: AuthoritySelfSessionCloseCapability,
+  ) {}
 
   stop(turnId: string): StopPersistenceOutcome {
     return this.db.transaction(() => this.persistStop(turnId))();
@@ -22,7 +28,7 @@ export class SqliteGuidedStopController {
 
   private persistStop(turnId: string): StopPersistenceOutcome {
     const turn = this.db.query<TurnControlRow, [string]>(`
-      SELECT semantic_state, revision, execution_fence,
+      SELECT session_id, semantic_state, revision, execution_fence,
         canonical_assistant_message_id, final_payload_json
       FROM btcc_turns WHERE turn_id = ?
     `).get(turnId);
@@ -39,6 +45,9 @@ export class SqliteGuidedStopController {
       return { kind: "cancelled", turnId };
     }
     assertGuidedTurnSemanticState(turn.semantic_state);
+    const priorStopStatus = this.db.query<{ status: string }, [string]>(`
+      SELECT status FROM btcc_stop_requests WHERE stop_request_id = ?
+    `).get(stopRequestId)?.status ?? null;
     this.db.query(`
       INSERT OR IGNORE INTO btcc_stop_requests (
         stop_request_id, turn_id, status, observed_turn_revision,
@@ -69,7 +78,14 @@ export class SqliteGuidedStopController {
       };
     }
     if (turn.semantic_state === "cancelled") {
+      // A terminal pre-existing stop-request proves the original
+      // operational close already committed; replaying it again would
+      // close a newer same-session request, so only an absent (legacy
+      // cancelled Turn) or still-installed row may re-close.
       this.closeRequest(stopRequestId, "already_cancelled", turn.revision);
+      if (priorStopStatus === null || priorStopStatus === "installed") {
+        this.closeSelfSessionRequests(turn.session_id);
+      }
       return { kind: "already_cancelled", turnId };
     }
     if (turn.semantic_state === "delivery_committed") {
@@ -109,7 +125,15 @@ export class SqliteGuidedStopController {
       WHERE turn_id = ? AND status = 'active'
     `).run(turnId);
     this.closeRequest(stopRequestId, "cancelled", cancelledRevision);
+    this.closeSelfSessionRequests(turn.session_id);
     return { kind: "cancelled", turnId };
+  }
+
+  private closeSelfSessionRequests(selfSessionId: string): void {
+    this.authorityClose.closeSelfSession({
+      selfSessionId,
+      reason: "session_cancelled",
+    });
   }
 
   private closeRequest(

@@ -6,6 +6,8 @@ import type {
   StartWorkCommand,
   WorkTurnScope,
 } from "../../../btcc/work/index.ts";
+import type { AuthorityAbandonedWorkCloseCapability } from
+  "../../../btcc/authority/index.ts";
 import type { GuidedWorkRow, GuidedWorkTurn } from "./guided-work-records.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
 import { guidedWorkMatchesScope } from "./guided-work-scope.ts";
@@ -19,6 +21,7 @@ export class GuidedWorkSessionWriter {
   constructor(
     private readonly db: Database,
     private readonly reader: GuidedWorkViewReader,
+    private readonly abandonedWorkClose: AuthorityAbandonedWorkCloseCapability,
   ) {
     this.relations = new GuidedWorkRelationCommandJournal(db);
   }
@@ -301,6 +304,12 @@ export class GuidedWorkSessionWriter {
     if (updated.changes !== 1) {
       throw new Error(`Durable Work could not be abandoned: ${workId}`);
     }
+    // Same SQLite transaction as the status transition above: either both the
+    // abandonment and the exact-Work authority close persist, or neither does.
+    this.abandonedWorkClose.closeAbandonedWork({
+      sourceWorkId: workId,
+      reason: "work_abandoned",
+    });
   }
 
   private bind(turn: GuidedWorkTurn, workId: string): void {

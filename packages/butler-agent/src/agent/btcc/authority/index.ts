@@ -1,9 +1,16 @@
 export { AuthorityRequestError, createPrincipalAuthority } from "./principal-authority.ts";
 export type {
+  AuthorityAbandonedWorkCloseCapability,
+  AuthorityAbandonedWorkCloseInput,
   AuthorityCommandInput,
   AuthorityDecisionAction,
   AuthorityDecisionResult,
+  AuthorityOperationalCloseInput,
+  AuthorityOperationalCloseReason,
+  AuthorityOperationalCloseResult,
+  AuthorityOperationalCloseScope,
   AuthorityOutcomeReceipt,
+  AuthoritySelfSessionCloseCapability,
   PrincipalAuthority,
   PrincipalAuthorityRepository,
 } from "./contracts.ts";

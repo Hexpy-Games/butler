@@ -19,6 +19,10 @@ import {
 } from "../../protocol/app-protocol.ts";
 import { paginationFromSearchParams } from "../route-params.ts";
 import { json, parseJson, RequestError } from "../responses.ts";
+import {
+  projectLifecycleActionWithAuthorityClose,
+  sessionLifecycleStopWithAuthorityClose,
+} from "../../../application/session-authority-operational-close.ts";
 
 import type { AppRouteContext } from "../server-types.ts";
 
@@ -88,12 +92,44 @@ export async function handleProjectSessionRoutes(
   const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/u);
   if (input.request.method === "PATCH" && projectMatch) {
     const body = await parseJson(input.request);
+    const projectId = decodeURIComponent(projectMatch[1]!);
+    const payload = (body && typeof body === "object" ? body : {}) as Record<
+      string,
+      unknown
+    >;
+    if (
+      payload.archived !== undefined &&
+      typeof payload.archived !== "boolean"
+    ) {
+      throw new RequestError(
+        400,
+        "invalid_request",
+        "Project update contains unsupported fields.",
+      );
+    }
+    if (payload.archived === true) {
+      return json(
+        apiEnvelope<ProjectActionResult>(
+          projectLifecycleActionWithAuthorityClose({
+            authority: input.authority,
+            store: input.store,
+            projectId,
+            action: "archive",
+            metadata: {
+              displayName: typeof payload.display_name === "string"
+                ? payload.display_name
+                : undefined,
+              pinned: typeof payload.pinned === "boolean"
+                ? payload.pinned
+                : undefined,
+            },
+          }),
+        ),
+      );
+    }
     return json(
       apiEnvelope<ProjectActionResult>(
-        input.store.updateProject(
-          decodeURIComponent(projectMatch[1]!),
-          body && typeof body === "object" ? body : {},
-        ),
+        input.store.updateProject(projectId, body && typeof body === "object" ? body : {}),
       ),
     );
   }
@@ -104,7 +140,12 @@ export async function handleProjectSessionRoutes(
   if (projectArchiveMatch) {
     return json(
       apiEnvelope<ProjectActionResult>(
-        input.store.archiveProject(decodeURIComponent(projectArchiveMatch[1]!)),
+        projectLifecycleActionWithAuthorityClose({
+          authority: input.authority,
+          store: input.store,
+          projectId: decodeURIComponent(projectArchiveMatch[1]!),
+          action: "archive",
+        }),
       ),
     );
   }
@@ -128,11 +169,15 @@ export async function handleProjectSessionRoutes(
     );
   }
   if (input.request.method === "DELETE" && projectMatch) {
+    const permanent = url.searchParams.get("permanent") === "true";
     return json(
       apiEnvelope<ProjectActionResult>(
-        url.searchParams.get("permanent") === "true"
-          ? input.store.deleteProjectPermanent(decodeURIComponent(projectMatch[1]!))
-          : input.store.deleteProject(decodeURIComponent(projectMatch[1]!)),
+        projectLifecycleActionWithAuthorityClose({
+          authority: input.authority,
+          store: input.store,
+          projectId: decodeURIComponent(projectMatch[1]!),
+          action: permanent ? "permanent_delete" : "delete",
+        }),
       ),
     );
   }
@@ -180,9 +225,23 @@ export async function handleProjectSessionRoutes(
         "Session update contains unsupported fields.",
       );
     }
+    const sessionId = decodeURIComponent(sessionMatch[1]!);
+    if (body.archived === true) {
+      return json(
+        apiEnvelope<SessionActionResult>(
+          sessionLifecycleStopWithAuthorityClose({
+            authority: input.authority,
+            store: input.store,
+            sessionId,
+            stop: "archive",
+            metadata: body.title === undefined ? undefined : { title: body.title },
+          }),
+        ),
+      );
+    }
     return json(
       apiEnvelope<SessionActionResult>(
-        input.store.updateSession(decodeURIComponent(sessionMatch[1]!), body),
+        input.store.updateSession(sessionId, body),
       ),
     );
   }
@@ -192,16 +251,25 @@ export async function handleProjectSessionRoutes(
   if (input.request.method === "POST" && sessionArchiveMatch) {
     return json(
       apiEnvelope<SessionActionResult>(
-        input.store.archiveSession(decodeURIComponent(sessionArchiveMatch[1]!)),
+        sessionLifecycleStopWithAuthorityClose({
+          authority: input.authority,
+          store: input.store,
+          sessionId: decodeURIComponent(sessionArchiveMatch[1]!),
+          stop: "archive",
+        }),
       ),
     );
   }
   if (input.request.method === "DELETE" && sessionMatch) {
+    const permanent = url.searchParams.get("permanent") === "true";
     return json(
       apiEnvelope<SessionActionResult>(
-        url.searchParams.get("permanent") === "true"
-          ? input.store.deleteSessionPermanent(decodeURIComponent(sessionMatch[1]!))
-          : input.store.archiveSession(decodeURIComponent(sessionMatch[1]!)),
+        sessionLifecycleStopWithAuthorityClose({
+          authority: input.authority,
+          store: input.store,
+          sessionId: decodeURIComponent(sessionMatch[1]!),
+          stop: permanent ? "permanent_delete" : "archive",
+        }),
       ),
     );
   }

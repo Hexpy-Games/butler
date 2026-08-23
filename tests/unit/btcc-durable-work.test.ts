@@ -22,6 +22,10 @@ import { backfillTurnToolResults } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { coordinateSharedSqliteWriter } from
   "../../packages/butler-agent/src/foundation/sqlite-writer-coordination.ts";
+import { SqlitePrincipalAuthorityRepository } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
+import { createPrincipalAuthority } from
+  "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
 
 test("first Plan opens scoped Work without making Direct or Assisted Turns pay for it", async () => {
   const fixture = durableWorkFixture();
@@ -416,7 +420,10 @@ test("a committed Turn tool result backfills once after storage restart", async 
   let db: Database | null = new Database(dbPath);
   try {
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    const firstService = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const firstService = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     const firstJournal = new SqliteGuidedToolJournal(db);
     const origin = insertGuidedTurn(
       db,
@@ -457,7 +464,10 @@ test("a committed Turn tool result backfills once after storage restart", async 
 
     db = new Database(dbPath);
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    const resumedService = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const resumedService = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     const resumedJournal = new SqliteGuidedToolJournal(db);
     await backfillTurnToolResults({
       durableWork: resumedService,
@@ -645,7 +655,10 @@ test("disposition replay is idempotent across a SQLite restart", async () => {
       "session-disposition-restart",
       "재시작 후에도 닫아 주세요.",
     );
-    const first = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const first = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     const work = await first.replacePlan({
       ...planInput(scope, "disposition-restart-plan"),
       startNew: true,
@@ -663,7 +676,10 @@ test("disposition replay is idempotent across a SQLite restart", async () => {
     db = null;
     db = new Database(dbPath);
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     const replay = await resumed.recordDisposition(input);
     expect(replay.workId).toBe(completed.workId);
     expect(replay.latestDisposition?.dispositionRevisionId)
@@ -1253,7 +1269,10 @@ test("Work disposition waits for a concurrent shared SQLite writer", async () =>
   const db = new Database(dbPath, { create: true });
   coordinateSharedSqliteWriter(db);
   db.exec(BTCC_SUCCESSOR_SCHEMA);
-  const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
+  const service = createDurableWorkService(new SqliteGuidedWorkStore(
+    db,
+    createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+  ));
   const scope = insertGuidedTurn(
     db,
     "turn-contention",
@@ -1502,7 +1521,10 @@ test("disposition replay is idempotent across a SQLite restart", async () => {
       "session-disposition-restart",
       "재시작 후에도 닫아 주세요.",
     );
-    const first = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const first = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     const work = await first.startWork({
       ...scope,
       mutationCallId: "disposition-restart-start",
@@ -1520,7 +1542,10 @@ test("disposition replay is idempotent across a SQLite restart", async () => {
     db = null;
     db = new Database(dbPath);
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     const replay = await resumed.recordDisposition(input);
     expect(replay.workId).toBe(completed.workId);
     expect(replay.latestDisposition?.dispositionRevisionId)
@@ -1958,6 +1983,112 @@ test("disposition evidence cannot cite an ordinary result from an earlier Turn",
   }
 });
 
+test("factual Work abandonment rolls back together with its exact-Work authority close", async () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const service = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
+    const scope = insertGuidedTurn(
+      db,
+      "turn-abandon-authority-fault",
+      "session-abandon-authority-fault",
+      "작업을 중단하고 권한 요청도 닫아 주세요.",
+    );
+    const work = await service.replacePlan({
+      ...planInput(scope, "abandon-authority-plan"),
+      startNew: true,
+    });
+    const planRevisionId = db.query<
+      { current_plan_revision_id: string },
+      [string]
+    >("SELECT current_plan_revision_id FROM btcc_guided_works WHERE work_id = ?")
+      .get(work.workId)!.current_plan_revision_id;
+    db.query(`
+      INSERT INTO btcc_authority_requests (
+        request_id, request_ref, identity_sha256, owner_session_id,
+        source_session_id, source_turn_id, source_work_id, workspace_path,
+        plan_revision_id, action_key, authority_generation, capability,
+        normalized_target, normalized_input_json, model_ref, reasoning_effort,
+        category, reason, executable, command_count, decision,
+        schedule_client_message_id, schedule_input_text, outcome,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "request-abandon-authority-fault",
+      "authority-ref-abandon-fault",
+      `identity-${work.workId}`,
+      scope.sessionId,
+      scope.sessionId,
+      scope.turnId,
+      work.workId,
+      "workspace-command-abandoned",
+      planRevisionId,
+      "run-seeded-command",
+      1,
+      "run_command",
+      "workspace-command:.",
+      JSON.stringify({
+        command: "printf 'abandoned-private-value'",
+        cwd: ".",
+        state_effect: "mutation",
+      }),
+      "openai/gpt-5.5",
+      "low",
+      "command",
+      "Run one reviewed seeded command",
+      "printf",
+      1,
+      "pending",
+      "client-abandon-authority-fault-0000000000000000000",
+      "Continue the approved operation exactly once.",
+      "pending",
+      "2026-08-23T09:00:00.000Z",
+      "2026-08-23T09:00:00.000Z",
+    );
+    db.exec(`
+      CREATE TRIGGER fault_abandoned_work_authority_close
+      BEFORE UPDATE ON btcc_authority_requests
+      WHEN NEW.close_reason IS NOT NULL AND OLD.close_reason IS NULL
+      BEGIN
+        SELECT RAISE(ABORT, 'simulated abandoned Work authority close failure');
+      END
+    `);
+    await expect(service.abandonBoundWorkForTurn(scope.turnId))
+      .rejects.toThrow("simulated abandoned Work authority close failure");
+    expect((await service.boundWorkForTurn(scope.turnId))?.workId)
+      .toBe(work.workId);
+    expect(db.query<{ status: string }, [string]>(`
+      SELECT status FROM btcc_guided_works WHERE work_id = ?
+    `).get(work.workId)?.status).not.toBe("abandoned");
+    expect(db.query<{ count: number }, [string]>(`
+      SELECT COUNT(*) AS count FROM btcc_authority_requests
+      WHERE source_work_id = ? AND decision = 'pending'
+        AND close_reason IS NULL AND close_scope IS NULL AND closed_at IS NULL
+    `).get(work.workId)?.count).toBe(1);
+
+    db.exec("DROP TRIGGER fault_abandoned_work_authority_close");
+    const abandoned = await service.abandonBoundWorkForTurn(scope.turnId);
+    expect(abandoned).toMatchObject({
+      workId: work.workId,
+      status: "abandoned",
+    });
+    expect(db.query<{
+      count: number;
+    }, [string]>(`
+      SELECT COUNT(*) AS count FROM btcc_authority_requests
+      WHERE source_work_id = ? AND decision = 'pending'
+        AND close_reason = 'work_abandoned' AND close_scope = 'work'
+        AND closed_at IS NOT NULL
+    `).get(work.workId)?.count).toBe(1);
+  } finally {
+    db.close();
+  }
+});
+
 function durableWorkFixture(): {
   db: Database;
   service: DurableWorkService;
@@ -1970,7 +2101,10 @@ function durableWorkFixture(): {
 } {
   const db = new Database(":memory:");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
-  const store = new SqliteGuidedWorkStore(db);
+  const store = new SqliteGuidedWorkStore(
+    db,
+    createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+  );
   const service = createDurableWorkService(store);
   const journal = new SqliteGuidedToolJournal(db);
   return {

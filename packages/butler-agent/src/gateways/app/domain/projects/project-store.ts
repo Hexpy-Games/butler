@@ -166,8 +166,15 @@ export class AppProjectStore {
     return { project };
   }
 
-  archiveProject(projectId: string): ProjectActionResult {
-    const result = this.updateProject(projectId, { archived: true });
+  archiveProject(
+    projectId: string,
+    metadata: { displayName?: string; pinned?: boolean } = {},
+  ): ProjectActionResult {
+    const result = this.updateProject(projectId, {
+      archived: true,
+      display_name: metadata.displayName,
+      pinned: metadata.pinned,
+    });
     this.db
       .query(
         `
