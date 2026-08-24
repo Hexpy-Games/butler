@@ -273,15 +273,7 @@ function buildLiveConfigurationSections(input: {
 }): PromptSection[] {
   const sections: PromptSection[] = [];
   if (input.binding.role === "butler") {
-    pushSection(sections, {
-      id: "eol",
-      title: "Butler Operating Ethos / EOL",
-      content: readTextIfExists(join(input.butlerData, "eol.md")) ??
-        readTextIfExists(butlerAgentResourcesPath(input.butlerHome, "eol.md")),
-      region: "live_configuration",
-      projectionClass: "profile",
-      scopeKind: "user",
-    });
+    sections.push(...buildEolSections(input));
   } else {
     pushSection(sections, {
       id: "steward-config",
@@ -316,6 +308,23 @@ function buildLiveConfigurationSections(input: {
     content: buildRulesContent(join(cognitionMemoryRoot(input.butlerData), "rules")),
     region: "live_configuration",
     projectionClass: "mandatory_hot_cache",
+    scopeKind: "user",
+  });
+  return sections;
+}
+
+function buildEolSections(input: {
+  butlerHome: string;
+  butlerData: string;
+}): PromptSection[] {
+  const sections: PromptSection[] = [];
+  pushSection(sections, {
+    id: "eol",
+    title: "Butler Operating Ethos / EOL",
+    content: readTextIfExists(join(input.butlerData, "eol.md")) ??
+      readTextIfExists(butlerAgentResourcesPath(input.butlerHome, "eol.md")),
+    region: "live_configuration",
+    projectionClass: "profile",
     scopeKind: "user",
   });
   return sections;
@@ -842,6 +851,23 @@ export class PromptAssembler {
     route?: GatewayRoute;
   }): ContextAssembly {
     return this.buildContextAssemblyForRuntime(input, false);
+  }
+
+  buildStewardContextAssembly(): ContextAssembly {
+    const liveConfiguration = buildEolSections({
+      butlerHome: this.butlerHome,
+      butlerData: this.butlerData,
+    });
+    return {
+      staticContext: [],
+      liveConfiguration,
+      runtimeState: [],
+      workingContext: [],
+      retrievedContext: [],
+      currentInput: [],
+      references: [],
+      liveConfigHash: hashSections(liveConfiguration),
+    };
   }
 
   private buildContextAssemblyForRuntime(input: {

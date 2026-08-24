@@ -35,6 +35,9 @@ import { ordinaryChatPhaseForIntent } from "./guided-delegation-intent.ts";
 const FLAG_NAME = "BUTLER_PHASE_TOOL_SURFACE";
 const POLICY_REVISION = "butler.btcc-tool-instruction-policy.v1";
 const TRUE_FLAG_VALUES = new Set(["1", "true", "on", "yes"]);
+const STEWARD_PARENT_TOOL_NAMES = new Set([
+  "delegate_to_steward", "steer_steward", "cancel_steward",
+]);
 
 export type GuidedTurnPhase = "direct" | "read_only" | "execution";
 
@@ -94,9 +97,16 @@ export function selectGuidedTurnPhasePolicy(
   ).filter((tool) => !isGuidedRuntimeUnavailable(tool.name))
     .filter((tool) => exactResultReplay.exactReadCapability ||
       !isExactResultReadTool(tool.name));
+  const accessAuthorizedNames = new Set(legacyAuthorized.map((tool) => tool.name));
   const admittedAuthority = new Map([
     ...legacyAuthorized,
-    ...admittedProfileTools,
+    ...admittedProfileTools.filter((tool) =>
+      executionPolicy.accessMode === "full_access" ||
+      accessAuthorizedNames.has(tool.name),
+    ),
+    ...(executionPolicy.role === "butler"
+      ? BUTLER_TOOLS.filter((tool) => STEWARD_PARENT_TOOL_NAMES.has(tool.name))
+      : []),
   ].map((tool) => [tool.name, tool]));
   const phaseAuthority = new Map([
     ...admittedAuthority.values(),
@@ -208,10 +218,8 @@ function providerCandidateToolNames(
   if (phase === "execution" || (policy.role === "steward" && policy.subsession)) {
     for (const tool of DURABLE_WORK_TOOL_DEFINITIONS) names.add(tool.name);
   }
-  if (policy.role === "butler" && policy.accessMode === "full_access") {
-    names.add("delegate_to_steward");
-    names.add("steer_steward");
-    names.add("cancel_steward");
+  if (policy.role === "butler") {
+    for (const name of STEWARD_PARENT_TOOL_NAMES) names.add(name);
   }
   return names;
 }
@@ -326,6 +334,10 @@ function guidedTurnPhase(
   policy: ButlerExecutionPolicy,
   originalMessage: string,
 ): GuidedTurnPhase {
+  if (policy.trackingMode !== "none" &&
+      (policy.role === "butler" || Boolean(policy.subsession))) {
+    return "execution";
+  }
   const hasWorkspaceAuthority = policy.requiredNativeToolProfiles
     .includes("workspace") || policy.requiredNativeTools.some((name) => {
       const category = TOOL_CAPABILITY_METADATA[name]?.category;

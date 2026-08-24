@@ -1,5 +1,6 @@
 import type { StoredSessionBinding } from
   "../../../test-support/harness/contracts.ts";
+import type { TurnRecord } from "../turn/index.ts";
 /** Inherit the exact user-admitted Composer authority without model-authored narrowing. */
 export function inheritedStewardRuntimePolicy(
   parent: StoredSessionBinding,
@@ -31,6 +32,17 @@ export function normalizeStewardAccessMode(
 ): "full_access" | "ask_first" | "read_only" {
   if (value === "full_access" || value === "ask_first" || value === "read_only") return value;
   throw new Error("delegation_parent_access_mode_invalid");
+}
+
+/** Resolve the immutable effective Composer authority admitted with the parent Turn. */
+export function admittedParentTurnAccessMode(
+  turn: TurnRecord,
+): "full_access" | "ask_first" | "read_only" {
+  const admitted = normalizeStewardAccessMode(turn.modelSelection.controls.accessMode);
+  const contextual = turn.context.executionPolicy?.accessMode;
+  if (!contextual) return admitted;
+  const rank = { read_only: 0, ask_first: 1, full_access: 2 } as const;
+  return rank[contextual] <= rank[admitted] ? contextual : admitted;
 }
 
 /** Keep the Steward root Work scope identical to its ordinary Turn scope. */

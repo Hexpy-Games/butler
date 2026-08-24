@@ -119,7 +119,7 @@ export function authorizedToolDefinitions(
   });
   if (policy.accessMode === "full_access") names.add("call_mcp_tool");
   else names.delete("call_mcp_tool");
-  if (policy.role === "butler" && policy.accessMode === "full_access") {
+  if (policy.role === "butler") {
     for (const name of STEWARD_PARENT_TOOL_NAMES) names.add(name);
   } else {
     for (const name of STEWARD_PARENT_TOOL_NAMES) names.delete(name);
@@ -187,7 +187,7 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
           "project_ledger_work_complete",
         ]
       : []),
-    ...(policy.role === "butler" && policy.accessMode === "full_access"
+    ...(policy.role === "butler"
       ? ["delegate_to_steward", "steer_steward", "cancel_steward"]
       : []),
     ...guidedWorkspaceVisibleToolNames(policy),

@@ -75,6 +75,25 @@ test("a verified project-scoped hot cache remains exact mandatory child authorit
   expect(completePacketContext(packetWith(snapshot!))).toBe(true);
 });
 
+test("Steward packet rejects missing or mismatched reviewed Plan provenance", () => {
+  const packet = packetWith(undefined);
+  expect(completePacketContext({
+    ...packet,
+    parent_work_ref: { ...packet.parent_work_ref, turn_id: "another-turn" },
+  })).toBe(false);
+  const missing = { ...packet };
+  Reflect.deleteProperty(missing, "parent_work_ref");
+  expect(completePacketContext(missing)).toBe(false);
+});
+
+test("Steward packet preserves a reviewed Plan with no explicit checks", () => {
+  const packet = packetWith(undefined);
+  expect(completePacketContext({
+    ...packet,
+    acceptance_criteria: [],
+  })).toBe(true);
+});
+
 function projectAndUserDocument(contextRef: string) {
   if (contextRef === MEMORY_REF) {
     return {
@@ -184,6 +203,13 @@ function packetWith(projectContext: DelegationPacket["project_context"]): Delega
       required_fields: ["summary", "acceptance_evidence", "changed_artifacts"],
     },
     work_creation_policy: "one_recoverable_child_work",
+    parent_work_ref: {
+      work_id: "guided-work-reviewed",
+      session_id: "sandy-session",
+      turn_id: "sandy-turn",
+      plan_revision_id: "plan-reviewed",
+      review_revision_id: "review-reviewed",
+    },
     access_and_budget_policy: {
       access_mode: "read_only",
       max_turns: 8,

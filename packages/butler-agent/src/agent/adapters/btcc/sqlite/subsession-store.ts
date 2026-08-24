@@ -204,11 +204,17 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   }; inserted: boolean } {
     const now = new Date().toISOString();
     const summary = safeStewardSummary(input.summary);
+    const accessMode = this.packetByRelationId(input.relation.relation_id)
+      ?.access_and_budget_policy.access_mode;
+    if (accessMode !== "full_access" && accessMode !== "ask_first" &&
+        accessMode !== "read_only") {
+      throw new Error("subsession_parent_access_mode_missing");
+    }
     const parentMessageId = `subsession-result:${input.relation.relation_id}:${input.resultId}`;
     const parentText = renderParentResult({
       result_id: input.resultId,
@@ -239,7 +245,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       text: parentText,
       model_ref: input.modelRef,
       reasoning_effort: input.reasoningEffort,
-      access_mode: "full_access" as const,
+      access_mode: accessMode,
       timestamp: now,
     };
     const transaction = this.db.transaction(() => {
@@ -301,7 +307,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   }> {
     return listPendingParentInputs(this.db);
@@ -318,7 +324,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   } | null {
     return findPendingParentInput(this.db, resultId);

@@ -11,6 +11,7 @@ import {
   type BtccRoundToolSurfaceSnapshot,
 } from "./round-tool-surface.ts";
 const DISPOSITION_TOOL = "record_work_disposition";
+const DELEGATION_TOOL = "delegate_to_steward";
 const MAX_EFFECT_RECORDS = 50;
 
 export function createGuidedRoundToolSurfaceResolver(input: {
@@ -21,14 +22,22 @@ export function createGuidedRoundToolSurfaceResolver(input: {
   durableWork: DurableWorkService;
   workScope: WorkTurnScope;
   effectJournal: Pick<GuidedEffectJournal, "listForWork">;
+  projectWorkSurface?: boolean;
 }): () => Promise<BtccRoundToolSurfaceSnapshot> {
   return async () => {
-    const work = await currentWork(input);
+    const { bound, work } = await currentWork(input);
     const dispositionReady = await canExposeDisposition(input, work);
-    const eligibleTools = input.tools.filter((tool) =>
-      tool.name !== DISPOSITION_TOOL || dispositionReady,
-    );
-    const tools = projectDurableWorkToolSurface(eligibleTools, work);
+    const delegationReady = canExposeDelegation(bound);
+    const eligibleTools = input.tools.filter((tool) => {
+      if (tool.name === DISPOSITION_TOOL) {
+        return input.projectWorkSurface === false || dispositionReady;
+      }
+      if (tool.name === DELEGATION_TOOL) return delegationReady;
+      return true;
+    });
+    const tools = input.projectWorkSurface === false
+      ? eligibleTools
+      : projectDurableWorkToolSurface(eligibleTools, work);
     const names = new Set(tools.map((tool) => tool.name));
     const missingRequired = [...input.requiredToolNames]
       .find((name) => input.tools.some((tool) => tool.name === name) && !names.has(name));
@@ -37,6 +46,17 @@ export function createGuidedRoundToolSurfaceResolver(input: {
     }
     return createRoundToolSurfaceSnapshot(tools);
   };
+}
+
+function canExposeDelegation(work: DurableWorkView | undefined): boolean {
+  const plan = work?.currentPlan;
+  const review = work?.latestPlanReview;
+  return Boolean(
+    work && (work.status === "open" || work.status === "blocked") &&
+    plan && review?.subject === "plan" &&
+    review.verdict === "accept" &&
+    review.boundPlanRevisionId === plan.planRevisionId,
+  );
 }
 
 async function canExposeDisposition(input: {
@@ -57,8 +77,14 @@ async function currentWork(input: {
   turnId: string;
   durableWork: DurableWorkService;
   workScope: WorkTurnScope;
-}): Promise<DurableWorkView | undefined> {
+}): Promise<{
+  bound: DurableWorkView | undefined;
+  work: DurableWorkView | undefined;
+}> {
   const bound = await safeBoundWork(input.durableWork, input.turnId);
   const context = await safeLoadWorkContext(input.durableWork, input.workScope);
-  return bound ?? context?.work ?? undefined;
+  return {
+    bound: bound ?? undefined,
+    work: bound ?? context?.work ?? undefined,
+  };
 }

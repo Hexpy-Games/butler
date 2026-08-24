@@ -8,6 +8,7 @@ import type { GuidedToolJournal } from "../ports/index.ts";
 import { digest } from "../identity/index.ts";
 import { GuidedWorkCloseoutError } from "./guided-work-closeout-error.ts";
 import { isDurableWorkTool } from "../work/index.ts";
+import type { BtccAgentLoopInput } from "./contracts.ts";
 
 type GuidedTurnCloseoutInput = {
   durableWork: DurableWorkService;
@@ -17,12 +18,39 @@ type GuidedTurnCloseoutInput = {
   trackingMode: "ledger" | "local" | "none";
   responseLanguage: string;
   originalRequest: string;
-  subsessionRoutingRequired?: boolean;
 };
 
 type GuidedTurnCloseoutReview =
   | { status: "accepted"; text?: string }
   | { status: "continue"; observation: string };
+
+type GuidedToolResultFinalizer = NonNullable<
+  BtccAgentLoopInput["finalTextFromToolResult"]
+>;
+
+/** Releases a successful delegation Turn without settling its parent Work. */
+export function createGuidedDelegationTurnRelease(input: {
+  reconcileAfterLoop(text: string): Promise<string>;
+  responseLanguage: string;
+  originalRequest: string;
+}): {
+  finalTextFromToolResult(fallback?: GuidedToolResultFinalizer): GuidedToolResultFinalizer;
+  reconcileAfterLoop(text: string): Promise<string>;
+} {
+  let released = false;
+  return {
+    finalTextFromToolResult: (fallback) => async (result) => {
+      if (result.toolCall.name === "delegate_to_steward" && result.toolResult.ok) {
+        released = true;
+        return delegationReleaseCopy(input);
+      }
+      return await fallback?.(result) ?? null;
+    },
+    reconcileAfterLoop: async (text) => released
+      ? text
+      : input.reconcileAfterLoop(text),
+  };
+}
 
 /**
  * A disposition is a closeout declaration only while it still describes the
@@ -54,24 +82,9 @@ export function isFreshCurrentDisposition(
 export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
   reviewFinalCandidate(candidate: { text: string }): Promise<GuidedTurnCloseoutReview>;
   reconcileAfterLoop(text: string): Promise<string>;
-  subsessionRoutingRepairRequired(): boolean;
 } {
-  let subsessionRoutingCorrectionIssued = false;
-  const hasSubsessionRoutingCall = () => input.toolJournal.list(input.turnId).some(
-    (record) => SUBSESSION_ROUTING_TOOLS.has(record.toolName),
-  );
   return {
     async reviewFinalCandidate(candidate) {
-      if (input.subsessionRoutingRequired && !hasSubsessionRoutingCall()) {
-        subsessionRoutingCorrectionIssued = true;
-        return {
-          status: "continue" as const,
-          observation: [
-            "This objective cannot finish as a direct Butler reply.",
-            "Call exactly one of delegate_to_steward, steer_steward, or cancel_steward now, using the current relation state and the user's complete objective.",
-          ].join(" "),
-        };
-      }
       if (input.trackingMode === "none") {
         return { status: "accepted" as const };
       }
@@ -110,22 +123,8 @@ export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
       }
       return settleOpen(input, bound, text);
     },
-
-    subsessionRoutingRepairRequired() {
-      return Boolean(
-        input.subsessionRoutingRequired &&
-        subsessionRoutingCorrectionIssued &&
-        !hasSubsessionRoutingCall(),
-      );
-    },
   };
 }
-
-const SUBSESSION_ROUTING_TOOLS = new Set([
-  "delegate_to_steward",
-  "steer_steward",
-  "cancel_steward",
-]);
 
 async function claimCloseoutCorrection(
   input: GuidedTurnCloseoutInput,
@@ -235,4 +234,14 @@ function closeoutCopy(input: GuidedTurnCloseoutInput): {
         nextCondition: "Review the current results and completion conditions, then record the Work disposition again.",
         notice: "Work completion could not be confirmed, so the Work remains open.",
       };
+}
+
+function delegationReleaseCopy(input: {
+  responseLanguage: string;
+  originalRequest: string;
+}): string {
+  const korean = /[가-힣]/u.test(input.responseLanguage) ||
+    /(?:korean|ko(?:rea)?)/iu.test(input.responseLanguage) ||
+    /[가-힣]/u.test(input.originalRequest);
+  return korean ? "위임 작업을 시작했습니다." : "Delegated work started.";
 }

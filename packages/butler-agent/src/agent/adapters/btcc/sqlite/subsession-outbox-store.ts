@@ -11,7 +11,7 @@ export type SubsessionParentInput = {
   text: string;
   model_ref: string;
   reasoning_effort: string;
-  access_mode: "full_access";
+  access_mode: "full_access" | "ask_first" | "read_only";
   timestamp: string;
 };
 

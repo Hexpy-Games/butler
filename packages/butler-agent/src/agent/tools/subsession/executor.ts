@@ -25,6 +25,10 @@ export function createSubsessionToolHandlers(input: {
         throw new Error("subsession_parent_access_snapshot_missing");
       }
       const args = decodeDelegationArgs(call.args);
+      const reviewed = await input.service!.reviewedDelegationPlan({
+        parentSessionId: input.parentSessionId,
+        parentTurnId: input.parentTurnId,
+      });
       const created = await input.service!.delegate({
         parent_session_id: input.parentSessionId,
         parent_turn_id: input.parentTurnId,
@@ -32,14 +36,15 @@ export function createSubsessionToolHandlers(input: {
         parent_access_mode: input.parentAccessMode,
         execution_mode: args.execution_mode,
         safe_title: args.safe_title,
-        objective: args.objective,
-        acceptance_criteria: args.acceptance_criteria,
-        task_or_plan_refs: args.task_or_plan_refs,
-        constraints_and_non_goals: args.constraints_and_non_goals,
+        objective: reviewed.objective,
+        acceptance_criteria: reviewed.acceptance_criteria,
+        task_or_plan_refs: reviewed.task_or_plan_refs,
+        constraints_and_non_goals: [],
         allowed_tools_and_effects: args.allowed_tools_and_effects,
         mutation_scope: args.mutation_scope,
         model_ref: input.modelRef,
         reasoning_effort: input.reasoningEffort,
+        parent_work_ref: reviewed.parent_work_ref,
       });
       return {
         ok: true,
@@ -112,20 +117,12 @@ function optionalRelationSelector(args: Record<string, unknown>): {
 function decodeDelegationArgs(args: Record<string, unknown>): {
   execution_mode: "read_only" | "mutation";
   safe_title: string;
-  objective: string;
-  acceptance_criteria: string[];
-  task_or_plan_refs: string[];
-  constraints_and_non_goals: string[];
   allowed_tools_and_effects: string[];
   mutation_scope: string[];
 } {
   return {
     execution_mode: executionMode(args.execution_mode),
     safe_title: requiredString(args.safe_title, "safe_title"),
-    objective: requiredString(args.objective, "objective"),
-    acceptance_criteria: stringArray(args.acceptance_criteria, "acceptance_criteria", true),
-    task_or_plan_refs: stringArray(args.task_or_plan_refs, "task_or_plan_refs", false),
-    constraints_and_non_goals: stringArray(args.constraints_and_non_goals, "constraints_and_non_goals", true),
     allowed_tools_and_effects: stringArray(args.allowed_tools_and_effects, "allowed_tools_and_effects", true),
     mutation_scope: stringArray(args.mutation_scope, "mutation_scope", false),
   };

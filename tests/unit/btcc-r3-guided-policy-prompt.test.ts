@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { SqliteGuidedToolJournal } from
@@ -13,10 +14,13 @@ import {
 import {
   guidedInstructions,
   renderGuidedPrompt,
+  renderGuidedTurnRequestAttribution,
 } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-prompt.ts";
 import { guidedStewardInstructions } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-steward-instructions.ts";
+import { phaseMinimalStableInstructionSurface } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-phase-instructions.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tool-definitions.ts";
 import { workScopeForTurn } from
@@ -262,19 +266,19 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   );
 });
 
-test("SS-03B guided instructions define semantic delegation selection", () => {
+test("guided instructions require reviewed Butler intent before delegation", () => {
   const instructions = guidedInstructions(guidedPolicy(
     turnRecord({ accessMode: "full_access", projectRef: "butler" }),
   ));
 
   expect(instructions).toContain(
-    "Select the path from the user's complete objective and constraints.",
+    "understand the complete request, create or continue one durable Work",
   );
   expect(instructions).toContain(
     "Keep simple conversation, stable knowledge, and one quick lookup in Butler.",
   );
   expect(instructions).toContain(
-    "Delegate bounded independent multi-step repository inspection, multi-source research or synthesis, persistent-artifact work, or execution-stage mutation with delegate_to_steward.",
+    "the immutable packet is derived from that exact reviewed Plan",
   );
   expect(instructions).toContain(
     "Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler.",
@@ -283,7 +287,7 @@ test("SS-03B guided instructions define semantic delegation selection", () => {
     "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
   );
   expect(instructions).toContain(
-    "Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",
+    "record an accepted Plan Review. Only then call delegate_to_steward",
   );
   expect(instructions).toContain(
     "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",
@@ -320,6 +324,12 @@ test("SS-03B delegation tool contract exposes canonical execution surfaces", () 
     "inherits the Composer Turn's admitted access mode",
   );
   expect(parameters.properties).not.toHaveProperty("parent_access_mode");
+  for (const reviewedField of [
+    "objective",
+    "acceptance_criteria",
+    "task_or_plan_refs",
+    "constraints_and_non_goals",
+  ]) expect(parameters.properties).not.toHaveProperty(reviewedField);
   expect(readOnly).toBeDefined();
   expect(readOnly?.properties?.allowed_tools_and_effects).toMatchObject({
     minItems: 5,
@@ -408,6 +418,128 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
   );
 });
 
+test("admitted EOL has distinct dynamic instruction attribution and fails closed", () => {
+  const eolRef = "e".repeat(64);
+  const personaRef = "a".repeat(64);
+  const duplicateEolRef = "d".repeat(64);
+  const untrustedProfileRef = "c".repeat(64);
+  const roleRef = "b".repeat(64);
+  const profileRef = "f".repeat(64);
+  const documents = new Map([
+    [eolRef, contextDocument(eolRef, "eol", "EOL_EXACT_INSTRUCTION")],
+    [personaRef, contextDocument(
+      personaRef,
+      "active-persona-reminder",
+      "PERSONA_EXACT",
+    )],
+    [duplicateEolRef, contextDocument(
+      duplicateEolRef,
+      "eol",
+      "DUPLICATE_EOL_INSTRUCTION",
+    )],
+    [untrustedProfileRef, contextDocument(
+      untrustedProfileRef,
+      "untrusted-profile",
+      "UNTRUSTED_PROFILE_INSTRUCTION",
+    )],
+    [roleRef, contextDocument(
+      roleRef, "role", `ROLE_SYSTEM_EXACT\n${"§".repeat(8_000)}`,
+    )],
+    [profileRef, contextDocument(
+      profileRef, "personalization-profile", `PERSONA_PROFILE_EXACT\n${"¤".repeat(8_000)}`,
+    )],
+  ]);
+  const reader = {
+    read(ref: string) {
+      const document = documents.get(ref);
+      if (!document) throw new Error("missing test document");
+      return document;
+    },
+    resolve(ref: string) {
+      return reader.read(ref).content;
+    },
+  };
+  const turn = turnRecord();
+  turn.context.profileRefs = [roleRef, personaRef, profileRef, eolRef];
+  const stable = phaseMinimalStableInstructionSurface(
+    "execution",
+    guidedPolicy(turn),
+    "test-tools-v1",
+  );
+  const request = renderGuidedTurnRequestAttribution(
+    turn,
+    stable.stableInstructionPrefix,
+    "Korean",
+    {
+      butlerData: "/tmp/butler-data",
+      contextDocuments: reader,
+      toolJournal: emptyToolJournal(),
+    },
+  );
+
+  expect(request.prompt).not.toContain("EOL_EXACT_INSTRUCTION");
+  expect(stable.stableProviderCachePrefix.instructionPrefix).toContain(
+    "exact EOL admitted for this Turn governs both Butler and Steward",
+  );
+  expect(stable.stableProviderCachePrefix.instructionPrefix).not.toContain(
+    "EOL_EXACT_INSTRUCTION",
+  );
+  const eolSource = request.requestSegmentSources.instructions.find((source) =>
+    source.text.includes("EOL_EXACT_INSTRUCTION"),
+  );
+  const personaSource = request.requestSegmentSources.instructions.find((source) =>
+    source.text.includes("PERSONA_EXACT"),
+  );
+  expect(eolSource).toMatchObject({
+    kind: "accepted_corrections_and_unresolved_obligations",
+    stability: "dynamic",
+  });
+  expect(personaSource).toMatchObject({
+    kind: "memory_recall_context",
+    stability: "dynamic",
+  });
+  expect(eolSource?.text).not.toContain("PERSONA_EXACT");
+  expect(personaSource?.text).not.toContain("EOL_EXACT_INSTRUCTION");
+  expect(request.instructions.indexOf("ROLE_SYSTEM_EXACT")).toBeLessThan(
+    request.instructions.indexOf("PERSONA_EXACT"),
+  );
+  expect(request.instructions.indexOf("PERSONA_EXACT")).toBeLessThan(
+    request.instructions.indexOf("EOL_EXACT_INSTRUCTION"),
+  );
+  expect([...request.instructions].filter((character) =>
+    character === "§" || character === "¤",
+  ).length).toBeLessThanOrEqual(12_000);
+
+  turn.context.profileRefs = [personaRef];
+  expect(() => renderGuidedTurnRequestAttribution(
+    turn, "You are Butler.\nStable protocol.", "", {
+      butlerData: "/tmp/butler-data", contextDocuments: reader,
+      toolJournal: emptyToolJournal(),
+    },
+  )).toThrow("guided_eol_instruction_document_invalid");
+  turn.context.profileRefs = [];
+  expect(() => renderGuidedTurnRequestAttribution(
+    turn, "You are Butler.\nStable protocol.", "", {
+      butlerData: "/tmp/butler-data", contextDocuments: reader,
+      toolJournal: emptyToolJournal(),
+    },
+  )).toThrow("guided_eol_instruction_document_invalid");
+  turn.context.profileRefs = [eolRef, duplicateEolRef];
+  expect(() => renderGuidedTurnRequestAttribution(
+    turn, "You are Butler.\nStable protocol.", "", {
+      butlerData: "/tmp/butler-data", contextDocuments: reader,
+      toolJournal: emptyToolJournal(),
+    },
+  )).toThrow("guided_eol_instruction_document_invalid");
+  turn.context.profileRefs = [eolRef, untrustedProfileRef];
+  expect(() => renderGuidedTurnRequestAttribution(
+    turn, "You are Butler.\nStable protocol.", "", {
+      butlerData: "/tmp/butler-data", contextDocuments: reader,
+      toolJournal: emptyToolJournal(),
+    },
+  )).toThrow("guided_profile_instruction_document_invalid");
+});
+
 test("R3 continuation guidance repairs legacy Work labels and refreshes downstream results", () => {
   const instructions = guidedInstructions(guidedPolicy(turnRecord()));
 
@@ -447,6 +579,15 @@ test("R3 Conception guidance actively selects associative recall and exposes cro
   expect(visible).toContain("recall_memory");
   expect(visible).toContain("list_conversation_sessions");
   expect(visible).toContain("read_conversation_session");
+  expect(authorized).toContain("delegate_to_steward");
+  expect(visible).toContain("delegate_to_steward");
+  expect(visible).not.toContain("write_file");
+  const askFirst = turnRecord({ accessMode: "ask_first" });
+  const askFirstVisible = visibleToolDefinitions(
+    authorizedToolDefinitions(askFirst, {}), guidedPolicy(askFirst),
+  ).map((tool) => tool.name);
+  expect(askFirstVisible).toContain("delegate_to_steward");
+  expect(askFirstVisible).not.toContain("write_file");
 });
 
 test("guided read-only policy authorizes and visibly exposes list_files", () => {
@@ -637,6 +778,23 @@ function executionPolicy(
     requiredNativeToolProfiles: [],
     requiredNativeTools: [],
     workspacePath: "/tmp/workspace",
+  };
+}
+
+function contextDocument(
+  contextRef: string,
+  sourceId: string,
+  content: string,
+) {
+  return {
+    contextRef,
+    contentSha256: createHash("sha256").update(content).digest("hex"),
+    sourceId,
+    projectionClass: "profile" as const,
+    scopeKind: "user" as const,
+    scopeId: "local-user",
+    sourceRevision: `${sourceId}-v1`,
+    content,
   };
 }
 

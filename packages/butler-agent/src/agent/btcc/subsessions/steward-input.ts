@@ -26,9 +26,7 @@ export function renderStewardInput(
     `expected_result_schema: ${stableJson(packet.expected_result_schema)}`,
     `work_creation_policy: ${packet.work_creation_policy}`,
     `access_and_budget_policy: ${stableJson(packet.access_and_budget_policy)}`,
-    ...(packet.parent_work_ref
-      ? [`parent_work_ref: ${stableJson(packet.parent_work_ref)}`]
-      : []),
+    `parent_work_ref: ${stableJson(packet.parent_work_ref)}`,
     ...(parentConversationContext ? [parentConversationContext] : []),
   ].join("\n");
 }
