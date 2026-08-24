@@ -46,6 +46,7 @@ export type DelegationProjectContextSnapshot = {
 
 export type DelegationPacket = {
   delegation_id: string;
+  /** Compatibility name for the Butler managerial assignment, never a Worker Task. */
   task_id: string;
   parent_session_id: string;
   parent_turn_id: string;
@@ -152,6 +153,15 @@ export type ReviewedDelegationPlan = {
   acceptance_criteria: string[];
   task_or_plan_refs: string[];
 };
+
+export type ReviewedDelegationRequest = Pick<DelegationRequest,
+  | "parent_session_id"
+  | "parent_turn_id"
+  | "anchor_message_id"
+  | "parent_access_mode"
+  | "model_ref"
+  | "reasoning_effort"
+> & { safe_title?: string };
 
 export type CreatedDelegation = {
   relation: SessionRelation;
@@ -284,6 +294,7 @@ export type SubsessionDelegationService = {
     parentSessionId: string;
     parentTurnId: string;
   }): Promise<ReviewedDelegationPlan>;
+  delegateReviewed(input: ReviewedDelegationRequest): Promise<CreatedDelegation>;
   delegate(input: DelegationRequest): Promise<CreatedDelegation>;
   ensureChildRootWork(input: {
     childSessionId: string;

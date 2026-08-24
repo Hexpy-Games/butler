@@ -294,59 +294,32 @@ test("guided instructions require reviewed Butler intent before delegation", () 
   );
 });
 
-test("SS-03B delegation tool contract exposes canonical execution surfaces", () => {
+test("Steward delegation exposes semantic handoff only and keeps mechanics runtime-owned", () => {
   const parameters = delegateToStewardToolDefinition.parameters as {
     properties?: Record<string, unknown>;
-    oneOf?: Array<{ properties?: Record<string, any> }>;
+    required?: string[];
   };
-  const variants = parameters.oneOf ?? [];
-  const readOnly = variants.find((variant) =>
-    variant.properties?.execution_mode?.const === "read_only",
-  );
-  const mutation = variants.find((variant) =>
-    variant.properties?.execution_mode?.const === "mutation",
-  );
-  const readOnlySurface = [
-    "grep_files:workspace",
-    "list_files:workspace",
-    "read_file:workspace",
-    "web_read:network",
-    "web_search:network",
-  ];
-
   expect(delegateToStewardToolDefinition.description).toContain(
-    "For read_only, allowed_tools_and_effects is exactly the complete five-value array",
+    "reviewed objective, success criteria, and provenance are loaded from durable Work",
   );
   expect(delegateToStewardToolDefinition.description).toContain(
-    "Every mutation Steward can list, grep, read, apply admitted edit/write effects, and run bounded workspace validation",
+    "omission uses a fixed privacy-safe title and never copies objective content",
   );
   expect(delegateToStewardToolDefinition.description).toContain(
-    "inherits the Composer Turn's admitted access mode",
+    "Runtime derives delegation identity, inherited Composer access, ordinary tools, workspace, admitted context and EOL, budget, and reviewed provenance",
   );
-  expect(parameters.properties).not.toHaveProperty("parent_access_mode");
-  for (const reviewedField of [
+  expect(Object.keys(parameters.properties ?? {})).toEqual(["safe_title"]);
+  expect(parameters.required ?? []).toEqual([]);
+  for (const runtimeOrReviewedField of [
+    "parent_access_mode",
     "objective",
     "acceptance_criteria",
     "task_or_plan_refs",
     "constraints_and_non_goals",
-  ]) expect(parameters.properties).not.toHaveProperty(reviewedField);
-  expect(readOnly).toBeDefined();
-  expect(readOnly?.properties?.allowed_tools_and_effects).toMatchObject({
-    minItems: 5,
-    maxItems: 5,
-    uniqueItems: true,
-    items: { enum: readOnlySurface },
-  });
-  expect(readOnly?.properties?.mutation_scope).toMatchObject({ maxItems: 0 });
-  expect(mutation).toBeDefined();
-  expect(mutation?.properties?.allowed_tools_and_effects).toMatchObject({
-    minItems: 1,
-    items: { enum: ["edit_file:workspace", "run_command:workspace", "write_file:workspace"] },
-  });
-  expect(mutation?.properties?.mutation_scope).toMatchObject({ minItems: 0 });
-  expect(mutation?.properties?.mutation_scope?.items?.description).toContain(
-    "whole session worktree",
-  );
+    "execution_mode",
+    "allowed_tools_and_effects",
+    "mutation_scope",
+  ]) expect(parameters.properties).not.toHaveProperty(runtimeOrReviewedField);
   expect(normalizeSubsessionMutationScope(["."])).toEqual(["."]);
   expect(normalizeSubsessionMutationScopeForEffects(
     ["/Users/example/project"],

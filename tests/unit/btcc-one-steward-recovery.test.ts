@@ -842,10 +842,7 @@ function recoveryRound(input: {
         if (round > 4) return { text: "Delegation accepted.", toolCalls: [] };
         return {
           toolCalls: [toolCall("delegate", "delegate_to_steward", {
-            execution_mode: "mutation",
             safe_title: "Bounded recovery task",
-            allowed_tools_and_effects: ["write_file:workspace"],
-            mutation_scope: ["recovery-result.txt"],
           })],
         };
       }
