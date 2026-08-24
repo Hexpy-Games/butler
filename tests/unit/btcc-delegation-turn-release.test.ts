@@ -16,16 +16,7 @@ test("successful Steward delegation releases before later batch calls and Work c
   );
   const calls: ModelRoundToolCall[] = [
     toolCall("delegate", "delegate_to_steward", {
-      execution_mode: "read_only",
       safe_title: "Inspect the exact reviewed model",
-      allowed_tools_and_effects: [
-        "grep_files:workspace",
-        "list_files:workspace",
-        "read_file:workspace",
-        "web_read:network",
-        "web_search:network",
-      ],
-      mutation_scope: [],
     }),
     toolCall("later-plan", "replace_work_plan", {
       objective: "This later plan must not execute",
@@ -80,13 +71,7 @@ test("failed Steward delegation retains ordinary batch and closeout behavior", a
   );
   const calls: ModelRoundToolCall[] = [
     toolCall("delegate", "delegate_to_steward", {
-      execution_mode: "read_only",
       safe_title: "Inspect the reviewed model",
-      allowed_tools_and_effects: [
-        "grep_files:workspace", "list_files:workspace", "read_file:workspace",
-        "web_read:network", "web_search:network",
-      ],
-      mutation_scope: [],
     }),
     toolCall("later-plan", "replace_work_plan", {
       objective: "Continue after a failed delegation",

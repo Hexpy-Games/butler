@@ -24,27 +24,15 @@ export function createSubsessionToolHandlers(input: {
       if (!input.parentAccessMode) {
         throw new Error("subsession_parent_access_snapshot_missing");
       }
-      const args = decodeDelegationArgs(call.args);
-      const reviewed = await input.service!.reviewedDelegationPlan({
-        parentSessionId: input.parentSessionId,
-        parentTurnId: input.parentTurnId,
-      });
-      const created = await input.service!.delegate({
+      const safeTitle = optionalSafeTitle(call.args.safe_title);
+      const created = await input.service!.delegateReviewed({
         parent_session_id: input.parentSessionId,
         parent_turn_id: input.parentTurnId,
         anchor_message_id: input.anchorMessageId,
         parent_access_mode: input.parentAccessMode,
-        execution_mode: args.execution_mode,
-        safe_title: args.safe_title,
-        objective: reviewed.objective,
-        acceptance_criteria: reviewed.acceptance_criteria,
-        task_or_plan_refs: reviewed.task_or_plan_refs,
-        constraints_and_non_goals: [],
-        allowed_tools_and_effects: args.allowed_tools_and_effects,
-        mutation_scope: args.mutation_scope,
+        ...(safeTitle ? { safe_title: safeTitle } : {}),
         model_ref: input.modelRef,
         reasoning_effort: input.reasoningEffort,
-        parent_work_ref: reviewed.parent_work_ref,
       });
       return {
         ok: true,
@@ -114,33 +102,12 @@ function optionalRelationSelector(args: Record<string, unknown>): {
   };
 }
 
-function decodeDelegationArgs(args: Record<string, unknown>): {
-  execution_mode: "read_only" | "mutation";
-  safe_title: string;
-  allowed_tools_and_effects: string[];
-  mutation_scope: string[];
-} {
-  return {
-    execution_mode: executionMode(args.execution_mode),
-    safe_title: requiredString(args.safe_title, "safe_title"),
-    allowed_tools_and_effects: stringArray(args.allowed_tools_and_effects, "allowed_tools_and_effects", true),
-    mutation_scope: stringArray(args.mutation_scope, "mutation_scope", false),
-  };
-}
-
-function executionMode(value: unknown): "read_only" | "mutation" {
-  if (value === "read_only" || value === "mutation") return value;
-  throw new Error("delegation_execution_mode_invalid");
+function optionalSafeTitle(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return requiredString(value, "safe_title").slice(0, 120);
 }
 
 function requiredString(value: unknown, name: string): string {
   if (typeof value !== "string" || !value.trim()) throw new Error(`delegation_${name}_required`);
   return value.trim();
-}
-
-function stringArray(value: unknown, name: string, required: boolean): string[] {
-  if (!Array.isArray(value)) throw new Error(`delegation_${name}_array_required`);
-  const result = value.map((item) => requiredString(item, name));
-  if (required && result.length === 0) throw new Error(`delegation_${name}_required`);
-  return result;
 }

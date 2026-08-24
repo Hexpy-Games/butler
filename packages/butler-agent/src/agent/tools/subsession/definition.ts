@@ -1,81 +1,21 @@
 import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../types.ts";
-import {
-  SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS,
-  SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS,
-} from "../../btcc/subsessions/scope.ts";
-
-const SUBSESSION_EFFECT_VALUES = [
-  ...SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS,
-  ...SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS,
-] as const;
 
 export const delegateToStewardToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "delegate_to_steward",
   description: [
-    "Delegate one bounded effect-free inspection or iterative mutation Work to exactly one ordinary Steward session.",
-    "The objective, acceptance criteria, and governing references come only from the current accepted Butler Plan Review; this call provides execution mode, a safe title, and the bounded tool/effect scope.",
-    "The Steward always inherits the Composer Turn's admitted access mode and ordinary BTCC tool policy exactly; execution_mode and allowed_tools_and_effects never choose, upgrade, or downgrade authority.",
-    "For read_only, allowed_tools_and_effects is exactly the complete five-value array [grep_files:workspace, list_files:workspace, read_file:workspace, web_read:network, web_search:network], and mutation_scope is [].",
-    "Every Steward keeps the parent's admitted project knowledge, memory recall, conversation, web, MCP, Project Ledger, and ordinary BTCC task capabilities. This field is not the Steward tool catalog.",
-    "Every mutation Steward can list, grep, read, apply admitted edit/write effects, and run bounded workspace validation through the ordinary BTCC loop.",
-    "For mutation, allowed_tools_and_effects may contain edit_file:workspace, write_file:workspace, and run_command:workspace. A run_command-only delegation uses mutation_scope []; edit/write uses exact relative files, directory prefixes, or '.' for the whole session worktree. Terminal dir/** shorthand is canonicalized to dir/; embedded wildcards remain forbidden.",
+    "Delegate the exact current accepted managerial Plan to one ordinary Steward session.",
+    "The reviewed objective, success criteria, and provenance are loaded from durable Work; the model does not repeat or author them in this call.",
+    "Runtime derives delegation identity, inherited Composer access, ordinary tools, workspace, admitted context and EOL, budget, and reviewed provenance.",
+    "A safe title is optional presentation metadata; omission uses a fixed privacy-safe title and never copies objective content.",
     "The Steward excludes Butler persona and direct-user presentation prompting, receives the immutable project context and bounded parent conversation projection, and returns one canonical terminal result for synthesis.",
   ].join(" "),
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
-      execution_mode: { type: "string", enum: ["read_only", "mutation"] },
       safe_title: { type: "string", minLength: 1, maxLength: 120 },
-      allowed_tools_and_effects: {
-        type: "array",
-        minItems: 1,
-        items: { type: "string", enum: SUBSESSION_EFFECT_VALUES, minLength: 1, maxLength: 240 },
-      },
-      mutation_scope: { type: "array", items: { type: "string", minLength: 1, maxLength: 240 } },
     },
-    required: [
-      "execution_mode",
-      "safe_title",
-      "allowed_tools_and_effects",
-      "mutation_scope",
-    ],
-    oneOf: [
-      {
-        properties: {
-          execution_mode: { const: "read_only" },
-          allowed_tools_and_effects: {
-            type: "array",
-            minItems: SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS.length,
-            maxItems: SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS.length,
-            uniqueItems: true,
-            items: { type: "string", enum: SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS },
-          },
-          mutation_scope: { type: "array", maxItems: 0 },
-        },
-      },
-      {
-        properties: {
-          execution_mode: { const: "mutation" },
-          allowed_tools_and_effects: {
-            type: "array",
-            minItems: 1,
-            items: { type: "string", enum: SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS },
-          },
-          mutation_scope: {
-            type: "array",
-            minItems: 0,
-            items: {
-              type: "string",
-              minLength: 1,
-              maxLength: 240,
-              description: "Empty for run_command-only; otherwise exact relative file, directory prefix, '.' for the whole session worktree, or terminal dir/** shorthand. Other wildcards are forbidden.",
-            },
-          },
-        },
-      },
-    ],
   },
   effectBoundary: "turn_local",
   concurrencySafe: false,
@@ -88,8 +28,8 @@ export const delegateToStewardToolMetadata: ToolCapabilityMetadata = {
   tags: ["subsession", "steward", "delegation"],
   safetyNotes: [
     "Creates one ordinary Steward session with one immutable minimal packet.",
-    "Mutation uses a validated session-owned isolated worktree; read-only inspection uses only the validated project workspace.",
-    "The delegated packet bounds the objective and context; Composer access remains the sole authority and the packet does not replace the ordinary BTCC Work lifecycle.",
+    "Runtime derives workspace and ordinary tools from the admitted parent Turn; Composer access remains the sole authority.",
+    "The semantic packet is loaded only from the exact current accepted managerial Plan.",
   ],
 };
 

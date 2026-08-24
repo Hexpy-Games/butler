@@ -28,9 +28,12 @@ import { readWebSearchMetrics } from
 
 const EXACT_QWEN_MODEL = "Qwen 3.8 27B AWQ INT4";
 const EXACT_QWEN_QUERY = `${EXACT_QWEN_MODEL} vLLM official settings KV cache`;
+const PRIVATE_OBJECTIVE_MARKER =
+  "PRIVATE_SAFE_TITLE_MARKER_/Users/private/.ssh/id_ed25519_\u0007";
 const EXACT_QWEN_OBJECTIVE =
   `Research official vLLM settings and KV-cache guidance for ${EXACT_QWEN_MODEL}, ` +
-  "and verify the repository source marker as bounded local evidence.";
+  "and verify the repository source marker as bounded local evidence. " +
+  `Keep this private control-bearing reference out of public titles: ${PRIVATE_OBJECTIVE_MARKER}`;
 const EXACT_QWEN_CHECK =
   `The actual Steward web search retains the exact model name ${EXACT_QWEN_MODEL}.`;
 
@@ -258,6 +261,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       ).get()?.packet_json ?? "";
       expect(packetJson).not.toContain(authToken);
       const packet = JSON.parse(packetJson) as {
+        task_id?: string;
         workspace_and_worktree?: { branch?: string };
         objective?: string;
         acceptance_criteria?: string[];
@@ -326,6 +330,8 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
         "SELECT work_id FROM btcc_guided_works WHERE session_id = ?",
       ).get(String(relation?.child_session_id));
       expect(rootWork?.work_id).toBeDefined();
+      expect(packet.task_id).toMatch(/^task-[a-f0-9]{40}$/u);
+      expect(rootWork?.work_id).not.toBe(packet.task_id);
       const appliedEffects = btccDb.query<{
         status: string;
         capability: string;
@@ -901,6 +907,7 @@ test("reviewed Butler delegation preserves the exact model name through Steward 
     expect(appSnapshot.parentTurnCount).toBe(1);
     expect(appSnapshot.assistantResultCount).toBe(1);
     expect(appSnapshot.newestAssistantText).toBe(synthesizedReport);
+    expect(appSnapshot.newestAssistantText).not.toContain(PRIVATE_OBJECTIVE_MARKER);
     const finalParentViewResponse = await fetch(
       `${app.url}session-view?session_id=general`,
       { headers: { authorization: `Bearer ${authToken}` } },
@@ -911,6 +918,9 @@ test("reviewed Butler delegation preserves the exact model name through Steward 
     };
     const finalParentData = finalParentView.data!;
     expect(finalParentData.messages.at(-1)?.text).toBe(synthesizedReport);
+    const publicStewardProjection = JSON.stringify(finalParentData.steward_children ?? []);
+    expect(publicStewardProjection).toContain("Delegated Steward work");
+    expect(publicStewardProjection).not.toContain(PRIVATE_OBJECTIVE_MARKER);
     expect(finalParentData.messages.some(
       (message) => message.role === "user" && message.text.startsWith("Subsession result\n"),
     )).toBe(false);
@@ -961,6 +971,8 @@ test("reviewed Butler delegation preserves the exact model name through Steward 
       ).all();
       expect(relations).toHaveLength(1);
       const relation = relations[0]!;
+      expect(relation.safe_title).toBe("Delegated Steward work");
+      expect(String(relation.safe_title)).not.toContain(PRIVATE_OBJECTIVE_MARKER);
       const packetJson = btccDb.query<{ packet_json: string }, []>(
         "SELECT packet_json FROM btcc_subsession_delegations",
       ).get()?.packet_json ?? "";
@@ -1008,6 +1020,7 @@ test("reviewed Butler delegation preserves the exact model name through Steward 
       expect(packet.objective).toBe(EXACT_QWEN_OBJECTIVE);
       expect(packet.acceptance_criteria).toEqual([EXACT_QWEN_CHECK]);
       expect(packet.task_or_plan_refs).toEqual(["W-SANDY-RELATIONSHIP-AUDIT-001"]);
+      expect(packet.constraints_and_non_goals).toEqual([]);
       expect(packet.parent_work_ref).toEqual({
         work_id: parentWork?.work_id,
         session_id: parentSessionId,
@@ -1044,7 +1057,7 @@ test("reviewed Butler delegation preserves the exact model name through Steward 
       expect(relation).toMatchObject({
         parent_session_id: parentSessionId,
         ordinal: 1,
-        safe_title: "Read-only repository inspection",
+        safe_title: "Delegated Steward work",
       });
       const childSessionId = String(relation.child_session_id);
       const child = bindings.listSessions().find((session) => session.sessionId === childSessionId);
@@ -1161,6 +1174,8 @@ test("reviewed Butler delegation preserves the exact model name through Steward 
         "SELECT input_json FROM btcc_subsession_outbox WHERE result_id = ?",
       ).get(String(result?.result_id))?.input_json ?? "";
       expect(resultOutbox).not.toContain("Evidence: README.md establishes the repository root");
+      expect(resultOutbox).toContain("Delegated Steward work");
+      expect(resultOutbox).not.toContain(PRIVATE_OBJECTIVE_MARKER);
       expect(JSON.parse(String(result?.tests_json))).toEqual([]);
       expect(JSON.parse(String(result?.remaining_risks_json))).toEqual([]);
       expect(JSON.parse(String(result?.follow_up_recommendations_json))).toEqual([]);
@@ -1213,6 +1228,10 @@ test("reviewed Butler delegation preserves the exact model name through Steward 
         .toEqual({ query: EXACT_QWEN_QUERY, max_results: 5 });
       expect(exactSearchRows[0]?.raw_arguments).toContain(EXACT_QWEN_MODEL);
       expect(exactSearchRows[0]?.result_json).toContain(EXACT_QWEN_QUERY);
+      expect(btccDb.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_tool_calls
+        WHERE turn_id = ? AND tool_name = 'web_search'
+      `).get(String(relation.parent_turn_id))?.count).toBe(0);
       expect(readWebSearchMetrics(root)).toMatchObject({
         requestCount: 1,
         lastProvider: "mock",
@@ -1598,7 +1617,11 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
           if (round === 2) return { toolCalls: [toolCall("plan-parent-work", "replace_work_plan", {
             objective: "Inspect, correct, and validate two bounded Steward fixture files.",
             governing_refs: [],
-            actions: [{ action_key: "delegate-reviewed-fixture-work" }],
+            actions: [{
+              action_key: "delegate-reviewed-fixture-work",
+              description: "Delegate the reviewed fixture execution milestone to Steward.",
+              dependency_keys: [],
+            }],
             checks: ["Both fixture files contain their expected mutation and bounded validation passes"],
           })] };
           if (round === 3) return { toolCalls: [toolCall("review-parent-work", "record_work_review", {
@@ -1609,17 +1632,22 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
             action_updates: [{ action_key: "delegate-reviewed-fixture-work", status: "active" }],
           })] };
           if (round > 4) return { text: "Delegation accepted.", toolCalls: [] };
-          expect(request.tools.map((tool) => tool.name)).toContain("delegate_to_steward");
+          expect(request.tools.map((tool) => tool.name)).toEqual(["delegate_to_steward"]);
+          const delegationTool = request.tools[0];
+          expect(delegationTool?.parameters).toMatchObject({
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              safe_title: expect.any(Object),
+            },
+          });
+          expect(Object.keys(
+            (delegationTool?.parameters as { properties?: Record<string, unknown> })
+              .properties ?? {},
+          )).toEqual(["safe_title"]);
           return {
             toolCalls: [toolCall("delegate", "delegate_to_steward", {
-              execution_mode: "mutation",
               safe_title: "Bounded Steward result",
-              allowed_tools_and_effects: [
-                "edit_file:workspace",
-                "write_file:workspace",
-                "run_command:workspace",
-              ],
-              mutation_scope: ["."],
             })],
           };
         }
@@ -1938,7 +1966,11 @@ function readOnlyStewardRound(
           if (round === 2) return { toolCalls: [toolCall(`plan-${key}`, "replace_work_plan", {
             objective,
             governing_refs: ["W-SANDY-RELATIONSHIP-AUDIT-001"],
-            actions: [{ action_key: "delegate-reviewed-read-only-inspection" }],
+            actions: [{
+              action_key: "delegate-reviewed-read-only-inspection",
+              description: "Delegate the reviewed exact-model inspection milestone to Steward.",
+              dependency_keys: [],
+            }],
             checks: [check],
           })] };
           if (round === 3) return { toolCalls: [toolCall(`review-${key}`, "record_work_review", {
@@ -1949,39 +1981,27 @@ function readOnlyStewardRound(
             action_updates: [{ action_key: "delegate-reviewed-read-only-inspection", status: "active" }],
           })] };
           if (round > 4) return { text: "Delegation accepted.", toolCalls: [] };
+          expect(request.tools.map((tool) => tool.name)).toEqual(["delegate_to_steward"]);
+          expect(Object.keys(
+            (request.tools[0]?.parameters as { properties?: Record<string, unknown> })
+              .properties ?? {},
+          )).toEqual(["safe_title"]);
           if (missingContext) {
             return {
               toolCalls: [toolCall("delegate-missing-context", "delegate_to_steward", {
-                execution_mode: "read_only",
                 safe_title: "Missing project context audit",
-                allowed_tools_and_effects: [...READ_ONLY_SURFACE],
-                mutation_scope: [],
               })],
             };
           }
           if (unusableReport) {
             return {
               toolCalls: [toolCall("delegate-unusable-report", "delegate_to_steward", {
-                execution_mode: "read_only",
                 safe_title: "Unusable report inspection",
-                allowed_tools_and_effects: [...READ_ONLY_SURFACE],
-                mutation_scope: [],
               })],
             };
           }
           return {
-            toolCalls: [toolCall("delegate-read-only", "delegate_to_steward", {
-              execution_mode: "read_only",
-              safe_title: "Read-only repository inspection",
-              allowed_tools_and_effects: [
-                "read_file:workspace",
-                "list_files:workspace",
-                "grep_files:workspace",
-                "web_search:network",
-                "web_read:network",
-              ],
-              mutation_scope: [],
-            })],
+            toolCalls: [toolCall("delegate-read-only", "delegate_to_steward", {})],
           };
         }
         return {
@@ -1997,7 +2017,11 @@ function readOnlyStewardRound(
       const round = (childRounds.get(childKey) ?? 0) + 1;
       childRounds.set(childKey, round);
       const childBody = request.messages.map((message) => message.content).join("\n");
-      const exactModelResearch = childBody.includes(EXACT_QWEN_MODEL);
+      const delegatedObjective = /^objective: (.+)$/mu.exec(childBody)?.[1];
+      const delegatedCheck = /^acceptance_criteria: (.+)$/mu.exec(childBody)?.[1];
+      const exactEntity = /official vLLM settings and KV-cache guidance for (.+?), and verify/u
+        .exec(delegatedObjective ?? "")?.[1];
+      const exactModelResearch = Boolean(exactEntity);
       const simulateToolFailure = request.messages.some((message) =>
         message.content.includes("unusable terminal report evidence"),
       );
@@ -2006,7 +2030,7 @@ function readOnlyStewardRound(
         return {
           toolCalls: [toolCall("plan-read-only", "replace_work_plan", {
             objective: exactModelResearch
-              ? EXACT_QWEN_OBJECTIVE
+              ? delegatedObjective
               : "Inspect the repository layout and source marker, then summarize the findings.",
             actions: [{
               action_key: "inspect-repository-evidence",
@@ -2018,7 +2042,8 @@ function readOnlyStewardRound(
               dependency_keys: ["inspect-repository-evidence"],
             }],
             checks: exactModelResearch
-              ? [EXACT_QWEN_CHECK, "At least two material local reads support the summary."]
+              ? [delegatedCheck, "At least two material local reads support the summary."]
+                .filter((value): value is string => Boolean(value))
               : ["At least two material read operations support the summary."],
           })],
         };
@@ -2036,7 +2061,7 @@ function readOnlyStewardRound(
       if (exactModelResearch && round === 3) {
         return {
           toolCalls: [toolCall("search-exact-qwen-model", "web_search", {
-            query: EXACT_QWEN_QUERY,
+            query: `${exactEntity} vLLM official settings KV cache`,
             max_results: 5,
           })],
         };
