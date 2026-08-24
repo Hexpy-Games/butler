@@ -1,4 +1,5 @@
 export { createDurableWorkService } from "./work.ts";
+export type { DurableWorkService, WorkLedgerOperation } from "./work.ts";
 export { dispositionMaterialFingerprint } from "./disposition-freshness.ts";
 export {
   DURABLE_WORK_TOOL_NAMES,
@@ -31,7 +32,6 @@ export type {
   DurableWorkPlanAction,
   DurableWorkReview,
   DurableWorkScope,
-  DurableWorkService,
   DurableWorkStore,
   DurableWorkToolResultRef,
   DurableWorkView,

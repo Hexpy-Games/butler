@@ -306,27 +306,6 @@ export type RecordWorkDispositionCommand = RecordWorkDispositionInput & {
   requestSha256: string;
 };
 
-export interface DurableWorkService {
-  loadContext(scope: WorkTurnScope): Promise<DurableWorkContext | null>;
-  importOpenLegacyWork(
-    scope: WorkTurnScope,
-  ): Promise<LegacyOpenWorkImportResult | null>;
-  bindOpenWork(
-    scope: WorkTurnScope,
-    expectedWorkId?: string,
-  ): Promise<DurableWorkView | null>;
-  startWork(input: StartWorkInput): Promise<DurableWorkView>;
-  continueWork(input: ContinueWorkInput): Promise<DurableWorkView>;
-  replacePlan(input: ReplaceWorkPlanInput): Promise<DurableWorkView>;
-  recordCheckpoint(input: RecordWorkCheckpointInput): Promise<DurableWorkView>;
-  recordReview(input: RecordWorkReviewInput): Promise<DurableWorkView>;
-  recordDisposition(input: RecordWorkDispositionInput): Promise<DurableWorkView>;
-  claimCloseoutCorrection(input: ClaimWorkCloseoutCorrectionInput): Promise<boolean>;
-  attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView>;
-  boundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
-  abandonBoundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
-}
-
 export interface DurableWorkStore {
   loadContext(scope: WorkTurnScope): Promise<DurableWorkContext | null>;
   importOpenLegacyWork(

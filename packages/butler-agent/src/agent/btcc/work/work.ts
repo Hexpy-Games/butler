@@ -1,6 +1,16 @@
 import type {
-  DurableWorkService,
+  AttachToolResultInput,
+  ClaimWorkCloseoutCorrectionInput,
+  ContinueWorkInput,
+  DurableWorkContext,
   DurableWorkStore,
+  DurableWorkView,
+  LegacyOpenWorkImportResult,
+  RecordWorkCheckpointInput,
+  RecordWorkDispositionInput,
+  RecordWorkReviewInput,
+  ReplaceWorkPlanInput,
+  StartWorkInput,
   WorkTurnScope,
 } from "./contracts.ts";
 import {
@@ -25,9 +35,32 @@ import {
   workRequestFingerprint,
 } from "./work-input-validation.ts";
 
+export interface WorkLedgerOperation {
+  loadContext(scope: WorkTurnScope): Promise<DurableWorkContext | null>;
+  importOpenLegacyWork(
+    scope: WorkTurnScope,
+  ): Promise<LegacyOpenWorkImportResult | null>;
+  bindOpenWork(
+    scope: WorkTurnScope,
+    expectedWorkId?: string,
+  ): Promise<DurableWorkView | null>;
+  startWork(input: StartWorkInput): Promise<DurableWorkView>;
+  continueWork(input: ContinueWorkInput): Promise<DurableWorkView>;
+  replacePlan(input: ReplaceWorkPlanInput): Promise<DurableWorkView>;
+  recordCheckpoint(input: RecordWorkCheckpointInput): Promise<DurableWorkView>;
+  recordReview(input: RecordWorkReviewInput): Promise<DurableWorkView>;
+  recordDisposition(input: RecordWorkDispositionInput): Promise<DurableWorkView>;
+  claimCloseoutCorrection(input: ClaimWorkCloseoutCorrectionInput): Promise<boolean>;
+  attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView>;
+  boundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
+  abandonBoundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
+}
+
+export type DurableWorkService = WorkLedgerOperation;
+
 export function createDurableWorkService(
   store: DurableWorkStore,
-): DurableWorkService {
+): WorkLedgerOperation {
   return {
     loadContext(scope) {
       validateScope(scope);
