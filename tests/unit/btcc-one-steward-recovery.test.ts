@@ -23,6 +23,10 @@ import type { SubsessionDelegationStore } from "../../packages/butler-agent/src/
 import { BTCC_SUBSESSION_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/subsession-schema.ts";
 import { migrateSubsessionResultSchema } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/subsession-schema-migration.ts";
 import { SqliteGuidedWorkStore } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+import { SqlitePrincipalAuthorityRepository } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
+import { createPrincipalAuthority } from
+  "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
 import { createDurableWorkService } from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import type { ReviewedDelegationPlan } from "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
 
@@ -995,7 +999,10 @@ async function installReviewedDelegationPlan(input: {
   accessMode?: "full_access" | "ask_first" | "read_only";
 }): Promise<ReviewedDelegationPlan> {
   const db = new Database(input.dbPath);
-  const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
+  const service = createDurableWorkService(new SqliteGuidedWorkStore(
+    db,
+    createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+  ));
   try {
     const checkpointId = `checkpoint-${input.turnId}`;
     db.query(`

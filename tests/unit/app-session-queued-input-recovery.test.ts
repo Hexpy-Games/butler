@@ -1091,6 +1091,11 @@ function oneRoundAnswer(text: string): ModelRoundPort {
 }
 
 function publishNativeReadiness(root: string): void {
+  writeFileSync(
+    join(root, "eol.md"),
+    "Act only from explicit evidence and preserve the exact reviewed objective.\n",
+    "utf8",
+  );
   mkdirSync(join(root, "state"), { recursive: true });
   writeFileSync(
     join(root, "state", "butler-main-native.json"),

@@ -85,17 +85,17 @@ test("production Guided Turn applies the fixed phase memory allowlist in typed o
     const readOnly = await runCaptured(fixture, turnRecord(fixture.root, "read_only", refs));
     const execution = await runCaptured(fixture, turnRecord(fixture.root, "execution", refs));
 
-    expect(combined(direct)).toContain('"sourceId":"profile-a"');
-    expect(combined(direct)).toContain('"sourceId":"profile-b"');
+    expect(combined(direct)).toContain("profile-a-body-");
+    expect(combined(direct)).toContain("profile-b-body-");
     expect(combined(direct)).toContain('"sourceId":"feedback"');
     expect(combined(direct)).not.toContain('"sourceId":"mandatory"');
     expect(combined(direct)).not.toContain('"sourceId":"optional"');
     expect(direct.instructions).toContain("Use Korean for every user-facing message");
     expect(direct.messages[0]?.content).toContain("Keep this exact current user request.");
-    expect(combined(direct).indexOf('"sourceId":"profile-a"'))
-      .toBeLessThan(combined(direct).indexOf('"sourceId":"profile-b"'));
+    expect(combined(direct).indexOf("profile-a-body-"))
+      .toBeLessThan(combined(direct).indexOf("profile-b-body-"));
 
-    expect(combined(readOnly)).toContain('"sourceId":"profile-a"');
+    expect(combined(readOnly)).toContain("profile-a-body-");
     expect(combined(readOnly)).toContain('"sourceId":"feedback"');
     expect(combined(readOnly)).toContain('"sourceId":"mandatory"');
     expect(combined(readOnly)).not.toContain('"sourceId":"optional"');
@@ -140,8 +140,8 @@ test("default-off Guided Turn preserves the exact pre-v4 request body", async ()
     expect(request.messages[0]?.content).toBe(expected.prompt);
     expect(request.instructions).toBe(expected.instructions);
     expect(combined(request)).toContain("optional-body-");
-    expect(combined(request)).not.toContain('"sourceId":"profile-a"');
-    expect(typedReads).toBe(0);
+    expect(combined(request)).not.toContain('"sourceId":"profile-projection"');
+    expect(typedReads).toBe(3);
   } finally {
     fixture.close();
   }
@@ -153,7 +153,7 @@ test("phase memory projection is a strict-shrink no-op for a tiny excluded docum
     const refs = persistAll(fixture, 1);
     const request = await runCaptured(fixture, turnRecord(fixture.root, "direct", refs));
     expect(combined(request)).toContain("optional-body-x");
-    expect(combined(request)).not.toContain('"sourceId":"profile-a"');
+    expect(combined(request)).not.toContain('"sourceId":"profile-projection"');
   } finally {
     fixture.close();
   }
@@ -179,7 +179,7 @@ test("malformed typed memory identity fails before the provider and is not downg
     const refs = persistAll(fixture, 4_000);
     const db = new Database(fixture.dbPath);
     db.query("UPDATE btcc_context_documents SET projection_class = ? WHERE context_ref = ?")
-      .run("optional_hot_cache", refs.profileRefs[0]);
+      .run("optional_hot_cache", refs.mandatoryHotCacheRefs[0]);
     db.close(false);
     let providerCalls = 0;
     const agent = createProductionGuidedTurnAgent({
@@ -250,25 +250,32 @@ test("phase memory projection requires the production serializer before dispatch
 test("phase memory projection fails when mandatory typed identities exceed 12 KiB", async () => {
   const fixture = createFixture("feature-memory-overflow");
   try {
-    const profileRefs = Array.from({ length: 90 }, (_, index) => persist(
+    const eolRef = persist(
       fixture,
       "profile",
-      `profile-${index}-${"s".repeat(120)}`,
+      "eol",
+      "revision-eol",
+      "Act only from explicit evidence and preserve the exact reviewed objective.",
+    );
+    const mandatoryHotCacheRefs = Array.from({ length: 90 }, (_, index) => persist(
+      fixture,
+      "mandatory_hot_cache",
+      `mandatory-${index}-${"s".repeat(120)}`,
       `revision-${index}-${"r".repeat(120)}`,
-      "required profile fact",
+      "required project fact",
     ));
     const optionalRef = persist(
       fixture, "optional_hot_cache", "optional", "revision-optional", "excluded",
     );
     const refs: ContextRefs = {
-      profileRefs,
+      profileRefs: [eolRef],
       recentFeedbackRefs: [],
-      mandatoryHotCacheRefs: [],
+      mandatoryHotCacheRefs,
       optionalHotCacheRefs: [optionalRef],
     };
     await expect(runCaptured(
       fixture,
-      turnRecord(fixture.root, "direct", refs),
+      turnRecord(fixture.root, "read_only", refs),
     )).rejects.toMatchObject({
       name: "PhaseScopedMemoryProjectionError",
       code: "phase_scoped_memory_projection_too_large",
@@ -469,8 +476,15 @@ function persistAll(fixture: Fixture, repeated: number): ContextRefs {
   const body = "x".repeat(repeated);
   return {
     profileRefs: [
-      persist(fixture, "profile", "profile-a", "revision-profile-a", `profile-a-body-${body}`),
-      persist(fixture, "profile", "profile-b", "revision-profile-b", `profile-b-body-${body}`),
+      persist(fixture, "profile", "profile-projection", "revision-profile-a", `profile-a-body-${body}`),
+      persist(fixture, "profile", "personalization-profile", "revision-profile-b", `profile-b-body-${body}`),
+      persist(
+        fixture,
+        "profile",
+        "eol",
+        "revision-eol",
+        "Act only from explicit evidence and preserve the exact reviewed objective.",
+      ),
     ],
     recentFeedbackRefs: [
       persist(fixture, "recent_feedback", "feedback", "revision-feedback", `feedback-body-${body}`),
@@ -581,33 +595,36 @@ function configureRuntimeFailure(
 ): {
   refs: ContextRefs;
   contextDocuments: ContextDocumentReader;
-  initialRequestBytes: typeof openAIInitialRequestSerializedBytes;
+  initialRequestBytes: typeof openAIInitialRequestSerializedBytes | undefined;
 } {
   let refs = persistAll(fixture, 4_000);
-  let contextDocuments: ContextDocumentReader = fixture.stores.contextDocuments;
-  let initialRequestBytes = openAIInitialRequestSerializedBytes;
+  const contextDocuments: ContextDocumentReader = fixture.stores.contextDocuments;
+  let initialRequestBytes: typeof openAIInitialRequestSerializedBytes | undefined =
+    openAIInitialRequestSerializedBytes;
   if (code === "phase_scoped_memory_dependency_missing") {
-    contextDocuments = {
-      resolve: fixture.stores.contextDocuments.resolve.bind(
-        fixture.stores.contextDocuments,
-      ),
-    } as ContextDocumentReader;
+    initialRequestBytes = undefined;
   } else if (code === "phase_scoped_memory_document_invalid") {
     const db = new Database(fixture.dbPath);
     db.query("UPDATE btcc_context_documents SET source_revision = ? WHERE context_ref = ?")
-      .run("mutated", refs.profileRefs[0]);
+      .run("mutated", refs.mandatoryHotCacheRefs[0]);
     db.close(false);
   } else if (code === "phase_scoped_memory_projection_too_large") {
     refs = {
-      profileRefs: Array.from({ length: 90 }, (_, index) => persist(
+      profileRefs: [persist(
         fixture,
         "profile",
-        `runtime-profile-${index}-${"s".repeat(120)}`,
-        `runtime-revision-${index}-${"r".repeat(120)}`,
-        "required profile fact",
-      )),
+        "eol",
+        "runtime-eol-revision",
+        "Act only from explicit evidence and preserve the exact reviewed objective.",
+      )],
       recentFeedbackRefs: [],
-      mandatoryHotCacheRefs: [],
+      mandatoryHotCacheRefs: Array.from({ length: 90 }, (_, index) => persist(
+        fixture,
+        "mandatory_hot_cache",
+        `runtime-mandatory-${index}-${"s".repeat(120)}`,
+        `runtime-revision-${index}-${"r".repeat(120)}`,
+        "required project fact",
+      )),
       optionalHotCacheRefs: [persist(
         fixture,
         "optional_hot_cache",
@@ -647,6 +664,7 @@ function runtimeCommand(
     },
     context: {
       userRef: "user",
+      projectRef: "runtime-project",
       ...refs,
       baselineObservationScopeRefs: [`workspace:${workspacePath}`],
       executionPolicy: {
@@ -656,6 +674,7 @@ function runtimeCommand(
         requiredNativeToolProfiles: [],
         requiredNativeTools: [],
         workspacePath,
+        projectId: "runtime-project",
       },
     },
   };

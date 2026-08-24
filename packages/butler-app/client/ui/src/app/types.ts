@@ -1448,5 +1448,45 @@ export interface ComposerControls {
 
 export type Updater<T> = T | ((previous: T) => T);
 
+/**
+ * Raw transport shape of the durable `GET /authority-requests` projection.
+ * Fields stay `unknown` on purpose: the store normalizer is the only place
+ * allowed to narrow them, and it must fail closed on malformed data.
+ */
+export interface AuthorityRequestsTransportView {
+  session_id?: unknown;
+  requests?: unknown;
+}
+
+/** Raw transport response from a narrow durable authority decision endpoint. */
+export interface AuthorityDecisionTransportView {
+  request_ref?: unknown;
+  decision?: unknown;
+  scheduled?: unknown;
+}
+
+/** Opaque decision handle. Never renderable outside transport state. */
+export type AuthorityRequestRef = string;
+
+/**
+ * Narrow read-only UI card for one pending self-session authority request.
+ * Only category, reason, executable, and command count are renderable; the
+ * request reference exists solely as an in-memory React key and narrow
+ * decision handle.
+ */
+export interface AuthorityApprovalCard {
+  requestRef: AuthorityRequestRef;
+  category: "command";
+  reason: string;
+  executable: string;
+  commandCount: number;
+}
+
+/** Server-backed projection bound to the session id it was fetched for. */
+export interface AuthorityApprovalProjection {
+  sessionId: string;
+  cards: AuthorityApprovalCard[];
+}
+
 export type IconElement = ReactElement<{ size?: number }>;
 export type ChildrenProps = { children?: ReactNode };

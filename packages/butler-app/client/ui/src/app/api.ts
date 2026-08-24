@@ -26,6 +26,10 @@ interface ButlerAppBridge {
   getSessionView?: (
     input?: SessionViewBridgeInput,
   ) => Promise<SessionViewBridgeResult | SessionView>;
+  getAuthorityRequests?: (input?: unknown) => Promise<unknown>;
+  allowAuthorityRequest?: (input?: unknown) => Promise<unknown>;
+  denyAuthorityRequest?: (input?: unknown) => Promise<unknown>;
+  modifyAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   openNativeNotificationSettings?: () => Promise<unknown>;
   setNativeShellPreferences?: (input?: unknown) => Promise<unknown>;
   subscribeLiveEvents?: (
@@ -474,6 +478,40 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/session-queue") {
     return await callBridge<T>(bridge, "listSessionQueue", {
       sessionId: url.searchParams.get("session_id") ?? "general",
+    });
+  }
+  if (method === "GET" && url.pathname === "/authority-requests") {
+    return await callBridge<T>(bridge, "getAuthorityRequests", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+    });
+  }
+  const authorityAllowMatch = url.pathname.match(
+    /^\/authority-requests\/([^/]+)\/allow$/u,
+  );
+  if (method === "POST" && authorityAllowMatch) {
+    return await callBridge<T>(bridge, "allowAuthorityRequest", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+      requestRef: decodeURIComponent(authorityAllowMatch[1] ?? ""),
+    });
+  }
+  const authorityDenyMatch = url.pathname.match(
+    /^\/authority-requests\/([^/]+)\/deny$/u,
+  );
+  if (method === "POST" && authorityDenyMatch) {
+    return await callBridge<T>(bridge, "denyAuthorityRequest", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+      requestRef: decodeURIComponent(authorityDenyMatch[1] ?? ""),
+    });
+  }
+  const authorityModifyMatch = url.pathname.match(
+    /^\/authority-requests\/([^/]+)\/modify$/u,
+  );
+  if (method === "POST" && authorityModifyMatch) {
+    const body = parseBody(options.body);
+    return await callBridge<T>(bridge, "modifyAuthorityRequest", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+      requestRef: decodeURIComponent(authorityModifyMatch[1] ?? ""),
+      alternative: body.alternative,
     });
   }
   if (method === "POST" && url.pathname === "/session-queue") {

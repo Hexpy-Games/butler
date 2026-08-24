@@ -1,7 +1,32 @@
 import type { Database } from "bun:sqlite";
-import type { AuthorityDecisionAction, PrincipalAuthorityRepository } from "../../../btcc/authority/index.ts";
+import type {
+  AuthorityOperationalCloseReason,
+  AuthorityOperationalCloseScope,
+  AuthorityDecisionAction,
+  PrincipalAuthorityRepository,
+} from "../../../btcc/authority/index.ts";
 
 type AuthorityRecord = Parameters<PrincipalAuthorityRepository["insert"]>[0];
+
+const AUTHORITY_ROW_SELECT = `
+  SELECT
+    request_id AS requestId, request_ref AS requestRef,
+    identity_sha256 AS identitySha256, owner_session_id AS ownerSessionId,
+    source_session_id AS sourceSessionId, source_turn_id AS sourceTurnId,
+    source_work_id AS sourceWorkId, workspace_path AS workspacePath,
+    plan_revision_id AS planRevisionId, action_key AS actionKey,
+    authority_generation AS authorityGeneration, capability,
+    normalized_target AS normalizedTarget, normalized_input_json AS normalizedInputJson,
+    model_ref AS modelRef, reasoning_effort AS reasoningEffort, category,
+    reason, executable, command_count AS commandCount, decision,
+    schedule_client_message_id AS scheduleClientMessageId,
+    schedule_input_text AS scheduleInputText,
+    private_alternative_input AS privateAlternativeInput, outcome,
+    outcome_receipt_json AS outcomeReceiptJson,
+    close_reason AS closeReason, close_scope AS closeScope,
+    closed_at AS closedAt, created_at AS createdAt, updated_at AS updatedAt
+  FROM btcc_authority_requests
+`;
 
 export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRepository {
   constructor(private readonly db: Database) {}
@@ -18,22 +43,7 @@ export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRep
     authorityGeneration: number;
   }): AuthorityRecord | null {
     const row = this.db.query<AuthorityRecord, [string, string, string, string, number]>(`
-      SELECT
-        request_id AS requestId, request_ref AS requestRef,
-        identity_sha256 AS identitySha256, owner_session_id AS ownerSessionId,
-        source_session_id AS sourceSessionId, source_turn_id AS sourceTurnId,
-        source_work_id AS sourceWorkId, workspace_path AS workspacePath,
-        plan_revision_id AS planRevisionId, action_key AS actionKey,
-        authority_generation AS authorityGeneration, capability,
-        normalized_target AS normalizedTarget, normalized_input_json AS normalizedInputJson,
-        model_ref AS modelRef, reasoning_effort AS reasoningEffort, category,
-        reason, executable, command_count AS commandCount, decision,
-        schedule_client_message_id AS scheduleClientMessageId,
-        schedule_input_text AS scheduleInputText,
-        private_alternative_input AS privateAlternativeInput, outcome,
-        outcome_receipt_json AS outcomeReceiptJson, created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM btcc_authority_requests
+      ${AUTHORITY_ROW_SELECT}
       WHERE source_work_id = ? AND plan_revision_id = ? AND action_key = ?
         AND capability = ? AND authority_generation = ?
       LIMIT 1
@@ -56,7 +66,8 @@ export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRep
         normalized_target, normalized_input_json, model_ref, reasoning_effort,
         category, reason, executable, command_count, decision,
         schedule_client_message_id, schedule_input_text, private_alternative_input, outcome,
-        outcome_receipt_json, created_at, updated_at
+        outcome_receipt_json, close_reason, close_scope, closed_at,
+        created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?,
         ?, ?, ?, ?,
@@ -64,7 +75,8 @@ export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRep
         ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?, ?
+        ?, ?, ?, ?,
+        ?, ?, ?
       )
       ON CONFLICT DO NOTHING
     `).run(
@@ -94,6 +106,9 @@ export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRep
       record.privateAlternativeInput,
       record.outcome,
       record.outcomeReceiptJson,
+      record.closeReason,
+      record.closeScope,
+      record.closedAt,
       record.createdAt,
       record.updatedAt,
     );
@@ -105,45 +120,15 @@ export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRep
 
   listPending(ownerSessionId: string): AuthorityRecord[] {
     return this.db.query<AuthorityRecord, [string]>(`
-      SELECT
-        request_id AS requestId, request_ref AS requestRef,
-        identity_sha256 AS identitySha256, owner_session_id AS ownerSessionId,
-        source_session_id AS sourceSessionId, source_turn_id AS sourceTurnId,
-        source_work_id AS sourceWorkId, workspace_path AS workspacePath,
-        plan_revision_id AS planRevisionId, action_key AS actionKey,
-        authority_generation AS authorityGeneration, capability,
-        normalized_target AS normalizedTarget, normalized_input_json AS normalizedInputJson,
-        model_ref AS modelRef, reasoning_effort AS reasoningEffort, category,
-        reason, executable, command_count AS commandCount, decision,
-        schedule_client_message_id AS scheduleClientMessageId,
-        schedule_input_text AS scheduleInputText,
-        private_alternative_input AS privateAlternativeInput, outcome,
-        outcome_receipt_json AS outcomeReceiptJson, created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM btcc_authority_requests
-      WHERE owner_session_id = ? AND decision = 'pending'
+      ${AUTHORITY_ROW_SELECT}
+      WHERE owner_session_id = ? AND decision = 'pending' AND close_reason IS NULL
       ORDER BY created_at ASC
     `).all(ownerSessionId);
   }
 
   listDecided(): AuthorityRecord[] {
     return this.db.query<AuthorityRecord, []>(`
-      SELECT
-        request_id AS requestId, request_ref AS requestRef,
-        identity_sha256 AS identitySha256, owner_session_id AS ownerSessionId,
-        source_session_id AS sourceSessionId, source_turn_id AS sourceTurnId,
-        source_work_id AS sourceWorkId, workspace_path AS workspacePath,
-        plan_revision_id AS planRevisionId, action_key AS actionKey,
-        authority_generation AS authorityGeneration, capability,
-        normalized_target AS normalizedTarget, normalized_input_json AS normalizedInputJson,
-        model_ref AS modelRef, reasoning_effort AS reasoningEffort, category,
-        reason, executable, command_count AS commandCount, decision,
-        schedule_client_message_id AS scheduleClientMessageId,
-        schedule_input_text AS scheduleInputText,
-        private_alternative_input AS privateAlternativeInput, outcome,
-        outcome_receipt_json AS outcomeReceiptJson, created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM btcc_authority_requests
+      ${AUTHORITY_ROW_SELECT}
       WHERE decision IN ('allowed', 'denied', 'modified')
         AND EXISTS (
           SELECT 1 FROM btcc_guided_works work
@@ -191,7 +176,7 @@ export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRep
         private_alternative_input = CASE WHEN ? = 'modified' THEN ? ELSE private_alternative_input END,
         updated_at = ?
       WHERE request_ref = ? AND owner_session_id = ? AND source_session_id = ?
-        AND decision = 'pending'
+        AND decision = 'pending' AND close_reason IS NULL
     `).run(
       decision,
       scheduleInputText,
@@ -209,7 +194,7 @@ export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRep
   recordOutcome(input: {
     requestRef: string;
     sourceWorkId: string;
-    status: "applied" | "failed";
+    status: "applied" | "failed" | "uncertain";
     receiptJson?: string;
     now: string;
   }): AuthorityRecord | null {
@@ -228,24 +213,52 @@ export class SqlitePrincipalAuthorityRepository implements PrincipalAuthorityRep
     return this.find("request_ref", input.requestRef);
   }
 
+  closePendingSelfSessionRequests(input: {
+    selfSessionId: string;
+    reason: AuthorityOperationalCloseReason;
+    scope: AuthorityOperationalCloseScope;
+    now: string;
+  }): number {
+    const updated = this.db.query(`
+      UPDATE btcc_authority_requests
+      SET close_reason = ?, close_scope = ?, closed_at = ?, updated_at = ?
+      WHERE owner_session_id = ? AND source_session_id = ?
+        AND decision = 'pending' AND close_reason IS NULL
+    `).run(
+      input.reason,
+      input.scope,
+      input.now,
+      input.now,
+      input.selfSessionId,
+      input.selfSessionId,
+    );
+    return updated.changes;
+  }
+
+  closePendingSourceWorkRequests(input: {
+    sourceWorkId: string;
+    reason: AuthorityOperationalCloseReason;
+    scope: AuthorityOperationalCloseScope;
+    now: string;
+  }): number {
+    const updated = this.db.query(`
+      UPDATE btcc_authority_requests
+      SET close_reason = ?, close_scope = ?, closed_at = ?, updated_at = ?
+      WHERE source_work_id = ?
+        AND decision = 'pending' AND close_reason IS NULL
+    `).run(
+      input.reason,
+      input.scope,
+      input.now,
+      input.now,
+      input.sourceWorkId,
+    );
+    return updated.changes;
+  }
+
   private find(column: "identity_sha256" | "request_ref", value: string): AuthorityRecord | null {
     const row = this.db.query<AuthorityRecord, [string]>(`
-      SELECT
-        request_id AS requestId, request_ref AS requestRef,
-        identity_sha256 AS identitySha256, owner_session_id AS ownerSessionId,
-        source_session_id AS sourceSessionId, source_turn_id AS sourceTurnId,
-        source_work_id AS sourceWorkId, workspace_path AS workspacePath,
-        plan_revision_id AS planRevisionId, action_key AS actionKey,
-        authority_generation AS authorityGeneration, capability,
-        normalized_target AS normalizedTarget, normalized_input_json AS normalizedInputJson,
-        model_ref AS modelRef, reasoning_effort AS reasoningEffort, category,
-        reason, executable, command_count AS commandCount, decision,
-        schedule_client_message_id AS scheduleClientMessageId,
-        schedule_input_text AS scheduleInputText,
-        private_alternative_input AS privateAlternativeInput, outcome,
-        outcome_receipt_json AS outcomeReceiptJson, created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM btcc_authority_requests
+      ${AUTHORITY_ROW_SELECT}
       WHERE ${column} = ?
       LIMIT 1
     `).get(value);

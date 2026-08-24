@@ -2,6 +2,7 @@ import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type { GuidedEffectAccessMode } from "../effects/index.ts";
 import {
   AUTHORITY_DENIAL_TEXT,
+  type AuthorityOutcomeReceipt,
   type PrincipalAuthority,
 } from "../authority/index.ts";
 import type {
@@ -198,6 +199,9 @@ function projectGuidedAuthorityOutcome(input: {
     if (execution.decision === "modified") return "Replacement command is waiting for Allow.";
     if (execution.outcome === "applied") return "Approved command completed once.";
     if (execution.outcome === "failed") return "Approved command failed to complete.";
+    if (execution.outcome === "uncertain") {
+      return authorityUncertainOutcomeText(execution.outcomeReceipt);
+    }
     return "Approved command outcome is pending.";
   } catch {
     return "Approved command outcome could not be verified.";
@@ -207,4 +211,35 @@ function projectGuidedAuthorityOutcome(input: {
 function authorityPending(value: unknown): boolean {
   return value !== null && typeof value === "object" && !Array.isArray(value) &&
     (value as Record<string, unknown>).authority_pending === true;
+}
+
+const AUTHORITY_UNCERTAIN_TEXT = "확인 필요";
+const AUTHORITY_EVIDENCE_REF_PREFIX = "authority-evidence-";
+const AUTHORITY_EVIDENCE_REF_BODY_MIN = 8;
+const AUTHORITY_EVIDENCE_REF_BODY_MAX = 64;
+const AUTHORITY_EVIDENCE_REF_BODY_PATTERN = /^[a-z0-9-]+$/;
+
+/**
+ * Terminal projection for a possibly-started uncertain authority outcome.
+ * Emits only a bounded, opaque evidence reference when it matches the safe
+ * format; receipt internals (journal ids, attempt counts, error codes) and any
+ * malformed or unbounded evidence value never reach the public string.
+ */
+function authorityUncertainOutcomeText(
+  receipt: AuthorityOutcomeReceipt | undefined,
+): string {
+  const evidenceRef = safeAuthorityEvidenceRef(receipt?.evidenceRef);
+  return evidenceRef
+    ? `${AUTHORITY_UNCERTAIN_TEXT} · ${evidenceRef}`
+    : AUTHORITY_UNCERTAIN_TEXT;
+}
+
+function safeAuthorityEvidenceRef(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  if (!value.startsWith(AUTHORITY_EVIDENCE_REF_PREFIX)) return null;
+  const body = value.slice(AUTHORITY_EVIDENCE_REF_PREFIX.length);
+  if (body.length < AUTHORITY_EVIDENCE_REF_BODY_MIN) return null;
+  if (body.length > AUTHORITY_EVIDENCE_REF_BODY_MAX) return null;
+  if (!AUTHORITY_EVIDENCE_REF_BODY_PATTERN.test(body)) return null;
+  return value;
 }

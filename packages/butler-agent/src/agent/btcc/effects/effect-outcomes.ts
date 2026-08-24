@@ -2,7 +2,9 @@ import type {
   EffectAdapterError,
   ExecuteGuidedEffectInput,
   GuidedEffectError,
+  GuidedEffectJournalRecord,
   GuidedEffectOutcome,
+  GuidedEffectUncertainEvidence,
 } from "./contracts.ts";
 
 export function dispatchPermission(
@@ -80,8 +82,33 @@ export function failed<TResult>(
   return { ok: false, status: "failed", error };
 }
 
+export function uncertainEvidenceFromRecord(
+  record: GuidedEffectJournalRecord,
+): GuidedEffectUncertainEvidence | null {
+  if (
+    record.status !== "uncertain" ||
+    !Number.isInteger(record.dispatchAttempts) ||
+    record.dispatchAttempts <= 0 ||
+    !record.error
+  ) {
+    return null;
+  }
+  return {
+    effectId: record.effectId,
+    identitySha256: record.identitySha256,
+    dispatchAttempt: record.dispatchAttempts,
+    errorCode: record.error.code,
+  };
+}
+
 export function uncertain<TResult>(
   error: GuidedEffectError,
+  evidence?: GuidedEffectUncertainEvidence | null,
 ): GuidedEffectOutcome<TResult> {
-  return { ok: false, status: "uncertain", error };
+  return {
+    ok: false,
+    status: "uncertain",
+    error,
+    ...(evidence ? { evidence } : {}),
+  };
 }

@@ -1,4 +1,5 @@
 import type { SqliteGuidedEffectJournal } from "../../adapters/index.ts";
+import type { GuidedEffectFaultHook } from "../effects/index.ts";
 import type {
   ModelRoundPort,
   PhaseContinuityPrivateDigester,
@@ -25,4 +26,6 @@ export type ProductionGuidedTurnAgentInput = {
   sessionBindingStore?: GuidedSessionWorkspaceBindingStore;
   executionWindowSize?: number;
   subsessionDelegation?: SubsessionDelegationService;
+  /** TEST-ONLY deterministic fault proof; production composition callers omit it. */
+  guidedEffectFaultHook?: GuidedEffectFaultHook;
 };

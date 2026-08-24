@@ -1,4 +1,5 @@
 import { isDurableWorkTool } from "../work/index.ts";
+import { GuidedEffectProcessReplacementError } from "../effects/index.ts";
 import type { GuidedActivityBinding } from "../projection/index.ts";
 import type { GuidedToolCallExecutionInput } from "./guided-tool-call-execution.ts";
 import {
@@ -18,6 +19,9 @@ export async function finishFailedTool(
   error: unknown,
   activity: GuidedActivityBinding,
 ): Promise<unknown> {
+  if (error instanceof GuidedEffectProcessReplacementError) {
+    throw error;
+  }
   const cancelled = input.signal.aborted || toolSignal.aborted;
   if (!cancelled) {
     const result = ordinaryToolError(effectiveToolName, error);
