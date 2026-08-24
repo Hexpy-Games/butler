@@ -27,7 +27,7 @@ import { seedLegacySessionWork } from
 
 const eolRefByRoot = new Map<string, string>();
 
-test("R3 managed Work survives a store restart and continues in a fresh Turn", async () => {
+test("R3 Work Ledger maps managed Work across restart and fresh Turn lineage", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-integration-"));
   const dbPath = join(root, "butler.sqlite");
   const firstTurnId = "work-turn-1";
@@ -226,11 +226,12 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
       ]),
     });
 
-    const continuationOutcome = await runtime.runTurn(command(
+    const continuationCommand = command(
       root,
       secondTurnId,
       "이어서 마무리해 주세요.",
-    ));
+    );
+    const continuationOutcome = await runtime.runTurn(continuationCommand);
     expect(continuationOutcome).toMatchObject({
       kind: "delivered",
       content: "이전 작업을 이어 최종 검토까지 마쳤습니다.",
@@ -249,21 +250,61 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
 
     const completed = await secondStores.durableWork.boundWorkForTurn(secondTurnId);
     expect(completed).toMatchObject({
+      workId: firstWorkId,
+      sessionId: continuationCommand.sessionId,
+      origin: { turnId: firstTurnId },
       status: "completed",
+      scope: { kind: "session", sessionId: continuationCommand.sessionId },
       currentStage: "reporting",
-      currentPlan: { revision: 1 },
-      latestPlanReview: { subject: "plan", verdict: "accept" },
-      latestResultReview: { subject: "result", verdict: "accept" },
+      currentPlan: {
+        planRevisionId: expect.any(String),
+        revision: 1,
+        originTurnId: firstTurnId,
+      },
+      latestPlanReview: {
+        reviewRevisionId: expect.any(String),
+        revision: 1,
+        subject: "plan",
+        verdict: "accept",
+        originTurnId: firstTurnId,
+      },
+      latestResultReview: {
+        reviewRevisionId: expect.any(String),
+        revision: 2,
+        subject: "result",
+        verdict: "accept",
+        originTurnId: secondTurnId,
+      },
       latestCompletionValidation: {
+        reviewRevisionId: expect.any(String),
+        revision: 3,
         subject: "completion",
         verdict: "accept",
+        originTurnId: secondTurnId,
+      },
+      latestDisposition: {
+        dispositionRevisionId: expect.any(String),
+        revision: 2,
+        disposition: "completed",
+        originTurnId: secondTurnId,
       },
     });
+    const plan = completed?.currentPlan;
+    const planAction = plan?.actions[0];
+    const resultEvidence = completed?.resultRefs ?? [];
+    const resultReview = completed?.latestResultReview;
+    const settlement = completed?.latestDisposition;
+    expect(planAction).toMatchObject({ actionKey: "write_report" });
+    expect(planAction).not.toHaveProperty("taskId");
+    expect(resultEvidence.map((result) => result.originTurnId))
+      .toEqual([firstTurnId, secondTurnId]);
+    expect(resultReview?.boundResultRefs)
+      .toEqual(resultEvidence.map((result) => result.resultRef));
+    expect(settlement?.disposition).toBe("completed");
     expect(completed?.resultRefs.map((result) => result.toolName))
       .toEqual(["write_file", "read_file"]);
     expect(completed?.latestResultReview?.boundResultRefs)
       .toEqual(completed?.resultRefs.map((result) => result.resultRef));
-    expect(completed?.origin.turnId).toBe(firstTurnId);
     expect((await secondStores.turns.findTurn(secondTurnId))?.route).toBe("managed");
   } finally {
     secondStores.close();
