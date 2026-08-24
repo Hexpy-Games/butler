@@ -23,7 +23,7 @@ import type { ModelRoundPort } from "../ports/model-round.ts";
 import { guidedContinuationBudget } from "./guided-continuation-budget.ts";
 import { guidedTurnResult } from "./guided-turn-result.ts";
 import { createGuidedModelRouteRuntime } from "./guided-turn-route-events.ts";
-import { createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
+import { createGuidedDelegationTurnRelease, createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
 import { createGuidedRoundToolSurfaceResolver } from "./guided-round-tool-surface.ts";
 import { renderPhaseScopedGuidedTurnRequest } from "./phase-scoped-memory-projection.ts";
 import { createFileStoreVerifiedImagePayloadPort } from "../../image-attachment/index.ts";
@@ -35,7 +35,6 @@ import { privateModifyContinuationPromptInput } from "./guided-authority-continu
 import type { PrincipalAuthority } from "../authority/index.ts";
 import { ensureSubsessionChildRootWork, stewardSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
 import { withStewardDirection } from "./guided-steward-direction.ts";
-import { guidedSubsessionRoutingLoopControls, requiresAppSubsessionRouting } from "./guided-subsession-routing.ts";
 type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
 export function createProductionGuidedTurnAgent(input: ProductionGuidedTurnAgentInput): BtccAgentLoop;
 export function createProductionGuidedTurnAgent(input: TestGuidedTurnAgentInput): BtccAgentLoop;
@@ -248,12 +247,14 @@ export function createProductionGuidedTurnAgent(
         durableWork: input.durableWork, toolJournal: input.toolJournal, workScope,
         turnId: turn.turnId, originalRequest: turn.originalMessage,
         trackingMode: policy.trackingMode, responseLanguage,
-        subsessionRoutingRequired: requiresAppSubsessionRouting({ turn, policy, hasSubsessionResultEvidence: Boolean(subsessionResultEvidence) }),
       });
-      const resolveGuidedTools = phasePolicy.mode === "phase_minimal"
+      const delegationRelease = createGuidedDelegationTurnRelease({ reconcileAfterLoop: closeout.reconcileAfterLoop, responseLanguage, originalRequest: turn.originalMessage });
+      const resolveGuidedTools = phasePolicy.mode === "phase_minimal" ||
+        visibleTools.some((tool) => tool.name === "delegate_to_steward")
         ? createGuidedRoundToolSurfaceResolver({
             turnId: turn.turnId, tools: visibleTools, workScope, durableWork: input.durableWork,
             requiredToolNames: new Set(policy.requiredNativeTools), toolJournal: input.toolJournal, effectJournal: input.effectJournal,
+            projectWorkSurface: phasePolicy.mode === "phase_minimal",
           })
         : undefined;
       const directionAware = withStewardDirection({ modelRound, safeBoundary: stewardSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: closeout.reviewFinalCandidate });
@@ -283,10 +284,7 @@ export function createProductionGuidedTurnAgent(
         onProviderResponseIdentity,
         onEvent: (event) => recordRuntimeMemoryEvent(memoryAttribution, event),
         tools: visibleTools,
-        ...guidedSubsessionRoutingLoopControls({
-          repairRequired: closeout.subsessionRoutingRepairRequired,
-          resolveTools: resolveGuidedTools,
-        }),
+        ...(resolveGuidedTools ? { resolveTools: resolveGuidedTools } : {}),
         // This is an internal execution-window size. The same Turn remains
         // active across windows until the model reaches a final answer.
         maxIterations: Math.max(1, input.executionWindowSize ?? 60),
@@ -299,6 +297,7 @@ export function createProductionGuidedTurnAgent(
           trackingMode: policy.trackingMode, signal,
         }),
         ...authorityProjection.loopCallbacks,
+        finalTextFromToolResult: delegationRelease.finalTextFromToolResult(authorityProjection.loopCallbacks.finalTextFromToolResult),
         reviewFinalCandidate: directionAware.reviewFinalCandidate,
         executeTool: async (call) => await toolCalls.executeTool({
           name: call.name,
@@ -322,7 +321,7 @@ export function createProductionGuidedTurnAgent(
           responseLanguage,
         }),
       });
-      const text = await closeout.reconcileAfterLoop(candidate);
+      const text = await delegationRelease.reconcileAfterLoop(candidate);
       const publicText = authorityProjection.project(text);
       const terminalOutcome = turn.context.emptyResponsePolicy === "typed_terminal" &&
         !text.trim()

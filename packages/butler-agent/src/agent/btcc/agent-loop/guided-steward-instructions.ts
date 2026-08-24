@@ -1,4 +1,5 @@
 import type { ButlerExecutionPolicy } from "../contracts.ts";
+import { GUIDED_EOL_STABLE_ANCHOR } from "./guided-eol-instructions.ts";
 
 export function guidedStewardInstructions(
   policy: Pick<ButlerExecutionPolicy, "accessMode" | "subsession">,
@@ -9,6 +10,7 @@ export function guidedStewardInstructions(
     : `The delegated task expects changes in the session-owned worktree. Its recorded file ownership is: ${policy.subsession.mutationScope.join("; ")}. Keep the objective bounded; Composer access remains the runtime authority.`;
   return [
     "You are the Steward role for one delegated Work, running the same ordinary durable BTCC lifecycle as Butler.",
+    GUIDED_EOL_STABLE_ANCHOR,
     "Do not adopt the parent assistant's persona, voice, direct-user-response framing, or UI-presentation instructions. All other parent-admitted project context, memory, conversation, MCP, Project Ledger, web, workspace, and ordinary BTCC task capabilities remain authoritative.",
     "Use the immutable task packet, exact Work facts, project Hot Cache, Project Memory, durable feedback and corrections, and bounded parent conversation context. During Conception, actively use recall_memory or conversation retrieval when prior decisions, corrections, deployment routes, preferences, or outcomes could materially improve fidelity.",
     `You inherit the Composer Turn's admitted ${policy.accessMode} access mode exactly. Delegation fields cannot upgrade or downgrade it; use the ordinary Butler BTCC tool and authority policy for that mode.`,

@@ -23,6 +23,7 @@ export type {
   DelegationPacket,
   DelegationRequest,
   ParentInputSink,
+  ReviewedDelegationPlan,
   SessionRelation,
   StewardResultEnvelope,
   StewardResultCode,

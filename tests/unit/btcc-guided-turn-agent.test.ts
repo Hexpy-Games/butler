@@ -28,7 +28,7 @@ import {
 } from "../../packages/butler-agent/src/agent/btcc/identity/index.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
-import { createProductionGuidedTurnAgent } from
+import { createProductionGuidedTurnAgent, type BtccAgentLoop } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import { dispositionMaterialFingerprint } from
   "../../packages/butler-agent/src/agent/btcc/work/index.ts";
@@ -67,6 +67,8 @@ import { createToolCallToolHandler } from
   "../../packages/butler-agent/src/agent/tools/tool-bridge/tool_call/executor.ts";
 import { runCommandToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/run-command/run_command/definition.ts";
+import { delegateToStewardToolDefinition } from
+  "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
 import type { ContextualButlerToolExecutor } from
   "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { createGuidedActivityProjection } from
@@ -81,32 +83,6 @@ import { buildModelRoute, ModelRouteDurabilityError } from
   "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { runOpenAIModelRound } from
   "../../packages/butler-agent/src/integrations/providers/openai/model-round.ts";
-
-test("substantial Butler work cannot settle as a promise-only direct reply", async () => {
-  const records: Array<{ toolName: string }> = [];
-  const closeout = createGuidedTurnCloseout({
-    durableWork: {} as DurableWorkService,
-    toolJournal: { list: () => records } as never,
-    workScope: { turnId: "turn-delegation-gate", sessionId: "session-delegation-gate" },
-    turnId: "turn-delegation-gate",
-    trackingMode: "none",
-    responseLanguage: "Korean",
-    originalRequest: "이전 문서를 요구사항을 보존해서 수정해줘",
-    subsessionRoutingRequired: true,
-  });
-
-  await expect(closeout.reviewFinalCandidate({ text: "수정하겠습니다." }))
-    .resolves.toMatchObject({
-      status: "continue",
-      observation: expect.stringContaining("delegate_to_steward"),
-    });
-  expect(closeout.subsessionRoutingRepairRequired()).toBe(true);
-
-  records.push({ toolName: "delegate_to_steward" });
-  expect(closeout.subsessionRoutingRepairRequired()).toBe(false);
-  await expect(closeout.reviewFinalCandidate({ text: "위임했습니다." }))
-    .resolves.toEqual({ status: "accepted" });
-});
 
 type ScriptedModelRoundStep =
   | ModelRoundResult
@@ -179,7 +155,7 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
         return { text: "BTCC final answer", toolCalls: [] };
       },
     };
-    const agent = createProductionGuidedTurnAgent({
+    const agent = fixture.admitEol(createProductionGuidedTurnAgent({
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
       butlerHome: fixture.root,
       butlerData: fixture.root,
@@ -188,7 +164,7 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
       effectJournal: fixture.stores.guidedEffectJournal,
       durableWork: fixture.stores.durableWork,
       modelRound,
-    });
+    }));
 
     const result = await agent.run({
       turn: turnRecord(fixture.root, { turnId: "guided-btcc-loop-entry" }),
@@ -969,7 +945,7 @@ test("production closeout reuses its durable correction after crash and late mat
       sanitizedTarget: "workspace:late.txt",
     })).toMatchObject({ ok: true, created: true });
     let recoveredProviderCalls = 0;
-    const recoveredAgent = createProductionGuidedTurnAgent({
+    const recoveredAgent = fixture.admitEol(createProductionGuidedTurnAgent({
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
       butlerHome: fixture.root,
       butlerData: fixture.root,
@@ -984,7 +960,7 @@ test("production closeout reuses its durable correction after crash and late mat
           return { text: "재시작 후 후보", toolCalls: [] };
         },
       },
-    });
+    }));
     await expect(recoveredAgent.run({
       turn,
       signal: new AbortController().signal,
@@ -1111,7 +1087,7 @@ test("runtime-owned open notice survives a crash before final Turn delivery", as
       storageProfile: "ephemeral",
     });
     let recoveredProviderCalls = 0;
-    const recoveredAgent = createProductionGuidedTurnAgent({
+    const recoveredAgent = fixture.admitEol(createProductionGuidedTurnAgent({
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
       butlerHome: fixture.root,
       butlerData: fixture.root,
@@ -1126,7 +1102,7 @@ test("runtime-owned open notice survives a crash before final Turn delivery", as
           return { text: "재시작 뒤 전달 후보", toolCalls: [] };
         },
       },
-    });
+    }));
     const recoveredRuntime = createGuidedTurnRuntime({
       admission: reopened.admission,
       turns: reopened.turns,
@@ -1660,7 +1636,7 @@ test("production feature execution instructions preserve guarded effects and ato
     });
 
     expect(captured?.instructions).toContain("create or reuse one Work");
-    expect(captured?.instructions).toContain("execute effects through the existing guard");
+    expect(captured?.instructions).toContain("Execute effects through the existing guard");
     expect(captured?.instructions).toContain("inspect the actual result");
     expect(captured?.instructions).toContain("record_work_disposition");
     expect(captured?.instructions).toContain("optional quality records");
@@ -1742,7 +1718,7 @@ test("production Guided Turn rereads Work across execution windows in one agent 
         return { text: "확인된 근거를 바탕으로 답변을 완료했습니다.", toolCalls: [] };
       },
     };
-    const agent = createProductionGuidedTurnAgent({
+    const agent = fixture.admitEol(createProductionGuidedTurnAgent({
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
       butlerHome: fixture.root,
       butlerData: fixture.root,
@@ -1752,7 +1728,7 @@ test("production Guided Turn rereads Work across execution windows in one agent 
       durableWork: trackedDurableWork,
       modelRound,
       executionWindowSize: 1,
-    });
+    }));
     const turnId = "guided-production-window-turn";
     const runtime = createGuidedTurnRuntime({
       admission: fixture.stores.admission,
@@ -2089,9 +2065,17 @@ test("Guided model rounds attribute provider usage before completion progress", 
   }
 });
 
-test("Guided Turn promotes persona and profile context into every provider instruction", async () => {
+test("Guided Turn keeps admitted EOL separate from persona in every provider instruction", async () => {
   const fixture = createFixture("guided-persona-instructions");
   try {
+    const eolRef = fixture.stores.contextDocuments.persist({
+      scopeKind: "user",
+      scopeId: "local-user",
+      projectionClass: "profile",
+      sourceId: "eol",
+      sourceRevision: "eol-v1",
+      content: "EOL_EXACT_GOVERNING_INSTRUCTION",
+    });
     const personaRef = fixture.stores.contextDocuments.persist({
       scopeKind: "user",
       scopeId: "local-user",
@@ -2117,18 +2101,21 @@ test("Guided Turn promotes persona and profile context into every provider instr
       content: "## Turn Environment\nAssistant Response Language: Korean",
     });
     const instructions: Array<string | undefined> = [];
+    const prompts: string[] = [];
     const agent = fixture.agent(scriptedModelRound([
       (request) => {
         instructions.push(request.instructions);
+        prompts.push(request.messages[0]?.content ?? "");
         return toolResponse([toolCall("read-1", "read_file", { requests: [{ path: "README.md" }] })]);
       },
       (request) => {
         instructions.push(request.instructions);
+        prompts.push(request.messages[0]?.content ?? "");
         return { text: "확인했냥.", toolCalls: [] };
       },
     ]));
     const turn = turnRecord(fixture.root, { turnId: "guided-persona-instructions" });
-    turn.context.profileRefs = [personaRef, profileRef];
+    turn.context.profileRefs = [eolRef, personaRef, profileRef];
     turn.context.optionalHotCacheRefs = [runtimeRef];
 
     await agent.run({ turn, signal: new AbortController().signal });
@@ -2139,6 +2126,74 @@ test("Guided Turn promotes persona and profile context into every provider instr
       expect(value).toContain("말끝에 반드시 냥을 붙인다.");
       expect(value).toContain("Preferred address: 사용자님");
       expect(value).toContain("Use Korean for every user-facing message");
+      expect(value).toContain("EOL_EXACT_GOVERNING_INSTRUCTION");
+      expect(value).toContain("not Butler persona or ordinary user content");
+    }
+    for (const prompt of prompts) {
+      expect(prompt).not.toContain("EOL_EXACT_GOVERNING_INSTRUCTION");
+      expect(prompt).not.toContain("BUTLER_PERSONA_PRIVATE");
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Steward receives admitted EOL on every round without Butler persona", async () => {
+  const fixture = createFixture("guided-steward-eol-instructions");
+  try {
+    const eolRef = fixture.stores.contextDocuments.persist({
+      scopeKind: "user", scopeId: "steward-role", projectionClass: "profile",
+      sourceId: "eol", sourceRevision: "eol-steward-v1",
+      content: "STEWARD_EOL_EXACT_GOVERNING_INSTRUCTION",
+    });
+    fixture.stores.contextDocuments.persist({
+      scopeKind: "user", scopeId: "local-user", projectionClass: "profile",
+      sourceId: "active-persona-reminder", sourceRevision: "persona-private-v1",
+      content: "BUTLER_PERSONA_PRIVATE",
+    });
+    const requests: ModelRoundRequest[] = [];
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        requests.push(request);
+        return toolResponse([toolCall("steward-read", "read_file", {
+          requests: [{ path: "README.md" }],
+        })]);
+      },
+      (request) => {
+        requests.push(request);
+        return { text: "Steward result", toolCalls: [] };
+      },
+    ]));
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-steward-eol-instructions",
+      trackingMode: "local",
+    });
+    turn.context.userRef = "steward-role";
+    turn.context.profileRefs = [eolRef];
+    turn.context.executionPolicy = {
+      role: "steward", accessMode: "full_access", trackingMode: "local",
+      requiredNativeToolProfiles: [], requiredNativeTools: [],
+      workspacePath: fixture.root,
+      subsession: {
+        relationId: "relation-eol", delegationId: "delegation-eol",
+        taskId: "task-eol", executionMode: "read_only", mutationScope: [],
+        allowedToolsAndEffects: [
+          "grep_files:workspace", "list_files:workspace", "read_file:workspace",
+          "web_read:network", "web_search:network",
+        ],
+      },
+    };
+
+    await agent.run({ turn, signal: new AbortController().signal });
+
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      expect(request.instructions).toContain("STEWARD_EOL_EXACT_GOVERNING_INSTRUCTION");
+      expect(request.instructions).toContain("exact EOL admitted for this Turn governs both Butler and Steward");
+      expect(request.instructions).not.toContain("BUTLER_PERSONA_PRIVATE");
+      expect(request.messages[0]?.content).not.toContain(
+        "STEWARD_EOL_EXACT_GOVERNING_INSTRUCTION",
+      );
     }
   } finally {
     fixture.close();
@@ -3759,7 +3814,7 @@ test("Guided agent offers the existing Work controls plus disposition and keeps 
     expect(visibleNames).not.toContain("list_work_streams");
     expect(visibleNames).not.toContain("update_work_stream_state");
     expect(outcome.route).toBe("direct");
-    expect(toolSurfaceDigest).toBeUndefined();
+    expect(toolSurfaceDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(await fixture.stores.durableWork.boundWorkForTurn(turn.turnId)).toBeNull();
   } finally {
     if (previousSurface === undefined) delete process.env.BUTLER_PHASE_TOOL_SURFACE;
@@ -4056,6 +4111,100 @@ test("feature Work schemas project only valid review subjects and Plan action ke
     }),
   });
   expect(invalid.validationError).toContain("action_key");
+});
+
+test("delegation schema appears only for the exact current accepted Plan Review", async () => {
+  const turnId = "reviewed-delegation-surface-turn";
+  const sessionId = "reviewed-delegation-surface-session";
+  const plan = {
+    planRevisionId: "reviewed-delegation-plan-r1",
+    revision: 1,
+    objective: "Preserve the exact named model through Steward research.",
+    governingRefs: ["SPEC-M2-REVIEWED-STEWARD-DELEGATION"],
+    actions: [{
+      actionKey: "delegate-reviewed-research",
+      description: "Delegate the reviewed research objective.",
+      dependencyKeys: [],
+    }],
+    checks: [],
+    originTurnId: turnId,
+    createdAt: "2026-08-24T00:00:00.000Z",
+  };
+  const base: DurableWorkView = {
+    workId: "reviewed-delegation-work",
+    sessionId,
+    scope: { kind: "session", sessionId },
+    origin: { turnId, messageId: "reviewed-delegation-message" },
+    objective: plan.objective,
+    status: "open",
+    currentStage: "planning",
+    allowedNextStages: ["execution"],
+    actionProgress: [{ actionKey: "delegate-reviewed-research", status: "pending" }],
+    currentPlan: plan,
+    resultRefs: [],
+    createdAt: "2026-08-24T00:00:00.000Z",
+    updatedAt: "2026-08-24T00:00:00.000Z",
+  };
+  let boundWork: DurableWorkView | null = null;
+  let contextWork: DurableWorkView | null = null;
+  const durableWork = {
+    boundWorkForTurn: async () => boundWork,
+    loadContext: async () => contextWork ? {
+      work: contextWork,
+      originalRequest: { turnId, messageId: "reviewed-delegation-message", content: plan.objective },
+      resultFacts: [],
+    } : null,
+  } as unknown as DurableWorkService;
+  const resolve = createGuidedRoundToolSurfaceResolver({
+    turnId,
+    tools: [...DURABLE_WORK_TOOL_DEFINITIONS, delegateToStewardToolDefinition],
+    requiredToolNames: new Set(),
+    toolJournal: { list: () => [] },
+    durableWork,
+    workScope: { turnId, sessionId },
+    effectJournal: { listForWork: async () => [] },
+  });
+
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(false);
+  contextWork = {
+    ...base,
+    latestPlanReview: {
+      reviewRevisionId: "reviewed-delegation-review-r1",
+      revision: 1,
+      subject: "plan",
+      verdict: "accept",
+      summary: "The exact intent is ready for delegation.",
+      corrections: [],
+      boundPlanRevisionId: plan.planRevisionId,
+      boundResultRefs: [],
+      originTurnId: turnId,
+      createdAt: "2026-08-24T00:00:01.000Z",
+    },
+  };
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(false);
+  boundWork = base;
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(false);
+  boundWork = {
+    ...base,
+    latestPlanReview: {
+      reviewRevisionId: "reviewed-delegation-review-r1",
+      revision: 1,
+      subject: "plan",
+      verdict: "accept",
+      summary: "The exact intent is ready for delegation.",
+      corrections: [],
+      boundPlanRevisionId: plan.planRevisionId,
+      boundResultRefs: [],
+      originTurnId: turnId,
+      createdAt: "2026-08-24T00:00:01.000Z",
+    },
+  };
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(true);
+  boundWork = {
+    ...boundWork,
+    currentPlan: { ...plan, planRevisionId: "reviewed-delegation-plan-r2", revision: 2 },
+  };
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(false);
 });
 
 test("Guided tool discovery hides the retired R2 Work catalog", async () => {
@@ -5359,16 +5508,18 @@ test("unbound capture fallback never inherits an unrelated candidate Work", asyn
 test("whole-goal sequence preserves explicit relation across restart and exhaustion", async () => {
   const fixture = createFixture("guided-whole-goal-sequence");
   let currentStores = fixture.stores;
-  const createAgent = (modelRound: ModelRoundPort) => createProductionGuidedTurnAgent({
-    butlerHome: fixture.root,
-    butlerData: fixture.root,
-    phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
-    contextDocuments: currentStores.contextDocuments,
-    toolJournal: currentStores.guidedToolJournal,
-    effectJournal: currentStores.guidedEffectJournal,
-    durableWork: currentStores.durableWork,
-    modelRound,
-  });
+  const createAgent = (modelRound: ModelRoundPort) => fixture.admitEol(
+    createProductionGuidedTurnAgent({
+      butlerHome: fixture.root,
+      butlerData: fixture.root,
+      phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
+      contextDocuments: currentStores.contextDocuments,
+      toolJournal: currentStores.guidedToolJournal,
+      effectJournal: currentStores.guidedEffectJournal,
+      durableWork: currentStores.durableWork,
+      modelRound,
+    }),
+  );
   const createRuntime = (turnId: string, modelRound: ModelRoundPort) =>
     createGuidedTurnRuntime({
       admission: currentStores.admission,
@@ -6588,19 +6739,30 @@ function createFixture(label: string) {
     ownerId: label,
     storageProfile: "ephemeral",
   });
+  const admittedEolRef = stores.contextDocuments.persist({
+    scopeKind: "user",
+    scopeId: "local-user",
+    projectionClass: "profile",
+    sourceId: "eol",
+    sourceRevision: "test-admitted-eol-v1",
+    content: "TEST_ADMITTED_EOL_GOVERNING_INSTRUCTION",
+  });
   return {
     root,
     dbPath,
     stores,
+    admitEol(agent: BtccAgentLoop): BtccAgentLoop {
+      return withAdmittedEol(agent, admittedEolRef);
+    },
     agent(
       modelRound: ModelRoundPort,
       operational: {
         butlerHome?: string;
         durableWork?: DurableWorkService;
       } = {},
-    ) {
+    ): BtccAgentLoop {
       const { butlerHome = root } = operational;
-      return createProductionGuidedTurnAgent({
+      const agent = createProductionGuidedTurnAgent({
         phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
         butlerHome,
         butlerData: root,
@@ -6611,10 +6773,25 @@ function createFixture(label: string) {
         durableWork: operational.durableWork ?? stores.durableWork,
         modelRound,
       });
+      return withAdmittedEol(agent, admittedEolRef);
     },
     close() {
       stores.close();
       rmSync(root, { recursive: true, force: true });
+    },
+  };
+}
+
+function withAdmittedEol(
+  agent: BtccAgentLoop,
+  admittedEolRef: string,
+): BtccAgentLoop {
+  return {
+    async run(input) {
+      if (input.turn.context.profileRefs.length === 0) {
+        input.turn.context.profileRefs = [admittedEolRef];
+      }
+      return await agent.run(input);
     },
   };
 }

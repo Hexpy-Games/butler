@@ -23,6 +23,16 @@ import { normalizeSubsessionAllowedToolsAndEffects } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
 import type { DelegationRequest } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/contracts.ts";
+import { readWebSearchMetrics } from
+  "../../packages/butler-agent/src/integrations/search/provider.ts";
+
+const EXACT_QWEN_MODEL = "Qwen 3.8 27B AWQ INT4";
+const EXACT_QWEN_QUERY = `${EXACT_QWEN_MODEL} vLLM official settings KV cache`;
+const EXACT_QWEN_OBJECTIVE =
+  `Research official vLLM settings and KV-cache guidance for ${EXACT_QWEN_MODEL}, ` +
+  "and verify the repository source marker as bounded local evidence.";
+const EXACT_QWEN_CHECK =
+  `The actual Steward web search retains the exact model name ${EXACT_QWEN_MODEL}.`;
 
 const READ_ONLY_SURFACE = [
   "grep_files:workspace",
@@ -165,6 +175,24 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
   let childTurnIdForDuplicate!: string;
   let parentMessageCount!: number;
   try {
+    await expect(composition.subsessions!.delegate({
+      parent_session_id: parentSessionId,
+      parent_turn_id: "turn-without-reviewed-work",
+      anchor_message_id: "message-without-reviewed-work",
+      parent_access_mode: "full_access",
+      execution_mode: "mutation",
+      safe_title: "Rejected unreviewed delegation",
+      objective: "Unreviewed objective",
+      acceptance_criteria: ["Must not dispatch"],
+      task_or_plan_refs: [],
+      constraints_and_non_goals: [],
+      allowed_tools_and_effects: ["write_file:workspace"],
+      mutation_scope: ["unreviewed.txt"],
+      model_ref: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    })).rejects.toThrow("subsession_parent_work_ref_required");
+    expect(bindings.listSessions().filter((session) => session.role === "steward"))
+      .toHaveLength(0);
     const baselineResponse = await fetch(`${app.url}messages`, {
       method: "POST",
       headers: {
@@ -202,6 +230,17 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
 
     await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
     await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
+    const dispatchDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
+    try {
+      expect(dispatchDb.query<{ count: number }, []>(
+        "SELECT COUNT(*) AS count FROM btcc_session_relations",
+      ).get()?.count).toBe(1);
+      expect(dispatchDb.query<{ count: number }, []>(
+        "SELECT COUNT(*) AS count FROM btcc_steward_results",
+      ).get()?.count).toBe(1);
+    } finally {
+      dispatchDb.close();
+    }
     const appBeforeDuplicate = await readAppSnapshot(app, authToken);
     expect(appBeforeDuplicate.queueCount).toBe(1);
     expect(appBeforeDuplicate.parentInputCount).toBe(1);
@@ -220,7 +259,33 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       expect(packetJson).not.toContain(authToken);
       const packet = JSON.parse(packetJson) as {
         workspace_and_worktree?: { branch?: string };
+        objective?: string;
+        acceptance_criteria?: string[];
+        task_or_plan_refs?: string[];
+        constraints_and_non_goals?: string[];
+        parent_work_ref?: {
+          work_id?: string;
+          session_id?: string;
+          turn_id?: string;
+          plan_revision_id?: string;
+          review_revision_id?: string;
+        };
       };
+      expect(packet.objective).toBe(
+        "Inspect, correct, and validate two bounded Steward fixture files.",
+      );
+      expect(packet.acceptance_criteria).toEqual([
+        "Both fixture files contain their expected mutation and bounded validation passes",
+      ]);
+      expect(packet.task_or_plan_refs).toEqual([]);
+      expect(packet.constraints_and_non_goals).toEqual([]);
+      expect(packet.parent_work_ref).toMatchObject({
+        session_id: parentSessionId,
+        turn_id: relation?.parent_turn_id,
+      });
+      expect(packet.parent_work_ref?.work_id).toMatch(/^guided-work-[a-f0-9]{64}$/u);
+      expect(packet.parent_work_ref?.plan_revision_id).toMatch(/^guided-plan-[a-f0-9]{64}$/u);
+      expect(packet.parent_work_ref?.review_revision_id).toMatch(/^guided-review-[a-f0-9]{64}$/u);
       const stewardBranch = packet.workspace_and_worktree?.branch ?? "";
       expect(stewardBranch.startsWith("butler/st/")).toBe(true);
       expect(stewardBranch.length).toBeLessThanOrEqual(22);
@@ -286,7 +351,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       expect(childRequest?.messages.some((message) => message.content.includes(String(rootWork?.work_id)))).toBe(true);
       const childPrompt = childRequest?.messages.map((message) => message.content).join("\n") ?? "";
       expect(childRequest?.instructions).toContain("Steward role");
-      expect(childRequest?.instructions).not.toMatch(/You are Butler|Butler persona|full transcript/iu);
+      expect(childRequest?.instructions).not.toMatch(/You are Butler|full transcript/iu);
       for (const requiredPacketField of [
         "workspace_and_worktree",
         "expected_result_schema",
@@ -418,6 +483,10 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
     expect(relation).toBeDefined();
     const stewardSessionCountBeforeSecond = bindings.listSessions()
       .filter((session) => session.role === "steward").length;
+    const secondReviewed = await composition.subsessions!.reviewedDelegationPlan({
+      parentSessionId,
+      parentTurnId: relation!.parent_turn_id,
+    });
     const secondRequest = {
       parent_session_id: parentSessionId,
       parent_turn_id: relation!.parent_turn_id,
@@ -425,15 +494,29 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       parent_access_mode: "full_access",
       execution_mode: "mutation",
       safe_title: "Second Steward task",
-      objective: "Create a second bounded Steward result file.",
-      acceptance_criteria: ["The second delegation has an isolated relation."],
-      task_or_plan_refs: [],
-      constraints_and_non_goals: ["Do not reuse the first relation or worktree."],
+      objective: secondReviewed.objective,
+      acceptance_criteria: secondReviewed.acceptance_criteria,
+      task_or_plan_refs: secondReviewed.task_or_plan_refs,
+      constraints_and_non_goals: [],
       allowed_tools_and_effects: ["write_file:workspace"],
       mutation_scope: ["second-steward-result.txt"],
       model_ref: "openai/gpt-5.5",
       reasoning_effort: "low",
+      parent_work_ref: secondReviewed.parent_work_ref,
     } satisfies DelegationRequest;
+    await expect(composition.subsessions!.delegate({
+      ...secondRequest,
+      parent_work_ref: {
+        ...secondReviewed.parent_work_ref,
+        plan_revision_id: "stale-plan-revision",
+      },
+    })).rejects.toThrow("subsession_parent_work_ref_mismatch");
+    await expect(composition.subsessions!.delegate({
+      ...secondRequest,
+      objective: "Broadened after the accepted Plan Review.",
+    })).rejects.toThrow("subsession_reviewed_plan_semantics_mismatch");
+    expect(bindings.listSessions().filter((session) => session.role === "steward"))
+      .toHaveLength(stewardSessionCountBeforeSecond);
     const second = await composition.subsessions!.delegate(secondRequest);
     const secondReplay = await composition.subsessions!.delegate(secondRequest);
     expect(secondReplay.relation.relation_id).toBe(second.relation.relation_id);
@@ -483,7 +566,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
   }
 });
 
-test("full-access Composer delegation keeps Steward access while inspection stays bounded", async () => {
+test("reviewed Butler delegation preserves the exact model name through Steward web search", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-read-only-steward-vertical-"));
   roots.push(root);
   initializeGitWorkspace(root);
@@ -500,6 +583,11 @@ test("full-access Composer delegation keeps Steward access while inspection stay
   writeFileSync(
     join(root, "cognition", "memory", "hot", "cache.md"),
     "PRIVATE_USER_HOT_CONTEXT\n",
+    "utf8",
+  );
+  writeFileSync(
+    join(root, "butler.config.json"),
+    `${JSON.stringify({ webSearch: { provider: "mock" } }, null, 2)}\n`,
     "utf8",
   );
   publishNativeReadiness(root);
@@ -572,10 +660,10 @@ test("full-access Composer delegation keeps Steward access while inspection stay
   try {
     const readOnlyInput = {
       chat_id: "general",
-      text: "Inspect the repository layout and source marker, then summarize the findings.",
+      text: EXACT_QWEN_OBJECTIVE,
       model: "openai/gpt-5.5",
       reasoning_effort: "low",
-      access_mode: "full_access",
+      access_mode: "read_only",
       client_message_id: "client-read-only-steward-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     };
     const response = await postAppMessage(app.url, authToken, readOnlyInput);
@@ -856,6 +944,11 @@ test("full-access Composer delegation keeps Steward access while inspection stay
     expect(parentSynthesisRequests[0]!.tools.some(
       (tool) => tool.name === "delegate_to_steward",
     )).toBe(false);
+    for (const effectTool of ["run_command", "write_file", "edit_file"]) {
+      expect(parentSynthesisRequests[0]!.tools.some(
+        (tool) => tool.name === effectTool,
+      )).toBe(false);
+    }
     const synthesisEvidence = parentSynthesisRequests[0]!.messages
       .map((message) => message.content).join("\n");
     expect(synthesisEvidence).toContain("Accepted child report evidence");
@@ -872,14 +965,59 @@ test("full-access Composer delegation keeps Steward access while inspection stay
         "SELECT packet_json FROM btcc_subsession_delegations",
       ).get()?.packet_json ?? "";
       const packet = JSON.parse(packetJson) as Record<string, unknown>;
+      const parentWork = btccDb.query<{
+        work_id: string;
+        objective: string;
+        current_plan_revision_id: string;
+        plan_objective: string;
+        governing_refs_json: string;
+        checks_json: string;
+        review_revision_id: string;
+        verdict: string;
+        bound_plan_revision_id: string;
+      }, [string]>(`
+        SELECT work.work_id, work.objective, work.current_plan_revision_id,
+          plan.objective AS plan_objective, plan.governing_refs_json, plan.checks_json,
+          review.review_revision_id, review.verdict, review.bound_plan_revision_id
+        FROM btcc_guided_turn_work_bindings AS binding
+        JOIN btcc_guided_works AS work ON work.work_id = binding.work_id
+        JOIN btcc_guided_work_plan_revisions AS plan
+          ON plan.plan_revision_id = work.current_plan_revision_id
+        JOIN btcc_guided_work_review_revisions AS review
+          ON review.work_id = work.work_id
+          AND review.subject = 'plan'
+          AND review.bound_plan_revision_id = plan.plan_revision_id
+        WHERE binding.turn_id = ? AND binding.is_current = 1
+        ORDER BY review.revision DESC
+        LIMIT 1
+      `).get(String(relation.parent_turn_id));
+      expect(parentWork).toMatchObject({
+        objective: EXACT_QWEN_OBJECTIVE,
+        plan_objective: EXACT_QWEN_OBJECTIVE,
+        verdict: "accept",
+      });
+      expect(JSON.parse(parentWork?.checks_json ?? "[]")).toEqual([EXACT_QWEN_CHECK]);
+      expect(JSON.parse(parentWork?.governing_refs_json ?? "[]"))
+        .toEqual(["W-SANDY-RELATIONSHIP-AUDIT-001"]);
       expect(packetJson).toBe(packetBeforeRestart);
       expect(JSON.stringify(
         (bindings.getBySessionId(childSessionBeforeRestart)?.metadata?.subsession as
           Record<string, unknown> | undefined)?.project_context,
       )).toBe(bindingContextBeforeRestart);
       expect(packet.execution_mode).toBe("read_only");
+      expect(packet.objective).toBe(EXACT_QWEN_OBJECTIVE);
+      expect(packet.acceptance_criteria).toEqual([EXACT_QWEN_CHECK]);
+      expect(packet.task_or_plan_refs).toEqual(["W-SANDY-RELATIONSHIP-AUDIT-001"]);
+      expect(packet.parent_work_ref).toEqual({
+        work_id: parentWork?.work_id,
+        session_id: parentSessionId,
+        turn_id: relation.parent_turn_id,
+        plan_revision_id: parentWork?.current_plan_revision_id,
+        review_revision_id: parentWork?.review_revision_id,
+      });
+      expect(parentWork?.bound_plan_revision_id).toBe(parentWork?.current_plan_revision_id);
       expect((packet.access_and_budget_policy as Record<string, unknown>).access_mode)
-        .toBe("full_access");
+        .toBe("read_only");
       expect(packet.workspace_and_worktree).toEqual({
         ownership: "project",
         workspace_label: "Validated project workspace",
@@ -918,7 +1056,7 @@ test("full-access Composer delegation keeps Steward access while inspection stay
         ?.metadata?.runtimePolicy as Record<string, unknown> | undefined;
       expect(child?.projectId).toBe("project-sandy");
       expect(child?.metadata?.runtimePolicy).toMatchObject({
-        accessMode: "full_access",
+        accessMode: "read_only",
         trackingMode: readOnlyParentPolicy?.trackingMode,
         authoritySource: "parent_session",
       });
@@ -1032,10 +1170,11 @@ test("full-access Composer delegation keeps Steward access while inspection stay
       )).toBe(true);
       expect(resultOutbox).toContain(detailRefs[0]!);
       expect(JSON.parse(String(result?.changed_artifacts_json))).toEqual([]);
-      const rootWork = btccDb.query<{ work_id: string }, [string]>(
-        "SELECT work_id FROM btcc_guided_works WHERE session_id = ?",
+      const rootWork = btccDb.query<{ work_id: string; objective: string }, [string]>(
+        "SELECT work_id, objective FROM btcc_guided_works WHERE session_id = ?",
       ).get(childSessionId);
       expect(rootWork?.work_id).toBeDefined();
+      expect(rootWork?.objective).toBe(EXACT_QWEN_OBJECTIVE);
       expect(btccDb.query<{ status: string }, [string]>(
         "SELECT status FROM btcc_guided_works WHERE work_id = ?",
       ).get(String(rootWork?.work_id))?.status).toBe("completed");
@@ -1057,10 +1196,35 @@ test("full-access Composer delegation keeps Steward access while inspection stay
       `).get(String(result?.child_turn_id));
       expect(recallRow?.status).toBe("completed");
       expect(recallRow?.result_json).toContain("SANDY_PROJECT_MEMORY_CONTEXT");
-      expect(btccDb.query<{ status: string }, [string]>(`
-        SELECT status FROM btcc_guided_tool_calls
+      const exactSearchRows = btccDb.query<{
+        status: string;
+        arguments_json: string;
+        raw_arguments: string;
+        result_json: string | null;
+      }, [string]>(`
+        SELECT status, arguments_json, raw_arguments, result_json
+        FROM btcc_guided_tool_calls
+        WHERE turn_id = ? AND tool_name = 'web_search'
+        ORDER BY rowid ASC
+      `).all(String(result?.child_turn_id));
+      expect(exactSearchRows).toHaveLength(1);
+      expect(exactSearchRows[0]?.status).toBe("completed");
+      expect(JSON.parse(exactSearchRows[0]?.arguments_json ?? "{}"))
+        .toEqual({ query: EXACT_QWEN_QUERY, max_results: 5 });
+      expect(exactSearchRows[0]?.raw_arguments).toContain(EXACT_QWEN_MODEL);
+      expect(exactSearchRows[0]?.result_json).toContain(EXACT_QWEN_QUERY);
+      expect(readWebSearchMetrics(root)).toMatchObject({
+        requestCount: 1,
+        lastProvider: "mock",
+        lastQuery: EXACT_QWEN_QUERY,
+        lastError: null,
+      });
+      expect(EXACT_QWEN_QUERY).not.toBe("Qwen 3");
+      expect(EXACT_QWEN_QUERY).not.toBe("Qwen3");
+      expect(btccDb.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_tool_calls
         WHERE turn_id = ? AND tool_name = 'run_command'
-      `).get(String(result?.child_turn_id))?.status).toBe("completed");
+      `).get(String(result?.child_turn_id))?.count).toBe(0);
       const childTaskRequests = childRequests.filter((request) =>
         request.messages.some((message) => message.content.includes("delegation_id:")),
       );
@@ -1069,13 +1233,11 @@ test("full-access Composer delegation keeps Steward access while inspection stay
         request.tools.map((tool) => tool.name),
       ))].sort();
       expect(childToolNames).toEqual(expect.arrayContaining([
-        "edit_file",
         "grep_files",
         "list_conversation_sessions",
         "list_files",
         "read_conversation_session",
         "read_file",
-        "run_command",
         "recall_memory",
         "record_work_checkpoint",
         "record_work_disposition",
@@ -1083,12 +1245,15 @@ test("full-access Composer delegation keeps Steward access while inspection stay
         "replace_work_plan",
         "web_read",
         "web_search",
-        "write_file",
       ]));
+      for (const effectTool of ["run_command", "write_file", "edit_file"]) {
+        expect(childToolNames).not.toContain(effectTool);
+      }
       const childPrompt = childTaskRequests.flatMap((request) =>
         request.messages.map((message) => message.content),
       ).join("\n");
       expect(childPrompt).toContain("execution_mode: read_only");
+      expect(childPrompt).toContain(EXACT_QWEN_MODEL);
       expect(childPrompt).toContain("SANDY_PROJECT_MEMORY_CONTEXT");
       expect(childPrompt).not.toContain("PRIVATE_USER_HOT_CONTEXT");
       const childContextJson = btccDb.query<{ context_json: string }, [string]>(
@@ -1106,7 +1271,7 @@ test("full-access Composer delegation keeps Steward access while inspection stay
       });
       expect(childRequests.some((request) => request.tools.some((tool) =>
         tool.name === "run_command",
-      ))).toBe(true);
+      ))).toBe(false);
       const readOnlyChildToolNames = new Set(childRequests.flatMap((request) =>
         request.tools.map((tool) => tool.name),
       ));
@@ -1412,7 +1577,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
         message.content.includes("Canonical child result synthesis") ||
         message.content.includes("Subsession result"),
       );
-      const isParent = request.tools.some((tool) => tool.name === "delegate_to_steward");
+      const isParent = !request.instructions?.includes("Steward role");
       if (!isParent && !isSynthesis) childRequests.push(request);
       if (isSynthesis) {
         return { text: CONTEXT_PRESERVING_SYNTHESIS, toolCalls: [] };
@@ -1425,25 +1590,30 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
         parentRounds.set(key, round);
         if (key === "delegation") {
           if (round === 1) {
-            return { text: "I will inspect and revise the fixtures directly.", toolCalls: [] };
+            expect(request.tools.map((tool) => tool.name)).not.toContain("delegate_to_steward");
+            return { toolCalls: [toolCall("start-parent-work", "start_work", {
+              objective: "Inspect, correct, and validate two bounded Steward fixture files.",
+            })] };
           }
-          if (round > 2) return { text: "Delegation accepted.", toolCalls: [] };
-          expect(request.toolChoice).toBe("required");
-          expect(request.tools.map((tool) => tool.name)).toEqual(
-            expect.arrayContaining([
-              "cancel_steward",
-              "delegate_to_steward",
-              "steer_steward",
-            ]),
-          );
+          if (round === 2) return { toolCalls: [toolCall("plan-parent-work", "replace_work_plan", {
+            objective: "Inspect, correct, and validate two bounded Steward fixture files.",
+            governing_refs: [],
+            actions: [{ action_key: "delegate-reviewed-fixture-work" }],
+            checks: ["Both fixture files contain their expected mutation and bounded validation passes"],
+          })] };
+          if (round === 3) return { toolCalls: [toolCall("review-parent-work", "record_work_review", {
+            subject: "plan",
+            verdict: "accept",
+            summary: "The exact fixture objective and checks are ready for Steward execution.",
+            corrections: [],
+            action_updates: [{ action_key: "delegate-reviewed-fixture-work", status: "active" }],
+          })] };
+          if (round > 4) return { text: "Delegation accepted.", toolCalls: [] };
+          expect(request.tools.map((tool) => tool.name)).toContain("delegate_to_steward");
           return {
             toolCalls: [toolCall("delegate", "delegate_to_steward", {
               execution_mode: "mutation",
               safe_title: "Bounded Steward result",
-              objective: "Inspect, correct, and validate two bounded Steward fixture files.",
-              acceptance_criteria: ["Both fixture files contain their expected mutation and bounded validation passes"],
-              task_or_plan_refs: [],
-              constraints_and_non_goals: ["Do not mutate the Butler workspace or Project Ledger."],
               allowed_tools_and_effects: [
                 "edit_file:workspace",
                 "write_file:workspace",
@@ -1706,7 +1876,7 @@ function readOnlyStewardRound(
         message.content.includes("Canonical child result synthesis") ||
         message.content.includes("Subsession result"),
       );
-      const isParent = request.tools.some((tool) => tool.name === "delegate_to_steward");
+      const isParent = !request.instructions?.includes("Steward role");
       if (!isParent && !isSynthesis) childRequests.push(request);
       if (isSynthesis) {
         parentSynthesisRequests.push(request);
@@ -1750,16 +1920,40 @@ function readOnlyStewardRound(
         const round = (parentRounds.get(key) ?? 0) + 1;
         parentRounds.set(key, round);
         if (key.endsWith("delegation")) {
-          if (round > 1) return { text: "Delegation accepted.", toolCalls: [] };
+          const objective = missingContext
+            ? "Audit the project using the required verified project context."
+            : privatePathReport
+              ? "Inspect the repository source marker with private-path terminal report evidence."
+              : unusableReport
+                ? "Inspect the repository source marker with unusable terminal report evidence."
+                : EXACT_QWEN_OBJECTIVE;
+          const check = missingContext
+            ? "Use the verified project context instead of guessing."
+            : unusableReport
+              ? "The source marker is inspected with material evidence."
+              : EXACT_QWEN_CHECK;
+          if (round === 1) return { toolCalls: [toolCall(`start-${key}`, "start_work", {
+            objective,
+          })] };
+          if (round === 2) return { toolCalls: [toolCall(`plan-${key}`, "replace_work_plan", {
+            objective,
+            governing_refs: ["W-SANDY-RELATIONSHIP-AUDIT-001"],
+            actions: [{ action_key: "delegate-reviewed-read-only-inspection" }],
+            checks: [check],
+          })] };
+          if (round === 3) return { toolCalls: [toolCall(`review-${key}`, "record_work_review", {
+            subject: "plan",
+            verdict: "accept",
+            summary: "The exact read-only objective and evidence check are ready.",
+            corrections: [],
+            action_updates: [{ action_key: "delegate-reviewed-read-only-inspection", status: "active" }],
+          })] };
+          if (round > 4) return { text: "Delegation accepted.", toolCalls: [] };
           if (missingContext) {
             return {
               toolCalls: [toolCall("delegate-missing-context", "delegate_to_steward", {
                 execution_mode: "read_only",
                 safe_title: "Missing project context audit",
-                objective: "Audit the project using the required verified project context.",
-                acceptance_criteria: ["Use the verified project context instead of guessing."],
-                task_or_plan_refs: ["W-SANDY-RELATIONSHIP-AUDIT-001"],
-                constraints_and_non_goals: ["Do not guess or scan when required context is unavailable."],
                 allowed_tools_and_effects: [...READ_ONLY_SURFACE],
                 mutation_scope: [],
               })],
@@ -1770,12 +1964,6 @@ function readOnlyStewardRound(
               toolCalls: [toolCall("delegate-unusable-report", "delegate_to_steward", {
                 execution_mode: "read_only",
                 safe_title: "Unusable report inspection",
-                objective: privatePathReport
-                  ? "Inspect the repository source marker with private-path terminal report evidence."
-                  : "Inspect the repository source marker with unusable terminal report evidence.",
-                acceptance_criteria: ["The source marker is inspected with material evidence."],
-                task_or_plan_refs: ["W-SANDY-RELATIONSHIP-AUDIT-001"],
-                constraints_and_non_goals: ["Do not mutate the workspace."],
                 allowed_tools_and_effects: [...READ_ONLY_SURFACE],
                 mutation_scope: [],
               })],
@@ -1785,10 +1973,6 @@ function readOnlyStewardRound(
             toolCalls: [toolCall("delegate-read-only", "delegate_to_steward", {
               execution_mode: "read_only",
               safe_title: "Read-only repository inspection",
-              objective: "Inspect the repository layout and source marker, then summarize the findings.",
-              acceptance_criteria: ["The layout and source marker are inspected with material read evidence."],
-              task_or_plan_refs: ["W-SANDY-RELATIONSHIP-AUDIT-001"],
-              constraints_and_non_goals: ["Do not mutate the workspace, run commands, call MCP, or change Project Ledger."],
               allowed_tools_and_effects: [
                 "read_file:workspace",
                 "list_files:workspace",
@@ -1812,6 +1996,8 @@ function readOnlyStewardRound(
       const childKey = request.messages.map((message) => message.content).find((content) => content.includes("delegation_id")) ?? "child";
       const round = (childRounds.get(childKey) ?? 0) + 1;
       childRounds.set(childKey, round);
+      const childBody = request.messages.map((message) => message.content).join("\n");
+      const exactModelResearch = childBody.includes(EXACT_QWEN_MODEL);
       const simulateToolFailure = request.messages.some((message) =>
         message.content.includes("unusable terminal report evidence"),
       );
@@ -1819,7 +2005,9 @@ function readOnlyStewardRound(
       if (round === 1) {
         return {
           toolCalls: [toolCall("plan-read-only", "replace_work_plan", {
-            objective: "Inspect the repository layout and source marker, then summarize the findings.",
+            objective: exactModelResearch
+              ? EXACT_QWEN_OBJECTIVE
+              : "Inspect the repository layout and source marker, then summarize the findings.",
             actions: [{
               action_key: "inspect-repository-evidence",
               description: "Inspect the repository layout and source marker.",
@@ -1829,7 +2017,9 @@ function readOnlyStewardRound(
               description: "Synthesize the verified read evidence without mutation.",
               dependency_keys: ["inspect-repository-evidence"],
             }],
-            checks: ["At least two material read operations support the summary."],
+            checks: exactModelResearch
+              ? [EXACT_QWEN_CHECK, "At least two material local reads support the summary."]
+              : ["At least two material read operations support the summary."],
           })],
         };
       }
@@ -1843,7 +2033,19 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 3) {
+      if (exactModelResearch && round === 3) {
+        return {
+          toolCalls: [toolCall("search-exact-qwen-model", "web_search", {
+            query: EXACT_QWEN_QUERY,
+            max_results: 5,
+          })],
+        };
+      }
+      const workflowRound = exactModelResearch ? round - 1 : round;
+      const effectiveWorkflowRound = exactModelResearch && workflowRound >= 4
+        ? workflowRound + 1
+        : workflowRound;
+      if (effectiveWorkflowRound === 3) {
         if (simulateToolFailure) {
           return {
             toolCalls: [toolCall("read-missing-source", "read_file", {
@@ -1861,7 +2063,7 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 4) {
+      if (effectiveWorkflowRound === 4) {
         return {
           toolCalls: [toolCall("inspect-command-access", "run_command", {
             command: "pwd",
@@ -1870,7 +2072,7 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 5) {
+      if (effectiveWorkflowRound === 5) {
         return {
           toolCalls: [toolCall("list-files", "list_files", {
             root: ".",
@@ -1879,14 +2081,14 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 6) {
+      if (effectiveWorkflowRound === 6) {
         return {
           toolCalls: [toolCall("read-source-marker", "read_file", {
             requests: [{ path: "src/inspection-target.ts" }],
           })],
         };
       }
-      if (round === 7) {
+      if (effectiveWorkflowRound === 7) {
         return {
           toolCalls: [toolCall("review-read-only-result", "record_work_review", {
             subject: "result",
@@ -1899,7 +2101,7 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 8) {
+      if (effectiveWorkflowRound === 8) {
         return {
           toolCalls: [toolCall("review-read-only-completion", "record_work_review", {
             subject: "completion",
@@ -1912,7 +2114,7 @@ function readOnlyStewardRound(
           })],
         };
       }
-      if (round === 9) {
+      if (effectiveWorkflowRound === 9) {
         const workId = request.messages
           .flatMap((message) => [...message.content.matchAll(/guided-work-[a-f0-9]{64}/gu)].map((match) => match[0]))
           .at(-1);
@@ -1929,11 +2131,11 @@ function readOnlyStewardRound(
           })],
         };
       }
-      const requestBody = request.messages.map((message) => message.content).join("\n");
+      const childReportBody = request.messages.map((message) => message.content).join("\n");
       return {
-        text: requestBody.includes("private-path terminal report evidence")
+        text: childReportBody.includes("private-path terminal report evidence")
           ? `${DETAILED_STEWARD_REPORT}\nEvidence detail: file:///private/var/secret.txt`
-          : requestBody.includes("unusable terminal report evidence")
+          : childReportBody.includes("unusable terminal report evidence")
             ? "Steward completed the bounded read-only inspection with verified material evidence."
             : DETAILED_STEWARD_REPORT,
         toolCalls: [],
@@ -2006,6 +2208,7 @@ function initializeGitWorkspace(root: string): void {
   run(["config", "user.email", "butler@example.test"]);
   run(["config", "user.name", "Butler Test"]);
   writeFileSync(join(root, "README.md"), "test\n", "utf8");
+  writeFileSync(join(root, "eol.md"), "Act only from explicit evidence and preserve the exact reviewed objective.\n", "utf8");
   run(["add", "README.md"]);
   run(["commit", "-qm", "initial"]);
 }

@@ -1,7 +1,7 @@
 import { NativeInboundQueue } from "../../../gateways/core/inbound-queue.ts";
 import { shortStewardWorktreeBranch } from "../../session-workspaces/index.ts";
-import { digest, stableJson } from "../identity/index.ts";
-import { subsessionChildTurnId, subsessionResultId, subsessionRootWorkId } from "./identities.ts";
+import { digest } from "../identity/index.ts";
+import { subsessionChildTurnId, subsessionDelegationId, subsessionResultId, subsessionRootWorkId } from "./identities.ts";
 import { recoverPendingParentInputs } from "./outbox-recovery.ts";
 import { completeStewardResultForDependencies } from "./terminal-result-service.ts";
 import { resolveParentResultEvidence } from "./accepted-terminal-report.ts";
@@ -15,6 +15,11 @@ import { completePacketContext } from "./terminal-results.ts";
 import { renderDelegatedParentConversationContext } from "./parent-conversation-context.ts";
 import { renderStewardInput } from "./steward-input.ts";
 import {
+  assertReviewedDelegationRequest,
+  loadReviewedDelegationPlan,
+} from "./reviewed-delegation-plan.ts";
+import {
+  admittedParentTurnAccessMode,
   inheritedStewardRuntimePolicy,
   normalizeStewardAccessMode,
   stewardRootWorkScope,
@@ -77,14 +82,29 @@ export function createSubsessionDelegationService(
     return work.workId;
   };
   return {
+    async reviewedDelegationPlan(parentInput) {
+      return loadReviewedDelegationPlan(input, parentInput);
+    },
     async delegate(request) {
       const normalizedRequest = normalizeDelegationRequest(request);
       const parent = input.sessionBindings.getBySessionId(normalizedRequest.parent_session_id);
       if (!parent || parent.role !== "butler") throw new Error("parent_butler_session_required");
+      const parentTurn = await input.parentTurns.findTurn(normalizedRequest.parent_turn_id);
+      if (!parentTurn || parentTurn.sessionId !== normalizedRequest.parent_session_id) {
+        throw new Error("subsession_parent_turn_required");
+      }
+      if (normalizedRequest.parent_access_mode !== admittedParentTurnAccessMode(parentTurn)) {
+        throw new Error("subsession_parent_access_mode_mismatch");
+      }
       if (normalizedRequest.model_ref !== parent.modelRef) throw new Error("subsession_parent_model_mismatch");
       const parentReasoning = parent.metadata?.reasoning_effort;
       if (typeof parentReasoning === "string" && parentReasoning !== normalizedRequest.reasoning_effort) throw new Error("subsession_parent_reasoning_mismatch");
-      const delegationId = delegationIdentity(normalizedRequest);
+      const reviewed = await loadReviewedDelegationPlan(input, {
+        parentSessionId: normalizedRequest.parent_session_id,
+        parentTurnId: normalizedRequest.parent_turn_id,
+      });
+      assertReviewedDelegationRequest(normalizedRequest, reviewed);
+      const delegationId = subsessionDelegationId(normalizedRequest);
       const existing = input.store.relationByDelegationId(delegationId); if (existing) return recoverExistingDelegation(input, existing);
       const relationId = `relation-${digest(`btcc.subsession.relation.v1\0${delegationId}`).slice(0, 40)}`;
       const taskId = `task-${digest(`btcc.subsession.task.v1\0${delegationId}`).slice(0, 40)}`;
@@ -92,13 +112,6 @@ export function createSubsessionDelegationService(
       const childTurnId = `steward-turn-${digest(`btcc.subsession.child-turn.v1\0${relationId}`).slice(0, 32)}`;
       const rootWorkId = subsessionRootWorkId(delegationId, taskId, childSessionId);
       const branch = shortStewardWorktreeBranch(relationId);
-      const parentWork = await input.durableWork.boundWorkForTurn(normalizedRequest.parent_turn_id);
-      if (normalizedRequest.parent_work_ref && (!parentWork ||
-        parentWork.workId !== normalizedRequest.parent_work_ref.work_id ||
-        parentWork.sessionId !== normalizedRequest.parent_work_ref.session_id ||
-        normalizedRequest.parent_turn_id !== normalizedRequest.parent_work_ref.turn_id)) {
-        throw new Error("subsession_parent_work_ref_mismatch");
-      }
       const parentChatId = parent.transportBindings.find((binding) =>
         binding.transport === "app" && binding.peerId.trim(),
       )?.peerId;
@@ -121,9 +134,7 @@ export function createSubsessionDelegationService(
       });
       const packet = createPacket(normalizedRequest, {
         delegationId, relationId, taskId,
-        parentWorkRef: parentWork
-          ? { work_id: parentWork.workId, session_id: parentWork.sessionId, turn_id: normalizedRequest.parent_turn_id }
-          : undefined,
+        parentWorkRef: reviewed.parent_work_ref,
         branch,
       }, projectContext);
       const parentConversationContext = renderDelegatedParentConversationContext({
@@ -169,22 +180,6 @@ export function createSubsessionDelegationService(
   };
 }
 
-function delegationIdentity(request: DelegationRequest): string {
-  const identity = stableJson({
-    parent_session_id: request.parent_session_id,
-    parent_turn_id: request.parent_turn_id,
-    anchor_message_id: request.anchor_message_id,
-    parent_access_mode: request.parent_access_mode,
-    execution_mode: request.execution_mode,
-    objective: request.objective,
-    acceptance_criteria: request.acceptance_criteria,
-    task_or_plan_refs: request.task_or_plan_refs,
-    constraints_and_non_goals: request.constraints_and_non_goals,
-    allowed_tools_and_effects: request.allowed_tools_and_effects,
-    mutation_scope: request.mutation_scope,
-  });
-  return `delegation-${digest(`btcc.subsession.delegation.v1\0${identity}`)}`;
-}
 function recoverExistingDelegation(
   input: SubsessionDelegationDependencies,
   relation: SessionRelation,
@@ -202,7 +197,7 @@ function recoverExistingDelegation(
 }
 function createPacket(
   request: DelegationRequest,
-  ids: { delegationId: string; relationId: string; taskId: string; parentWorkRef?: DelegationPacket["parent_work_ref"]; branch: string },
+  ids: { delegationId: string; relationId: string; taskId: string; parentWorkRef: DelegationPacket["parent_work_ref"]; branch: string },
   projectContext: DelegationPacket["project_context"],
 ): DelegationPacket {
   return {
@@ -243,7 +238,7 @@ function createPacket(
       model_ref: request.model_ref,
       reasoning_effort: request.reasoning_effort,
     },
-    ...(ids.parentWorkRef ? { parent_work_ref: ids.parentWorkRef } : {}),
+    parent_work_ref: ids.parentWorkRef,
     model_ref: request.model_ref,
     reasoning_effort: request.reasoning_effort,
   };
@@ -322,7 +317,7 @@ function normalizeDelegationRequest(input: DelegationRequest): DelegationRequest
   for (const [key, value] of Object.entries(input)) {
     if (typeof value === "string" && !value.trim()) throw new Error(`delegation_${key}_required`);
   }
-  if (!input.acceptance_criteria.length) throw new Error("delegation_acceptance_criteria_required");
+  if (!input.parent_work_ref) throw new Error("subsession_parent_work_ref_required");
   const parentAccessMode = normalizeStewardAccessMode(input.parent_access_mode);
   const executionMode = normalizeExecutionMode(input.execution_mode);
   const allowedToolsAndEffects = normalizeSubsessionAllowedToolsAndEffects(

@@ -18,6 +18,7 @@ export function completePacketContext(packet: DelegationPacket): boolean {
   const expectedSchema = packet.expected_result_schema;
   const workspace = packet.workspace_and_worktree;
   const access = packet.access_and_budget_policy;
+  const parentWork = packet.parent_work_ref;
   const executionMode = packet.execution_mode;
   const workspaceValid = executionMode === "read_only"
     ? workspace?.ownership === "project" &&
@@ -48,10 +49,17 @@ export function completePacketContext(packet: DelegationPacket): boolean {
     stringValue(packet.task_id) &&
     stringValue(packet.parent_session_id) &&
     stringValue(packet.parent_turn_id) &&
+    stringValue(parentWork?.work_id) &&
+    stringValue(parentWork?.session_id) &&
+    stringValue(parentWork?.turn_id) &&
+    stringValue(parentWork?.plan_revision_id) &&
+    stringValue(parentWork?.review_revision_id) &&
+    parentWork?.session_id === packet.parent_session_id &&
+    parentWork.turn_id === packet.parent_turn_id &&
     stringValue(packet.relation_id) &&
     (executionMode === "read_only" || executionMode === "mutation") &&
     stringValue(packet.objective) &&
-    stringArray(packet.acceptance_criteria, 1) &&
+    stringArray(packet.acceptance_criteria) &&
     stringArray(packet.task_or_plan_refs) &&
     stringArray(packet.constraints_and_non_goals) &&
     stringArray(packet.allowed_tools_and_effects, 1) &&

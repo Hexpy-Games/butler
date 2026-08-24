@@ -14,7 +14,7 @@ export const delegateToStewardToolDefinition: ButlerToolDefinition = {
   name: "delegate_to_steward",
   description: [
     "Delegate one bounded effect-free inspection or iterative mutation Work to exactly one ordinary Steward session.",
-    "Provide the task execution intent, minimal task packet, acceptance criteria, local workspace effect evidence, and file mutation scope only when edit_file or write_file is expected.",
+    "The objective, acceptance criteria, and governing references come only from the current accepted Butler Plan Review; this call provides execution mode, a safe title, and the bounded tool/effect scope.",
     "The Steward always inherits the Composer Turn's admitted access mode and ordinary BTCC tool policy exactly; execution_mode and allowed_tools_and_effects never choose, upgrade, or downgrade authority.",
     "For read_only, allowed_tools_and_effects is exactly the complete five-value array [grep_files:workspace, list_files:workspace, read_file:workspace, web_read:network, web_search:network], and mutation_scope is [].",
     "Every Steward keeps the parent's admitted project knowledge, memory recall, conversation, web, MCP, Project Ledger, and ordinary BTCC task capabilities. This field is not the Steward tool catalog.",
@@ -28,10 +28,6 @@ export const delegateToStewardToolDefinition: ButlerToolDefinition = {
     properties: {
       execution_mode: { type: "string", enum: ["read_only", "mutation"] },
       safe_title: { type: "string", minLength: 1, maxLength: 120 },
-      objective: { type: "string", minLength: 1, maxLength: 800 },
-      acceptance_criteria: { type: "array", minItems: 1, items: { type: "string", minLength: 1, maxLength: 240 } },
-      task_or_plan_refs: { type: "array", items: { type: "string", minLength: 1, maxLength: 240 } },
-      constraints_and_non_goals: { type: "array", minItems: 1, items: { type: "string", minLength: 1, maxLength: 240 } },
       allowed_tools_and_effects: {
         type: "array",
         minItems: 1,
@@ -42,10 +38,6 @@ export const delegateToStewardToolDefinition: ButlerToolDefinition = {
     required: [
       "execution_mode",
       "safe_title",
-      "objective",
-      "acceptance_criteria",
-      "task_or_plan_refs",
-      "constraints_and_non_goals",
       "allowed_tools_and_effects",
       "mutation_scope",
     ],

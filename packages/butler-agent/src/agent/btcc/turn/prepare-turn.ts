@@ -38,7 +38,7 @@ import {
 import { includeRecentContext } from "./recent-conversation-context.ts";
 import { buildModelRoute } from "../model-route/index.ts";
 import {
-  emptySubsessionContextAssembly,
+  admitButlerContextAssembly, admitStewardContextAssembly,
   isSubsessionBinding,
   readSubsessionMetadata,
 } from "./subsession-turn-context.ts";
@@ -46,7 +46,8 @@ export type BtccTurnPreparationDependencies = {
   bindingStore: Pick<SessionBindingStore, "getBySessionId">;
   conversationStore: ConversationWriter & ConversationContextStoreReader;
   butlerData: string;
-  promptAssembler: Pick<PromptAssembler, "buildButlerContextAssembly">;
+  promptAssembler: Pick<PromptAssembler,
+    "buildButlerContextAssembly" | "buildStewardContextAssembly">;
   contextDocuments: BtccContextDocumentWriter;
   turns: Pick<TurnStateRepository, "findTurn">;
   wakeAuthorizations: import("./contracts.ts").BtccWakeAuthorizationReader;
@@ -88,12 +89,12 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
     const envelope = inboundEnvelopeFor(request);
     const subsession = isSubsessionBinding(binding);
     const assembly = subsession
-      ? emptySubsessionContextAssembly()
+      ? admitStewardContextAssembly(this.dependencies.promptAssembler.buildStewardContextAssembly())
       : includeRecentContext(
         this.dependencies.conversationStore,
         binding,
         envelope,
-        this.dependencies.promptAssembler.buildButlerContextAssembly({
+        admitButlerContextAssembly(this.dependencies.promptAssembler.buildButlerContextAssembly({
           binding,
           envelope,
           route: {
@@ -103,7 +104,7 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
             workspacePath: request.route.workspacePath,
             ...(request.route.projectId ? { projectId: request.route.projectId } : {}),
           },
-        }),
+        })),
       );
     const controls = request.executionControls
       ? verifyTurnExecutionControls(request.executionControls)
@@ -181,20 +182,12 @@ export function snapshotTurnContext(input: {
     ...input.assembly.workingContext,
     ...input.assembly.retrievedContext,
   ];
-  const userRef = principalRef(input.binding);
-  const snapshot = subsession ? {
-        userRef: "steward-role",
-        ...(subsession.projectContext?.projectId ? { projectRef: subsession.projectContext.projectId } : {}),
-        profileRefs: [],
-        recentFeedbackRefs: [],
-        mandatoryHotCacheRefs: [...(subsession.projectContext?.mandatoryHotCacheRefs ?? [])],
-        optionalHotCacheRefs: [...(subsession.projectContext?.optionalHotCacheRefs ?? [])],
-        baselineObservationScopeRefs: [],
-      }
-    : snapshotContextDocuments({
+  const userRef = subsession ? "steward-role" : principalRef(input.binding);
+  const projectRef = subsession?.projectContext?.projectId ?? input.binding.projectId;
+  const documentSnapshot = snapshotContextDocuments({
       userRef,
       sessionId: input.binding.sessionId,
-      ...(input.binding.projectId ? { projectRef: input.binding.projectId } : {}),
+      ...(projectRef ? { projectRef } : {}),
       workspacePath: input.binding.workspacePath,
       sections: sections.map((section) => ({
         id: section.id,
@@ -209,6 +202,13 @@ export function snapshotTurnContext(input: {
         scopeKind: section.scopeKind,
       })),
     }, input.documents);
+  const snapshot = subsession ? {
+      ...documentSnapshot,
+      mandatoryHotCacheRefs: [...(subsession.projectContext?.mandatoryHotCacheRefs ?? [])],
+      optionalHotCacheRefs: [...(subsession.projectContext?.optionalHotCacheRefs ?? [])],
+      baselineObservationScopeRefs: [],
+    }
+    : documentSnapshot;
   return {
     ...snapshot,
     executionPolicy: {

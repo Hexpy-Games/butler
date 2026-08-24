@@ -8,6 +8,12 @@ import { projectGuidedToolContext } from
 import type { ModelContextSegmentKind } from "../ports/model-round.ts";
 import { renderPrivateModifyContinuationInput } from "./guided-authority-continuation.ts";
 import { guidedStewardInstructions } from "./guided-steward-instructions.ts";
+import type { ContextDocumentReader } from "../../context/context-projection.ts";
+import {
+  GUIDED_EOL_STABLE_ANCHOR,
+  attributeGuidedInstructions,
+  projectGuidedProfileInstructions,
+} from "./guided-eol-instructions.ts";
 export interface GuidedTextSegmentSource {
   kind: ModelContextSegmentKind;
   stability: "stable" | "dynamic";
@@ -30,7 +36,8 @@ export interface GuidedTurnRequestAttribution {
 
 type GuidedPromptInput = {
   butlerData: string;
-  contextDocuments: { resolve(contextRef: string): string };
+  contextDocuments: Pick<ContextDocumentReader, "resolve"> &
+    Partial<Pick<ContextDocumentReader, "read">>;
   toolJournal: GuidedToolJournal;
   workContext?: string | null;
   effectContext?: string | null;
@@ -42,14 +49,22 @@ export function renderGuidedTurnRequestAttribution(
   turn: TurnRecord,
   stableInstructionPrefix: string,
   responseLanguage: string,
-  input: Parameters<typeof renderGuidedPromptAttribution>[1],
+  input: Omit<GuidedPromptInput, "contextDocuments"> & {
+    contextDocuments: ContextDocumentReader;
+  },
 ): GuidedTurnRequestAttribution {
   const prompt = renderGuidedPromptAttribution(turn, input);
-  const instructions = guidedInstructionsAttribution(
-    stableInstructionPrefix,
-    renderGuidedPersonaInstructions(turn, input.contextDocuments),
-    responseLanguage,
+  const profileInstructions = projectGuidedProfileInstructions(
+    turn,
+    input.contextDocuments,
   );
+  const instructions = attributeGuidedInstructions({
+    stableInstructionPrefix,
+    roleAndSystem: profileInstructions.roleAndSystem,
+    eolInstructions: profileInstructions.eolInstructions,
+    personaAndProfile: profileInstructions.personaAndProfile,
+    responseLanguage,
+  });
   return {
     prompt: prompt.text,
     instructions: instructions.text,
@@ -118,9 +133,10 @@ export function guidedInstructions(
   }
   return [
     "You are Butler. Give the user a useful result, not an account of an internal protocol.",
+    GUIDED_EOL_STABLE_ANCHOR,
     "Answer simple conversation and stable knowledge directly and briefly. Select the path from the user's complete objective and constraints. Keep simple conversation, stable knowledge, and one quick lookup in Butler.",
     "Substantial writing, revision, research, comparison, inspection, or execution belongs to Steward, including ordinary chats without a project binding. A short correction or continuation of that objective remains Steward work.",
-    "Use tools when current, external, workspace, attachment, or project facts are needed. Delegate bounded independent multi-step repository inspection, multi-source research or synthesis, persistent-artifact work, or execution-stage mutation with delegate_to_steward. Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler. Choose read_only for inspection or research without expected workspace effects, and mutation only for requested execution-stage changes; this describes task and workspace intent and never changes the Composer access mode inherited by Steward. After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn. Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",
+    "Use tools when current, external, workspace, attachment, or project facts are needed. Keep simple conversation, stable knowledge, and one quick lookup in Butler. Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler. For substantial delegation, first understand the complete request, create or continue one durable Work, replace its current Plan with the complete objective, checks, and governing references, and record an accepted Plan Review. Only then call delegate_to_steward; the immutable packet is derived from that exact reviewed Plan. Choose read_only for inspection or research without expected workspace effects, and mutation only for requested execution-stage changes; this describes task and workspace intent and never changes the Composer access mode inherited by Steward. After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
     "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",
     "During Conception, treat injected profile, recent feedback, and Hot Cache as a bounded baseline, not exhaustive memory. Before closing a substantial goal, actively use recall_memory when durable user preferences, corrections, prior decisions, related work outcomes, or relationship context could materially improve personalization or goal fidelity. Preserve the fast path when current context is genuinely sufficient; this is your semantic choice, not a runtime keyword rule.",
     "When the user refers to a particular other Butler conversation, use list_conversation_sessions and then read_conversation_session. Use all_sessions only when that reference is outside the active project. Use query_memory for exact wording and recall_memory for associative personalization; do not substitute Hot Cache for either when the needed evidence is absent.",
@@ -173,58 +189,6 @@ export function guidedInstructions(
         ]
       : []),
   ].join("\n");
-}
-
-export function guidedInstructionsAttribution(
-  stableInstructionPrefix: string,
-  personaAndProfile = "",
-  responseLanguage = "",
-): GuidedTextAttribution {
-  const prefix = stableInstructionPrefix;
-  const persona = personaAndProfile.trim();
-  const responseDirective = responseLanguage.trim()
-    ? `Use ${responseLanguage.trim()} for every user-facing message in this Turn.`
-    : "";
-  const roleEnd = Math.max(0, prefix.indexOf("\n") + 1);
-  const sources: GuidedTextSegmentSource[] = [{
-    kind: "stable_safety_and_role_instructions", stability: "stable", text: prefix.slice(0, roleEnd),
-  }];
-  if (roleEnd < prefix.length) {
-    sources.push({
-      kind: "stable_btcc_protocol",
-      stability: "stable",
-      text: prefix.slice(roleEnd),
-    });
-  }
-  if (responseDirective) {
-    sources.push({
-      kind: "accepted_corrections_and_unresolved_obligations",
-      stability: "dynamic",
-      text: `\n${responseDirective}`,
-    });
-  }
-  if (persona) {
-    sources.push({
-      kind: "memory_recall_context",
-      stability: "dynamic",
-      text: [
-        "",
-        "Apply the following current Butler persona and user personalization to every user-facing message in this Turn, including progress, review, failure, and final reporting. Preserve it across every tool round. These instructions are provider-neutral and must not be weakened by report formatting.",
-        persona,
-      ].join("\n"),
-    });
-  }
-  return {
-    text: sources.map((source) => source.text).join(""),
-    sources: sources.filter((source) => source.text.length > 0),
-  };
-}
-
-export function renderGuidedPersonaInstructions(
-  turn: TurnRecord,
-  documents: { resolve(contextRef: string): string },
-): string {
-  return renderContextRefs(turn.context.profileRefs, documents, 12_000);
 }
 
 export function renderGuidedResponseLanguage(

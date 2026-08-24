@@ -71,10 +71,12 @@ export type DelegationPacket = {
     model_ref: string;
     reasoning_effort: string;
   };
-  parent_work_ref?: {
+  parent_work_ref: {
     work_id: string;
     session_id: string;
     turn_id: string;
+    plan_revision_id: string;
+    review_revision_id: string;
   };
   model_ref: string;
   reasoning_effort: string;
@@ -116,7 +118,7 @@ export type ParentInputSink = (input: {
   text: string;
   model_ref: string;
   reasoning_effort: string;
-  access_mode: "full_access";
+  access_mode: "full_access" | "ask_first" | "read_only";
   timestamp: string;
 }) => Promise<void> | void;
 
@@ -139,7 +141,16 @@ export type DelegationRequest = {
     work_id: string;
     session_id: string;
     turn_id: string;
+    plan_revision_id: string;
+    review_revision_id: string;
   };
+};
+
+export type ReviewedDelegationPlan = {
+  parent_work_ref: DelegationPacket["parent_work_ref"];
+  objective: string;
+  acceptance_criteria: string[];
+  task_or_plan_refs: string[];
 };
 
 export type CreatedDelegation = {
@@ -233,7 +244,7 @@ export interface SubsessionDelegationStore {
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   }; inserted: boolean };
   pendingParentInputForResult(resultId: string): {
@@ -247,7 +258,7 @@ export interface SubsessionDelegationStore {
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   } | null;
   pendingParentInputCount(): number;
@@ -263,12 +274,16 @@ export interface SubsessionDelegationStore {
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   }>;
 }
 
 export type SubsessionDelegationService = {
+  reviewedDelegationPlan(input: {
+    parentSessionId: string;
+    parentTurnId: string;
+  }): Promise<ReviewedDelegationPlan>;
   delegate(input: DelegationRequest): Promise<CreatedDelegation>;
   ensureChildRootWork(input: {
     childSessionId: string;
