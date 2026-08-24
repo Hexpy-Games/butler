@@ -49,6 +49,10 @@ import {
 } from "./panelSizing.ts";
 import type {
   AppView,
+  AuthorityDecisionTransportView,
+  AuthorityApprovalCard,
+  AuthorityApprovalProjection,
+  AuthorityRequestsTransportView,
   CommandPaletteResult,
   ComposerControls,
   MessageListView,
@@ -138,6 +142,7 @@ interface ButlerStore {
   summary: SessionSummaryView | null;
   turnProgress: Record<string, TurnProgressSnapshot>;
   sessionQueue: QueuedMessageRecord[];
+  authorityApprovals: AuthorityApprovalProjection | null;
   settings: SettingsView;
   modelCatalog: ModelCatalogView;
   modelCatalogState: ModelCatalogState;
@@ -213,6 +218,20 @@ interface ButlerStore {
   refreshSessionSummary: (chatId?: string) => Promise<void>;
   sendMessage: (text: string, controls?: ComposerControls) => Promise<void>;
   refreshSessionQueue: (chatId?: string) => Promise<void>;
+  refreshAuthorityApprovals: (sessionId?: string) => Promise<boolean>;
+  allowAuthorityRequest: (
+    requestRef: string,
+    sessionId?: string,
+  ) => Promise<boolean>;
+  denyAuthorityRequest: (
+    requestRef: string,
+    sessionId?: string,
+  ) => Promise<boolean>;
+  modifyAuthorityRequest: (
+    requestRef: string,
+    alternative: string,
+    sessionId?: string,
+  ) => Promise<boolean>;
   queueMessage: (text: string, controls?: ComposerControls) => Promise<void>;
   updateQueuedMessage: (
     queuedMessageId: string,
@@ -653,6 +672,98 @@ function isNonTerminalTurnState(state: string): boolean {
   );
 }
 
+const EMPTY_AUTHORITY_APPROVAL_CARDS: AuthorityApprovalCard[] = [];
+
+/**
+ * Narrow the durable authority projection fail-closed: only records whose
+ * every renderable field has the exact expected type become UI cards, and
+ * response order is preserved unchanged. Raw records are never spread into
+ * the public shape.
+ */
+function normalizeAuthorityApprovals(
+  view: AuthorityRequestsTransportView,
+): AuthorityApprovalCard[] {
+  if (!Array.isArray(view.requests)) return EMPTY_AUTHORITY_APPROVAL_CARDS;
+  const cards: AuthorityApprovalCard[] = [];
+  for (const entry of view.requests) {
+    const card = normalizeAuthorityApprovalCard(entry);
+    if (card) cards.push(card);
+  }
+  return cards;
+}
+
+function normalizeAuthorityApprovalCard(
+  entry: unknown,
+): AuthorityApprovalCard | null {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+  const record = entry as Record<string, unknown>;
+  if (typeof record.request_ref !== "string" || !record.request_ref.trim()) {
+    return null;
+  }
+  if (record.category !== "command") return null;
+  if (typeof record.reason !== "string" || !record.reason.trim()) return null;
+  if (typeof record.executable !== "string" || !record.executable.trim()) {
+    return null;
+  }
+  if (
+    typeof record.command_count !== "number" ||
+    !Number.isSafeInteger(record.command_count) ||
+    record.command_count < 1
+  ) {
+    return null;
+  }
+  return {
+    requestRef: record.request_ref,
+    category: "command",
+    reason: record.reason,
+    executable: record.executable,
+    commandCount: record.command_count,
+  };
+}
+
+type AuthorityDecisionKind = "allowed" | "denied" | "modified";
+type AuthorityDecisionAction = "allow" | "deny" | "modify";
+
+function isAcceptedAuthorityDecisionResponse(
+  view: AuthorityDecisionTransportView,
+  requestRef: string,
+  decision: AuthorityDecisionKind,
+): boolean {
+  return (
+    view.request_ref === requestRef &&
+    view.decision === decision &&
+    typeof view.scheduled === "boolean"
+  );
+}
+
+function normalizedAuthorityAlternative(value: string): string | null {
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+async function submitAuthorityDecision(input: {
+  action: AuthorityDecisionAction;
+  alternative?: string;
+  decision: AuthorityDecisionKind;
+  requestRef: string;
+  sessionId: string;
+}): Promise<boolean> {
+  const view = await api<AuthorityDecisionTransportView>(
+    `/authority-requests/${encodeURIComponent(input.requestRef)}/${input.action}?session_id=${encodeURIComponent(input.sessionId)}`,
+    {
+      method: "POST",
+      ...(input.action === "modify"
+        ? { body: JSON.stringify({ alternative: input.alternative }) }
+        : {}),
+    },
+  );
+  return isAcceptedAuthorityDecisionResponse(
+    view,
+    input.requestRef,
+    input.decision,
+  );
+}
+
 function applySessionView(
   state: ButlerStore,
   view: SessionView,
@@ -739,6 +850,8 @@ function applySessionView(
 let activeSessionGeneration = 0;
 let nextSessionViewRequestToken = 0;
 const latestSessionViewRequestByChat = new Map<string, number>();
+let nextAuthorityApprovalRefreshToken = 0;
+const latestAuthorityApprovalRefreshBySession = new Map<string, number>();
 
 function beginSessionViewRequest(
   chatId: string,
@@ -786,6 +899,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   summary: null,
   turnProgress: {},
   sessionQueue: [],
+  authorityApprovals: null,
   settings: initialSettings,
   modelCatalog: EMPTY_MODEL_CATALOG,
   modelCatalogState: "loading",
@@ -1144,6 +1258,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       if (!isCurrentRequest()) return false;
       set((state) => applySessionView(state, data));
       void writeCachedMessageList(chatId, messageListViewFromSessionView(data));
+      // The durable authority projection rides the existing session-view
+      // convergence. It must never fail or delay the canonical refresh.
+      void get().refreshAuthorityApprovals(chatId);
       return true;
     } catch {
       // Keep the last canonical snapshot visible on transient failures.
@@ -1270,6 +1387,94 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       set({ sessionQueue: data.queued_messages });
     } catch {
       if (get().activeChatId === chatId) set({ sessionQueue: [] });
+    }
+  },
+
+  refreshAuthorityApprovals: async (sessionId = get().activeChatId) => {
+    if (!isServerBackedSessionId(sessionId)) return false;
+    const requestToken = ++nextAuthorityApprovalRefreshToken;
+    latestAuthorityApprovalRefreshBySession.set(sessionId, requestToken);
+    try {
+      const data = await api<AuthorityRequestsTransportView>(
+        `/authority-requests?session_id=${encodeURIComponent(sessionId)}`,
+      );
+      if (data.session_id !== sessionId) return false;
+      const cards = normalizeAuthorityApprovals(data);
+      // Only the latest refresh for the still-active session may project.
+      if (
+        latestAuthorityApprovalRefreshBySession.get(sessionId) !== requestToken ||
+        get().activeChatId !== sessionId
+      ) {
+        return false;
+      }
+      const next: AuthorityApprovalProjection = { sessionId, cards };
+      // A transient fetch failure keeps the previous same-session projection.
+      if (structurallyEqual(get().authorityApprovals, next)) return true;
+      set({ authorityApprovals: next });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  allowAuthorityRequest: async (
+    requestRef,
+    sessionId = get().activeChatId,
+  ) => {
+    if (!isServerBackedSessionId(sessionId) || !requestRef.trim()) return false;
+    try {
+      if (!await submitAuthorityDecision({
+        action: "allow",
+        decision: "allowed",
+        requestRef,
+        sessionId,
+      })) return false;
+      return await get().refreshAuthorityApprovals(sessionId);
+    } catch {
+      return false;
+    }
+  },
+
+  denyAuthorityRequest: async (
+    requestRef,
+    sessionId = get().activeChatId,
+  ) => {
+    if (!isServerBackedSessionId(sessionId) || !requestRef.trim()) return false;
+    try {
+      if (!await submitAuthorityDecision({
+        action: "deny",
+        decision: "denied",
+        requestRef,
+        sessionId,
+      })) return false;
+      return await get().refreshAuthorityApprovals(sessionId);
+    } catch {
+      return false;
+    }
+  },
+
+  modifyAuthorityRequest: async (
+    requestRef,
+    alternative,
+    sessionId = get().activeChatId,
+  ) => {
+    const normalizedAlternative = normalizedAuthorityAlternative(alternative);
+    if (
+      !isServerBackedSessionId(sessionId) ||
+      !requestRef.trim() ||
+      !normalizedAlternative
+    ) return false;
+    try {
+      if (!await submitAuthorityDecision({
+        action: "modify",
+        alternative: normalizedAlternative,
+        decision: "modified",
+        requestRef,
+        sessionId,
+      })) return false;
+      return await get().refreshAuthorityApprovals(sessionId);
+    } catch {
+      return false;
     }
   },
 
@@ -2017,6 +2222,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
 useButlerStore.subscribe((state, previousState) => {
   if (state.activeChatId !== previousState.activeChatId) {
     activeSessionGeneration += 1;
+    // Session navigation/hydration re-projects the durable authority stack
+    // for the newly active server-backed session (no-op for draft ids).
+    void state.refreshAuthorityApprovals(state.activeChatId);
   }
 });
 
@@ -2032,3 +2240,8 @@ export const selectViewTitle = (state: ButlerStore) =>
   activeTitleForView(state.view, selectActiveChat(state));
 export const selectIsSettingsView = (state: ButlerStore) =>
   state.view.kind === "settings";
+/** Only the projection fetched for the active session id is renderable. */
+export const selectActiveAuthorityApprovals = (state: ButlerStore) =>
+  state.authorityApprovals?.sessionId === state.activeChatId
+    ? state.authorityApprovals.cards
+    : EMPTY_AUTHORITY_APPROVAL_CARDS;
