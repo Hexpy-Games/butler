@@ -128,6 +128,18 @@ export interface AppCopy {
     editQueuedMessage: string;
     deleteQueuedMessage: string;
     contextDetails: string;
+    approval: {
+      title: string;
+      categoryCommand: string;
+      commandSummary: (executable: string, count: number) => string;
+      allowOnce: string;
+      deny: string;
+      modify: string;
+      modifyPlaceholder: string;
+      submitModify: string;
+      decisionFailed: string;
+      modifyInvalid: string;
+    };
   };
   permissions: {
     fullAccess: string;
@@ -802,6 +814,19 @@ const koKrCopy: AppCopy = {
     editQueuedMessage: "대기 메시지 수정",
     deleteQueuedMessage: "대기 메시지 삭제",
     contextDetails: "컨텍스트 세부정보 표시",
+    approval: {
+      title: "승인 대기 중인 명령",
+      categoryCommand: "명령",
+      commandSummary: (executable, count) =>
+        count <= 1 ? executable : `${executable} · 총 ${count}개`,
+      allowOnce: "이번만 허용",
+      deny: "거부",
+      modify: "수정 또는 다른 방법 제안",
+      modifyPlaceholder: "대신 수행할 방법을 입력하세요",
+      submitModify: "제안 제출",
+      decisionFailed: "승인 상태를 확인하지 못했습니다. 요청을 계속 표시합니다.",
+      modifyInvalid: "제안은 비어 있지 않은 16KB 이하의 텍스트여야 합니다.",
+    },
   },
   permissions: {
     fullAccess: "전체 권한",
@@ -1553,6 +1578,19 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     editQueuedMessage: "Edit queued message",
     deleteQueuedMessage: "Delete queued message",
     contextDetails: "Show context details",
+    approval: {
+      title: "Command awaiting approval",
+      categoryCommand: "Command",
+      commandSummary: (executable, count) =>
+        count <= 1 ? executable : `${executable} · ${count} total`,
+      allowOnce: "Allow once",
+      deny: "Deny",
+      modify: "Modify or suggest another approach",
+      modifyPlaceholder: "Describe the approach Butler should take instead",
+      submitModify: "Submit suggestion",
+      decisionFailed: "Could not confirm the approval. The request remains visible.",
+      modifyInvalid: "The suggestion must be non-empty text no larger than 16 KB.",
+    },
   },
   permissions: {
     fullAccess: "Full access",
