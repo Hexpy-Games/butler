@@ -24,10 +24,28 @@ CREATE TABLE IF NOT EXISTS btcc_authority_requests (
   schedule_client_message_id TEXT NOT NULL UNIQUE,
   schedule_input_text TEXT NOT NULL,
   private_alternative_input TEXT,
-  outcome TEXT NOT NULL CHECK (outcome IN ('pending', 'applied', 'failed')),
+  outcome TEXT NOT NULL CHECK (outcome IN ('pending', 'applied', 'failed', 'uncertain')),
   outcome_receipt_json TEXT,
+  close_reason TEXT CHECK (
+    close_reason IS NULL OR
+    close_reason IN (
+      'session_archived', 'session_permanently_deleted', 'session_cancelled',
+      'work_abandoned'
+    )
+  ),
+  close_scope TEXT CHECK (
+    close_scope IS NULL OR close_scope IN ('self_session', 'work')
+  ),
+  closed_at TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  CHECK (
+    (close_reason IS NULL AND close_scope IS NULL AND closed_at IS NULL) OR
+    (
+      close_reason IS NOT NULL AND close_scope IS NOT NULL AND closed_at IS NOT NULL
+      AND decision = 'pending' AND outcome = 'pending'
+    )
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_btcc_authority_requests_owner_pending

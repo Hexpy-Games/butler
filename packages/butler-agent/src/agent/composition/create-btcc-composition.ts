@@ -11,6 +11,7 @@ import {
 } from "../btcc/turn/index.ts";
 import { createProductionGuidedTurnAgent } from "../btcc/agent-loop/index.ts";
 import type { ModelRoundPort } from "../btcc/agent-loop/index.ts";
+import type { GuidedEffectFaultHook } from "../btcc/effects/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { AgentConversationStore } from "../conversation/index.ts";
@@ -43,6 +44,8 @@ export function createProductionBtccComposition(input: {
   ownerId: string;
   /** Test-only one-round provider seam; production callers omit it. */
   modelRound?: ModelRoundPort;
+  /** TEST-ONLY deterministic fault proof; default-omitted in production. */
+  guidedEffectFaultHook?: GuidedEffectFaultHook;
   memoryAttribution?: RuntimeMemoryAttributionPort;
   sessionBindings?: SessionBindingStore;
   conversationStore?: AgentConversationStore;
@@ -116,6 +119,7 @@ export function createProductionBtccComposition(input: {
       durableWork: stores.durableWork,
       authority: stores.authority,
       modelRound: input.modelRound,
+      guidedEffectFaultHook: input.guidedEffectFaultHook,
       sessionBindingStore: bindings,
       subsessionDelegation: subsessions,
     }),
@@ -129,16 +133,21 @@ export function createProductionBtccComposition(input: {
     turns: stores.turns,
     wakeAuthorizations: stores.wakeAuthorizations,
   };
+  let startupRecovery: Promise<void> = Promise.resolve();
   const assembly = createBtcc({
     runtime,
     preparation: new DefaultBtccTurnPreparation(preparationDependencies),
     progressEvents: stores.progressEvents,
     turns: stores.turns,
     close: async () => {
-      memoryAttribution.close();
-      stores.close();
-      if (!input.conversationStore) conversations.close();
-      if (!input.sessionBindings) bindings.close();
+      try {
+        await startupRecovery;
+      } finally {
+        memoryAttribution.close();
+        stores.close();
+        if (!input.conversationStore) conversations.close();
+        if (!input.sessionBindings) bindings.close();
+      }
     },
   });
   const serviceClient = new FileQueueButlerServiceClient({
@@ -169,15 +178,16 @@ export function createProductionBtccComposition(input: {
       });
     }
   };
+  startupRecovery = subsessions.recoverPendingParentInputs().then(() => {
+    recoverInterruptedStewards();
+  });
   return {
     btcc: assembly.btcc,
     host: assembly.host,
     // A persisted Steward result may have committed its outbox just before
     // process loss. Re-enter that same durable handoff once at composition
     // startup; the App queue remains the sole owner after admission.
-    ready: subsessions.recoverPendingParentInputs().then(() => {
-      recoverInterruptedStewards();
-    }),
+    ready: startupRecovery,
     authority: stores.authority,
     subsessions,
   };

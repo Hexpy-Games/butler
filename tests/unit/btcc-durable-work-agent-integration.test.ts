@@ -25,6 +25,8 @@ import { createProductionGuidedTurnAgent } from
 import { seedLegacySessionWork } from
   "./support/btcc-r3-legacy-session-work-fixture.ts";
 
+const eolRefByRoot = new Map<string, string>();
+
 test("R3 managed Work survives a store restart and continues in a fresh Turn", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-integration-"));
   const dbPath = join(root, "butler.sqlite");
@@ -1283,6 +1285,19 @@ function createRuntime(input: {
   modelRound: ModelRoundPort;
   progress?: BtccTurnProgressObserver;
 }) {
+  writeFileSync(
+    join(input.root, "eol.md"),
+    "Act only from explicit evidence and preserve the exact reviewed objective.\n",
+    "utf8",
+  );
+  eolRefByRoot.set(input.root, input.stores.contextDocuments.persist({
+    scopeKind: "user",
+    scopeId: "local-user",
+    projectionClass: "profile",
+    sourceId: "eol",
+    sourceRevision: "test-eol-v1",
+    content: "Act only from explicit evidence and preserve the exact reviewed objective.",
+  }));
   return createGuidedTurnRuntime({
     admission: input.stores.admission,
     turns: input.stores.turns,
@@ -1323,7 +1338,7 @@ function command(
     },
     context: {
       userRef: "local-user",
-      profileRefs: [],
+      profileRefs: [requiredTestEolRef(root)],
       recentFeedbackRefs: [],
       mandatoryHotCacheRefs: [],
       optionalHotCacheRefs: [],
@@ -1338,6 +1353,12 @@ function command(
       },
     },
   };
+}
+
+function requiredTestEolRef(root: string): string {
+  const contextRef = eolRefByRoot.get(root);
+  if (!contextRef) throw new Error("test_eol_not_installed");
+  return contextRef;
 }
 
 type ScriptedModelRoundStep =

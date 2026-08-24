@@ -776,6 +776,9 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "read_conversation_session",
     "update_explicit_memory",
     "list_skills",
+    "delegate_to_steward",
+    "steer_steward",
+    "cancel_steward",
   ]);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "web_search")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "web_read")?.concurrencySafe).toBe(true);
@@ -924,17 +927,22 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
     "run-command",
     "session-workspace",
     "skills",
+    "subsession",
     "tool-bridge",
     "web-read",
     "web-search",
     "work-tracking",
   ];
-  const groupedToolNames = groupNames.flatMap((groupName) => (
-    readdirSync(join(toolsRoot, groupName))
+  const groupedToolNames = groupNames.flatMap((groupName) => {
+    if (groupName === "subsession") {
+      return ["delegate_to_steward", "steer_steward", "cancel_steward"]
+        .map((name) => `${groupName}/${name}`);
+    }
+    return readdirSync(join(toolsRoot, groupName))
       .filter((name) => statSync(join(toolsRoot, groupName, name)).isDirectory())
       .filter((name) => existsSync(join(toolsRoot, groupName, name, "index.ts")))
-      .map((name) => `${groupName}/${name}`)
-  )).sort();
+      .map((name) => `${groupName}/${name}`);
+  }).sort();
   const toolNames = BUTLER_TOOLS.map((tool) => tool.name).sort();
   const nestedToolNames = groupedToolNames.map((name) => name.split("/").at(1)).sort();
 
@@ -942,10 +950,13 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
   expect(nestedToolNames).toEqual(toolNames);
 
   for (const groupName of groupNames) {
-    expect(existsSync(join(toolsRoot, groupName, "executor.ts"))).toBe(false);
+    expect(existsSync(join(toolsRoot, groupName, "executor.ts"))).toBe(
+      groupName === "subsession",
+    );
   }
 
   for (const name of groupedToolNames) {
+    if (name.startsWith("subsession/")) continue;
     const source = readFileSync(join(toolsRoot, name, "index.ts"), "utf8");
     expect(source).not.toContain("export * from");
     expect(source).toContain("./definition.ts");

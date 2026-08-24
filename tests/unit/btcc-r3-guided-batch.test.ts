@@ -254,7 +254,7 @@ test("guided batch reconciliation distinguishes all-before, all-after, and mixed
   }
 });
 
-test("guided batch partial_apply stays uncertain until externally completed and never replays", async () => {
+test("guided batch partial_apply stays terminally uncertain after external completion", async () => {
   const root = await mkdtemp(join(tmpdir(), "butler-guided-batch-partial-"));
   await writeFile(join(root, "one.txt"), "one old\n", "utf8");
   await writeFile(join(root, "two.txt"), "two old\n", "utf8");
@@ -300,11 +300,7 @@ test("guided batch partial_apply stays uncertain until externally completed and 
     expect(dispatches).toBe(1);
     await writeFile(join(root, "one.txt"), "one new\n", "utf8");
     await writeFile(join(root, "two.txt"), "two new\n", "utf8");
-    expect(await execute()).toMatchObject({
-      ok: true,
-      status: "applied",
-      replayed: false,
-    });
+    expect(await execute()).toMatchObject({ ok: false, status: "uncertain" });
     expect(dispatches).toBe(1);
   } finally {
     db?.close();

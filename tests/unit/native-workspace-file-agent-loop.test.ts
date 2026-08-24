@@ -160,6 +160,7 @@ function guidedTurn(
 function projectRunCommand(
   workspacePath: string,
   turnId: string,
+  eolRef: string,
 ): Extract<BtccRunCommand, { kind: "run" }> {
   return {
     kind: "run",
@@ -180,7 +181,7 @@ function projectRunCommand(
     context: {
       userRef: "native-file-agent-user",
       projectRef: "native-file-agent-project",
-      profileRefs: [],
+      profileRefs: [eolRef],
       recentFeedbackRefs: [],
       mandatoryHotCacheRefs: [],
       optionalHotCacheRefs: [],
@@ -236,6 +237,11 @@ test("native file capability registry and guided surfaces keep the five-tool con
 
 test("production Agent tool loop discovers, continues, reviews, edits, rereads, and delivers native workspace files", async () => {
   const root = mkdtempSync(join(tmpdir(), "native-file-agent-loop-"));
+  writeFileSync(
+    join(root, "eol.md"),
+    "Act only from explicit evidence and preserve the exact reviewed objective.\n",
+    "utf8",
+  );
   const workspace = join(root, "workspace");
   const data = join(root, "data");
   mkdirSync(join(workspace, "src"), { recursive: true });
@@ -526,9 +532,17 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
   };
 
   try {
+    const eolRef = stores.contextDocuments.persist({
+      scopeKind: "user",
+      scopeId: "native-file-agent-user",
+      projectionClass: "profile",
+      sourceId: "eol",
+      sourceRevision: "test-eol-v1",
+      content: "Act only from explicit evidence and preserve the exact reviewed objective.",
+    });
     const agent = createProductionGuidedTurnAgent({
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
-      butlerHome: process.cwd(),
+      butlerHome: root,
       butlerData: data,
       contextDocuments: stores.contextDocuments,
       toolJournal: stores.guidedToolJournal,
@@ -544,7 +558,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
       agent,
     });
     const turnId = "native-file-agent-loop-turn";
-    const outcome = await runtime.runTurn(projectRunCommand(workspace, turnId));
+    const outcome = await runtime.runTurn(projectRunCommand(workspace, turnId, eolRef));
 
     expect(outcome).toMatchObject({
       kind: "delivered",

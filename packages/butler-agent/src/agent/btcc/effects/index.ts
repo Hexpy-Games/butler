@@ -1,3 +1,4 @@
+export { GuidedEffectProcessReplacementError } from "./effect-process-replacement.ts";
 export { createGuidedEffectService } from "./effects.ts";
 export { normalizeGuidedEffectRecoveryEntries } from "./guided-effect-recovery.ts";
 export type { GuidedEffectRecoveryEntry } from "./guided-effect-recovery.ts";

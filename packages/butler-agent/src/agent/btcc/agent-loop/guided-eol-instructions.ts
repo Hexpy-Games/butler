@@ -26,7 +26,9 @@ const GUIDED_PERSONA_SOURCE_IDS = new Set([
   "turn-personalization-profile",
 ]);
 const GUIDED_GOVERNING_SOURCE_IDS = new Set(["role", "runtime-system-contract"]);
-const MAX_NON_EOL_INSTRUCTION_CHARS = 12_000;
+// Leave deterministic headroom inside the phase-scoped 12 KiB memory envelope
+// for the attribution wrapper and metadata surrounding these documents.
+const MAX_NON_EOL_INSTRUCTION_BYTES = 10 * 1024;
 
 export function attributeGuidedInstructions(input: {
   stableInstructionPrefix: string;
@@ -137,11 +139,27 @@ export function projectGuidedProfileInstructions(
 }
 
 function boundedDocuments<T extends { content: string }>(documents: T[]): T[] {
-  let remaining = MAX_NON_EOL_INSTRUCTION_CHARS;
-  return documents.flatMap((document) => {
+  let remaining = MAX_NON_EOL_INSTRUCTION_BYTES;
+  return documents.flatMap((document, index) => {
     if (remaining <= 0) return [];
-    const content = document.content.slice(0, remaining);
-    remaining -= content.length;
+    const documentsLeft = documents.length - index;
+    const content = truncateUtf8(
+      document.content,
+      Math.floor(remaining / documentsLeft),
+    );
+    remaining -= Buffer.byteLength(content, "utf8");
     return [{ ...document, content }];
   });
+}
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  let bytes = 0;
+  let result = "";
+  for (const character of value) {
+    const next = Buffer.byteLength(character, "utf8");
+    if (bytes + next > maxBytes) break;
+    result += character;
+    bytes += next;
+  }
+  return result;
 }

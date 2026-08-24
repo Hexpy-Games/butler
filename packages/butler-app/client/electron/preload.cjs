@@ -686,6 +686,34 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/session-queue?${params.toString()}`);
   },
+  getAuthorityRequests: ({ sessionId } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(`/authority-requests?${params.toString()}`);
+  },
+  allowAuthorityRequest: ({ sessionId, requestRef } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(
+      `/authority-requests/${encodeURIComponent(requestRef ?? "")}/allow?${params.toString()}`,
+      { method: "POST" },
+    );
+  },
+  denyAuthorityRequest: ({ sessionId, requestRef } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(
+      `/authority-requests/${encodeURIComponent(requestRef ?? "")}/deny?${params.toString()}`,
+      { method: "POST" },
+    );
+  },
+  modifyAuthorityRequest: ({ alternative, sessionId, requestRef } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(
+      `/authority-requests/${encodeURIComponent(requestRef ?? "")}/modify?${params.toString()}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ alternative }),
+      },
+    );
+  },
   queueMessage: ({ chatId, text, model, reasoningEffort, accessMode, planMode, attachments }) => requestJson("/session-queue", {
     method: "POST",
     body: JSON.stringify({

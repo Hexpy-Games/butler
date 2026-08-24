@@ -111,6 +111,26 @@ export class AppSessionCatalogStore {
     };
   }
 
+  /**
+   * Internal read for project lifecycle authority close: every chat id bound to
+   * an existing project, including already archived chats, without pagination.
+   * An absent project yields no close targets.
+   */
+  projectSessionIdsForLifecycle(projectId: string): string[] {
+    return this.db
+      .query<{ id: string }, [string]>(
+        `
+      SELECT c.id
+      FROM chats c
+      JOIN projects p ON p.id = c.project_id
+      WHERE c.project_id = ?
+      ORDER BY c.created_at ASC, c.rowid ASC
+    `,
+      )
+      .all(projectId)
+      .map((row) => row.id);
+  }
+
   listArchives(options: { limit?: number; offset?: number } = {}): ArchiveListView {
     const page = paginationInput(options);
     const projectRows = this.db

@@ -53,6 +53,8 @@ import { createGuidedOperationalProgressCapture } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-progress.ts";
 import { createGuidedToolCallExecutor } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-call-execution.ts";
+import { GuidedEffectProcessReplacementError } from
+  "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
 import { createGuidedRoundToolSurfaceResolver } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-round-tool-surface.ts";
 import { prepareBtccToolCall } from
@@ -6652,6 +6654,65 @@ test("Guided parent cancellation does not deliver an operational fallback", asyn
 
   await expect(running).rejects.toThrow("user stopped the Turn");
   expect(factLoads).toBe(0);
+});
+
+test("process replacement interruption rejects identically without finalizing the tool call", async () => {
+  const fixture = createFixture("guided-process-replacement-interruption");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "turn-process-replacement-interruption",
+    });
+    const interruption = new GuidedEffectProcessReplacementError();
+    const args = { query: "fact", path: "." };
+    const callId = digest([
+      "btcc-guided-tool-call.v1",
+      turn.turnId,
+      "0",
+      "grep_files",
+      stableJson(args),
+    ].join("\0"));
+    const operations: string[] = [];
+    const executor = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      progress: {
+        stateChanged: async () => {},
+        operationChanged: async (update) => {
+          operations.push(update.status);
+        },
+      },
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["grep_files"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      workspacePath: () => fixture.root,
+      butlerData: fixture.root,
+      executeButlerTool: async () => {
+        throw interruption;
+      },
+    });
+
+    let caught: unknown;
+    try {
+      await executor.executeTool({
+        name: "grep_files",
+        args,
+        rawArguments: JSON.stringify(args),
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBe(interruption);
+    expect(caught).toBeInstanceOf(GuidedEffectProcessReplacementError);
+    expect(operations).toEqual(["started"]);
+    expect(fixture.stores.guidedToolJournal.find(callId)?.status).toBe(
+      "started",
+    );
+  } finally {
+    fixture.close();
+  }
 });
 
 async function addAttachedFileResult(

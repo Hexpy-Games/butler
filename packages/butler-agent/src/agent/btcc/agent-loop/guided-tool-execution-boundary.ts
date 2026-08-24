@@ -13,10 +13,12 @@ import type {
   ButlerToolCall,
   ButlerToolExecutionBoundary,
 } from "../../tools/butler-tools.ts";
-import type {
-  AuthorityCommandInput,
-  PrincipalAuthority,
+import {
+  deriveAppliedAuthorityOutcomeReceipt,
+  type AuthorityCommandInput,
+  type PrincipalAuthority,
 } from "../authority/index.ts";
+import { settleNonAppliedAuthorityOutcome } from "./guided-authority-outcome.ts";
 import type { GuidedToolJournal } from "../ports/guided-tool-journal.ts";
 import {
   acceptedGuidedPlanActionKey,
@@ -268,13 +270,39 @@ export function createGuidedToolExecutionBoundary(
       input: resolution.input,
       adapter: resolution.adapter,
     });
-    if (approvedAuthorityExecution) {
+    if (approvedAuthorityExecution && !outcome.ok) {
+      const settled = settleNonAppliedAuthorityOutcome(
+        authority!,
+        {
+          requestRef: input.authorityRequestRef!,
+          ownerSessionId: input.ownerSessionId!,
+          sourceWorkId: work.workId,
+        },
+        outcome,
+      );
+      if (!settled) {
+        return ordinaryGuidedEffectError(
+          "authority_outcome_receipt_invalid",
+          "The uncertain command outcome could not be recorded.",
+        );
+      }
+    }
+    if (approvedAuthorityExecution && outcome.ok) {
+      const appliedReceipt = deriveAppliedAuthorityOutcomeReceipt(
+        outcome.receipt,
+      );
+      if (!appliedReceipt) {
+        return ordinaryGuidedEffectError(
+          "authority_outcome_receipt_invalid",
+          "The applied command outcome could not be recorded.",
+        );
+      }
       authority!.recordOutcome({
         requestRef: input.authorityRequestRef!,
         ownerSessionId: input.ownerSessionId!,
         sourceWorkId: work.workId,
-        status: outcome.ok ? "applied" : "failed",
-        ...(outcome.ok ? { receipt: outcome.receipt } : {}),
+        status: "applied",
+        receipt: appliedReceipt,
       });
     }
     if (!outcome.ok) {

@@ -777,6 +777,11 @@ test("private digest failure stops projection before serializer or provider admi
 
 test("production Turn preserves typed projection failure instead of delivering a final", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-phase-projection-terminal-"));
+  writeFileSync(
+    join(root, "eol.md"),
+    "Act only from explicit evidence and preserve the exact reviewed objective.\n",
+    "utf8",
+  );
   const previous = {
     bounded: process.env.BUTLER_BOUNDED_STATELESS_CONTEXT,
     replay: process.env.BUTLER_OPERATION_RESULT_REPLAY,
@@ -883,6 +888,11 @@ test("bounded eviction cannot retain an identity for a projection it did not sen
 
 test("production composition keeps the private installation key lazy while flag is off", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-phase-projection-off-"));
+  writeFileSync(
+    join(root, "eol.md"),
+    "Act only from explicit evidence and preserve the exact reviewed objective.\n",
+    "utf8",
+  );
   const composition = createProductionBtccComposition({
     butlerHome: root,
     butlerData: root,

@@ -1,7 +1,9 @@
-import { createHash } from "node:crypto";
 import type {
+  AuthorityAbandonedWorkCloseInput,
   AuthorityDecisionAction,
   AuthorityDecisionResult,
+  AuthorityOperationalCloseInput,
+  AuthorityOperationalCloseResult,
   AuthorityOutcomeInput,
   AuthorityRecord,
   AuthorityRequestProjection,
@@ -13,6 +15,12 @@ import {
   admissionResult,
   authorityProjection,
 } from "./admission-projection.ts";
+import { parseAuthorityOutcomeReceipt } from "./outcome-receipt.ts";
+import {
+  canonicalJson,
+  deterministicClientMessageId,
+  digest,
+} from "./request-identity.ts";
 
 const ALLOW_SCHEDULE_INPUT_TEXT = "Continue the approved operation exactly once.";
 const MAX_ALTERNATIVE_INPUT_BYTES = 16 * 1024;
@@ -24,31 +32,26 @@ export function createPrincipalAuthority(
     admit(input) {
       const identitySha256 = digest(canonicalJson({
         version: 1,
-        ownerSessionId: input.ownerSessionId,
-        sourceSessionId: input.sourceSessionId,
-        sourceTurnId: input.sourceTurnId,
-        sourceWorkId: input.sourceWorkId,
-        workspacePath: input.workspacePath,
-        planRevisionId: input.planRevisionId,
-        actionKey: input.actionKey,
-        authorityGeneration: input.authorityGeneration,
-        capability: input.capability,
-        target: input.target,
+        ownerSessionId: input.ownerSessionId, sourceSessionId: input.sourceSessionId,
+        sourceTurnId: input.sourceTurnId, sourceWorkId: input.sourceWorkId,
+        workspacePath: input.workspacePath, planRevisionId: input.planRevisionId,
+        actionKey: input.actionKey, authorityGeneration: input.authorityGeneration,
+        capability: input.capability, target: input.target,
         normalizedInput: input.normalizedInput,
       }));
       const existing = repository.findByIdentity(identitySha256);
-      if (existing) return admissionResult(existing);
+      if (existing) {
+        assertNotOperationallyClosed(existing);
+        return admissionResult(existing);
+      }
       const slot = repository.findBySlot({
-        sourceWorkId: input.sourceWorkId,
-        planRevisionId: input.planRevisionId,
-        actionKey: input.actionKey,
-        capability: input.capability,
+        sourceWorkId: input.sourceWorkId, planRevisionId: input.planRevisionId,
+        actionKey: input.actionKey, capability: input.capability,
         authorityGeneration: input.authorityGeneration,
       });
       if (slot) {
         throw new AuthorityRequestError("authority_slot_identity_mismatch");
       }
-
       const now = new Date().toISOString();
       const requestId = `authority-${crypto.randomUUID()}`;
       const requestRef = `authority-ref-${digest(`${requestId}\0${identitySha256}`).slice(0, 32)}`;
@@ -79,6 +82,9 @@ export function createPrincipalAuthority(
         privateAlternativeInput: null,
         outcome: "pending",
         outcomeReceiptJson: null,
+        closeReason: null,
+        closeScope: null,
+        closedAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -87,6 +93,7 @@ export function createPrincipalAuthority(
       if (!stored || stored.identitySha256 !== identitySha256) {
         throw new AuthorityRequestError("authority_request_insert_conflict");
       }
+      assertNotOperationallyClosed(stored);
       return admissionResult(stored);
     },
 
@@ -164,6 +171,11 @@ export function createPrincipalAuthority(
       } catch {
         throw new AuthorityRequestError("authority_request_corrupt");
       }
+      const outcomeReceipt = record.outcomeReceiptJson === null
+        ? undefined : parseAuthorityOutcomeReceipt(record.outcomeReceiptJson);
+      if (record.outcomeReceiptJson !== null && !outcomeReceipt) {
+        throw new AuthorityRequestError("authority_request_corrupt");
+      }
       return {
         requestRef: record.requestRef,
         sourceSessionId: record.sourceSessionId,
@@ -181,6 +193,7 @@ export function createPrincipalAuthority(
           ? { alternativeInput: record.privateAlternativeInput }
           : {}),
         outcome: record.outcome,
+        ...(outcomeReceipt ? { outcomeReceipt } : {}),
       };
     },
 
@@ -198,6 +211,32 @@ export function createPrincipalAuthority(
         now: new Date().toISOString(),
       });
     },
+
+    closeSelfSession(
+      input: AuthorityOperationalCloseInput,
+    ): AuthorityOperationalCloseResult {
+      const selfSessionId = required(input.selfSessionId, "self session");
+      const closedCount = repository.closePendingSelfSessionRequests({
+        selfSessionId,
+        reason: input.reason,
+        scope: "self_session",
+        now: new Date().toISOString(),
+      });
+      return { scope: "self_session", reason: input.reason, closedCount };
+    },
+
+    closeAbandonedWork(
+      input: AuthorityAbandonedWorkCloseInput,
+    ): AuthorityOperationalCloseResult {
+      const sourceWorkId = required(input.sourceWorkId, "source Work");
+      const closedCount = repository.closePendingSourceWorkRequests({
+        sourceWorkId,
+        reason: input.reason,
+        scope: "work",
+        now: new Date().toISOString(),
+      });
+      return { scope: "work", reason: input.reason, closedCount };
+    },
   };
 }
 
@@ -205,6 +244,12 @@ export class AuthorityRequestError extends Error {
   constructor(readonly code: string) {
     super(code);
     this.name = "AuthorityRequestError";
+  }
+}
+
+function assertNotOperationallyClosed(record: AuthorityRecord): void {
+  if (record.decision === "pending" && record.closeReason !== null) {
+    throw new AuthorityRequestError("authority_request_operationally_closed");
   }
 }
 
@@ -264,11 +309,6 @@ function shellWords(input: string): string[] | null {
   return words;
 }
 
-function deterministicClientMessageId(requestId: string): string {
-  const value = digest(`authority-queue\0${requestId}`).slice(0, 32);
-  return `client-${value.slice(0, 8)}-${value.slice(8, 12)}-4${value.slice(13, 16)}-8${value.slice(17, 20)}-${value.slice(20)}`;
-}
-
 function decisionResult(record: AuthorityRecord): AuthorityDecisionResult {
   if (record.decision === "pending") {
     throw new AuthorityRequestError("authority_request_not_decided");
@@ -290,33 +330,9 @@ function sameDecision(
   action: AuthorityDecisionAction,
   alternativeInput: string | undefined,
 ): boolean {
-  const expected = action === "allow"
-    ? "allowed"
-    : action === "deny"
-      ? "denied"
-      : "modified";
+  const expected = action === "allow" ? "allowed" : action === "deny" ? "denied" : "modified";
   return record.decision === expected &&
     (action !== "modify" || record.privateAlternativeInput === alternativeInput);
-}
-
-function canonicalJson(value: unknown): string {
-  return JSON.stringify(canonicalValue(value));
-}
-
-function canonicalValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalValue);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, child]) => [key, canonicalValue(child)]),
-    );
-  }
-  return value;
-}
-
-function digest(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 function required(value: string, label: string): string {

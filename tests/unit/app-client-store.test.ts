@@ -1005,7 +1005,12 @@ test("settings drafts fill default web search settings for legacy responses", as
 
 test("refreshSessionSummary ignores late responses for inactive sessions", async () => {
   let releaseResponse: (() => void) | undefined;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    const path = String(input);
+    if (path.startsWith("/authority-requests")) {
+      const sessionId = new URL(path, "http://butler.local").searchParams.get("session_id") ?? "";
+      return jsonResponse({ session_id: sessionId, requests: [] });
+    }
     await new Promise<void>((resolve) => {
       releaseResponse = resolve;
     });
@@ -3482,7 +3487,7 @@ test("cancelActiveTurn refreshes a stale SessionView before selecting its canoni
 
   await useButlerStore.getState().cancelActiveTurn();
 
-  expect(calls.slice(0, 2)).toEqual([
+  expect(calls.filter((call) => !call.path.startsWith("/authority-requests")).slice(0, 2)).toEqual([
     { path: "/session-view?session_id=session-a" },
     { path: "/turns/turn-refreshed/cancel", body: {} },
   ]);
@@ -3541,7 +3546,9 @@ test("cancelActiveTurn does not cancel a refreshed turn after the active chat ch
   releaseRefresh?.();
   await pendingCancel;
 
-  expect(calls).toEqual(["/session-view?session_id=session-a"]);
+  expect(calls.filter((path) => !path.startsWith("/authority-requests"))).toEqual([
+    "/session-view?session_id=session-a",
+  ]);
   expect(useButlerStore.getState().sessionView).toBeNull();
 });
 
@@ -3690,7 +3697,7 @@ test("cancelActiveTurn targets only the canonical SessionView active turn", asyn
 
   await useButlerStore.getState().cancelActiveTurn();
 
-  expect(calls[0]).toEqual({
+  expect(calls.find((call) => !call.path.startsWith("/authority-requests"))).toEqual({
     path: "/turns/turn-canonical/cancel",
     body: {},
   });
@@ -3815,7 +3822,7 @@ test("cancelActiveTurn does not apply cancellation to a new chat during post-can
   releaseReload?.();
   await pendingCancel;
 
-  expect(calls).toEqual([
+  expect(calls.filter((path) => !path.startsWith("/authority-requests"))).toEqual([
     `/turns/${turnA}/cancel`,
     `/session-view?session_id=${sessionA}`,
   ]);
@@ -3868,7 +3875,7 @@ test("cancelActiveTurn reports a failed canonical refresh without inferring a ta
   await useButlerStore.getState().cancelActiveTurn();
 
   expect(statusAtRefresh).toEqual({ label: "stopping", tone: "muted" });
-  expect(calls).toEqual([
+  expect(calls.filter((path) => !path.startsWith("/authority-requests"))).toEqual([
     "/session-view?session_id=session-refresh-failure",
   ]);
   expect(useButlerStore.getState().status).toEqual({
