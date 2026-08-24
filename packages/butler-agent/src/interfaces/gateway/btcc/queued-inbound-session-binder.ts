@@ -93,18 +93,22 @@ function runtimePolicy(
   hasProject: boolean,
   accessMode: string,
 ): Record<string, unknown> {
-  const trackingMode = hasProject ? "ledger" : "local";
   const profiles = accessMode === "full_access"
     ? hasProject ? ["workspace", "project", "project-lifecycle"] : ["workspace"]
     : hasProject ? ["project"] : [];
   return {
     accessMode,
-    trackingMode,
-    tracking_mode: trackingMode,
+    ...(hasProject ? {
+      trackingMode: "ledger",
+      tracking_mode: "ledger",
+    } : {
+      workLedgerScope: "session",
+      work_ledger_scope: "session",
+    }),
     trackingModeSource: hasProject ? "app_project_default" : sessionKind === "project" ? "project_shell_default" : "session_default",
     tracking_mode_source: hasProject ? "app_project_default" : sessionKind === "project" ? "project_shell_default" : "session_default",
-    closeoutStrategy: hasProject ? "ledger" : "local_workstream",
-    closeout_strategy: hasProject ? "ledger" : "local_workstream",
+    closeoutStrategy: hasProject ? "ledger" : "session_ledger",
+    closeout_strategy: hasProject ? "ledger" : "session_ledger",
     thinFirstResponse: true,
     thin_first_response: true,
     requiredNativeTools: [],
