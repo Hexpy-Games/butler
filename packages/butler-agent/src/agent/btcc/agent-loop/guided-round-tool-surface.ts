@@ -29,6 +29,7 @@ export function createGuidedRoundToolSurfaceResolver(input: {
     const dispositionReady = await canExposeDisposition(input, work);
     const delegationReady = canExposeDelegation(bound);
     const eligibleTools = input.tools.filter((tool) => {
+      if (delegationReady) return tool.name === DELEGATION_TOOL;
       if (tool.name === DISPOSITION_TOOL) {
         return input.projectWorkSurface === false || dispositionReady;
       }
@@ -39,7 +40,7 @@ export function createGuidedRoundToolSurfaceResolver(input: {
       ? eligibleTools
       : projectDurableWorkToolSurface(eligibleTools, work);
     const names = new Set(tools.map((tool) => tool.name));
-    const missingRequired = [...input.requiredToolNames]
+    const missingRequired = delegationReady ? undefined : [...input.requiredToolNames]
       .find((name) => input.tools.some((tool) => tool.name === name) && !names.has(name));
     if (missingRequired) {
       throw new RoundToolSurfaceError("round_tool_surface_required_tool_missing");
