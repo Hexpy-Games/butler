@@ -22,17 +22,13 @@ import {
   admittedParentTurnAccessMode,
   inheritedStewardRuntimePolicy,
   normalizeStewardAccessMode,
+  reviewedStewardDelegationRequest,
   stewardRootWorkScope,
 } from "./runtime-policy.ts";
 import { createSubsessionControlService } from "./control.ts";
 import type {
-  CreatedDelegation,
-  DelegationPacket,
-  DelegationRequest,
-  ParentInputSink,
-  SessionRelation,
-  SubsessionExecutionMode,
-  SubsessionDelegationDependencies,
+  CreatedDelegation, DelegationPacket, DelegationRequest, ParentInputSink,
+  SessionRelation, SubsessionExecutionMode, SubsessionDelegationDependencies,
   SubsessionDelegationService,
 } from "./contracts.ts";
 import type { StoredSessionBinding } from "../../../test-support/harness/contracts.ts";
@@ -81,9 +77,16 @@ export function createSubsessionDelegationService(
     if (work.workId !== expectedRootWorkId) throw new Error("subsession_root_work_identity_mismatch");
     return work.workId;
   };
-  return {
+  const service: SubsessionDelegationService = {
     async reviewedDelegationPlan(parentInput) {
       return loadReviewedDelegationPlan(input, parentInput);
+    },
+    async delegateReviewed(request) {
+      const reviewed = await loadReviewedDelegationPlan(input, {
+        parentSessionId: request.parent_session_id,
+        parentTurnId: request.parent_turn_id,
+      });
+      return service.delegate(reviewedStewardDelegationRequest(request, reviewed));
     },
     async delegate(request) {
       const normalizedRequest = normalizeDelegationRequest(request);
@@ -107,10 +110,11 @@ export function createSubsessionDelegationService(
       const delegationId = subsessionDelegationId(normalizedRequest);
       const existing = input.store.relationByDelegationId(delegationId); if (existing) return recoverExistingDelegation(input, existing);
       const relationId = `relation-${digest(`btcc.subsession.relation.v1\0${delegationId}`).slice(0, 40)}`;
-      const taskId = `task-${digest(`btcc.subsession.task.v1\0${delegationId}`).slice(0, 40)}`;
+      // Persisted task_id is the managerial assignment, never a Worker Task.
+      const managerialAssignmentId = `task-${digest(`btcc.subsession.task.v1\0${delegationId}`).slice(0, 40)}`;
       const childSessionId = `steward-${digest(`btcc.subsession.child-session.v1\0${relationId}`).slice(0, 32)}`;
       const childTurnId = `steward-turn-${digest(`btcc.subsession.child-turn.v1\0${relationId}`).slice(0, 32)}`;
-      const rootWorkId = subsessionRootWorkId(delegationId, taskId, childSessionId);
+      const rootWorkId = subsessionRootWorkId(delegationId, managerialAssignmentId, childSessionId);
       const branch = shortStewardWorktreeBranch(relationId);
       const parentChatId = parent.transportBindings.find((binding) =>
         binding.transport === "app" && binding.peerId.trim(),
@@ -133,7 +137,7 @@ export function createSubsessionDelegationService(
         turns: input.parentTurns, documents: input.contextDocuments,
       });
       const packet = createPacket(normalizedRequest, {
-        delegationId, relationId, taskId,
+        delegationId, relationId, taskId: managerialAssignmentId,
         parentWorkRef: reviewed.parent_work_ref,
         branch,
       }, projectContext);
@@ -178,6 +182,7 @@ export function createSubsessionDelegationService(
     },
     ...createSubsessionControlService(input, childQueue),
   };
+  return service;
 }
 
 function recoverExistingDelegation(

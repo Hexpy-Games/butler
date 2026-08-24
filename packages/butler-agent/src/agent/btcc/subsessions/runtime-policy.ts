@@ -1,6 +1,58 @@
 import type { StoredSessionBinding } from
   "../../../test-support/harness/contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
+import type {
+  DelegationRequest,
+  ReviewedDelegationPlan,
+  ReviewedDelegationRequest,
+} from "./contracts.ts";
+import {
+  SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS,
+  SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS,
+} from "./scope.ts";
+
+export const DEFAULT_STEWARD_SAFE_TITLE = "Delegated Steward work";
+
+export function reviewedStewardDelegationRequest(
+  input: ReviewedDelegationRequest,
+  reviewed: ReviewedDelegationPlan,
+): DelegationRequest {
+  const execution = derivedStewardExecutionIntent(input.parent_access_mode);
+  return {
+    ...input,
+    safe_title: input.safe_title ?? DEFAULT_STEWARD_SAFE_TITLE,
+    execution_mode: execution.executionMode,
+    objective: reviewed.objective,
+    acceptance_criteria: reviewed.acceptance_criteria,
+    task_or_plan_refs: reviewed.task_or_plan_refs,
+    constraints_and_non_goals: [],
+    allowed_tools_and_effects: execution.allowedToolsAndEffects,
+    mutation_scope: execution.mutationScope,
+    parent_work_ref: reviewed.parent_work_ref,
+  };
+}
+
+/** Derive legacy packet execution hints from the admitted Composer authority. */
+export function derivedStewardExecutionIntent(
+  accessMode: "full_access" | "ask_first" | "read_only",
+): {
+  executionMode: "read_only" | "mutation";
+  allowedToolsAndEffects: string[];
+  mutationScope: string[];
+} {
+  if (accessMode === "read_only") {
+    return {
+      executionMode: "read_only",
+      allowedToolsAndEffects: [...SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS],
+      mutationScope: [],
+    };
+  }
+  return {
+    executionMode: "mutation",
+    allowedToolsAndEffects: [...SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS],
+    mutationScope: ["."],
+  };
+}
 /** Inherit the exact user-admitted Composer authority without model-authored narrowing. */
 export function inheritedStewardRuntimePolicy(
   parent: StoredSessionBinding,
