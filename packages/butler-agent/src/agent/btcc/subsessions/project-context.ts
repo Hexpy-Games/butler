@@ -5,6 +5,7 @@ import type {
   DelegationProjectContextSnapshot,
   SubsessionDelegationDependencies,
 } from "./contracts.ts";
+import type { StoredSessionBinding } from "../../../test-support/harness/contracts.ts";
 
 const PROJECT_CONTEXT_SOURCES = {
   "project-hot-cache": "mandatory_hot_cache",
@@ -73,18 +74,63 @@ export async function snapshotDelegationProjectContext(input: {
   };
 }
 
+export async function snapshotChildProjectContext(input: {
+  parentSessionId: string;
+  parentTurnId: string;
+  parent: Pick<StoredSessionBinding, "projectId" | "appProjectId" | "ledgerProjectId">;
+  turns: Pick<TurnStateRepository, "findTurn">;
+  documents: ContextDocumentReader;
+}): Promise<{
+  projectContext: DelegationProjectContextSnapshot | undefined;
+  inheritedProject: ReturnType<typeof childProjectContextBinding>;
+}> {
+  const projectContext = await snapshotDelegationProjectContext({
+    ...input,
+    projectId: input.parent.appProjectId ?? input.parent.projectId,
+  });
+  return {
+    projectContext,
+    inheritedProject: childProjectContextBinding(projectContext, input.parent),
+  };
+}
+
 export function childProjectContextBinding(
   context: DelegationProjectContextSnapshot | undefined,
-): { projectId: string; metadata: Record<string, unknown> } | undefined {
-  if (!context?.project_id) return undefined;
+  parent: Pick<StoredSessionBinding, "projectId" | "appProjectId" | "ledgerProjectId">,
+): {
+  sessionBinding: Pick<StoredSessionBinding, "projectId" | "appProjectId" | "ledgerProjectId">;
+  metadata: Record<string, unknown>;
+} | undefined {
+  const appProjectId = parent.appProjectId ?? parent.projectId;
+  if (!appProjectId) {
+    if (context?.project_id) throw new Error("subsession_project_context_mismatch");
+    return undefined;
+  }
+  if (context?.project_id !== appProjectId) {
+    throw new Error("subsession_project_context_mismatch");
+  }
   return {
-    projectId: context.project_id,
+    sessionBinding: {
+      projectId: appProjectId,
+      appProjectId,
+      ...(parent.ledgerProjectId !== undefined
+        ? { ledgerProjectId: parent.ledgerProjectId }
+        : {}),
+    },
     metadata: {
-      project_id: context.project_id,
+      project_id: appProjectId,
       mandatory_hot_cache_refs: context.mandatory_refs.map((ref) => ref.context_ref),
       optional_hot_cache_refs: context.optional_refs.map((ref) => ref.context_ref),
     },
   };
+}
+
+export function assertExactChildLedgerProjectIdentity(
+  binding: Pick<StoredSessionBinding, "projectId" | "appProjectId" | "ledgerProjectId">,
+): void {
+  if ((binding.appProjectId ?? binding.projectId) && binding.ledgerProjectId === undefined) {
+    throw new Error("subsession_child_ledger_project_binding_missing");
+  }
 }
 
 export async function delegationProjectContextReady(
