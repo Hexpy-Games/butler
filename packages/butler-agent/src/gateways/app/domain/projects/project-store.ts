@@ -265,17 +265,24 @@ export class AppProjectStore {
   }
 
   private projectRow(value: string, predicate: string): ProjectRow | null {
-    return (
-      this.db
-        .query<ProjectRow, [string]>(
-          `
+    const row = this.db
+      .query<ProjectRow, [string]>(
+        `
       SELECT id, display_name, status, workspace_path, workspace_label, safe_path_label,
-        pinned, archived, error_summary, created_at, updated_at
+        ledger_project_id, pinned, archived, error_summary, created_at, updated_at
       FROM projects
       ${predicate}
     `,
-        )
-        .get(value) ?? null
-    );
+      )
+      .get(value) ?? null;
+    if (
+      row &&
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(
+        row.ledger_project_id ?? "",
+      )
+    ) {
+      throw new Error("app_project_ledger_identity_invalid");
+    }
+    return row;
   }
 }
