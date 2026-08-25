@@ -115,7 +115,10 @@ export interface SessionTransportBinding {
 export interface SessionBinding {
   sessionId: string;
   role: Exclude<SessionRole, "worker">;
+  /** Legacy App-project alias retained for existing Gateway consumers. */
   projectId?: string;
+  appProjectId?: string;
+  ledgerProjectId?: string;
   workspacePath: string;
   runtimeAdapterId: string;
   modelProviderId: string;

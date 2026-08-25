@@ -1,7 +1,7 @@
 import {
   agentBtccStoragePaths,
   createProjectLedgerLegacyWorkSource,
-  openBtccSqliteStores,
+  openProductionBtccSqliteStores,
 } from "../adapters/index.ts";
 import { createBtcc } from "../btcc/index.ts";
 import {
@@ -54,18 +54,30 @@ export function createProductionBtccComposition(input: {
 }) {
   let phaseContinuityKey: Buffer | undefined;
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
+  const bindings = input.sessionBindings ?? new SessionBindingStore(
+    `${input.butlerData}/runtime/session-store.sqlite`,
+  );
   const legacyProjectWorkSource = createProjectLedgerLegacyWorkSource({
     butlerData: input.butlerData,
     resolver: projectLedgerResolver,
   });
-  const stores = openBtccSqliteStores({
-    dbPath: agentBtccStoragePaths(input.butlerData).agentBtccDbPath,
-    ownerId: input.ownerId,
-    legacyProjectWorkSource,
-  });
-  const bindings = input.sessionBindings ?? new SessionBindingStore(
-    `${input.butlerData}/runtime/session-store.sqlite`,
-  );
+  let stores: ReturnType<typeof openProductionBtccSqliteStores>;
+  try {
+    stores = openProductionBtccSqliteStores({
+      dbPath: agentBtccStoragePaths(input.butlerData).agentBtccDbPath,
+      ownerId: input.ownerId,
+      legacyProjectWorkSource,
+      workSelection: {
+        butlerHome: input.butlerHome,
+        butlerData: input.butlerData,
+        sessionBindings: bindings,
+        projectLedgerResolver,
+      },
+    });
+  } catch (error) {
+    if (!input.sessionBindings) bindings.close();
+    throw error;
+  }
   const conversations = input.conversationStore ?? new AgentConversationStore({
     butlerData: input.butlerData,
   });

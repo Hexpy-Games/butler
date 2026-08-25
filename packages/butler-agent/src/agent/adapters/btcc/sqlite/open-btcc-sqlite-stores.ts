@@ -42,6 +42,15 @@ import { SqlitePrincipalAuthorityRepository } from "./authority-repository.ts";
 import { agentBtccStoragePaths } from "./storage-ownership/index.ts";
 import { SqliteSubsessionDelegationStore } from "./subsession-store.ts";
 import { SqliteStewardObserverStore } from "./steward-observer-store.ts";
+import type { Database } from "bun:sqlite";
+import {
+  createProductionScopeSelectedWorkStore,
+  type ProductionWorkSelection,
+} from "../scope-selected-work-store.ts";
+import { SqliteProjectWorkResultRuntime } from "./project-work-result-runtime.ts";
+import { SqliteProjectWorkLegacyRuntime } from "./project-work-legacy-runtime.ts";
+import { createSqliteProjectWorkRuntimeProjection } from
+  "./project-work-runtime-projection.ts";
 
 export function openBtccSqliteStores(input: {
   dbPath: string;
@@ -50,6 +59,34 @@ export function openBtccSqliteStores(input: {
   runtimeOwnerIdentity?: RuntimeOwnerIdentity;
   processLiveness?: ProcessLiveness;
   storageProfile?: SqliteStorageProfile;
+}) {
+  return openStores(input);
+}
+
+export function openProductionBtccSqliteStores(input: {
+  dbPath: string;
+  ownerId: string;
+  legacyProjectWorkSource?: LegacyProjectWorkSource;
+  runtimeOwnerIdentity?: RuntimeOwnerIdentity;
+  processLiveness?: ProcessLiveness;
+  storageProfile?: SqliteStorageProfile;
+  workSelection: ProductionWorkSelection;
+}) {
+  if (!input.workSelection?.sessionBindings ||
+      !input.workSelection.projectLedgerResolver) {
+    throw new Error("production_work_selection_collaborator_missing");
+  }
+  return openStores(input);
+}
+
+function openStores(input: {
+  dbPath: string;
+  ownerId: string;
+  legacyProjectWorkSource?: LegacyProjectWorkSource;
+  runtimeOwnerIdentity?: RuntimeOwnerIdentity;
+  processLiveness?: ProcessLiveness;
+  storageProfile?: SqliteStorageProfile;
+  workSelection?: ProductionWorkSelection;
 }) {
   mkdirSync(dirname(input.dbPath), { recursive: true });
   const connection = openOwnedSqliteConnection(input.dbPath);
@@ -77,11 +114,20 @@ export function openBtccSqliteStores(input: {
   );
   const turns = new SqliteGuidedTurnStateRepository(db, owner, authority);
   const sqliteWriteReadiness = createSqliteWriteReadiness(input.dbPath);
-  const durableWork = createDurableWorkService(new SqliteGuidedWorkStore(
+  const sessionWorkStore = new SqliteGuidedWorkStore(
     db,
     authority,
     input.legacyProjectWorkSource,
-  ));
+  );
+  const durableWorkStore = input.workSelection
+    ? productionWorkStore(
+        db,
+        sessionWorkStore,
+        input.legacyProjectWorkSource,
+        input.workSelection,
+      )
+    : sessionWorkStore;
+  const durableWork = createDurableWorkService(durableWorkStore);
   const subsessionStore = new SqliteSubsessionDelegationStore(db);
   return {
     admission: new SqliteTurnAdmissionRepository(
@@ -110,6 +156,29 @@ export function openBtccSqliteStores(input: {
       connection.close();
     },
   };
+}
+
+function productionWorkStore(
+  db: Database,
+  sessionStore: SqliteGuidedWorkStore,
+  legacyProjectWorkSource: LegacyProjectWorkSource | undefined,
+  selection: ProductionWorkSelection,
+) {
+  const resultRuntime = new SqliteProjectWorkResultRuntime(db);
+  return createProductionScopeSelectedWorkStore({
+    db,
+    sessionStore,
+    selection,
+    runtimeProjection: createSqliteProjectWorkRuntimeProjection(
+      db,
+      resultRuntime,
+    ),
+    resultRuntime,
+    legacyRuntime: new SqliteProjectWorkLegacyRuntime(
+      db,
+      legacyProjectWorkSource,
+    ),
+  });
 }
 
 export function openBtccAuthorityStore(input: { butlerData: string }) {
