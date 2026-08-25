@@ -158,14 +158,11 @@ function validateManifest(value: ProjectWorkManifest): void {
   )
     invalid();
   if (
-    Boolean(
-      value.latestPlanReviewRevisionId ||
-        value.latestResultReviewRevisionId ||
-        value.latestCompletionValidationRevisionId,
-    ) !==
-    value.reviewRevision > 0
-  )
-    invalid();
+    value.reviewRevision === 0 &&
+    (value.latestPlanReviewRevisionId ||
+      value.latestResultReviewRevisionId ||
+      value.latestCompletionValidationRevisionId)
+  ) invalid();
 }
 
 function validateProgress(value: unknown): void {

@@ -17,6 +17,7 @@ export function migrateBtccSchema(db: Database): void {
     ensureLegacyWorkImportProvenance(db);
     ensureGuidedToolJournalOrder(db);
     ensureGuidedWorkResultOrder(db);
+    ensureProjectWorkProjectionColumns(db);
     ensureGuidedWorkDispositionSchema(db);
     ensureGuidedEffectRecoveryPayloadTable(db);
     ensureGuidedWorkDispositionSchema(db);
@@ -30,6 +31,12 @@ export function migrateBtccSchema(db: Database): void {
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
+}
+
+function ensureProjectWorkProjectionColumns(db: Database): void {
+  if (!tableExists(db, "btcc_guided_works")) return;
+  ensureColumn(db, "btcc_guided_works", "ledger_project_id", "TEXT");
+  ensureColumn(db, "btcc_guided_works", "canonical_head_sha256", "TEXT");
 }
 
 function ensureGuidedWorkDispositionSchema(db: Database): void {

@@ -36,6 +36,36 @@ export function validateManagedProjectWorkRelations(
     if (child.schema === "butler.btcc-project-work-disposition.v1")
       validateDisposition(child, manifest, plans, reviews, results);
   }
+  validateReviewPointers(manifest, [...reviews.values()], results);
+}
+
+function validateReviewPointers(
+  manifest: ProjectWorkManifest,
+  reviews: ReviewChild[],
+  results: ResultChild[],
+): void {
+  const pointers = {
+    plan: manifest.latestPlanReviewRevisionId,
+    result: manifest.latestResultReviewRevisionId,
+    completion: manifest.latestCompletionValidationRevisionId,
+  };
+  for (const subject of ["plan", "result", "completion"] as const) {
+    const historical = reviews
+      .filter((child) => child.review.subject === subject)
+      .sort((left, right) => right.review.revision - left.review.revision)[0];
+    const pointer = pointers[subject];
+    if (!historical) {
+      if (pointer !== undefined) invalid();
+      continue;
+    }
+    if (pointer === historical.review.reviewRevisionId) continue;
+    const latestResult = results.at(-1);
+    if (
+      subject === "plan" || pointer !== undefined || !latestResult ||
+      latestResult.result.sequence !== manifest.resultSequence ||
+      historical.boundResultSequence >= manifest.resultSequence
+    ) invalid();
+  }
 }
 
 function validatePlan(plan: ExtractPlan): void {
