@@ -102,6 +102,20 @@ test("real differing-ID App path initializes only the exact Ledger root and expo
       next_step: "Review the result and completion.",
     }),
   ]);
+  const afterExplicitCheckpoint = await inspectOfficialWork(ledgerRoot, workId);
+  const persistedExplicitCheckpoint = afterExplicitCheckpoint.children.find(({ body }) =>
+    body.schema === "butler.btcc-project-work-checkpoint.v1" &&
+    body.checkpoint?.publicSummary === "The exact public fact was observed.",
+  );
+  expect(afterExplicitCheckpoint.checkpointCount).toBeGreaterThan(0);
+  expect(afterExplicitCheckpoint.manifest.latestCheckpointRevisionId).toBe(
+    persistedExplicitCheckpoint?.record.id,
+  );
+  expect(persistedExplicitCheckpoint?.body.checkpoint).toMatchObject({
+    checkpointRevisionId: persistedExplicitCheckpoint?.record.id,
+    revision: afterExplicitCheckpoint.manifest.checkpointRevision,
+    stage: afterExplicitCheckpoint.manifest.currentStage,
+  });
   await runOpenTurn(harness, project.sessionId, workId, [
     tool("b1-result-review", "record_work_review", {
       subject: "result",
@@ -147,13 +161,33 @@ test("real differing-ID App path initializes only the exact Ledger root and expo
     semanticStatus: "completed",
     officialStatus: "review",
     planCount: 1,
-    checkpointCount: expect.any(Number),
+    checkpointCount: 13,
     resultCount: 1,
     reviewCount: 3,
   });
   expect(official.dispositionCount).toBeGreaterThanOrEqual(4);
   expect(official.bindingCount).toBeGreaterThanOrEqual(7);
   expect(official.closeoutCount).toBeGreaterThanOrEqual(1);
+  const explicitCheckpoint = official.children.filter(({ body }) =>
+    body.schema === "butler.btcc-project-work-checkpoint.v1",
+  ).find(({ body }) =>
+    body.checkpoint?.publicSummary === "The exact public fact was observed.",
+  );
+  expect(explicitCheckpoint?.body.checkpoint).toMatchObject({
+    actionProgress: [{ actionKey: "verify_public_fact", status: "done" }],
+    nextStep: "Review the result and completion.",
+  });
+  const currentCheckpointId = official.manifest.latestCheckpointRevisionId;
+  expect(currentCheckpointId).toMatch(/^guided-checkpoint-/u);
+  const currentCheckpoint = official.children.find(({ record, body }) =>
+    record.id === currentCheckpointId &&
+    body.schema === "butler.btcc-project-work-checkpoint.v1",
+  );
+  expect(currentCheckpoint?.body.checkpoint).toMatchObject({
+    checkpointRevisionId: currentCheckpointId,
+    revision: official.manifest.checkpointRevision,
+    stage: official.manifest.currentStage,
+  });
   expect(official.manifest.scope).toEqual({
     appProjectId: project.appProjectId,
     ledgerProjectId: project.ledgerProjectId,
@@ -202,8 +236,14 @@ test("one real App Turn physically replays one canonical occurrence and rejects 
   let firstWorkId = "";
   let turnId = "";
   let planCallId = "";
+  let initialPlanPayload: Record<string, any> | undefined;
+  let laterCheckpointPayload: Record<string, any> | undefined;
   let replayPayload: Record<string, any> | undefined;
   let conflictPayload: Record<string, any> | undefined;
+  let beforeReplayCardinality: ProjectCardinality | undefined;
+  let afterReplayCardinality: ProjectCardinality | undefined;
+  let ledgerBeforeReplay = "";
+  let ledgerAfterReplay = "";
   let ledgerBeforeConflict = "";
   let ledgerAfterConflict = "";
   let callbackError = "";
@@ -224,23 +264,43 @@ test("one real App Turn physically replays one canonical occurrence and rejects 
         });
       },
       (request) => {
-        expect(latestToolPayload(request, "replace_work_plan")).toMatchObject({
+        initialPlanPayload = latestToolPayload(request, "replace_work_plan");
+        expect(initialPlanPayload).toMatchObject({
           output: { work: { work_id: firstWorkId, current_stage: "planning" } },
         });
+        return tool("replay-later-checkpoint", "record_work_checkpoint", {
+          action_updates: [{ action_key: "one", status: "active" }],
+          public_summary: "Later canonical progress distinguishes replay.",
+          next_step: "Replay the older Plan occurrence.",
+        });
+      },
+      async (request) => {
+        laterCheckpointPayload = latestToolPayload(request, "record_work_checkpoint");
         try {
           planCallId = harness.forgetGuidedToolCall(turnId, "replace_work_plan");
         } catch (error) {
           callbackError = error instanceof Error ? error.message : String(error);
           return finalText();
         }
+        beforeReplayCardinality = await projectCardinality(harness, project.ledgerProjectId, {
+          workId: firstWorkId,
+          operationId: planCallId,
+        });
+        ledgerBeforeReplay = readLedger(harness.ledgerRoot(project.ledgerProjectId));
         return tool("replay-plan", "replace_work_plan", {
           objective: "First replayable Work",
           actions: [{ action_key: "one", dependency_keys: [] }],
           checks: ["one"],
         });
       },
-      (request) => {
+      async (request) => {
         replayPayload = latestToolPayload(request, "replace_work_plan");
+        ledgerAfterReplay = readLedger(harness.ledgerRoot(project.ledgerProjectId));
+        afterReplayCardinality = await projectCardinality(
+          harness,
+          project.ledgerProjectId,
+          { workId: firstWorkId, operationId: planCallId },
+        );
         ledgerBeforeConflict = readLedger(harness.ledgerRoot(project.ledgerProjectId));
         harness.tamperProjectOccurrenceRequest(planCallId);
         expect(harness.forgetGuidedToolCall(turnId, "replace_work_plan")).toBe(planCallId);
@@ -260,22 +320,47 @@ test("one real App Turn physically replays one canonical occurrence and rejects 
   });
   expect(first.summary).toMatchObject({ handled: 0, interrupted: 1 });
   expect(turnIdFrom(first.accepted.body)).toBe(turnId);
+  expect(initialPlanPayload).toMatchObject({
+    output: { work: { actions: [{ action_key: "one", status: "pending" }] } },
+  });
+  expect(laterCheckpointPayload).toMatchObject({
+    output: { work: { actions: [{ action_key: "one", status: "active" }] } },
+  });
   expect(replayPayload).toMatchObject({
     ok: true,
-    output: { work: { work_id: firstWorkId, current_stage: "planning" } },
+    output: {
+      work: {
+        work_id: firstWorkId,
+        current_stage: "planning",
+        actions: [{ action_key: "one", status: "active" }],
+      },
+    },
   });
+  expect(replayPayload?.output?.work?.actions).not.toEqual(
+    initialPlanPayload?.output?.work?.actions,
+  );
+  expect(replayPayload?.output?.work).toEqual(laterCheckpointPayload?.output?.work);
+  expect(beforeReplayCardinality).toMatchObject({
+    occurrenceCount: 1,
+    planCount: 1,
+    checkpointCount: 3,
+  });
+  expect(beforeReplayCardinality?.recordCount).toBeGreaterThan(0);
+  expect(beforeReplayCardinality?.ledgerEntryCount).toBeGreaterThan(0);
+  expect(ledgerAfterReplay).toBe(ledgerBeforeReplay);
+  expect(afterReplayCardinality).toEqual(beforeReplayCardinality);
   expect(conflictPayload).toMatchObject({
     ok: false,
     error: { code: "work_update_rejected" },
   });
   expect(callbackError).toBe("");
   expect(ledgerAfterConflict).toBe(ledgerBeforeConflict);
-  const beforeReplay = await inspectOfficialWork(
+  const afterConflict = await inspectOfficialWork(
     harness.ledgerRoot(project.ledgerProjectId),
     firstWorkId,
   );
-  expect(beforeReplay.planCount).toBe(1);
-
+  expect(afterConflict.planCount).toBe(1);
+  expect(afterConflict.checkpointCount).toBe(3);
 }, 30_000);
 
 test("a later real App Work atomically abandons the prior Project semantic authority", async () => {
@@ -422,6 +507,44 @@ let openTurnIndex = 0;
 
 function readLedger(root: string): string {
   return readFileSync(join(root, "ledger.jsonl"), "utf8");
+}
+
+type ProjectCardinality = {
+  occurrenceCount: number;
+  planCount: number;
+  checkpointCount: number;
+  recordCount: number;
+  ledgerEntryCount: number;
+};
+
+async function projectCardinality(
+  harness: PublicParityHarness,
+  ledgerProjectId: string,
+  input: { workId: string; operationId?: string },
+): Promise<ProjectCardinality> {
+  const root = harness.ledgerRoot(ledgerProjectId);
+  const official = await inspectOfficialWork(root, input.workId);
+  const occurrenceDirectory = join(
+    harness.root,
+    "runtime",
+    "btcc-project-ledger-effects-v2",
+    "occurrences",
+  );
+  const occurrenceCount = input.operationId
+    ? readdirSync(occurrenceDirectory).filter((name) => {
+        const occurrence = JSON.parse(
+          readFileSync(join(occurrenceDirectory, name), "utf8"),
+        ) as { operationIdentity?: { id?: string } };
+        return occurrence.operationIdentity?.id === input.operationId;
+      }).length
+    : 0;
+  return {
+    occurrenceCount,
+    planCount: official.planCount,
+    checkpointCount: official.checkpointCount,
+    recordCount: official.index.records.length,
+    ledgerEntryCount: readLedger(root).trim().split("\n").length,
+  };
 }
 
 function track(harness: PublicParityHarness): PublicParityHarness {
