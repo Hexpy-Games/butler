@@ -1,7 +1,10 @@
 import type {
-  AttachToolResultInput,
   DurableWorkActionProgress,
   DurableWorkContext,
+  DurableWorkCheckpoint,
+  DurableWorkDisposition,
+  DurableWorkPlan,
+  DurableWorkReview,
   DurableWorkToolResultRef,
   DurableWorkView,
   RecordWorkDispositionCommand,
@@ -20,10 +23,79 @@ export type ProjectWorkOperationIdentity = {
     | "mutation_call"
     | "binding_revision"
     | "closeout_diagnostic"
-    | "abandonment";
+    | "abandonment"
+    | "legacy_import";
   id: string;
   requestSha256: string;
   mutationCallId?: string;
+};
+
+export type ProjectWorkLegacySnapshot = {
+  sourceKind: "sqlite_r3" | "raw_r2";
+  sourceProgramId: string;
+  /** Complete Session locator set used by the legacy source selector. */
+  sourceProgramIds: string[];
+  sourceIdentity: string;
+  sourceSha256: string;
+  work: DurableWorkView;
+  plans: DurableWorkPlan[];
+  checkpoints: Array<{
+    checkpoint: DurableWorkCheckpoint;
+    fromResultSequence: number;
+    toResultSequence: number;
+  }>;
+  reviews: DurableWorkReview[];
+  dispositions: Array<{
+    disposition: DurableWorkDisposition;
+    historicalView: DurableWorkView;
+    effectWatermark: string;
+  }>;
+  bindings: Array<{
+    bindingRevisionId: string;
+    turnId: string;
+    revision: number;
+    boundAt: string;
+    isCurrent: boolean;
+  }>;
+  turns: Array<{
+    turnId: string;
+    sessionId: string;
+    originalMessageId: string;
+    originalMessage: string;
+    semanticState: string;
+    executionFence: number;
+  }>;
+};
+
+export type ProjectWorkLegacyObservation = {
+  sourceProgramId: string;
+  sourceSha256: string;
+  workId: string;
+};
+
+/** Owns the bounded SQLite snapshot and post-promotion fixed-point cleanup. */
+export type ProjectWorkLegacyRuntime = {
+  readImportObservation(input: {
+    scope: WorkTurnScope;
+    resolvedScope: ResolvedProjectWorkScope;
+  }): ProjectWorkLegacyObservation | null;
+  captureStableSnapshot(input: {
+    scope: WorkTurnScope;
+    resolvedScope: ResolvedProjectWorkScope;
+  }): ProjectWorkLegacySnapshot | null | Promise<ProjectWorkLegacySnapshot | null>;
+  /** Re-read non-SQLite legacy input after publication and before cleanup. */
+  revalidateBeforeObservation(input: {
+    scope: WorkTurnScope;
+    resolvedScope: ResolvedProjectWorkScope;
+    snapshot: ProjectWorkLegacySnapshot;
+  }): Promise<void>;
+  observeImported(input: {
+    scope: WorkTurnScope;
+    resolvedScope: ResolvedProjectWorkScope;
+    snapshot: ProjectWorkLegacySnapshot;
+    canonicalHeadSha256: string;
+    verifyResults(): void;
+  }): void;
 };
 
 export type ProjectWorkRuntimeProjection = {
@@ -65,6 +137,7 @@ export type ProjectWorkRuntimeProjection = {
     sessionHeadWorkId: string;
     ledgerProjectId: string;
     canonicalHeadSha256: string;
+    legacyImportClaimWorkId?: string;
   }): Promise<void>;
 };
 
@@ -80,7 +153,11 @@ export type ProjectWorkToolResultEvidence = {
 
 /** SQLite remains the raw-result authority and receives only a thin Project link. */
 export type ProjectWorkResultRuntime = {
-  readCommittedResult(input: AttachToolResultInput): ProjectWorkToolResultEvidence;
+  readCommittedResult(input: {
+    turnId: string;
+    sessionId: string;
+    toolCallId: string;
+  }): ProjectWorkToolResultEvidence;
   observeCanonicalResult(input: {
     work: DurableWorkView;
     scope: ResolvedProjectWorkScope;
@@ -94,4 +171,5 @@ export type CreateProjectWorkStoreInput = {
   scope: ResolvedProjectWorkScope;
   runtimeProjection: ProjectWorkRuntimeProjection;
   resultRuntime: ProjectWorkResultRuntime;
+  legacyRuntime?: ProjectWorkLegacyRuntime;
 };
