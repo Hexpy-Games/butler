@@ -5,9 +5,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   admitProjectLedgerEffectOccurrence,
+  appendProjectLedgerEffectAttempt,
   decodeProjectLedgerEffectOccurrence,
   ProjectLedgerEffectConflictError,
   ProjectLedgerEffectEvidenceUnsupportedError,
+  readProjectLedgerEffectOccurrence,
   type ProjectLedgerLogicalOperationKind,
 } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/external-effect-occurrence.ts";
 
@@ -36,6 +38,31 @@ test("standalone admission replays the same logical content and types different 
     .toThrow(ProjectLedgerEffectConflictError);
   const files = readdirSync(join(fixture.butlerData, "runtime", "btcc-project-ledger-effects-v2", "occurrences"));
   expect(files).toHaveLength(1);
+});
+
+test("public occurrence access reads exact evidence and appends one deterministic numbered attempt", () => {
+  const fixture = admissionFixture("append");
+  expect(readProjectLedgerEffectOccurrence(fixture)).toBeNull();
+  const admitted = admitProjectLedgerEffectOccurrence(fixture);
+  expect(readProjectLedgerEffectOccurrence(fixture)).toEqual(admitted);
+  const appended = appendProjectLedgerEffectAttempt({
+    ...fixture,
+    afterAttemptNumber: 1,
+    expectedBase: head(fixture.ledgerRoot, "second-base"),
+    targetPreconditions: [{ ...fixture.targetPreconditions[0], id: "REF-2",
+      path: "project-ledger/projects/ledger-project/references/ref-2.md" }],
+  });
+  expect(appended.attempts.map(({ number }) => number)).toEqual([1, 2]);
+  expect(appended.attempts[1]!.publicationId).not.toBe(admitted.attempts[0]!.publicationId);
+  expect(() => appendProjectLedgerEffectAttempt({
+    ...fixture,
+    afterAttemptNumber: 1,
+    expectedBase: head(fixture.ledgerRoot, "second-base"),
+    targetPreconditions: appended.attempts[1]!.targetPreconditions,
+  })).toThrow(ProjectLedgerEffectConflictError);
+  expect(readProjectLedgerEffectOccurrence(fixture)).toEqual(appended);
+  expect(() => readProjectLedgerEffectOccurrence({ ...fixture, requestSha256: hash("other") }))
+    .toThrow(ProjectLedgerEffectConflictError);
 });
 
 test("all governed logical operation kinds admit while unknown kinds fail closed", () => {
