@@ -5,9 +5,12 @@ export async function requireObservedProjectWorkReceipt(input: {
   context: ProjectWorkWriteContext;
   identity: ProjectWorkOperationIdentity;
   expectedTarget: { id: string; kind: string; parentId: string | null };
+  recoverProjection?: boolean;
 }): Promise<void> {
-  const outcome = await input.context.publish(input.identity, () =>
-    Promise.resolve(null),
+  const outcome = await input.context.publish(
+    input.identity,
+    () => Promise.resolve(null),
+    input.recoverProjection,
   );
   if (
     outcome.skipped ||

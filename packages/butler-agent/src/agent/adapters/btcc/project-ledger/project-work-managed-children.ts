@@ -70,18 +70,31 @@ function validateIdentity(child: ProjectWorkChild): void {
   if (
     child.schema !== "butler.btcc-project-work-binding.v1" &&
     child.schema !== "butler.btcc-project-work-closeout-diagnostic.v1" &&
-    identity.kind !== "mutation_call"
+    identity.kind !== "mutation_call" &&
+    identity.kind !== "legacy_import"
   )
     invalid();
-  if (child.schema === "butler.btcc-project-work-plan.v1")
+  if (
+    child.schema === "butler.btcc-project-work-plan.v1" &&
+    identity.kind !== "legacy_import"
+  )
     exactId(child.plan.planRevisionId, "plan", identity.id);
-  if (child.schema === "butler.btcc-project-work-review.v1")
+  if (
+    child.schema === "butler.btcc-project-work-review.v1" &&
+    identity.kind !== "legacy_import"
+  )
     exactId(child.review.reviewRevisionId, "review", identity.id);
-  if (child.schema === "butler.btcc-project-work-disposition.v1")
+  if (
+    child.schema === "butler.btcc-project-work-disposition.v1" &&
+    identity.kind !== "legacy_import"
+  )
     exactId(child.disposition.dispositionRevisionId, "disposition", identity.id);
   if (child.schema === "butler.btcc-project-work-result-reference.v1")
     exactId(child.result.resultRef, "result", child.result.toolCallId);
-  if (child.schema === "butler.btcc-project-work-checkpoint.v1") {
+  if (
+    child.schema === "butler.btcc-project-work-checkpoint.v1" &&
+    identity.kind !== "legacy_import"
+  ) {
     const prefix = `${identity.id}\0`;
     const suffix = child.checkpointIdentity.slice(prefix.length);
     if (
