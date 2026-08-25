@@ -38,6 +38,7 @@ import { probeProjectWorkServiceReplay } from "./project-work-service-replay.ts"
 import { safeProjectWorkPublicOperation } from "./project-work-errors.ts";
 import { attachProjectWorkToolResult } from "./project-work-result-attachment.ts";
 import { observeProjectLedgerHead } from "./observe-project-ledger.ts";
+import { importLegacyProjectWork } from "./project-work-legacy-import.ts";
 
 export function createProjectWorkStore(
   input: CreateProjectWorkStoreInput,
@@ -82,9 +83,9 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
     };
   }
 
-  importOpenLegacyWork(): Promise<never> {
+  importOpenLegacyWork(scope: WorkTurnScope) {
     return safeProjectWorkPublicOperation(() =>
-      Promise.reject(new Error("project_work_legacy_import_required")),
+      importLegacyProjectWork(this, scope),
     );
   }
 
@@ -169,6 +170,7 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
     prepareUpdates: Parameters<
       typeof publishProjectWorkRecords
     >[0]["prepareUpdates"],
+    recoverProjection = true,
   ) {
     const outcome = await publishProjectWorkRecords({
       butlerData: this.input.butlerData,
@@ -176,8 +178,8 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
       identity,
       prepareUpdates,
     });
-    if (!outcome.skipped)
-      await this.recoverPublicationProjection(outcome.targets);
+    if (!outcome.skipped && recoverProjection)
+      await this.recoverPublicationProjection(outcome.targets, identity);
     return outcome;
   }
   async afterMutation(
@@ -188,6 +190,7 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
   }
   private async recoverPublicationProjection(
     targets: Array<{ id: string; kind: string; parentId: string | null }>,
+    identity: ProjectWorkOperationIdentity,
   ) {
     const workIds = new Set(
       targets.flatMap((target) =>
@@ -198,10 +201,11 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
             : [],
       ),
     );
-    await this.observeStableRuntimeProjection([...workIds]);
+    await this.observeStableRuntimeProjection([...workIds], identity);
   }
   private async observeStableRuntimeProjection(
     workIds: string[],
+    identity: ProjectWorkOperationIdentity,
     attempt = 1,
   ): Promise<void> {
     const before = await observeProjectLedgerHead(this.input.scope.ledgerRoot);
@@ -226,7 +230,7 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
     const after = await observeProjectLedgerHead(this.input.scope.ledgerRoot);
     if (before.sourceSha256 !== after.sourceSha256) {
       if (attempt >= 3) invalid("project_work_snapshot_unstable");
-      return this.observeStableRuntimeProjection(workIds, attempt + 1);
+      return this.observeStableRuntimeProjection(workIds, identity, attempt + 1);
     }
     for (const sessionId of sessionIds) {
       const head = heads.get(sessionId)!;
@@ -254,6 +258,9 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
         sessionHeadWorkId: head.view.workId,
         ledgerProjectId: this.input.scope.ledgerProjectId,
         canonicalHeadSha256: after.sourceSha256,
+        ...(identity.kind === "legacy_import" && workIds.length === 1
+          ? { legacyImportClaimWorkId: workIds[0] }
+          : {}),
       });
     }
   }

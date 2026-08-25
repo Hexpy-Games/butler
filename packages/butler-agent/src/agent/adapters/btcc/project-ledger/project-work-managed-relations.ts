@@ -110,6 +110,11 @@ function validateCheckpointRole(
   children: ProjectWorkChild[],
 ): void {
   const identity = child.operationIdentity;
+  if (identity.kind === "legacy_import") {
+    if (child.checkpointIdentity !== child.checkpoint.checkpointRevisionId)
+      invalid();
+    return;
+  }
   const siblings = children.filter(
     (candidate) =>
       candidate !== child &&
@@ -195,8 +200,7 @@ function validateReview(
       (!review.boundPlanRevisionId || review.boundResultRefs.length !== 0)) ||
     (review.subject === "result" && review.boundPlanRevisionId !== undefined) ||
     (review.subject !== "plan" && !review.boundActionProgress)
-  )
-    invalid();
+  ) invalid();
   if (!review.boundResultReviewRevisionId) {
     if (review.subject === "completion") invalid();
     return;

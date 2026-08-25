@@ -55,7 +55,9 @@ export function assertProjectWorkProjectionOwnership(
     if (row && (
       row.session_id !== work.sessionId || row.scope_kind !== "project" ||
       row.scope_ref !== work.scope.projectRef ||
-      row.ledger_project_id !== input.ledgerProjectId
+      (row.ledger_project_id === null
+        ? input.legacyImportClaimWorkId !== work.workId
+        : row.ledger_project_id !== input.ledgerProjectId)
     )) conflict();
   }
 

@@ -49,6 +49,7 @@ export interface ProjectWorkWriteContext {
   publish(
     identity: ProjectWorkOperationIdentity,
     prepareUpdates: () => Promise<ProjectLedgerRecordUpdate[] | null>,
+    recoverProjection?: boolean,
   ): Promise<{
     replayed: boolean;
     skipped: boolean;
