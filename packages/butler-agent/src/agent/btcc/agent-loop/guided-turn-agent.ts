@@ -24,7 +24,7 @@ import { guidedContinuationBudget } from "./guided-continuation-budget.ts";
 import { guidedTurnResult } from "./guided-turn-result.ts";
 import { createGuidedModelRouteRuntime } from "./guided-turn-route-events.ts";
 import { createGuidedDelegationTurnRelease, createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
-import { createGuidedRoundToolSurfaceResolver } from "./guided-round-tool-surface.ts";
+import { createActiveDelegationAdmissionGuard, createGuidedRoundToolSurfaceResolver } from "./guided-round-tool-surface.ts";
 import { renderPhaseScopedGuidedTurnRequest } from "./phase-scoped-memory-projection.ts";
 import { createFileStoreVerifiedImagePayloadPort } from "../../image-attachment/index.ts";
 import { createGuidedAskFirstProgress, createGuidedAuthorityProjection, createGuidedOperationalProgressCapture } from "./guided-operational-progress.ts";
@@ -102,6 +102,7 @@ export function createProductionGuidedTurnAgent(
       const visibleTools = subsessionResultEvidence ? directSynthesisToolDefinitions(phasePolicy.providerTools) : phasePolicy.providerTools;
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
       const describedToolIds = new Set<string>();
+      const activeDelegationAdmission = createActiveDelegationAdmissionGuard();
       const effectService = createGuidedEffectService(input.effectJournal, input.guidedEffectFaultHook ? { faultHook: input.guidedEffectFaultHook } : {});
       const execute = createButlerToolExecutor({
         butlerHome: input.butlerHome,
@@ -255,6 +256,9 @@ export function createProductionGuidedTurnAgent(
             turnId: turn.turnId, tools: visibleTools, workScope, durableWork: input.durableWork,
             requiredToolNames: new Set(policy.requiredNativeTools), toolJournal: input.toolJournal, effectJournal: input.effectJournal,
             projectWorkSurface: phasePolicy.mode === "phase_minimal",
+            parentSessionId: turn.sessionId,
+            subsessionDelegation: input.subsessionDelegation,
+            onActiveDelegationAdmission: activeDelegationAdmission.observe,
           })
         : undefined;
       const directionAware = withStewardDirection({ modelRound, safeBoundary: stewardSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: closeout.reviewFinalCandidate });
@@ -299,13 +303,7 @@ export function createProductionGuidedTurnAgent(
         ...authorityProjection.loopCallbacks,
         finalTextFromToolResult: delegationRelease.finalTextFromToolResult(authorityProjection.loopCallbacks.finalTextFromToolResult),
         reviewFinalCandidate: directionAware.reviewFinalCandidate,
-        executeTool: async (call) => await toolCalls.executeTool({
-          name: call.name,
-          args: call.arguments,
-          rawArguments: call.rawArguments,
-          providerCallId: call.id,
-          signal: call.signal,
-        }),
+        executeTool: activeDelegationAdmission.execute(toolCalls.executeTool),
       };
       const candidate = await runGuidedAgentLoopWithOperationalReport({
         options: loopOptions,
