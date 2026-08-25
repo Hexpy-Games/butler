@@ -22,6 +22,10 @@ const ACTIVE_DELEGATION_TOOLS = new Set([
   "steer_steward",
   "cancel_steward",
 ]);
+const ACTIVE_RELATION_CONTROL_TOOLS = new Set([
+  "steer_steward",
+  "cancel_steward",
+]);
 const EFFECT_FREE_TOOL_NAMES = new Set(
   BUTLER_TOOLS
     .filter((tool) => tool.effectBoundary === "none")
@@ -61,6 +65,8 @@ export function createGuidedRoundToolSurfaceResolver(input: {
       if (activeDelegationAdmission) {
         return isActiveDelegationAdmissionTool(tool.name);
       }
+      if (ACTIVE_RELATION_CONTROL_TOOLS.has(tool.name) &&
+        activeDelegations.length === 0) return false;
       if (delegationReady) return tool.name === DELEGATION_TOOL;
       if (tool.name === DISPOSITION_TOOL) {
         return input.projectWorkSurface === false || dispositionReady;

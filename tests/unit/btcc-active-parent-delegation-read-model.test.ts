@@ -50,6 +50,20 @@ test("active parent delegation read model validates exact terminal identities", 
     child_turn_id: fixture.childTurnId,
   })]);
 
+  fixture.setChildTurn(null);
+  expect(await activeParentDelegations(fixture.dependencies, {
+    parentSessionId: fixture.relation.parent_session_id,
+  })).toEqual([expect.objectContaining({
+    relation: fixture.relation,
+    child_turn_id: fixture.childTurnId,
+  })]);
+  fixture.setChildTurn(fixture.childTurn);
+
+  fixture.childTurn.semanticState = "delivery_committed";
+  expect(await activeParentDelegations(fixture.dependencies, {
+    parentSessionId: fixture.relation.parent_session_id,
+  })).toEqual([]);
+
   fixture.childTurn.semanticState = "delivered";
   expect(await activeParentDelegations(fixture.dependencies, {
     parentSessionId: fixture.relation.parent_session_id,
@@ -126,6 +140,28 @@ test("active relation plus Work read failure stays on the restricted surface", a
   expect([...names].sort()).toEqual([
     "cancel_steward", "read_file", "start_work", "steer_steward",
   ]);
+});
+
+test("delivery-committed child is not active and relation controls are not advertised", async () => {
+  const fixture = delegationFixture();
+  fixture.childTurn.semanticState = "delivery_committed";
+  const work = reviewedWork("work-active", "plan-active", "review-active");
+  const resolve = surfaceResolver({
+    durableWork: {
+      boundWorkForTurn: async () => null,
+      loadContext: async () => ({
+        work,
+        originalRequest: { turnId: "origin", messageId: "message", content: "active" },
+        resultFacts: [],
+      }),
+    } as unknown as DurableWorkService,
+    active: (input) => activeParentDelegations(fixture.dependencies, input),
+  });
+  const names = (await resolve()).names;
+  expect(names.has("steer_steward")).toBe(false);
+  expect(names.has("cancel_steward")).toBe(false);
+  expect(names.has("start_work")).toBe(true);
+  expect(names.has("read_file")).toBe(true);
 });
 
 test("an exact reviewed Work is selected among unrelated active siblings", async () => {
@@ -306,11 +342,13 @@ function delegationFixture() {
   const relation = relationFixture("relation-active", "child-session");
   const childTurnId = "child-turn";
   const packet = packetFixture(relation);
-  let childTurn = {
+  const admittedChildTurn = {
     turnId: childTurnId,
     sessionId: relation.child_session_id,
-    semanticState: "admitted" as "admitted" | "delivered" | "cancelled",
+    semanticState: "admitted" as
+      "admitted" | "delivery_committed" | "delivered" | "cancelled",
   };
+  let childTurn: typeof admittedChildTurn | null = admittedChildTurn;
   let result: StewardResultEnvelope | null = null;
   let storedResultId: string | null = null;
   let taskId = packet.task_id;
@@ -334,10 +372,10 @@ function delegationFixture() {
     relation,
     packet,
     childTurnId,
-    childTurn,
+    childTurn: admittedChildTurn,
     store,
     dependencies,
-    setChildTurn(value: typeof childTurn) { childTurn = value; },
+    setChildTurn(value: typeof admittedChildTurn | null) { childTurn = value; },
     setResult(value: StewardResultEnvelope, identity: string) {
       result = value;
       storedResultId = identity;
