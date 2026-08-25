@@ -109,6 +109,7 @@ export function childProjectContextBinding(
   if (context?.project_id !== appProjectId) {
     throw new Error("subsession_project_context_mismatch");
   }
+  assertExactChildLedgerProjectIdentity(parent);
   return {
     sessionBinding: {
       projectId: appProjectId,

@@ -27,6 +27,8 @@ import { DeliveryGuard } from
   "../../packages/butler-agent/src/interfaces/transport/delivery-guard.ts";
 import { SessionBindingStore } from
   "../../packages/butler-agent/src/test-support/harness/session-store.ts";
+import type { DelegationPacket, DelegationRequest } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/contracts.ts";
 
 const roots: string[] = [];
 
@@ -157,6 +159,23 @@ test("real App delegation preserves distinct child identities through Steward Wo
       "work.md",
     ))).toBe(true);
     expect(existsSync(join(root, "project-ledger", "projects", appProjectId))).toBe(false);
+
+    const packetDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), {
+      readonly: true,
+    });
+    const packetJson = packetDb.query<{ packet_json: string }, []>(`
+      SELECT packet_json FROM btcc_subsession_delegations LIMIT 1
+    `).get()?.packet_json;
+    packetDb.close();
+    if (!packetJson) throw new Error("persisted reviewed delegation packet missing");
+    const packet = JSON.parse(packetJson) as DelegationPacket;
+    const parentBinding = bindings.getBySessionId(packet.parent_session_id);
+    if (!parentBinding) throw new Error("persisted parent binding missing");
+    const beforeRejected = sideEffectCounts(root, bindings, queue, workspacePath);
+    bindings.upsert({ ...parentBinding, ledgerProjectId: undefined });
+    await expect(composition.subsessions.delegate(redelegationRequest(packet)))
+      .rejects.toThrow("subsession_child_ledger_project_binding_missing");
+    expect(sideEffectCounts(root, bindings, queue, workspacePath)).toEqual(beforeRejected);
   } finally {
     app.stop();
     await composition.host.close();
@@ -225,6 +244,63 @@ function delegationRounds(): ModelRoundPort & {
 
 function toolCall(id: string, name: string, args: Record<string, unknown>) {
   return { id, name, arguments: args, rawArguments: JSON.stringify(args) };
+}
+
+function redelegationRequest(packet: DelegationPacket): DelegationRequest {
+  return {
+    parent_session_id: packet.parent_session_id,
+    parent_turn_id: packet.parent_turn_id,
+    anchor_message_id: "missing-ledger-redelegation-anchor",
+    parent_access_mode: packet.access_and_budget_policy.access_mode,
+    execution_mode: packet.execution_mode,
+    safe_title: "Reject missing Ledger identity",
+    objective: packet.objective,
+    acceptance_criteria: [...packet.acceptance_criteria],
+    task_or_plan_refs: [...packet.task_or_plan_refs],
+    constraints_and_non_goals: [...packet.constraints_and_non_goals],
+    allowed_tools_and_effects: [...packet.allowed_tools_and_effects],
+    mutation_scope: [...packet.mutation_scope],
+    parent_work_ref: packet.parent_work_ref,
+    model_ref: packet.model_ref,
+    reasoning_effort: packet.reasoning_effort,
+  };
+}
+
+function sideEffectCounts(
+  root: string,
+  bindings: SessionBindingStore,
+  queue: NativeInboundQueue,
+  workspacePath: string,
+) {
+  const db = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
+  const relations = db.query<{ count: number }, []>(
+    "SELECT COUNT(*) AS count FROM btcc_session_relations",
+  ).get()?.count ?? 0;
+  const packets = db.query<{ count: number }, []>(
+    "SELECT COUNT(*) AS count FROM btcc_subsession_delegations",
+  ).get()?.count ?? 0;
+  db.close();
+  return {
+    childBindings: bindings.listSessions().filter((binding) => binding.role === "steward").length,
+    relations,
+    packets,
+    queueRecords: ["pending", "processing", "processed", "failed"].reduce((count, state) => {
+      const directory = join(queue.rootDir, state);
+      return count + (existsSync(directory) ? readdirSync(directory).length : 0);
+    }, 0),
+    gitWorktrees: gitOutput(workspacePath, ["worktree", "list", "--porcelain"]),
+  };
+}
+
+function gitOutput(workspacePath: string, args: string[]): string {
+  const result = Bun.spawnSync({
+    cmd: ["git", ...args],
+    cwd: workspacePath,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (result.exitCode !== 0) throw new Error(new TextDecoder().decode(result.stderr));
+  return new TextDecoder().decode(result.stdout);
 }
 
 async function postJson<T>(
