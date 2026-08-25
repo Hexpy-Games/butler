@@ -149,19 +149,9 @@ test("child project binding never synthesizes a missing Ledger identity", () => 
     optional_refs: [],
   }).project_context;
 
-  expect(childProjectContextBinding(context, {
+  expect(() => childProjectContextBinding(context, {
     projectId: "app-project",
-  })).toEqual({
-    sessionBinding: {
-      projectId: "app-project",
-      appProjectId: "app-project",
-    },
-    metadata: {
-      project_id: "app-project",
-      mandatory_hot_cache_refs: [],
-      optional_hot_cache_refs: [],
-    },
-  });
+  })).toThrow("subsession_child_ledger_project_binding_missing");
   expect(childProjectContextBinding(undefined, {})).toBeUndefined();
 });
 

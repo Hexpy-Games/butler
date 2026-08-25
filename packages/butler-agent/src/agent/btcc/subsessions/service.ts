@@ -103,6 +103,10 @@ export function createSubsessionDelegationService(
       if (normalizedRequest.model_ref !== parent.modelRef) throw new Error("subsession_parent_model_mismatch");
       const parentReasoning = parent.metadata?.reasoning_effort;
       if (typeof parentReasoning === "string" && parentReasoning !== normalizedRequest.reasoning_effort) throw new Error("subsession_parent_reasoning_mismatch");
+      const { projectContext, inheritedProject } = await snapshotChildProjectContext({
+        parentSessionId: normalizedRequest.parent_session_id, parentTurnId: normalizedRequest.parent_turn_id, parent,
+        turns: input.parentTurns, documents: input.contextDocuments,
+      });
       const reviewed = await loadReviewedDelegationPlan(input, {
         parentSessionId: normalizedRequest.parent_session_id,
         parentTurnId: normalizedRequest.parent_turn_id,
@@ -132,10 +136,6 @@ export function createSubsessionDelegationService(
         safe_title: normalizedRequest.safe_title,
         created_at: now,
       };
-      const { projectContext, inheritedProject } = await snapshotChildProjectContext({
-        parentSessionId: normalizedRequest.parent_session_id, parentTurnId: normalizedRequest.parent_turn_id, parent,
-        turns: input.parentTurns, documents: input.contextDocuments,
-      });
       const packet = createPacket(normalizedRequest, {
         delegationId, relationId, taskId: managerialAssignmentId,
         parentWorkRef: reviewed.parent_work_ref,
