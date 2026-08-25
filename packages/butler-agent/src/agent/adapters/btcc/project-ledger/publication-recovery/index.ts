@@ -5,6 +5,7 @@ export {
 } from "./attempt-preparation.ts";
 export {
   publicationPaths,
+  readPublicationReceipt,
   type AppliedPublicationEvidence,
 } from "./evidence-codec.ts";
 export {

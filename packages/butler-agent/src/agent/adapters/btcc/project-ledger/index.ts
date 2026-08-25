@@ -13,6 +13,7 @@ export {
   reconcileProjectLedgerRecordUpdates,
 } from "./external-effect-mutation.ts";
 export { observeProjectLedgerHead } from "./observe-project-ledger.ts";
+export { createProjectWorkStore } from "./project-work-store.ts";
 export type {
   ProjectLedgerEffectReconciliation,
   ProjectLedgerEffectResult,
@@ -21,3 +22,10 @@ export type {
 export type { CanonicalLedgerRecord } from "./canonical-ledger-reader.ts";
 export type { ProjectLedgerBinding } from "./project-binding.ts";
 export type { ProjectLedgerHead } from "./runtime-types.ts";
+export type {
+  CreateProjectWorkStoreInput,
+  ProjectWorkOperationIdentity,
+  ProjectWorkResultAttachment,
+  ProjectWorkRuntimeProjection,
+  ResolvedProjectWorkScope,
+} from "./project-work-contracts.ts";
