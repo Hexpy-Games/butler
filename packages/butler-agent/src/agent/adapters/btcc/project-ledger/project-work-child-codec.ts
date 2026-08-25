@@ -55,6 +55,8 @@ export type ProjectWorkChild =
   | {
       schema: "butler.btcc-project-work-result-reference.v1";
       workId: string;
+      sessionId: string;
+      scope: { appProjectId: string; ledgerProjectId: string };
       operationIdentity: ProjectWorkOperationIdentity;
       result: DurableWorkToolResultRef & { sequence: number };
     }
@@ -103,6 +105,9 @@ export function decodeChild<T extends ProjectWorkChild["schema"]>(
     ...(expected.schema === "butler.btcc-project-work-disposition.v1"
       ? ["materialSnapshot"]
       : []),
+    ...(expected.schema === "butler.btcc-project-work-result-reference.v1"
+      ? ["sessionId", "scope"]
+      : []),
   ]);
   digestValue(value.recordSha256);
   const { recordSha256, ...semantic } = value;
@@ -113,6 +118,13 @@ export function decodeChild<T extends ProjectWorkChild["schema"]>(
   const child = object(value[key]);
   if (child[CHILD_ID_KEYS[expected.schema]] !== expected.recordId) invalid();
   validateChild(expected.schema, child);
+  if (expected.schema === "butler.btcc-project-work-result-reference.v1") {
+    textRequired(value.sessionId);
+    const scope = object(value.scope);
+    exactKeys(scope, ["appProjectId", "ledgerProjectId"]);
+    textRequired(scope.appProjectId);
+    textRequired(scope.ledgerProjectId);
+  }
   if (expected.schema === "butler.btcc-project-work-checkpoint.v1") {
     textRequired(value.checkpointIdentity);
     const window = object(value.resultWindow);

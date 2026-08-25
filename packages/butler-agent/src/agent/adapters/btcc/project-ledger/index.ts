@@ -14,6 +14,11 @@ export {
 } from "./external-effect-mutation.ts";
 export { observeProjectLedgerHead } from "./observe-project-ledger.ts";
 export { createProjectWorkStore } from "./project-work-store.ts";
+export { createExactProjectWorkResultAuthority } from "./project-work-result-reader.ts";
+export type {
+  ExactProjectWorkResultAuthority,
+  ExactProjectWorkResultIdentity,
+} from "./project-work-result-reader.ts";
 export type {
   ProjectLedgerEffectReconciliation,
   ProjectLedgerEffectResult,
@@ -25,7 +30,8 @@ export type { ProjectLedgerHead } from "./runtime-types.ts";
 export type {
   CreateProjectWorkStoreInput,
   ProjectWorkOperationIdentity,
-  ProjectWorkResultAttachment,
+  ProjectWorkResultRuntime,
+  ProjectWorkToolResultEvidence,
   ProjectWorkRuntimeProjection,
   ResolvedProjectWorkScope,
 } from "./project-work-contracts.ts";

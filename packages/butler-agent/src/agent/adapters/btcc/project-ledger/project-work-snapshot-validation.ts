@@ -254,7 +254,7 @@ function validatePointers(
     new Set(reviewRevisions).size !== reviewRevisions.length ||
     reviewRevisions.some((revision) => revision > manifest.reviewRevision) ||
     (reviewRevisions.length > 0 &&
-      Math.max(...reviewRevisions) !== manifest.reviewRevision)
+      Math.max(...reviewRevisions) > manifest.reviewRevision)
   )
     invalid();
   if (children.dispositionChild) {
@@ -285,6 +285,9 @@ function validatePointers(
       sequence !== index + 1 ||
       child.result.resultRef !==
         projectWorkRecordId("result", child.result.toolCallId) ||
+      child.sessionId !== manifest.sessionId ||
+      child.scope.appProjectId !== manifest.scope.appProjectId ||
+      child.scope.ledgerProjectId !== manifest.scope.ledgerProjectId ||
       !manifest.bindingRefs.some(
         (binding) => binding.turnId === child.result.originTurnId,
       ) ||
