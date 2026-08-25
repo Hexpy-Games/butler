@@ -6,10 +6,12 @@ import type {
   SubsessionDelegationDependencies,
   SubsessionDelegationService,
 } from "./contracts.ts";
+import { activeParentDelegations } from "./active-parent-delegation.ts";
 
 type ControlService = Pick<
   SubsessionDelegationService,
-  "steerSteward" | "cancelSteward" | "consumeStewardDirection"
+  "activeParentDelegations" | "steerSteward" | "cancelSteward" |
+    "consumeStewardDirection"
 >;
 
 export function createSubsessionControlService(
@@ -17,6 +19,9 @@ export function createSubsessionControlService(
   childQueue: NativeInboundQueue,
 ): ControlService {
   return {
+    async activeParentDelegations(parentInput) {
+      return activeParentDelegations(input, parentInput);
+    },
     async steerSteward(directionInput) {
       const instruction = requiredBoundedDirection(directionInput.instruction);
       const active = await resolveActiveRelation(input, directionInput);
@@ -78,19 +83,13 @@ async function resolveActiveRelation(
   input: SubsessionDelegationDependencies,
   selector: { parentSessionId: string; relationId?: string; safeTitle?: string },
 ): Promise<{ relation: SessionRelation; child_turn_id: string }> {
-  const candidates = input.store.relationsByParentSessionId(selector.parentSessionId)
-    .filter((relation) => !input.store.resultByRelationId(relation.relation_id))
-    .filter((relation) => !selector.relationId || relation.relation_id === selector.relationId)
-    .filter((relation) => !selector.safeTitle || relation.safe_title === selector.safeTitle);
-  const active: Array<{ relation: SessionRelation; child_turn_id: string }> = [];
-  for (const relation of candidates) {
-    const childTurnId = input.store.childTurnIdByRelationId(relation.relation_id);
-    if (!childTurnId) continue;
-    const turn = await input.parentTurns.findTurn(childTurnId);
-    if (!turn || turn.semanticState === "admitted") {
-      active.push({ relation, child_turn_id: childTurnId });
-    }
-  }
+  const active = (await activeParentDelegations(input, {
+    parentSessionId: selector.parentSessionId,
+  }))
+    .filter(({ relation }) =>
+      !selector.relationId || relation.relation_id === selector.relationId)
+    .filter(({ relation }) =>
+      !selector.safeTitle || relation.safe_title === selector.safeTitle);
   if (active.length === 0) throw new Error("active_steward_relation_not_found");
   if (active.length !== 1) throw new Error("active_steward_relation_ambiguous");
   return active[0]!;

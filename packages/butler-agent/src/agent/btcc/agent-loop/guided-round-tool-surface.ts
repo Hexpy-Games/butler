@@ -3,15 +3,34 @@ import type { GuidedToolJournal } from "../ports/index.ts";
 import { RoundToolSurfaceError } from "../ports/model-round.ts";
 import type { DurableWorkService, WorkTurnScope } from "../work/index.ts";
 import type { DurableWorkView } from "../work/index.ts";
-import type { BtccAgentLoopToolDefinition } from "./contracts.ts";
+import type {
+  DelegationPacket,
+  SubsessionDelegationService,
+} from "../subsessions/index.ts";
+import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
+import type { ButlerToolExecutor } from "../../tools/butler-tools.ts";
+import type { BtccAgentLoopInput, BtccAgentLoopToolDefinition } from "./contracts.ts";
 import { projectDurableWorkToolSurface } from "./durable-work-tool-surface.ts";
-import { safeBoundWork, safeLoadWorkContext } from "./guided-work-runtime.ts";
 import {
   createRoundToolSurfaceSnapshot,
   type BtccRoundToolSurfaceSnapshot,
 } from "./round-tool-surface.ts";
 const DISPOSITION_TOOL = "record_work_disposition";
 const DELEGATION_TOOL = "delegate_to_steward";
+const ACTIVE_DELEGATION_TOOLS = new Set([
+  "start_work",
+  "steer_steward",
+  "cancel_steward",
+]);
+const ACTIVE_RELATION_CONTROL_TOOLS = new Set([
+  "steer_steward",
+  "cancel_steward",
+]);
+const EFFECT_FREE_TOOL_NAMES = new Set(
+  BUTLER_TOOLS
+    .filter((tool) => tool.effectBoundary === "none")
+    .map((tool) => tool.name),
+);
 const MAX_EFFECT_RECORDS = 50;
 
 export function createGuidedRoundToolSurfaceResolver(input: {
@@ -23,12 +42,31 @@ export function createGuidedRoundToolSurfaceResolver(input: {
   workScope: WorkTurnScope;
   effectJournal: Pick<GuidedEffectJournal, "listForWork">;
   projectWorkSurface?: boolean;
+  parentSessionId?: string;
+  subsessionDelegation?: Pick<SubsessionDelegationService, "activeParentDelegations">;
+  onActiveDelegationAdmission?: (active: boolean) => void;
 }): () => Promise<BtccRoundToolSurfaceSnapshot> {
   return async () => {
-    const { bound, work } = await currentWork(input);
-    const dispositionReady = await canExposeDisposition(input, work);
+    const activeDelegations = input.parentSessionId && input.subsessionDelegation
+      ? await input.subsessionDelegation.activeParentDelegations({
+          parentSessionId: input.parentSessionId,
+        })
+      : [];
+    const { bound, work, readFailed } = await currentWork(input);
+    const activeDelegationAdmission = activeDelegations.length > 0 &&
+      (readFailed || (!bound && activeDelegations.some((delegation) =>
+        sameCurrentReviewedWork(work, delegation.parent_work_ref))));
+    input.onActiveDelegationAdmission?.(activeDelegationAdmission);
+    const dispositionReady = activeDelegationAdmission
+      ? false
+      : await canExposeDisposition(input, work);
     const delegationReady = canExposeDelegation(bound);
     const eligibleTools = input.tools.filter((tool) => {
+      if (activeDelegationAdmission) {
+        return isActiveDelegationAdmissionTool(tool.name);
+      }
+      if (ACTIVE_RELATION_CONTROL_TOOLS.has(tool.name) &&
+        activeDelegations.length === 0) return false;
       if (delegationReady) return tool.name === DELEGATION_TOOL;
       if (tool.name === DISPOSITION_TOOL) {
         return input.projectWorkSurface === false || dispositionReady;
@@ -40,12 +78,66 @@ export function createGuidedRoundToolSurfaceResolver(input: {
       ? eligibleTools
       : projectDurableWorkToolSurface(eligibleTools, work);
     const names = new Set(tools.map((tool) => tool.name));
-    const missingRequired = delegationReady ? undefined : [...input.requiredToolNames]
+    const missingRequired = delegationReady || activeDelegationAdmission
+      ? undefined
+      : [...input.requiredToolNames]
       .find((name) => input.tools.some((tool) => tool.name === name) && !names.has(name));
     if (missingRequired) {
       throw new RoundToolSurfaceError("round_tool_surface_required_tool_missing");
     }
     return createRoundToolSurfaceSnapshot(tools);
+  };
+}
+
+function sameCurrentReviewedWork(
+  work: DurableWorkView | undefined,
+  parentWorkRef: DelegationPacket["parent_work_ref"],
+): boolean {
+  const plan = work?.currentPlan;
+  const review = work?.latestPlanReview;
+  if (!work || (work.status !== "open" && work.status !== "blocked") ||
+    !plan || review?.subject !== "plan" ||
+    review.verdict !== "accept" ||
+    review.boundPlanRevisionId !== plan.planRevisionId) return false;
+  return work.workId === parentWorkRef.work_id &&
+    work.sessionId === parentWorkRef.session_id &&
+    plan.planRevisionId === parentWorkRef.plan_revision_id &&
+    review.reviewRevisionId === parentWorkRef.review_revision_id;
+}
+
+function isActiveDelegationAdmissionTool(name: string): boolean {
+  return EFFECT_FREE_TOOL_NAMES.has(name) || ACTIVE_DELEGATION_TOOLS.has(name);
+}
+
+export function createActiveDelegationAdmissionGuard(): {
+  observe(active: boolean): void;
+  execute(execute: ButlerToolExecutor): BtccAgentLoopInput["executeTool"];
+} {
+  let active = false;
+  return {
+    observe(value) {
+      active = value;
+    },
+    execute(execute) {
+      return async (call) => {
+        if (active && !isActiveDelegationAdmissionTool(call.name)) {
+          return {
+            ok: false,
+            error: {
+              code: "active_delegated_work_tool_forbidden",
+              message: "This fresh Turn cannot continue, mutate, execute, or re-delegate the active Steward-owned Work.",
+            },
+          };
+        }
+        return await execute({
+          name: call.name,
+          args: call.arguments,
+          rawArguments: call.rawArguments,
+          providerCallId: call.id,
+          signal: call.signal,
+        });
+      };
+    },
   };
 }
 
@@ -81,11 +173,24 @@ async function currentWork(input: {
 }): Promise<{
   bound: DurableWorkView | undefined;
   work: DurableWorkView | undefined;
+  readFailed: boolean;
 }> {
-  const bound = await safeBoundWork(input.durableWork, input.turnId);
-  const context = await safeLoadWorkContext(input.durableWork, input.workScope);
+  let bound: DurableWorkView | null = null;
+  let context: Awaited<ReturnType<DurableWorkService["loadContext"]>> = null;
+  let readFailed = false;
+  try {
+    bound = await input.durableWork.boundWorkForTurn(input.turnId);
+  } catch {
+    readFailed = true;
+  }
+  try {
+    context = await input.durableWork.loadContext(input.workScope);
+  } catch {
+    readFailed = true;
+  }
   return {
     bound: bound ?? undefined,
     work: bound ?? context?.work ?? undefined,
+    readFailed,
   };
 }

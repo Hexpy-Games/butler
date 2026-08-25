@@ -290,6 +290,10 @@ export interface SubsessionDelegationStore {
 }
 
 export type SubsessionDelegationService = {
+  activeParentDelegations(input: {
+    parentSessionId: string;
+  }): Promise<Array<{ relation: SessionRelation; parent_work_ref:
+      DelegationPacket["parent_work_ref"]; child_turn_id: string }>>;
   reviewedDelegationPlan(input: {
     parentSessionId: string;
     parentTurnId: string;
