@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 
 import { expect, test } from "bun:test";
-import { snapshotDelegationProjectContext } from
+import { childProjectContextBinding, snapshotDelegationProjectContext } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/project-context.ts";
 import { completePacketContext } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/terminal-results.ts";
@@ -92,6 +92,77 @@ test("Steward packet preserves a reviewed Plan with no explicit checks", () => {
     ...packet,
     acceptance_criteria: [],
   })).toBe(true);
+});
+
+test("child project binding preserves distinct App and Ledger identities", () => {
+  const context = packetWith({
+    project_id: "app-project",
+    required_source_ids: [],
+    missing_source_ids: [],
+    mandatory_refs: [],
+    optional_refs: [],
+  }).project_context;
+
+  expect(childProjectContextBinding(context, {
+    projectId: "legacy-app-project",
+    appProjectId: "app-project",
+    ledgerProjectId: "ledger-project",
+  })).toEqual({
+    sessionBinding: {
+      projectId: "app-project",
+      appProjectId: "app-project",
+      ledgerProjectId: "ledger-project",
+    },
+    metadata: {
+      project_id: "app-project",
+      mandatory_hot_cache_refs: [],
+      optional_hot_cache_refs: [],
+    },
+  });
+});
+
+test("child project binding fails closed on packet and parent App identity mismatch", () => {
+  const context = packetWith({
+    project_id: "packet-project",
+    required_source_ids: [],
+    missing_source_ids: [],
+    mandatory_refs: [],
+    optional_refs: [],
+  }).project_context;
+
+  expect(() => childProjectContextBinding(context, {
+    projectId: "legacy-app-project",
+    appProjectId: "verified-app-project",
+    ledgerProjectId: "ledger-project",
+  })).toThrow("subsession_project_context_mismatch");
+  expect(() => childProjectContextBinding(undefined, {
+    projectId: "app-project",
+  })).toThrow("subsession_project_context_mismatch");
+});
+
+test("child project binding never synthesizes a missing Ledger identity", () => {
+  const context = packetWith({
+    project_id: "app-project",
+    required_source_ids: [],
+    missing_source_ids: [],
+    mandatory_refs: [],
+    optional_refs: [],
+  }).project_context;
+
+  expect(childProjectContextBinding(context, {
+    projectId: "app-project",
+  })).toEqual({
+    sessionBinding: {
+      projectId: "app-project",
+      appProjectId: "app-project",
+    },
+    metadata: {
+      project_id: "app-project",
+      mandatory_hot_cache_refs: [],
+      optional_hot_cache_refs: [],
+    },
+  });
+  expect(childProjectContextBinding(undefined, {})).toBeUndefined();
 });
 
 function projectAndUserDocument(contextRef: string) {
