@@ -1,0 +1,305 @@
+import type {
+  DurableWorkStore,
+  DurableWorkView,
+  WorkTurnScope,
+} from "../../../btcc/work/index.ts";
+import type {
+  CreateProjectWorkStoreInput,
+  ProjectWorkOperationIdentity,
+} from "./project-work-contracts.ts";
+import {
+  claimProjectWorkCloseoutCorrection,
+  recordProjectWorkDisposition,
+  recordProjectWorkReview,
+} from "./project-work-closeout-recording.ts";
+import {
+  recordProjectWorkCheckpoint,
+  replaceProjectWorkPlan,
+} from "./project-work-progress-recording.ts";
+import { abandonProjectWork } from "./project-work-abandonment-recording.ts";
+import {
+  bindOpenProjectWork,
+  continueProjectWork,
+} from "./project-work-relation-recording.ts";
+import { startProjectWork } from "./project-work-start-recording.ts";
+import { publishProjectWorkRecords } from "./project-work-publication.ts";
+import {
+  requireProjectWorkSessionHead,
+  readCanonicalProjectWorkBinding,
+  readCanonicalProjectWorkRelation,
+} from "./project-work-relation-snapshot.ts";
+import {
+  requireCurrentProjectWork,
+  type CurrentProjectWorkSnapshot,
+} from "./project-work-snapshot.ts";
+import type { ProjectWorkWriteContext } from "./project-work-write-context.ts";
+import { assertMaterialSnapshotForView } from "./project-work-material-snapshot.ts";
+import { probeProjectWorkServiceReplay } from "./project-work-service-replay.ts";
+import { safeProjectWorkPublicOperation } from "./project-work-errors.ts";
+
+export function createProjectWorkStore(
+  input: CreateProjectWorkStoreInput,
+): DurableWorkStore {
+  return new ProjectWorkStore(input);
+}
+
+class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
+  constructor(readonly input: CreateProjectWorkStoreInput) {}
+
+  loadContext(scope: WorkTurnScope) {
+    return safeProjectWorkPublicOperation(() => this.loadContextUnsafe(scope));
+  }
+  private async loadContextUnsafe(scope: WorkTurnScope) {
+    this.assertScope(scope);
+    const replay = await probeProjectWorkServiceReplay({
+      butlerData: this.input.butlerData,
+      scope: this.input.scope,
+      mutation: scope,
+    });
+    const current = replay ? null : await this.currentForScope(scope);
+    const work = replay ?? current?.view;
+    if (!work) return null;
+    const originalRequest =
+      await this.input.runtimeProjection.loadOriginalRequest({
+        turnId: work.origin.turnId,
+        sessionId: work.sessionId,
+        projectRef: this.input.scope.appProjectId,
+      });
+    if (
+      originalRequest.turnId !== work.origin.turnId ||
+      originalRequest.messageId !== work.origin.messageId
+    ) {
+      invalid("project_work_runtime_origin_mismatch");
+    }
+    return {
+      work,
+      originalRequest,
+      resultFacts: await this.input.runtimeProjection.loadResultFacts(
+        work.workId,
+      ),
+    };
+  }
+
+  importOpenLegacyWork(): Promise<never> {
+    return safeProjectWorkPublicOperation(() =>
+      Promise.reject(new Error("project_work_legacy_import_required")),
+    );
+  }
+
+  bindOpenWork(scope: WorkTurnScope, expectedWorkId?: string) {
+    return safeProjectWorkPublicOperation(() =>
+      bindOpenProjectWork(this, scope, expectedWorkId),
+    );
+  }
+  startWork(command: Parameters<DurableWorkStore["startWork"]>[0]) {
+    return safeProjectWorkPublicOperation(() => startProjectWork(this, command));
+  }
+  continueWork(command: Parameters<DurableWorkStore["continueWork"]>[0]) {
+    return safeProjectWorkPublicOperation(() =>
+      continueProjectWork(this, command),
+    );
+  }
+  replacePlan(command: Parameters<DurableWorkStore["replacePlan"]>[0]) {
+    return safeProjectWorkPublicOperation(() =>
+      replaceProjectWorkPlan(this, command),
+    );
+  }
+  recordCheckpoint(
+    command: Parameters<DurableWorkStore["recordCheckpoint"]>[0],
+  ) {
+    return safeProjectWorkPublicOperation(() =>
+      recordProjectWorkCheckpoint(this, command),
+    );
+  }
+  recordReview(command: Parameters<DurableWorkStore["recordReview"]>[0]) {
+    return safeProjectWorkPublicOperation(() =>
+      recordProjectWorkReview(this, command),
+    );
+  }
+  recordDisposition(
+    command: Parameters<DurableWorkStore["recordDisposition"]>[0],
+  ) {
+    return safeProjectWorkPublicOperation(() =>
+      recordProjectWorkDisposition(this, command),
+    );
+  }
+  claimCloseoutCorrection(
+    command: Parameters<DurableWorkStore["claimCloseoutCorrection"]>[0],
+  ) {
+    return safeProjectWorkPublicOperation(() =>
+      claimProjectWorkCloseoutCorrection(this, command),
+    );
+  }
+  attachToolResult(
+    command: Parameters<DurableWorkStore["attachToolResult"]>[0],
+  ) {
+    return safeProjectWorkPublicOperation(() => {
+      this.assertScope(command);
+      return this.input.resultAttachment.attachToolResult(command);
+    });
+  }
+
+  boundWorkForTurn(turnId: string) {
+    return safeProjectWorkPublicOperation(() => this.boundWorkForTurnUnsafe(turnId));
+  }
+  private async boundWorkForTurnUnsafe(turnId: string) {
+    const candidate = await readCanonicalProjectWorkBinding({
+      butlerData: this.input.butlerData,
+      scope: this.input.scope,
+      turnId,
+    });
+    if (!candidate) return null;
+    const relation = await readCanonicalProjectWorkRelation({
+      butlerData: this.input.butlerData,
+      scope: this.input.scope,
+      sessionId: candidate.view.sessionId,
+      turnId,
+    });
+    if (relation.binding?.view.workId !== candidate.view.workId)
+      invalid("project_work_turn_binding_stale");
+    return relation.binding.view;
+  }
+  abandonBoundWorkForTurn(turnId: string) {
+    return safeProjectWorkPublicOperation(() => abandonProjectWork(this, turnId));
+  }
+
+  async publish(
+    identity: ProjectWorkOperationIdentity,
+    prepareUpdates: Parameters<
+      typeof publishProjectWorkRecords
+    >[0]["prepareUpdates"],
+  ) {
+    const outcome = await publishProjectWorkRecords({
+      butlerData: this.input.butlerData,
+      scope: this.input.scope,
+      identity,
+      prepareUpdates,
+    });
+    if (!outcome.skipped)
+      await this.recoverPublicationProjection(outcome.targets);
+    return outcome;
+  }
+  async afterMutation(
+    current: CurrentProjectWorkSnapshot,
+    _affected: CurrentProjectWorkSnapshot[] = [],
+  ) {
+    return current.view;
+  }
+  private async recoverPublicationProjection(
+    targets: Array<{ id: string; kind: string; parentId: string | null }>,
+  ) {
+    const workIds = new Set(
+      targets.flatMap((target) =>
+        target.kind === "work"
+          ? [target.id]
+          : target.parentId
+            ? [target.parentId]
+            : [],
+      ),
+    );
+    const affected = await Promise.all(
+      [...workIds].map((workId) =>
+        requireCurrentProjectWork({
+          butlerData: this.input.butlerData,
+          scope: this.input.scope,
+          workId,
+        }),
+      ),
+    );
+    const sessionIds = new Set(affected.map((item) => item.view.sessionId));
+    for (const sessionId of sessionIds) {
+      const head = await requireProjectWorkSessionHead({
+        butlerData: this.input.butlerData,
+        scope: this.input.scope,
+        sessionId,
+      });
+      const snapshots = new Map(
+        affected
+          .filter((item) => item.view.sessionId === sessionId)
+          .map((item) => [item.view.workId, item]),
+      );
+      snapshots.set(head.view.workId, head);
+      await this.input.runtimeProjection.observeCanonicalWorks({
+        works: [...snapshots.values()].map((snapshot) => ({
+          work: snapshot.view,
+          currentBindingTurnIds: snapshot.manifest.bindingRefs.map(
+            (item) => item.turnId,
+          ),
+        })),
+        sessionHeadWorkId: head.view.workId,
+      });
+    }
+  }
+  async requireBound(scope: WorkTurnScope, allowCompleted = false) {
+    this.assertScope(scope);
+    const relation = await this.relation(scope);
+    const binding = relation.binding;
+    if (!binding)
+      invalid("project_work_turn_binding_missing");
+    if (
+      relation.sessionHead?.view.workId !== binding.view.workId ||
+      !binding.manifest.bindingRefs.some((item) => item.turnId === scope.turnId)
+    )
+      invalid("project_work_turn_binding_stale");
+    if (
+      !isOpen(binding.view) &&
+      !(allowCompleted && binding.view.status === "completed")
+    ) {
+      invalid("project_work_not_open");
+    }
+    return binding;
+  }
+  async currentForScope(scope: WorkTurnScope) {
+    const relation = await this.relation(scope);
+    if (relation.binding) return relation.binding;
+    return relation.sessionHead && isOpen(relation.sessionHead.view)
+      ? relation.sessionHead
+      : null;
+  }
+  relation(scope: WorkTurnScope) {
+    return readCanonicalProjectWorkRelation({
+      butlerData: this.input.butlerData,
+      scope: this.input.scope,
+      sessionId: scope.sessionId,
+      turnId: scope.turnId,
+    });
+  }
+  assertScope(scope: WorkTurnScope) {
+    if (scope.projectRef !== this.input.scope.appProjectId)
+      invalid("project_work_scope_mismatch");
+  }
+  async recordedAt(identity: ProjectWorkOperationIdentity) {
+    const value =
+      await this.input.runtimeProjection.operationRecordedAt(identity);
+    if (!value || Number.isNaN(Date.parse(value)))
+      invalid("project_work_operation_time_invalid");
+    return value;
+  }
+  async captureMaterial(
+    current: DurableWorkView | null,
+    candidate: DurableWorkView,
+    operationIdentity: ProjectWorkOperationIdentity,
+  ) {
+    const material =
+      await this.input.runtimeProjection.captureWorkMaterial({
+        operationIdentity,
+        current,
+        candidate,
+      });
+    if (!/^[a-f0-9]{64}$/u.test(material.materialFingerprint))
+      invalid("project_work_material_fingerprint_invalid");
+    assertMaterialSnapshotForView(
+      material.materialSnapshot,
+      candidate,
+      material.materialFingerprint,
+    );
+    return material;
+  }
+}
+
+function isOpen(view: DurableWorkView) {
+  return view.status === "open" || view.status === "blocked";
+}
+function invalid(message: string): never {
+  throw new Error(message);
+}
