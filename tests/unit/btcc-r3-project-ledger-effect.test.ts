@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import {
   applyProjectLedgerRecordUpdates,
   ProjectLedgerEffectConflictError,
@@ -19,6 +19,10 @@ import {
 } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/external-effect-mutation.ts";
 import { loadProjectLedgerCore } from
   "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-ledger-core.ts";
+import { readStableExactProjectLedgerSnapshot } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/canonical-ledger-reader.ts";
+import { admitProjectLedgerEffectOccurrence } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/external-effect-occurrence.ts";
 import {
   createGuidedProjectLedgerEffectAdapter,
   guidedProjectLedgerEffect,
@@ -722,10 +726,10 @@ describe("R3 guided Project Ledger effect", () => {
     });
     expect(ledgerEvents(fixture.projectRoot)).toEqual(events);
     expect(JSON.parse(
-      readFileSync(onlyOccurrencePath(fixture.butlerData), "utf8"),
+      readFileSync(onlyReceiptPath(fixture.butlerData), "utf8"),
     )).toMatchObject({
       status: "observed",
-      result: { publicationId: applied.publicationId },
+      publicationId: applied.publicationId,
     });
   });
 
@@ -744,7 +748,7 @@ describe("R3 guided Project Ledger effect", () => {
       }],
     };
     const before = fixture.core.observeProjectLedgerSourceHead(fixture.projectRoot);
-    preparePendingOccurrence(fixture, input);
+    await preparePendingOccurrence(fixture, input);
     expect(fixture.core.observeProjectLedgerSourceHead(fixture.projectRoot)).toEqual(before);
     expect(() => fixture.core.resolveRecord(fixture.projectRoot, {
       kind: "report",
@@ -764,10 +768,10 @@ describe("R3 guided Project Ledger effect", () => {
       { kind: "report", id: "REPORT-PENDING" },
     ).filePath)).toBe("Prepared but not promoted");
     expect(JSON.parse(
-      readFileSync(onlyOccurrencePath(fixture.butlerData), "utf8"),
+      readFileSync(onlyReceiptPath(fixture.butlerData), "utf8"),
     )).toMatchObject({
       status: "observed",
-      result: { effectKey: input.effectKey },
+      publicationId: expect.any(String),
     });
   });
 
@@ -787,7 +791,10 @@ describe("R3 guided Project Ledger effect", () => {
         id: "MISSING-REPORT",
         body: "Must never reach the canonical root",
       }],
-    })).rejects.toThrow("record not found");
+    })).rejects.toMatchObject({
+      code: "project_ledger_effect_uncertain",
+      message: "The Project Ledger publication state could not be verified safely.",
+    });
 
     expect(fixture.core.observeProjectLedgerSourceHead(fixture.projectRoot)).toEqual(before);
     expect(readFileSync(join(fixture.projectRoot, "project.json"), "utf8"))
@@ -868,7 +875,7 @@ async function projectLedgerFixture() {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-project-ledger-effect-"));
   roots.push(root);
   const butlerData = join(root, "butler-data");
-  const projectRoot = join(root, "contained-project-ledger");
+  const projectRoot = join(butlerData, "project-ledger", "projects", "fixture");
   mkdirSync(projectRoot, { recursive: true });
   writeFileSync(join(projectRoot, "project.json"), `${JSON.stringify({
     schema: "project-ledger.project.v1",
@@ -910,13 +917,14 @@ function ledgerEvents(projectRoot: string): string[] {
     .filter(Boolean);
 }
 
-function occurrencePaths(butlerData: string): string[] {
-  const root = join(
-    butlerData,
-    "runtime",
-    "btcc-project-ledger-effects",
-    "occurrences",
-  );
+function observedOccurrences(butlerData: string): Array<Record<string, unknown>> {
+  return receiptPaths(butlerData).map((path) =>
+    JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>,
+  ).filter((receipt) => receipt.status === "observed");
+}
+
+function receiptPaths(butlerData: string): string[] {
+  const root = join(butlerData, "runtime", "btcc-project-ledger-effects-v2", "receipts");
   try {
     return readdirSync(root).filter((name) => name.endsWith(".json"))
       .map((name) => join(root, name));
@@ -925,14 +933,8 @@ function occurrencePaths(butlerData: string): string[] {
   }
 }
 
-function observedOccurrences(butlerData: string): Array<Record<string, unknown>> {
-  return occurrencePaths(butlerData).map((path) =>
-    JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>,
-  ).filter((occurrence) => occurrence.status === "observed");
-}
-
-function onlyOccurrencePath(butlerData: string): string {
-  const paths = occurrencePaths(butlerData);
+function onlyReceiptPath(butlerData: string): string {
+  const paths = receiptPaths(butlerData);
   if (paths.length !== 1) {
     throw new Error(
       `Expected one Project Ledger occurrence, found ${paths.length}`,
@@ -941,7 +943,7 @@ function onlyOccurrencePath(butlerData: string): string {
   return paths[0]!;
 }
 
-function preparePendingOccurrence(
+async function preparePendingOccurrence(
   fixture: Awaited<ReturnType<typeof projectLedgerFixture>>,
   input: {
     butlerData: string;
@@ -955,34 +957,42 @@ function preparePendingOccurrence(
       body: string;
     }>;
   },
-): void {
+): Promise<void> {
   const updatesSha256 = sha256(stableJson(input.updates));
-  const occurrenceId = sha256(stableJson({
-    schema: "butler.btcc-project-ledger-effect.v1",
+  const update = input.updates[0]!;
+  const snapshot = await readStableExactProjectLedgerSnapshot({
     projectRoot: input.projectRoot,
-    effectKey: input.effectKey,
-  }));
-  const publicationId = sha256(stableJson({
-    schema: "butler.btcc-project-ledger-effect-publication.v1",
-    occurrenceId,
-    updatesSha256,
-  }));
+    targets: [{
+      id: update.id,
+      kind: update.kind,
+      path: `project-ledger/projects/fixture/reports/${update.id.toLocaleLowerCase("en-US")}.md`,
+      parentId: null,
+    }],
+  });
+  const occurrence = admitProjectLedgerEffectOccurrence({
+    butlerData: input.butlerData,
+    ledgerProjectId: "fixture",
+    ledgerRoot: input.projectRoot,
+    operationIdentity: { kind: "mutation_call", id: input.effectKey },
+    requestSha256: updatesSha256,
+    expectedBase: snapshot.expectedBase,
+    targetPreconditions: snapshot.targetPreconditions,
+  });
+  const publicationId = occurrence.attempts[0]!.publicationId;
   const root = join(
     input.butlerData,
     "runtime",
-    "btcc-project-ledger-effects",
+    "btcc-project-ledger-effects-v2",
   );
-  const occurrencePath = join(root, "occurrences", `${occurrenceId}.json`);
   const candidateRoot = join(root, "candidates", publicationId);
   const journalPath = join(root, "journals", `${publicationId}.json`);
   fixture.core.prepareProjectLedgerPublication({
     publicationId,
-    canonicalRoot: input.projectRoot,
+    canonicalRoot: occurrence.ledgerRoot,
     candidateRoot,
     journalPath,
-    expectedBase: fixture.core.observeProjectLedgerSourceHead(input.projectRoot),
+    expectedBase: occurrence.attempts[0]!.expectedBase,
     materialize(projectRoot: string) {
-      const [update] = input.updates;
       fixture.core.createRecord(projectRoot, {
         project: projectRoot,
         ...update,
@@ -990,18 +1000,11 @@ function preparePendingOccurrence(
       for (const view of ["dashboard", "handoff", "roadmap"]) {
         fixture.core.render(projectRoot, view, { write: true });
       }
+      fixture.core.writeIndex(projectRoot);
       const check = fixture.core.check(projectRoot);
       if (!check.ok) throw new Error("Prepared test publication is invalid");
     },
   });
-  mkdirSync(dirname(occurrencePath), { recursive: true });
-  writeFileSync(occurrencePath, `${JSON.stringify({
-    schema: "butler.btcc-project-ledger-effect-occurrence.v1",
-    effectKey: input.effectKey,
-    updatesSha256,
-    publicationId,
-    status: "pending",
-  }, null, 2)}\n`);
 }
 
 function stableJson(value: unknown): string {
