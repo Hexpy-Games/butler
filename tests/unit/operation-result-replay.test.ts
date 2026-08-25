@@ -477,7 +477,7 @@ test("admission keeps small, failed, and non-durable terminal results raw", () =
   } finally { stores.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test("Work result references use canonical identity and fail closed across scope and kind", () => {
+test("Session Work result references use canonical identity and fail closed across scope and kind", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-exact-replay-work-"));
   const dbPath = join(root, "btcc.sqlite");
   const stores = openBtccSqliteStores({ dbPath, ownerId: "work" });
@@ -488,8 +488,8 @@ test("Work result references use canonical identity and fail closed across scope
     db.query(`INSERT INTO btcc_guided_works (
       work_id, session_id, scope_kind, scope_ref, origin_turn_id, origin_message_id,
       objective, status, created_at, updated_at
-    ) VALUES (?, ?, 'project', ?, ?, 'message', 'objective', 'open', ?, ?)`)
-      .run("work", "session", "project", "turn", "now", "now");
+    ) VALUES (?, ?, 'session', ?, ?, 'message', 'objective', 'open', ?, ?)`)
+      .run("work", "session", "session", "turn", "now", "now");
     db.query(`INSERT INTO btcc_guided_work_results (
       result_ref, work_id, sequence, tool_call_id, origin_turn_id, attached_at
     ) VALUES (?, ?, 3, ?, ?, ?)`)
@@ -498,7 +498,7 @@ test("Work result references use canonical identity and fail closed across scope
     const replay = createOperationResultReplay({
       turnId: "turn", turnRevision: 9, journal: stores.guidedToolJournal,
       exactReader: stores.guidedOperationResultReader,
-      exactReadCapability: true, sessionId: "session", projectRef: "project",
+      exactReadCapability: true, sessionId: "session",
     });
     const reference = replay.referenceFor(stores.guidedToolJournal.findForTurn("turn", "call")!);
     expect(reference.identity).toMatchObject({ kind: "work", result_ref: "canonical-result", work_id: "work" });
@@ -506,29 +506,22 @@ test("Work result references use canonical identity and fail closed across scope
     const laterTurnReplay = createOperationResultReplay({
       turnId: "later-turn", turnRevision: 1, journal: stores.guidedToolJournal,
       exactReader: stores.guidedOperationResultReader,
-      exactReadCapability: true, sessionId: "session", projectRef: "project",
+      exactReadCapability: true, sessionId: "session",
     });
     expect(laterTurnReplay.readExact(exactPage(
       "canonical-result", reference.integrity.sha256, 3, "work",
     ))).toMatchObject({ encoding: "base64", offset: 0, length: 32 });
-    const wrongScope = createOperationResultReplay({
-      turnId: "turn", turnRevision: 9, journal: stores.guidedToolJournal,
-      exactReader: stores.guidedOperationResultReader,
-      exactReadCapability: true, sessionId: "session", projectRef: "other",
-    });
-    expect(() => wrongScope.readExact(exactPage("canonical-result", reference.integrity.sha256, 3, "work")))
-      .toThrow("operation_result_scope_mismatch");
     const wrongSession = createOperationResultReplay({
       turnId: "turn", turnRevision: 9, journal: stores.guidedToolJournal,
       exactReader: stores.guidedOperationResultReader,
-      exactReadCapability: true, sessionId: "other", projectRef: "project",
+      exactReadCapability: true, sessionId: "other",
     });
     expect(() => wrongSession.readExact(exactPage("canonical-result", reference.integrity.sha256, 3, "work")))
       .toThrow("operation_result_session_mismatch");
     const wrongWork = createOperationResultReplay({
       turnId: "turn", turnRevision: 9, journal: stores.guidedToolJournal,
       exactReader: stores.guidedOperationResultReader,
-      exactReadCapability: true, sessionId: "session", projectRef: "project",
+      exactReadCapability: true, sessionId: "session",
     });
     expect(() => wrongWork.readExact(exactPage("canonical-result", reference.integrity.sha256, 3, "other")))
       .toThrow("operation_result_work_mismatch");
@@ -538,10 +531,6 @@ test("Work result references use canonical identity and fail closed across scope
       .toThrow("operation_result_missing_or_scope_mismatch");
     expect(() => replay.readExact(exactPage("canonical-result", "0".repeat(64), 3, "work")))
       .toThrow("operation_result_integrity_mismatch");
-    const scoped = new Database(dbPath);
-    scoped.query("UPDATE btcc_guided_works SET scope_kind = 'session', scope_ref = ? WHERE work_id = ?")
-      .run("session", "work");
-    scoped.close();
     const sessionReplay = createOperationResultReplay({
       turnId: "later-turn", turnRevision: 1, journal: stores.guidedToolJournal,
       exactReader: stores.guidedOperationResultReader, exactReadCapability: true,
@@ -550,14 +539,6 @@ test("Work result references use canonical identity and fail closed across scope
     expect(sessionReplay.readExact(exactPage(
       "canonical-result", reference.integrity.sha256, 3, "work",
     ))).toMatchObject({ encoding: "base64" });
-    const crossKind = createOperationResultReplay({
-      turnId: "later-turn", turnRevision: 1, journal: stores.guidedToolJournal,
-      exactReader: stores.guidedOperationResultReader, exactReadCapability: true,
-      sessionId: "session", projectRef: "project",
-    });
-    expect(() => crossKind.readExact(exactPage(
-      "canonical-result", reference.integrity.sha256, 3, "work",
-    ))).toThrow("operation_result_scope_mismatch");
     const corruptScope = new Database(dbPath);
     corruptScope.query("UPDATE btcc_guided_works SET scope_ref = ? WHERE work_id = ?")
       .run("other-session", "work");
@@ -566,14 +547,86 @@ test("Work result references use canonical identity and fail closed across scope
       "canonical-result", reference.integrity.sha256, 3, "work",
     ))).toThrow("operation_result_scope_mismatch");
     const corrupt = new Database(dbPath);
-    corrupt.query("UPDATE btcc_guided_works SET scope_kind = 'project', scope_ref = ? WHERE work_id = ?")
-      .run("project", "work");
+    corrupt.query("UPDATE btcc_guided_works SET scope_kind = 'session', scope_ref = ? WHERE work_id = ?")
+      .run("session", "work");
     corrupt.query("UPDATE btcc_guided_tool_calls SET result_json = ? WHERE call_id = ?")
       .run(JSON.stringify({ ok: true, content: "tampered" }), "call");
     corrupt.close();
     expect(() => replay.readExact(exactPage("canonical-result", reference.integrity.sha256, 3, "work")))
       .toThrow("operation_result_body_hash_mismatch");
   } finally { stores.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("legacy Project Work and project-scoped direct results replay before canonical selection", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-exact-replay-legacy-project-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({ dbPath, ownerId: "legacy-project" });
+  try {
+    stores.guidedToolJournal.start({
+      turnId: "project-turn", callId: "linked-call", toolName: "read_file",
+      rawArguments: "{}", arguments: {},
+    });
+    stores.guidedToolJournal.finish({
+      callId: "linked-call", status: "completed",
+      result: { ok: true, content: "P".repeat(16_000) },
+    });
+    stores.guidedToolJournal.start({
+      turnId: "project-turn", callId: "direct-call", toolName: "read_file",
+      rawArguments: "{}", arguments: {},
+    });
+    stores.guidedToolJournal.finish({
+      callId: "direct-call", status: "completed",
+      result: { ok: true, content: "D".repeat(16_000) },
+    });
+    const db = new Database(dbPath);
+    db.query(`INSERT INTO btcc_guided_works (
+      work_id, session_id, scope_kind, scope_ref, origin_turn_id,
+      origin_message_id, objective, status, created_at, updated_at
+    ) VALUES ('legacy-project-work', 'session', 'project', 'app-project',
+      'project-turn', 'message', 'legacy', 'open', 'now', 'now')`).run();
+    db.query(`INSERT INTO btcc_guided_work_results (
+      result_ref, work_id, sequence, tool_call_id, origin_turn_id, attached_at
+    ) VALUES ('legacy-project-result', 'legacy-project-work', 1,
+      'linked-call', 'project-turn', 'now')`).run();
+    db.close();
+
+    const replay = createOperationResultReplay({
+      turnId: "project-turn", turnRevision: 1,
+      journal: stores.guidedToolJournal,
+      exactReader: stores.guidedOperationResultReader,
+      exactReadCapability: true,
+      sessionId: "session",
+      projectRef: "app-project",
+    });
+    const linked = replay.referenceFor(
+      stores.guidedToolJournal.findForTurn("project-turn", "linked-call")!,
+    );
+    expect(linked.identity).toMatchObject({
+      kind: "work", result_ref: "legacy-project-result",
+      work_id: "legacy-project-work",
+    });
+    expect(replay.readExact(exactPage(
+      linked.identity.result_ref,
+      linked.integrity.sha256,
+      1,
+      "legacy-project-work",
+    ))).toMatchObject({ encoding: "base64", length: 32 });
+
+    const direct = replay.referenceFor(
+      stores.guidedToolJournal.findForTurn("project-turn", "direct-call")!,
+    );
+    expect(direct.identity).toMatchObject({
+      kind: "direct", result_ref: "direct-call",
+    });
+    expect(replay.readExact(exactPage(
+      direct.identity.result_ref,
+      direct.integrity.sha256,
+      null,
+    ))).toMatchObject({ encoding: "base64", length: 32 });
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("reference identity is stable and exact reads fail closed across restart and mismatches", () => {
