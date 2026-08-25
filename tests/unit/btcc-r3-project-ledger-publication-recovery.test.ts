@@ -197,6 +197,49 @@ test("stale CAS writes nothing, cleans only its artifacts, and explicit attempt 
   )).toHaveLength(1);
 });
 
+test("admitted-only absence reconciles not applied without publishing and only explicit re-entry adds attempt two", async () => {
+  const fixture = await createFixture();
+  const input = effectInput(fixture, "admitted-only-absence", "R-ADMITTED-ONLY-ABSENCE");
+  const target = {
+    id: "R-ADMITTED-ONLY-ABSENCE",
+    kind: "report",
+    path: "project-ledger/projects/fixture-project/reports/r-admitted-only-absence.md",
+    parentId: null,
+  };
+  const snapshot = await readStableExactProjectLedgerSnapshot({
+    projectRoot: fixture.projectRoot,
+    targets: [target],
+  });
+  const occurrence = admitProjectLedgerEffectOccurrence({
+    butlerData: fixture.butlerData,
+    ledgerProjectId: "fixture-project",
+    ledgerRoot: fixture.projectRoot,
+    operationIdentity: { kind: "mutation_call", id: input.effectKey },
+    requestSha256: sha(stableJson(input.updates)),
+    expectedBase: snapshot.expectedBase,
+    targetPreconditions: snapshot.targetPreconditions,
+  });
+  const canonicalBefore = readFileSync(join(fixture.projectRoot, "ledger.jsonl"), "utf8");
+
+  expect(await reconcileProjectLedgerRecordUpdates(input)).toEqual({ status: "not_applied" });
+  expect(readFileSync(join(fixture.projectRoot, "ledger.jsonl"), "utf8")).toBe(canonicalBefore);
+  expect(fixture.core.buildIndex(fixture.projectRoot).records.some(
+    (record) => record.id === "R-ADMITTED-ONLY-ABSENCE",
+  )).toBe(false);
+
+  const applied = await applyProjectLedgerRecordUpdates(input);
+  const runtimeRoot = join(fixture.butlerData, "runtime", "btcc-project-ledger-effects-v2");
+  const stored = JSON.parse(readFileSync(
+    join(runtimeRoot, "occurrences", `${occurrence.occurrenceId}.json`),
+    "utf8",
+  )) as { attempts: Array<{ number: number; publicationId: string }> };
+  expect(stored.attempts.map(({ number }) => number)).toEqual([1, 2]);
+  expect(applied.publicationId).toBe(stored.attempts[1]!.publicationId);
+  expect(fixture.core.buildIndex(fixture.projectRoot).records.filter(
+    (record) => record.id === "R-ADMITTED-ONLY-ABSENCE",
+  )).toHaveLength(1);
+});
+
 test("prepared stale CAS removes its exact candidate, journal, and claim before caller retry", async () => {
   const fixture = await createFixture();
   const seeded = await seedPreparedPublication(fixture, "prepared-stale", "R-PREPARED-STALE");
@@ -255,6 +298,56 @@ test("prepared, committing, promoted, and observed crash cuts reconcile exactly 
     expect(await reconcileProjectLedgerRecordUpdates(seeded.input)).toEqual(reconciled);
     expect(readFileSync(join(fixture.projectRoot, "ledger.jsonl"), "utf8")).toBe(events);
   }
+});
+
+test("committing journal with candidate-active canonical head records applied without re-executing publication", async () => {
+  const fixture = await createFixture();
+  const seeded = await seedPreparedPublication(
+    fixture,
+    "exchange-immediate-crash",
+    "R-EXCHANGE-IMMEDIATE-CRASH",
+  );
+  setJournalStatus(seeded.journalPath, "committing");
+  exchangeCompleteRoots(seeded.prepared.candidateRoot, fixture.projectRoot);
+  const canonicalAfterExchange = readFileSync(join(fixture.projectRoot, "ledger.jsonl"), "utf8");
+  const phases: string[] = [];
+
+  const reconciled = await reconcileProjectLedgerRecordUpdates({
+    ...seeded.input,
+    memoryAttribution: {
+      checkpoint() {},
+      projectLedgerPhase({ phase, status }) {
+        phases.push(`${phase}:${status}`);
+      },
+      terminal() {},
+      close() {},
+    },
+  });
+
+  expect(reconciled).toMatchObject({
+    status: "applied",
+    result: { publicationId: seeded.occurrence.attempts[0]!.publicationId },
+  });
+  expect(phases.some((phase) => [
+    "prepare:start",
+    "materialize:start",
+    "promote:start",
+    "observe_promotion:start",
+  ].includes(phase))).toBe(false);
+  expect(readFileSync(join(fixture.projectRoot, "ledger.jsonl"), "utf8"))
+    .toBe(canonicalAfterExchange);
+  expect(existsSync(seeded.prepared.candidateRoot)).toBe(false);
+  expect(existsSync(seeded.prepared.claimPath)).toBe(false);
+  expect(JSON.parse(readFileSync(join(
+    fixture.butlerData,
+    "runtime",
+    "btcc-project-ledger-effects-v2",
+    "receipts",
+    `${seeded.occurrence.attempts[0]!.publicationId}.json`,
+  ), "utf8"))).toMatchObject({ status: "observed" });
+  expect(fixture.core.buildIndex(fixture.projectRoot).records.filter(
+    (record) => record.id === "R-EXCHANGE-IMMEDIATE-CRASH",
+  )).toHaveLength(1);
 });
 
 test("possible-started and corrupt evidence fail closed with one safe uncertainty", async () => {

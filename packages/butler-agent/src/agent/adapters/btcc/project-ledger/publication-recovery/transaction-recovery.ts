@@ -59,7 +59,8 @@ export async function reconcileProjectLedgerPublication(
   const journal = readPublicationJournal(paths.journalPath, input, paths);
   if (!journal) {
     if (existsSync(paths.candidateRoot) || exactClaimExists(input)) return uncertain();
-    return { status: "ready" };
+    writeNotAppliedReceipt(paths.receiptPath, input);
+    return { status: "not_applied" };
   }
   if (journal.status === "claim_pending" || journal.status === "preparing") {
     cleanupPreExchange(input, paths, journal);
@@ -67,14 +68,12 @@ export async function reconcileProjectLedgerPublication(
     return { status: "not_applied" };
   }
   if (journal.status === "promoted" || journal.status === "observed") {
-    const observed = createObservedReceipt(input, journal);
-    cleanupApplied(input, paths, journal);
-    writeObservedReceipt(paths.receiptPath, observed);
-    return { status: "applied", evidence: appliedEvidence(observed) };
+    return recordAppliedRecovery(input, paths, journal);
   }
   const active = await input.observeHead(input.ledgerRoot);
   const baseActive = sameLogicalHead(active, input.attempt.expectedBase);
   const candidateActive = sameHead(active, journal.candidateHead);
+  if (candidateActive) return recordAppliedRecovery(input, paths, journal);
   if (journal.status === "committing" && !baseActive && !candidateActive) return uncertain();
   if (journal.status === "prepared" && !baseActive) {
     cleanupPreExchange(input, paths, journal);
@@ -158,6 +157,17 @@ function cleanupApplied(
 ): void {
   rmSync(paths.candidateRoot, { recursive: true, force: true });
   input.core.reconcilePublicationClaim(journal.claimPath, journal, false);
+}
+
+function recordAppliedRecovery(
+  input: PublicationInput,
+  paths: PublicationPaths,
+  journal: PublicationJournal,
+): Extract<ProjectLedgerPublicationState, { status: "applied" }> {
+  const observed = createObservedReceipt(input, journal);
+  cleanupApplied(input, paths, journal);
+  writeObservedReceipt(paths.receiptPath, observed);
+  return { status: "applied", evidence: appliedEvidence(observed) };
 }
 
 function pathsFor(input: Pick<PublicationInput, "butlerData" | "attempt">): PublicationPaths {
