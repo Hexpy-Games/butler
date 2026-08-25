@@ -20,6 +20,8 @@ interface SessionRow {
   role: StoredSessionBinding["role"];
   lifecycle_state: SessionLifecycleState;
   project_id: string | null;
+  app_project_id: string | null;
+  ledger_project_id: string | null;
   workspace_path: string;
   runtime_adapter_id: string;
   model_provider_id: string;
@@ -134,6 +136,12 @@ export class SessionBindingStore {
       (lifecycleState === "closed" || lifecycleState === "crashed" ? undefined : now);
     const metadata = binding.metadata ?? existing?.metadata;
     const transportBindings = dedupeTransportBindings(binding.transportBindings);
+    const appProjectId = Object.hasOwn(binding, "appProjectId")
+      ? binding.appProjectId
+      : existing?.appProjectId ?? binding.projectId;
+    const ledgerProjectId = Object.hasOwn(binding, "ledgerProjectId")
+      ? binding.ledgerProjectId
+      : existing?.ledgerProjectId;
 
     const upsertSession = this.db.query(`
       INSERT INTO session_bindings (
@@ -141,6 +149,8 @@ export class SessionBindingStore {
         role,
         lifecycle_state,
         project_id,
+        app_project_id,
+        ledger_project_id,
         workspace_path,
         runtime_adapter_id,
         model_provider_id,
@@ -151,11 +161,13 @@ export class SessionBindingStore {
         updated_at,
         last_active_at,
         metadata_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         role = excluded.role,
         lifecycle_state = excluded.lifecycle_state,
         project_id = excluded.project_id,
+        app_project_id = excluded.app_project_id,
+        ledger_project_id = excluded.ledger_project_id,
         workspace_path = excluded.workspace_path,
         runtime_adapter_id = excluded.runtime_adapter_id,
         model_provider_id = excluded.model_provider_id,
@@ -186,6 +198,8 @@ export class SessionBindingStore {
         binding.role,
         lifecycleState,
         binding.projectId ?? null,
+        appProjectId ?? null,
+        ledgerProjectId ?? null,
         binding.workspacePath,
         binding.runtimeAdapterId,
         binding.modelProviderId,
@@ -259,6 +273,8 @@ export class SessionBindingStore {
         role,
         lifecycle_state,
         project_id,
+        app_project_id,
+        ledger_project_id,
         workspace_path,
         runtime_adapter_id,
         model_provider_id,
@@ -294,6 +310,8 @@ export class SessionBindingStore {
         role,
         lifecycle_state,
         project_id,
+        app_project_id,
+        ledger_project_id,
         workspace_path,
         runtime_adapter_id,
         model_provider_id,
@@ -325,6 +343,8 @@ export class SessionBindingStore {
           s.role,
           s.lifecycle_state,
           s.project_id,
+          s.app_project_id,
+          s.ledger_project_id,
           s.workspace_path,
           s.runtime_adapter_id,
           s.model_provider_id,
@@ -361,6 +381,8 @@ export class SessionBindingStore {
         s.role,
         s.lifecycle_state,
         s.project_id,
+        s.app_project_id,
+        s.ledger_project_id,
         s.workspace_path,
         s.runtime_adapter_id,
         s.model_provider_id,
@@ -426,6 +448,8 @@ export class SessionBindingStore {
         role TEXT NOT NULL,
         lifecycle_state TEXT NOT NULL,
         project_id TEXT,
+        app_project_id TEXT,
+        ledger_project_id TEXT,
         workspace_path TEXT NOT NULL,
         runtime_adapter_id TEXT NOT NULL,
         model_provider_id TEXT NOT NULL,
@@ -456,6 +480,22 @@ export class SessionBindingStore {
       CREATE INDEX IF NOT EXISTS idx_session_lifecycle_state
         ON session_bindings (lifecycle_state, updated_at);
     `);
+    this.ensureColumn("session_bindings", "app_project_id", "TEXT");
+    this.ensureColumn("session_bindings", "ledger_project_id", "TEXT");
+    this.db.exec(`
+      UPDATE session_bindings
+      SET app_project_id = project_id
+      WHERE app_project_id IS NULL AND project_id IS NOT NULL;
+    `);
+  }
+
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const columns = this.db.query<{ name: string }, []>(
+      `PRAGMA table_info(${table})`,
+    ).all();
+    if (!columns.some((item) => item.name === column)) {
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
   }
 
   private hydrateSession(row: SessionRow): StoredSessionBinding {
@@ -464,6 +504,8 @@ export class SessionBindingStore {
       role: row.role,
       lifecycleState: row.lifecycle_state,
       projectId: row.project_id ?? undefined,
+      appProjectId: row.app_project_id ?? row.project_id ?? undefined,
+      ledgerProjectId: row.ledger_project_id ?? undefined,
       workspacePath: row.workspace_path,
       runtimeAdapterId: row.runtime_adapter_id,
       modelProviderId: row.model_provider_id,
