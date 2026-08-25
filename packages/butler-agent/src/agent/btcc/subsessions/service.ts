@@ -6,7 +6,7 @@ import { recoverPendingParentInputs } from "./outbox-recovery.ts";
 import { completeStewardResultForDependencies } from "./terminal-result-service.ts";
 import { resolveParentResultEvidence } from "./accepted-terminal-report.ts";
 import { createStewardWorktree } from "./worktree.ts";
-import { childProjectContextBinding, delegationProjectContextReady, snapshotDelegationProjectContext } from "./project-context.ts";
+import { assertExactChildLedgerProjectIdentity, childProjectContextBinding, delegationProjectContextReady, snapshotChildProjectContext } from "./project-context.ts";
 import {
   normalizeSubsessionAllowedToolsAndEffects,
   normalizeSubsessionMutationScopeForEffects,
@@ -59,6 +59,7 @@ export function createSubsessionDelegationService(
     if (!childBinding || childBinding.role !== "steward") {
       throw new Error("subsession_child_binding_missing");
     }
+    assertExactChildLedgerProjectIdentity(childBinding);
     const rootWorkScope = stewardRootWorkScope(childBinding);
     const existing = await input.durableWork.boundWorkForTurn(child.childTurnId);
     if (existing) {
@@ -102,6 +103,10 @@ export function createSubsessionDelegationService(
       if (normalizedRequest.model_ref !== parent.modelRef) throw new Error("subsession_parent_model_mismatch");
       const parentReasoning = parent.metadata?.reasoning_effort;
       if (typeof parentReasoning === "string" && parentReasoning !== normalizedRequest.reasoning_effort) throw new Error("subsession_parent_reasoning_mismatch");
+      const { projectContext, inheritedProject } = await snapshotChildProjectContext({
+        parentSessionId: normalizedRequest.parent_session_id, parentTurnId: normalizedRequest.parent_turn_id, parent,
+        turns: input.parentTurns, documents: input.contextDocuments,
+      });
       const reviewed = await loadReviewedDelegationPlan(input, {
         parentSessionId: normalizedRequest.parent_session_id,
         parentTurnId: normalizedRequest.parent_turn_id,
@@ -131,11 +136,6 @@ export function createSubsessionDelegationService(
         safe_title: normalizedRequest.safe_title,
         created_at: now,
       };
-      const projectContext = await snapshotDelegationProjectContext({
-        parentSessionId: normalizedRequest.parent_session_id, parentTurnId: normalizedRequest.parent_turn_id,
-        projectId: parent.projectId,
-        turns: input.parentTurns, documents: input.contextDocuments,
-      });
       const packet = createPacket(normalizedRequest, {
         delegationId, relationId, taskId: managerialAssignmentId,
         parentWorkRef: reviewed.parent_work_ref,
@@ -147,7 +147,7 @@ export function createSubsessionDelegationService(
         parentTurnId: normalizedRequest.parent_turn_id,
         modelRef: normalizedRequest.model_ref,
       });
-      registerChildSession(input, parent, normalizedRequest, packet, childSessionId);
+      registerChildSession(input, parent, normalizedRequest, packet, childSessionId, inheritedProject);
       const childWorkspacePath = normalizedRequest.execution_mode === "read_only"
         ? parent.workspacePath
         : await createStewardWorktree(input, parent.workspacePath, branch, childSessionId);
@@ -254,12 +254,12 @@ function registerChildSession(
   request: DelegationRequest,
   packet: DelegationPacket,
   childSessionId: string,
+  inheritedProject: ReturnType<typeof childProjectContextBinding>,
 ): void {
-  const inheritedProject = childProjectContextBinding(packet.project_context);
   input.sessionBindings.upsert({
     sessionId: childSessionId,
     role: "steward",
-    ...(inheritedProject ? { projectId: inheritedProject.projectId } : {}),
+    ...(inheritedProject?.sessionBinding ?? {}),
     workspacePath: parent.workspacePath,
     runtimeAdapterId: "btcc-turn-runtime",
     modelProviderId: parent.modelProviderId,
