@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -45,7 +46,7 @@ test("R3 Project Ledger publication keeps canonical metadata after staging promo
         specExemption: true,
       }],
     });
-    const stagingPrefix = "runtime/btcc-project-ledger-effects/candidates/";
+    const stagingPrefix = "runtime/btcc-project-ledger-effects-v2/candidates/";
     const candidateRoot = join(
       butlerData,
       stagingPrefix,
@@ -113,19 +114,14 @@ test("R3 Project Ledger publication keeps canonical metadata after staging promo
     ]);
     expect(index.index.path).toBe(`${canonicalPrefix}/index/project.json`);
 
-    expect(result.promotion).toMatchObject({
-      status: "promoted",
-      activeHead: { projectRoot },
-    });
-    expect(result.observation).toMatchObject({
-      status: "observed",
-      activeHead: { projectRoot },
-    });
+    expect(result.promotion).toEqual({ status: "promoted" });
+    expect(result.observation).toEqual({ status: "observed" });
+    expect(JSON.stringify(result)).not.toContain(projectRoot);
 
     const journalPath = join(
       butlerData,
       "runtime",
-      "btcc-project-ledger-effects",
+      "btcc-project-ledger-effects-v2",
       "journals",
       `${result.publicationId}.json`,
     );
@@ -136,7 +132,7 @@ test("R3 Project Ledger publication keeps canonical metadata after staging promo
     };
     expect(journal).toMatchObject({
       status: "observed",
-      canonicalRoot: projectRoot,
+      canonicalRoot: realpathSync(projectRoot),
       candidateRoot,
     });
   } finally {
