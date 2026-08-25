@@ -6,10 +6,12 @@ import type {
   SubsessionDelegationDependencies,
   SubsessionDelegationService,
 } from "./contracts.ts";
+import { activeParentDelegations } from "./active-parent-delegation.ts";
 
 type ControlService = Pick<
   SubsessionDelegationService,
-  "steerSteward" | "cancelSteward" | "consumeStewardDirection"
+  "activeParentDelegations" | "steerSteward" | "cancelSteward" |
+    "consumeStewardDirection"
 >;
 
 export function createSubsessionControlService(
@@ -17,6 +19,9 @@ export function createSubsessionControlService(
   childQueue: NativeInboundQueue,
 ): ControlService {
   return {
+    async activeParentDelegations(parentInput) {
+      return activeParentDelegations(input, parentInput);
+    },
     async steerSteward(directionInput) {
       const instruction = requiredBoundedDirection(directionInput.instruction);
       const active = await resolveActiveRelation(input, directionInput);
