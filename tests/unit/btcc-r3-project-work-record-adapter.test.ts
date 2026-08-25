@@ -954,13 +954,12 @@ test("required projection port filesystem errors are safely masked", async () =>
   const attachmentService = createDurableWorkService(
     createProjectWorkStore({
       ...fixture.adapterInput,
-      resultAttachment: {
-        attachToolResult() {
-          return Promise.reject(
-            Object.assign(new Error("EACCES: /private/result.json"), {
-              code: "EACCES",
-            }),
-          );
+      resultRuntime: {
+        ...fixture.adapterInput.resultRuntime,
+        readCommittedResult() {
+          throw Object.assign(new Error("EACCES: /private/result.json"), {
+            code: "EACCES",
+          });
         },
       },
     }),
@@ -2511,13 +2510,24 @@ async function createFixture(
       ledgerRoot: projectRoot,
     },
     runtimeProjection: runtime,
-    resultAttachment: {
-      async attachToolResult(input: { toolCallId: string }) {
+    resultRuntime: {
+      readCommittedResult(input: { toolCallId: string; turnId: string }) {
         resultCalls.push(input.toolCallId);
+        return {
+          toolCallId: input.toolCallId,
+          toolName: "read_file",
+          status: "completed" as const,
+          resultSha256: createHash("sha256").update(`result:${input.toolCallId}`).digest("hex"),
+          originTurnId: input.turnId,
+          sourceTurnRowid: 1,
+          sourceTurnSequence: 1,
+        };
+      },
+      observeCanonicalResult(input: { work: DurableWorkView }) {
         const binding =
           runtime.bindings.get("turn-2") ?? runtime.bindings.get("turn-1");
         if (!binding) throw new Error("missing test binding");
-        return runtime.works.get(binding.workId)!;
+        if (input.work.workId !== binding.workId) throw new Error("wrong result Work");
       },
     },
   };
@@ -2569,6 +2579,11 @@ async function appendCanonicalResult(
   const childBody = canonicalProjectWorkChildBody({
       schema: "butler.btcc-project-work-result-reference.v1",
       workId: work.workId,
+      sessionId: work.sessionId,
+      scope: {
+        appProjectId: fixture.adapterInput.scope.appProjectId,
+        ledgerProjectId: fixture.adapterInput.scope.ledgerProjectId,
+      },
       operationIdentity,
       result: { ...result, sequence },
   });
@@ -2693,7 +2708,10 @@ class TestRuntimeProjection implements ProjectWorkRuntimeProjection {
     });
   }
   observeCanonicalWorks(input: {
-    works: Array<{ work: DurableWorkView; currentBindingTurnIds: string[] }>;
+    works: Array<{
+      work: DurableWorkView;
+      bindings: Array<{ turnId: string; isCurrent: boolean }>;
+    }>;
     sessionHeadWorkId: string;
   }) {
     if (this.observationError) throw this.observationError;
@@ -2704,7 +2722,7 @@ class TestRuntimeProjection implements ProjectWorkRuntimeProjection {
     this.observations.push(input.works.map((item) => item.work.workId));
     for (const item of input.works) {
       this.works.set(item.work.workId, item.work);
-      for (const turnId of item.currentBindingTurnIds) {
+      for (const { turnId } of item.bindings.filter((binding) => binding.isCurrent)) {
         this.bindings.set(turnId, {
           workId: item.work.workId,
           sessionId: item.work.sessionId,

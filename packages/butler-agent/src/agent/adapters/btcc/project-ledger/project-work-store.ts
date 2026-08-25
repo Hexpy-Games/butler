@@ -36,6 +36,8 @@ import type { ProjectWorkWriteContext } from "./project-work-write-context.ts";
 import { assertMaterialSnapshotForView } from "./project-work-material-snapshot.ts";
 import { probeProjectWorkServiceReplay } from "./project-work-service-replay.ts";
 import { safeProjectWorkPublicOperation } from "./project-work-errors.ts";
+import { attachProjectWorkToolResult } from "./project-work-result-attachment.ts";
+import { observeProjectLedgerHead } from "./observe-project-ledger.ts";
 
 export function createProjectWorkStore(
   input: CreateProjectWorkStoreInput,
@@ -133,10 +135,9 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
   attachToolResult(
     command: Parameters<DurableWorkStore["attachToolResult"]>[0],
   ) {
-    return safeProjectWorkPublicOperation(() => {
-      this.assertScope(command);
-      return this.input.resultAttachment.attachToolResult(command);
-    });
+    return safeProjectWorkPublicOperation(() =>
+      attachProjectWorkToolResult(this, command),
+    );
   }
 
   boundWorkForTurn(turnId: string) {
@@ -197,22 +198,38 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
             : [],
       ),
     );
-    const affected = await Promise.all(
-      [...workIds].map((workId) =>
-        requireCurrentProjectWork({
-          butlerData: this.input.butlerData,
-          scope: this.input.scope,
-          workId,
-        }),
-      ),
-    );
-    const sessionIds = new Set(affected.map((item) => item.view.sessionId));
-    for (const sessionId of sessionIds) {
-      const head = await requireProjectWorkSessionHead({
+    await this.observeStableRuntimeProjection([...workIds]);
+  }
+  private async observeStableRuntimeProjection(
+    workIds: string[],
+    attempt = 1,
+  ): Promise<void> {
+    const before = await observeProjectLedgerHead(this.input.scope.ledgerRoot);
+    const affected = await Promise.all(workIds.map((workId) =>
+      requireCurrentProjectWork({
         butlerData: this.input.butlerData,
         scope: this.input.scope,
+        workId,
+      }),
+    ));
+    const sessionIds = new Set(affected.map((item) => item.view.sessionId));
+    const heads = new Map(
+      await Promise.all([...sessionIds].map(async (sessionId) => [
         sessionId,
-      });
+        await requireProjectWorkSessionHead({
+          butlerData: this.input.butlerData,
+          scope: this.input.scope,
+          sessionId,
+        }),
+      ] as const)),
+    );
+    const after = await observeProjectLedgerHead(this.input.scope.ledgerRoot);
+    if (before.sourceSha256 !== after.sourceSha256) {
+      if (attempt >= 3) invalid("project_work_snapshot_unstable");
+      return this.observeStableRuntimeProjection(workIds, attempt + 1);
+    }
+    for (const sessionId of sessionIds) {
+      const head = heads.get(sessionId)!;
       const snapshots = new Map(
         affected
           .filter((item) => item.view.sessionId === sessionId)
@@ -222,11 +239,21 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
       await this.input.runtimeProjection.observeCanonicalWorks({
         works: [...snapshots.values()].map((snapshot) => ({
           work: snapshot.view,
-          currentBindingTurnIds: snapshot.manifest.bindingRefs.map(
-            (item) => item.turnId,
+          bindings: snapshot.children.flatMap((child) =>
+            child.schema === "butler.btcc-project-work-binding.v1"
+              ? [{
+                  ...child.binding,
+                  isCurrent: snapshot.manifest.bindingRefs.some(
+                    (ref) => ref.bindingRevisionId ===
+                      child.binding.bindingRevisionId,
+                  ),
+                }]
+              : [],
           ),
         })),
         sessionHeadWorkId: head.view.workId,
+        ledgerProjectId: this.input.scope.ledgerProjectId,
+        canonicalHeadSha256: after.sourceSha256,
       });
     }
   }

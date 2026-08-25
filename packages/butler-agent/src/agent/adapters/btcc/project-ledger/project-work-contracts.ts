@@ -2,6 +2,7 @@ import type {
   AttachToolResultInput,
   DurableWorkActionProgress,
   DurableWorkContext,
+  DurableWorkToolResultRef,
   DurableWorkView,
   RecordWorkDispositionCommand,
   WorkTurnScope,
@@ -53,19 +54,44 @@ export type ProjectWorkRuntimeProjection = {
   observeCanonicalWorks(input: {
     works: Array<{
       work: DurableWorkView;
-      currentBindingTurnIds: string[];
+      bindings: Array<{
+        bindingRevisionId: string;
+        turnId: string;
+        revision: number;
+        boundAt: string;
+        isCurrent: boolean;
+      }>;
     }>;
     sessionHeadWorkId: string;
+    ledgerProjectId: string;
+    canonicalHeadSha256: string;
   }): Promise<void>;
 };
 
-export type ProjectWorkResultAttachment = {
-  attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView>;
+export type ProjectWorkToolResultEvidence = {
+  toolCallId: string;
+  toolName: string;
+  status: "completed";
+  resultSha256: string;
+  originTurnId: string;
+  sourceTurnRowid: number | null;
+  sourceTurnSequence: number | null;
+};
+
+/** SQLite remains the raw-result authority and receives only a thin Project link. */
+export type ProjectWorkResultRuntime = {
+  readCommittedResult(input: AttachToolResultInput): ProjectWorkToolResultEvidence;
+  observeCanonicalResult(input: {
+    work: DurableWorkView;
+    scope: ResolvedProjectWorkScope;
+    result: DurableWorkToolResultRef & { sequence: number };
+    operationIdentity: ProjectWorkOperationIdentity;
+  }): void;
 };
 
 export type CreateProjectWorkStoreInput = {
   butlerData: string;
   scope: ResolvedProjectWorkScope;
   runtimeProjection: ProjectWorkRuntimeProjection;
-  resultAttachment: ProjectWorkResultAttachment;
+  resultRuntime: ProjectWorkResultRuntime;
 };

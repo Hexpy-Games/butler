@@ -103,6 +103,8 @@ CREATE TABLE IF NOT EXISTS btcc_guided_works (
   session_id TEXT NOT NULL,
   scope_kind TEXT NOT NULL CHECK (scope_kind IN ('session', 'project')),
   scope_ref TEXT NOT NULL,
+  ledger_project_id TEXT,
+  canonical_head_sha256 TEXT,
   origin_turn_id TEXT NOT NULL,
   origin_message_id TEXT NOT NULL,
   objective TEXT NOT NULL,
