@@ -27,7 +27,9 @@ function bindAppTurn(envelope: InboundEnvelope, store: SessionBindingStore): voi
   store.upsert({
     sessionId,
     role: existing?.role ?? "butler",
-    projectId: context.project?.id ?? existing?.projectId,
+    projectId: context.project?.id,
+    appProjectId: context.project?.id,
+    ledgerProjectId: context.project?.ledgerProjectId,
     workspacePath:
       workspaceAuthority.kind === "project"
         ? workspaceAuthority.workspacePath ?? process.cwd()
@@ -67,6 +69,9 @@ function bindStewardTurn(envelope: InboundEnvelope, store: SessionBindingStore):
     sessionId,
     role: "steward",
     ...(context.projectName.trim() ? { projectId: context.projectName.trim() } : {}),
+    ...(context.projectName.trim()
+      ? { appProjectId: context.projectName.trim() }
+      : {}),
     workspacePath: context.workspacePath,
     runtimeAdapterId: "btcc-turn-runtime",
     modelProviderId: modelRef.split("/", 1)[0] || (existing?.modelProviderId ?? "openai"),

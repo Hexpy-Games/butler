@@ -1,4 +1,7 @@
-export { openBtccSqliteStores } from "./open-btcc-sqlite-stores.ts";
+export {
+  openBtccSqliteStores,
+  openProductionBtccSqliteStores,
+} from "./open-btcc-sqlite-stores.ts";
 export { SqliteGuidedToolJournal } from "./guided-tool-journal.ts";
 export { SqliteGuidedEffectJournal } from "./guided-effect-store.ts";
 export { SqliteGuidedWorkStore } from "./guided-work-store.ts";
