@@ -30,6 +30,9 @@ export type { ProjectLedgerHead } from "./runtime-types.ts";
 export type {
   CreateProjectWorkStoreInput,
   ProjectWorkOperationIdentity,
+  ProjectWorkLegacyObservation,
+  ProjectWorkLegacyRuntime,
+  ProjectWorkLegacySnapshot,
   ProjectWorkResultRuntime,
   ProjectWorkToolResultEvidence,
   ProjectWorkRuntimeProjection,

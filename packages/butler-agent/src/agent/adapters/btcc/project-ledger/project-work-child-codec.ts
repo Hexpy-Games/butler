@@ -170,6 +170,7 @@ export function validateOperationIdentity(
       "binding_revision",
       "closeout_diagnostic",
       "abandonment",
+      "legacy_import",
     ].includes(String(item.kind))
   )
     invalid();
