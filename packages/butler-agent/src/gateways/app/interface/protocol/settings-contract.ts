@@ -43,6 +43,60 @@ export interface ModelFallbackSettingsUpdate {
   models?: string[];
 }
 
+export const WORKER_PROFILE_BUILTIN_JOBS = [
+  "coding",
+  "research",
+  "debug",
+  "review",
+  "writing",
+] as const;
+
+export type WorkerProfileBuiltinJobName =
+  (typeof WORKER_PROFILE_BUILTIN_JOBS)[number];
+
+export interface WorkerProfileBuiltinJob {
+  kind: "builtin";
+  job: WorkerProfileBuiltinJobName;
+}
+
+export interface WorkerProfileCustomJob {
+  kind: "custom";
+  text: string;
+}
+
+export type WorkerProfileJob = WorkerProfileBuiltinJob | WorkerProfileCustomJob;
+
+export const DEFAULT_WORKER_PROFILE_ID = "default";
+
+export const MAX_WORKER_PROFILES = 12;
+
+export const WORKER_PROFILE_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,47}$/u;
+
+export const WORKER_PROFILE_LABEL_MAX_LENGTH = 64;
+
+export const WORKER_PROFILE_DOMAIN_MAX_LENGTH = 96;
+
+export const WORKER_PROFILE_CUSTOM_JOB_TEXT_MAX_LENGTH = 160;
+
+export const WORKER_PROFILE_MODEL_REF_MAX_LENGTH = 128;
+
+export const WORKER_PROFILE_PROMPT_MAX_LENGTH = 2000;
+
+export const DEFAULT_MAX_SIMULTANEOUS_WORKERS = 10;
+
+export const MAX_SIMULTANEOUS_WORKERS_LIMIT = 10;
+
+export interface WorkerProfile {
+  id: string;
+  label: string;
+  enabled: boolean;
+  job: WorkerProfileJob;
+  domain?: string;
+  model: string;
+  reasoning_effort: SettingsView["reasoning_effort"];
+  prompt?: string;
+}
+
 export interface SettingsView {
   bridge_mode: "local" | "external";
   gateway_profile: "electron";
@@ -57,7 +111,8 @@ export interface SettingsView {
   effective_consolidation_model: string;
   consolidation_uses_butler_model: boolean;
   context_window_tokens: number;
-  worker_model_rules: WorkerModelRule[];
+  worker_profiles: WorkerProfile[];
+  max_simultaneous_workers: number;
   access_mode: "full_access" | "ask_first" | "read_only";
   plan_mode_default: boolean;
   follow_up_behavior: "queue" | "steer";
@@ -114,7 +169,8 @@ export interface UpdateSettingsRequest {
   consolidation_model?: string;
   consolidation_reasoning_effort?: SettingsView["consolidation_reasoning_effort"];
   context_window_tokens?: number;
-  worker_model_rules?: WorkerModelRule[];
+  worker_profiles?: WorkerProfile[];
+  max_simultaneous_workers?: number;
   access_mode?: SettingsView["access_mode"];
   plan_mode_default?: boolean;
   follow_up_behavior?: SettingsView["follow_up_behavior"];

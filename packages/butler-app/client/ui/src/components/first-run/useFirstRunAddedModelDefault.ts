@@ -9,36 +9,28 @@ import type { AppModelSummary, SettingsView } from "@/app/types.ts";
 
 type FirstRunCopy = (typeof firstRunCopy)[FirstRunLanguage];
 
-function selectedModelWorkerRules(
+function selectedModelWorkerProfiles(
   settings: SettingsView,
   targetModel: AppModelSummary,
-): SettingsView["worker_model_rules"] {
-  const rules = settings.worker_model_rules.length > 0
-    ? settings.worker_model_rules
-    : [
-        {
-          id: "deep_work",
-          label: "Deep work",
-          condition: "Research, feature development, architecture, review, and analysis",
-          enabled: true,
-        },
-        {
-          id: "routine_work",
-          label: "Routine work",
-          condition: "Simple coding, search, inspection, formatting, and tool calls",
-          enabled: true,
-        },
-      ];
-  return rules.map((rule) => {
-    const preferredEffort = rule.id === "deep_work" ? "high" : "medium";
-    return {
-      ...rule,
-      model: targetModel.model_ref,
-      reasoning_effort: targetModel.reasoning_efforts.includes(preferredEffort)
-        ? preferredEffort
-        : targetModel.default_reasoning_effort,
-    };
-  });
+): SettingsView["worker_profiles"] {
+  const profiles: SettingsView["worker_profiles"] =
+    settings.worker_profiles.length > 0
+      ? settings.worker_profiles
+      : [
+          {
+            id: "default",
+            label: "Default",
+            enabled: true,
+            job: { kind: "builtin", job: "coding" },
+            model: targetModel.model_ref,
+            reasoning_effort: targetModel.default_reasoning_effort,
+          },
+        ];
+  return profiles.map((profile) => ({
+    ...profile,
+    model: targetModel.model_ref,
+    reasoning_effort: targetModel.default_reasoning_effort,
+  }));
 }
 
 interface UseFirstRunAddedModelDefaultOptions {
@@ -118,7 +110,7 @@ export function useFirstRunAddedModelDefault({
         model: targetModel.model_ref,
         reasoning_effort: targetModel.default_reasoning_effort,
         context_window_tokens: targetModel.context_window_tokens ?? baseSettings.context_window_tokens,
-        worker_model_rules: selectedModelWorkerRules(baseSettings, targetModel),
+        worker_profiles: selectedModelWorkerProfiles(baseSettings, targetModel),
       };
       try {
         const result = await api<Partial<SettingsView>>("/settings", {
@@ -128,7 +120,7 @@ export function useFirstRunAddedModelDefault({
             model: fallbackSettings.model,
             reasoning_effort: fallbackSettings.reasoning_effort,
             context_window_tokens: fallbackSettings.context_window_tokens,
-            worker_model_rules: fallbackSettings.worker_model_rules,
+            worker_profiles: fallbackSettings.worker_profiles,
           }),
         });
         if (cancelled) return;

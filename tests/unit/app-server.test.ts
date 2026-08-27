@@ -650,10 +650,16 @@ test("fresh app settings honor an install-selected local model default", async (
     expect(settings.data.model).toBe("local/gemma-install");
     expect(settings.data.context_window_tokens).toBe(32768);
     expect(settings.data.effective_consolidation_model).toBe("local/gemma-install");
-    expect(settings.data.worker_model_rules).toEqual([
-      expect.objectContaining({ id: "deep_work", model: "local/gemma-install" }),
-      expect.objectContaining({ id: "routine_work", model: "local/gemma-install" }),
+    expect(settings.data.worker_profiles).toEqual([
+      expect.objectContaining({
+        id: "default",
+        enabled: true,
+        model: "local/gemma-install",
+        reasoning_effort: "none",
+      }),
     ]);
+    expect(settings.data.max_simultaneous_workers).toBe(10);
+    expect(settings.data).not.toHaveProperty("worker_model_rules");
     const catalog = await getJson(`${server.url}model-catalog`);
     expect(catalog.data.generation).toMatch(/^[a-f0-9]{64}$/);
     expect(catalog.data.default_model_ref).toBe("local/gemma-install");
@@ -3420,20 +3426,16 @@ test("settings, command palette, and project actions are route-backed and privac
       },
       desktop_tray_enabled: true,
     });
-    expect(settings.data.worker_model_rules).toEqual([
+    expect(settings.data.worker_profiles).toEqual([
       expect.objectContaining({
-        id: "deep_work",
-        model: "openai/gpt-5.5",
-        reasoning_effort: "high",
+        id: "default",
         enabled: true,
-      }),
-      expect.objectContaining({
-        id: "routine_work",
         model: "openai/gpt-5.5",
-        reasoning_effort: "medium",
-        enabled: true,
+        reasoning_effort: "xhigh",
       }),
     ]);
+    expect(settings.data.max_simultaneous_workers).toBe(10);
+    expect(settings.data).not.toHaveProperty("worker_model_rules");
     expect(settings.data.web_search).toMatchObject({
       provider: "duckduckgo-html",
       api_key_configured: false,
@@ -3660,6 +3662,15 @@ test("settings, command palette, and project actions are route-backed and privac
       effective_consolidation_model: "openai/gpt-5.4-mini",
       consolidation_uses_butler_model: false,
     });
+    const consolidationModelPersisted = await getJson(
+      `${server.url}settings`,
+    );
+    expect(consolidationModelPersisted.data).toMatchObject({
+      consolidation_model: "openai/gpt-5.4-mini",
+      consolidation_reasoning_effort: "medium",
+      effective_consolidation_model: "openai/gpt-5.4-mini",
+      consolidation_uses_butler_model: false,
+    });
     const migratedShortcut = await patchJson(`${server.url}settings`, {
       multiline_send_behavior: "enter_newline_shift_enter_send",
     });
@@ -3746,66 +3757,74 @@ test("settings, command palette, and project actions are route-backed and privac
       "unexpected_field",
     );
 
-    const invalidWorkerRuleSettings = await fetch(`${server.url}settings`, {
+    const invalidWorkerProfileSettings = await fetch(`${server.url}settings`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        worker_model_rules: [
+        worker_profiles: [
           {
-            id: "deep",
-            label: "Deep",
-            condition: "Deep work",
+            id: "invalid-extra",
+            label: "Invalid extra",
+            enabled: true,
+            job: { kind: "builtin", job: "coding" },
             model: "openai/gpt-5.5",
             reasoning_effort: "high",
-            enabled: true,
             unexpected_nested_field: "must not pass",
           },
         ],
       }),
     });
-    const invalidWorkerRuleBody = await invalidWorkerRuleSettings.json();
-    expect(invalidWorkerRuleSettings.status).toBe(400);
-    expect(invalidWorkerRuleBody.error.code).toBe("invalid_settings_request");
-    expect(JSON.stringify(invalidWorkerRuleBody)).not.toContain(
+    const invalidWorkerProfileBody = await invalidWorkerProfileSettings.json();
+    expect(invalidWorkerProfileSettings.status).toBe(400);
+    expect(invalidWorkerProfileBody.error.code).toBe(
+      "invalid_settings_request",
+    );
+    expect(JSON.stringify(invalidWorkerProfileBody)).not.toContain(
       "unexpected_nested_field",
     );
 
-    const workerRulesUpdated = await patchJson(`${server.url}settings`, {
-      worker_model_rules: [
+    const workerProfilesUpdated = await patchJson(`${server.url}settings`, {
+      worker_profiles: [
         {
-          id: "routine search work",
+          id: "routine-search-work",
           label: "Routine search work",
-          condition: "Search, inspect, and format",
+          enabled: true,
+          job: { kind: "custom", text: "Search, inspect, and format" },
           model: "openai/gpt-5.4-mini",
           reasoning_effort: "medium",
-          enabled: true,
         },
         {
           id: "anthropic-runtime-work",
           label: "Anthropic runtime work",
-          condition: "Provider wired through native runtime",
+          enabled: true,
+          job: { kind: "custom", text: "Provider wired through native runtime" },
           model: "anthropic/claude-opus-5",
           reasoning_effort: "high",
-          enabled: true,
         },
       ],
     });
-    expect(workerRulesUpdated.data.worker_model_rules).toEqual([
+    expect(workerProfilesUpdated.data.worker_profiles).toEqual([
+      expect.objectContaining({ id: "default", enabled: true }),
       expect.objectContaining({
         id: "routine-search-work",
         label: "Routine search work",
+        enabled: true,
+        job: { kind: "custom", text: "Search, inspect, and format" },
         model: "openai/gpt-5.4-mini",
         reasoning_effort: "medium",
-        enabled: true,
       }),
       expect.objectContaining({
         id: "anthropic-runtime-work",
         label: "Anthropic runtime work",
+        enabled: true,
+        job: { kind: "custom", text: "Provider wired through native runtime" },
         model: "anthropic/claude-opus-5",
         reasoning_effort: "high",
-        enabled: true,
       }),
     ]);
+    expect(workerProfilesUpdated.data).not.toHaveProperty(
+      "worker_model_rules",
+    );
 
     await postJson(`${server.url}messages`, {
       chat_id: "general",
@@ -4026,48 +4045,6 @@ test("settings accepts GPT-5.6 max reasoning effort", async () => {
     expect(maxReasoning.data.model).toBe("openai/gpt-5.6-sol");
     expect(maxReasoning.data.reasoning_effort).toBe("max");
     expect(maxReasoning.data.consolidation_reasoning_effort).toBe("max");
-  } finally {
-    server.stop();
-  }
-});
-
-test("message responders receive configured worker model rules", async () => {
-  const responderInputs: Array<{ workerModelRules?: unknown[] }> = [];
-  const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
-    port: 0,
-    responder(input) {
-      responderInputs.push({ workerModelRules: input.workerModelRules });
-      return { texts: ["ok"] };
-    },
-  });
-  try {
-    await patchJson(`${server.url}settings`, {
-      worker_model_rules: [
-        {
-          id: "deep_work",
-          label: "Deep work",
-          condition: "Research and analysis",
-          model: "openai/gpt-5.5",
-          reasoning_effort: "high",
-          enabled: true,
-        },
-      ],
-    });
-
-    await postJson(`${server.url}messages`, {
-      chat_id: "general",
-      text: "start worker",
-    });
-
-    expect(responderInputs[0]?.workerModelRules).toContainEqual(
-      expect.objectContaining({
-        id: "deep_work",
-        model: "openai/gpt-5.5",
-        reasoning_effort: "high",
-        enabled: true,
-      }),
-    );
   } finally {
     server.stop();
   }
@@ -4527,14 +4504,22 @@ test("registered local models can be edited and deleted without stale settings r
     await patchJson(`${server.url}settings`, {
       model: "local/gemma-before",
       reasoning_effort: "none",
-      worker_model_rules: [
+      worker_profiles: [
+        {
+          id: "default",
+          label: "Default",
+          enabled: true,
+          job: { kind: "builtin", job: "coding" },
+          model: "local/gemma-before",
+          reasoning_effort: "none",
+        },
         {
           id: "local-deep",
           label: "Local deep",
-          condition: "Use local before",
+          enabled: true,
+          job: { kind: "custom", text: "Use local before" },
           model: "local/gemma-before",
           reasoning_effort: "none",
-          enabled: true,
         },
       ],
     });
@@ -4579,12 +4564,19 @@ test("registered local models can be edited and deleted without stale settings r
 
     const remappedSettings = await getJson(`${server.url}settings`);
     expect(remappedSettings.data.model).toBe("local/gemma-after");
-    expect(remappedSettings.data.worker_model_rules).toContainEqual(
+    expect(remappedSettings.data.worker_profiles).toEqual([
       expect.objectContaining({
+        id: "default",
         model: "local/gemma-after",
         reasoning_effort: "none",
       }),
-    );
+      expect.objectContaining({
+        id: "local-deep",
+        model: "local/gemma-after",
+        reasoning_effort: "none",
+      }),
+    ]);
+    expect(remappedSettings.data).not.toHaveProperty("worker_model_rules");
 
     const deleted = await deleteJson(
       `${server.url}model-catalog/local-models/${encodeURIComponent("local/gemma-after")}`,
@@ -4598,8 +4590,9 @@ test("registered local models can be edited and deleted without stale settings r
     const normalizedSettings = await getJson(`${server.url}settings`);
     expect(normalizedSettings.data.model).toBe("openai/gpt-5.5");
     expect(
-      JSON.stringify(normalizedSettings.data.worker_model_rules),
+      JSON.stringify(normalizedSettings.data.worker_profiles),
     ).not.toContain("local/gemma-after");
+    expect(normalizedSettings.data).not.toHaveProperty("worker_model_rules");
   } finally {
     server.stop();
   }

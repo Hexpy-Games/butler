@@ -2118,8 +2118,8 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("aria-describedby={descriptionId}");
   expect(renderer).toContain("settingsDescriptions.contextLimitClamped");
   expect(renderer).toContain("<SettingsShell");
-  expect(renderer).toContain("settingsCopy.panels.workerModelRules");
-  expect(renderer).toContain("worker_model_rules");
+  expect(renderer).toContain("settingsCopy.panels.workerProfiles");
+  expect(renderer).toContain("draft.worker_profiles");
   expect(renderer).toContain("appCopy.settings.localModels");
   expect(renderer).toContain("/model-catalog/local/discover");
   expect(renderer).toContain("api<LocalModelRegistrationResult>(");
@@ -2136,19 +2136,30 @@ test("settings, command palette, automations, right panel, and worker UI are app
   ).toContain("<LocalModelApiSection");
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/settings/WorkerModelRule.tsx",
+      "packages/butler-app/client/ui/src/components/settings/ModelsSettings.tsx",
     ),
-  ).toContain('data-test-class="worker-model-rule"');
+  ).toContain("<WorkerProfileEditor");
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/settings/WorkerModelRule.tsx",
+      "packages/butler-app/client/ui/src/components/settings/WorkerProfileEditor.tsx",
     ),
-  ).not.toContain("<Grid");
+  ).toContain('from "@/butler-ds"');
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/settings/WorkerModelRule.tsx",
+      "packages/butler-app/client/ui/src/components/settings/WorkerProfileEditor.tsx",
     ),
-  ).not.toContain("actions=");
+  ).toContain('data-test-class="worker-profile"');
+  expect(
+    read(
+      "packages/butler-app/client/ui/src/components/settings/WorkerProfileEditor.tsx",
+    ),
+  ).toContain("disabled={saving || isDefault}");
+  expect(
+    listUiSourceFiles(
+      "packages/butler-app/client/ui/src/components/settings",
+    ).some((filePath) => filePath.includes("WorkerModelRule")),
+  ).toBe(false);
+  expect(renderer).not.toContain("panels.workerModelRules");
   expect(
     read(
       "packages/butler-app/client/ui/src/components/settings/LocalModelRow.tsx",

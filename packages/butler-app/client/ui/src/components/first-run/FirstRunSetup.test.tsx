@@ -15,6 +15,7 @@ import type {
   ModelCatalogView,
   ProviderAuthMethod,
   SettingsView,
+  WorkerProfile,
 } from "@/app/types.ts";
 import { FirstRunSetup } from "./FirstRunSetup";
 
@@ -373,12 +374,79 @@ test("first-run model setup waits for a newly added model before completion", as
   )).toBe(true);
   const selectedModelPatch = rendered.settingsPatches.find((patch) =>
     hasSettingsPatchFields(patch, { model: "openai/gpt-5.5" }),
-  ) as { worker_model_rules?: Array<{ model?: string }> } | undefined;
-  expect(selectedModelPatch?.worker_model_rules?.map((rule) => rule.model)).toEqual([
-    "openai/gpt-5.5",
-    "openai/gpt-5.5",
+  ) as { worker_profiles?: WorkerProfile[] } | undefined;
+  expect(selectedModelPatch?.worker_profiles).toEqual([
+    {
+      id: "default",
+      label: "Default",
+      enabled: true,
+      job: { kind: "builtin", job: "coding" },
+      model: "openai/gpt-5.5",
+      reasoning_effort: "xhigh",
+    },
   ]);
+  expect(
+    Object.prototype.hasOwnProperty.call(
+      selectedModelPatch ?? {},
+      "worker_model_rules",
+    ),
+  ).toBe(false);
+  expect(
+    Object.prototype.hasOwnProperty.call(
+      selectedModelPatch ?? {},
+      "max_simultaneous_workers",
+    ),
+  ).toBe(false);
   expect(rendered.completedStates[0]?.status).toBe("complete");
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run model setup keeps pre-existing custom worker profile fields", async () => {
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+    {
+      settings: {
+        ...EMPTY_SETTINGS,
+        model: "missing/model",
+        worker_profiles: [
+          {
+            id: "docs-writer",
+            label: "Docs writer",
+            enabled: false,
+            job: { kind: "custom", text: "Write release notes" },
+            domain: "writing",
+            prompt: "Keep it terse.",
+            model: "old/model",
+            reasoning_effort: "low",
+          },
+        ],
+      },
+    },
+  );
+
+  await addHostedModelAndFinish(rendered);
+  const selectedModelPatch = rendered.settingsPatches.find((patch) =>
+    hasSettingsPatchFields(patch, { model: "openai/gpt-5.5" }),
+  ) as { worker_profiles?: WorkerProfile[] } | undefined;
+  expect(selectedModelPatch?.worker_profiles).toEqual([
+    {
+      id: "docs-writer",
+      label: "Docs writer",
+      enabled: false,
+      job: { kind: "custom", text: "Write release notes" },
+      domain: "writing",
+      prompt: "Keep it terse.",
+      model: "openai/gpt-5.5",
+      reasoning_effort: "xhigh",
+    },
+  ]);
 
   await act(async () => rendered.root.unmount());
 });
