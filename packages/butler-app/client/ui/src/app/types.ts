@@ -44,6 +44,36 @@ export interface WorkerModelRule {
   enabled: boolean;
 }
 
+export type WorkerProfileBuiltinJobName =
+  | "coding"
+  | "research"
+  | "debug"
+  | "review"
+  | "writing";
+
+export interface WorkerProfileBuiltinJob {
+  kind: "builtin";
+  job: WorkerProfileBuiltinJobName;
+}
+
+export interface WorkerProfileCustomJob {
+  kind: "custom";
+  text: string;
+}
+
+export type WorkerProfileJob = WorkerProfileBuiltinJob | WorkerProfileCustomJob;
+
+export interface WorkerProfile {
+  id: string;
+  label: string;
+  enabled: boolean;
+  job: WorkerProfileJob;
+  domain?: string;
+  model: string;
+  reasoning_effort: ReasoningEffort;
+  prompt?: string;
+}
+
 export interface AppModelSummary {
   provider_id: string;
   provider_label: string;
@@ -477,7 +507,8 @@ export interface SettingsView {
   effective_consolidation_model: string;
   consolidation_uses_butler_model: boolean;
   context_window_tokens: number;
-  worker_model_rules: WorkerModelRule[];
+  worker_profiles: WorkerProfile[];
+  max_simultaneous_workers: number;
   access_mode: AccessMode;
   plan_mode_default: boolean;
   follow_up_behavior: "queue" | "steer";

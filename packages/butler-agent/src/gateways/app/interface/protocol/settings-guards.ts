@@ -1,9 +1,20 @@
 import type { McpSecretInput, McpServerUpsertRequest } from "./integration-contract.ts";
+import {
+  MAX_SIMULTANEOUS_WORKERS_LIMIT,
+  MAX_WORKER_PROFILES,
+  WORKER_PROFILE_BUILTIN_JOBS,
+  WORKER_PROFILE_CUSTOM_JOB_TEXT_MAX_LENGTH,
+  WORKER_PROFILE_DOMAIN_MAX_LENGTH,
+  WORKER_PROFILE_ID_PATTERN,
+  WORKER_PROFILE_LABEL_MAX_LENGTH,
+  WORKER_PROFILE_MODEL_REF_MAX_LENGTH,
+  WORKER_PROFILE_PROMPT_MAX_LENGTH,
+  type WorkerProfile,
+} from "./settings-contract.ts";
 import type {
   ModelFallbackSettingsUpdate,
   UpdateSettingsRequest,
   WebSearchSettingsUpdate,
-  WorkerModelRule,
 } from "./settings-contract.ts";
 
 const UPDATE_SETTINGS_KEYS = new Set([
@@ -15,7 +26,8 @@ const UPDATE_SETTINGS_KEYS = new Set([
   "consolidation_model",
   "consolidation_reasoning_effort",
   "context_window_tokens",
-  "worker_model_rules",
+  "worker_profiles",
+  "max_simultaneous_workers",
   "access_mode",
   "plan_mode_default",
   "follow_up_behavior",
@@ -80,13 +92,24 @@ export function isMcpServerUpsertRequest(
   return true;
 }
 
-const WORKER_MODEL_RULE_KEYS = new Set([
+const WORKER_PROFILE_KEYS = new Set([
   "id",
   "label",
-  "condition",
+  "enabled",
+  "job",
+  "domain",
   "model",
   "reasoning_effort",
-  "enabled",
+  "prompt",
+]);
+
+const REASONING_EFFORTS = new Set([
+  "none",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
 ]);
 
 export function isUpdateSettingsRequest(
@@ -120,8 +143,16 @@ export function isUpdateSettingsRequest(
   )
     return false;
   if (
-    "worker_model_rules" in input &&
-    !isWorkerModelRuleList(input.worker_model_rules)
+    "worker_profiles" in input &&
+    !isWorkerProfileList(input.worker_profiles)
+  )
+    return false;
+  if (
+    "max_simultaneous_workers" in input &&
+    (typeof input.max_simultaneous_workers !== "number" ||
+      !Number.isInteger(input.max_simultaneous_workers) ||
+      input.max_simultaneous_workers < 1 ||
+      input.max_simultaneous_workers > MAX_SIMULTANEOUS_WORKERS_LIMIT)
   )
     return false;
   if (
@@ -252,27 +283,97 @@ function isIanaTimezone(value: unknown): value is string {
   }
 }
 
-function isWorkerModelRuleList(value: unknown): value is WorkerModelRule[] {
+function isWorkerProfileList(value: unknown): value is WorkerProfile[] {
   if (!Array.isArray(value)) return false;
-  return value.every((rule) => {
-    if (!rule || typeof rule !== "object" || Array.isArray(rule)) return false;
-    const input = rule as Record<string, unknown>;
-    if (!Object.keys(input).every((key) => WORKER_MODEL_RULE_KEYS.has(key)))
+  if (value.length === 0 || value.length > MAX_WORKER_PROFILES) return false;
+  const seenIds = new Set<string>();
+  return value.every((profile) => {
+    if (!profile || typeof profile !== "object" || Array.isArray(profile))
       return false;
-    if ("id" in input && typeof input.id !== "string") return false;
-    if ("label" in input && typeof input.label !== "string") return false;
-    if ("condition" in input && typeof input.condition !== "string")
+    const input = profile as Record<string, unknown>;
+    if (!Object.keys(input).every((key) => WORKER_PROFILE_KEYS.has(key)))
       return false;
-    if ("model" in input && typeof input.model !== "string") return false;
-    if ("enabled" in input && typeof input.enabled !== "boolean") return false;
     if (
-      "reasoning_effort" in input &&
-      !["none", "low", "medium", "high", "xhigh", "max"].includes(
-        String(input.reasoning_effort),
-      )
+      typeof input.id !== "string" ||
+      !WORKER_PROFILE_ID_PATTERN.test(input.id)
+    ) {
+      return false;
+    }
+    const collisionKey = input.id.toLocaleLowerCase("en-US");
+    if (seenIds.has(collisionKey)) return false;
+    seenIds.add(collisionKey);
+    if (
+      typeof input.label !== "string" ||
+      !isBoundedText(input.label, WORKER_PROFILE_LABEL_MAX_LENGTH)
+    ) {
+      return false;
+    }
+    if (typeof input.enabled !== "boolean") return false;
+    if (!isWorkerProfileJob(input.job)) return false;
+    if (
+      "domain" in input &&
+      (typeof input.domain !== "string" ||
+        !isBoundedText(input.domain, WORKER_PROFILE_DOMAIN_MAX_LENGTH))
+    ) {
+      return false;
+    }
+    if (
+      typeof input.model !== "string" ||
+      !isBoundedModelRef(input.model)
+    ) {
+      return false;
+    }
+    if (
+      typeof input.reasoning_effort !== "string" ||
+      !REASONING_EFFORTS.has(input.reasoning_effort)
+    ) {
+      return false;
+    }
+    if (
+      "prompt" in input &&
+      (typeof input.prompt !== "string" ||
+        input.prompt.length > WORKER_PROFILE_PROMPT_MAX_LENGTH)
     ) {
       return false;
     }
     return true;
   });
+}
+
+function isWorkerProfileJob(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const job = value as Record<string, unknown>;
+  const keys = Object.keys(job).sort();
+  if (job.kind === "builtin") {
+    return (
+      keys.length === 2 &&
+      keys[0] === "job" &&
+      keys[1] === "kind" &&
+      (WORKER_PROFILE_BUILTIN_JOBS as readonly unknown[]).includes(job.job)
+    );
+  }
+  if (job.kind === "custom") {
+    return (
+      keys.length === 2 &&
+      keys[0] === "kind" &&
+      keys[1] === "text" &&
+      typeof job.text === "string" &&
+      isBoundedText(job.text, WORKER_PROFILE_CUSTOM_JOB_TEXT_MAX_LENGTH)
+    );
+  }
+  return false;
+}
+
+function isBoundedModelRef(value: string): boolean {
+  const model = value.trim();
+  return (
+    model.length > 0 &&
+    model.length <= WORKER_PROFILE_MODEL_REF_MAX_LENGTH &&
+    !/\s/u.test(model)
+  );
+}
+
+function isBoundedText(value: string, maxLength: number): boolean {
+  const text = value.replace(/\s+/gu, " ").trim();
+  return text.length > 0 && text.length <= maxLength;
 }

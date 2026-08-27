@@ -249,7 +249,7 @@ export interface AppCopy {
     };
     panels: {
       butlerModel: string;
-      workerModelRules: string;
+      workerProfiles: string;
       backupModels: string;
       serverBridge: string;
       updates: string;
@@ -261,6 +261,14 @@ export interface AppCopy {
       systemEvents: string;
       archives: string;
       about: string;
+    };
+    workerJobs: {
+      coding: string;
+      research: string;
+      debug: string;
+      review: string;
+      writing: string;
+      custom: string;
     };
     backupModels: {
       title: string;
@@ -275,6 +283,11 @@ export interface AppCopy {
       empty: string;
       noCandidates: string;
       limitReached: string;
+    };
+    workerProfilesPanel: {
+      add: string;
+      addLimitReached: string;
+      maxSimultaneousWorkers: string;
     };
     fields: {
       language: string;
@@ -294,6 +307,11 @@ export interface AppCopy {
       contextLimit: string;
       access: string;
       planModeDefault: string;
+      name: string;
+      job: string;
+      customJob: string;
+      domain: string;
+      workerPrompt: string;
       enabled: string;
       condition: string;
       model: string;
@@ -936,7 +954,7 @@ const koKrCopy: AppCopy = {
     },
     panels: {
       butlerModel: "모델 설정",
-      workerModelRules: "작업자 모델 규칙",
+      workerProfiles: "작업자 프로필",
       backupModels: "예비 모델",
       serverBridge: "서버 / 브리지",
       updates: "업데이트",
@@ -948,6 +966,14 @@ const koKrCopy: AppCopy = {
       systemEvents: "시스템 이벤트",
       archives: "아카이브",
       about: "앱 정보",
+    },
+    workerJobs: {
+      coding: "코딩",
+      research: "리서치",
+      debug: "디버깅",
+      review: "리뷰",
+      writing: "글쓰기",
+      custom: "사용자 지정",
     },
     backupModels: {
       title: "예비 모델",
@@ -964,6 +990,11 @@ const koKrCopy: AppCopy = {
       empty: "등록된 예비 모델이 없습니다.",
       noCandidates: "추가할 수 있는 모델이 없습니다.",
       limitReached: "예비 모델은 최대 5개까지 등록할 수 있습니다.",
+    },
+    workerProfilesPanel: {
+      add: "작업자 프로필 추가",
+      addLimitReached: "작업자 프로필은 최대 12개까지 등록할 수 있습니다.",
+      maxSimultaneousWorkers: "최대 동시 작업자 수",
     },
     fields: {
       language: "언어",
@@ -983,6 +1014,11 @@ const koKrCopy: AppCopy = {
       contextLimit: "컨텍스트 한도",
       access: "접근 권한",
       planModeDefault: "기본으로 계획 모드 사용",
+      name: "이름",
+      job: "작업",
+      customJob: "사용자 지정 작업",
+      domain: "도메인",
+      workerPrompt: "작업자 프롬프트",
       enabled: "사용",
       condition: "조건",
       model: "모델",
@@ -1700,7 +1736,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     },
     panels: {
       butlerModel: "Model settings",
-      workerModelRules: "Worker model rules",
+      workerProfiles: "Worker profiles",
       backupModels: "Backup models",
       serverBridge: "Server / Bridge",
       updates: "Updates",
@@ -1712,6 +1748,14 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       systemEvents: "System events",
       archives: "Archives",
       about: "About",
+    },
+    workerJobs: {
+      coding: "Coding",
+      research: "Research",
+      debug: "Debug",
+      review: "Review",
+      writing: "Writing",
+      custom: "Custom",
     },
     backupModels: {
       title: "Backup models",
@@ -1728,6 +1772,11 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       empty: "No backup models are registered.",
       noCandidates: "No models are available to add.",
       limitReached: "You can register up to 5 backup models.",
+    },
+    workerProfilesPanel: {
+      add: "Add Worker profile",
+      addLimitReached: "You can register up to 12 worker profiles.",
+      maxSimultaneousWorkers: "Max simultaneous Workers",
     },
     fields: {
       language: "Language",
@@ -1747,6 +1796,11 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       contextLimit: "Context limit",
       access: "Access",
       planModeDefault: "Use plan mode by default",
+      name: "Name",
+      job: "Job",
+      customJob: "Custom job",
+      domain: "Domain",
+      workerPrompt: "Worker prompt",
       enabled: "Enabled",
       condition: "Condition",
       model: "Model",

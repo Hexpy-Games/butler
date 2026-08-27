@@ -29,8 +29,13 @@ import {
   DEFAULT_CONTEXT_WINDOW_TOKENS,
   DEFAULT_MODEL_FALLBACK_SETTINGS,
   normalizeModelFallbackSettings,
-  normalizeWorkerModelRules,
 } from "./settings-models.ts";
+import {
+  defaultWorkerProfileFor,
+  migrateLegacyWorkerModelRules,
+  normalizeMaxSimultaneousWorkers,
+  normalizeStoredWorkerProfiles,
+} from "./worker-profile-storage.ts";
 import {
   normalizeWebSearchSettings,
   readConfigWebSearchSettings,
@@ -82,6 +87,11 @@ export class AppPreferencesStore {
       registeredModels,
     );
     const storedReasoning = stored.reasoning_effort ?? DEFAULT_REASONING_EFFORT;
+    const reasoningEffort = modelMetadata.reasoning_efforts.includes(
+      storedReasoning,
+    )
+      ? storedReasoning
+      : modelMetadata.default_reasoning_effort;
     const contextWindowTokens = clampContextWindowTokens(
       stored.context_window_tokens,
       modelMetadata.context_window_tokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
@@ -94,6 +104,54 @@ export class AppPreferencesStore {
     const customColors = normalizedMainScreenThemeColorsOrDefault(
       stored.main_screen_theme_custom_colors,
     );
+    const primaryWorkerModel = {
+      model: modelMetadata.model_ref,
+      reasoning_effort: reasoningEffort,
+    };
+    const storedWithLegacyRules = stored as Partial<SettingsView> & {
+      worker_model_rules?: unknown;
+    };
+    const hasCanonicalWorkerProfiles = Object.prototype.hasOwnProperty.call(
+      stored,
+      "worker_profiles",
+    );
+    const hasLegacyWorkerRules = Object.prototype.hasOwnProperty.call(
+      storedWithLegacyRules,
+      "worker_model_rules",
+    );
+    const migratedLegacyProfiles = hasCanonicalWorkerProfiles
+      ? undefined
+      : migrateLegacyWorkerModelRules(
+          storedWithLegacyRules.worker_model_rules,
+          registeredModels,
+          primaryWorkerModel,
+        );
+    const workerProfiles = hasCanonicalWorkerProfiles
+      ? normalizeStoredWorkerProfiles(
+          stored.worker_profiles,
+          registeredModels,
+          primaryWorkerModel,
+        )
+      : (migratedLegacyProfiles ?? [defaultWorkerProfileFor(primaryWorkerModel)]);
+    const canonicalMaxSimultaneousWorkers = normalizeMaxSimultaneousWorkers(
+      stored.max_simultaneous_workers,
+    );
+    const { worker_model_rules: _legacyWorkerRules, ...canonicalStored } =
+      storedWithLegacyRules;
+    const needsCanonicalizationWrite =
+      hasLegacyWorkerRules ||
+      !hasCanonicalWorkerProfiles ||
+      !Object.prototype.hasOwnProperty.call(stored, "max_simultaneous_workers") ||
+      stored.max_simultaneous_workers !== canonicalMaxSimultaneousWorkers ||
+      JSON.stringify(stored.worker_profiles) !==
+        JSON.stringify(workerProfiles);
+    if (needsCanonicalizationWrite) {
+      this.persistence.write("settings", {
+        ...canonicalStored,
+        worker_profiles: workerProfiles,
+        max_simultaneous_workers: canonicalMaxSimultaneousWorkers,
+      });
+    }
     return {
       bridge_mode: this.bridgeMode,
       gateway_profile: "electron",
@@ -122,11 +180,8 @@ export class AppPreferencesStore {
         : consolidationModel.effective_model,
       consolidation_uses_butler_model: consolidationModel.uses_butler_model,
       context_window_tokens: contextWindowTokens,
-      worker_model_rules: normalizeWorkerModelRules(
-        stored.worker_model_rules,
-        registeredModels,
-        modelMetadata.model_ref,
-      ),
+      worker_profiles: workerProfiles,
+      max_simultaneous_workers: canonicalMaxSimultaneousWorkers,
       access_mode: stored.access_mode ?? "full_access",
       plan_mode_default: stored.plan_mode_default ?? false,
       follow_up_behavior: stored.follow_up_behavior ?? "queue",
@@ -162,7 +217,12 @@ export class AppPreferencesStore {
 
   updateSettings(input: UpdateSettingsRequest): SettingsView {
     const registeredModels = this.modelRegistry.registeredModelMetadata();
-    const sanitized = sanitizeSettingsUpdate(input, registeredModels);
+    const current = this.getSettings();
+    const sanitized = sanitizeSettingsUpdate(
+      input,
+      registeredModels,
+      current.worker_profiles,
+    );
     const webSearchPatch = sanitized.web_search
       ? webSearchSettingsPatchFrom(sanitized.web_search)
       : undefined;
@@ -176,6 +236,12 @@ export class AppPreferencesStore {
         sanitized.consolidation_reasoning_effort,
       );
     }
+    const consolidationUpdated =
+      typeof sanitized.consolidation_model === "string" ||
+      typeof sanitized.consolidation_reasoning_effort === "string";
+    const updatedConsolidation = consolidationUpdated
+      ? readProfilingExtractorModelConfig(this.butlerData)
+      : undefined;
     const hasModelFallbackPatch = Object.prototype.hasOwnProperty.call(
       input,
       "model_fallback",
@@ -185,7 +251,6 @@ export class AppPreferencesStore {
       model_fallback: _ignoredModelFallback,
       ...sanitizedSettings
     } = sanitized;
-    const current = this.getSettings();
     const hasPrimaryModelUpdate = typeof sanitized.model === "string";
     const shouldPersistModelFallback =
       hasModelFallbackPatch || hasPrimaryModelUpdate;
@@ -210,6 +275,21 @@ export class AppPreferencesStore {
     const candidate: SettingsView = {
       ...current,
       ...sanitizedSettings,
+      consolidation_model: updatedConsolidation
+        ? (updatedConsolidation.configured_model ??
+          PROFILE_EXTRACTOR_MODEL_DEFAULT)
+        : current.consolidation_model,
+      consolidation_reasoning_effort:
+        updatedConsolidation?.reasoning_effort ??
+        current.consolidation_reasoning_effort,
+      effective_consolidation_model: updatedConsolidation
+        ? updatedConsolidation.uses_butler_model
+          ? current.model
+          : updatedConsolidation.effective_model
+        : current.effective_consolidation_model,
+      consolidation_uses_butler_model:
+        updatedConsolidation?.uses_butler_model ??
+        current.consolidation_uses_butler_model,
       model_fallback: current.model_fallback,
       desktop_notifications: sanitized.desktop_notifications
         ? normalizeDesktopNotificationSettings({
@@ -305,9 +385,10 @@ export class AppPreferencesStore {
         consolidation_reasoning_effort: next.consolidation_reasoning_effort,
         effective_consolidation_model: next.effective_consolidation_model,
         context_window_tokens: next.context_window_tokens,
-        worker_model_rule_count: next.worker_model_rules.filter(
-          (rule) => rule.enabled,
+        enabled_worker_profile_count: next.worker_profiles.filter(
+          (profile) => profile.enabled,
         ).length,
+        max_simultaneous_workers: next.max_simultaneous_workers,
         access_mode: next.access_mode,
         appearance_theme: next.appearance_theme,
         main_screen_theme: next.main_screen_theme,

@@ -1,4 +1,8 @@
 import type { ProviderModelMetadata } from "../../../../integrations/providers/model-catalog.ts";
+import {
+  MAX_SIMULTANEOUS_WORKERS_LIMIT,
+  type WorkerProfile,
+} from "../../interface/protocol/settings-contract.ts";
 import type {
   SettingsView,
   UpdateSettingsRequest,
@@ -6,14 +10,15 @@ import type {
 import {
   normalizeConsolidationModelRef,
   normalizeKnownModelRef,
-  normalizeWorkerModelRules,
   positiveTokenCount,
 } from "./settings-models.ts";
 import { sanitizeWebSearchSettingsUpdate } from "./web-search-settings.ts";
+import { normalizeWorkerProfilesUpdate } from "./worker-profile-updates.ts";
 
 export function sanitizeSettingsUpdate(
   input: UpdateSettingsRequest,
   extraModels: ProviderModelMetadata[] = [],
+  currentWorkerProfiles: WorkerProfile[] = [],
 ): UpdateSettingsRequest {
   const output: UpdateSettingsRequest = {};
   if (typeof input.server_url === "string") {
@@ -54,11 +59,20 @@ export function sanitizeSettingsUpdate(
   }
   const contextWindowTokens = positiveTokenCount(input.context_window_tokens);
   if (contextWindowTokens) output.context_window_tokens = contextWindowTokens;
-  if (Array.isArray(input.worker_model_rules)) {
-    output.worker_model_rules = normalizeWorkerModelRules(
-      input.worker_model_rules,
+  if (Array.isArray(input.worker_profiles)) {
+    output.worker_profiles = normalizeWorkerProfilesUpdate(
+      input.worker_profiles,
       extraModels,
+      currentWorkerProfiles,
     );
+  }
+  if (
+    typeof input.max_simultaneous_workers === "number" &&
+    Number.isInteger(input.max_simultaneous_workers) &&
+    input.max_simultaneous_workers >= 1 &&
+    input.max_simultaneous_workers <= MAX_SIMULTANEOUS_WORKERS_LIMIT
+  ) {
+    output.max_simultaneous_workers = input.max_simultaneous_workers;
   }
   if (
     ["full_access", "ask_first", "read_only"].includes(

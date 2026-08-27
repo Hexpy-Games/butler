@@ -7,12 +7,17 @@ import { SettingsSection } from "./SettingsFormComponents";
 import { ButlerModelSettings } from "./ButlerModelSettings";
 import { ModelAddEditPage } from "./ModelAddEditPage";
 import { ModelManagementPage } from "./ModelManagementPage";
-import { WorkerModelRuleItem } from "./WorkerModelRule";
-import type { WorkerModelRule } from "@/app/types.ts";
+import { WorkerProfileControls } from "./WorkerProfileControls";
+import { WorkerProfileEditor } from "./WorkerProfileEditor";
+import {
+  WORKER_PROFILES_LIMIT,
+  createWorkerProfileInNextSlot,
+  removeWorkerProfileById,
+} from "./workerProfileUpdates";
+import type { WorkerProfile } from "@/app/types.ts";
 
 export function ModelsSettings() {
   const draft = useSettingsUIStore((state) => state.draft);
-  const setDraft = useSettingsUIStore((state) => state.setDraft);
   const update = useSettingsUIStore((state) => state.update);
   const modelRoute = useSettingsUIStore((state) => state.modelRoute);
   const setSettings = useButlerStore((state) => state.setSettings);
@@ -22,7 +27,7 @@ export function ModelsSettings() {
   const models = runtimeModels(modelCatalog);
 
   if (!draft) return null;
-  const workerRules = draft.worker_model_rules ?? [];
+  const workerProfiles = draft.worker_profiles ?? [];
 
   if (modelRoute.page === "management") return <ModelManagementPage />;
   if (modelRoute.page === "add") return <ModelAddEditPage />;
@@ -30,19 +35,27 @@ export function ModelsSettings() {
     return <ModelAddEditPage modelRef={modelRoute.modelRef} />;
   }
 
-  function workerRuleAt(index: number, partial: Partial<WorkerModelRule>) {
-    return workerRules.map((rule, ruleIndex) =>
-      ruleIndex === index ? { ...rule, ...partial } : rule,
+  function profileAt(index: number, partial: Partial<WorkerProfile>) {
+    return workerProfiles.map((profile, profileIndex) =>
+      profileIndex === index ? { ...profile, ...partial } : profile,
     );
   }
 
-  function updateWorkerRule(index: number, partial: Partial<WorkerModelRule>) {
-    update({ worker_model_rules: workerRuleAt(index, partial) }, setSettings);
+  function updateProfile(index: number, partial: Partial<WorkerProfile>) {
+    update({ worker_profiles: profileAt(index, partial) }, setSettings);
   }
 
-  function draftWorkerRule(index: number, partial: Partial<WorkerModelRule>) {
-    if (draft) {
-      setDraft({ ...draft, worker_model_rules: workerRuleAt(index, partial) });
+  function addProfile() {
+    const created = createWorkerProfileInNextSlot(workerProfiles, models);
+    if (created) {
+      update({ worker_profiles: [...workerProfiles, created] }, setSettings);
+    }
+  }
+
+  function deleteProfile(id: string) {
+    const remaining = removeWorkerProfileById(workerProfiles, id);
+    if (remaining.length !== workerProfiles.length) {
+      update({ worker_profiles: remaining }, setSettings);
     }
   }
 
@@ -50,15 +63,23 @@ export function ModelsSettings() {
     <>
       <ButlerModelSettings />
 
-      <SettingsSection title={settingsCopy.panels.workerModelRules}>
+      <SettingsSection title={settingsCopy.panels.workerProfiles}>
         <Stack gap="md">
-          {workerRules.map((rule, index) => (
-            <WorkerModelRuleItem
-              key={rule.id}
-              rule={rule}
+          <WorkerProfileControls
+            canAdd={workerProfiles.length < WORKER_PROFILES_LIMIT}
+            maxSimultaneousWorkers={draft.max_simultaneous_workers}
+            onAdd={() => addProfile()}
+            onMaxChange={(value) =>
+              update({ max_simultaneous_workers: value }, setSettings)
+            }
+          />
+          {workerProfiles.map((profile, index) => (
+            <WorkerProfileEditor
+              key={profile.id}
+              profile={profile}
               models={models}
-              onUpdate={(partial) => updateWorkerRule(index, partial)}
-              onDraftUpdate={(partial) => draftWorkerRule(index, partial)}
+              onUpdate={(partial) => updateProfile(index, partial)}
+              onDelete={() => deleteProfile(profile.id)}
             />
           ))}
         </Stack>

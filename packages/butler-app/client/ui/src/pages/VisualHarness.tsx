@@ -26,6 +26,7 @@ import {
   HARNESS_MODEL_CATALOG,
   HARNESS_MESSAGES,
   HARNESS_NAVIGATION,
+  HARNESS_PRIMARY_MODEL,
   HARNESS_PROJECT_DASHBOARD,
   HARNESS_SS03_NAVIGATION,
   HARNESS_SS03_OBSERVER_VIEW,
@@ -33,6 +34,7 @@ import {
   HARNESS_SUMMARY,
 } from "@/app/fixtures.ts";
 import { appThemeClasses, isDraftChatId, projectDraftId } from "@/app/utils.ts";
+import type { WorkerProfile } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import {
   LEFT_PANEL_MAX_WIDTH,
@@ -97,13 +99,25 @@ export function VisualHarness() {
         : HARNESS_SUMMARY,
     [ss03Surface, worktreeSurface],
   );
-  const harnessSettings = useMemo(
-    () =>
-      visualTheme === EMPTY_SETTINGS.appearance_theme
-        ? EMPTY_SETTINGS
-        : { ...EMPTY_SETTINGS, appearance_theme: visualTheme },
-    [visualTheme],
-  );
+  const harnessSettings = useMemo(() => {
+    const workerProfiles: WorkerProfile[] = [
+      {
+        id: "default",
+        label: "Default",
+        enabled: true,
+        job: { kind: "builtin", job: "coding" },
+        model: HARNESS_PRIMARY_MODEL.model_ref,
+        reasoning_effort: HARNESS_PRIMARY_MODEL.default_reasoning_effort,
+      },
+    ];
+    return visualTheme === EMPTY_SETTINGS.appearance_theme
+      ? { ...EMPTY_SETTINGS, worker_profiles: workerProfiles }
+      : {
+          ...EMPTY_SETTINGS,
+          appearance_theme: visualTheme,
+          worker_profiles: workerProfiles,
+        };
+  }, [visualTheme]);
   const systemPrefersDark = useSystemThemePreference();
   usePortalThemeClasses(harnessSettings, systemPrefersDark);
   const rightAvailable =
