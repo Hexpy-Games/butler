@@ -60,6 +60,8 @@ export function createProductionGuidedTurnAgent(
       const subsessionResultEvidence = await input.subsessionDelegation?.resolveParentResultEvidence({ parentSessionId: turn.sessionId, parentInputText: turn.originalMessage });
       const phasePolicy = selectGuidedTurnPhasePolicy(turn);
       const policy = phasePolicy.executionPolicy;
+      const workerResultIntegration = policy.role === "steward" &&
+        turn.turnId.startsWith("steward-worker-result-");
       const askFirstTurn = policy.accessMode === "ask_first";
       const progressCapture = createGuidedOperationalProgressCapture(
         askFirstTurn
@@ -80,7 +82,6 @@ export function createProductionGuidedTurnAgent(
       if (policy.role === "steward" && input.subsessionDelegation) await ensureSubsessionChildRootWork({ service: input.subsessionDelegation, turn });
       const { context: initialWork, bound: initialWorkBound } = await loadGuidedTurnWork({
         durableWork: input.durableWork,
-        toolJournal: input.toolJournal,
         scope: workScope,
         trackingMode: policy.trackingMode,
         authority,
@@ -151,6 +152,7 @@ export function createProductionGuidedTurnAgent(
             ? { authorityRequestRef: turn.context.authorityRequestRef }
             : {}),
           accessMode: policy.accessMode,
+          allowDirectPersistentEffects: policy.role === "worker",
           signal,
           executeCommand: (call, executeRegistered) => executeGuidedCommandCall({
             call,
@@ -245,13 +247,20 @@ export function createProductionGuidedTurnAgent(
         butlerData: input.butlerData,
       });
       const closeout = createGuidedTurnCloseout({
-        durableWork: input.durableWork, toolJournal: input.toolJournal, workScope,
+        durableWork: input.durableWork, workScope,
         turnId: turn.turnId, originalRequest: turn.originalMessage,
         trackingMode: policy.trackingMode, responseLanguage,
+        parentResultIntegration: workerResultIntegration,
       });
-      const delegationRelease = createGuidedDelegationTurnRelease({ reconcileAfterLoop: closeout.reconcileAfterLoop, responseLanguage, originalRequest: turn.originalMessage });
+      const delegationRelease = createGuidedDelegationTurnRelease({
+        reconcileAfterLoop: closeout.reconcileAfterLoop,
+        responseLanguage,
+        originalRequest: turn.originalMessage,
+      });
       const resolveGuidedTools = phasePolicy.mode === "phase_minimal" ||
-        visibleTools.some((tool) => tool.name === "delegate_to_steward")
+        visibleTools.some((tool) =>
+          tool.name === "delegate_to_steward" || tool.name === "delegate_to_worker",
+        )
         ? createGuidedRoundToolSurfaceResolver({
             turnId: turn.turnId, tools: visibleTools, workScope, durableWork: input.durableWork,
             requiredToolNames: new Set(policy.requiredNativeTools), toolJournal: input.toolJournal, effectJournal: input.effectJournal,
@@ -259,6 +268,9 @@ export function createProductionGuidedTurnAgent(
             parentSessionId: turn.sessionId,
             subsessionDelegation: input.subsessionDelegation,
             onActiveDelegationAdmission: activeDelegationAdmission.observe,
+            ...(policy.role === "butler"
+              ? { forcedDelegationTool: "delegate_to_steward" as const }
+              : {}),
           })
         : undefined;
       const directionAware = withStewardDirection({ modelRound, safeBoundary: stewardSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: closeout.reviewFinalCandidate });

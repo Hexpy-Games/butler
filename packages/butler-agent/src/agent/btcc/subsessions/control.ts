@@ -68,9 +68,7 @@ export function createSubsessionControlService(
       const relation = input.store.relationByChildSessionId(directionInput.childSessionId);
       if (!relation || input.store.resultByRelationId(relation.relation_id)) return null;
       const storedTurnId = input.store.childTurnIdByRelationId(relation.relation_id);
-      if (storedTurnId !== directionInput.childTurnId) {
-        throw new Error("steward_direction_child_turn_mismatch");
-      }
+      if (storedTurnId !== directionInput.childTurnId) return null;
       return input.store.consumePendingDirection({
         relationId: relation.relation_id,
         childTurnId: directionInput.childTurnId,

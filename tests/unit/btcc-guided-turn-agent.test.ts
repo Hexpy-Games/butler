@@ -329,7 +329,6 @@ test("a terminal Turn fences late effects from reopening completed Work", async 
     })).toMatchObject({ ok: true, created: true });
     const closeout = createGuidedTurnCloseout({
       durableWork: fixture.stores.durableWork,
-      toolJournal: fixture.stores.guidedToolJournal,
       workScope: { turnId, sessionId: "guided-local-session" },
       turnId,
       trackingMode: "local",
@@ -456,7 +455,6 @@ test("ordinary open cannot reopen completed Work and a concurrent fresh completi
         };
         const closeout = createGuidedTurnCloseout({
           durableWork: competingService,
-          toolJournal: fixture.stores.guidedToolJournal,
           workScope: { turnId, sessionId: "guided-local-session" },
           turnId,
           trackingMode: "local",
@@ -799,7 +797,6 @@ test("runtime-owned open closeout survives reopen while terminal Turns reject la
     });
     const closeout = createGuidedTurnCloseout({
       durableWork: reopened.durableWork,
-      toolJournal: reopened.guidedToolJournal,
       workScope: { turnId, sessionId: "guided-local-session" },
       turnId,
       trackingMode: "local",
@@ -4091,6 +4088,8 @@ test("feature Work schemas project only valid review subjects and Plan action ke
   });
 
   expect(execution.names.has("run_command")).toBe(true);
+  expect(execution.names.has("start_work")).toBe(false);
+  expect(execution.names.has("continue_work")).toBe(false);
   expect(statusOnly.digest).toBe(execution.digest);
   expect(acceptedResult.digest).not.toBe(execution.digest);
   const encodedExecution = JSON.stringify(execution.tools);

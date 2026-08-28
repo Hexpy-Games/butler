@@ -19,9 +19,7 @@ import {
   isWorkRelationshipTool,
 } from "../work/index.ts";
 import {
-  backfillTurnToolResults,
   publishWorkProgress,
-  safeAttachToolResult,
   safeBindOpenWork,
 } from "./guided-work-runtime.ts";
 import {
@@ -144,10 +142,8 @@ export function createGuidedToolCallExecutor(
       effectiveToolName,
       signal: toolSignal,
       runtime: {
-        durableWork: input.durableWork,
         toolJournal: input.toolJournal,
       },
-      scope: input.workScope,
       executeFresh: (executionCall) =>
         executeFreshTool(input, executionCall, callId, toolSignal),
     });
@@ -229,9 +225,6 @@ export function createGuidedToolCallExecutor(
       input.toolJournal.finish({ callId, status: "completed", result });
       if (call.name === "replace_work_plan" && toolResultSucceeded(result)) {
         await safeBindOpenWork(input.durableWork, input.workScope);
-        await backfillTurnToolResults(input, input.workScope);
-      } else if (!isDurableWorkTool(call.name)) {
-        await safeAttachToolResult(input, input.workScope, callId);
       }
       if (isDurableWorkTool(call.name) && toolResultSucceeded(result)) {
         await activityProjection.publishAccepted(activity);
@@ -282,7 +275,6 @@ async function executeFreshTool(
 ): Promise<unknown> {
   return executeGuidedFreshTool({
     durableWork: input.durableWork,
-    toolJournal: input.toolJournal,
     workScope: input.workScope,
     call,
     callId,

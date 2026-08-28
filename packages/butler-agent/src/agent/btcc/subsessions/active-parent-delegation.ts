@@ -3,7 +3,6 @@ import type {
   SessionRelation,
   SubsessionDelegationDependencies,
 } from "./contracts.ts";
-import { subsessionResultId } from "./identities.ts";
 
 type ActiveParentDelegation = {
   relation: SessionRelation;
@@ -35,10 +34,7 @@ export async function activeParentDelegations(
     );
     if (!childTurnId) throw new Error("active_parent_delegation_child_turn_missing");
     const result = dependencies.store.resultByRelationId(relation.relation_id);
-    if (result) {
-      validateTerminalResult(dependencies, relation, packet, childTurnId, result);
-      continue;
-    }
+    if (result) continue;
     const childTurn = await dependencies.parentTurns.findTurn(childTurnId);
     if (childTurn && (childTurn.turnId !== childTurnId ||
       childTurn.sessionId !== relation.child_session_id)) {
@@ -71,30 +67,4 @@ function sameRelationPacket(
     packet.parent_turn_id === relation.parent_turn_id &&
     packet.parent_work_ref.session_id === relation.parent_session_id &&
     packet.parent_work_ref.turn_id === relation.parent_turn_id;
-}
-
-function validateTerminalResult(
-  dependencies: SubsessionDelegationDependencies,
-  relation: SessionRelation,
-  packet: DelegationPacket,
-  childTurnId: string,
-  result: NonNullable<ReturnType<
-    SubsessionDelegationDependencies["store"]["resultByRelationId"]
-  >>,
-): void {
-  const storedResultId = dependencies.store.resultIdForRelation(
-    relation.relation_id,
-  );
-  const expectedResultId = subsessionResultId(
-    relation.child_session_id,
-    childTurnId,
-  );
-  if (result.relation_id !== relation.relation_id ||
-    result.task_id !== packet.task_id ||
-    result.child_session_id !== relation.child_session_id ||
-    result.child_turn_id !== childTurnId ||
-    !storedResultId || result.result_id !== storedResultId ||
-    result.result_id !== expectedResultId) {
-    throw new Error("active_parent_delegation_result_mismatch");
-  }
 }

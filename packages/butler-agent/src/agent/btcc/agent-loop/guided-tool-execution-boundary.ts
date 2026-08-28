@@ -63,6 +63,7 @@ type GuidedToolExecutionBoundaryInput = {
   authorityClientMessageId?: string;
   toolJournal?: GuidedToolJournal;
   accessMode: GuidedEffectAccessMode;
+  allowDirectPersistentEffects?: boolean;
   signal: AbortSignal;
   executeCommand(
     call: ButlerToolCall,
@@ -109,6 +110,7 @@ export function createGuidedToolExecutionBoundary(
   ): Promise<unknown> => {
     const work = await loadGuidedEffectWork(input.durableWork, input.workScope);
     if (!work) {
+      if (input.allowDirectPersistentEffects) return await execute();
       return ordinaryGuidedEffectError(
         "effect_work_required",
         "Create concise Work, record its Plan Review, then retry this persistent effect.",

@@ -1,5 +1,4 @@
-import { resolveAcceptedStewardReport } from "./accepted-terminal-report.ts";
-import { subsessionChildTurnId, subsessionResultId } from "./identities.ts";
+import { subsessionResultId } from "./identities.ts";
 import {
   defaultCode,
   safeTerminalSummary,
@@ -21,11 +20,16 @@ export async function completeStewardResultForDependencies(
 ): Promise<CompleteStewardResultOutcome> {
   const relation = input.store.relationByChildSessionId(resultInput.childSessionId);
   if (!relation) throw new Error("subsession_relation_missing");
-  const expectedChildTurnId = subsessionChildTurnId(relation.relation_id);
-  if (resultInput.childTurnId !== expectedChildTurnId) {
-    throw new Error("subsession_child_turn_identity_mismatch");
+  const childTurn = await input.parentTurns.findTurn(resultInput.childTurnId);
+  if (resultInput.status !== "cancelled" &&
+      (!childTurn || childTurn.sessionId !== relation.child_session_id ||
+       childTurn.semanticState !== "delivered")) {
+    throw new Error("subsession_child_turn_missing");
   }
-  const expectedResultId = subsessionResultId(relation.child_session_id, expectedChildTurnId);
+  const expectedResultId = subsessionResultId(
+    relation.child_session_id,
+    resultInput.childTurnId,
+  );
   if (resultInput.resultId !== expectedResultId) throw new Error("subsession_result_identity_mismatch");
   if (resultInput.status === "cancelled") {
     await input.durableWork.abandonBoundWorkForTurn(resultInput.childTurnId);
@@ -64,25 +68,11 @@ export async function completeStewardResultForDependencies(
     detailRefs: string[];
   };
   if (resultInput.summary?.trim()) {
-    const report = await resolveAcceptedStewardReport({
-      binding: {
-        relationId: relation.relation_id,
-        resultId: resultInput.resultId,
-        childSessionId: relation.child_session_id,
-        childTurnId: resultInput.childTurnId,
-      },
-      reportedContent: resultInput.summary,
-      turns: input.parentTurns,
-    });
     evidence = {
-      summary: report.summary,
+      summary: safeSummary(resultInput.summary),
       acceptanceEvidence: [],
-      changedArtifacts: report.changedArtifacts,
-      commits: report.commits,
-      tests: report.tests,
-      remainingRisks: report.remainingRisks,
-      followUpRecommendations: report.followUpRecommendations,
-      detailRefs: report.detailRefs,
+      changedArtifacts: resultInput.changedArtifacts ?? [],
+      ...emptyReportDetails(),
     };
   } else {
     if (terminalStatus === "success") {
@@ -124,6 +114,31 @@ export async function completeStewardResultForDependencies(
     detailRefs: evidence.detailRefs,
     parentChatId,
   });
+  if (terminalStatus === "success") {
+    const childWork = await input.durableWork.boundWorkForTurn(
+      resultInput.childTurnId,
+    );
+    if (childWork && childWork.status !== "completed") {
+      await completeWork(input, {
+        turnId: resultInput.childTurnId,
+        sessionId: relation.child_session_id,
+        work: childWork,
+        mutationCallId: `steward-work:${resultInput.resultId}`,
+        summary: evidence.summary,
+      });
+    }
+    const work = await input.durableWork.boundWorkForTurn(relation.parent_turn_id);
+    if (work && work.workId === packet?.parent_work_ref.work_id &&
+        work.status !== "completed") {
+      await completeWork(input, {
+        turnId: relation.parent_turn_id,
+        sessionId: relation.parent_session_id,
+        work,
+        mutationCallId: `steward-result:${resultInput.resultId}`,
+        summary: evidence.summary,
+      });
+    }
+  }
   const pending = input.store.pendingParentInputForResult(result.result.result_id);
   if (pending) {
     await parentInputSink(pending);
@@ -133,6 +148,42 @@ export async function completeStewardResultForDependencies(
     status: result.inserted ? "committed" : "duplicate",
     result: result.result,
   } satisfies CompleteStewardResultOutcome;
+}
+
+async function completeWork(
+  input: SubsessionDelegationDependencies,
+  command: {
+    turnId: string;
+    sessionId: string;
+    work: NonNullable<Awaited<ReturnType<
+      SubsessionDelegationDependencies["durableWork"]["boundWorkForTurn"]
+    >>>;
+    mutationCallId: string;
+    summary: string;
+  },
+): Promise<void> {
+  await input.durableWork.recordDisposition({
+    turnId: command.turnId,
+    sessionId: command.sessionId,
+    ...(command.work.scope.kind === "project"
+      ? { projectRef: command.work.scope.projectRef }
+      : {}),
+    mutationCallId: command.mutationCallId,
+    workId: command.work.workId,
+    disposition: "completed",
+    summary: command.summary,
+    actionUpdates: (command.work.currentPlan?.actions ?? []).map((action) => ({
+      actionKey: action.actionKey,
+      status: "done" as const,
+    })),
+    remainingActions: [],
+    evidenceRefs: [],
+    followups: [],
+  });
+}
+
+function safeSummary(value: string): string {
+  return value.replace(/\s+/gu, " ").trim().slice(0, 2_000);
 }
 
 function nonEmpty(value: unknown): string | null {

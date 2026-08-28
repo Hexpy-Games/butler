@@ -252,7 +252,7 @@ export type BtccTurnRequest = {
         resultScopeRef?: string;
       };
   route: {
-    role: "butler" | "steward";
+    role: "butler" | "steward" | "worker";
     workspacePath: string;
     projectId?: string;
     reason?:

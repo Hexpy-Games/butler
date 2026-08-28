@@ -21,7 +21,7 @@ export function createBtccGatewayHandlers(
       if (outcome.kind !== "cancelled" && outcome.kind !== "already_cancelled") {
         throw new Error(`BTCC cancellation remains recoverable: ${outcome.kind}`);
       }
-      await completeStewardTerminalResult(options, route, turnId, "cancelled", "steward_cancelled");
+      await completeChildTerminalResult(options, route, turnId);
       return {
         ok: true,
         handledBy: "btcc/turn-stop",
@@ -42,7 +42,7 @@ export function createBtccGatewayHandlers(
     }
     const outcome = await options.btcc.runTurn(toBtccRequest(route, envelope, turnId));
     if (outcome.kind === "cancelled" || outcome.kind === "already_cancelled") {
-      await completeStewardTerminalResult(options, route, turnId, "cancelled", "steward_cancelled");
+      await completeChildTerminalResult(options, route, turnId);
       return {
         ok: true,
         handledBy: "btcc/turn-cancelled",
@@ -59,15 +59,32 @@ export function createBtccGatewayHandlers(
       throw new Error(`BTCC turn remains recoverable: ${outcome.kind}`);
     }
     const result = projectTurnOutcome(outcome);
-    if (route.role === "steward" && options.subsessionDelegation &&
+    if (options.subsessionDelegation &&
       (outcome.kind === "delivered" || outcome.kind === "already_delivered")) {
-      await options.subsessionDelegation.completeStewardResult({
-        childSessionId: route.sessionId,
-        childTurnId: outcome.turnId,
-        resultId: subsessionResultId(route.sessionId, outcome.turnId),
-        summary: result.text,
-        status: result.workStatus === "blocked" ? "blocked" : "success",
-      });
+      if (route.role === "worker") {
+        await options.subsessionDelegation.completeWorkerResult({
+          childSessionId: route.sessionId,
+          childTurnId: outcome.turnId,
+          resultId: subsessionResultId(route.sessionId, outcome.turnId),
+          summary: result.text,
+          status: "success",
+          changedArtifacts: result.artifacts.map((artifact) => artifact.safePathLabel),
+        });
+      } else if (route.role === "steward") {
+        const activeChildren = await options.subsessionDelegation.activeParentDelegations({
+          parentSessionId: route.sessionId,
+        });
+        if (activeChildren.length === 0) {
+          await options.subsessionDelegation.completeStewardResult({
+            childSessionId: route.sessionId,
+            childTurnId: outcome.turnId,
+            resultId: subsessionResultId(route.sessionId, outcome.turnId),
+            summary: result.text,
+            changedArtifacts: result.artifacts.map((artifact) => artifact.safePathLabel),
+            status: result.workStatus === "blocked" ? "blocked" : "success",
+          });
+        }
+      }
     }
     const generatedSessionTitle = result.text && outcome.admission !== "replay"
       ? await safeTitle(options, envelope, route)
@@ -97,24 +114,28 @@ export function createBtccGatewayHandlers(
   return {
     butler: ({ route, envelope }) => handle(route, envelope),
     steward: ({ route, envelope }) => handle(route, envelope),
+    worker: ({ route, envelope }) => handle(route, envelope),
   };
 }
 
-async function completeStewardTerminalResult(
+async function completeChildTerminalResult(
   options: BtccGatewayHandlerOptions,
   route: GatewayRoute,
   childTurnId: string,
-  status: "cancelled",
-  code: "steward_cancelled",
 ): Promise<void> {
-  if (route.role !== "steward" || !options.subsessionDelegation) return;
-  await options.subsessionDelegation.completeStewardResult({
+  if (!options.subsessionDelegation) return;
+  const result = {
     childSessionId: route.sessionId,
     childTurnId,
     resultId: subsessionResultId(route.sessionId, childTurnId),
-    status,
-    code,
-  });
+    status: "cancelled" as const,
+    code: "steward_cancelled" as const,
+  };
+  if (route.role === "steward") {
+    await options.subsessionDelegation.completeStewardResult(result);
+  } else if (route.role === "worker") {
+    await options.subsessionDelegation.completeWorkerResult(result);
+  }
 }
 
 function toBtccRequest(

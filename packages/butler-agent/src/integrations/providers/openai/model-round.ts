@@ -71,6 +71,11 @@ export async function runOpenAIModelRound(
   const previous = isOpenAIResponseContinuation(request.continuation)
     ? request.continuation
     : null;
+  const previousProviderRouteIdentity = previous?.toolSurfaceDigest &&
+      request.routeContext?.toolSurfaceDigest &&
+      previous.toolSurfaceDigest !== request.routeContext.toolSurfaceDigest
+    ? undefined
+    : previous?.providerRouteIdentity;
   if (request.stableProviderCachePrefix) {
     if (!request.routeContext) {
       throw stableProviderPrefixInvariant("stable_provider_prefix_route_context_missing");
@@ -201,7 +206,7 @@ export async function runOpenAIModelRound(
       admitBoundedProviderBody: request.boundedContinuation?.admitProviderBody,
       stableProviderCachePrefix: request.stableProviderCachePrefix,
       routeContext: request.routeContext,
-      previousProviderRouteIdentity: previous?.providerRouteIdentity,
+      previousProviderRouteIdentity,
       onProviderRouteCacheIdentity: (established) => {
         if (providerCacheIdentity &&
             JSON.stringify(providerCacheIdentity) !== JSON.stringify(established.identity)) {

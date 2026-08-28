@@ -49,7 +49,9 @@ export function replayBinding(
   const modelRef = `${turn.modelSelection.provider}/${turn.modelSelection.model}` as StoredSessionBinding["modelRef"];
   return {
     sessionId: turn.sessionId,
-    role: executionPolicy?.role === "steward" ? "steward" : "butler",
+    role: executionPolicy?.role === "steward" || executionPolicy?.role === "worker"
+      ? executionPolicy.role
+      : "butler",
     ...(turn.context.projectRef ? { projectId: turn.context.projectRef } : {}),
     workspacePath: executionPolicy?.workspacePath ?? "",
     runtimeAdapterId: "btcc-turn-runtime",

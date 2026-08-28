@@ -158,7 +158,7 @@ implements ProjectWorkResultRuntime,
           work.origin.messageId,
           work.objective,
           work.status,
-          work.currentPlan?.planRevisionId ?? null,
+          null,
           work.createdAt,
           work.updatedAt,
         );

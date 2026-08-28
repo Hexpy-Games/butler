@@ -1076,7 +1076,7 @@ test("SQLite restart retains projected continuation and route rebases only an ad
   }
 });
 
-test("model route resets one same-candidate continuation when the tool surface changes", async () => {
+test("model route preserves one same-candidate continuation when the tool surface changes", async () => {
   const route = buildModelRoute({
     primaryModelRef: "openai/gpt-5.6-sol",
     reasoningEffort: "medium",
@@ -1139,8 +1139,8 @@ test("model route resets one same-candidate continuation when the tool surface c
   });
 
   expect(seen).toEqual([
-    { continuation: undefined, cursor: 0, digest: nextDigest },
-    { continuation: undefined, cursor: 0, digest: nextDigest },
+    { continuation: priorContinuation, cursor: 0, digest: nextDigest },
+    { continuation: priorContinuation, cursor: 0, digest: nextDigest },
   ]);
   expect(changed.continuation).toMatchObject({ toolSurfaceDigest: nextDigest });
 

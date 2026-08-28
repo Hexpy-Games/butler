@@ -15,10 +15,7 @@ export type {
 } from "./contracts.ts";
 export { WorkspaceReferenceUnavailableError } from "./contracts.ts";
 export { bindSessionGitWorktree } from "./bind.ts";
-export {
-  shortSessionWorktreeBranch,
-  shortStewardWorktreeBranch,
-} from "./branch.ts";
+export { shortSessionWorktreeBranch } from "./branch.ts";
 export {
   recoverSessionWorkspaceReference,
   resolveSessionWorkspaceAuthority,

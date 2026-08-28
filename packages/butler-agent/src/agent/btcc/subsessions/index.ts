@@ -2,6 +2,7 @@ export {
   createSubsessionDelegationService,
 } from "./service.ts";
 export { createAppParentInputSink } from "./app-parent-input-sink.ts";
+export { createWorkerProfileReader } from "./worker-profile.ts";
 export { subsessionParentResultRefs } from "./accepted-terminal-report.ts";
 export { ensureSubsessionChildRootWork, stewardSafeBoundary, subsessionToolInput } from "./agent-hook.ts";
 export {
@@ -24,6 +25,7 @@ export type {
   DelegationRequest,
   ParentInputSink,
   ReviewedDelegationPlan,
+  ReviewedWorkerDelegationRequest,
   SessionRelation,
   StewardResultEnvelope,
   StewardResultCode,

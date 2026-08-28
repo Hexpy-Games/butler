@@ -16,16 +16,11 @@ import {
 } from "./project-work-mapping.ts";
 import { projectWorkViewUpdates } from "./project-work-record-updates.ts";
 import {
-  proveProjectWorkCheckpointOutcome,
-  proveProjectWorkPlanOutcome,
-} from "./project-work-operation-proof.ts";
-import {
   requireCurrentProjectWork,
   type CurrentProjectWorkSnapshot,
 } from "./project-work-snapshot.ts";
 import {
   mutationIdentity,
-  noResultBackfill,
   publishedWorkId,
   workRevisions,
   type ProjectWorkWriteContext,
@@ -35,13 +30,12 @@ export async function replaceProjectWorkPlan(
   command: ReplaceWorkPlanCommand,
 ): Promise<DurableWorkView> {
   context.assertScope(command);
-  noResultBackfill(command.backfillToolCallIds);
   const identity = mutationIdentity(command);
   const targetWorkId =
     command.expectedWorkId ??
     projectWorkRecordId("work", command.mutationCallId);
   let abandonedId: string | undefined;
-  const outcome = await context.publish(identity, async () => {
+  await context.publish(identity, async () => {
     const relation = await context.relation(command);
     if (command.startNew && relation.binding)
       invalid("project_work_turn_already_bound");
@@ -136,7 +130,6 @@ export async function replaceProjectWorkPlan(
     scope: context.input.scope,
     workId: targetWorkId,
   });
-  proveProjectWorkPlanOutcome({ command, outcome, current });
   const abandoned = abandonedId
     ? [
         await requireCurrentProjectWork({
@@ -206,7 +199,6 @@ export async function recordProjectWorkCheckpoint(
     scope: context.input.scope,
     workId: replayTarget,
   });
-  proveProjectWorkCheckpointOutcome({ command, outcome, current });
   return context.afterMutation(current);
 }
 

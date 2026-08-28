@@ -34,10 +34,11 @@ import { ordinaryChatPhaseForIntent } from "./guided-delegation-intent.ts";
 
 const FLAG_NAME = "BUTLER_PHASE_TOOL_SURFACE";
 const POLICY_REVISION = "butler.btcc-tool-instruction-policy.v1";
-const TRUE_FLAG_VALUES = new Set(["1", "true", "on", "yes"]);
+const FALSE_FLAG_VALUES = new Set(["0", "false", "off", "no"]);
 const STEWARD_PARENT_TOOL_NAMES = new Set([
   "delegate_to_steward", "steer_steward", "cancel_steward",
 ]);
+const WORKER_DELEGATION_TOOL_NAME = "delegate_to_worker";
 
 export type GuidedTurnPhase = "direct" | "read_only" | "execution";
 
@@ -87,13 +88,17 @@ export function selectGuidedTurnPhasePolicy(
   }
 
   assertRequiredProfilesKnown(executionPolicy.requiredNativeToolProfiles);
+  const requiredProfiles = executionPolicy.role === "butler"
+    ? executionPolicy.requiredNativeToolProfiles.filter((profile) =>
+      profile !== "project" && profile !== "project-lifecycle")
+    : executionPolicy.requiredNativeToolProfiles;
   assertNonExecutionProfilesEffectFree(
-    executionPolicy.requiredNativeToolProfiles,
+    requiredProfiles,
     phase,
   );
 
   const admittedProfileTools = selectButlerToolsForProfiles(
-    executionPolicy.requiredNativeToolProfiles,
+    requiredProfiles,
   ).filter((tool) => !isGuidedRuntimeUnavailable(tool.name))
     .filter((tool) => exactResultReplay.exactReadCapability ||
       !isExactResultReadTool(tool.name));
@@ -106,6 +111,9 @@ export function selectGuidedTurnPhasePolicy(
     ),
     ...(executionPolicy.role === "butler"
       ? BUTLER_TOOLS.filter((tool) => STEWARD_PARENT_TOOL_NAMES.has(tool.name))
+      : []),
+    ...(executionPolicy.role === "steward"
+      ? BUTLER_TOOLS.filter((tool) => tool.name === WORKER_DELEGATION_TOOL_NAME)
       : []),
   ].map((tool) => [tool.name, tool]));
   const phaseAuthority = new Map([
@@ -126,7 +134,7 @@ export function selectGuidedTurnPhasePolicy(
   const authorizedTools = admittedAuthorizedTools;
   const admittedRequiredToolNames = new Set([
     ...executionPolicy.requiredNativeTools,
-    ...executionPolicy.requiredNativeToolProfiles.flatMap((profile) =>
+    ...requiredProfiles.flatMap((profile) =>
       profileInitialToolNames(profile, phase),
     ),
   ]);
@@ -153,7 +161,7 @@ export function selectGuidedTurnPhasePolicy(
     phase,
   );
   assertRequiredProfileAuthorityRetained(
-    executionPolicy.requiredNativeToolProfiles,
+    requiredProfiles,
     authorizedTools,
     providerTools,
     phase,
@@ -220,6 +228,16 @@ function providerCandidateToolNames(
   }
   if (policy.role === "butler") {
     for (const name of STEWARD_PARENT_TOOL_NAMES) names.add(name);
+  }
+  if (policy.role === "steward") names.add(WORKER_DELEGATION_TOOL_NAME);
+  if (policy.role === "butler") {
+    for (const name of [...names]) {
+      const metadata = TOOL_CAPABILITY_METADATA[name];
+      if (metadata?.category === "project" &&
+          !DURABLE_WORK_TOOL_DEFINITIONS.some((tool) => tool.name === name)) {
+        names.delete(name);
+      }
+    }
   }
   return names;
 }
@@ -327,7 +345,7 @@ function isGuidedRuntimeUnavailable(name: string): boolean {
 }
 
 function isEnabled(env: Record<string, string | undefined>): boolean {
-  return TRUE_FLAG_VALUES.has(env[FLAG_NAME]?.trim().toLowerCase() ?? "");
+  return !FALSE_FLAG_VALUES.has(env[FLAG_NAME]?.trim().toLowerCase() ?? "");
 }
 
 function guidedTurnPhase(

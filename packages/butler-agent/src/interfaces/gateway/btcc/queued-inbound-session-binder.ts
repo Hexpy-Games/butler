@@ -60,14 +60,15 @@ function bindAppTurn(envelope: InboundEnvelope, store: SessionBindingStore): voi
 
 function bindStewardTurn(envelope: InboundEnvelope, store: SessionBindingStore): void {
   const context = envelope.nativeStewardContext!;
-  const sessionId = envelope.routingHints?.stewardId?.trim();
+  const sessionId = envelope.routingHints?.sessionId?.trim() ||
+    envelope.routingHints?.stewardId?.trim();
   if (!sessionId) throw new Error("queued_steward_context_missing");
   const existing = store.getBySessionId(sessionId);
   const modelRef = context.modelRef ?? existing?.modelRef ?? "openai/auto:codex-latest";
   const reasoningEffort = context.reasoningEffort ?? existing?.metadata?.reasoning_effort;
   store.upsert({
     sessionId,
-    role: "steward",
+    role: context.role ?? "steward",
     ...(context.projectName.trim() ? { projectId: context.projectName.trim() } : {}),
     ...(context.projectName.trim()
       ? { appProjectId: context.projectName.trim() }

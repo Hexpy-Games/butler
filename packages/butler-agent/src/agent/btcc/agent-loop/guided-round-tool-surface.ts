@@ -16,7 +16,6 @@ import {
   type BtccRoundToolSurfaceSnapshot,
 } from "./round-tool-surface.ts";
 const DISPOSITION_TOOL = "record_work_disposition";
-const DELEGATION_TOOL = "delegate_to_steward";
 const ACTIVE_DELEGATION_TOOLS = new Set([
   "start_work",
   "steer_steward",
@@ -45,6 +44,8 @@ export function createGuidedRoundToolSurfaceResolver(input: {
   parentSessionId?: string;
   subsessionDelegation?: Pick<SubsessionDelegationService, "activeParentDelegations">;
   onActiveDelegationAdmission?: (active: boolean) => void;
+  /** Butler hands off after Plan Review; Steward may execute directly or use a Worker. */
+  forcedDelegationTool?: "delegate_to_steward";
 }): () => Promise<BtccRoundToolSurfaceSnapshot> {
   return async () => {
     const activeDelegations = input.parentSessionId && input.subsessionDelegation
@@ -67,11 +68,16 @@ export function createGuidedRoundToolSurfaceResolver(input: {
       }
       if (ACTIVE_RELATION_CONTROL_TOOLS.has(tool.name) &&
         activeDelegations.length === 0) return false;
-      if (delegationReady) return tool.name === DELEGATION_TOOL;
+      if (bound && (tool.name === "start_work" || tool.name === "continue_work")) {
+        return false;
+      }
+      if (delegationReady && input.forcedDelegationTool) {
+        return tool.name === input.forcedDelegationTool;
+      }
       if (tool.name === DISPOSITION_TOOL) {
         return input.projectWorkSurface === false || dispositionReady;
       }
-      if (tool.name === DELEGATION_TOOL) return delegationReady;
+      if (tool.name === input.forcedDelegationTool) return delegationReady;
       return true;
     });
     const tools = input.projectWorkSurface === false

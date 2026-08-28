@@ -10,11 +10,6 @@ import {
 import type { ProjectWorkChild } from "./project-work-child-codec.ts";
 import { projectWorkRecordId, requestDigest } from "./project-work-json.ts";
 import {
-  proveProjectWorkDiagnosticOutcome,
-  proveProjectWorkDispositionOutcome,
-  proveProjectWorkReviewOutcome,
-} from "./project-work-operation-proof.ts";
-import {
   checkpointChild,
   statusForProgress,
 } from "./project-work-mapping.ts";
@@ -25,7 +20,6 @@ import {
 import { requireCurrentProjectWork } from "./project-work-snapshot.ts";
 import {
   mutationIdentity,
-  noResultBackfill,
   publishedWorkId,
   workRevisions,
   type ProjectWorkWriteContext,
@@ -140,7 +134,6 @@ export async function recordProjectWorkReview(
     scope: context.input.scope,
     workId,
   });
-  proveProjectWorkReviewOutcome({ command, outcome, current });
   return context.afterMutation(current);
 }
 
@@ -149,12 +142,11 @@ export async function recordProjectWorkDisposition(
   command: RecordWorkDispositionCommand,
 ): Promise<DurableWorkView> {
   context.assertScope(command);
-  noResultBackfill(command.backfillToolCallIds);
   const identity = mutationIdentity(command);
   const allowCompleted =
     command.disposition === "open" &&
     command.runtimeOwnedOpenGeneration?.version === 1;
-  const outcome = await context.publish(identity, async () => {
+  await context.publish(identity, async () => {
     const current = await context.requireBound(command, allowCompleted);
     if (current.view.workId !== command.workId)
       invalid("project_work_disposition_target_mismatch");
@@ -258,8 +250,6 @@ export async function recordProjectWorkDisposition(
     scope: context.input.scope,
     workId: command.workId,
   });
-  if (!outcome.skipped)
-    proveProjectWorkDispositionOutcome({ command, outcome, current });
   return context.afterMutation(current);
 }
 
@@ -305,12 +295,6 @@ export async function claimProjectWorkCloseoutCorrection(
     if (!update) invalid("project_work_occurrence_receipt_missing");
     return [update];
   });
-  const current = await requireCurrentProjectWork({
-    butlerData: context.input.butlerData,
-    scope: context.input.scope,
-    workId: command.workId,
-  });
-  proveProjectWorkDiagnosticOutcome({ command, identity, outcome, current });
   return !outcome.replayed;
 }
 
