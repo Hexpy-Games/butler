@@ -1,5 +1,6 @@
 import type { DurableWorkService } from "../work/index.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
+import type { WorkerProfile } from "../../../gateways/app/interface/protocol/settings-contract.ts";
 
 /** The only persisted SessionRelation shape for the SS-02 vertical. */
 export type SessionRelation = {
@@ -22,10 +23,9 @@ export type SubsessionWorkspaceAndWorktree =
       repository_anchor_ref: "parent-session-project";
     }
   | {
-      ownership: "session";
-      workspace_label: "Steward session worktree";
-      repository_anchor_ref: "parent-session-repository";
-      branch: string;
+      ownership: "parent_session";
+      workspace_label: "Inherited parent session workspace";
+      repository_anchor_ref: "parent-session-workspace";
     };
 
 export type DelegationProjectContextRef = {
@@ -65,7 +65,7 @@ export type DelegationPacket = {
     status: "success" | "blocked" | "failed" | "cancelled";
     required_fields: ["summary", "acceptance_evidence", "changed_artifacts"];
   };
-  work_creation_policy: "one_recoverable_child_work";
+  work_creation_policy: "one_recoverable_child_work" | "none";
   access_and_budget_policy: {
     access_mode: "full_access" | "ask_first" | "read_only";
     max_turns: number;
@@ -163,6 +163,12 @@ export type ReviewedDelegationRequest = Pick<DelegationRequest,
   | "reasoning_effort"
 > & { safe_title?: string };
 
+export type ReviewedWorkerDelegationRequest = ReviewedDelegationRequest & {
+  objective: string;
+  acceptance_criteria: string[];
+  profile_id?: string;
+};
+
 export type CreatedDelegation = {
   relation: SessionRelation;
   packet: DelegationPacket;
@@ -194,6 +200,7 @@ export type CompleteStewardResultInput = {
   childTurnId: string;
   resultId: string;
   summary?: string;
+  changedArtifacts?: string[];
   status?: StewardResultStatus;
   code?: StewardResultCode;
 };
@@ -299,6 +306,7 @@ export type SubsessionDelegationService = {
     parentTurnId: string;
   }): Promise<ReviewedDelegationPlan>;
   delegateReviewed(input: ReviewedDelegationRequest): Promise<CreatedDelegation>;
+  delegateWorkerReviewed(input: ReviewedWorkerDelegationRequest): Promise<CreatedDelegation>;
   delegate(input: DelegationRequest): Promise<CreatedDelegation>;
   ensureChildRootWork(input: {
     childSessionId: string;
@@ -306,6 +314,9 @@ export type SubsessionDelegationService = {
     objective: string;
   }): Promise<string>;
   completeStewardResult(input: CompleteStewardResultInput): Promise<CompleteStewardResultOutcome>;
+  completeWorkerResult(input: CompleteStewardResultInput & {
+    changedArtifacts?: string[];
+  }): Promise<CompleteStewardResultOutcome>;
   recoverPendingParentInputs(): Promise<{ attempted: number; delivered: number }>;
   resolveParentResultEvidence(input: {
     parentSessionId: string;
@@ -345,4 +356,5 @@ export type SubsessionDelegationDependencies = {
   parentTurns: Pick<import("../turn/index.ts").TurnStateRepository, "findTurn">;
   contextDocuments: import("../../context/context-projection.ts").ContextDocumentReader;
   conversations: import("../../conversation/index.ts").ConversationContextStoreReader;
+  workerProfiles?: { read(profileId?: string): Promise<WorkerProfile> };
 };

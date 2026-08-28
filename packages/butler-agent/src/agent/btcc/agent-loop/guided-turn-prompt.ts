@@ -8,6 +8,7 @@ import { projectGuidedToolContext } from
 import type { ModelContextSegmentKind } from "../ports/model-round.ts";
 import { renderPrivateModifyContinuationInput } from "./guided-authority-continuation.ts";
 import { guidedStewardInstructions } from "./guided-steward-instructions.ts";
+import { guidedWorkerInstructions } from "./guided-worker-instructions.ts";
 import type { ContextDocumentReader } from "../../context/context-projection.ts";
 import {
   GUIDED_EOL_STABLE_ANCHOR,
@@ -97,7 +98,9 @@ export function renderGuidedPromptAttribution(
   const priorTools = renderPriorToolFacts(input.toolJournal.list(turn.turnId));
   const workStorage = workStorageForPolicy(policy);
   const entries: Array<{ text: string; kind: GuidedTextSegmentSource["kind"] }> = [
-    { text: `User request:\n${turn.originalMessage}`, kind: "current_user_request" },
+    { text: input.subsessionResultEvidence
+      ? "User request:\nA delegated result is ready for final synthesis."
+      : `User request:\n${turn.originalMessage}`, kind: "current_user_request" },
     { text: `Current scope:\n- role: ${policy.role}\n- workspace: ${policy.workspacePath}` +
       `\n- access: ${policy.accessMode}\n- work storage: ${workStorage}` +
       (policy.projectId ? `\n- project: ${policy.projectId}` : ""),
@@ -130,6 +133,9 @@ export function guidedInstructions(
 ): string {
   if (policy.role === "steward" && policy.subsession) {
     return guidedStewardInstructions(policy);
+  }
+  if (policy.role === "worker" && policy.subsession) {
+    return guidedWorkerInstructions(policy);
   }
   return [
     "You are Butler. Give the user a useful result, not an account of an internal protocol.",

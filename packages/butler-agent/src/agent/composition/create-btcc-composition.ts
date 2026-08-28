@@ -28,6 +28,7 @@ import {
 import {
   createAppParentInputSink,
   createSubsessionDelegationService,
+  createWorkerProfileReader,
   stewardResumeRequestId,
 } from "../btcc/subsessions/index.ts";
 import { resolveAppGatewayRuntimeConfig } from "../../operations/gateway/registry.ts";
@@ -81,16 +82,22 @@ export function createProductionBtccComposition(input: {
   const conversations = input.conversationStore ?? new AgentConversationStore({
     butlerData: input.butlerData,
   });
+  const appServerUrl = input.appServerUrl ?? resolveAppGatewayRuntimeConfig({
+    butlerData: input.butlerData,
+  }).serverUrl;
+  const appLocalAuth = input.appLocalAuth ?? readLocalAuthConfigFromEnvironment();
   const subsessions = createSubsessionDelegationService({
     butlerData: input.butlerData,
     sessionBindings: bindings,
     durableWork: stores.durableWork,
     store: stores.subsessionStore,
     parentInputSink: createAppParentInputSink({
-      appServerUrl: input.appServerUrl ?? resolveAppGatewayRuntimeConfig({
-        butlerData: input.butlerData,
-      }).serverUrl,
-      localAuth: input.appLocalAuth ?? readLocalAuthConfigFromEnvironment(),
+      appServerUrl,
+      localAuth: appLocalAuth,
+    }),
+    workerProfiles: createWorkerProfileReader({
+      appServerUrl,
+      localAuth: appLocalAuth,
     }),
     toolJournal: stores.guidedToolJournal,
     effectJournal: stores.guidedEffectJournal,

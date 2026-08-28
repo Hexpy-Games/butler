@@ -13,7 +13,6 @@ import {
 } from "./project-work-mapping.ts";
 import { immutableChildUpdate } from "./project-work-record-updates.ts";
 import { requireObservedProjectWorkReceipt } from "./project-work-receipt.ts";
-import { proveProjectWorkRelationOutcome } from "./project-work-operation-receipt-proof.ts";
 import {
   readManagedProjectWorkChild,
   requireCurrentProjectWork,
@@ -21,7 +20,6 @@ import {
 } from "./project-work-snapshot.ts";
 import {
   mutationIdentity,
-  noResultBackfill,
   workRevisions,
   type ProjectWorkWriteContext,
 } from "./project-work-write-context.ts";
@@ -88,9 +86,8 @@ export async function continueProjectWork(
   command: ContinueWorkCommand,
 ): Promise<DurableWorkView> {
   context.assertScope(command);
-  noResultBackfill(command.backfillToolCallIds);
   const identity = mutationIdentity(command);
-  const outcome = await context.publish(identity, async () => {
+  await context.publish(identity, async () => {
     const relation = await resolveRelation(context, command);
     if (relation.binding) {
       if (relation.binding.view.workId !== command.workId)
@@ -125,7 +122,6 @@ export async function continueProjectWork(
       scope: context.input.scope,
       workId: command.workId,
     });
-  proveProjectWorkRelationOutcome({ outcome, current, identity });
   return context.afterMutation(current);
 }
 
@@ -141,7 +137,7 @@ async function bind(
     expectedWorkId,
     current.view.workId,
   );
-  const outcome = await context.publish(identity, () =>
+  await context.publish(identity, () =>
     bindingUpdates(context, current, scope, identity),
   );
   const bound = await requireCurrentProjectWork({
@@ -149,7 +145,6 @@ async function bind(
       scope: context.input.scope,
       workId: current.view.workId,
     });
-  proveProjectWorkRelationOutcome({ outcome, current: bound, identity });
   return context.afterMutation(bound);
 }
 

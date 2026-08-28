@@ -1,11 +1,9 @@
 import { NativeInboundQueue } from "../../../gateways/core/inbound-queue.ts";
-import { shortStewardWorktreeBranch } from "../../session-workspaces/index.ts";
 import { digest } from "../identity/index.ts";
 import { subsessionChildTurnId, subsessionDelegationId, subsessionResultId, subsessionRootWorkId } from "./identities.ts";
 import { recoverPendingParentInputs } from "./outbox-recovery.ts";
 import { completeStewardResultForDependencies } from "./terminal-result-service.ts";
 import { resolveParentResultEvidence } from "./accepted-terminal-report.ts";
-import { createStewardWorktree } from "./worktree.ts";
 import { assertExactChildLedgerProjectIdentity, childProjectContextBinding, delegationProjectContextReady, snapshotChildProjectContext } from "./project-context.ts";
 import {
   normalizeSubsessionAllowedToolsAndEffects,
@@ -26,6 +24,8 @@ import {
   stewardRootWorkScope,
 } from "./runtime-policy.ts";
 import { createSubsessionControlService } from "./control.ts";
+import { delegateReviewedWorker } from "./worker-delegation.ts";
+import { completeWorkerResultForDependencies } from "./worker-result.ts";
 import type {
   CreatedDelegation, DelegationPacket, DelegationRequest, ParentInputSink,
   SessionRelation, SubsessionExecutionMode, SubsessionDelegationDependencies,
@@ -45,6 +45,17 @@ export function createSubsessionDelegationService(
     const expectedRootWorkId = input.store.rootWorkIdByRelationId(relation.relation_id);
     if (!expectedRootWorkId) throw new Error("subsession_root_work_identity_missing");
     const packet = input.store.packetByRelationId(relation.relation_id);
+    const childBinding = input.sessionBindings.getBySessionId(child.childSessionId);
+    if (!childBinding || childBinding.role !== "steward") {
+      throw new Error("subsession_child_binding_missing");
+    }
+    const existing = await input.durableWork.boundWorkForTurn(child.childTurnId);
+    if (existing) {
+      if (existing.workId !== expectedRootWorkId || existing.sessionId !== child.childSessionId) {
+        throw new Error("subsession_root_work_identity_mismatch");
+      }
+      return existing.workId;
+    }
     if (!packet || !completePacketContext(packet) || !await delegationProjectContextReady(packet.project_context, { sessionId: child.childSessionId, turnId: child.childTurnId }, input)) {
       await completeResult({
         childSessionId: child.childSessionId,
@@ -55,19 +66,8 @@ export function createSubsessionDelegationService(
       });
       throw new Error("delegation_context_incomplete");
     }
-    const childBinding = input.sessionBindings.getBySessionId(child.childSessionId);
-    if (!childBinding || childBinding.role !== "steward") {
-      throw new Error("subsession_child_binding_missing");
-    }
     assertExactChildLedgerProjectIdentity(childBinding);
     const rootWorkScope = stewardRootWorkScope(childBinding);
-    const existing = await input.durableWork.boundWorkForTurn(child.childTurnId);
-    if (existing) {
-      if (existing.workId !== expectedRootWorkId || existing.sessionId !== child.childSessionId) {
-        throw new Error("subsession_root_work_identity_mismatch");
-      }
-      return existing.workId;
-    }
     const work = await input.durableWork.startWork({
       sessionId: child.childSessionId,
       turnId: child.childTurnId,
@@ -88,6 +88,9 @@ export function createSubsessionDelegationService(
         parentTurnId: request.parent_turn_id,
       });
       return service.delegate(reviewedStewardDelegationRequest(request, reviewed));
+    },
+    async delegateWorkerReviewed(request) {
+      return delegateReviewedWorker(input, childQueue, request);
     },
     async delegate(request) {
       const normalizedRequest = normalizeDelegationRequest(request);
@@ -120,7 +123,6 @@ export function createSubsessionDelegationService(
       const childSessionId = `steward-${digest(`btcc.subsession.child-session.v1\0${relationId}`).slice(0, 32)}`;
       const childTurnId = `steward-turn-${digest(`btcc.subsession.child-turn.v1\0${relationId}`).slice(0, 32)}`;
       const rootWorkId = subsessionRootWorkId(delegationId, managerialAssignmentId, childSessionId);
-      const branch = shortStewardWorktreeBranch(relationId);
       const parentChatId = parent.transportBindings.find((binding) =>
         binding.transport === "app" && binding.peerId.trim(),
       )?.peerId;
@@ -139,7 +141,6 @@ export function createSubsessionDelegationService(
       const packet = createPacket(normalizedRequest, {
         delegationId, relationId, taskId: managerialAssignmentId,
         parentWorkRef: reviewed.parent_work_ref,
-        branch,
       }, projectContext);
       const parentConversationContext = renderDelegatedParentConversationContext({
         conversations: input.conversations,
@@ -148,13 +149,10 @@ export function createSubsessionDelegationService(
         modelRef: normalizedRequest.model_ref,
       });
       registerChildSession(input, parent, normalizedRequest, packet, childSessionId, inheritedProject);
-      const childWorkspacePath = normalizedRequest.execution_mode === "read_only"
-        ? parent.workspacePath
-        : await createStewardWorktree(input, parent.workspacePath, branch, childSessionId);
+      const childWorkspacePath = parent.workspacePath;
       const storedChild = input.sessionBindings.getBySessionId(childSessionId);
-      if (!storedChild || (normalizedRequest.execution_mode === "mutation" &&
-        storedChild.workspacePath === parent.workspacePath)) {
-        throw new Error("steward_isolated_workspace_missing");
+      if (!storedChild || storedChild.workspacePath !== parent.workspacePath) {
+        throw new Error("steward_inherited_workspace_missing");
       }
       input.store.create({ relation, packet, childTurnId, rootWorkId });
       enqueueChild(childQueue, packet, normalizedRequest.parent_session_id, childSessionId,
@@ -167,6 +165,9 @@ export function createSubsessionDelegationService(
     },
     async completeStewardResult(resultInput) {
       return completeResult(resultInput);
+    },
+    async completeWorkerResult(resultInput) {
+      return completeWorkerResultForDependencies(input, childQueue, resultInput);
     },
     async recoverPendingParentInputs() {
       return recoverPendingParentInputs({ store: input.store, sink: parentInputSink });
@@ -202,7 +203,7 @@ function recoverExistingDelegation(
 }
 function createPacket(
   request: DelegationRequest,
-  ids: { delegationId: string; relationId: string; taskId: string; parentWorkRef: DelegationPacket["parent_work_ref"]; branch: string },
+  ids: { delegationId: string; relationId: string; taskId: string; parentWorkRef: DelegationPacket["parent_work_ref"] },
   projectContext: DelegationPacket["project_context"],
 ): DelegationPacket {
   return {
@@ -226,10 +227,9 @@ function createPacket(
           repository_anchor_ref: "parent-session-project",
         }
       : {
-          ownership: "session",
-          workspace_label: "Steward session worktree",
-          repository_anchor_ref: "parent-session-repository",
-          branch: ids.branch,
+          ownership: "parent_session",
+          workspace_label: "Inherited parent session workspace",
+          repository_anchor_ref: "parent-session-workspace",
         },
     expected_result_schema: {
       version: 1,

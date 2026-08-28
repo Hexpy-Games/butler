@@ -80,6 +80,7 @@ export async function waitForTurn(
   let acknowledgedAtMs: number | null = null;
   let firstRenderedActivityAtMs: number | null = null;
   let turnId: string | null = null;
+  let delegatedTurnId: string | null = null;
   let stopClicked = false;
   const progress = new Set<string>();
   while (Date.now() - startedAt < timeoutMs) {
@@ -95,7 +96,8 @@ export async function waitForTurn(
       continue;
     }
     const candidate = view.active_turn ?? view.latest_turn;
-    if (candidate?.id && candidate.id !== previousTurnId) {
+    if (candidate?.id && candidate.id !== previousTurnId &&
+        candidate.id !== delegatedTurnId) {
       turnId ??= candidate.id;
       acknowledgedAtMs ??= Date.now();
       for (const label of progressLabels(view)) progress.add(label);
@@ -112,6 +114,15 @@ export async function waitForTurn(
         view.status && TERMINAL_STATES.has(view.status) &&
           view.latest_turn?.id === turnId,
       );
+      const activeSteward = (view.steward_children ?? []).some((child) =>
+        child.status === "active" || child.terminal === false,
+      );
+      if (terminal && activeSteward) {
+        delegatedTurnId = turnId;
+        turnId = null;
+        await new Promise((resolveWait) => setTimeout(resolveWait, 250));
+        continue;
+      }
       if (terminal && options.stopAfterAcknowledgement && !stopClicked) {
         throw new Error(
           `Electron Turn ${turnId} reached ${view.status} before the visible Stop button was clicked.`,

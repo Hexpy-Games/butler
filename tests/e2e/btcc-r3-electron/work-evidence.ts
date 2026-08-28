@@ -5,6 +5,8 @@ import type {
   GuidedWorkObservation,
   PreparedRun,
 } from "./contracts.ts";
+import { sessionHintForRow } from
+  "../../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
 import {
   projectLedgerWorkIdFromEffectTarget,
   readCanonicalProjectLedgerWorks,
@@ -22,6 +24,7 @@ interface ValueRow {
 }
 
 const APP_DATABASE_CANDIDATES = [
+  ["agent-runtime", "btcc.sqlite"],
   ["app-server", "butler-client.sqlite"],
   ["runtime", "butler-client.sqlite"],
   ["butler-client.sqlite"],
@@ -90,7 +93,15 @@ export function readGuidedWorkObservation(
         ON plan.plan_revision_id = work.current_plan_revision_id
       WHERE binding.turn_id = ? AND binding.is_current = 1
       LIMIT 1
-    `).get(turnId);
+    `).get(turnId) ?? db.query<WorkRow, [string]>(`
+      SELECT work.work_id, work.status, plan.revision AS plan_revision
+      FROM btcc_guided_works work
+      LEFT JOIN btcc_guided_work_plan_revisions plan
+        ON plan.plan_revision_id = work.current_plan_revision_id
+      WHERE work.session_id = ?
+      ORDER BY work.updated_at DESC
+      LIMIT 1
+    `).get(sessionHintForRow(run.sessionId));
     if (!work) return null;
     const resultToolNames = db.query<{ tool_name: string }, [string]>(`
       SELECT call.tool_name

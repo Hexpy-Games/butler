@@ -33,6 +33,37 @@ export const delegateToStewardToolMetadata: ToolCapabilityMetadata = {
   ],
 };
 
+export const delegateToWorkerToolDefinition: ButlerToolDefinition = {
+  type: "function",
+  name: "delegate_to_worker",
+  description: "Assign one bounded action from the current accepted Steward Plan to a Worker. Steward remains responsible for integration, review, validation, and reporting.",
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      objective: { type: "string", minLength: 1, maxLength: 2000 },
+      acceptance_criteria: {
+        type: "array",
+        items: { type: "string", minLength: 1, maxLength: 500 },
+        maxItems: 8,
+      },
+      safe_title: { type: "string", minLength: 1, maxLength: 120 },
+      profile_id: { type: "string", minLength: 1, maxLength: 48 },
+    },
+    required: ["objective", "acceptance_criteria"],
+  },
+  effectBoundary: "turn_local",
+  concurrencySafe: false,
+  interruptBehavior: "continue",
+  transcriptVisibility: "visible",
+};
+
+export const delegateToWorkerToolMetadata: ToolCapabilityMetadata = {
+  category: "dispatch",
+  tags: ["subsession", "worker", "delegation"],
+  safetyNotes: ["Worker executes one bounded Task and reports only to Steward."],
+};
+
 export const steerStewardToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "steer_steward",

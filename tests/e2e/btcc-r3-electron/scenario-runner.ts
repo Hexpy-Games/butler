@@ -32,6 +32,7 @@ import {
 } from "./provider-observation-proxy.ts";
 import {
   assert,
+  isInside,
   safeSegment,
   validateElectronScenario,
 } from "./scenario-preflight.ts";
@@ -108,10 +109,19 @@ export async function runBtccR3ElectronHarness(
       settings.model === run.model,
       `Electron settings selected ${settings.model}, expected ${run.model}.`,
     );
-    assert(
-      bindingWorkspace(run) === run.workspaceRoot,
-      "Electron session binding escaped the fixture workspace.",
-    );
+    const boundWorkspace = bindingWorkspace(run);
+    if (run.sessionKind === "project") {
+      assert(
+        boundWorkspace && isInside(run.dataRoot, boundWorkspace),
+        "Electron project session binding escaped the isolated run data.",
+      );
+      run.workspaceRoot = boundWorkspace;
+    } else {
+      assert(
+        boundWorkspace === run.workspaceRoot,
+        "Electron session binding escaped the fixture workspace.",
+      );
+    }
 
     if (options.smoke) {
       await launch.page.reload();

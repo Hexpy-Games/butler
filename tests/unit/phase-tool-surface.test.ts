@@ -26,6 +26,7 @@ import { inheritedStewardRuntimePolicy, stewardRootWorkScope } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/runtime-policy.ts";
 
 const ENABLED = { BUTLER_PHASE_TOOL_SURFACE: "on" };
+const DISABLED = { BUTLER_PHASE_TOOL_SURFACE: "off" };
 
 test("exact result tool is absent from every Guided selection while replay is off", () => {
   const turn = turnRecord({ accessMode: "full_access", trackingMode: "local" });
@@ -126,7 +127,7 @@ test("ordinary tracked chat admits reviewed Work without keyword or access routi
   }
 });
 
-test("tracked read-only project phase keeps Work and delegation but omits effects", () => {
+test("tracked read-only Butler phase keeps Work and delegation but omits project and effects", () => {
   const selection = selectGuidedTurnPhasePolicy(turnRecord({
     accessMode: "read_only",
     trackingMode: "ledger",
@@ -139,7 +140,6 @@ test("tracked read-only project phase keeps Work and delegation but omits effect
     "read_file",
     "grep_files",
     "list_files",
-    "project_ledger_status",
     "start_work",
     "replace_work_plan",
     "record_work_review",
@@ -148,6 +148,7 @@ test("tracked read-only project phase keeps Work and delegation but omits effect
     expect(names).toContain(name);
   }
   for (const name of [
+    "project_ledger_status",
     "run_command",
     "write_file",
     "edit_file",
@@ -293,10 +294,10 @@ test("feature accepts the real writable App project profile set with a reduced s
   });
   turn.context = { ...turn.context, ...context };
 
-  const legacy = selectGuidedTurnPhasePolicy(turn, {});
+  const legacy = selectGuidedTurnPhasePolicy(turn, DISABLED);
   const enabled = selectGuidedTurnPhasePolicy(turn, ENABLED);
   const names = enabled.providerTools.map((tool) => tool.name);
-  expect(names).toContain("project_ledger_status");
+  expect(names).not.toContain("project_ledger_status");
   expect(names).not.toContain("project_ledger_work_complete");
   expect(names).not.toContain("project_ledger_attempt_start");
   expect(enabled.authorizedTools.map((tool) => tool.name))
@@ -322,7 +323,7 @@ test("feature treats real full-access App chat workspace authority as execution"
   const turn = turnRecord({ accessMode: "full_access", trackingMode: "local" });
   turn.context = { ...turn.context, ...context };
 
-  const legacy = selectGuidedTurnPhasePolicy(turn, {});
+  const legacy = selectGuidedTurnPhasePolicy(turn, DISABLED);
   const enabled = selectGuidedTurnPhasePolicy(turn, ENABLED);
   const names = enabled.providerTools.map((tool) => tool.name);
   expect(enabled.phase).toBe("execution");
@@ -551,18 +552,20 @@ test("Steward root Work uses the same project scope as a ledger-backed child Tur
   })).toThrow("steward_project_binding_missing");
 });
 
-test("feature default-off path preserves legacy bytes and enabled policy reduces both stable and schema bytes", () => {
+test("feature defaults to the minimal role surface and explicit off preserves legacy bytes", () => {
   const turn = turnRecord({
     accessMode: "full_access",
     trackingMode: "ledger",
     projectRef: "butler",
   });
-  const legacy = selectGuidedTurnPhasePolicy(turn, {});
+  const legacy = selectGuidedTurnPhasePolicy(turn, DISABLED);
+  const defaultSelection = selectGuidedTurnPhasePolicy(turn, {});
   const enabled = selectGuidedTurnPhasePolicy(turn, ENABLED);
   const legacySchemas = JSON.stringify(modelFacingFunctionTools(legacy.providerTools));
   const enabledSchemas = JSON.stringify(modelFacingFunctionTools(enabled.providerTools));
 
   expect(legacy.mode).toBe("legacy");
+  expect(defaultSelection).toEqual(enabled);
   expect(legacy.stableInstructionPrefix).toContain("Work stages guide process, never tool access");
   expect(enabled.mode).toBe("phase_minimal");
   expect(enabled.stableInstructionPrefix).toContain(
@@ -578,9 +581,9 @@ test("feature default-off path preserves legacy bytes and enabled policy reduces
   expect(enabledSchemas.length).toBeLessThan(legacySchemas.length);
 });
 
-test("feature flag-off request retains its legacy prefix before admitted EOL", () => {
+test("feature explicit flag-off request retains its legacy prefix before admitted EOL", () => {
   const turn = turnRecord({ trackingMode: "none" });
-  const selection = selectGuidedTurnPhasePolicy(turn, {});
+  const selection = selectGuidedTurnPhasePolicy(turn, DISABLED);
   const contextDocuments = admitTestEol(turn);
   const request = renderGuidedTurnRequestAttribution(
     turn,
@@ -610,7 +613,7 @@ test("feature serializer stays reduced except for deliberate read-only Work admi
   ];
 
   for (const turn of turns) {
-    const before = selectGuidedTurnPhasePolicy(turn, {});
+    const before = selectGuidedTurnPhasePolicy(turn, DISABLED);
     const after = selectGuidedTurnPhasePolicy(turn, ENABLED);
     const beforeSchemaBytes = byteLength(JSON.stringify(modelFacingFunctionTools(before.providerTools)));
     const afterSchemaBytes = byteLength(JSON.stringify(modelFacingFunctionTools(after.providerTools)));

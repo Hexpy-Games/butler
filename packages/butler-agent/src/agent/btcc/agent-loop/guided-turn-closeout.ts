@@ -4,20 +4,18 @@ import type {
   WorkTurnScope,
 } from "../work/index.ts";
 import { dispositionMaterialFingerprint } from "../work/index.ts";
-import type { GuidedToolJournal } from "../ports/index.ts";
 import { digest } from "../identity/index.ts";
 import { GuidedWorkCloseoutError } from "./guided-work-closeout-error.ts";
-import { isDurableWorkTool } from "../work/index.ts";
 import type { BtccAgentLoopInput } from "./contracts.ts";
 
 type GuidedTurnCloseoutInput = {
   durableWork: DurableWorkService;
   workScope: WorkTurnScope;
-  toolJournal: GuidedToolJournal;
   turnId: string;
   trackingMode: "ledger" | "local" | "none";
   responseLanguage: string;
   originalRequest: string;
+  parentResultIntegration?: boolean;
 };
 
 type GuidedTurnCloseoutReview =
@@ -40,7 +38,8 @@ export function createGuidedDelegationTurnRelease(input: {
   let released = false;
   return {
     finalTextFromToolResult: (fallback) => async (result) => {
-      if (result.toolCall.name === "delegate_to_steward" && result.toolResult.ok) {
+      if ((result.toolCall.name === "delegate_to_steward" ||
+          result.toolCall.name === "delegate_to_worker") && result.toolResult.ok) {
         released = true;
         return delegationReleaseCopy(input);
       }
@@ -85,6 +84,9 @@ export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
 } {
   return {
     async reviewFinalCandidate(candidate) {
+      if (input.parentResultIntegration) {
+        return { status: "accepted" as const };
+      }
       if (input.trackingMode === "none") {
         return { status: "accepted" as const };
       }
@@ -113,6 +115,7 @@ export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
     },
 
     async reconcileAfterLoop(text) {
+      if (input.parentResultIntegration) return text;
       if (input.trackingMode === "none") return text;
       const bound = await loadBoundWork(input);
       if (!bound) return text;
@@ -158,7 +161,6 @@ async function settleOpen(
   const copy = closeoutCopy(input);
   try {
     await claimCloseoutCorrection(input, bound.workId);
-    await backfillCloseoutResults(input);
     const current = await input.durableWork.boundWorkForTurn(input.turnId);
     if (!current || current.workId !== bound.workId) {
       throw new Error("Runtime-owned open Work binding changed before settlement");
@@ -200,19 +202,6 @@ function noticeCandidate(input: GuidedTurnCloseoutInput, candidate: string): str
   return content.startsWith(`${notice}\n\n`)
     ? content
     : `${notice}\n\n${content}`;
-}
-
-async function backfillCloseoutResults(
-  input: GuidedTurnCloseoutInput,
-): Promise<void> {
-  for (const record of input.toolJournal.list(input.turnId)) {
-    if (record.status !== "completed" || isDurableWorkTool(record.toolName)) continue;
-    await input.durableWork.attachToolResult({
-      ...input.workScope,
-      mutationCallId: digest(`btcc-guided-work-result-attach.v1\0${record.callId}`),
-      toolCallId: record.callId,
-    });
-  }
 }
 
 function closeoutCopy(input: GuidedTurnCloseoutInput): {

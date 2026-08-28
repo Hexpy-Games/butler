@@ -1,6 +1,7 @@
 import type { ButlerExecutionPolicy } from "../contracts.ts";
 import type { StableProviderCachePrefixContract } from "../ports/model-round.ts";
 import { guidedStewardInstructions } from "./guided-steward-instructions.ts";
+import { guidedWorkerInstructions } from "./guided-worker-instructions.ts";
 import { GUIDED_EOL_STABLE_ANCHOR } from "./guided-eol-instructions.ts";
 
 export const GUIDED_STABLE_PROVIDER_PREFIX_REVISION =
@@ -32,6 +33,9 @@ export function phaseMinimalStableInstructions(
 ): string {
   if (policy.role === "steward" && policy.subsession) {
     return guidedStewardInstructions(policy);
+  }
+  if (policy.role === "worker" && policy.subsession) {
+    return guidedWorkerInstructions(policy);
   }
   return [
     "You are Butler. Give the user a useful result, not an account of an internal protocol.",

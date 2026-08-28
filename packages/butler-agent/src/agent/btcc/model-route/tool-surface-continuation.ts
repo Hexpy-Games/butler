@@ -3,22 +3,7 @@ import { RoundToolSurfaceError } from "../ports/model-round.ts";
 import { continuationForContextProjection } from "./context-projection-rebase.ts";
 
 export function continuationForRoundContext(request: ModelRoundRequest): unknown {
-  return continuationForContextProjection({
-    ...request,
-    continuation: continuationForToolSurface({
-      currentDigest: request.toolSurfaceDigest,
-      continuation: request.continuation,
-    }),
-  });
-}
-
-export function continuationForToolSurface(input: {
-  currentDigest: string | undefined;
-  continuation: unknown;
-}): unknown {
-  const current = normalizeDigest(input.currentDigest);
-  const accepted = continuationToolSurfaceDigest(input.continuation);
-  return current === accepted ? input.continuation : undefined;
+  return continuationForContextProjection(request);
 }
 
 export function attachAcceptedToolSurface(

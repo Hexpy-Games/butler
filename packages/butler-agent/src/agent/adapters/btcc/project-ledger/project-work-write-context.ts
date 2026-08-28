@@ -82,11 +82,6 @@ export function workRevisions(
   };
 }
 
-export function noResultBackfill(ids: string[] | undefined): void {
-  if (ids && ids.length > 0)
-    throw new Error("project_work_result_attachment_required");
-}
-
 export function publishedWorkId(outcome: {
   targets: Array<{ id: string; kind: string; parentId: string | null }>;
 }): string | undefined {

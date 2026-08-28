@@ -4,10 +4,6 @@ import type {
   GuidedToolJournal,
 } from "../ports/index.ts";
 import { parseToolCatalogId } from "../../tools/progressive-catalog.ts";
-import { isDurableWorkTool } from "../work/index.ts";
-import {
-  safeAttachToolResult,
-} from "./guided-work-runtime.ts";
 import {
   ordinaryToolError,
 } from "./guided-tool-progress.ts";
@@ -17,8 +13,7 @@ import {
   uncertainPriorMutation,
 } from "./guided-turn-policy.ts";
 
-type LegacyReplayRuntime = Parameters<typeof safeAttachToolResult>[0];
-type LegacyReplayScope = Parameters<typeof safeAttachToolResult>[1];
+type LegacyReplayRuntime = { toolJournal: GuidedToolJournal };
 type GuidedToolCall = Parameters<ButlerToolExecutor>[0];
 const LEGACY_REPLAY_SUMMARY =
   "재개: 기존 명령";
@@ -30,7 +25,6 @@ type LegacyReplayExecutionInput = {
   effectiveToolName: string;
   signal: AbortSignal;
   runtime: LegacyReplayRuntime;
-  scope: LegacyReplayScope;
   executeFresh: (call: GuidedToolCall) => Promise<unknown>;
 };
 
@@ -71,7 +65,6 @@ async function replaySummarylessLegacyRecord(
 ): Promise<LegacyToolReplayResult> {
   const { record } = input;
   if (record.status === "completed") {
-    await attachLegacyResult(input, record.callId);
     return { handled: true, result: record.result };
   }
   if (record.status === "failed" || record.status === "cancelled") {
@@ -95,7 +88,6 @@ async function replaySummarylessLegacyRecord(
       status: "completed",
       result,
     });
-    await attachLegacyResult(input, input.callId);
     return { handled: true, result };
   } catch (error) {
     if (input.signal.aborted) {
@@ -112,7 +104,6 @@ async function replaySummarylessLegacyRecord(
       status: "completed",
       result,
     });
-    await attachLegacyResult(input, input.callId);
     return { handled: true, result };
   }
 }
@@ -177,16 +168,4 @@ function isSummarylessRunCommandCall(
       nested && typeof nested === "object" && !Array.isArray(nested) &&
       !Object.hasOwn(nested, "summary"),
   );
-}
-
-async function attachLegacyResult(
-  input: {
-    call: GuidedToolCall;
-    runtime: LegacyReplayRuntime;
-    scope: LegacyReplayScope;
-  },
-  callId: string,
-): Promise<void> {
-  if (isDurableWorkTool(input.call.name)) return;
-  await safeAttachToolResult(input.runtime, input.scope, callId);
 }

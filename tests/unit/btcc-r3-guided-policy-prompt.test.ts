@@ -19,6 +19,8 @@ import {
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-prompt.ts";
 import { guidedStewardInstructions } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-steward-instructions.ts";
+import { guidedWorkerInstructions } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-worker-instructions.ts";
 import { phaseMinimalStableInstructionSurface } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-phase-instructions.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from
@@ -27,7 +29,7 @@ import { workScopeForTurn } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { appRuntimePolicy } from
   "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
-import { delegateToStewardToolDefinition } from
+import { delegateToStewardToolDefinition, delegateToWorkerToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
 import {
   normalizeSubsessionMutationScope,
@@ -388,6 +390,51 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
   expect(mutationInstructions).toContain("same reviewed Plan and effect contract as Butler");
   expect(mutationInstructions).not.toMatch(
     /access conversation or memory tools|call MCP|mutate Project Ledger|omit effect from .*run_command/iu,
+  );
+});
+
+test("Steward may delegate one Plan action while Worker has only execution duty", () => {
+  const subsession = {
+    relationId: "relation",
+    delegationId: "delegation",
+    taskId: "task",
+    executionMode: "mutation" as const,
+    mutationScope: ["."],
+    allowedToolsAndEffects: [],
+  };
+  const stewardPolicy = {
+    role: "steward",
+    accessMode: "full_access" as const,
+    trackingMode: "local" as const,
+    requiredNativeToolProfiles: ["workspace"],
+    requiredNativeTools: [],
+    workspacePath: "/tmp/workspace",
+    subsession,
+  };
+  const stewardTools = visibleToolDefinitions(
+    authorizedToolDefinitions(turnRecord({
+      accessMode: "full_access",
+      executionPolicy: stewardPolicy,
+    })),
+    stewardPolicy,
+  ).map((tool) => tool.name);
+  expect(stewardTools).toContain(delegateToWorkerToolDefinition.name);
+  expect(stewardTools).toContain("write_file");
+  expect(guidedStewardInstructions(stewardPolicy)).toContain(
+    "direct execution and/or bounded Worker orchestration",
+  );
+
+  const workerPolicy = { ...stewardPolicy, role: "worker", trackingMode: "none" as const };
+  const workerTools = authorizedToolDefinitions(turnRecord({
+    accessMode: "full_access",
+    executionPolicy: workerPolicy,
+  })).map((tool) => tool.name);
+  expect(workerTools).toContain("write_file");
+  expect(workerTools).not.toContain("delegate_to_steward");
+  expect(workerTools).not.toContain("delegate_to_worker");
+  expect(workerTools).not.toContain("start_work");
+  expect(guidedWorkerInstructions(workerPolicy)).toContain(
+    "Do not delegate, create Work or Plan records",
   );
 });
 

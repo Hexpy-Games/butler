@@ -103,6 +103,7 @@ export interface InboundEnvelope {
   };
   nativeStewardContext?: {
     version: 1;
+    role?: "steward" | "worker";
     projectName: string;
     workspacePath: string;
     modelRef?: ModelRef;
@@ -166,7 +167,7 @@ export interface TransportAdapter {
   send(action: OutboundAction): Promise<DeliveryResult>;
 }
 
-export type GatewayDurableRole = Exclude<SessionRole, "worker">;
+export type GatewayDurableRole = SessionRole;
 export type GatewayRouteReason =
   | "session-hint"
   | "steward-hint"
@@ -227,6 +228,7 @@ export type GatewayRoleHandler = (input: GatewayHandlerInput) => Promise<Gateway
 export interface GatewayRoleHandlers {
   butler?: GatewayRoleHandler;
   steward?: GatewayRoleHandler;
+  worker?: GatewayRoleHandler;
 }
 
 export interface GatewayHandledResult {

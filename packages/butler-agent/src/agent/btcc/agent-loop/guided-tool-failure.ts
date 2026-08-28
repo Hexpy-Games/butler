@@ -1,4 +1,3 @@
-import { isDurableWorkTool } from "../work/index.ts";
 import { GuidedEffectProcessReplacementError } from "../effects/index.ts";
 import type { GuidedActivityBinding } from "../projection/index.ts";
 import type { GuidedToolCallExecutionInput } from "./guided-tool-call-execution.ts";
@@ -7,7 +6,6 @@ import {
   publishOperation,
   safeJson,
 } from "./guided-tool-progress.ts";
-import { safeAttachToolResult } from "./guided-work-runtime.ts";
 
 export async function finishFailedTool(
   input: GuidedToolCallExecutionInput,
@@ -26,9 +24,6 @@ export async function finishFailedTool(
   if (!cancelled) {
     const result = ordinaryToolError(effectiveToolName, error);
     input.toolJournal.finish({ callId, status: "completed", result });
-    if (!isDurableWorkTool(toolName)) {
-      await safeAttachToolResult(input, input.workScope, callId);
-    }
     await publishOperation(input.progress, {
       turnId: input.turn.turnId,
       activityId: activity.activityId,

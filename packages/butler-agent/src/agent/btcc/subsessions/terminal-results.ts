@@ -25,10 +25,9 @@ export function completePacketContext(packet: DelegationPacket): boolean {
       workspace.workspace_label === "Validated project workspace" &&
       workspace.repository_anchor_ref === "parent-session-project"
     : executionMode === "mutation" &&
-      workspace?.ownership === "session" &&
-      stringValue(workspace.repository_anchor_ref) &&
-      stringValue(workspace.branch) &&
-      stringValue(workspace.workspace_label);
+      workspace?.ownership === "parent_session" &&
+      workspace.repository_anchor_ref === "parent-session-workspace" &&
+      workspace.workspace_label === "Inherited parent session workspace";
   const readOnlySurfaceValid = executionMode !== "read_only" ||
     (Array.isArray(packet.mutation_scope) && Array.isArray(packet.allowed_tools_and_effects) &&
       packet.mutation_scope.length === 0 &&

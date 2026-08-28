@@ -12,14 +12,12 @@ import {
   mutableWorkUpdate,
 } from "./project-work-mapping.ts";
 import { immutableChildUpdate } from "./project-work-record-updates.ts";
-import { proveProjectWorkRelationOutcome } from "./project-work-operation-receipt-proof.ts";
 import {
   readCurrentProjectWork,
   requireCurrentProjectWork,
 } from "./project-work-snapshot.ts";
 import {
   mutationIdentity,
-  noResultBackfill,
   workRevisions,
   type ProjectWorkWriteContext,
 } from "./project-work-write-context.ts";
@@ -29,11 +27,10 @@ export async function startProjectWork(
   command: StartWorkCommand,
 ): Promise<DurableWorkView> {
   context.assertScope(command);
-  noResultBackfill(command.backfillToolCallIds);
   const identity = mutationIdentity(command);
   const workId = projectWorkRecordId("work", command.mutationCallId);
   let abandonedId: string | undefined;
-  const outcome = await context.publish(identity, async () => {
+  await context.publish(identity, async () => {
     const relation = await context.relation(command);
     if (relation.binding) invalid("project_work_turn_already_bound");
     if (
@@ -120,7 +117,6 @@ export async function startProjectWork(
     scope: context.input.scope,
     workId,
   });
-  proveProjectWorkRelationOutcome({ outcome, current, identity });
   const abandoned = abandonedId
     ? [
         await requireCurrentProjectWork({

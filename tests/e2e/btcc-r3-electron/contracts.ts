@@ -189,6 +189,10 @@ export interface AppSessionView {
   project_id?: string;
   session_id?: string;
   status?: string;
+  steward_children?: Array<{
+    status?: "idle" | "active" | "delivered" | "failed" | "cancelled";
+    terminal?: boolean;
+  }>;
 }
 
 export interface AppSettingsView {
