@@ -61,6 +61,8 @@ import { prepareBtccToolCall } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-execution.ts";
 import { createGuidedTurnCloseout } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-closeout.ts";
+import { renderExecutionWindowObservation } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/execution-window-observation.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tools.ts";
 import { guidedToolOccurrence } from
@@ -1754,8 +1756,12 @@ test("production Guided Turn rereads Work across execution windows in one agent 
     expect(requests[2]?.messages.filter((message) => message.role === "user"))
       .toHaveLength(3);
     expect(requests[1]?.messages.at(-1)?.content).toContain("Execution checkpoint 1");
+    expect(requests[1]?.messages.at(-1)?.content)
+      .toContain("Window diagnosis: 1 successful and 0 failed tool results.");
     expect(requests[1]?.messages.at(-1)?.content).toContain("Durable Work status");
     expect(requests[2]?.messages.at(-1)?.content).toContain("Execution checkpoint 2");
+    expect(requests[2]?.messages.at(-1)?.content)
+      .toContain("Before another tool call, determine why the previous window did not finish.");
     expect(requests[2]?.messages.at(-1)?.content)
       .toContain("The collected evidence remains available.");
     expect(requests[3]?.messages.filter((message) => message.role === "user"))
@@ -1763,6 +1769,29 @@ test("production Guided Turn rereads Work across execution windows in one agent 
   } finally {
     fixture.close();
   }
+});
+
+test("Guided execution-window diagnosis names repeated no-change work without ending the Turn", () => {
+  const result = {
+    toolCallId: "same-edit",
+    name: "edit_file",
+    ok: false as const,
+    error: {
+      code: "no_change_requested",
+      message: "No change was requested.",
+    },
+  };
+  const observation = renderExecutionWindowObservation({
+    windowIndex: 2,
+    context: null,
+    boundWork: null,
+    toolResults: [result, result, result],
+  });
+
+  expect(observation).toContain("internal diagnosis boundary, not a failure or completion condition");
+  expect(observation).toContain("No-change mutations: 3");
+  expect(observation).toContain("Repeated tool pattern: edit_file appeared 3 times");
+  expect(observation).toContain("take one materially different next step");
 });
 
 test("Guided fallback projects the cursor model into public iteration and fallback evidence", async () => {

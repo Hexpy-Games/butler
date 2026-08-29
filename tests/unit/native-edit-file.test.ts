@@ -157,6 +157,33 @@ describe("edit_file execution", () => {
     expect(invalid.error).toBe("invalid_arguments");
   });
 
+  test("rejects unchanged single and batch edits without recording a mutation", async () => {
+    const single = await executeEditFileTool(call({
+      path: "same.txt",
+      old_text: "same",
+      new_text: "same",
+    }), { workspacePath: workspace }) as { ok: false; error: string };
+    expect(single).toMatchObject({ ok: false, error: "no_change_requested" });
+
+    const batch = await executeEditFileTool(call({
+      edits: [
+        {
+          path: "one.txt",
+          old_text: "one",
+          new_text: "one",
+          expected_sha256: sha256Hex("one"),
+        },
+        {
+          path: "two.txt",
+          old_text: "two",
+          new_text: "changed",
+          expected_sha256: sha256Hex("two"),
+        },
+      ],
+    }), { workspacePath: workspace }) as { ok: false; error: string };
+    expect(batch).toMatchObject({ ok: false, error: "no_change_requested" });
+  });
+
   test("does not overwrite a target that appears after create preflight", async () => {
     const path = join(workspace, "appeared.txt");
     const snapshot = await observeWorkspaceFileMutation({
