@@ -5,10 +5,26 @@ import type {
   SubsessionDelegationDependencies,
 } from "./contracts.ts";
 
-/** Loads the sole durable Butler Plan/Review authority for Steward dispatch. */
+/** Loads the reviewed Plan authority shared by Steward and Worker dispatch. */
 export async function loadReviewedDelegationPlan(
   input: Pick<SubsessionDelegationDependencies, "durableWork">,
   parent: { parentSessionId: string; parentTurnId: string },
+): Promise<ReviewedDelegationPlan> {
+  return loadDelegationPlan(input, parent, false);
+}
+
+/** Requires a Plan created and reviewed in the current Butler user Turn. */
+export async function loadCurrentTurnReviewedDelegationPlan(
+  input: Pick<SubsessionDelegationDependencies, "durableWork">,
+  parent: { parentSessionId: string; parentTurnId: string },
+): Promise<ReviewedDelegationPlan> {
+  return loadDelegationPlan(input, parent, true);
+}
+
+async function loadDelegationPlan(
+  input: Pick<SubsessionDelegationDependencies, "durableWork">,
+  parent: { parentSessionId: string; parentTurnId: string },
+  requireCurrentTurn: boolean,
 ): Promise<ReviewedDelegationPlan> {
   const work = await input.durableWork.boundWorkForTurn(parent.parentTurnId);
   if (!work || work.sessionId !== parent.parentSessionId ||
@@ -19,8 +35,8 @@ export async function loadReviewedDelegationPlan(
   const review = work.latestPlanReview;
   if (!plan || !review || review.subject !== "plan" || review.verdict !== "accept" ||
       review.boundPlanRevisionId !== plan.planRevisionId ||
-      plan.originTurnId !== parent.parentTurnId ||
-      review.originTurnId !== parent.parentTurnId) {
+      (requireCurrentTurn && (plan.originTurnId !== parent.parentTurnId ||
+        review.originTurnId !== parent.parentTurnId))) {
     throw new Error("subsession_accepted_parent_plan_review_required");
   }
   return {

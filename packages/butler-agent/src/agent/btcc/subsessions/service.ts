@@ -14,7 +14,7 @@ import { renderDelegatedParentConversationContext } from "./parent-conversation-
 import { renderStewardInput } from "./steward-input.ts";
 import {
   assertReviewedDelegationRequest,
-  loadReviewedDelegationPlan,
+  loadCurrentTurnReviewedDelegationPlan,
 } from "./reviewed-delegation-plan.ts";
 import {
   admittedParentTurnAccessMode,
@@ -80,10 +80,10 @@ export function createSubsessionDelegationService(
   };
   const service: SubsessionDelegationService = {
     async reviewedDelegationPlan(parentInput) {
-      return loadReviewedDelegationPlan(input, parentInput);
+      return loadCurrentTurnReviewedDelegationPlan(input, parentInput);
     },
     async delegateReviewed(request) {
-      const reviewed = await loadReviewedDelegationPlan(input, {
+      const reviewed = await loadCurrentTurnReviewedDelegationPlan(input, {
         parentSessionId: request.parent_session_id,
         parentTurnId: request.parent_turn_id,
       });
@@ -110,7 +110,7 @@ export function createSubsessionDelegationService(
         parentSessionId: normalizedRequest.parent_session_id, parentTurnId: normalizedRequest.parent_turn_id, parent,
         turns: input.parentTurns, documents: input.contextDocuments,
       });
-      const reviewed = await loadReviewedDelegationPlan(input, {
+      const reviewed = await loadCurrentTurnReviewedDelegationPlan(input, {
         parentSessionId: normalizedRequest.parent_session_id,
         parentTurnId: normalizedRequest.parent_turn_id,
       });
