@@ -28,8 +28,46 @@ type ProjectionInput = Parameters<
 
 export class SqliteProjectWorkResultRuntime
 implements ProjectWorkResultRuntime,
-  Pick<ProjectWorkRuntimeProjection, "observeCanonicalWorks"> {
+  Pick<
+    ProjectWorkRuntimeProjection,
+    "locateCanonicalWorks" | "observeCanonicalWorks"
+  > {
   constructor(private readonly db: Database) {}
+
+  locateCanonicalWorks(
+    input: Parameters<ProjectWorkRuntimeProjection["locateCanonicalWorks"]>[0],
+  ): ReturnType<ProjectWorkRuntimeProjection["locateCanonicalWorks"]> {
+    const sessionHeadWorkId = input.sessionId
+      ? this.db.query<{ work_id: string }, [string, string, string]>(`
+          SELECT head.work_id
+          FROM btcc_guided_work_session_heads head
+          JOIN btcc_guided_works work ON work.work_id = head.work_id
+          WHERE head.session_id = ? AND work.scope_kind = 'project'
+            AND work.scope_ref = ? AND work.ledger_project_id = ?
+            AND work.canonical_head_sha256 IS NOT NULL
+        `).get(
+          input.sessionId,
+          input.scope.appProjectId,
+          input.scope.ledgerProjectId,
+        )?.work_id ?? null
+      : null;
+    const bindingWorkId = input.turnId
+      ? this.db.query<{ work_id: string }, [string, string, string]>(`
+          SELECT binding.work_id
+          FROM btcc_guided_turn_work_bindings binding
+          JOIN btcc_guided_works work ON work.work_id = binding.work_id
+          WHERE binding.turn_id = ? AND binding.is_current = 1
+            AND work.scope_kind = 'project' AND work.scope_ref = ?
+            AND work.ledger_project_id = ?
+            AND work.canonical_head_sha256 IS NOT NULL
+        `).get(
+          input.turnId,
+          input.scope.appProjectId,
+          input.scope.ledgerProjectId,
+        )?.work_id ?? null
+      : null;
+    return Promise.resolve({ sessionHeadWorkId, bindingWorkId });
+  }
 
   readCommittedResult(input: {
     turnId: string;

@@ -622,6 +622,7 @@ function testProjection(
   concrete: SqliteProjectWorkResultRuntime,
 ): ProjectWorkRuntimeProjection {
   return {
+    locateCanonicalWorks: concrete.locateCanonicalWorks.bind(concrete),
     loadOriginalRequest(scope) {
       const row = db.query<{ original_message_id: string; original_message: string }, [string]>(
         "SELECT original_message_id, original_message FROM btcc_turns WHERE turn_id = ?",

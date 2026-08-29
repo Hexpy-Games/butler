@@ -1,7 +1,9 @@
 import type { DurableWorkView } from "../../../btcc/work/index.ts";
 import {
+  readExactProjectLedgerSnapshot,
   readStableExactProjectLedgerSnapshot,
   type ExactLedgerRecord,
+  type ExactLedgerReadSnapshot,
   type ExactLedgerTarget,
 } from "./canonical-ledger-reader.ts";
 import { decodeChild } from "./project-work-child-codec.ts";
@@ -30,7 +32,17 @@ export async function readCurrentProjectWork(input: {
   scope: ResolvedProjectWorkScope;
   workId: string;
 }): Promise<CurrentProjectWorkSnapshot | null> {
-  return readCurrentProjectWorkAttempt(input, 1);
+  return readCurrentProjectWorkAttempt(input, 1, readStableSnapshot);
+}
+
+export async function requireExactCurrentProjectWork(input: {
+  butlerData: string;
+  scope: ResolvedProjectWorkScope;
+  workId: string;
+}): Promise<CurrentProjectWorkSnapshot> {
+  const current = await readCurrentProjectWorkAttempt(input, 1, readExactSnapshot);
+  if (!current) throw new Error("project_work_record_missing");
+  return current;
 }
 
 async function readCurrentProjectWorkAttempt(
@@ -40,9 +52,13 @@ async function readCurrentProjectWorkAttempt(
     workId: string;
   },
   attempt: number,
+  readSnapshot: (input: {
+    projectRoot: string;
+    targets: ExactLedgerTarget[];
+  }) => Promise<ExactLedgerReadSnapshot>,
 ): Promise<CurrentProjectWorkSnapshot | null> {
   const workTarget = target(input.scope, "work", input.workId, null);
-  const initial = await readStableExactProjectLedgerSnapshot({
+  const initial = await readSnapshot({
     projectRoot: input.scope.ledgerRoot,
     targets: [workTarget],
   });
@@ -55,7 +71,7 @@ async function readCurrentProjectWorkAttempt(
     manifest,
     targetsForManifest(input.scope, manifest),
   );
-  const stable = await readStableExactProjectLedgerSnapshot({
+  const stable = await readSnapshot({
     projectRoot: input.scope.ledgerRoot,
     targets: [workTarget, ...childTargets],
   });
@@ -71,7 +87,7 @@ async function readCurrentProjectWorkAttempt(
   );
   if (pointerSignature(currentManifest) !== pointerSignature(manifest)) {
     if (attempt >= 3) throw new Error("project_work_snapshot_unstable");
-    return readCurrentProjectWorkAttempt(input, attempt + 1);
+    return readCurrentProjectWorkAttempt(input, attempt + 1, readSnapshot);
   }
   const dependencies = dependencyTargets(
     input.scope,
@@ -85,7 +101,7 @@ async function readCurrentProjectWorkAttempt(
   ]);
   if (allTargets.length === 1 + childTargets.length)
     return hydrate(input, currentManifest, stable.records, stableMetadata);
-  const complete = await readStableExactProjectLedgerSnapshot({
+  const complete = await readSnapshot({
     projectRoot: input.scope.ledgerRoot,
     targets: allTargets,
   });
@@ -103,9 +119,23 @@ async function readCurrentProjectWorkAttempt(
     pointerSignature(completeManifest) !== pointerSignature(currentManifest)
   ) {
     if (attempt >= 3) throw new Error("project_work_snapshot_unstable");
-    return readCurrentProjectWorkAttempt(input, attempt + 1);
+    return readCurrentProjectWorkAttempt(input, attempt + 1, readSnapshot);
   }
   return hydrate(input, completeManifest, complete.records, completeMetadata);
+}
+
+function readStableSnapshot(input: {
+  projectRoot: string;
+  targets: ExactLedgerTarget[];
+}): Promise<ExactLedgerReadSnapshot> {
+  return readStableExactProjectLedgerSnapshot(input);
+}
+
+function readExactSnapshot(input: {
+  projectRoot: string;
+  targets: ExactLedgerTarget[];
+}): Promise<ExactLedgerReadSnapshot> {
+  return readExactProjectLedgerSnapshot(input);
 }
 
 export async function requireCurrentProjectWork(input: {
@@ -134,7 +164,7 @@ export async function readManagedProjectWorkChild<
     input.id,
     input.workId,
   );
-  const snapshot = await readStableExactProjectLedgerSnapshot({
+  const snapshot = await readExactProjectLedgerSnapshot({
     projectRoot: input.scope.ledgerRoot,
     targets: [childTarget],
   });

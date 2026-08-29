@@ -25,6 +25,7 @@ export function createSqliteProjectWorkRuntimeProjection(
   resultRuntime: SqliteProjectWorkResultRuntime,
 ): ProjectWorkRuntimeProjection {
   return {
+    locateCanonicalWorks: resultRuntime.locateCanonicalWorks.bind(resultRuntime),
     loadOriginalRequest(scope) {
       const row = db.query<{
         session_id: string;

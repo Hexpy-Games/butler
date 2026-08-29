@@ -65,7 +65,17 @@ const DURABLE_REFERENCE_RULES: readonly ReferenceRule[] = [
   { name: "work_result_origin_turn", fromTable: "btcc_guided_work_results", fromColumn: "origin_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
   { name: "work_result_tool", fromTable: "btcc_guided_work_results", fromColumn: "tool_call_id", toTable: "btcc_guided_tool_calls", toColumn: "call_id" },
   { name: "effect_work", fromTable: "btcc_guided_effects", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
-  { name: "effect_plan", fromTable: "btcc_guided_effects", fromColumn: "plan_revision_id", toTable: "btcc_guided_work_plan_revisions", toColumn: "plan_revision_id" },
+  {
+    name: "effect_plan",
+    fromTable: "btcc_guided_effects",
+    fromColumn: "plan_revision_id",
+    toTable: "btcc_guided_work_plan_revisions",
+    toColumn: "plan_revision_id",
+    sourceFilter: `NOT EXISTS (
+      SELECT 1 FROM btcc_guided_works work
+      WHERE work.work_id = source.work_id AND work.scope_kind = 'project'
+    )`,
+  },
   { name: "effect_hint", fromTable: "btcc_guided_effect_recovery_hints", fromColumn: "effect_id", toTable: "btcc_guided_effects", toColumn: "effect_id" },
   { name: "effect_payload", fromTable: "btcc_guided_effect_recovery_payloads", fromColumn: "effect_id", toTable: "btcc_guided_effects", toColumn: "effect_id" },
   { name: "effect_blocker_work", fromTable: "btcc_guided_work_effect_blockers", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },

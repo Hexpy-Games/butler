@@ -215,10 +215,24 @@ function validateReview(
     bound.boundResultSequence !== child.boundResultSequence ||
     canonicalJson(bound.review.boundResultRefs) !==
       canonicalJson(review.boundResultRefs) ||
-    canonicalJson(bound.review.boundActionProgress) !==
-      canonicalJson(review.boundActionProgress)
+    !sameActionStates(
+      bound.review.boundActionProgress,
+      review.boundActionProgress,
+    )
   )
     invalid();
+}
+
+function sameActionStates(
+  left: Array<{ actionKey: string; status: string }> | undefined,
+  right: Array<{ actionKey: string; status: string }> | undefined,
+): boolean {
+  if (!left || !right) return false;
+  return left.length === right.length && left.every((action, index) => {
+    const candidate = right[index];
+    return candidate?.actionKey === action.actionKey &&
+      candidate.status === action.status;
+  });
 }
 
 function validateDisposition(

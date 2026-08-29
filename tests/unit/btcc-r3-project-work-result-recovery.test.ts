@@ -666,9 +666,16 @@ class ResultTestRuntime implements ProjectWorkRuntimeProjection {
     private readonly db: Database,
     private readonly projection?: Pick<
       ProjectWorkRuntimeProjection,
-      "observeCanonicalWorks"
+      "locateCanonicalWorks" | "observeCanonicalWorks"
     >,
   ) {}
+  locateCanonicalWorks(
+    input: Parameters<ProjectWorkRuntimeProjection["locateCanonicalWorks"]>[0],
+  ) {
+    if (this.projection) return this.projection.locateCanonicalWorks(input);
+    const concrete = new SqliteProjectWorkResultRuntime(this.db);
+    return concrete.locateCanonicalWorks(input);
+  }
   loadOriginalRequest(scope: { turnId: string }) {
     return Promise.resolve(this.originals.get(scope.turnId)!);
   }

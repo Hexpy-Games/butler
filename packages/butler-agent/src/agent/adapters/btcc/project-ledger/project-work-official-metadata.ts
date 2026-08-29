@@ -1,7 +1,7 @@
 import {
   revalidateExactLedgerPreconditions,
   type ExactLedgerRecord,
-  type ExactLedgerSnapshot,
+  type ExactLedgerReadSnapshot,
 } from "./canonical-ledger-reader.ts";
 import { loadProjectLedgerCore } from "./project-ledger-core.ts";
 import {
@@ -14,20 +14,12 @@ import type { ProjectWorkPublishedRecord } from "./project-work-publication-proo
 
 export async function validateProjectWorkOfficialMetadata(
   scope: ResolvedProjectWorkScope,
-  snapshot: ExactLedgerSnapshot,
+  snapshot: ExactLedgerReadSnapshot,
   manifest?: ProjectWorkManifest,
 ): Promise<ProjectWorkPublishedRecord[]> {
   const core = await loadProjectLedgerCore();
-  const index = core.buildIndex(scope.ledgerRoot);
   const publishedRecords: ProjectWorkPublishedRecord[] = [];
   for (const target of snapshot.targetPreconditions) {
-    const sameId = index.records.filter((record) => record.id === target.id);
-    if (
-      sameId.length !== 1 ||
-      sameId[0]!.kind !== target.kind ||
-      sameId[0]!.path !== target.path
-    )
-      invalid();
     const data = core.readRecordData(
       core.projectPath(scope.ledgerRoot, target.path),
     );
