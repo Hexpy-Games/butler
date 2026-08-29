@@ -29,7 +29,11 @@ import { workScopeForTurn } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { appRuntimePolicy } from
   "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
-import { delegateToStewardToolDefinition, delegateToWorkerToolDefinition } from
+import {
+  delegateToStewardToolDefinition,
+  delegateToWorkerToolDefinition,
+  withWorkerProfileChoices,
+} from
   "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
 import {
   normalizeSubsessionMutationScope,
@@ -322,6 +326,36 @@ test("Steward delegation preserves Butler request text and keeps mechanics runti
       "subsession_mutation_scope_wildcard_not_allowed",
     );
   }
+});
+
+test("Worker delegation exposes exact enabled opaque profile choices", () => {
+  const projected = withWorkerProfileChoices(delegateToWorkerToolDefinition, [
+    {
+      id: "default",
+      label: "Coding",
+      enabled: true,
+      job: { kind: "builtin", job: "coding" },
+      model: "openai/gpt-5.6-luna",
+      reasoning_effort: "max",
+    },
+    {
+      id: "w1",
+      label: "Review",
+      enabled: true,
+      job: { kind: "builtin", job: "review" },
+      model: "openai/gpt-5.6-sol",
+      reasoning_effort: "high",
+    },
+  ]);
+  const parameters = projected.parameters as {
+    properties: { profile_id: { enum: string[] } };
+  };
+
+  expect(parameters.properties.profile_id.enum).toEqual(["default", "w1"]);
+  expect(projected.description).toContain(
+    '{"id":"w1","label":"Review","job":"review"}',
+  );
+  expect(projected.description).toContain("ids are opaque selectors");
 });
 
 test("Steward instructions keep ordinary BTCC memory, authority, and closeout", () => {

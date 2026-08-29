@@ -79,6 +79,10 @@ export function createSubsessionDelegationService(
     return work.workId;
   };
   const service: SubsessionDelegationService = {
+    async enabledWorkerProfiles() {
+      const profiles = await input.workerProfiles?.list() ?? [];
+      return profiles.filter((profile) => profile.enabled);
+    },
     async reviewedDelegationPlan(parentInput) {
       return loadReviewedDelegationPlan(input, parentInput);
     },

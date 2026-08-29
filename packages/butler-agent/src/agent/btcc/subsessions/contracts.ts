@@ -303,6 +303,7 @@ export interface SubsessionDelegationStore {
 }
 
 export type SubsessionDelegationService = {
+  enabledWorkerProfiles?(): Promise<WorkerProfile[]>;
   activeParentDelegations(input: {
     parentSessionId: string;
   }): Promise<Array<{ relation: SessionRelation; parent_work_ref:
@@ -362,5 +363,8 @@ export type SubsessionDelegationDependencies = {
   parentTurns: Pick<import("../turn/index.ts").TurnStateRepository, "findTurn">;
   contextDocuments: import("../../context/context-projection.ts").ContextDocumentReader;
   conversations: import("../../conversation/index.ts").ConversationContextStoreReader;
-  workerProfiles?: { read(profileId?: string): Promise<WorkerProfile> };
+  workerProfiles?: {
+    list(): Promise<WorkerProfile[]>;
+    read(profileId?: string): Promise<WorkerProfile>;
+  };
 };

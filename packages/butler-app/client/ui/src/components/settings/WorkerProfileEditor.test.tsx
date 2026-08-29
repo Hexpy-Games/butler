@@ -72,7 +72,7 @@ const defaultProfile: WorkerProfile = {
 };
 
 const researchProfile: WorkerProfile = {
-  id: "research-1",
+  id: "w1",
   label: "Research",
   enabled: true,
   job: { kind: "builtin", job: "research" },
@@ -302,7 +302,7 @@ test("existing profiles persist canonical worker_profiles patches through the br
     const profiles = patch.worker_profiles as WorkerProfile[];
     expect(profiles.map((profile) => profile.id)).toEqual([
       "default",
-      "research-1",
+      "w1",
     ]);
   }
   expect(applied.at(-1)?.worker_profiles).toEqual([defaultProfile, afterToggle]);
@@ -386,7 +386,7 @@ test("unchanged valid blurs stay silent while one genuine field change emits a c
     (patches[0]!.worker_profiles as WorkerProfile[]).map(
       (profile) => profile.id,
     ),
-  ).toEqual(["default", "research-1"]);
+  ).toEqual(["default", "w1"]);
   expect(JSON.stringify(patches)).not.toContain("worker_model_rules");
 });
 
@@ -425,7 +425,7 @@ test("add, delete, and max-workers controls persist canonical patches through th
   await renderApp();
 
   const createdProfile: WorkerProfile = {
-    id: "worker-1",
+    id: "w2",
     label: "Worker 1",
     enabled: true,
     job: { kind: "builtin", job: "coding" },
@@ -467,7 +467,7 @@ test("add, delete, and max-workers controls persist canonical patches through th
   expect(Object.keys(patches[1]!)).toEqual(["worker_profiles"]);
   expect(
     (patches[1]!.worker_profiles as WorkerProfile[]).map((profile) => profile.id),
-  ).toEqual(["default", "research-1"]);
+  ).toEqual(["default", "w1"]);
 
   const maxInput = fieldInput(document.body, "Max simultaneous Workers");
   expect((maxInput as HTMLInputElement).value).toBe("10");
@@ -491,12 +491,12 @@ test("add allocates worker id and label independently across crossed occupancy",
   dom = installDom();
   const crossedA: WorkerProfile = {
     ...defaultProfile,
-    id: "worker-1",
+    id: "w1",
     label: "Worker 2",
   };
   const crossedB: WorkerProfile = {
     ...defaultProfile,
-    id: "worker-3",
+    id: "w3",
     label: "Worker 1",
   };
   const { patches } = installBridgeAndStores({
@@ -514,7 +514,7 @@ test("add allocates worker id and label independently across crossed occupancy",
     crossedA,
     crossedB,
     {
-      id: "worker-2",
+      id: "w2",
       label: "Worker 3",
       enabled: true,
       job: { kind: "builtin", job: "coding" },

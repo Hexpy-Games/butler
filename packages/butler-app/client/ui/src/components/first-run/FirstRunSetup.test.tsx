@@ -417,7 +417,7 @@ test("first-run model setup keeps pre-existing custom worker profile fields", as
         model: "missing/model",
         worker_profiles: [
           {
-            id: "docs-writer",
+            id: "w1",
             label: "Docs writer",
             enabled: false,
             job: { kind: "custom", text: "Write release notes" },
@@ -437,7 +437,7 @@ test("first-run model setup keeps pre-existing custom worker profile fields", as
   ) as { worker_profiles?: WorkerProfile[] } | undefined;
   expect(selectedModelPatch?.worker_profiles).toEqual([
     {
-      id: "docs-writer",
+      id: "w1",
       label: "Docs writer",
       enabled: false,
       job: { kind: "custom", text: "Write release notes" },

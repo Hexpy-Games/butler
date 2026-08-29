@@ -1,4 +1,6 @@
 import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../types.ts";
+import type { WorkerProfile } from "../../../gateways/app/interface/protocol/settings-contract.ts";
+import type { FunctionToolDefinition } from "../../../integrations/providers/runtime-contracts.ts";
 
 export const delegateToStewardToolDefinition: ButlerToolDefinition = {
   type: "function",
@@ -65,6 +67,34 @@ export const delegateToWorkerToolMetadata: ToolCapabilityMetadata = {
   tags: ["subsession", "worker", "delegation"],
   safetyNotes: ["Worker executes one bounded Task and reports only to Steward."],
 };
+
+export function withWorkerProfileChoices(
+  definition: FunctionToolDefinition,
+  profiles: readonly WorkerProfile[],
+): FunctionToolDefinition {
+  if (definition.name !== delegateToWorkerToolDefinition.name || profiles.length === 0) {
+    return definition;
+  }
+  const choices = profiles.map((profile) => ({
+    id: profile.id,
+    label: profile.label,
+    job: profile.job.kind === "builtin" ? profile.job.job : profile.job.text,
+  }));
+  return {
+    ...definition,
+    description: `${definition.description} Available profiles: ${JSON.stringify(choices)}. Profile ids are opaque selectors; choose by label and job, or omit profile_id to use default.`,
+    parameters: {
+      ...definition.parameters,
+      properties: {
+        ...Reflect.get(definition.parameters, "properties") as Record<string, unknown>,
+        profile_id: {
+          type: "string",
+          enum: choices.map((profile) => profile.id),
+        },
+      },
+    },
+  };
+}
 
 export const steerStewardToolDefinition: ButlerToolDefinition = {
   type: "function",

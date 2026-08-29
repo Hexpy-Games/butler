@@ -5,6 +5,7 @@ export {
   delegateToStewardToolMetadata,
   delegateToWorkerToolDefinition,
   delegateToWorkerToolMetadata,
+  withWorkerProfileChoices,
   steerStewardToolDefinition,
   steerStewardToolMetadata,
 } from "./definition.ts";

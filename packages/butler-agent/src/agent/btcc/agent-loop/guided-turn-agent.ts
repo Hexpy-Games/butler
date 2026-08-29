@@ -34,6 +34,7 @@ import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts
 import { privateModifyContinuationPromptInput } from "./guided-authority-continuation.ts";
 import type { PrincipalAuthority } from "../authority/index.ts";
 import { ensureSubsessionChildRootWork, stewardSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
+import { withWorkerProfileChoices } from "../../tools/subsession/index.ts";
 import { withStewardDirection } from "./guided-steward-direction.ts";
 type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
 export function createProductionGuidedTurnAgent(input: ProductionGuidedTurnAgentInput): BtccAgentLoop;
@@ -100,7 +101,14 @@ export function createProductionGuidedTurnAgent(
       });
       const authorizedTools = subsessionResultEvidence ? directSynthesisToolDefinitions(phasePolicy.authorizedTools) : phasePolicy.authorizedTools;
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
-      const visibleTools = subsessionResultEvidence ? directSynthesisToolDefinitions(phasePolicy.providerTools) : phasePolicy.providerTools;
+      const baseVisibleTools = subsessionResultEvidence ? directSynthesisToolDefinitions(phasePolicy.providerTools) : phasePolicy.providerTools;
+      const workerProfiles = policy.role === "steward" &&
+          baseVisibleTools.some((tool) => tool.name === "delegate_to_worker")
+        ? await input.subsessionDelegation?.enabledWorkerProfiles?.() ?? []
+        : [];
+      const visibleTools = baseVisibleTools.map((tool) =>
+        withWorkerProfileChoices(tool, workerProfiles),
+      );
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
       const describedToolIds = new Set<string>();
       const activeDelegationAdmission = createActiveDelegationAdmissionGuard();

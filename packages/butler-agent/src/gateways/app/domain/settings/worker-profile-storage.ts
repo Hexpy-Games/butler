@@ -22,8 +22,6 @@ import type {
   WorkerProfile,
 } from "../../interface/protocol/app-protocol.ts";
 
-const WORKER_PROFILE_ID_MAX_LENGTH = 48;
-
 interface WorkerProfilePrimaryModel {
   model: string;
   reasoning_effort: SettingsView["reasoning_effort"];
@@ -51,7 +49,7 @@ export function migrateLegacyWorkerModelRules(
       isDefault,
       id: isDefault
         ? DEFAULT_WORKER_PROFILE_ID
-        : uniqueLegacyProfileId(safeProfileId(entry.id, index), seenIds),
+        : nextWorkerProfileId(seenIds),
       labelFallback: isDefault ? "Default" : `Worker ${index + 1}`,
     });
   });
@@ -65,6 +63,14 @@ export function normalizeStoredWorkerProfiles(
 ): WorkerProfile[] {
   const knownModels = allKnownModels(extraModels);
   const raw = Array.isArray(input) ? input : [];
+  const reservedIds = new Set<string>([DEFAULT_WORKER_PROFILE_ID]);
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const id = Reflect.get(entry, "id");
+    if (typeof id === "string" && /^w[1-9]\d*$/u.test(id.trim())) {
+      reservedIds.add(id.trim());
+    }
+  }
   const seenIds = new Set<string>();
   const profiles = raw
     .filter(
@@ -72,14 +78,15 @@ export function normalizeStoredWorkerProfiles(
         Boolean(entry) && typeof entry === "object" && !Array.isArray(entry),
     )
     .slice(0, MAX_WORKER_PROFILES)
-    .map((entry, index) => {
-      const baseId =
-        typeof entry.id === "string" &&
-        WORKER_PROFILE_ID_PATTERN.test(entry.id.trim())
-          ? entry.id.trim()
-          : safeProfileId(entry.id, index);
+    .map((entry) => {
+      const requestedId = typeof entry.id === "string" ? entry.id.trim() : "";
+      const id = WORKER_PROFILE_ID_PATTERN.test(requestedId) &&
+          !seenIds.has(requestedId)
+        ? requestedId
+        : nextWorkerProfileId(new Set([...reservedIds, ...seenIds]));
+      seenIds.add(id);
       return storedProfileFromEntry(entry, knownModels, extraModels, primary, {
-        id: uniqueLegacyProfileId(baseId, seenIds),
+        id,
       });
     });
   return ensureDefaultWorkerProfile(profiles, primary);
@@ -269,26 +276,11 @@ function supportedReasoningEffort(
   return efforts.includes(candidate) ? candidate : undefined;
 }
 
-function safeProfileId(input: unknown, index: number): string {
-  const value = typeof input === "string" ? input.trim().toLocaleLowerCase("en-US") : "";
-  const normalized = value
-    .replace(/[^a-z0-9_-]+/gu, "-")
-    .replace(/^-+|-+$/gu, "")
-    .replace(/^[^a-z0-9]+/gu, "")
-    .slice(0, WORKER_PROFILE_ID_MAX_LENGTH);
-  return normalized || `worker_profile_${index + 1}`;
-}
-
-function uniqueLegacyProfileId(baseId: string, seenIds: Set<string>): string {
-  if (!seenIds.has(baseId)) {
-    seenIds.add(baseId);
-    return baseId;
-  }
-  for (let suffix = 2; ; suffix += 1) {
-    const suffixText = `-${suffix}`;
-    const candidate = `${baseId.slice(0, WORKER_PROFILE_ID_MAX_LENGTH - suffixText.length)}${suffixText}`;
-    if (!seenIds.has(candidate)) {
-      seenIds.add(candidate);
+function nextWorkerProfileId(taken: Set<string>): string {
+  for (let number = 1; ; number += 1) {
+    const candidate = `w${number}`;
+    if (!taken.has(candidate)) {
+      taken.add(candidate);
       return candidate;
     }
   }

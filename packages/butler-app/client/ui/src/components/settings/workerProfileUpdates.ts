@@ -46,7 +46,7 @@ function nextWorkerProfileSlot(
     profiles.map((profile) => profile.label.trim().toLocaleLowerCase("en-US")),
   );
   return {
-    id: `worker-${lowestFreeNumber(takenIds, (n) => `worker-${n}`)}`,
+    id: `w${lowestFreeNumber(takenIds, (n) => `w${n}`)}`,
     label: `Worker ${lowestFreeNumber(takenLabels, (n) => `Worker ${n}`)}`,
   };
 }
