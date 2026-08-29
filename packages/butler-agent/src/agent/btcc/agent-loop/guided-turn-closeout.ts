@@ -24,14 +24,19 @@ type GuidedTurnCloseoutReview =
 
 /** Keeps the model-authored handoff reply without settling delegated Work. */
 export function createGuidedDelegationTurnRelease(input: {
+  reviewFinalCandidate(candidate: { text: string }): Promise<GuidedTurnCloseoutReview>;
   reconcileAfterLoop(text: string): Promise<string>;
   turnId: string;
   toolJournal: Pick<GuidedToolJournal, "list">;
   delegationTool: "delegate_to_steward" | "delegate_to_worker";
 }): {
+  reviewFinalCandidate(candidate: { text: string }): Promise<GuidedTurnCloseoutReview>;
   reconcileAfterLoop(text: string): Promise<string>;
 } {
   return {
+    reviewFinalCandidate: async (candidate) => hasQueuedDelegation(input)
+      ? { status: "accepted" }
+      : input.reviewFinalCandidate(candidate),
     reconcileAfterLoop: async (text) => hasQueuedDelegation(input)
       ? text
       : input.reconcileAfterLoop(text),

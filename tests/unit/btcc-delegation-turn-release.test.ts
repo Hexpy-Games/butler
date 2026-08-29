@@ -26,11 +26,16 @@ test("successful Steward delegation gets a natural tool-free handoff and skips W
     result: { ok: true; status: "queued" };
   }> = [];
   let rounds = 0;
+  let closeoutReviewCalls = 0;
   let closeoutCalls = 0;
   const release = createGuidedDelegationTurnRelease({
     turnId: "parent-turn",
     toolJournal: { list: () => records },
     delegationTool: "delegate_to_steward",
+    reviewFinalCandidate: async () => {
+      closeoutReviewCalls += 1;
+      return { status: "continue", observation: "close the Work" };
+    },
     reconcileAfterLoop: async (text) => {
       closeoutCalls += 1;
       return `closed: ${text}`;
@@ -66,6 +71,7 @@ test("successful Steward delegation gets a natural tool-free handoff and skips W
       });
       return { ok: true, status: "queued" };
     },
+    reviewFinalCandidate: release.reviewFinalCandidate,
   });
   const text = await release.reconcileAfterLoop(output.finalText);
 
@@ -74,6 +80,7 @@ test("successful Steward delegation gets a natural tool-free handoff and skips W
   expect(output.events.filter((event) => event.type === "tool_call")
     .map((event) => event.toolCall?.name)).toEqual(["delegate_to_steward"]);
   expect(text).toBe("정확한 검토를 위해 스튜어드에게 조사를 맡겼습니다.");
+  expect(closeoutReviewCalls).toBe(0);
   expect(closeoutCalls).toBe(0);
 });
 
@@ -100,6 +107,7 @@ test("failed Steward delegation retains ordinary batch and closeout behavior", a
     turnId: "parent-turn",
     toolJournal: { list: () => [] },
     delegationTool: "delegate_to_steward",
+    reviewFinalCandidate: async () => ({ status: "accepted" }),
     reconcileAfterLoop: async (text) => {
       closeoutCalls += 1;
       return `closed: ${text}`;

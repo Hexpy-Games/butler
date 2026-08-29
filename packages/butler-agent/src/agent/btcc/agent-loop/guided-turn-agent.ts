@@ -253,6 +253,7 @@ export function createProductionGuidedTurnAgent(
         parentResultIntegration: workerResultIntegration,
       });
       const delegationRelease = createGuidedDelegationTurnRelease({
+        reviewFinalCandidate: closeout.reviewFinalCandidate,
         reconcileAfterLoop: closeout.reconcileAfterLoop,
         turnId: turn.turnId,
         toolJournal: input.toolJournal,
@@ -281,7 +282,7 @@ export function createProductionGuidedTurnAgent(
               : {}),
           })
         : undefined;
-      const directionAware = withStewardDirection({ modelRound, safeBoundary: stewardSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: closeout.reviewFinalCandidate });
+      const directionAware = withStewardDirection({ modelRound, safeBoundary: stewardSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: delegationRelease.reviewFinalCandidate });
       const loopOptions: BtccAgentLoopInput = {
         prompt: requestAttribution.prompt,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
