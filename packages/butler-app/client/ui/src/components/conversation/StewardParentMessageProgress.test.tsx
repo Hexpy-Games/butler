@@ -390,6 +390,17 @@ test("terminal Steward activity stays attached to the factual parent message", (
     },
   };
   child.active_turn = null;
+  child.artifacts = [{
+    id: "steward-report-artifact",
+    session_id: child.session_id,
+    message_id: "steward-result",
+    turn_id: child.latest_turn.id,
+    title: "research/qwen3.8-27b-awq-turboquant-vllm.md",
+    kind: "file",
+    safe_path_label: "research/qwen3.8-27b-awq-turboquant-vllm.md",
+    created_at: "2026-08-29T00:00:00.000Z",
+    open_action: "unsupported",
+  }];
 
   const progress = anchoredStewardProgressByMessageId(
     HARNESS_MESSAGES,
@@ -409,6 +420,8 @@ test("terminal Steward activity stays attached to the factual parent message", (
   expect(html).toContain("steward-parent-progress-card");
   expect(html).toContain("Review the activity surface");
   expect(html).toContain("완료됨");
+  expect(html).toContain('data-test-class="message-artifact-list"');
+  expect(html).toContain("research/qwen3.8-27b-awq-turboquant-vllm.md");
   expect(html).not.toContain("답변 완료");
 });
 

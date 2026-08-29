@@ -5,7 +5,10 @@ import type {
 } from "../../../gateways/core/contracts.ts";
 import type { BtccTurnRequest } from "../../../agent/btcc/index.ts";
 import { subsessionResultId } from "../../../agent/btcc/subsessions/index.ts";
-import { projectTurnOutcome } from "./project-turn-outcome.ts";
+import {
+  projectChildTerminalReport,
+  projectTurnOutcome,
+} from "./project-turn-outcome.ts";
 import type { BtccGatewayHandlerOptions } from "./contracts.ts";
 
 export function createBtccGatewayHandlers(
@@ -61,14 +64,15 @@ export function createBtccGatewayHandlers(
     const result = projectTurnOutcome(outcome);
     if (options.subsessionDelegation &&
       (outcome.kind === "delivered" || outcome.kind === "already_delivered")) {
+      const childReport = projectChildTerminalReport(result);
       if (route.role === "worker") {
         await options.subsessionDelegation.completeWorkerResult({
           childSessionId: route.sessionId,
           childTurnId: outcome.turnId,
           resultId: subsessionResultId(route.sessionId, outcome.turnId),
-          summary: result.text,
+          summary: childReport.summary,
           status: "success",
-          changedArtifacts: result.artifacts.map((artifact) => artifact.safePathLabel),
+          changedArtifacts: childReport.changedArtifacts,
         });
       } else if (route.role === "steward") {
         const activeChildren = await options.subsessionDelegation.activeParentDelegations({
@@ -79,8 +83,8 @@ export function createBtccGatewayHandlers(
             childSessionId: route.sessionId,
             childTurnId: outcome.turnId,
             resultId: subsessionResultId(route.sessionId, outcome.turnId),
-            summary: result.text,
-            changedArtifacts: result.artifacts.map((artifact) => artifact.safePathLabel),
+            summary: childReport.summary,
+            changedArtifacts: childReport.changedArtifacts,
             status: result.workStatus === "blocked" ? "blocked" : "success",
           });
         }

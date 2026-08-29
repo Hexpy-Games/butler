@@ -6,6 +6,7 @@ import type {
   StewardSessionSummaryView,
 } from "../../interface/protocol/app-protocol.ts";
 import { progressRowFromSharedTurnEvent } from "../../../../../../butler-progress-projection/src/index.ts";
+import { projectBtccFinalReport } from "../../../../agent/btcc/index.ts";
 import { normalizeProgressSummaryRow } from "../progress-summary/progress-row-normalizer.ts";
 
 export interface StewardObserverRelation extends SessionRelationView {}
@@ -258,6 +259,7 @@ export function projectStewardSession(
   relation: StewardObserverRelation,
   snapshot: StewardObserverSnapshot,
 ): ProjectedStewardSession {
+  const result = projectedObserverResult(snapshot.result);
   const latestTurn = snapshot.turns.at(-1);
   const activityRows = projectStewardActivityRows(snapshot, latestTurn?.id);
   const approvedPlan = snapshot.plan?.approved ? snapshot.plan : null;
@@ -267,13 +269,13 @@ export function projectStewardSession(
     )
     : [];
   const recoverable = latestTurn?.recovery?.state === "recoverable";
-  const activeTurn = latestTurn && !snapshot.result && !recoverable &&
+  const activeTurn = latestTurn && !result && !recoverable &&
     !isTerminalObserverState(latestTurn.state)
     ? projectStewardTurn(latestTurn, activityRows)
     : null;
   const latestTurnView = projectStewardTurn(latestTurn, activityRows);
-  const status = snapshot.result
-    ? observerResultStatus(snapshot.result.status)
+  const status = result
+    ? observerResultStatus(result.status)
     : recoverable
       ? "failed"
     : observerSessionStatus(latestTurn?.state);
@@ -294,22 +296,34 @@ export function projectStewardSession(
           ).length,
         }
       : {}),
-    artifacts: snapshot.result
-      ? snapshot.result.changed_artifacts.map((path, index) => ({
-          id: `${snapshot.result?.result_id}:artifact:${index}`,
+    artifacts: result
+      ? result.changed_artifacts.map((path, index) => ({
+          id: `${result.result_id}:artifact:${index}`,
           session_id: snapshot.session_id,
-          message_id: snapshot.result?.result_id,
-          turn_id: snapshot.result?.child_turn_id,
+          message_id: result.result_id,
+          turn_id: result.child_turn_id,
           title: path,
           kind: "file",
           safe_path_label: path,
-          created_at: snapshot.result?.created_at ?? snapshot.updated_at,
+          created_at: result.created_at,
           open_action: "unsupported" as const,
         }))
       : [],
-    result: snapshot.result,
+    result,
     updated_at: snapshot.updated_at,
-    terminal: Boolean(snapshot.result) || isTerminalObserverState(latestTurn?.state ?? ""),
+    terminal: Boolean(result) || isTerminalObserverState(latestTurn?.state ?? ""),
+  };
+}
+
+function projectedObserverResult(
+  result: StewardResultView | null,
+): StewardResultView | null {
+  if (!result) return null;
+  const projected = projectBtccFinalReport(result.summary, result.changed_artifacts);
+  return {
+    ...result,
+    summary: projected.summary,
+    changed_artifacts: projected.changedArtifacts,
   };
 }
 

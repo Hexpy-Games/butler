@@ -6,6 +6,75 @@ import { projectStewardSession } from "../../packages/butler-agent/src/gateways/
 import { sessionViewForStewardObserver } from "../../packages/butler-agent/src/gateways/app/domain/sessions/steward-observer-view.ts";
 
 describe("App Steward observer projection", () => {
+  test("projects a stored structured report instead of showing raw JSON", () => {
+    const report = JSON.stringify({
+      status: "success",
+      version: 1,
+      summary: "TurboQuant와 vLLM 호환성 조사를 완료했습니다.",
+      changed_artifacts: ["research/qwen3.8-27b-awq-turboquant-vllm.md"],
+    });
+    const relation = {
+      relation_id: "relation-report",
+      parent_session_id: "parent-report",
+      parent_turn_id: "parent-turn-report",
+      child_session_id: "steward-report",
+      anchor_message_id: "anchor-report",
+      ordinal: 1,
+      safe_title: "TurboQuant와 vLLM 호환성 조사",
+      created_at: "2026-08-29T00:00:00.000Z",
+    };
+    const snapshot = {
+      session_id: "steward-report",
+      title: relation.safe_title,
+      turns: [{
+        id: "steward-turn-report",
+        state: "delivered",
+        created_at: "2026-08-29T00:00:00.000Z",
+        updated_at: "2026-08-29T00:01:00.000Z",
+      }],
+      messages: [{
+        id: "assistant-report",
+        session_id: "steward-report",
+        turn_id: "steward-turn-report",
+        role: "assistant" as const,
+        text: report,
+        created_at: "2026-08-29T00:01:00.000Z",
+        updated_at: "2026-08-29T00:01:00.000Z",
+      }],
+      progress_events: [],
+      plan: null,
+      result: {
+        result_id: "result-report",
+        relation_id: relation.relation_id,
+        task_id: "task-report",
+        child_session_id: "steward-report",
+        child_turn_id: "steward-turn-report",
+        status: "success" as const,
+        code: null,
+        summary: report,
+        acceptance_evidence: [],
+        changed_artifacts: [],
+        created_at: "2026-08-29T00:01:00.000Z",
+      },
+      updated_at: "2026-08-29T00:01:00.000Z",
+    };
+
+    const projection = projectStewardSession(relation, snapshot);
+    const view = sessionViewForStewardObserver(relation, snapshot, 1);
+
+    expect(projection.result?.summary).toBe(
+      "TurboQuant와 vLLM 호환성 조사를 완료했습니다.",
+    );
+    expect(projection.result?.changed_artifacts).toEqual([
+      "research/qwen3.8-27b-awq-turboquant-vllm.md",
+    ]);
+    expect(view.messages.at(-1)?.text).toBe(projection.result?.summary);
+    expect(view.messages.at(-1)?.artifacts?.[0]?.safe_path_label).toBe(
+      "research/qwen3.8-27b-awq-turboquant-vllm.md",
+    );
+    expect(JSON.stringify(view)).not.toContain('"changed_artifacts"');
+  });
+
   test("reads the durable relation, public activity, transcript, and result", () => {
     const db = new Database(":memory:");
     db.exec(BTCC_SUCCESSOR_SCHEMA);
