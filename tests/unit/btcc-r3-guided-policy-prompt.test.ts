@@ -265,13 +265,10 @@ test("guided instructions require reviewed Butler intent before delegation", () 
   ));
 
   expect(instructions).toContain(
-    "understand the complete request, create or continue one durable Work",
-  );
-  expect(instructions).toContain(
     "Keep simple conversation, stable knowledge, and one quick lookup in Butler.",
   );
   expect(instructions).toContain(
-    "the immutable packet is derived from that exact reviewed Plan",
+    "one complete request written exactly as Steward should receive it; runtime preserves that request unchanged",
   );
   expect(instructions).toContain(
     "Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler.",
@@ -280,20 +277,20 @@ test("guided instructions require reviewed Butler intent before delegation", () 
     "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
   );
   expect(instructions).toContain(
-    "record an accepted Plan Review. Only then call delegate_to_steward",
+    "follow the Butler conception, Plan, and Plan Review flow, then call delegate_to_steward",
   );
   expect(instructions).toContain(
     "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",
   );
 });
 
-test("Steward delegation exposes semantic handoff only and keeps mechanics runtime-owned", () => {
+test("Steward delegation preserves Butler request text and keeps mechanics runtime-owned", () => {
   const parameters = delegateToStewardToolDefinition.parameters as {
     properties?: Record<string, unknown>;
     required?: string[];
   };
   expect(delegateToStewardToolDefinition.description).toContain(
-    "reviewed objective, success criteria, and provenance are loaded from durable Work",
+    "complete request exactly as the Steward should receive it",
   );
   expect(delegateToStewardToolDefinition.description).toContain(
     "omission uses a fixed privacy-safe title and never copies objective content",
@@ -301,8 +298,8 @@ test("Steward delegation exposes semantic handoff only and keeps mechanics runti
   expect(delegateToStewardToolDefinition.description).toContain(
     "Runtime derives delegation identity, inherited Composer access, ordinary tools, workspace, admitted context and EOL, budget, and reviewed provenance",
   );
-  expect(Object.keys(parameters.properties ?? {})).toEqual(["safe_title"]);
-  expect(parameters.required ?? []).toEqual([]);
+  expect(Object.keys(parameters.properties ?? {})).toEqual(["request", "safe_title"]);
+  expect(parameters.required ?? []).toEqual(["request"]);
   for (const runtimeOrReviewedField of [
     "parent_access_mode",
     "objective",

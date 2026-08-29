@@ -5,26 +5,10 @@ import type {
   SubsessionDelegationDependencies,
 } from "./contracts.ts";
 
-/** Loads the reviewed Plan authority shared by Steward and Worker dispatch. */
+/** Loads the reviewed Plan provenance shared by Steward and Worker dispatch. */
 export async function loadReviewedDelegationPlan(
   input: Pick<SubsessionDelegationDependencies, "durableWork">,
   parent: { parentSessionId: string; parentTurnId: string },
-): Promise<ReviewedDelegationPlan> {
-  return loadDelegationPlan(input, parent, false);
-}
-
-/** Requires a Plan created and reviewed in the current Butler user Turn. */
-export async function loadCurrentTurnReviewedDelegationPlan(
-  input: Pick<SubsessionDelegationDependencies, "durableWork">,
-  parent: { parentSessionId: string; parentTurnId: string },
-): Promise<ReviewedDelegationPlan> {
-  return loadDelegationPlan(input, parent, true);
-}
-
-async function loadDelegationPlan(
-  input: Pick<SubsessionDelegationDependencies, "durableWork">,
-  parent: { parentSessionId: string; parentTurnId: string },
-  requireCurrentTurn: boolean,
 ): Promise<ReviewedDelegationPlan> {
   const work = await input.durableWork.boundWorkForTurn(parent.parentTurnId);
   if (!work || work.sessionId !== parent.parentSessionId ||
@@ -34,9 +18,7 @@ async function loadDelegationPlan(
   const plan = work.currentPlan;
   const review = work.latestPlanReview;
   if (!plan || !review || review.subject !== "plan" || review.verdict !== "accept" ||
-      review.boundPlanRevisionId !== plan.planRevisionId ||
-      (requireCurrentTurn && (plan.originTurnId !== parent.parentTurnId ||
-        review.originTurnId !== parent.parentTurnId))) {
+      review.boundPlanRevisionId !== plan.planRevisionId) {
     throw new Error("subsession_accepted_parent_plan_review_required");
   }
   return {
@@ -53,18 +35,13 @@ async function loadDelegationPlan(
   };
 }
 
-/** Rejects replay or direct service calls that do not match the current review. */
-export function assertReviewedDelegationRequest(
+/** Keeps the durable parent Work identity exact without rewriting the request. */
+export function assertDelegationParentWorkRef(
   request: DelegationRequest,
   reviewed: ReviewedDelegationPlan,
 ): void {
   if (stableJson(request.parent_work_ref) !== stableJson(reviewed.parent_work_ref)) {
     throw new Error("subsession_parent_work_ref_mismatch");
-  }
-  if (request.objective !== reviewed.objective ||
-      stableJson(request.acceptance_criteria) !== stableJson(reviewed.acceptance_criteria) ||
-      stableJson(request.task_or_plan_refs) !== stableJson(reviewed.task_or_plan_refs)) {
-    throw new Error("subsession_reviewed_plan_semantics_mismatch");
   }
   if (request.constraints_and_non_goals.length > 0) {
     throw new Error("subsession_unreviewed_constraints_forbidden");

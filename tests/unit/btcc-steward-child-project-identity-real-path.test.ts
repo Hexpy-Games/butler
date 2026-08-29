@@ -31,6 +31,8 @@ import type { DelegationPacket, DelegationRequest } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/contracts.ts";
 
 const roots: string[] = [];
+const STEWARD_REQUEST =
+  "Verify that child Work uses only the exact inherited Ledger project identity.";
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -141,6 +143,7 @@ test("real App delegation preserves distinct child identities through Steward Wo
     inbound.poll({ queue, server: gateway, store: bindings, deliveryGuard, limit: 1 });
     await inbound.waitForIdle();
     expect(rounds.childCalls()).toBeGreaterThan(0);
+    expect(rounds.lastChildBody()).toContain(`objective: ${STEWARD_REQUEST}`);
     expect(bindings.getBySessionId(childSessionId)).toMatchObject({
       projectId: appProjectId,
       appProjectId,
@@ -169,6 +172,8 @@ test("real App delegation preserves distinct child identities through Steward Wo
     packetDb.close();
     if (!packetJson) throw new Error("persisted reviewed delegation packet missing");
     const packet = JSON.parse(packetJson) as DelegationPacket;
+    expect(packet.objective).toBe(STEWARD_REQUEST);
+    expect(packet.acceptance_criteria).toEqual([]);
     const parentBinding = bindings.getBySessionId(packet.parent_session_id);
     if (!parentBinding) throw new Error("persisted parent binding missing");
     const beforeRejected = sideEffectCounts(root, bindings, queue, workspacePath);
@@ -198,18 +203,22 @@ test("real App delegation preserves distinct child identities through Steward Wo
 function delegationRounds(): ModelRoundPort & {
   childCalls(): number;
   parentCalls(): number;
+  lastChildBody(): string;
   lastParentBody(): string;
 } {
   let parentRound = 0;
   let stewardCalls = 0;
+  let lastChildBody = "Steward child was not started";
   let lastParentBody = "reviewed App delegation did not persist a child";
   return {
     childCalls: () => stewardCalls,
     parentCalls: () => parentRound,
+    lastChildBody: () => lastChildBody,
     lastParentBody: () => lastParentBody,
     async runRound(request) {
       if (request.instructions?.includes("Steward role")) {
         stewardCalls += 1;
+        lastChildBody = request.messages.map((message) => message.content).join("\n");
         return { text: "Conclusion: verified the exact delegated project identity.", toolCalls: [] };
       }
       lastParentBody = request.messages.map((message) => message.content).join("\n");
@@ -235,6 +244,7 @@ function delegationRounds(): ModelRoundPort & {
         action_updates: [{ action_key: "delegate-identity-check", status: "active" }],
       })] };
       if (parentRound === 4) return { toolCalls: [toolCall("delegate", "delegate_to_steward", {
+        request: STEWARD_REQUEST,
         safe_title: "Exact child project identity",
       })] };
       return { text: "The reviewed delegation was queued.", toolCalls: [] };

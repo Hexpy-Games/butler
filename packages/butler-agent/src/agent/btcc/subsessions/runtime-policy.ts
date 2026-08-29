@@ -18,13 +18,14 @@ export function reviewedStewardDelegationRequest(
   reviewed: ReviewedDelegationPlan,
 ): DelegationRequest {
   const execution = derivedStewardExecutionIntent(input.parent_access_mode);
+  const { request, ...identity } = input;
   return {
-    ...input,
+    ...identity,
     safe_title: input.safe_title ?? DEFAULT_STEWARD_SAFE_TITLE,
     execution_mode: execution.executionMode,
-    objective: reviewed.objective,
-    acceptance_criteria: reviewed.acceptance_criteria,
-    task_or_plan_refs: reviewed.task_or_plan_refs,
+    objective: request,
+    acceptance_criteria: [],
+    task_or_plan_refs: [],
     constraints_and_non_goals: [],
     allowed_tools_and_effects: execution.allowedToolsAndEffects,
     mutation_scope: execution.mutationScope,
