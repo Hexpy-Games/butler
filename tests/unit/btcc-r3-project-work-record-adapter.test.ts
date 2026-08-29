@@ -1069,6 +1069,39 @@ test("current Session reads ignore unrelated malformed Project Work", async () =
   expect((await service.boundWorkForTurn("turn-1"))?.workId).toBe(started.workId);
 });
 
+test("Project Ledger Tasks under a managed Work remain outside BTCC child validation", async () => {
+  const fixture = await createFixture();
+  const service = createDurableWorkService(
+    createProjectWorkStore(fixture.adapterInput),
+  );
+  const scope = fixture.scope("turn-1");
+  const started = await service.startWork({
+    ...scope,
+    mutationCallId: "task-sibling-start",
+    objective: "Continue after ordinary Project Ledger bookkeeping",
+  });
+  fixture.core.createTask(fixture.projectRoot, {
+    id: "task-sibling",
+    work: started.workId,
+    title: "Ordinary Project Ledger Task",
+    status: "todo",
+  });
+  fixture.core.writeIndex(fixture.projectRoot);
+
+  expect((await service.loadContext(scope))?.work.workId).toBe(started.workId);
+  expect((await service.replacePlan({
+    ...scope,
+    mutationCallId: "task-sibling-plan",
+    objective: "Continue after ordinary Project Ledger bookkeeping",
+    actions: [{
+      actionKey: "continue",
+      description: "Continue BTCC Work",
+      dependencyKeys: [],
+    }],
+    checks: [],
+  })).currentPlan?.actions).toHaveLength(1);
+});
+
 test("ready disposition resumes its durable candidate without recomputing runtime semantics", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-ready-disposition-"));
   roots.push(root);

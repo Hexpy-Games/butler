@@ -160,7 +160,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   );
   expect(instructions).toContain("do not enumerate files");
   expect(instructions).toContain(
-    "typed Project Ledger changes in the active project",
+    "explicitly requested typed Project Ledger changes in the active project",
   );
   expect(instructions).toContain(
     "Checkpoints update only actions or progress",
@@ -254,7 +254,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "alongside the internal Work record",
   );
   expect(projectInstructions).toContain(
-    "If that bookkeeping fails, still deliver the truthful result",
+    "If requested bookkeeping fails, still deliver the truthful result",
   );
   expect(projectInstructions.indexOf("finish any Project Ledger publication or closeout effect"))
     .toBeLessThan(projectInstructions.indexOf("If useful, record a result Review or completion Validation"));
@@ -282,6 +282,9 @@ test("guided instructions require reviewed Butler intent before delegation", () 
   );
   expect(instructions).toContain(
     "follow the Butler conception, Plan, and Plan Review flow, then call delegate_to_steward",
+  );
+  expect(instructions).toContain(
+    "Do not add Project Ledger records, commit requirements, proof campaigns, or test matrices that the user and reviewed Plan did not request",
   );
   expect(instructions).toContain(
     "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",
@@ -410,6 +413,12 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
     "actively use recall_memory",
   );
   expect(mutationInstructions).toContain("same reviewed Plan and effect contract as Butler");
+  expect(mutationInstructions).toContain(
+    "Keep Plan actions inside this Work and create Worker tasks through delegate_to_worker",
+  );
+  expect(mutationInstructions).toContain(
+    "Do not create Project Ledger bookkeeping unless the delegated outcome explicitly requires it",
+  );
   expect(mutationInstructions).not.toMatch(
     /access conversation or memory tools|call MCP|mutate Project Ledger|omit effect from .*run_command/iu,
   );

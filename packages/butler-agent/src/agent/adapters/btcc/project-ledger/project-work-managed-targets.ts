@@ -16,9 +16,11 @@ export async function managedProjectWorkTargets(
     if (entry.kind === "work" && entry.id === manifest.workId) continue;
     const filePath = core.projectPath(scope.ledgerRoot, entry.path);
     const data = core.readRecordData(filePath);
-    const bodyWorkId = managedBodyWorkId(core.readRecordBody(filePath));
+    const body = core.readRecordBody(filePath);
+    const bodyWorkId = managedBodyWorkId(body);
     if (data?.parentId !== manifest.workId && bodyWorkId !== manifest.workId)
       continue;
+    if (!isManagedProjectWorkBody(body)) continue;
     if (entry.kind !== "plan" && entry.kind !== "reference") invalid();
     targets.push({
       id: entry.id,
@@ -32,6 +34,16 @@ export async function managedProjectWorkTargets(
       targets.map((item) => [`${item.kind}\0${item.id}`, item]),
     ).values(),
   ];
+}
+
+function isManagedProjectWorkBody(body: string | null): boolean {
+  if (!body) return false;
+  try {
+    const schema = String((JSON.parse(body) as { schema?: unknown }).schema ?? "");
+    return schema.startsWith("butler.btcc-project-work-");
+  } catch {
+    return false;
+  }
 }
 
 function managedBodyWorkId(body: string | null): string | null {
