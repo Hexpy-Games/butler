@@ -14,6 +14,7 @@ import type { ModelRoundToolCall } from
 
 test("successful Steward delegation gets a natural tool-free handoff and skips Work closeout", async () => {
   const call = toolCall("delegate", "delegate_to_steward", {
+    request: "Inspect the exact reviewed model and report the useful result.",
     safe_title: "Inspect the exact reviewed model",
   });
   const executed: string[] = [];
@@ -90,6 +91,7 @@ test("failed Steward delegation retains ordinary batch and closeout behavior", a
   );
   const calls: ModelRoundToolCall[] = [
     toolCall("delegate", "delegate_to_steward", {
+      request: "Inspect the reviewed model and report any delegation failure plainly.",
       safe_title: "Inspect the reviewed model",
     }),
     toolCall("later-plan", "replace_work_plan", {

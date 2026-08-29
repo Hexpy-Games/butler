@@ -29,12 +29,14 @@ export function createSubsessionToolHandlers(input: {
       if (!input.parentAccessMode) {
         throw new Error("subsession_parent_access_snapshot_missing");
       }
+      const request = requiredString(call.args.request, "request");
       const safeTitle = optionalSafeTitle(call.args.safe_title);
       const created = await input.service!.delegateReviewed({
         parent_session_id: input.parentSessionId,
         parent_turn_id: input.parentTurnId,
         anchor_message_id: input.anchorMessageId,
         parent_access_mode: input.parentAccessMode,
+        request,
         ...(safeTitle ? { safe_title: safeTitle } : {}),
         model_ref: input.modelRef,
         reasoning_effort: input.reasoningEffort,

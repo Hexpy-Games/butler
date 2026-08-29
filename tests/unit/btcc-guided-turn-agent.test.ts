@@ -71,11 +71,6 @@ import { runCommandToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/run-command/run_command/definition.ts";
 import { delegateToStewardToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
-import {
-  loadCurrentTurnReviewedDelegationPlan,
-  loadReviewedDelegationPlan,
-} from
-  "../../packages/butler-agent/src/agent/btcc/subsessions/reviewed-delegation-plan.ts";
 import type { ContextualButlerToolExecutor } from
   "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { createGuidedActivityProjection } from
@@ -3935,7 +3930,7 @@ test("feature Work schemas project only valid review subjects and Plan action ke
   expect(invalid.validationError).toContain("action_key");
 });
 
-test("delegation schema appears only for the exact current accepted Plan Review", async () => {
+test("delegation schema appears for the bound accepted Plan Review", async () => {
   const turnId = "reviewed-delegation-surface-turn";
   const sessionId = "reviewed-delegation-surface-session";
   const plan = {
@@ -4033,28 +4028,7 @@ test("delegation schema appears only for the exact current accepted Plan Review"
       originTurnId: "earlier-user-turn",
     },
   };
-  expect((await resolve()).names.has("delegate_to_steward")).toBe(false);
-  expect((await loadReviewedDelegationPlan(
-    { durableWork },
-    { parentSessionId: sessionId, parentTurnId: turnId },
-  )).objective).toBe(plan.objective);
-  await expect(loadCurrentTurnReviewedDelegationPlan(
-    { durableWork },
-    { parentSessionId: sessionId, parentTurnId: turnId },
-  )).rejects.toThrow("subsession_accepted_parent_plan_review_required");
-  boundWork = {
-    ...boundWork,
-    currentPlan: plan,
-    latestPlanReview: {
-      ...boundWork.latestPlanReview!,
-      originTurnId: turnId,
-    },
-  };
   expect((await resolve()).names.has("delegate_to_steward")).toBe(true);
-  expect((await loadCurrentTurnReviewedDelegationPlan(
-    { durableWork },
-    { parentSessionId: sessionId, parentTurnId: turnId },
-  )).objective).toBe(plan.objective);
   delegationRecords.push({
     callId: "queued-delegation",
     toolName: "delegate_to_steward",

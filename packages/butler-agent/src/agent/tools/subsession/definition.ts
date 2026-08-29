@@ -4,8 +4,8 @@ export const delegateToStewardToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "delegate_to_steward",
   description: [
-    "Delegate the exact current accepted managerial Plan to one ordinary Steward session.",
-    "The reviewed objective, success criteria, and provenance are loaded from durable Work; the model does not repeat or author them in this call.",
+    "Delegate one complete Butler-authored request to an ordinary Steward session.",
+    "Write the complete request exactly as the Steward should receive it; runtime preserves it unchanged instead of reconstructing it from Work or Plan state.",
     "Runtime derives delegation identity, inherited Composer access, ordinary tools, workspace, admitted context and EOL, budget, and reviewed provenance.",
     "A safe title is optional presentation metadata; omission uses a fixed privacy-safe title and never copies objective content.",
     "The Steward excludes Butler persona and direct-user presentation prompting, receives the immutable project context and bounded parent conversation projection, and returns one canonical terminal result for synthesis.",
@@ -14,8 +14,10 @@ export const delegateToStewardToolDefinition: ButlerToolDefinition = {
     type: "object",
     additionalProperties: false,
     properties: {
+      request: { type: "string", minLength: 1, maxLength: 8000 },
       safe_title: { type: "string", minLength: 1, maxLength: 120 },
     },
+    required: ["request"],
   },
   effectBoundary: "turn_local",
   concurrencySafe: false,
@@ -29,7 +31,7 @@ export const delegateToStewardToolMetadata: ToolCapabilityMetadata = {
   safetyNotes: [
     "Creates one ordinary Steward session with one immutable minimal packet.",
     "Runtime derives workspace and ordinary tools from the admitted parent Turn; Composer access remains the sole authority.",
-    "The semantic packet is loaded only from the exact current accepted managerial Plan.",
+    "The semantic request is copied unchanged from the Butler tool call.",
   ],
 };
 

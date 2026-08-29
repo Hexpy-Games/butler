@@ -154,18 +154,24 @@ export type ReviewedDelegationPlan = {
   task_or_plan_refs: string[];
 };
 
-export type ReviewedDelegationRequest = Pick<DelegationRequest,
+type ReviewedDelegationIdentity = Pick<DelegationRequest,
   | "parent_session_id"
   | "parent_turn_id"
   | "anchor_message_id"
   | "parent_access_mode"
   | "model_ref"
   | "reasoning_effort"
-> & { safe_title?: string };
+>;
 
-export type ReviewedWorkerDelegationRequest = ReviewedDelegationRequest & {
+export type ReviewedDelegationRequest = ReviewedDelegationIdentity & {
+  request: string;
+  safe_title?: string;
+};
+
+export type ReviewedWorkerDelegationRequest = ReviewedDelegationIdentity & {
   objective: string;
   acceptance_criteria: string[];
+  safe_title?: string;
   profile_id?: string;
 };
 

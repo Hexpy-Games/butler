@@ -242,6 +242,7 @@ function admissionGuardRounds(): ModelRoundPort & {
       action_updates: [{ action_key: "delegate-first", status: "active" }],
     });
     return response("w1-delegate", "delegate_to_steward", {
+      request: "Execute the first long-running reviewed objective and keep its Steward relation active.",
       safe_title: "First active Steward",
     });
   }
@@ -303,6 +304,7 @@ function admissionGuardRounds(): ModelRoundPort & {
     });
     expect(names).toEqual(["delegate_to_steward"]);
     return response("w2-delegate", "delegate_to_steward", {
+      request: "Execute the distinct second reviewed objective in a separate Steward relation.",
       safe_title: "Second active Steward",
     });
   }

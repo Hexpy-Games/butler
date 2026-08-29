@@ -36,6 +36,7 @@ const EXACT_QWEN_OBJECTIVE =
   `Keep this private control-bearing reference out of public titles: ${PRIVATE_OBJECTIVE_MARKER}`;
 const EXACT_QWEN_CHECK =
   `The actual Steward web search retains the exact model name ${EXACT_QWEN_MODEL}.`;
+const EXACT_QWEN_STEWARD_REQUEST = `${EXACT_QWEN_OBJECTIVE} ${EXACT_QWEN_CHECK}`;
 
 const READ_ONLY_SURFACE = [
   "grep_files:workspace",
@@ -66,6 +67,10 @@ const CONTEXT_PRESERVING_SYNTHESIS = [
   "- construction-noise requirements must remain in the replacement.",
   "- the newly requested bounded fixture correction was inspected, applied, and validated.",
 ].join("\n");
+
+const EXACT_STEWARD_REQUEST =
+  "Inspect, correct, and validate the two bounded Steward fixture files. " +
+  "Preserve the household-noise and construction-noise requirements, and confirm both fixture mutations.";
 
 type PublicSessionView = {
   messages: Array<{
@@ -275,12 +280,8 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
           review_revision_id?: string;
         };
       };
-      expect(packet.objective).toBe(
-        "Inspect, correct, and validate two bounded Steward fixture files.",
-      );
-      expect(packet.acceptance_criteria).toEqual([
-        "Both fixture files contain their expected mutation and bounded validation passes",
-      ]);
+      expect(packet.objective).toBe(EXACT_STEWARD_REQUEST);
+      expect(packet.acceptance_criteria).toEqual([]);
       expect(packet.task_or_plan_refs).toEqual([]);
       expect(packet.constraints_and_non_goals).toEqual([]);
       expect(packet.parent_work_ref).toMatchObject({
@@ -356,6 +357,7 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       expect(childRequest?.reasoningEffort).toBe("low");
       expect(childRequest?.messages.some((message) => message.content.includes(String(rootWork?.work_id)))).toBe(true);
       const childPrompt = childRequest?.messages.map((message) => message.content).join("\n") ?? "";
+      expect(childPrompt).toContain(`objective: ${EXACT_STEWARD_REQUEST}`);
       expect(childRequest?.instructions).toContain("Steward role");
       expect(childRequest?.instructions).not.toMatch(/You are Butler|full transcript/iu);
       for (const requiredPacketField of [
@@ -500,9 +502,9 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       parent_access_mode: "full_access",
       execution_mode: "mutation",
       safe_title: "Second Steward task",
-      objective: secondReviewed.objective,
-      acceptance_criteria: secondReviewed.acceptance_criteria,
-      task_or_plan_refs: secondReviewed.task_or_plan_refs,
+      objective: EXACT_STEWARD_REQUEST,
+      acceptance_criteria: [],
+      task_or_plan_refs: [],
       constraints_and_non_goals: [],
       allowed_tools_and_effects: ["write_file:workspace"],
       mutation_scope: ["second-steward-result.txt"],
@@ -517,10 +519,6 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
         plan_revision_id: "stale-plan-revision",
       },
     })).rejects.toThrow("subsession_parent_work_ref_mismatch");
-    await expect(composition.subsessions!.delegate({
-      ...secondRequest,
-      objective: "Broadened after the accepted Plan Review.",
-    })).rejects.toThrow("subsession_reviewed_plan_semantics_mismatch");
     expect(bindings.listSessions().filter((session) => session.role === "steward"))
       .toHaveLength(stewardSessionCountBeforeSecond);
     const second = await composition.subsessions!.delegate(secondRequest);
@@ -1017,9 +1015,9 @@ test("reviewed Butler delegation preserves the exact model name through Steward 
           Record<string, unknown> | undefined)?.project_context,
       )).toBe(bindingContextBeforeRestart);
       expect(packet.execution_mode).toBe("read_only");
-      expect(packet.objective).toBe(EXACT_QWEN_OBJECTIVE);
-      expect(packet.acceptance_criteria).toEqual([EXACT_QWEN_CHECK]);
-      expect(packet.task_or_plan_refs).toEqual(["W-SANDY-RELATIONSHIP-AUDIT-001"]);
+      expect(packet.objective).toBe(EXACT_QWEN_STEWARD_REQUEST);
+      expect(packet.acceptance_criteria).toEqual([]);
+      expect(packet.task_or_plan_refs).toEqual([]);
       expect(packet.constraints_and_non_goals).toEqual([]);
       expect(packet.parent_work_ref).toEqual({
         work_id: parentWork?.work_id,
@@ -1638,15 +1636,18 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
             type: "object",
             additionalProperties: false,
             properties: {
+              request: expect.any(Object),
               safe_title: expect.any(Object),
             },
+            required: ["request"],
           });
           expect(Object.keys(
             (delegationTool?.parameters as { properties?: Record<string, unknown> })
               .properties ?? {},
-          )).toEqual(["safe_title"]);
+          )).toEqual(["request", "safe_title"]);
           return {
             toolCalls: [toolCall("delegate", "delegate_to_steward", {
+              request: EXACT_STEWARD_REQUEST,
               safe_title: "Bounded Steward result",
             })],
           };
@@ -1985,10 +1986,12 @@ function readOnlyStewardRound(
           expect(Object.keys(
             (request.tools[0]?.parameters as { properties?: Record<string, unknown> })
               .properties ?? {},
-          )).toEqual(["safe_title"]);
+          )).toEqual(["request", "safe_title"]);
+          const stewardRequest = `${objective} ${check}`;
           if (missingContext) {
             return {
               toolCalls: [toolCall("delegate-missing-context", "delegate_to_steward", {
+                request: stewardRequest,
                 safe_title: "Missing project context audit",
               })],
             };
@@ -1996,12 +1999,15 @@ function readOnlyStewardRound(
           if (unusableReport) {
             return {
               toolCalls: [toolCall("delegate-unusable-report", "delegate_to_steward", {
+                request: stewardRequest,
                 safe_title: "Unusable report inspection",
               })],
             };
           }
           return {
-            toolCalls: [toolCall("delegate-read-only", "delegate_to_steward", {})],
+            toolCalls: [toolCall("delegate-read-only", "delegate_to_steward", {
+              request: stewardRequest,
+            })],
           };
         }
         return {

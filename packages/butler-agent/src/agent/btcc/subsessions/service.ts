@@ -13,8 +13,8 @@ import { completePacketContext } from "./terminal-results.ts";
 import { renderDelegatedParentConversationContext } from "./parent-conversation-context.ts";
 import { renderStewardInput } from "./steward-input.ts";
 import {
-  assertReviewedDelegationRequest,
-  loadCurrentTurnReviewedDelegationPlan,
+  assertDelegationParentWorkRef,
+  loadReviewedDelegationPlan,
 } from "./reviewed-delegation-plan.ts";
 import {
   admittedParentTurnAccessMode,
@@ -80,10 +80,10 @@ export function createSubsessionDelegationService(
   };
   const service: SubsessionDelegationService = {
     async reviewedDelegationPlan(parentInput) {
-      return loadCurrentTurnReviewedDelegationPlan(input, parentInput);
+      return loadReviewedDelegationPlan(input, parentInput);
     },
     async delegateReviewed(request) {
-      const reviewed = await loadCurrentTurnReviewedDelegationPlan(input, {
+      const reviewed = await loadReviewedDelegationPlan(input, {
         parentSessionId: request.parent_session_id,
         parentTurnId: request.parent_turn_id,
       });
@@ -110,11 +110,11 @@ export function createSubsessionDelegationService(
         parentSessionId: normalizedRequest.parent_session_id, parentTurnId: normalizedRequest.parent_turn_id, parent,
         turns: input.parentTurns, documents: input.contextDocuments,
       });
-      const reviewed = await loadCurrentTurnReviewedDelegationPlan(input, {
+      const reviewed = await loadReviewedDelegationPlan(input, {
         parentSessionId: normalizedRequest.parent_session_id,
         parentTurnId: normalizedRequest.parent_turn_id,
       });
-      assertReviewedDelegationRequest(normalizedRequest, reviewed);
+      assertDelegationParentWorkRef(normalizedRequest, reviewed);
       const delegationId = subsessionDelegationId(normalizedRequest);
       const existing = input.store.relationByDelegationId(delegationId); if (existing) return recoverExistingDelegation(input, existing);
       const relationId = `relation-${digest(`btcc.subsession.relation.v1\0${delegationId}`).slice(0, 40)}`;

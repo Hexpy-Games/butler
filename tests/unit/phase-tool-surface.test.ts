@@ -403,7 +403,7 @@ test("reviewed delegation instructions restore Butler Work and Plan Review first
       "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
     );
     expect(instructions).toContain(
-      "Before substantial delegation, create or continue one durable Work, replace its current Plan with the complete objective, checks, and governing references, then record an accepted Plan Review. delegate_to_steward appears only after that exact reviewed Plan is current, and its immutable packet is derived from that Plan.",
+      "Before substantial delegation, follow the Butler conception, Plan, and Plan Review flow, then call delegate_to_steward with one complete request written exactly as Steward should receive it. Runtime preserves that request unchanged.",
     );
     expect(instructions).toContain(
       "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",
