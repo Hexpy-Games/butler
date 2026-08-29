@@ -18,4 +18,7 @@ export type {
   StewardResultEnvelope,
   SubsessionDelegationStore,
 } from "./subsessions/index.ts";
-export { projectBtccFinalContentSummary } from "./turn/final-content-summary.ts";
+export {
+  projectBtccFinalContentSummary,
+  projectBtccFinalReport,
+} from "./turn/final-content-summary.ts";

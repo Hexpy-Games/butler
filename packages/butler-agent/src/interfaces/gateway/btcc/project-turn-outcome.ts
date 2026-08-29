@@ -2,6 +2,7 @@ import type {
   BtccFinalArtifact,
   BtccTurnOutcome,
 } from "../../../agent/btcc/index.ts";
+import { projectBtccFinalReport } from "../../../agent/btcc/index.ts";
 
 export function projectTurnOutcome(
   outcome: BtccTurnOutcome,
@@ -21,4 +22,13 @@ export function projectTurnOutcome(
     return { text: "", artifacts: [] };
   }
   throw new Error(`BTCC inbound did not reach a deliverable outcome: ${outcome.kind}`);
+}
+
+export function projectChildTerminalReport(
+  result: ReturnType<typeof projectTurnOutcome>,
+): { summary: string; changedArtifacts: string[] } {
+  return projectBtccFinalReport(
+    result.text,
+    result.artifacts.map((artifact) => artifact.safePathLabel),
+  );
 }

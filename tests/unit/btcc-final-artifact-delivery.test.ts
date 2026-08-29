@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { collectGuidedFinalArtifacts } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
-import { projectTurnOutcome } from
+import { projectChildTerminalReport, projectTurnOutcome } from
   "../../packages/butler-agent/src/interfaces/gateway/btcc/project-turn-outcome.ts";
 import { artifactFilesFromOutbound } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/transport/outbound-artifact-files.ts";
@@ -100,6 +100,31 @@ test("BTCC gateway outcome projection preserves typed final artifacts", () => {
       mimeType: "image/png",
       sizeBytes: 128,
     }],
+  });
+});
+
+test("structured child reports become a natural summary and changed artifacts", () => {
+  const report = projectChildTerminalReport(projectTurnOutcome({
+    kind: "delivered",
+    turnId: "turn-report",
+    messageId: "message-report",
+    content: JSON.stringify({
+      status: "success",
+      version: 1,
+      summary: "호환성 조사와 보고서 작성을 완료했습니다.",
+      changed_artifacts: ["research/qwen-turboquant-vllm.md"],
+    }),
+    artifacts: [{
+      id: "artifact-report",
+      kind: "report",
+      title: "qwen-turboquant-vllm.md",
+      safePathLabel: "research/qwen-turboquant-vllm.md",
+    }],
+  }));
+
+  expect(report).toEqual({
+    summary: "호환성 조사와 보고서 작성을 완료했습니다.",
+    changedArtifacts: ["research/qwen-turboquant-vllm.md"],
   });
 });
 
