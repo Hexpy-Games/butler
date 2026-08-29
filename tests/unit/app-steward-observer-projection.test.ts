@@ -69,9 +69,7 @@ describe("App Steward observer projection", () => {
       "research/qwen3.8-27b-awq-turboquant-vllm.md",
     ]);
     expect(view.messages.at(-1)?.text).toBe(projection.result?.summary);
-    expect(view.messages.at(-1)?.artifacts?.[0]?.safe_path_label).toBe(
-      "research/qwen3.8-27b-awq-turboquant-vllm.md",
-    );
+    expect(view.messages.at(-1)?.artifacts).toBeUndefined();
     expect(JSON.stringify(view)).not.toContain('"changed_artifacts"');
   });
 
@@ -610,7 +608,7 @@ describe("App Steward observer projection", () => {
     expect(view.messages[0]?.text).toBe("Terminal child");
     expect(view.messages[1]?.text).toBe("Completed");
     expect(view.messages.at(-1)?.text).toBe("Completed");
-    expect(view.messages.at(-1)?.artifacts?.[0]?.id).toBe("result-3:artifact:0");
+    expect(view.messages.at(-1)?.artifacts).toBeUndefined();
     expect(view.messages.filter((message) => message.turn_activity_rows?.length))
       .toHaveLength(1);
     expect(view.message_window.complete).toBe(true);

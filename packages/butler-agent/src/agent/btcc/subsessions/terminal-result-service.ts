@@ -127,17 +127,6 @@ export async function completeStewardResultForDependencies(
         summary: evidence.summary,
       });
     }
-    const work = await input.durableWork.boundWorkForTurn(relation.parent_turn_id);
-    if (work && work.workId === packet?.parent_work_ref.work_id &&
-        work.status !== "completed") {
-      await completeWork(input, {
-        turnId: relation.parent_turn_id,
-        sessionId: relation.parent_session_id,
-        work,
-        mutationCallId: `steward-result:${resultInput.resultId}`,
-        summary: evidence.summary,
-      });
-    }
   }
   const pending = input.store.pendingParentInputForResult(result.result.result_id);
   if (pending) {

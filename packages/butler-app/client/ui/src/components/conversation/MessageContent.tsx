@@ -32,12 +32,7 @@ function MessageContentComponent({
   onCopyAssistantMessage,
   stewardProgress,
 }: MessageContentProps) {
-  const artifacts = [
-    ...(message.artifacts ?? []),
-    ...(stewardProgress?.child.artifacts ?? []),
-  ].filter((artifact, index, values) =>
-    values.findIndex((candidate) => candidate.id === artifact.id) === index,
-  );
+  const artifacts = message.artifacts ?? [];
   return (
     <>
       {message.role === "assistant" ? (

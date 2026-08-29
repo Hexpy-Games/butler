@@ -346,7 +346,10 @@ export function createProductionGuidedTurnAgent(
         ? "no_visible" as const
         : undefined;
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
-      const artifacts = collectGuidedFinalArtifacts(input.toolJournal.list(turn.turnId));
+      const artifacts = collectGuidedFinalArtifacts(
+        input.toolJournal.list(turn.turnId),
+        subsessionResultEvidence ?? undefined,
+      );
       return guidedTurnResult({
         content: publicText,
         ...(terminalOutcome && !authorityProjection.continuation ? { terminalOutcome } : {}),

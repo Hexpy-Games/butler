@@ -17,7 +17,7 @@ afterEach(() => {
     .IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("completed unbound ordinary turn discloses 작업 중 and operation rows", async () => {
+test("completed unbound ordinary turn discloses 완료 and operation history", async () => {
   const dom = new JSDOM("<div id=\"root\"></div>", { url: "http://localhost" });
   Object.assign(globalThis, {
     window: dom.window,
@@ -68,7 +68,7 @@ test("completed unbound ordinary turn discloses 작업 중 and operation rows", 
   if (!(header instanceof dom.window.HTMLButtonElement)) {
     throw new Error("Missing completed activity disclosure header.");
   }
-  expect(header.textContent).toContain("활동 · 작업 중");
+  expect(header.textContent).toContain("활동 · 완료");
   expect(container.textContent).not.toContain("Bun 실행 완료");
 
   await act(async () => header.click());

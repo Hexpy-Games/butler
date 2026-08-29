@@ -9,6 +9,7 @@ const MAX_FINAL_ARTIFACT_BYTES = 10 * 1024 * 1024;
 
 export function collectGuidedFinalArtifacts(
   records: readonly GuidedToolJournalRecord[],
+  parentResultEvidence?: string,
 ): BtccFinalArtifact[] {
   const artifacts: BtccFinalArtifact[] = [];
   const seen = new Set<string>();
@@ -24,6 +25,13 @@ export function collectGuidedFinalArtifacts(
       if (artifacts.length >= MAX_FINAL_ARTIFACTS) return artifacts;
     }
   }
+  for (const path of parentResultArtifactPaths(parentResultEvidence)) {
+    const artifact = finalArtifact({ path, artifact_kind: "file" }, false);
+    if (!artifact || seen.has(artifact.safePathLabel)) continue;
+    seen.add(artifact.safePathLabel);
+    artifacts.push(artifact);
+    if (artifacts.length >= MAX_FINAL_ARTIFACTS) break;
+  }
   return artifacts;
 }
 
@@ -35,10 +43,13 @@ function artifactCandidates(result: Record<string, unknown>): unknown[] {
   ];
 }
 
-function finalArtifact(value: unknown): BtccFinalArtifact | null {
+function finalArtifact(
+  value: unknown,
+  requireArtifactRoot = true,
+): BtccFinalArtifact | null {
   const candidate = object(value);
   if (!candidate) return null;
-  const safePathLabel = safeArtifactPath(candidate.path);
+  const safePathLabel = safeArtifactPath(candidate.path, requireArtifactRoot);
   if (!safePathLabel) return null;
   const sizeBytes = finitePositiveNumber(
     candidate.size_bytes ?? candidate.sizeBytes,
@@ -66,7 +77,10 @@ function finalArtifact(value: unknown): BtccFinalArtifact | null {
   };
 }
 
-function safeArtifactPath(value: unknown): string | null {
+function safeArtifactPath(
+  value: unknown,
+  requireArtifactRoot: boolean,
+): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().replaceAll("\\", "/");
   if (!normalized || isAbsolute(normalized) || /^[A-Za-z]:\//u.test(normalized)) {
@@ -74,8 +88,20 @@ function safeArtifactPath(value: unknown): string | null {
   }
   const parts = normalized.split("/");
   if (parts.some((part) => !part || part === "." || part === "..")) return null;
-  if (parts[0] !== "artifacts") return null;
+  if (requireArtifactRoot && parts[0] !== "artifacts") return null;
   return parts.join("/");
+}
+
+function parentResultArtifactPaths(evidence: string | undefined): string[] {
+  if (!evidence) return [];
+  const line = evidence.split("\n").find((value) =>
+    value.startsWith("Changed artifacts: ")
+  );
+  if (!line) return [];
+  const value = line.slice("Changed artifacts: ".length).trim();
+  return value === "none"
+    ? []
+    : value.split(";").map((path) => path.trim()).filter(Boolean);
 }
 
 function artifactKind(value: unknown): BtccFinalArtifact["kind"] {

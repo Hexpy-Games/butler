@@ -296,19 +296,7 @@ export function projectStewardSession(
           ).length,
         }
       : {}),
-    artifacts: result
-      ? result.changed_artifacts.map((path, index) => ({
-          id: `${result.result_id}:artifact:${index}`,
-          session_id: snapshot.session_id,
-          message_id: result.result_id,
-          turn_id: result.child_turn_id,
-          title: path,
-          kind: "file",
-          safe_path_label: path,
-          created_at: result.created_at,
-          open_action: "unsupported" as const,
-        }))
-      : [],
+    artifacts: [],
     result,
     updated_at: snapshot.updated_at,
     terminal: Boolean(result) || isTerminalObserverState(latestTurn?.state ?? ""),
