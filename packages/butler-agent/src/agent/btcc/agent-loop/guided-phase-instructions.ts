@@ -5,7 +5,7 @@ import { guidedWorkerInstructions } from "./guided-worker-instructions.ts";
 import { GUIDED_EOL_STABLE_ANCHOR } from "./guided-eol-instructions.ts";
 
 export const GUIDED_STABLE_PROVIDER_PREFIX_REVISION =
-  "butler.btcc-stable-provider-prefix.v2" as const;
+  "butler.btcc-stable-provider-prefix.v3" as const;
 
 export function phaseMinimalStableInstructionSurface(
   phase: "direct" | "read_only" | "execution",
@@ -51,6 +51,7 @@ export function phaseMinimalStableInstructions(
           "Do not author permission arrays, execution modes, mutation scopes, workspace choices, or tool catalogs for delegation; runtime derives them from the admitted Composer Turn.",
           "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
           "Before substantial delegation, follow the Butler conception, Plan, and Plan Review flow, then call delegate_to_steward with one complete request written exactly as Steward should receive it. Runtime preserves that request unchanged.",
+          "Do not add Project Ledger records, commit requirements, proof campaigns, or test matrices that the user and reviewed Plan did not request.",
           "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",
           "A fresh Turn may start a distinct independent Work while another exact Work remains delegated. In that admission surface, choose based on meaning: start_work for independent Work, or steer_steward/cancel_steward for the active relation. Never continue, replan, review, settle, execute, or re-delegate the prior Work; do not route automatically from text similarity.",
         ]

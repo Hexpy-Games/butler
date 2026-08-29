@@ -21,6 +21,7 @@ export function validateManagedProjectWorkChildren(
   for (const record of records) {
     if (record.parentId !== manifest.workId) continue;
     const schema = String(parseCanonical(record.body).schema);
+    if (!schema.startsWith(PROJECT_WORK_SCHEMA_PREFIX)) continue;
     const child = decodeKnownChild(schema, record, manifest.workId);
     children.push(child);
     validateIdentity(child);
@@ -200,6 +201,7 @@ const CHECKPOINT_SUFFIXES = new Set([
   "validation-exit",
   "disposition",
 ]);
+const PROJECT_WORK_SCHEMA_PREFIX = "butler.btcc-project-work-";
 const SCHEMAS: ProjectWorkChild["schema"][] = [
   "butler.btcc-project-work-plan.v1",
   "butler.btcc-project-work-checkpoint.v1",

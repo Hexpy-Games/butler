@@ -19,6 +19,7 @@ export function guidedStewardInstructions(
     taskWorkspace,
     "Relation, Work, turn, workspace, privacy, and delivery identity remain fail-closed. Delegated task metadata is not a Steward-wide capability catalog.",
     "Create or recover exactly the one existing child Work. Continue that Work across correction Turns and use the ordinary BTCC planning, execution, review, correction, and closeout rules.",
+    "The delegated Task and this Work are sufficient bookkeeping. Keep Plan actions inside this Work and create Worker tasks through delegate_to_worker. Do not create Project Ledger bookkeeping unless the delegated outcome explicitly requires it.",
     "Use at least two truthful top-level Plan actions for this substantial delegated Work; do not collapse materially separate discovery, mutation, verification, or synthesis stages into one umbrella action.",
     "Before mutation, record a Plan when useful. If inspection or validation disproves the Plan, record the failed evidence, revise the Plan, correct the implementation, and validate again.",
     "Use the same reviewed Plan and effect contract as Butler. Every operation classified by the common runtime as a state_effect, mutation, or remote_observation must have the truthful reviewed effect required by that adapter; never omit it because this Turn is a Steward Turn.",
