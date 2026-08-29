@@ -54,13 +54,17 @@ export function stewardCurrentActivityTitle(
   const rows = child.active_turn?.progress.safe_progress_rows ?? [];
   const activeActivity = latestMatchingRow(rows, (row) =>
     row.kind !== "todo" &&
+    row.kind !== "turn" &&
     !isGenericModelRoundActivity(row) &&
+    !isModelAuthoredPhaseActivity(row) &&
     (row.state === "running" || row.state === "thinking") &&
     row.safe_label.trim().length > 0,
   );
   const latestActivity = latestMatchingRow(rows, (row) =>
     row.kind !== "todo" &&
+    row.kind !== "turn" &&
     !isGenericModelRoundActivity(row) &&
+    !isModelAuthoredPhaseActivity(row) &&
     row.safe_label.trim().length > 0,
   );
   const activePlanStep = rows.find((row) =>
@@ -86,6 +90,10 @@ export function stewardCurrentActivityTitle(
 function isGenericModelRoundActivity(row: ProgressRow): boolean {
   return row.bridge_phase === "model_round_waiting" ||
     row.safe_tool_name === "model_round";
+}
+
+function isModelAuthoredPhaseActivity(row: ProgressRow): boolean {
+  return row.work_decision_source === "model-authored";
 }
 
 function latestMatchingRow(

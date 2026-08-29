@@ -34,7 +34,7 @@ import { ordinaryChatPhaseForIntent } from "./guided-delegation-intent.ts";
 
 const FLAG_NAME = "BUTLER_PHASE_TOOL_SURFACE";
 const POLICY_REVISION = "butler.btcc-tool-instruction-policy.v1";
-const FALSE_FLAG_VALUES = new Set(["0", "false", "off", "no"]);
+const TRUE_FLAG_VALUES = new Set(["1", "true", "on", "yes"]);
 const STEWARD_PARENT_TOOL_NAMES = new Set([
   "delegate_to_steward", "steer_steward", "cancel_steward",
 ]);
@@ -345,7 +345,7 @@ function isGuidedRuntimeUnavailable(name: string): boolean {
 }
 
 function isEnabled(env: Record<string, string | undefined>): boolean {
-  return !FALSE_FLAG_VALUES.has(env[FLAG_NAME]?.trim().toLowerCase() ?? "");
+  return TRUE_FLAG_VALUES.has(env[FLAG_NAME]?.trim().toLowerCase() ?? "");
 }
 
 function guidedTurnPhase(

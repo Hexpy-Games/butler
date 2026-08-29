@@ -12,11 +12,13 @@ export function CurrentTurnStatus({
   operation,
   modelRoundWait,
   publicActivity,
+  phaseLabel,
   startedAt,
 }: {
   operation?: ProgressRow;
   modelRoundWait?: ProgressRow;
   publicActivity?: ProgressRow;
+  phaseLabel?: string;
   startedAt?: string;
 }) {
   const markTheme = useButlerMarkTheme();
@@ -26,7 +28,9 @@ export function CurrentTurnStatus({
     : undefined;
   const providerRecovery = publicActivity?.bridge_phase ===
     "operational_recovery" ? publicActivity : undefined;
-  const fullLabel = operationLabel ?? publicActivity?.safe_label ??
+  const fullLabel = operationLabel ?? providerRecovery?.safe_label ??
+    modelRoundWait?.safe_label ?? publicActivity?.safe_label ??
+    phaseLabel ??
     "응답 생성 중";
   return (
     <RollingStatusLine
@@ -48,6 +52,10 @@ export function CurrentTurnStatus({
             <CurrentModelRoundWaiting row={modelRoundWait} />
           ) : publicActivity ? (
             <CurrentPhaseActivity row={publicActivity} />
+          ) : phaseLabel ? (
+            <Typo.Body as="p" data-test-class="turn-phase-status-fallback">
+              {phaseLabel}
+            </Typo.Body>
           ) : (
             <Typo.Body
               as="p"

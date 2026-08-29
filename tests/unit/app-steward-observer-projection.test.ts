@@ -420,6 +420,22 @@ describe("App Steward observer projection", () => {
           state: "running",
         },
         created_at: "2026-08-22T08:02:00.000Z",
+      }, {
+        id: "event-model-phase",
+        session_id: relation.child_session_id,
+        turn_id: "turn-substantive-activity",
+        session_sequence: 3,
+        turn_sequence: 3,
+        kind: "assistant.public_note",
+        visibility: "public",
+        payload: {
+          note: "실행 결과를 검토하고 있습니다",
+          decisionSummary: "실행 결과를 검토하고 있습니다",
+          decisionSource: "model-authored",
+          activityStage: "review",
+          state: "running",
+        },
+        created_at: "2026-08-22T08:03:00.000Z",
       }],
       plan: null,
       result: null,
@@ -427,6 +443,8 @@ describe("App Steward observer projection", () => {
     });
 
     expect(projection.active_turn?.progress.summary).toBe("프로젝트 기록 확인");
+    expect(projection.active_turn?.updated_at).toBe("2026-08-22T08:03:00.000Z");
+    expect(projection.active_turn?.progress.updated_at).toBe("2026-08-22T08:03:00.000Z");
   });
 
   test("absent Plan approval does not fabricate n/j", () => {

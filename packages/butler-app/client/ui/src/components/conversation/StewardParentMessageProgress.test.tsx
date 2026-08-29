@@ -224,6 +224,38 @@ test("generic model waiting does not replace the latest substantive Steward acti
   expect(html).not.toContain("응답 생성 중");
 });
 
+test("model-authored lifecycle narration does not replace factual Steward activity", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const child = summary.steward_children![0]!;
+  child.active_turn = {
+    ...child.active_turn!,
+    progress: {
+      ...child.active_turn!.progress,
+      summary: "실행 결과를 검토하고 있습니다",
+      safe_progress_rows: [{
+        id: "latest-factual-tool",
+        kind: "used_tool",
+        state: "delivered",
+        safe_label: "웹 검색 결과 확인",
+        safe_tool_name: "web_search",
+        tool_call_id: "search-result",
+      }, {
+        id: "review-phase-narration",
+        kind: "message",
+        state: "running",
+        safe_label: "실행 결과를 검토하고 있습니다",
+        work_decision_source: "model-authored",
+        activity_stage: "review",
+      }],
+    },
+  };
+
+  const html = renderToStaticMarkup(<ComposerNotices summary={summary} />);
+
+  expect(html).toContain("웹 검색 결과 확인");
+  expect(html).not.toContain("실행 결과를 검토하고 있습니다");
+});
+
 test("Steward result synthesis capsule reports preparation and offers no Stop", () => {
   const summary: SessionSummaryView = {
     ...HARNESS_SS03_SUMMARY,

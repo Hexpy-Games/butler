@@ -160,6 +160,7 @@ function projectStewardTurn(
   activityRows: ProgressSummaryRow[],
 ): SessionViewTurn | null {
   if (!turn) return null;
+  const activityUpdatedAt = latestActivityTimestamp(activityRows) ?? turn.updated_at;
   if (turn.recovery?.state === "recoverable") {
     return {
       id: turn.id,
@@ -172,13 +173,13 @@ function projectStewardTurn(
       retryable: true,
       progress: {
         summary: "작업이 중단되었습니다. 이어서 진행할 수 있습니다.",
-        updated_at: turn.updated_at,
+        updated_at: activityUpdatedAt,
         turn_id: turn.id,
         state: "runtime_fault",
         safe_progress_rows: activityRows,
       },
       created_at: turn.created_at,
-      updated_at: turn.updated_at,
+      updated_at: activityUpdatedAt,
     };
   }
   const state = observerTurnState(turn.state);
@@ -194,13 +195,13 @@ function projectStewardTurn(
     retryable: state === "failed",
     progress: {
       summary: currentStewardActivityLabel(activityRows) ?? stewardStateLabel(turn.state),
-      updated_at: turn.updated_at,
+      updated_at: activityUpdatedAt,
       turn_id: turn.id,
       state: progressState,
       safe_progress_rows: activityRows,
     },
     created_at: turn.created_at,
-    updated_at: turn.updated_at,
+    updated_at: activityUpdatedAt,
   };
 }
 
@@ -209,14 +210,18 @@ function currentStewardActivityLabel(
 ): string | undefined {
   const currentActivity = rows.findLast((row) =>
     row.kind !== "todo" &&
+    row.kind !== "turn" &&
     !isGenericModelRoundActivity(row) &&
+    !isModelAuthoredPhaseActivity(row) &&
     (row.state === "running" || row.state === "thinking") &&
     row.safe_label.trim().length > 0,
   );
   if (currentActivity) return currentActivity.safe_label;
   const latestActivity = rows.findLast((row) =>
     row.kind !== "todo" &&
+    row.kind !== "turn" &&
     !isGenericModelRoundActivity(row) &&
+    !isModelAuthoredPhaseActivity(row) &&
     row.safe_label.trim().length > 0,
   );
   if (latestActivity) return latestActivity.safe_label;
@@ -225,8 +230,23 @@ function currentStewardActivityLabel(
   );
   if (currentPlanAction) return currentPlanAction.safe_label;
   return rows.findLast((row) =>
-    row.kind !== "todo" && row.safe_label.trim().length > 0,
+    row.kind !== "todo" &&
+    row.kind !== "turn" &&
+    !isModelAuthoredPhaseActivity(row) &&
+    row.safe_label.trim().length > 0,
   )?.safe_label;
+}
+
+function isModelAuthoredPhaseActivity(row: ProgressSummaryRow): boolean {
+  return row.work_decision_source === "model-authored";
+}
+
+function latestActivityTimestamp(rows: ProgressSummaryRow[]): string | undefined {
+  return rows.reduce<string | undefined>((latest, row) => {
+    if (!row.created_at || !Number.isFinite(Date.parse(row.created_at))) return latest;
+    if (!latest || Date.parse(row.created_at) > Date.parse(latest)) return row.created_at;
+    return latest;
+  }, undefined);
 }
 
 function isGenericModelRoundActivity(row: ProgressSummaryRow): boolean {
