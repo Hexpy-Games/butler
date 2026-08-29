@@ -74,6 +74,23 @@ test("completed guided tool results become bounded safe final artifacts", () => 
   }]);
 });
 
+test("accepted parent result evidence carries safe child artifacts to the final message", () => {
+  const artifacts = collectGuidedFinalArtifacts([], [
+    "Canonical child result synthesis",
+    "Status: success",
+    "Summary: 조사 완료",
+    "Changed artifacts: research/memory-brain-structure-ko.md; ../private.txt; /private/leak.txt",
+  ].join("\n"));
+
+  expect(artifacts).toEqual([{
+    id: expect.stringMatching(/^artifact-/u),
+    kind: "file",
+    title: "memory-brain-structure-ko.md",
+    safePathLabel: "research/memory-brain-structure-ko.md",
+    mimeType: "text/plain",
+  }]);
+});
+
 test("BTCC gateway outcome projection preserves typed final artifacts", () => {
   const result = projectTurnOutcome({
     kind: "delivered",

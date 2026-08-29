@@ -420,8 +420,8 @@ test("terminal Steward activity stays attached to the factual parent message", (
   expect(html).toContain("steward-parent-progress-card");
   expect(html).toContain("Review the activity surface");
   expect(html).toContain("완료됨");
-  expect(html).toContain('data-test-class="message-artifact-list"');
-  expect(html).toContain("research/qwen3.8-27b-awq-turboquant-vllm.md");
+  expect(html).not.toContain('data-test-class="message-artifact-list"');
+  expect(html).not.toContain("research/qwen3.8-27b-awq-turboquant-vllm.md");
   expect(html).not.toContain("답변 완료");
 });
 

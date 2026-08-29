@@ -1,5 +1,8 @@
 export function phaseLabel(phase?: string): string {
   if (!phase) return "작업 중";
+  if (phase === "delivered" || phase === "completed") return "완료";
+  if (phase === "failed" || phase === "runtime_fault") return "실패";
+  if (phase === "cancelled") return "중단";
   if (phase.startsWith("conception")) return "구상";
   if (phase === "contract_review") return "구상 검토";
   if (phase === "planning") return "계획";
