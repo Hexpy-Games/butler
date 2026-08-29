@@ -71,6 +71,8 @@ import { runCommandToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/run-command/run_command/definition.ts";
 import { delegateToStewardToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
+import { loadReviewedDelegationPlan } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/reviewed-delegation-plan.ts";
 import type { ContextualButlerToolExecutor } from
   "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { createGuidedActivityProjection } from
@@ -4020,6 +4022,32 @@ test("delegation schema appears only for the exact current accepted Plan Review"
     },
   };
   expect((await resolve()).names.has("delegate_to_steward")).toBe(true);
+  boundWork = {
+    ...boundWork,
+    currentPlan: { ...plan, originTurnId: "earlier-user-turn" },
+    latestPlanReview: {
+      ...boundWork.latestPlanReview!,
+      originTurnId: "earlier-user-turn",
+    },
+  };
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(false);
+  await expect(loadReviewedDelegationPlan(
+    { durableWork },
+    { parentSessionId: sessionId, parentTurnId: turnId },
+  )).rejects.toThrow("subsession_accepted_parent_plan_review_required");
+  boundWork = {
+    ...boundWork,
+    currentPlan: plan,
+    latestPlanReview: {
+      ...boundWork.latestPlanReview!,
+      originTurnId: turnId,
+    },
+  };
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(true);
+  expect((await loadReviewedDelegationPlan(
+    { durableWork },
+    { parentSessionId: sessionId, parentTurnId: turnId },
+  )).objective).toBe(plan.objective);
   delegationRecords.push({
     callId: "queued-delegation",
     toolName: "delegate_to_steward",

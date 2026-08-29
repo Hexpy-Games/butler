@@ -18,7 +18,9 @@ export async function loadReviewedDelegationPlan(
   const plan = work.currentPlan;
   const review = work.latestPlanReview;
   if (!plan || !review || review.subject !== "plan" || review.verdict !== "accept" ||
-      review.boundPlanRevisionId !== plan.planRevisionId) {
+      review.boundPlanRevisionId !== plan.planRevisionId ||
+      plan.originTurnId !== parent.parentTurnId ||
+      review.originTurnId !== parent.parentTurnId) {
     throw new Error("subsession_accepted_parent_plan_review_required");
   }
   return {

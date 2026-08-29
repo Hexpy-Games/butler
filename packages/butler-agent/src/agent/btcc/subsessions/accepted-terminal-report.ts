@@ -43,7 +43,7 @@ export async function resolveParentResultEvidence(input: {
   }
   const synthesisInstruction = [
     "Canonical child result synthesis",
-    "Respond directly from the supplied safe result fields. Do not delegate or start new Work.",
+    "Report completed work, remaining work, and the next action in user terms; do not start Work in this result-report Turn.",
   ];
   return [
     ...synthesisInstruction,
