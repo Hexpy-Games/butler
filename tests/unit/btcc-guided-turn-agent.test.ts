@@ -1648,7 +1648,7 @@ test("production feature execution instructions preserve guarded effects and ato
       .not.toContain("project_ledger_work_complete");
     expect(JSON.stringify(fixture.stores.guidedToolJournal.list(
       "guided-feature-execution-instructions",
-    ))).toContain("native:project_ledger_work_complete");
+    ))).not.toContain("native:project_ledger_work_complete");
   } finally {
     if (previousFlag === undefined) {
       delete process.env.BUTLER_PHASE_TOOL_SURFACE;
@@ -2281,6 +2281,8 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
       .toBeUndefined();
     expect(await availability(fullAccessProjectTurn, "complete_project_work"))
       .toBeUndefined();
+    expect(await availability(fullAccessProjectTurn, "project_ledger_work_complete"))
+      .toBeUndefined();
     expect(await availability(turnRecord(fixture.root, {
       accessMode: "read_only",
       trackingMode: "ledger",
@@ -2325,12 +2327,11 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     expect(visibleNames).not.toContain("project_ledger_show");
     expect(visibleNames).toContain("project_ledger_create");
     expect(visibleNames).not.toContain("project_ledger_work_update");
-    expect(visibleNames).toContain("project_ledger_work_complete");
-    expect(instructions).toContain("keep one concise Project Ledger Work record");
-    expect(instructions).toContain("Check for related Work first and reuse it");
+    expect(visibleNames).not.toContain("project_ledger_work_complete");
     expect(instructions).toContain(
-      "complete it after validating the requested outcome",
+      "The bound Managed Work is the single project-work lifecycle",
     );
+    expect(instructions).not.toContain("alongside the internal Work record");
     expect(instructions).not.toContain(
       "Do not attempt to mutate the Project Ledger",
     );
@@ -2410,191 +2411,6 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
       error: { code: "tool_unavailable" },
     });
   } finally {
-    fixture.close();
-  }
-});
-
-test("Guided project Work initializes and closes Project Ledger through reviewed effects", async () => {
-  const fixture = createFixture("guided-project-ledger-lifecycle");
-  const previousFlag = process.env.BUTLER_PHASE_TOOL_SURFACE;
-  process.env.BUTLER_PHASE_TOOL_SURFACE = "on";
-  const ledgerRoot = join(
-    fixture.root,
-    "project-ledger",
-    "projects",
-    "guided-ledger-project",
-  );
-  writeFileSync(
-    join(fixture.root, "package.json"),
-    `${JSON.stringify({ name: "guided-ledger-project" })}\n`,
-  );
-  bindAppProject(fixture.dbPath, {
-    id: "guided-project-session",
-    workspacePath: fixture.root,
-    ledgerProjectId: "guided-ledger-project",
-  });
-  try {
-    const turnId = "turn-guided-project-ledger-lifecycle";
-    const planCalls = [toolCall("plan-1", "replace_work_plan", {
-        objective: "Complete one tracked project change",
-        actions: [{
-          action_key: "create-ledger-work",
-          description: "Create one concise Project Ledger Work record",
-          effect: {
-            capability: "project_ledger_create",
-            target: "project-ledger:work:W-GUIDED-LIFECYCLE",
-          },
-        }, {
-          action_key: "complete-ledger-work",
-          description: "Complete the Project Ledger Work after validation",
-          dependency_keys: ["create-ledger-work"],
-          effect: {
-            capability: "project_ledger_work_complete",
-            target: "project-ledger:work:W-GUIDED-LIFECYCLE",
-          },
-        }],
-        checks: ["The canonical Project Ledger Work is done"],
-      })];
-    const planReviewCalls = [toolCall("plan-review-1", "record_work_review", {
-        subject: "plan",
-        verdict: "accept",
-        summary: "The plan is concise and matches the project request.",
-      })];
-    const searchCalls = [
-      toolCall("search-create", "tool_search", {
-        query: "project_ledger_create",
-        include_disabled: true,
-      }),
-      toolCall("search-complete", "tool_search", {
-        query: "project_ledger_work_complete",
-        include_disabled: true,
-      }),
-    ];
-    const describeCalls = [toolCall("describe-effects", "tool_describe", {
-      ids: [
-        "native:project_ledger_create",
-        "native:project_ledger_work_complete",
-      ],
-    })];
-    const createCalls = [toolCall("create-1", "tool_call", {
-      id: "native:project_ledger_create",
-      arguments: {
-        kind: "work",
-        id: "W-GUIDED-LIFECYCLE",
-        title: "Guided project lifecycle",
-        status: "proposed",
-        spec: "SPEC-GUIDED-LIFECYCLE",
-        acceptance: "The tracked project result is validated and reported",
-      },
-    })];
-    const completeCalls = [toolCall("complete-1", "tool_call", {
-      id: "native:project_ledger_work_complete",
-      arguments: {
-        id: "W-GUIDED-LIFECYCLE",
-        validation: "Lifecycle integration test passed",
-        review: "The requested tracked outcome is complete",
-        report: "The Guided result contains the completed outcome",
-      },
-    })];
-    const reviewCalls = [
-      toolCall("checkpoint-1", "record_work_checkpoint", {
-        action_updates: [{ action_key: "create-ledger-work", status: "done" }, {
-          action_key: "complete-ledger-work",
-          status: "done",
-        }],
-        public_summary: "The Project Ledger Work was created and completed.",
-        next_step: "Review the completed project result.",
-      }),
-      toolCall("result-review-1", "record_work_review", {
-        subject: "result",
-        verdict: "accept",
-        summary: "The Project Ledger Work was created and completed.",
-      }),
-    ];
-    const completionCalls = [toolCall("completion-1", "record_work_review", {
-        subject: "completion",
-        verdict: "accept",
-        summary: "The whole Work satisfies the original project request and checks.",
-      })];
-    const agent = fixture.agent(scriptedModelRound([
-      toolResponse(planCalls),
-      toolResponse(planReviewCalls),
-      toolResponse(searchCalls),
-      toolResponse(describeCalls),
-      toolResponse(createCalls),
-      toolResponse(completeCalls),
-      toolResponse(reviewCalls),
-      toolResponse(completionCalls),
-      async () => {
-        const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
-        return toolResponse([toolCall("disposition-1", "record_work_disposition", {
-          work_id: bound!.workId,
-          disposition: "completed",
-          summary: "The tracked project change is complete.",
-          action_updates: [{ action_key: "create-ledger-work", status: "done" }, {
-            action_key: "complete-ledger-work", status: "done",
-          }],
-        })]);
-      },
-      (request) => {
-        expect(existsSync(ledgerRoot)).toBe(true);
-        expect(request.messages.some((message) => message.role === "tool")).toBe(true);
-        return { text: "프로젝트 작업과 기록을 완료했습니다.", toolCalls: [] };
-      },
-      async () => {
-        const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
-        return toolResponse([toolCall("disposition-1", "record_work_disposition", {
-          work_id: bound!.workId,
-          disposition: "completed",
-          summary: "Project Ledger 효과와 검토 결과를 확인했습니다.",
-        })]);
-      },
-      { text: "프로젝트 작업과 기록을 완료했습니다.", toolCalls: [] },
-    ]), { butlerHome: process.cwd() });
-    const runtime = createGuidedTurnRuntime({
-      admission: fixture.stores.admission,
-      turns: fixture.stores.turns,
-      messages: fixture.stores.messages,
-      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
-      agent,
-    });
-    const delivered = await runtime.runTurn(projectRunCommand(fixture.root, turnId));
-    expect(delivered)
-      .toMatchObject({
-      kind: "delivered",
-      content: "프로젝트 작업과 기록을 완료했습니다.",
-    });
-    const journal = fixture.stores.guidedToolJournal.list(turnId);
-    expect(journal.find((entry) => entry.toolName === "tool_search" &&
-      JSON.stringify(entry.arguments).includes("project_ledger_create"))?.result)
-      .toMatchObject({ results: [expect.objectContaining({
-        id: "native:project_ledger_create",
-        enabled: true,
-      })] });
-    expect(journal.find((entry) => entry.toolName === "tool_describe")?.result)
-      .toMatchObject({ ok: true, missing: [] });
-    expect(journal.find((entry) => entry.toolName === "project_ledger_create")?.result)
-      .toMatchObject({ ok: true });
-    expect(journal.find((entry) => entry.toolName === "project_ledger_work_complete")?.result)
-      .toMatchObject({ ok: true });
-    expect(existsSync(join(ledgerRoot, "project.json"))).toBe(true);
-    expect(existsSync(join(ledgerRoot, "work", "W-GUIDED-LIFECYCLE", "work.md")))
-      .toBe(true);
-    const work = await fixture.stores.durableWork.boundWorkForTurn(turnId);
-    expect(work).toMatchObject({
-      status: "completed",
-      latestResultReview: { verdict: "accept" },
-      latestCompletionValidation: { verdict: "accept" },
-    });
-    expect(fixture.stores.guidedEffectJournal.listForWork(work!.workId))
-      .toHaveLength(2);
-    expect((await fixture.stores.turns.findTurn(turnId))?.route).toBe("managed");
-  } finally {
-    if (previousFlag === undefined) {
-      delete process.env.BUTLER_PHASE_TOOL_SURFACE;
-    } else {
-      process.env.BUTLER_PHASE_TOOL_SURFACE = previousFlag;
-    }
     fixture.close();
   }
 });

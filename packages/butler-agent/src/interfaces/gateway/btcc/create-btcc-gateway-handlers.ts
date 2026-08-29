@@ -85,7 +85,7 @@ export function createBtccGatewayHandlers(
             resultId: subsessionResultId(route.sessionId, outcome.turnId),
             summary: childReport.summary,
             changedArtifacts: childReport.changedArtifacts,
-            status: result.workStatus === "blocked" ? "blocked" : "success",
+            status: childTerminalStatus(result.workStatus),
           });
         }
       }
@@ -120,6 +120,14 @@ export function createBtccGatewayHandlers(
     steward: ({ route, envelope }) => handle(route, envelope),
     worker: ({ route, envelope }) => handle(route, envelope),
   };
+}
+
+function childTerminalStatus(
+  workStatus: "completed" | "blocked" | undefined,
+): "success" | "blocked" | "failed" {
+  if (workStatus === "completed") return "success";
+  if (workStatus === "blocked") return "blocked";
+  return "failed";
 }
 
 async function completeChildTerminalResult(

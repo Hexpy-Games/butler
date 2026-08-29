@@ -30,6 +30,10 @@ import { readOperationResultsToolDefinition } from
   "../../tools/monitoring/read_operation_results/index.ts";
 const STEWARD_PARENT_TOOL_NAMES = ["delegate_to_steward", "steer_steward", "cancel_steward"];
 const WORKER_DELEGATION_TOOL_NAME = "delegate_to_worker";
+const GUIDED_MANAGED_LEDGER_EFFECT_TOOL_NAMES =
+  GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES.filter((name) =>
+    name !== "project_ledger_work_complete",
+  );
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
   disabledReason:
@@ -132,7 +136,7 @@ export function authorizedToolDefinitions(
     policy.accessMode === "full_access" &&
       policy.trackingMode === "ledger" &&
       (policy.projectId || turn.context.projectRef)
-      ? GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES
+      ? GUIDED_MANAGED_LEDGER_EFFECT_TOOL_NAMES
       : [],
   );
   for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
@@ -148,7 +152,7 @@ export function hiddenNativeToolNamesForGuidedTurn(
   enableProjectLedgerEffects: boolean,
 ): string[] {
   const supported = new Set<string>(
-    enableProjectLedgerEffects ? GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES : [],
+    enableProjectLedgerEffects ? GUIDED_MANAGED_LEDGER_EFFECT_TOOL_NAMES : [],
   );
   return [
     ...WORK_TRACKING_TOOL_NAMES,
@@ -187,7 +191,6 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
     ...(projectLedgerWork && policy.accessMode === "full_access"
       ? [
           "project_ledger_create",
-          "project_ledger_work_complete",
         ]
       : []),
     ...(policy.role === "butler"

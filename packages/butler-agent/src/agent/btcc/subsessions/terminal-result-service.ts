@@ -114,20 +114,6 @@ export async function completeStewardResultForDependencies(
     detailRefs: evidence.detailRefs,
     parentChatId,
   });
-  if (terminalStatus === "success") {
-    const childWork = await input.durableWork.boundWorkForTurn(
-      resultInput.childTurnId,
-    );
-    if (childWork && childWork.status !== "completed") {
-      await completeWork(input, {
-        turnId: resultInput.childTurnId,
-        sessionId: relation.child_session_id,
-        work: childWork,
-        mutationCallId: `steward-work:${resultInput.resultId}`,
-        summary: evidence.summary,
-      });
-    }
-  }
   const pending = input.store.pendingParentInputForResult(result.result.result_id);
   if (pending) {
     await parentInputSink(pending);
@@ -137,38 +123,6 @@ export async function completeStewardResultForDependencies(
     status: result.inserted ? "committed" : "duplicate",
     result: result.result,
   } satisfies CompleteStewardResultOutcome;
-}
-
-async function completeWork(
-  input: SubsessionDelegationDependencies,
-  command: {
-    turnId: string;
-    sessionId: string;
-    work: NonNullable<Awaited<ReturnType<
-      SubsessionDelegationDependencies["durableWork"]["boundWorkForTurn"]
-    >>>;
-    mutationCallId: string;
-    summary: string;
-  },
-): Promise<void> {
-  await input.durableWork.recordDisposition({
-    turnId: command.turnId,
-    sessionId: command.sessionId,
-    ...(command.work.scope.kind === "project"
-      ? { projectRef: command.work.scope.projectRef }
-      : {}),
-    mutationCallId: command.mutationCallId,
-    workId: command.work.workId,
-    disposition: "completed",
-    summary: command.summary,
-    actionUpdates: (command.work.currentPlan?.actions ?? []).map((action) => ({
-      actionKey: action.actionKey,
-      status: "done" as const,
-    })),
-    remainingActions: [],
-    evidenceRefs: [],
-    followups: [],
-  });
 }
 
 function safeSummary(value: string): string {
