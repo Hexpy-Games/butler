@@ -71,7 +71,7 @@ export function createGuidedRoundToolSurfaceResolver(input: {
     const dispositionReady = activeDelegationAdmission
       ? false
       : await canExposeDisposition(input, work);
-    const delegationReady = canExposeDelegation(bound);
+    const delegationReady = canExposeDelegation(bound, input.turnId);
     const eligibleTools = input.tools.filter((tool) => {
       if (activeDelegationAdmission) {
         return isActiveDelegationAdmissionTool(tool.name);
@@ -165,14 +165,19 @@ export function createActiveDelegationAdmissionGuard(): {
   };
 }
 
-function canExposeDelegation(work: DurableWorkView | undefined): boolean {
+function canExposeDelegation(
+  work: DurableWorkView | undefined,
+  turnId: string,
+): boolean {
   const plan = work?.currentPlan;
   const review = work?.latestPlanReview;
   return Boolean(
     work && (work.status === "open" || work.status === "blocked") &&
     plan && review?.subject === "plan" &&
     review.verdict === "accept" &&
-    review.boundPlanRevisionId === plan.planRevisionId,
+    review.boundPlanRevisionId === plan.planRevisionId &&
+    plan.originTurnId === turnId &&
+    review.originTurnId === turnId,
   );
 }
 
