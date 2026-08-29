@@ -3786,7 +3786,7 @@ test("settings, command palette, and project actions are route-backed and privac
     const workerProfilesUpdated = await patchJson(`${server.url}settings`, {
       worker_profiles: [
         {
-          id: "routine-search-work",
+          id: "w1",
           label: "Routine search work",
           enabled: true,
           job: { kind: "custom", text: "Search, inspect, and format" },
@@ -3794,7 +3794,7 @@ test("settings, command palette, and project actions are route-backed and privac
           reasoning_effort: "medium",
         },
         {
-          id: "anthropic-runtime-work",
+          id: "w2",
           label: "Anthropic runtime work",
           enabled: true,
           job: { kind: "custom", text: "Provider wired through native runtime" },
@@ -3806,7 +3806,7 @@ test("settings, command palette, and project actions are route-backed and privac
     expect(workerProfilesUpdated.data.worker_profiles).toEqual([
       expect.objectContaining({ id: "default", enabled: true }),
       expect.objectContaining({
-        id: "routine-search-work",
+        id: "w1",
         label: "Routine search work",
         enabled: true,
         job: { kind: "custom", text: "Search, inspect, and format" },
@@ -3814,7 +3814,7 @@ test("settings, command palette, and project actions are route-backed and privac
         reasoning_effort: "medium",
       }),
       expect.objectContaining({
-        id: "anthropic-runtime-work",
+        id: "w2",
         label: "Anthropic runtime work",
         enabled: true,
         job: { kind: "custom", text: "Provider wired through native runtime" },
@@ -4514,7 +4514,7 @@ test("registered local models can be edited and deleted without stale settings r
           reasoning_effort: "none",
         },
         {
-          id: "local-deep",
+          id: "w1",
           label: "Local deep",
           enabled: true,
           job: { kind: "custom", text: "Use local before" },
@@ -4571,7 +4571,7 @@ test("registered local models can be edited and deleted without stale settings r
         reasoning_effort: "none",
       }),
       expect.objectContaining({
-        id: "local-deep",
+        id: "w1",
         model: "local/gemma-after",
         reasoning_effort: "none",
       }),

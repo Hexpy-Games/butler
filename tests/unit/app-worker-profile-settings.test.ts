@@ -228,7 +228,7 @@ test("legacy persisted worker_model_rules migrate deterministically and purge th
       reasoning_effort: "high",
     });
     expect(profiles[1]).toEqual({
-      id: "worker_profile_2",
+      id: "w1",
       label: "Routine",
       enabled: true,
       job: { kind: "builtin", job: "coding" },
@@ -236,7 +236,7 @@ test("legacy persisted worker_model_rules migrate deterministically and purge th
       reasoning_effort: settings.reasoning_effort,
     });
     expect(profiles[2]).toEqual({
-      id: "deep-work",
+      id: "w2",
       label: "Dup",
       enabled: true,
       job: { kind: "custom", text: "Writing" },
@@ -386,7 +386,7 @@ test("PATCH round-trips custom jobs, domains and prompts with canonical-only per
       worker_profiles: [
         defaultProfile("openai/gpt-5.6-luna", "medium"),
         {
-          id: "writer",
+          id: "w1",
           label: "Writer",
           enabled: true,
           job: { kind: "custom", text: "Draft release notes" },
@@ -402,7 +402,7 @@ test("PATCH round-trips custom jobs, domains and prompts with canonical-only per
     expect(patched.data?.worker_profiles).toEqual([
       defaultProfile("openai/gpt-5.6-luna", "medium"),
       {
-        id: "writer",
+        id: "w1",
         label: "Writer",
         enabled: true,
         job: { kind: "custom", text: "Draft release notes" },
@@ -441,7 +441,7 @@ test("PATCH omitting the default profile preserves the exact current default whi
     const updated = await patchSettings(server.url, {
       worker_profiles: [
         {
-          id: "researcher",
+          id: "w1",
           label: "Researcher",
           enabled: true,
           job: { kind: "custom", text: "Deep research" },
@@ -458,7 +458,7 @@ test("PATCH omitting the default profile preserves the exact current default whi
     expect(profiles[0]).toEqual(currentDefault);
     expect(profiles[0]?.model).toBe("openai/gpt-5.6-luna");
     expect(profiles[0]?.reasoning_effort).toBe("high");
-    expect(profiles[1]?.id).toBe("researcher");
+    expect(profiles[1]?.id).toBe("w1");
   } finally {
     server.stop();
   }
@@ -575,6 +575,13 @@ test("invalid worker profile patches reject fail-closed through the settings req
 
     await expectRejected({
       worker_profiles: [
+        defaultProfile(validModel, "medium"),
+        defaultProfile(validModel, "medium", { id: "explorer" }),
+      ],
+    });
+
+    await expectRejected({
+      worker_profiles: [
         defaultProfile(validModel, "medium", {
           prompt: "x".repeat(2001),
         }),
@@ -682,9 +689,9 @@ test("persisted leading-invalid and empty worker profile ids are repaired determ
     result = await expectCanonicalRoundTrip(dbName, dbPath);
     expect(result.ids).toEqual([
       "default",
-      "bad",
-      "also_bad",
-      "worker_profile_4",
+      "w1",
+      "w2",
+      "w3",
     ]);
     expect(result.profiles.map((profile) => profile.label)).toEqual([
       "Default",
@@ -697,7 +704,7 @@ test("persisted leading-invalid and empty worker profile ids are repaired determ
   }
 });
 
-test("duplicate 48-character persisted worker profile ids are deduplicated with suffix width reserved under the id limit", async () => {
+test("duplicate semantic persisted worker profile ids migrate to stable ordinal ids", async () => {
   const dbName = "duplicate-max-length-ids.sqlite";
   const dbPath = join(tempDir, dbName);
   const bootstrap = createServer(dbName);
@@ -719,8 +726,7 @@ test("duplicate 48-character persisted worker profile ids are deduplicated with 
   let result: Awaited<ReturnType<typeof expectCanonicalRoundTrip>> | undefined;
   try {
     result = await expectCanonicalRoundTrip(dbName, dbPath);
-    expect(result.ids[1]).toBe(baseId);
-    expect(result.ids[2]).toBe(`${baseId.slice(0, 46)}-2`);
+    expect(result.ids).toEqual(["default", "w1", "w2"]);
     expect(result.profiles.map((profile) => profile.label)).toEqual([
       "Default",
       "One",
@@ -731,7 +737,7 @@ test("duplicate 48-character persisted worker profile ids are deduplicated with 
   }
 });
 
-test("repeated collisions across suffix widths keep every repaired worker profile id unique, ordered and within the limit", async () => {
+test("repeated semantic ids migrate to unique ordered ordinal ids", async () => {
   const dbName = "repeated-collision-widths.sqlite";
   const dbPath = join(tempDir, dbName);
   const bootstrap = createServer(dbName);
@@ -756,12 +762,7 @@ test("repeated collisions across suffix widths keep every repaired worker profil
     result = await expectCanonicalRoundTrip(dbName, dbPath);
     const expectedIds = [
       "default",
-      baseId,
-      ...Array.from({ length: 10 }, (_, index) => {
-        const suffix = index + 2;
-        const suffixText = `-${suffix}`;
-        return `${baseId.slice(0, 48 - suffixText.length)}${suffixText}`;
-      }),
+      ...Array.from({ length: 11 }, (_, index) => `w${index + 1}`),
     ];
     expect(result.ids).toEqual(expectedIds);
     expect(result.profiles.map((profile) => profile.label)).toEqual([

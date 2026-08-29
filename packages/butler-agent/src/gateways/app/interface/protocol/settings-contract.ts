@@ -70,7 +70,7 @@ export const DEFAULT_WORKER_PROFILE_ID = "default";
 
 export const MAX_WORKER_PROFILES = 12;
 
-export const WORKER_PROFILE_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,47}$/u;
+export const WORKER_PROFILE_ID_PATTERN = /^(?:default|w[1-9]\d*)$/u;
 
 export const WORKER_PROFILE_LABEL_MAX_LENGTH = 64;
 
