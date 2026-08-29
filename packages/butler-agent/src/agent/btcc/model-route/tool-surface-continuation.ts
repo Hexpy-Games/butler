@@ -25,34 +25,14 @@ export function attachAcceptedToolSurface(
   };
 }
 
-export function assertAcceptedToolSurface(
+export function replayAcceptedResponse(
   result: ModelRoundResult,
-  digest: string | undefined,
-): void {
-  const current = normalizeDigest(digest);
-  const accepted = continuationToolSurfaceDigest(result.continuation);
-  if (accepted !== current) {
-    throw new RoundToolSurfaceError("round_tool_surface_continuation_invalid");
-  }
-}
-
-export function replayAcceptedToolSurface(
-  result: ModelRoundResult,
-  digest: string | undefined,
   checkpoint: NonNullable<ModelRoundResult["acceptedCheckpoint"]>,
 ): ModelRoundResult {
-  assertAcceptedToolSurface(result, digest);
   return {
     ...result,
     acceptedCheckpoint: result.acceptedCheckpoint ?? checkpoint,
   };
-}
-
-function continuationToolSurfaceDigest(continuation: unknown): string | undefined {
-  if (!isRecord(continuation) || !Object.hasOwn(continuation, "toolSurfaceDigest")) {
-    return undefined;
-  }
-  return normalizeDigest(continuation.toolSurfaceDigest);
 }
 
 function normalizeDigest(value: unknown): string | undefined {

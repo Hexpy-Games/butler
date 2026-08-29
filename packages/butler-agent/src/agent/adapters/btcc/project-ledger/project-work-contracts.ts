@@ -99,6 +99,14 @@ export type ProjectWorkLegacyRuntime = {
 };
 
 export type ProjectWorkRuntimeProjection = {
+  locateCanonicalWorks(input: {
+    scope: ResolvedProjectWorkScope;
+    sessionId?: string;
+    turnId?: string;
+  }): Promise<{
+    sessionHeadWorkId: string | null;
+    bindingWorkId: string | null;
+  }>;
   loadOriginalRequest(
     scope: WorkTurnScope,
   ): Promise<DurableWorkContext["originalRequest"]>;

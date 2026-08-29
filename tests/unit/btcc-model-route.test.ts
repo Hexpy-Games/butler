@@ -12,8 +12,6 @@ import {
   ModelRouteDurabilityError,
 } from "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
-import { runBtccAgentLoop } from
-  "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import { createTurnRuntime } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import { openBtccSqliteStores } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import type { ImageCarrierTuple } from "../../packages/butler-agent/src/agent/image-attachment/index.ts";
@@ -980,54 +978,13 @@ test("SQLite restart retains projected continuation and route rebases only an ad
 
     await expect(replayPersisted("accepted-round", toolSurfaceDigest)).resolves
       .toMatchObject({ text: "accepted" });
-    await expect(replayPersisted("accepted-round", "a".repeat(64))).rejects
-      .toMatchObject({
-        name: "RoundToolSurfaceError",
-        code: "round_tool_surface_continuation_invalid",
-      });
+    await expect(replayPersisted("accepted-round", "a".repeat(64))).resolves
+      .toMatchObject({ text: "accepted" });
     await expect(replayPersisted(
       "accepted-round-without-surface",
       toolSurfaceDigest,
-    )).rejects.toMatchObject({
-      name: "RoundToolSurfaceError",
-      code: "round_tool_surface_continuation_invalid",
-    });
-    let replayToolExecutions = 0;
-    await expect(runBtccAgentLoop({
-      prompt: "do not run the persisted tool",
-      model: "openai/gpt-5.5",
-      tools: [{
-        name: "run_command",
-        description: "Run a command.",
-        parameters: { type: "object", properties: {} },
-      }],
-      modelRound: createModelRoutePort({
-        turnId: command.turnId,
-        route,
-        base: { async runRound() {
-          replayDispatches += 1;
-          return { text: "unexpected dispatch", toolCalls: [] };
-        } },
-        loadAcceptedResponse: (lookup) => stores.turns.loadModelRoundAcceptance({
-          turnId: command.turnId,
-          roundId: lookup.roundId,
-          routeDigest: route.routeDigest,
-          candidateIndex: lookup.candidateIndex,
-          modelRef: lookup.modelRef,
-          checkpointId: checkpointIdentity.checkpoint_id,
-          checkpointRevision: checkpointIdentity.checkpoint_revision,
-        }),
-      }),
-      executeTool: async () => {
-        replayToolExecutions += 1;
-        throw new Error("unexpected tool execution");
-      },
-    })).rejects.toMatchObject({
-      name: "RoundToolSurfaceError",
-      code: "round_tool_surface_continuation_invalid",
-    });
+    )).resolves.toMatchObject({ text: "accepted without surface" });
     expect(replayDispatches).toBe(0);
-    expect(replayToolExecutions).toBe(0);
 
     const runNextRound = async (
       current: typeof identity | undefined,

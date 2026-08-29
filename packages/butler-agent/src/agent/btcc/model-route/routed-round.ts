@@ -20,7 +20,7 @@ import type {
   ModelRouteEventHandler,
   ModelRouteState,
 } from "./contracts.ts";
-import { attachAcceptedToolSurface, continuationForRoundContext, replayAcceptedToolSurface } from "./tool-surface-continuation.ts";
+import { attachAcceptedToolSurface, continuationForRoundContext, replayAcceptedResponse } from "./tool-surface-continuation.ts";
 import { ModelRouteDispatchLimitError } from "./contracts.ts";
 import {
   createModelRouteRecovery,
@@ -94,8 +94,8 @@ export function createModelRoutePort(input: {
           candidateIndex: route.activeCursor,
           modelRef: candidate.modelRef,
         });
-        if (accepted) return replayAcceptedToolSurface(
-          accepted, request.toolSurfaceDigest, {
+        if (accepted) return replayAcceptedResponse(
+          accepted, {
             roundId, candidateIndex: route.activeCursor,
             transportAttempt: 0, modelRef: candidate.modelRef,
           });

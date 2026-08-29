@@ -1952,7 +1952,7 @@ test("primary-only route uses the durable routed path", async () => {
   }
 });
 
-test("production Turn rejects a persisted accepted response without its round tool surface", async () => {
+test("production Turn resumes a persisted accepted response without recomputing its prior tool surface", async () => {
   const previousSurface = process.env.BUTLER_PHASE_TOOL_SURFACE;
   process.env.BUTLER_PHASE_TOOL_SURFACE = "on";
   const fixture = createFixture("guided-persisted-tool-surface-mismatch");
@@ -2010,21 +2010,21 @@ test("production Turn rejects a persisted accepted response without its round to
         },
       }),
     });
-    await expect(productionRuntime.runTurn(command)).rejects.toMatchObject({
-      name: "RoundToolSurfaceError",
-      code: "round_tool_surface_continuation_invalid",
+    await expect(productionRuntime.runTurn(command)).resolves.toMatchObject({
+      kind: "delivered",
+      content: "stale accepted response",
     });
     expect(providerCalls).toBe(0);
     expect(fixture.stores.guidedToolJournal.list(turnId)).toEqual([]);
     const persistedTurn = await fixture.stores.turns.findTurn(turnId);
-    expect(persistedTurn?.semanticState).toBe("admitted");
-    expect(persistedTurn?.finalPayload).toBeUndefined();
+    expect(persistedTurn?.semanticState).toBe("delivered");
+    expect(persistedTurn?.finalPayload?.content).toBe("stale accepted response");
     const db = new Database(fixture.dbPath, { readonly: true });
     try {
       expect(db.query<{ count: number }, [string]>(`
         SELECT COUNT(*) AS count FROM btcc_messages
         WHERE turn_id = ? AND role = 'assistant'
-      `).get(turnId)?.count).toBe(0);
+      `).get(turnId)?.count).toBe(1);
     } finally {
       db.close();
     }

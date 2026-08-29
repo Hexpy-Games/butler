@@ -91,6 +91,11 @@ test("public service maps Work, Plan, checkpoint, Reviews, and completed disposi
     verdict: "accept",
     summary: "Result accepted",
     corrections: [],
+    actionUpdates: [{
+      actionKey: "implement",
+      status: "done",
+      note: "Detailed result review note",
+    }],
   });
   expect(resultReviewed.currentStage).toBe("validation");
   const completion = await service.recordReview({
@@ -100,6 +105,11 @@ test("public service maps Work, Plan, checkpoint, Reviews, and completed disposi
     verdict: "accept",
     summary: "Validation accepted",
     corrections: [],
+    actionUpdates: [{
+      actionKey: "implement",
+      status: "done",
+      note: "Short completion note",
+    }],
   });
   const completed = await service.recordDisposition({
     ...scope,
@@ -1030,6 +1040,33 @@ test("canonical relation admission prevents a second head while runtime projecti
   expect(replayedSecond.status).toBe("abandoned");
   expect(canonicalHeadIds(fixture)).toEqual([third.workId]);
   expect(fixture.runtime.heads.get("session-1")).toBe(third.workId);
+});
+
+test("current Session reads ignore unrelated malformed Project Work", async () => {
+  const fixture = await createFixture();
+  const service = createDurableWorkService(
+    createProjectWorkStore(fixture.adapterInput),
+  );
+  const scope = fixture.scope("turn-1");
+  const started = await service.startWork({
+    ...scope,
+    mutationCallId: "session-local-read",
+    objective: "Read only the current Session Work",
+  });
+  fixture.core.createWork(fixture.projectRoot, {
+    id: "unrelated-malformed-work",
+    title: "Unrelated malformed Work",
+    status: "proposed",
+    spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+    body: stableJson({
+      schema: "unrelated.invalid-work.v1",
+      sessionId: "another-session",
+    }),
+  });
+  fixture.core.writeIndex(fixture.projectRoot);
+
+  expect((await service.loadContext(scope))?.work.workId).toBe(started.workId);
+  expect((await service.boundWorkForTurn("turn-1"))?.workId).toBe(started.workId);
 });
 
 test("ready disposition resumes its durable candidate without recomputing runtime semantics", async () => {
@@ -2653,6 +2690,16 @@ class TestRuntimeProjection implements ProjectWorkRuntimeProjection {
     string,
     { turnId: string; messageId: string; content: string }
   >();
+  locateCanonicalWorks(input: { sessionId?: string; turnId?: string }) {
+    return Promise.resolve({
+      sessionHeadWorkId: input.sessionId
+        ? this.heads.get(input.sessionId) ?? null
+        : null,
+      bindingWorkId: input.turnId
+        ? this.bindings.get(input.turnId)?.workId ?? null
+        : null,
+    });
+  }
   loadOriginalRequest(scope: { turnId: string }) {
     if (this.originalFailure) throw this.originalFailure;
     const original = this.originals.get(scope.turnId);

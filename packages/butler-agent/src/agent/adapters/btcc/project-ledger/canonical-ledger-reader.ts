@@ -32,10 +32,13 @@ export type ExactLedgerRecord = ExactLedgerTarget & {
   body: string;
 };
 
-export type ExactLedgerSnapshot = {
-  expectedBase: ProjectLedgerHead;
+export type ExactLedgerReadSnapshot = {
   records: ExactLedgerRecord[];
   targetPreconditions: ExactLedgerTargetPrecondition[];
+};
+
+export type ExactLedgerSnapshot = ExactLedgerReadSnapshot & {
+  expectedBase: ProjectLedgerHead;
 };
 
 type ExactReaderDependencies = {
@@ -100,6 +103,16 @@ export async function readStableExactProjectLedgerSnapshot(input: {
   throw new Error("project_ledger_exact_reader_unstable_source");
 }
 
+export async function readExactProjectLedgerSnapshot(input: {
+  projectRoot: string;
+  targets: ExactLedgerTarget[];
+}): Promise<ExactLedgerReadSnapshot> {
+  assertUniqueTargets(input.targets);
+  const scope = canonicalScope(input.projectRoot);
+  for (const target of input.targets) exactPath(scope, target.path);
+  return await readExactSnapshot(scope, input.targets);
+}
+
 export async function revalidateExactLedgerPreconditions(
   projectRoot: string,
   preconditions: ExactLedgerTargetPrecondition[],
@@ -129,16 +142,11 @@ async function readExactSnapshot(scope: CanonicalLedgerScope, targets: ExactLedg
 }> {
   const core = await loadProjectLedgerCore();
   const paths = targets.map((target) => exactPath(scope, target.path));
-  const index = core.buildIndex(scope.root);
   const records: ExactLedgerRecord[] = [];
   const targetPreconditions: ExactLedgerTargetPrecondition[] = [];
   for (const [targetIndex, target] of targets.entries()) {
     const path = paths[targetIndex]!;
-    const matches = index.records.filter((record) =>
-      record.id === target.id && record.kind === target.kind && record.path === target.path);
-    if (matches.length > 1) throw new Error("project_ledger_exact_target_ambiguous");
-    if (matches.length === 0) {
-      if (existsSync(path)) throw new Error("project_ledger_exact_index_path_mismatch");
+    if (!existsSync(path)) {
       targetPreconditions.push({ ...target, state: "absent" });
       continue;
     }

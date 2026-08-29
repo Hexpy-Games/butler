@@ -74,12 +74,26 @@ export function validateProjectWorkReview(
       boundChild.boundResultSequence !== child.boundResultSequence ||
       JSON.stringify(boundChild.review.boundResultRefs) !==
         JSON.stringify(review.boundResultRefs) ||
-      JSON.stringify(boundChild.review.boundActionProgress) !==
-        JSON.stringify(review.boundActionProgress)
+      !sameActionStates(
+        boundChild.review.boundActionProgress,
+        review.boundActionProgress,
+      )
     )
       invalid();
     validateProjectWorkReview(boundChild, "result", manifest, bodyForId);
   }
+}
+
+function sameActionStates(
+  left: Array<{ actionKey: string; status: string }> | undefined,
+  right: Array<{ actionKey: string; status: string }> | undefined,
+): boolean {
+  if (!left || !right) return false;
+  return left.length === right.length && left.every((action, index) => {
+    const candidate = right[index];
+    return candidate?.actionKey === action.actionKey &&
+      candidate.status === action.status;
+  });
 }
 
 export function validateProjectWorkPlanIdentity(

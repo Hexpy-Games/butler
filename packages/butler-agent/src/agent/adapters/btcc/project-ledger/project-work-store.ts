@@ -47,6 +47,8 @@ export function createProjectWorkStore(
 }
 
 class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
+  private readonly emptyRelationCache = new Set<string>();
+
   constructor(readonly input: CreateProjectWorkStoreInput) {}
 
   loadContext(scope: WorkTurnScope) {
@@ -145,10 +147,17 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
     return safeProjectWorkPublicOperation(() => this.boundWorkForTurnUnsafe(turnId));
   }
   private async boundWorkForTurnUnsafe(turnId: string) {
+    const located = await this.input.runtimeProjection.locateCanonicalWorks({
+      scope: this.input.scope,
+      turnId,
+    });
     const candidate = await readCanonicalProjectWorkBinding({
       butlerData: this.input.butlerData,
       scope: this.input.scope,
       turnId,
+      ...(located.bindingWorkId
+        ? { workIds: [located.bindingWorkId] }
+        : {}),
     });
     if (!candidate) return null;
     const relation = await readCanonicalProjectWorkRelation({
@@ -178,6 +187,7 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
       identity,
       prepareUpdates,
     });
+    this.emptyRelationCache.clear();
     if (!outcome.skipped && recoverProjection)
       await this.recoverPublicationProjection(outcome.targets, identity);
     return outcome;
@@ -186,6 +196,7 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
     current: CurrentProjectWorkSnapshot,
     _affected: CurrentProjectWorkSnapshot[] = [],
   ) {
+    this.emptyRelationCache.clear();
     return current.view;
   }
   private async recoverPublicationProjection(
@@ -290,13 +301,30 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
       ? relation.sessionHead
       : null;
   }
-  relation(scope: WorkTurnScope) {
-    return readCanonicalProjectWorkRelation({
-      butlerData: this.input.butlerData,
+  async relation(scope: WorkTurnScope) {
+    const cacheKey = `${scope.sessionId}\0${scope.turnId}`;
+    if (this.emptyRelationCache.has(cacheKey))
+      return { sessionHead: null, binding: null };
+    const located = await this.input.runtimeProjection.locateCanonicalWorks({
       scope: this.input.scope,
       sessionId: scope.sessionId,
       turnId: scope.turnId,
     });
+    const workIds = located.bindingWorkId
+      ? [located.sessionHeadWorkId, located.bindingWorkId].filter(
+          (workId): workId is string => Boolean(workId),
+        )
+      : [];
+    const relation = await readCanonicalProjectWorkRelation({
+      butlerData: this.input.butlerData,
+      scope: this.input.scope,
+      sessionId: scope.sessionId,
+      turnId: scope.turnId,
+      ...(workIds.length > 0 ? { workIds } : {}),
+    });
+    if (!relation.sessionHead && !relation.binding)
+      this.emptyRelationCache.add(cacheKey);
+    return relation;
   }
   assertScope(scope: WorkTurnScope) {
     if (scope.projectRef !== this.input.scope.appProjectId)
