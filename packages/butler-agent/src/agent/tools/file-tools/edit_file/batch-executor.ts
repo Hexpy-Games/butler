@@ -72,6 +72,20 @@ function invalidArguments(message: string, recoveryHint: string) {
   };
 }
 
+function noChangeRequested(index: number) {
+  return {
+    ok: false as const,
+    error: "no_change_requested",
+    message: `edits[${index}] has identical old_text and new_text, so no file change was requested.`,
+    recovery_hint: "Remove the unchanged entry and continue with only material edits.",
+    evidence_capability_receipts: fileToolCapabilityReceipt({
+      toolName: "edit_file",
+      ok: false,
+      error: "no_change_requested",
+    }),
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -84,7 +98,7 @@ function normalizeStartLine(value: unknown): number | undefined | "invalid" {
 
 export function normalizeBatchEdits(value: unknown):
   | { ok: true; edits: NormalizedEdit[] }
-  | { ok: false; result: ReturnType<typeof invalidArguments> } {
+  | { ok: false; result: ReturnType<typeof invalidArguments> | ReturnType<typeof noChangeRequested> } {
   if (!Array.isArray(value) || value.length < BATCH_MIN_EDITS || value.length > BATCH_MAX_EDITS) {
     return {
       ok: false,
@@ -100,6 +114,7 @@ export function normalizeBatchEdits(value: unknown):
     if (typeof item.path !== "string" || !item.path.trim()) return { ok: false, result: invalidArguments(`edits[${index}].path is required.`, "Retry with workspace-relative paths.") };
     if (typeof item.old_text !== "string" || item.old_text.length === 0) return { ok: false, result: invalidArguments(`edits[${index}].old_text must be non-empty.`, "Copy each exact existing text range.") };
     if (typeof item.new_text !== "string") return { ok: false, result: invalidArguments(`edits[${index}].new_text must be a string.`, "Use an empty string to remove text or provide replacement text.") };
+    if (item.old_text === item.new_text) return { ok: false, result: noChangeRequested(index) };
     const startLine = normalizeStartLine(item.start_line);
     if (startLine === "invalid") return { ok: false, result: invalidArguments(`edits[${index}].start_line must be a positive integer.`, "Retry with one-based line hints or omit them.") };
     const expectedSha256 = normalizeWorkspaceSha256(item.expected_sha256);

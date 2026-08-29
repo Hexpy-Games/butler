@@ -98,6 +98,14 @@ function invalidArguments(message: string, recoveryHint: string) {
   return failure({ error: "invalid_arguments", message, recoveryHint });
 }
 
+function noChangeRequested(message: string) {
+  return failure({
+    error: "no_change_requested",
+    message,
+    recoveryHint: "Continue from the current file state and choose a materially different next action.",
+  });
+}
+
 function normalizeStartLine(value: unknown): number | undefined | "invalid" {
   if (value === undefined) return undefined;
   const parsed = Number(value);
@@ -120,6 +128,9 @@ function normalizeSingleEdit(args: Record<string, unknown>):
   }
   if (typeof args.new_text !== "string") {
     return { ok: false, result: invalidArguments("new_text must be a string.", "Use an empty string to remove old_text or provide replacement text.") };
+  }
+  if (args.old_text === args.new_text) {
+    return { ok: false, result: noChangeRequested("old_text and new_text are identical, so no file change was requested.") };
   }
   const startLine = normalizeStartLine(args.start_line);
   if (startLine === "invalid") {
