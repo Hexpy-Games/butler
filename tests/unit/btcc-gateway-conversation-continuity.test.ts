@@ -40,6 +40,8 @@ import { createAppCancellationEnvelope, createAppResumeEnvelope } from
   "../../packages/butler-agent/src/gateways/core/app-transport.ts";
 import type { Btcc } from
   "../../packages/butler-agent/src/agent/btcc/contracts.ts";
+import type { SubsessionDelegationService } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
 
 const roots: string[] = [];
 
@@ -131,6 +133,49 @@ test("typed resume re-enters the exact admitted BTCC request identity", async ()
     },
   });
   expect(result.handledBy).toBe("btcc/turn-resume");
+});
+
+test("Steward delivery without completed Work is reported as failed", async () => {
+  const completed: Array<{ status?: string; summary?: string }> = [];
+  const subsessionDelegation = {
+    activeParentDelegations: async () => [],
+    completeStewardResult: async (input: { status?: string; summary?: string }) => {
+      completed.push(input);
+      return undefined as never;
+    },
+  } as unknown as SubsessionDelegationService;
+  const handlers = createBtccGatewayHandlers({
+    btcc: {
+      runTurn: async () => ({
+        kind: "delivered",
+        turnId: "steward-turn-failed",
+        messageId: "steward-message-failed",
+        content: "내부 실행 오류로 작업을 완료하지 못했습니다.",
+      }),
+      stopTurn: async ({ turnId }) => ({ kind: "cancelled", turnId }),
+    },
+    subsessionDelegation,
+  });
+
+  await handlers.steward!({
+    route: {
+      sessionId: "steward/failed",
+      role: "steward",
+      reason: "steward-hint",
+      workspacePath: process.cwd(),
+    },
+    envelope: envelope(
+      "steward-turn-failed",
+      "steward-input-failed",
+      "위임 작업을 완료해 주세요.",
+    ),
+  });
+
+  expect(completed).toHaveLength(1);
+  expect(completed[0]).toMatchObject({
+    status: "failed",
+    summary: "내부 실행 오류로 작업을 완료하지 못했습니다.",
+  });
 });
 
 test("BTCC facade commits each Turn and gives the next Turn recent conversation", async () => {

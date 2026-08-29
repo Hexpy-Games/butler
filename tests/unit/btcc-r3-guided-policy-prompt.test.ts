@@ -244,22 +244,13 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
 
   const projectInstructions = guidedInstructions(guidedPolicy(projectTurn));
   expect(projectInstructions).toContain(
-    "keep one concise Project Ledger Work record",
+    "The bound Managed Work is the single project-work lifecycle",
+  );
+  expect(projectInstructions).not.toContain(
+    "alongside the internal Work record",
   );
   expect(projectInstructions).toContain(
-    "Check for related Work first and reuse it when present",
-  );
-  expect(projectInstructions).toContain(
-    "then complete it after validating the requested outcome",
-  );
-  expect(projectInstructions).toContain(
-    "An uninitialized Project Ledger has no existing Work to reuse",
-  );
-  expect(projectInstructions).toContain(
-    "Do not create Project Ledger task or attempt hierarchies unless",
-  );
-  expect(projectInstructions).toContain(
-    "If Project Ledger bookkeeping fails, still deliver the truthful result",
+    "If that bookkeeping fails, still deliver the truthful result",
   );
   expect(projectInstructions.indexOf("finish any Project Ledger publication or closeout effect"))
     .toBeLessThan(projectInstructions.indexOf("If useful, record a result Review or completion Validation"));
@@ -632,6 +623,8 @@ test("session worktree binding is visible only on full-access project surfaces",
   });
   const projectAuthorized = authorizedToolDefinitions(projectFullAccess, {});
   expect(projectAuthorized.map((tool) => tool.name)).toContain("bind_session_git_worktree");
+  expect(projectAuthorized.map((tool) => tool.name))
+    .not.toContain("project_ledger_work_complete");
   expect(visibleToolDefinitions(projectAuthorized, guidedPolicy(projectFullAccess))
     .map((tool) => tool.name)).toContain("bind_session_git_worktree");
 

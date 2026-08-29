@@ -172,9 +172,8 @@ export function guidedInstructions(
     "If Work bookkeeping fails, continue and deliver any truthful artifact or final answer you can support.",
     ...(policy.trackingMode === "ledger"
       ? [
-          "For substantial project work, keep one concise Project Ledger Work record alongside the internal Work record. Check for related Work first and reuse it when present; otherwise create one, then complete it after validating the requested outcome.",
-          "An uninitialized Project Ledger has no existing Work to reuse; the first reviewed create effect initializes it.",
-          "Do not create Project Ledger task or attempt hierarchies unless they make the user's work easier to continue. If Project Ledger bookkeeping fails, still deliver the truthful result and disclose the limitation.",
+          "The bound Managed Work is the single project-work lifecycle. Do not create or complete a second Project Ledger Work record for the same request.",
+          "Create other Project Ledger records only when they are useful user-facing artifacts. If that bookkeeping fails, still deliver the truthful result and disclose the limitation.",
         ]
       : []),
     "Use tool_search, then tool_describe, then tool_call for capabilities not already visible.",

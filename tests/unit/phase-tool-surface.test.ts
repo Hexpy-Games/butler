@@ -301,7 +301,7 @@ test("feature accepts the real writable App project profile set with a reduced s
   expect(names).not.toContain("project_ledger_work_complete");
   expect(names).not.toContain("project_ledger_attempt_start");
   expect(enabled.authorizedTools.map((tool) => tool.name))
-    .toContain("project_ledger_work_complete");
+    .not.toContain("project_ledger_work_complete");
   expect(names).toContain("tool_search");
   expect(names).toContain("tool_describe");
   expect(names).toContain("tool_call");
