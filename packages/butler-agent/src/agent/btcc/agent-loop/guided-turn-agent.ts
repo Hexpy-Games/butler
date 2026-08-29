@@ -254,8 +254,11 @@ export function createProductionGuidedTurnAgent(
       });
       const delegationRelease = createGuidedDelegationTurnRelease({
         reconcileAfterLoop: closeout.reconcileAfterLoop,
-        responseLanguage,
-        originalRequest: turn.originalMessage,
+        turnId: turn.turnId,
+        toolJournal: input.toolJournal,
+        delegationTool: policy.role === "butler"
+          ? "delegate_to_steward"
+          : "delegate_to_worker",
       });
       const resolveGuidedTools = phasePolicy.mode === "phase_minimal" ||
         visibleTools.some((tool) =>
@@ -270,6 +273,11 @@ export function createProductionGuidedTurnAgent(
             onActiveDelegationAdmission: activeDelegationAdmission.observe,
             ...(policy.role === "butler"
               ? { forcedDelegationTool: "delegate_to_steward" as const }
+              : {}),
+            ...(policy.role === "butler" || policy.role === "steward"
+              ? { turnReleaseDelegationTool: policy.role === "butler"
+                  ? "delegate_to_steward" as const
+                  : "delegate_to_worker" as const }
               : {}),
           })
         : undefined;
@@ -313,7 +321,6 @@ export function createProductionGuidedTurnAgent(
           trackingMode: policy.trackingMode, signal,
         }),
         ...authorityProjection.loopCallbacks,
-        finalTextFromToolResult: delegationRelease.finalTextFromToolResult(authorityProjection.loopCallbacks.finalTextFromToolResult),
         reviewFinalCandidate: directionAware.reviewFinalCandidate,
         executeTool: activeDelegationAdmission.execute(toolCalls.executeTool),
       };

@@ -6,7 +6,7 @@ import type {
 import { dispositionMaterialFingerprint } from "../work/index.ts";
 import { digest } from "../identity/index.ts";
 import { GuidedWorkCloseoutError } from "./guided-work-closeout-error.ts";
-import type { BtccAgentLoopInput } from "./contracts.ts";
+import type { GuidedToolJournal } from "../ports/index.ts";
 
 type GuidedTurnCloseoutInput = {
   durableWork: DurableWorkService;
@@ -22,33 +22,35 @@ type GuidedTurnCloseoutReview =
   | { status: "accepted"; text?: string }
   | { status: "continue"; observation: string };
 
-type GuidedToolResultFinalizer = NonNullable<
-  BtccAgentLoopInput["finalTextFromToolResult"]
->;
-
-/** Releases a successful delegation Turn without settling its parent Work. */
+/** Keeps the model-authored handoff reply without settling delegated Work. */
 export function createGuidedDelegationTurnRelease(input: {
   reconcileAfterLoop(text: string): Promise<string>;
-  responseLanguage: string;
-  originalRequest: string;
+  turnId: string;
+  toolJournal: Pick<GuidedToolJournal, "list">;
+  delegationTool: "delegate_to_steward" | "delegate_to_worker";
 }): {
-  finalTextFromToolResult(fallback?: GuidedToolResultFinalizer): GuidedToolResultFinalizer;
   reconcileAfterLoop(text: string): Promise<string>;
 } {
-  let released = false;
   return {
-    finalTextFromToolResult: (fallback) => async (result) => {
-      if ((result.toolCall.name === "delegate_to_steward" ||
-          result.toolCall.name === "delegate_to_worker") && result.toolResult.ok) {
-        released = true;
-        return delegationReleaseCopy(input);
-      }
-      return await fallback?.(result) ?? null;
-    },
-    reconcileAfterLoop: async (text) => released
+    reconcileAfterLoop: async (text) => hasQueuedDelegation(input)
       ? text
       : input.reconcileAfterLoop(text),
   };
+}
+
+function hasQueuedDelegation(input: {
+  turnId: string;
+  toolJournal: Pick<GuidedToolJournal, "list">;
+  delegationTool: "delegate_to_steward" | "delegate_to_worker";
+}): boolean {
+  return input.toolJournal.list(input.turnId).some((record) => {
+    const result = record.result;
+    return record.toolName === input.delegationTool &&
+      record.status === "completed" &&
+      Boolean(result && typeof result === "object" &&
+        Reflect.get(result, "ok") === true &&
+        Reflect.get(result, "status") === "queued");
+  });
 }
 
 /**
@@ -223,14 +225,4 @@ function closeoutCopy(input: GuidedTurnCloseoutInput): {
         nextCondition: "Review the current results and completion conditions, then record the Work disposition again.",
         notice: "Work completion could not be confirmed, so the Work remains open.",
       };
-}
-
-function delegationReleaseCopy(input: {
-  responseLanguage: string;
-  originalRequest: string;
-}): string {
-  const korean = /[가-힣]/u.test(input.responseLanguage) ||
-    /(?:korean|ko(?:rea)?)/iu.test(input.responseLanguage) ||
-    /[가-힣]/u.test(input.originalRequest);
-  return korean ? "위임 작업을 시작했습니다." : "Delegated work started.";
 }

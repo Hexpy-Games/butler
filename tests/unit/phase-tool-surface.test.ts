@@ -552,7 +552,7 @@ test("Steward root Work uses the same project scope as a ledger-backed child Tur
   })).toThrow("steward_project_binding_missing");
 });
 
-test("feature defaults to the minimal role surface and explicit off preserves legacy bytes", () => {
+test("feature preserves legacy request bytes by default and minimal role surface is opt-in", () => {
   const turn = turnRecord({
     accessMode: "full_access",
     trackingMode: "ledger",
@@ -565,7 +565,7 @@ test("feature defaults to the minimal role surface and explicit off preserves le
   const enabledSchemas = JSON.stringify(modelFacingFunctionTools(enabled.providerTools));
 
   expect(legacy.mode).toBe("legacy");
-  expect(defaultSelection).toEqual(enabled);
+  expect(defaultSelection).toEqual(legacy);
   expect(legacy.stableInstructionPrefix).toContain("Work stages guide process, never tool access");
   expect(enabled.mode).toBe("phase_minimal");
   expect(enabled.stableInstructionPrefix).toContain(

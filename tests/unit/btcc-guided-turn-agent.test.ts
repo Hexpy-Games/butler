@@ -4148,6 +4148,7 @@ test("delegation schema appears only for the exact current accepted Plan Review"
   };
   let boundWork: DurableWorkView | null = null;
   let contextWork: DurableWorkView | null = null;
+  const delegationRecords: import("../../packages/butler-agent/src/agent/btcc/ports/guided-tool-journal.ts").GuidedToolJournalRecord[] = [];
   const durableWork = {
     boundWorkForTurn: async () => boundWork,
     loadContext: async () => contextWork ? {
@@ -4160,10 +4161,12 @@ test("delegation schema appears only for the exact current accepted Plan Review"
     turnId,
     tools: [...DURABLE_WORK_TOOL_DEFINITIONS, delegateToStewardToolDefinition],
     requiredToolNames: new Set(),
-    toolJournal: { list: () => [] },
+    toolJournal: { list: () => delegationRecords },
     durableWork,
     workScope: { turnId, sessionId },
     effectJournal: { listForWork: async () => [] },
+    forcedDelegationTool: "delegate_to_steward",
+    turnReleaseDelegationTool: "delegate_to_steward",
   });
 
   expect((await resolve()).names.has("delegate_to_steward")).toBe(false);
@@ -4201,6 +4204,15 @@ test("delegation schema appears only for the exact current accepted Plan Review"
     },
   };
   expect((await resolve()).names.has("delegate_to_steward")).toBe(true);
+  delegationRecords.push({
+    callId: "queued-delegation",
+    toolName: "delegate_to_steward",
+    rawArguments: "{}",
+    arguments: {},
+    status: "completed",
+    result: { ok: true, status: "queued" },
+  });
+  expect([...((await resolve()).names)]).toEqual([]);
   boundWork = {
     ...boundWork,
     currentPlan: { ...plan, planRevisionId: "reviewed-delegation-plan-r2", revision: 2 },

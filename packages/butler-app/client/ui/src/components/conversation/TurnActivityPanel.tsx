@@ -67,6 +67,7 @@ export function TurnActivityPanel({
         modelRoundWait={modelRoundWait}
         operation={operation}
         publicActivity={publicActivity}
+        phaseLabel={phaseActivities.at(-1)?.summary}
         startedAt={startedAt ?? earliestProgressTimestamp(rows)}
       />
     </Stack>

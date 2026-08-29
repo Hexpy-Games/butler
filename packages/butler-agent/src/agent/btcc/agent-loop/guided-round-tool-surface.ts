@@ -46,8 +46,18 @@ export function createGuidedRoundToolSurfaceResolver(input: {
   onActiveDelegationAdmission?: (active: boolean) => void;
   /** Butler hands off after Plan Review; Steward may execute directly or use a Worker. */
   forcedDelegationTool?: "delegate_to_steward";
+  /** A successful handoff gets one tool-free round for the role's natural reply. */
+  turnReleaseDelegationTool?: "delegate_to_steward" | "delegate_to_worker";
 }): () => Promise<BtccRoundToolSurfaceSnapshot> {
   return async () => {
+    if (input.turnReleaseDelegationTool && input.toolJournal.list(input.turnId)
+      .some((record) =>
+        record.toolName === input.turnReleaseDelegationTool &&
+        record.status === "completed" &&
+        isQueuedDelegationResult(record.result),
+      )) {
+      return createRoundToolSurfaceSnapshot([]);
+    }
     const activeDelegations = input.parentSessionId && input.subsessionDelegation
       ? await input.subsessionDelegation.activeParentDelegations({
           parentSessionId: input.parentSessionId,
@@ -93,6 +103,14 @@ export function createGuidedRoundToolSurfaceResolver(input: {
     }
     return createRoundToolSurfaceSnapshot(tools);
   };
+}
+
+function isQueuedDelegationResult(result: unknown): boolean {
+  return Boolean(
+    result && typeof result === "object" &&
+    Reflect.get(result, "ok") === true &&
+    Reflect.get(result, "status") === "queued",
+  );
 }
 
 function sameCurrentReviewedWork(
