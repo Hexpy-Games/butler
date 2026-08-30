@@ -30,7 +30,11 @@ export async function resolveParentResultEvidence(input: {
   parentInputText: string;
   store: SubsessionDelegationDependencies["store"];
   turns: SubsessionDelegationDependencies["parentTurns"];
-}): Promise<string | null> {
+}): Promise<{
+  synthesisEvidence: string;
+  outcome: "success" | "blocked" | "failed" | "cancelled";
+  parentWorkId: string;
+} | null> {
   const refs = subsessionParentResultRefs(input.parentInputText);
   if (!refs) return null;
   const result = input.store.resultByRelationId(refs.relationId);
@@ -41,16 +45,24 @@ export async function resolveParentResultEvidence(input: {
   if (!relation || relation.parent_session_id !== input.parentSessionId) {
     throw new Error("subsession_parent_result_relation_mismatch");
   }
+  const packet = input.store.packetByRelationId(refs.relationId);
+  if (!packet) {
+    throw new Error("subsession_parent_result_relation_mismatch");
+  }
   const synthesisInstruction = [
     "Canonical child result synthesis",
     "Report completed work, remaining work, and the next action in user terms; do not start Work in this result-report Turn.",
   ];
-  return [
-    ...synthesisInstruction,
-    `Status: ${result.status}`,
-    `Summary: ${result.summary}`,
-    `Changed artifacts: ${result.changed_artifacts.join("; ") || "none"}`,
-  ].join("\n");
+  return {
+    synthesisEvidence: [
+      ...synthesisInstruction,
+      `Status: ${result.status}`,
+      `Summary: ${result.summary}`,
+      `Changed artifacts: ${result.changed_artifacts.join("; ") || "none"}`,
+    ].join("\n"),
+    outcome: result.status,
+    parentWorkId: packet.parent_work_ref.work_id,
+  };
 }
 
 /** Resolves the accepted child final payload; no transcript or tool payload is accepted. */

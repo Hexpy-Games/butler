@@ -328,7 +328,11 @@ export type SubsessionDelegationService = {
   resolveParentResultEvidence(input: {
     parentSessionId: string;
     parentInputText: string;
-  }): Promise<string | null>;
+  }): Promise<{
+    synthesisEvidence: string;
+    outcome: StewardResultStatus;
+    parentWorkId: string;
+  } | null>;
   resultIdForRelation(relationId: string): string | null;
   pendingParentInputCount(): number;
   steerSteward(input: {
