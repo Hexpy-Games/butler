@@ -10,7 +10,7 @@ import { createGuidedToolExecutionBoundary } from "./guided-tool-execution-bound
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
 import { renderGuidedEffectContext } from "./guided-effect-context.ts";
 import { renderDurableWorkContext } from "./durable-work-tools.ts";
-import { loadGuidedTurnWork, safeBoundWork, workScopeForTurn } from "./guided-work-runtime.ts";
+import { loadGuidedTurnWork, safeBindOpenWork, safeBoundWork, workScopeForTurn } from "./guided-work-runtime.ts";
 import { createGuidedToolCallExecutor } from "./guided-tool-call-execution.ts";
 import { runGuidedAgentLoopWithOperationalReport } from "./guided-operational-report.ts";
 import { createGuidedActivityProjection } from "../projection/index.ts";
@@ -36,6 +36,7 @@ import type { PrincipalAuthority } from "../authority/index.ts";
 import { ensureSubsessionChildRootWork, subsessionDirectionSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
 import { withWorkerProfileChoices } from "../../tools/subsession/index.ts";
 import { withStewardDirection } from "./guided-steward-direction.ts";
+import { digest } from "../identity/index.ts";
 type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
 export function createProductionGuidedTurnAgent(input: ProductionGuidedTurnAgentInput): BtccAgentLoop;
 export function createProductionGuidedTurnAgent(input: TestGuidedTurnAgentInput): BtccAgentLoop;
@@ -81,6 +82,31 @@ export function createProductionGuidedTurnAgent(
       const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
       const workScope = workScopeForTurn(turn, policy.trackingMode);
       if (policy.role === "steward" && input.subsessionDelegation) await ensureSubsessionChildRootWork({ service: input.subsessionDelegation, turn });
+      if (subsessionResultEvidence?.outcome === "success" && !workerResultIntegration) {
+        const parentWork = await safeBindOpenWork(
+          input.durableWork,
+          workScope,
+          subsessionResultEvidence.parentWorkId,
+        );
+        if (parentWork) {
+          await input.durableWork.recordDisposition({
+            ...workScope,
+            mutationCallId: digest(
+              `btcc-parent-work-settlement.v2\0${turn.turnId}\0${parentWork.workId}`,
+            ),
+            workId: parentWork.workId,
+            disposition: "completed",
+            summary: "Delegated Work completed successfully.",
+            actionUpdates: (parentWork.currentPlan?.actions ?? []).map((action) => ({
+              actionKey: action.actionKey,
+              status: "done" as const,
+            })),
+            remainingActions: [],
+            evidenceRefs: [],
+            followups: [],
+          });
+        }
+      }
       const { context: initialWork, bound: initialWorkBound } = await loadGuidedTurnWork({
         durableWork: input.durableWork,
         scope: workScope,
@@ -245,7 +271,9 @@ export function createProductionGuidedTurnAgent(
         responseLanguage,
         promptInput: {
           ...input, workContext: renderDurableWorkContext(initialWork), effectContext,
-          ...(subsessionResultEvidence ? { subsessionResultEvidence } : {}),
+          ...(subsessionResultEvidence
+            ? { subsessionResultEvidence: subsessionResultEvidence.synthesisEvidence }
+            : {}),
           ...privateModifyContinuationPromptInput(
             authority, turn.sessionId, turn.context.authorityRequestRef, turn.turnId,
             turn.context.authorityClientMessageId,
@@ -356,7 +384,7 @@ export function createProductionGuidedTurnAgent(
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
       const artifacts = collectGuidedFinalArtifacts(
         input.toolJournal.list(turn.turnId),
-        subsessionResultEvidence ?? undefined,
+        subsessionResultEvidence?.synthesisEvidence,
       );
       return guidedTurnResult({
         content: publicText,
