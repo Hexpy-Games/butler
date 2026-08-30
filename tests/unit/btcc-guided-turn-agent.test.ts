@@ -643,7 +643,7 @@ test("a late same-Turn result invalidates disposition and persists a fresh open 
   }
 });
 
-test("closeout read and settlement-persistence failures leave final delivery rows absent", async () => {
+test("open-disposition publication failure preserves the answer while core closeout failures abort", async () => {
   const previousSurface = process.env.BUTLER_PHASE_TOOL_SURFACE;
   process.env.BUTLER_PHASE_TOOL_SURFACE = "on";
   for (const failure of ["read", "diagnostic", "backfill", "persist"] as const) {
@@ -662,13 +662,17 @@ test("closeout read and settlement-persistence failures leave final delivery row
         recordDisposition: async (input) => {
           if (failure === "persist" &&
               input.disposition === "open" && input.expectedMaterialFingerprint) {
-            throw new Error("closeout persistence failed");
+            throw Object.assign(new Error("closeout publication failed"), {
+              code: "project_ledger_effect_uncertain",
+            });
           }
           return base.recordDisposition(input);
         },
         claimCloseoutCorrection: async (input) => {
           if (failure === "diagnostic") {
-            throw new Error("closeout diagnostic persistence failed");
+            throw Object.assign(new Error("closeout claim publication failed"), {
+              code: "project_ledger_effect_uncertain",
+            });
           }
           return base.claimCloseoutCorrection(input);
         },
@@ -714,33 +718,47 @@ test("closeout read and settlement-persistence failures leave final delivery row
         agent,
       });
 
-      await expect(runtime.runTurn(localRunCommand(fixture.root, turnId))).rejects
-        .toMatchObject({
+      const run = runtime.runTurn(localRunCommand(fixture.root, turnId));
+      const publicationFailure = failure === "diagnostic" || failure === "persist";
+      if (publicationFailure) {
+        await expect(run).resolves.toMatchObject({
+          kind: "delivered",
+          content: "저장되지 않아야 하는 최종 후보",
+        });
+      } else {
+        await expect(run).rejects.toMatchObject({
           name: "GuidedWorkCloseoutError",
           code: "guided_work_closeout_persistence_failed",
         });
+      }
       expect(modelCalls).toBe(
         failure === "read" || failure === "diagnostic" ? 2 : 3,
       );
       const db = new Database(fixture.dbPath);
       try {
-        expect(db.query<{
+        const delivery = db.query<{
           final_payload_json: string | null;
           delivery_outbox_id: string | null;
         }, [string]>(`
           SELECT final_payload_json, delivery_outbox_id FROM btcc_turns
           WHERE turn_id = ?
-        `).get(turnId)).toEqual({
-          final_payload_json: null,
-          delivery_outbox_id: null,
-        });
+        `).get(turnId);
+        if (publicationFailure) {
+          expect(delivery?.final_payload_json).not.toBeNull();
+          expect(delivery?.delivery_outbox_id).not.toBeNull();
+        } else {
+          expect(delivery).toEqual({
+            final_payload_json: null,
+            delivery_outbox_id: null,
+          });
+        }
         expect(db.query<{ count: number }, [string]>(`
           SELECT COUNT(*) AS count FROM btcc_delivery_outbox WHERE turn_id = ?
-        `).get(turnId)?.count).toBe(0);
+        `).get(turnId)?.count).toBe(publicationFailure ? 1 : 0);
         expect(db.query<{ count: number }, [string]>(`
           SELECT COUNT(*) AS count FROM btcc_messages
           WHERE turn_id = ? AND role = 'assistant'
-        `).get(turnId)?.count).toBe(0);
+        `).get(turnId)?.count).toBe(publicationFailure ? 1 : 0);
       } finally {
         db.close(false);
       }

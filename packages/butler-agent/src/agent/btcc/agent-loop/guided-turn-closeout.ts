@@ -91,47 +91,57 @@ export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
 } {
   return {
     async reviewFinalCandidate(candidate) {
-      if (input.parentResultIntegration) {
-        return { status: "accepted" as const };
-      }
-      if (input.trackingMode === "none") {
-        return { status: "accepted" as const };
-      }
-      const bound = await loadBoundWork(input);
-      if (!bound) {
-        return { status: "accepted" as const };
-      }
-      if (isFreshCurrentDisposition(bound, input.turnId)) {
-        return bound.latestDisposition?.runtimeOwnedOpen
-          ? { status: "accepted" as const, text: noticeCandidate(input, candidate.text) }
-          : { status: "accepted" as const };
-      }
-      if (!await claimCloseoutCorrection(input, bound.workId)) {
+      try {
+        if (input.parentResultIntegration) {
+          return { status: "accepted" as const };
+        }
+        if (input.trackingMode === "none") {
+          return { status: "accepted" as const };
+        }
+        const bound = await loadBoundWork(input);
+        if (!bound) {
+          return { status: "accepted" as const };
+        }
+        if (isFreshCurrentDisposition(bound, input.turnId)) {
+          return bound.latestDisposition?.runtimeOwnedOpen
+            ? { status: "accepted" as const, text: noticeCandidate(input, candidate.text) }
+            : { status: "accepted" as const };
+        }
+        if (!await claimCloseoutCorrection(input, bound.workId)) {
+          return {
+            status: "accepted" as const,
+            text: await settleOpen(input, bound, candidate.text),
+          };
+        }
         return {
-          status: "accepted" as const,
-          text: await settleOpen(input, bound, candidate.text),
+          status: "continue" as const,
+          observation: [
+            "Before reporting the final answer, call record_work_disposition for the explicitly bound Work.",
+            "Choose completed, open, or blocked with a concise summary and valid action/evidence details, then report.",
+          ].join(" "),
         };
+      } catch (error) {
+        if (!isOpenDispositionPublicationFailure(error)) throw error;
+        return { status: "accepted" as const };
       }
-      return {
-        status: "continue" as const,
-        observation: [
-          "Before reporting the final answer, call record_work_disposition for the explicitly bound Work.",
-          "Choose completed, open, or blocked with a concise summary and valid action/evidence details, then report.",
-        ].join(" "),
-      };
     },
 
     async reconcileAfterLoop(text) {
-      if (input.parentResultIntegration) return text;
-      if (input.trackingMode === "none") return text;
-      const bound = await loadBoundWork(input);
-      if (!bound) return text;
-      if (isFreshCurrentDisposition(bound, input.turnId)) {
-        return bound.latestDisposition?.runtimeOwnedOpen
-          ? noticeCandidate(input, text)
-          : text;
+      try {
+        if (input.parentResultIntegration) return text;
+        if (input.trackingMode === "none") return text;
+        const bound = await loadBoundWork(input);
+        if (!bound) return text;
+        if (isFreshCurrentDisposition(bound, input.turnId)) {
+          return bound.latestDisposition?.runtimeOwnedOpen
+            ? noticeCandidate(input, text)
+            : text;
+        }
+        return await settleOpen(input, bound, text);
+      } catch (error) {
+        if (!isOpenDispositionPublicationFailure(error)) throw error;
+        return text;
       }
-      return settleOpen(input, bound, text);
     },
   };
 }
@@ -173,22 +183,30 @@ async function settleOpen(
       throw new Error("Runtime-owned open Work binding changed before settlement");
     }
     const expectedMaterialFingerprint = dispositionMaterialFingerprint(current);
-    const persisted = await input.durableWork.recordDisposition({
-      ...input.workScope,
-      mutationCallId: digest(
-        `btcc-guided-work-runtime-open.v2\0${input.turnId}\0${bound.workId}\0${expectedMaterialFingerprint}`,
-      ),
-      workId: bound.workId,
-      disposition: "open",
-      summary: copy.summary,
-      actionUpdates: [],
-      remainingActions: [],
-      nextCondition: copy.nextCondition,
-      evidenceRefs: [],
-      followups: [],
-      expectedMaterialFingerprint,
-      runtimeOwnedOpenGeneration: { version: 1 },
-    });
+    let persisted: DurableWorkView;
+    try {
+      persisted = await input.durableWork.recordDisposition({
+        ...input.workScope,
+        mutationCallId: digest(
+          `btcc-guided-work-runtime-open.v2\0${input.turnId}\0${bound.workId}\0${expectedMaterialFingerprint}`,
+        ),
+        workId: bound.workId,
+        disposition: "open",
+        summary: copy.summary,
+        actionUpdates: [],
+        remainingActions: [],
+        nextCondition: copy.nextCondition,
+        evidenceRefs: [],
+        followups: [],
+        expectedMaterialFingerprint,
+        runtimeOwnedOpenGeneration: { version: 1 },
+      });
+    } catch (error) {
+      if (!isOpenDispositionPublicationFailure(error)) throw error;
+      // Runtime-owned open is bookkeeping. The Work is already open, so a
+      // publication failure must not discard an otherwise valid user answer.
+      return candidate.trim();
+    }
     if (persisted.status === "completed" &&
         isFreshCurrentDisposition(persisted, input.turnId)) {
       return candidate.trim();
@@ -201,6 +219,18 @@ async function settleOpen(
     throw new GuidedWorkCloseoutError(error);
   }
   return noticeCandidate(input, candidate);
+}
+
+function isOpenDispositionPublicationFailure(error: unknown): boolean {
+  let current = error;
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (!current || typeof current !== "object") return false;
+    const code = Reflect.get(current, "code");
+    if (code === "project_ledger_effect_not_applied" ||
+        code === "project_ledger_effect_uncertain") return true;
+    current = Reflect.get(current, "cause");
+  }
+  return false;
 }
 
 function noticeCandidate(input: GuidedTurnCloseoutInput, candidate: string): string {
