@@ -27,8 +27,21 @@ export function projectTurnOutcome(
 export function projectChildTerminalReport(
   result: ReturnType<typeof projectTurnOutcome>,
 ): { summary: string; changedArtifacts: string[] } {
-  return projectBtccFinalReport(
+  const projected = projectBtccFinalReport(
     result.text,
     result.artifacts.map((artifact) => artifact.safePathLabel),
   );
+  return {
+    summary: structuredReport(result.text) ? projected.summary : result.text.trim(),
+    changedArtifacts: projected.changedArtifacts,
+  };
+}
+
+function structuredReport(content: string): boolean {
+  try {
+    const value = JSON.parse(content) as unknown;
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  } catch {
+    return false;
+  }
 }
