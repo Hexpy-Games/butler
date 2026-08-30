@@ -69,7 +69,9 @@ describe("App Steward observer projection", () => {
       "research/qwen3.8-27b-awq-turboquant-vllm.md",
     ]);
     expect(view.messages.at(-1)?.text).toBe(projection.result?.summary);
-    expect(view.messages.at(-1)?.artifacts).toBeUndefined();
+    expect(view.messages.at(-1)?.artifacts?.[0]?.safe_path_label).toBe(
+      "research/qwen3.8-27b-awq-turboquant-vllm.md",
+    );
     expect(JSON.stringify(view)).not.toContain('"changed_artifacts"');
   });
 
@@ -211,6 +213,86 @@ describe("App Steward observer projection", () => {
         }),
       ]),
     );
+    db.close();
+  });
+
+  test("renders Butler direction and Steward activity in durable timeline order while waiting for Worker", () => {
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("relation-timeline", "parent-timeline", "parent-turn", "steward-timeline",
+        "anchor-timeline", 1, "Timeline task", "2026-08-30T00:00:00.000Z");
+    db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("relation-worker", "steward-timeline", "steward-turn-1", "worker-timeline",
+        "worker-anchor", 1, "Worker task", "2026-08-30T00:01:30.000Z");
+    db.query(`INSERT INTO btcc_subsession_delegations
+      (delegation_id, relation_id, task_id, child_turn_id, root_work_id,
+       packet_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run("delegation-timeline", "relation-timeline", "task-timeline",
+        "steward-turn-1", "work-timeline",
+        JSON.stringify({ objective: "Butler가 작성한 원래 요청" }),
+        "2026-08-30T00:00:00.000Z");
+    for (const [turnId, messageId, state] of [
+      ["steward-turn-1", "steward-message:delegation-timeline", "delivered"],
+      ["steward-turn-2", "subsession-direction-message:direction-timeline", "delivered"],
+    ]) {
+      db.query(`INSERT INTO btcc_turns (
+        turn_id, session_id, inbox_id, trigger_key, original_message_id,
+        original_message, admission_snapshot_ref, model_selection_json,
+        context_json, semantic_state, revision, execution_fence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(turnId, "steward-timeline", `inbox-${turnId}`, `trigger-${turnId}`,
+          messageId, "internal", `snapshot-${turnId}`, "{}", "{}", state, 1, 0);
+    }
+    db.query("INSERT INTO btcc_messages VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run("assistant-first", "steward-timeline", "steward-turn-1", "assistant",
+        "첫 번째 스튜어드 응답", "assistant-first-key", "2026-08-30T00:01:00.000Z");
+    db.query("INSERT INTO btcc_messages VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run("worker-result-message:private", "steward-timeline", "steward-turn-2", "user",
+        "raw Worker transport", "worker-result-key", "2026-08-30T00:02:30.000Z");
+    db.query("INSERT INTO btcc_messages VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run("assistant-second", "steward-timeline", "steward-turn-2", "assistant",
+        "방향을 반영한 스튜어드 응답", "assistant-second-key", "2026-08-30T00:03:00.000Z");
+    db.query(`INSERT INTO btcc_subsession_directions (
+      instruction_id, relation_id, revision, source_parent_turn_id,
+      source_message_id, instruction, status, created_at, applied_at,
+      applied_child_turn_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run("direction-timeline", "relation-timeline", 1, "parent-direction-turn",
+        "parent-direction-message", "버틀러의 추가 지시", "applied",
+        "2026-08-30T00:02:00.000Z", "2026-08-30T00:02:01.000Z", "steward-turn-2");
+    for (const [eventId, turnId, label, sequence] of [
+      ["event-first", "steward-turn-1", "첫 번째 활동", 1],
+      ["event-second", "steward-turn-2", "두 번째 활동", 2],
+    ]) {
+      db.query(`INSERT INTO btcc_progress_events (
+        event_id, action_id, session_id, turn_id, session_sequence,
+        turn_sequence, event_fingerprint, event_json, destination_json,
+        status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?)`)
+        .run(eventId, eventId, "steward-timeline", turnId, sequence, 1,
+          `fingerprint-${eventId}`, JSON.stringify({
+            kind: "assistant.public_note",
+            visibility: "public",
+            payload: { note: label },
+          }), "{}", `2026-08-30T00:0${sequence}:30.000Z`);
+    }
+
+    const observer = new SqliteStewardObserverStore(db);
+    const relation = observer.relationsForParent("parent-timeline")[0]!;
+    const snapshot = observer.snapshot("steward-timeline")!;
+    const view = sessionViewForStewardObserver(relation, snapshot, 2);
+    expect(view.messages.map((message) => [message.role, message.text])).toEqual([
+      ["user", "Butler가 작성한 원래 요청"],
+      ["assistant", "첫 번째 스튜어드 응답"],
+      ["user", "버틀러의 추가 지시"],
+      ["assistant", "방향을 반영한 스튜어드 응답"],
+    ]);
+    expect(view.messages[1]?.turn_activity_rows?.[0]?.safe_label).toBe("첫 번째 활동");
+    expect(view.messages[3]?.turn_activity_rows?.[0]?.safe_label).toBe("두 번째 활동");
+    expect(view.status).toBe("active");
+    expect(view.active_turn?.progress.summary).toBe("Worker 결과를 기다리는 중입니다.");
+    expect(JSON.stringify(view)).not.toContain("raw Worker transport");
     db.close();
   });
 

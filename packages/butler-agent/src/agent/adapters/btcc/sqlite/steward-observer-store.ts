@@ -1,7 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { readStewardObserverPlan } from "./steward-observer-plan-reader.ts";
 import type {
-  StewardObserverMessage,
   StewardObserverProgressEvent,
   StewardObserverReader,
   StewardObserverRelation,
@@ -23,18 +22,9 @@ import {
   type StewardRecoveryTurnRow,
 } from "./steward-recovery-reader.ts";
 import { readStewardOperationOutputChunks } from "./steward-operation-output-reader.ts";
+import { readStewardObserverMessages } from "./steward-observer-message-reader.ts";
 
 type RelationRow = StewardObserverRelation;
-
-type MessageRow = {
-  message_id: string;
-  session_id: string;
-  turn_id: string;
-  role: "user" | "assistant" | string;
-  content: string;
-  idempotency_key: string;
-  created_at: string;
-};
 
 type ProgressRow = {
   event_id: string;
@@ -111,27 +101,7 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
   snapshot(sessionId: string): StewardObserverSnapshot | null {
     const relation = this.relationForChild(sessionId);
     if (!relation) return null;
-    const messages = this.db
-      .query<MessageRow, [string]>(`
-        SELECT message_id, session_id, turn_id, role, content, idempotency_key, created_at
-        FROM btcc_messages
-        WHERE session_id = ? AND role IN ('user', 'assistant')
-          -- Steward dispatch inputs are durable internal continuation context,
-          -- not user-facing transcript. Keep assistant/result messages public.
-          AND message_id NOT LIKE 'steward-message:%'
-          AND idempotency_key NOT LIKE 'inbound:%:steward:%'
-        ORDER BY created_at ASC, message_id ASC
-      `)
-      .all(sessionId)
-      .map<StewardObserverMessage>((message) => ({
-        id: message.message_id,
-        session_id: message.session_id,
-        turn_id: message.turn_id,
-        role: message.role === "user" ? "user" : "assistant",
-        text: message.content,
-        created_at: message.created_at,
-        updated_at: message.created_at,
-      }));
+    const messages = readStewardObserverMessages(this.db, relation);
     const turns = this.db
       .query<StewardRecoveryTurnRow, [string, string]>(`
         SELECT t.turn_id, t.semantic_state, t.trigger_key, t.original_message_id,
@@ -178,6 +148,14 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       .flatMap((row) => this.parseProgress(row));
     const result = this.resultForRelation(relation.relation_id);
     const plan = readStewardObserverPlan(this.db, sessionId);
+    const waitingForChildren = Boolean(this.db.query<{ present: number }, [string]>(`
+      SELECT 1 AS present
+      FROM btcc_session_relations AS child
+      LEFT JOIN btcc_steward_results AS result
+        ON result.relation_id = child.relation_id
+      WHERE child.parent_session_id = ? AND result.result_id IS NULL
+      LIMIT 1
+    `).get(sessionId));
     const updatedAt = latestTimestamp([
       relation.created_at,
       ...messages.map((message) => message.updated_at),
@@ -192,6 +170,7 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       progress_events: progressEvents,
       plan,
       result,
+      waiting_for_children: waitingForChildren,
       updated_at: updatedAt,
     };
   }

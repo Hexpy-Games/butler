@@ -122,6 +122,18 @@ export const steerStewardToolMetadata: ToolCapabilityMetadata = {
   safetyNotes: ["Persists one addressed direction and applies it only at the active Steward's next safe model boundary."],
 };
 
+export const steerWorkerToolDefinition: ButlerToolDefinition = {
+  ...steerStewardToolDefinition,
+  name: "steer_worker",
+  description: "Send a bounded correction or added instruction to one active Worker relation while the Steward continues waiting for that Worker result. Continue the same Worker session and assigned work; never create a replacement Worker.",
+};
+
+export const steerWorkerToolMetadata: ToolCapabilityMetadata = {
+  category: "dispatch",
+  tags: ["subsession", "worker", "direction"],
+  safetyNotes: ["Persists one addressed direction and applies it at the active Worker's next safe model boundary."],
+};
+
 export const cancelStewardToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "cancel_steward",

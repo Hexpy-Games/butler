@@ -7,6 +7,7 @@ import { encodeSessionCursor } from "./session-message-page.ts";
 import {
   projectStewardSession,
   emptyStewardProjection,
+  projectStewardActivityRows,
   type ProjectedStewardSession,
   type StewardObserverRelation,
   type StewardObserverSnapshot,
@@ -20,31 +21,30 @@ export function sessionViewForStewardObserver(
   const projected = snapshot
     ? projectStewardSession(relation, snapshot)
     : emptyStewardProjection(relation);
-  const lastAssistantMessageId = snapshot?.messages
-    .slice()
-    .reverse()
-    .find((message) => message.role === "assistant")?.id;
   const messages = snapshot
-    ? snapshot.messages.map((message, index) => ({
+    ? snapshot.messages.map((message, index) => {
+      const activityRows = message.role === "assistant"
+        ? projectStewardActivityRows(snapshot, message.turn_id)
+        : [];
+      return {
         id: message.id,
         chat_id: message.session_id,
         turn_id: message.turn_id,
         role: message.role,
-        text: safeChildMessageText(message, relation, projected),
+        text: safeChildMessageText(message, projected),
         status: projectedStatus(projected.status),
         retryable: false,
         cursor: index + 1,
         created_at: message.created_at,
         updated_at: message.updated_at,
-        ...(!projected.active_turn &&
-        message.id === lastAssistantMessageId &&
-        projected.activity_rows.length > 0
-          ? { turn_activity_rows: projected.activity_rows }
+        ...(activityRows.length > 0
+          ? { turn_activity_rows: activityRows }
           : {}),
         ...(index === snapshot.messages.length - 1 && projected.artifacts.length > 0
           ? { artifacts: projected.artifacts }
           : {}),
-      } satisfies MessageRecord))
+      } satisfies MessageRecord;
+    })
     : [];
   const resultMessage = projected.result && !messages.some(
     (message) =>
@@ -107,11 +107,13 @@ export function sessionViewForStewardObserver(
 
 function safeChildMessageText(
   message: StewardObserverSnapshot["messages"][number],
-  relation: StewardObserverRelation,
   projected: ProjectedStewardSession,
 ): string {
-  if (message.role === "user") return relation.safe_title;
-  return projected.result?.summary ?? "Steward progress is available in the activity view.";
+  if (message.role === "assistant" &&
+    projected.result?.child_turn_id === message.turn_id) {
+    return projected.result.summary;
+  }
+  return message.text;
 }
 
 function projectedStatus(

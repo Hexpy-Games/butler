@@ -33,22 +33,24 @@ export function subsessionToolInput(
     : {};
 }
 
-export function stewardSafeBoundary(input: {
+export function subsessionDirectionSafeBoundary(input: {
   service?: SubsessionDelegationService;
   turn: TurnRecord;
 }): (() => Promise<string | undefined>) | undefined {
-  if (!input.service || input.turn.context.executionPolicy?.role !== "steward") return undefined;
+  const role = input.turn.context.executionPolicy?.role;
+  if (!input.service || (role !== "steward" && role !== "worker")) return undefined;
   return async () => {
     const direction = await input.service!.consumeStewardDirection({
       childSessionId: input.turn.sessionId,
       childTurnId: input.turn.turnId,
     });
     if (!direction) return undefined;
+    const parentLabel = role === "worker" ? "Steward" : "Butler";
     return [
-      "Butler direction update. Apply this at the next safe boundary without changing the immutable delegation packet, authority, workspace, or Work identity.",
+      `${parentLabel} direction update. Apply this at the next safe boundary without changing the immutable delegation packet, authority, workspace, or Work identity.`,
       `Direction revision: ${direction.revision}`,
       `Instruction: ${direction.instruction}`,
-      "Continue the same Work and record truthful progress, review, validation, and terminal evidence.",
+      "Continue the same assigned work and report the resulting progress and outcome to the parent session.",
     ].join("\n");
   };
 }

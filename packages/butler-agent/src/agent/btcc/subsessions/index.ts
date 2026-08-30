@@ -4,7 +4,7 @@ export {
 export { createAppParentInputSink } from "./app-parent-input-sink.ts";
 export { createWorkerProfileReader } from "./worker-profile.ts";
 export { subsessionParentResultRefs } from "./accepted-terminal-report.ts";
-export { ensureSubsessionChildRootWork, stewardSafeBoundary, subsessionToolInput } from "./agent-hook.ts";
+export { ensureSubsessionChildRootWork, subsessionDirectionSafeBoundary, subsessionToolInput } from "./agent-hook.ts";
 export {
   stewardResumeRequestId,
   subsessionResultId,

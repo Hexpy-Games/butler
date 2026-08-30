@@ -37,6 +37,7 @@ import {
   cancelStewardToolDefinition,
   delegateToStewardToolDefinition,
   steerStewardToolDefinition,
+  steerWorkerToolDefinition,
 } from "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
 import { NativeInboundQueue } from
   "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
@@ -62,16 +63,16 @@ test("active parent delegation read model validates exact terminal identities", 
   fixture.childTurn.semanticState = "delivery_committed";
   expect(await activeParentDelegations(fixture.dependencies, {
     parentSessionId: fixture.relation.parent_session_id,
-  })).toEqual([]);
+  })).toHaveLength(1);
 
   fixture.childTurn.semanticState = "delivered";
   expect(await activeParentDelegations(fixture.dependencies, {
     parentSessionId: fixture.relation.parent_session_id,
-  })).toEqual([]);
+  })).toHaveLength(1);
   fixture.childTurn.semanticState = "cancelled";
   expect(await activeParentDelegations(fixture.dependencies, {
     parentSessionId: fixture.relation.parent_session_id,
-  })).toEqual([]);
+  })).toHaveLength(1);
   fixture.childTurn.semanticState = "admitted";
 
   for (const corruptTurn of [
@@ -142,7 +143,7 @@ test("active relation plus Work read failure stays on the restricted surface", a
   ]);
 });
 
-test("delivery-committed child is not active and relation controls are not advertised", async () => {
+test("delivery-committed child stays active until its terminal result exists", async () => {
   const fixture = delegationFixture();
   fixture.childTurn.semanticState = "delivery_committed";
   const work = reviewedWork("work-active", "plan-active", "review-active");
@@ -158,8 +159,8 @@ test("delivery-committed child is not active and relation controls are not adver
     active: (input) => activeParentDelegations(fixture.dependencies, input),
   });
   const names = (await resolve()).names;
-  expect(names.has("steer_steward")).toBe(false);
-  expect(names.has("cancel_steward")).toBe(false);
+  expect(names.has("steer_steward")).toBe(true);
+  expect(names.has("cancel_steward")).toBe(true);
   expect(names.has("start_work")).toBe(true);
   expect(names.has("read_file")).toBe(true);
 });
@@ -256,6 +257,75 @@ test("control service executes exact steer and cancel for the active relation", 
   }
 });
 
+test("delivered child receives direction on a fresh continuation Turn", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-active-direction-"));
+  const fixture = delegationFixture();
+  fixture.childTurn.semanticState = "delivered";
+  let pending: StewardDirection | null = null;
+  fixture.store.createDirection = (input) => {
+    pending = {
+      ...input,
+      revision: 1,
+      status: "pending",
+      applied_at: null,
+      applied_child_turn_id: null,
+    };
+    return pending;
+  };
+  fixture.store.consumePendingDirection = ({ childTurnId }) => {
+    if (!pending) return null;
+    pending = {
+      ...pending,
+      status: "applied",
+      applied_at: "2026-08-30T00:00:01.000Z",
+      applied_child_turn_id: childTurnId,
+    };
+    return pending;
+  };
+  fixture.store.rootWorkIdByRelationId = () => "task-active";
+  fixture.dependencies.sessionBindings = {
+    getBySessionId: () => ({
+      sessionId: fixture.relation.child_session_id,
+      role: "steward",
+      workspacePath: "/tmp/workspace",
+      modelProviderId: "openai",
+      modelRef: "openai/gpt-5.5",
+      runtimeAdapterId: "btcc-turn-runtime",
+      transportBindings: [],
+      metadata: { reasoning_effort: "low" },
+    }),
+  } as unknown as SubsessionDelegationDependencies["sessionBindings"];
+  fixture.dependencies.durableWork = {
+    bindOpenWork: async () => reviewedWork(
+      "task-active", "plan-active", "review-active",
+    ),
+  } as unknown as DurableWorkService;
+  const controls = createSubsessionControlService(
+    fixture.dependencies,
+    new NativeInboundQueue(root),
+  );
+  try {
+    const direction = await controls.steerSteward({
+      parentSessionId: fixture.relation.parent_session_id,
+      sourceParentTurnId: "fresh-control-turn",
+      sourceMessageId: "fresh-control-message",
+      instruction: "Correct the current work without replacing the session.",
+    });
+    expect(direction.status).toBe("pending");
+    expect(readdirSync(join(root, "runtime", "inbound-events", "pending")))
+      .toHaveLength(1);
+    await expect(controls.consumeStewardDirection({
+      childSessionId: fixture.relation.child_session_id,
+      childTurnId: "fresh-continuation-turn",
+    })).resolves.toMatchObject({
+      status: "applied",
+      applied_child_turn_id: "fresh-continuation-turn",
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function surfaceResolver(input: {
   durableWork: DurableWorkService;
   active: SubsessionDelegationService["activeParentDelegations"];
@@ -269,6 +339,7 @@ function surfaceResolver(input: {
       toolCallToolDefinition,
       delegateToStewardToolDefinition,
       steerStewardToolDefinition,
+      steerWorkerToolDefinition,
       cancelStewardToolDefinition,
     ],
     requiredToolNames: new Set(),
@@ -354,6 +425,8 @@ function delegationFixture() {
   let taskId = packet.task_id;
   const store = {
     relationsByParentSessionId: () => [relation],
+    relationByChildSessionId: (sessionId: string) =>
+      sessionId === relation.child_session_id ? relation : null,
     packetByRelationId: () => packet,
     taskIdByRelationId: () => taskId,
     childTurnIdByRelationId: () => childTurnId,
@@ -362,6 +435,10 @@ function delegationFixture() {
     createDirection: (_input: CreateStewardDirectionInput): StewardDirection => {
       throw new Error("not configured");
     },
+    consumePendingDirection: (
+      _input: { relationId: string; childTurnId: string },
+    ): StewardDirection | null => null,
+    rootWorkIdByRelationId: () => packet.task_id,
   };
   const dependencies = {
     butlerData: "/tmp",
