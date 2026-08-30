@@ -253,6 +253,14 @@ test("transport handoff failure is a safe terminal queue result visible to the A
       safe_error_code: "app_turn_queue_failed",
     }));
     expect(JSON.stringify(queue)).not.toContain("simulated queue write failure");
+    const failed = queue.data.queued_messages.find((item: { client_message_id?: string }) =>
+      item.client_message_id === "client-33333333-3333-4333-8333-333333333333",
+    );
+    const deleted = await fetch(`${server.url}session-queue/${failed.id}`, {
+      method: "DELETE",
+    });
+    expect(deleted.status).toBe(200);
+    expect((await deleted.json()).data.queued_messages).toEqual([]);
   } finally {
     server.stop();
   }

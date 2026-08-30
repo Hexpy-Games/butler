@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { isAbsolute, join } from "path";
 import type { AttachmentRef, InboundEnvelope, StoredSessionBinding } from "../../test-support/harness/contracts.ts";
 import type { GatewayRoute } from "../../gateways/core/contracts.ts";
 import { appendPromptAssemblyContextMetric } from "../../operations/metrics/context-monitor.ts";
@@ -183,6 +183,9 @@ function buildDynamicMemorySections(input: {
     butlerData: input.butlerData,
     projectId: input.projectId,
   });
+  const projectMemory = projectMemoryFile
+    ? readTextIfExists(projectMemoryFile)
+    : null;
   pushSection(sections, {
     id: "hot-cache",
     title: "Hot Cache",
@@ -202,7 +205,7 @@ function buildDynamicMemorySections(input: {
   pushSection(sections, {
     id: "project-memory",
     title: "Project Memory",
-    content: projectMemoryFile ? readTextIfExists(projectMemoryFile) : null,
+    content: projectMemory,
     region: "retrieved_context",
     projectionClass: "optional_hot_cache",
     scopeKind: "project",
@@ -210,12 +213,22 @@ function buildDynamicMemorySections(input: {
   pushSection(sections, {
     id: "project-hot-cache",
     title: "Project Hot Cache",
-    content: readTextIfExists(join(input.workspacePath, ".butler", "hot-cache.md")),
+    content: projectHotCache(input.workspacePath, projectMemory),
     region: "retrieved_context",
     projectionClass: "mandatory_hot_cache",
     scopeKind: input.projectId ? "project" : "session",
   });
   return sections;
+}
+
+function projectHotCache(workspacePath: string, projectMemory: string | null): string | null {
+  const sessionCache = readTextIfExists(join(workspacePath, ".butler", "hot-cache.md"));
+  if (sessionCache) return sessionCache;
+  const canonicalPath = projectMemory
+    ?.match(/^- canonical_path:\s*(.+)$/mu)?.[1]
+    ?.trim();
+  if (!canonicalPath || !isAbsolute(canonicalPath)) return null;
+  return readTextIfExists(join(canonicalPath, ".butler", "hot-cache.md"));
 }
 
 function buildDynamicPersonalizationSections(input: {

@@ -631,6 +631,7 @@ test("R3 Conception guidance actively selects associative recall and exposes cro
   expect(authorized).toContain("list_conversation_sessions");
   expect(authorized).toContain("read_conversation_session");
   expect(visible).toContain("recall_memory");
+  expect(visible).toContain("query_memory");
   expect(visible).toContain("list_conversation_sessions");
   expect(visible).toContain("read_conversation_session");
   expect(authorized).toContain("delegate_to_steward");

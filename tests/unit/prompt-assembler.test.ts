@@ -678,6 +678,37 @@ test("project memory and project hot cache are dynamic turn context", () => {
   }
 });
 
+test("project hot cache follows the canonical project when the session uses a worktree", () => {
+  const root = join(tmpdir(), `butler-project-worktree-memory-${Date.now()}`);
+  const butlerHome = join(root, "home");
+  const butlerData = join(root, "data");
+  const canonicalPath = join(root, "canonical");
+  const worktreePath = join(root, "worktree");
+  mkdirSync(join(butlerData, "cognition", "memory", "projects"), { recursive: true });
+  mkdirSync(join(canonicalPath, ".butler"), { recursive: true });
+  mkdirSync(worktreePath, { recursive: true });
+  writeFileSync(
+    join(butlerData, "cognition", "memory", "projects", "sandy.md"),
+    `# Project Memory: sandy\n- canonical_path: ${canonicalPath}`,
+    "utf8",
+  );
+  writeFileSync(
+    join(canonicalPath, ".butler", "hot-cache.md"),
+    "SANDY_CANONICAL_DEPLOYMENT_MEMORY",
+    "utf8",
+  );
+
+  try {
+    const context = assembledTurnContext(
+      new PromptAssembler({ butlerHome, butlerData }),
+      binding(worktreePath, { projectId: "sandy" }),
+    );
+    expect(context).toContain("SANDY_CANONICAL_DEPLOYMENT_MEMORY");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("turn context injects active feedback buffer before profile projection", () => {
   const root = join(tmpdir(), `butler-feedback-prompt-${Date.now()}`);
   const butlerHome = join(root, "home");
