@@ -276,6 +276,9 @@ test("guided instructions require reviewed Butler intent before delegation", () 
     "one complete request written exactly as Steward should receive it; runtime preserves that request unchanged",
   );
   expect(instructions).toContain(
+    "Preserve a user request or preference to use a Worker without weakening it into optional guidance.",
+  );
+  expect(instructions).toContain(
     "Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler.",
   );
   expect(instructions).toContain(
@@ -416,6 +419,9 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
   expect(mutationInstructions).toContain("same reviewed Plan and effect contract as Butler");
   expect(mutationInstructions).toContain(
     "Keep Plan actions inside this Work and create Worker tasks through delegate_to_worker",
+  );
+  expect(mutationInstructions).toContain(
+    "unless the delegated request asks or prefers Worker use; when an enabled Worker is available, assign that execution action before doing it directly",
   );
   expect(mutationInstructions).toContain(
     "Do not create Project Ledger bookkeeping unless the delegated outcome explicitly requires it",
