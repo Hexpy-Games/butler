@@ -40,7 +40,6 @@ export async function activeParentDelegations(
       childTurn.sessionId !== relation.child_session_id)) {
       throw new Error("active_parent_delegation_child_turn_mismatch");
     }
-    if (!isControllableStewardTurn(childTurn)) continue;
     matches.push({
       relation,
       parent_work_ref: packet.parent_work_ref,
@@ -48,14 +47,6 @@ export async function activeParentDelegations(
     });
   }
   return matches;
-}
-
-function isControllableStewardTurn(
-  turn: Awaited<ReturnType<
-    SubsessionDelegationDependencies["parentTurns"]["findTurn"]
-  >>,
-): boolean {
-  return !turn || turn.semanticState === "admitted";
 }
 
 function sameRelationPacket(

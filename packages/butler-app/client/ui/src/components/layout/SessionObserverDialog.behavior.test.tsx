@@ -116,6 +116,13 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
     .not.toContain(expect.stringMatching(/copy/iu));
   expect(dialog.querySelector('[data-test-class*="composer"]')).toBeNull();
   expect(dialog.textContent).not.toContain("Composer");
+  const timelineText = dialog.textContent ?? "";
+  expect(timelineText.indexOf("Butler request")).toBeLessThan(
+    timelineText.indexOf("Safe activity transcript"),
+  );
+  expect(timelineText.indexOf("Safe activity transcript")).toBeLessThan(
+    timelineText.indexOf("Butler direction"),
+  );
   const stopButton = Array.from(dialog.querySelectorAll("button")).find((button) =>
     /중지|stop/iu.test(button.textContent ?? ""),
   );
@@ -164,12 +171,22 @@ function observerView(sessionId: string): SessionView {
     },
     latest_turn: null,
     messages: [{
+      id: "observer-request-message",
+      role: "user",
+      text: "Butler request",
+      status: "delivered",
+    }, {
       id: "observer-assistant-message",
       role: "assistant",
       text: "Safe activity transcript",
       status: "delivered",
-    } as SessionView["messages"][number]],
-    message_window: { next_cursor: 1, complete: true },
+    }, {
+      id: "observer-direction-message",
+      role: "user",
+      text: "Butler direction",
+      status: "delivered",
+    }] as SessionView["messages"],
+    message_window: { next_cursor: 3, complete: true },
     workers: [],
     work_streams: [],
     artifacts: [],
@@ -177,7 +194,7 @@ function observerView(sessionId: string): SessionView {
     branch: null,
     automations: [],
     errors: [],
-    cursors: { messages: 1, events: 0 },
+    cursors: { messages: 3, events: 0 },
     relation: {
       relation_id: "observer-relation",
       parent_session_id: "parent-observer",

@@ -3,6 +3,7 @@ import type { NativeInboundQueue } from "../../../gateways/core/inbound-queue.ts
 import { digest, stableJson } from "../identity/index.ts";
 import type {
   SessionRelation,
+  StewardDirection,
   SubsessionDelegationDependencies,
   SubsessionDelegationService,
 } from "./contracts.ts";
@@ -41,6 +42,10 @@ export function createSubsessionControlService(
       if (direction.instruction_id !== instructionId || direction.instruction !== instruction) {
         throw new Error("steward_direction_identity_conflict");
       }
+      const childTurn = await input.parentTurns.findTurn(active.child_turn_id);
+      if (childTurn && childTurn.semanticState !== "admitted") {
+        await enqueueDirectionContinuation(input, childQueue, active.relation, direction);
+      }
       return direction;
     },
     async cancelSteward(cancelInput) {
@@ -67,14 +72,64 @@ export function createSubsessionControlService(
     async consumeStewardDirection(directionInput) {
       const relation = input.store.relationByChildSessionId(directionInput.childSessionId);
       if (!relation || input.store.resultByRelationId(relation.relation_id)) return null;
-      const storedTurnId = input.store.childTurnIdByRelationId(relation.relation_id);
-      if (storedTurnId !== directionInput.childTurnId) return null;
       return input.store.consumePendingDirection({
         relationId: relation.relation_id,
         childTurnId: directionInput.childTurnId,
       });
     },
   };
+}
+
+async function enqueueDirectionContinuation(
+  input: SubsessionDelegationDependencies,
+  childQueue: NativeInboundQueue,
+  relation: SessionRelation,
+  direction: StewardDirection,
+): Promise<void> {
+  const child = input.sessionBindings.getBySessionId(relation.child_session_id);
+  if (!child || (child.role !== "steward" && child.role !== "worker")) {
+    throw new Error("subsession_direction_child_binding_missing");
+  }
+  const turnId = `subsession-direction-turn-${digest(direction.instruction_id).slice(0, 32)}`;
+  if (child.role === "steward") {
+    const rootWorkId = input.store.rootWorkIdByRelationId(relation.relation_id);
+    if (!rootWorkId) throw new Error("subsession_direction_work_missing");
+    const work = await input.durableWork.bindOpenWork({
+      sessionId: relation.child_session_id,
+      turnId,
+      ...(child.projectId ? { projectRef: child.projectId } : {}),
+    }, rootWorkId);
+    if (!work || work.workId !== rootWorkId) {
+      throw new Error("subsession_direction_work_missing");
+    }
+  }
+  childQueue.enqueueIdempotent({
+    eventId: `subsession-direction:${direction.instruction_id}`,
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: relation.child_session_id, parentId: relation.parent_session_id },
+    sender: {
+      id: child.role === "worker" ? "steward-worker-direction" : "butler-steward-direction",
+      displayName: child.role === "worker" ? "Steward" : "Butler",
+    },
+    message: {
+      id: `subsession-direction-message:${direction.instruction_id}`,
+      text: direction.instruction,
+      timestamp: direction.created_at,
+    },
+    routingHints: { sessionId: relation.child_session_id, turnId },
+    nativeStewardContext: {
+      version: 1,
+      role: child.role,
+      projectName: child.projectId ?? "",
+      workspacePath: child.workspacePath,
+      modelRef: child.modelRef,
+      ...(typeof child.metadata?.reasoning_effort === "string"
+        ? { reasoningEffort: child.metadata.reasoning_effort }
+        : {}),
+    },
+    raw: { source: "btcc-subsession-direction", instruction_id: direction.instruction_id },
+  });
 }
 
 async function resolveActiveRelation(

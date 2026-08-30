@@ -20,10 +20,12 @@ const ACTIVE_DELEGATION_TOOLS = new Set([
   "start_work",
   "steer_steward",
   "cancel_steward",
+  "steer_worker",
 ]);
 const ACTIVE_RELATION_CONTROL_TOOLS = new Set([
   "steer_steward",
   "cancel_steward",
+  "steer_worker",
 ]);
 const EFFECT_FREE_TOOL_NAMES = new Set(
   BUTLER_TOOLS

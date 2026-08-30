@@ -62,6 +62,8 @@ import {
   delegateToWorkerToolMetadata,
   steerStewardToolDefinition,
   steerStewardToolMetadata,
+  steerWorkerToolDefinition,
+  steerWorkerToolMetadata,
 } from "./subsession/index.ts";
 
 export const CORE_BUTLER_TOOLS = [
@@ -117,6 +119,7 @@ export const CORE_BUTLER_TOOLS = [
   delegateToStewardToolDefinition,
   delegateToWorkerToolDefinition,
   steerStewardToolDefinition,
+  steerWorkerToolDefinition,
   cancelStewardToolDefinition,
 ] satisfies ButlerToolDefinition[];
 
@@ -175,5 +178,6 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [delegateToStewardToolDefinition.name]: delegateToStewardToolMetadata,
   [delegateToWorkerToolDefinition.name]: delegateToWorkerToolMetadata,
   [steerStewardToolDefinition.name]: steerStewardToolMetadata,
+  [steerWorkerToolDefinition.name]: steerWorkerToolMetadata,
   [cancelStewardToolDefinition.name]: cancelStewardToolMetadata,
 };

@@ -66,6 +66,7 @@ export interface StewardObserverSnapshot {
   progress_events: StewardObserverProgressEvent[];
   plan: StewardObserverPlan | null;
   result: StewardResultView | null;
+  waiting_for_children?: boolean;
   updated_at: string;
 }
 
@@ -120,7 +121,7 @@ export interface ProjectedStewardSession {
   terminal: boolean;
 }
 
-function projectStewardActivityRows(
+export function projectStewardActivityRows(
   snapshot: StewardObserverSnapshot,
   turnId?: string,
 ): ProgressSummaryRow[] {
@@ -138,7 +139,9 @@ function projectStewardActivityRows(
       });
       return row ? [normalizeProgressSummaryRow(row)] : [];
   });
-  const planRows = approvedPlanRows(snapshot.plan, rows);
+  const planRows = !turnId || turnId === snapshot.turns.at(-1)?.id
+    ? approvedPlanRows(snapshot.plan, rows)
+    : [];
   const publicNonPlanRows = rows.filter((row) => row.kind !== "todo");
   if (planRows.length > 0 || publicNonPlanRows.length > 0) {
     return [...publicNonPlanRows, ...planRows];
@@ -159,6 +162,8 @@ function projectStewardActivityRows(
 function projectStewardTurn(
   turn: StewardObserverTurn | undefined,
   activityRows: ProgressSummaryRow[],
+  active = false,
+  waitingForChildren = false,
 ): SessionViewTurn | null {
   if (!turn) return null;
   const activityUpdatedAt = latestActivityTimestamp(activityRows) ?? turn.updated_at;
@@ -183,7 +188,7 @@ function projectStewardTurn(
       updated_at: activityUpdatedAt,
     };
   }
-  const state = observerTurnState(turn.state);
+  const state = active ? "thinking" : observerTurnState(turn.state);
   const terminal = ["delivered", "failed", "cancelled"].includes(state);
   const progressState = terminal ? state : state === "accepted" ? "accepted" : "thinking";
   return {
@@ -195,7 +200,9 @@ function projectStewardTurn(
     cancellable: !terminal,
     retryable: state === "failed",
     progress: {
-      summary: currentStewardActivityLabel(activityRows) ?? stewardStateLabel(turn.state),
+      summary: waitingForChildren
+        ? "Worker 결과를 기다리는 중입니다."
+        : currentStewardActivityLabel(activityRows) ?? stewardStateLabel(turn.state),
       updated_at: activityUpdatedAt,
       turn_id: turn.id,
       state: progressState,
@@ -269,16 +276,21 @@ export function projectStewardSession(
     )
     : [];
   const recoverable = latestTurn?.recovery?.state === "recoverable";
-  const activeTurn = latestTurn && !result && !recoverable &&
-    !isTerminalObserverState(latestTurn.state)
-    ? projectStewardTurn(latestTurn, activityRows)
+  const activeTurn = latestTurn && !result && !recoverable
+    ? projectStewardTurn(
+        latestTurn, activityRows, true, Boolean(snapshot.waiting_for_children),
+      )
     : null;
-  const latestTurnView = projectStewardTurn(latestTurn, activityRows);
+  const latestTurnView = projectStewardTurn(
+    latestTurn, activityRows, Boolean(activeTurn), Boolean(snapshot.waiting_for_children),
+  );
   const status = result
     ? observerResultStatus(result.status)
     : recoverable
       ? "failed"
-    : observerSessionStatus(latestTurn?.state);
+    : latestTurn
+      ? "active"
+      : "idle";
   return {
     relation,
     session_id: snapshot.session_id,
@@ -296,10 +308,19 @@ export function projectStewardSession(
           ).length,
         }
       : {}),
-    artifacts: [],
+    artifacts: result?.changed_artifacts.map((path, index) => ({
+      id: `steward-artifact:${result.result_id}:${index}`,
+      session_id: snapshot.session_id,
+      turn_id: result.child_turn_id,
+      kind: "file" as const,
+      title: path.split("/").at(-1) ?? path,
+      safe_path_label: path,
+      created_at: result.created_at,
+      open_action: "unsupported" as const,
+    })) ?? [],
     result,
     updated_at: snapshot.updated_at,
-    terminal: Boolean(result) || isTerminalObserverState(latestTurn?.state ?? ""),
+    terminal: Boolean(result),
   };
 }
 
@@ -329,7 +350,7 @@ export function emptyStewardProjection(
     artifacts: [],
     result: null,
     updated_at: relation.created_at,
-    terminal: true,
+    terminal: false,
   };
 }
 
@@ -340,16 +361,6 @@ function observerTurnState(state: string): SessionViewTurn["state"] {
   if (state === "delivery_committed") return "streaming";
   if (state === "admitted") return "accepted";
   return "thinking";
-}
-
-function observerSessionStatus(
-  state: string | undefined,
-): ProjectedStewardSession["status"] {
-  if (state === "delivered") return "delivered";
-  if (state === "cancelled") return "cancelled";
-  if (state === "failed") return "failed";
-  if (state) return "active";
-  return "idle";
 }
 
 function observerResultStatus(
@@ -381,10 +392,6 @@ function stewardStateLabel(state: string): string {
   if (state === "cancelled") return "작업이 중단되었습니다.";
   if (state === "failed") return "작업을 완료하지 못했습니다.";
   return "작업을 진행 중입니다.";
-}
-
-function isTerminalObserverState(state: string): boolean {
-  return state === "delivered" || state === "failed" || state === "cancelled";
 }
 
 function approvedPlanRows(

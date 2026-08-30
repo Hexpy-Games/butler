@@ -32,6 +32,7 @@ import { appRuntimePolicy } from
 import {
   delegateToStewardToolDefinition,
   delegateToWorkerToolDefinition,
+  steerWorkerToolDefinition,
   withWorkerProfileChoices,
 } from
   "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
@@ -450,6 +451,7 @@ test("Steward may delegate one Plan action while Worker has only execution duty"
     stewardPolicy,
   ).map((tool) => tool.name);
   expect(stewardTools).toContain(delegateToWorkerToolDefinition.name);
+  expect(stewardTools).toContain(steerWorkerToolDefinition.name);
   expect(stewardTools).toContain("write_file");
   expect(guidedStewardInstructions(stewardPolicy)).toContain(
     "direct execution and/or bounded Worker orchestration",
@@ -463,6 +465,7 @@ test("Steward may delegate one Plan action while Worker has only execution duty"
   expect(workerTools).toContain("write_file");
   expect(workerTools).not.toContain("delegate_to_steward");
   expect(workerTools).not.toContain("delegate_to_worker");
+  expect(workerTools).not.toContain("steer_worker");
   expect(workerTools).not.toContain("start_work");
   expect(guidedWorkerInstructions(workerPolicy)).toContain(
     "Do not delegate, create Work or Plan records",

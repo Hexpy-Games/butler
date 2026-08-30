@@ -33,7 +33,7 @@ import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
 import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
 import { privateModifyContinuationPromptInput } from "./guided-authority-continuation.ts";
 import type { PrincipalAuthority } from "../authority/index.ts";
-import { ensureSubsessionChildRootWork, stewardSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
+import { ensureSubsessionChildRootWork, subsessionDirectionSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
 import { withWorkerProfileChoices } from "../../tools/subsession/index.ts";
 import { withStewardDirection } from "./guided-steward-direction.ts";
 type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
@@ -290,7 +290,7 @@ export function createProductionGuidedTurnAgent(
               : {}),
           })
         : undefined;
-      const directionAware = withStewardDirection({ modelRound, safeBoundary: stewardSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: delegationRelease.reviewFinalCandidate });
+      const directionAware = withStewardDirection({ modelRound, safeBoundary: subsessionDirectionSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: delegationRelease.reviewFinalCandidate });
       const loopOptions: BtccAgentLoopInput = {
         prompt: requestAttribution.prompt,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,

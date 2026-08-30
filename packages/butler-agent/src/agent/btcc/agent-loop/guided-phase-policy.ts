@@ -39,6 +39,7 @@ const STEWARD_PARENT_TOOL_NAMES = new Set([
   "delegate_to_steward", "steer_steward", "cancel_steward",
 ]);
 const WORKER_DELEGATION_TOOL_NAME = "delegate_to_worker";
+const WORKER_DIRECTION_TOOL_NAME = "steer_worker";
 
 export type GuidedTurnPhase = "direct" | "read_only" | "execution";
 
@@ -113,7 +114,9 @@ export function selectGuidedTurnPhasePolicy(
       ? BUTLER_TOOLS.filter((tool) => STEWARD_PARENT_TOOL_NAMES.has(tool.name))
       : []),
     ...(executionPolicy.role === "steward"
-      ? BUTLER_TOOLS.filter((tool) => tool.name === WORKER_DELEGATION_TOOL_NAME)
+      ? BUTLER_TOOLS.filter((tool) =>
+        tool.name === WORKER_DELEGATION_TOOL_NAME ||
+        tool.name === WORKER_DIRECTION_TOOL_NAME)
       : []),
   ].map((tool) => [tool.name, tool]));
   const phaseAuthority = new Map([
@@ -229,7 +232,10 @@ function providerCandidateToolNames(
   if (policy.role === "butler") {
     for (const name of STEWARD_PARENT_TOOL_NAMES) names.add(name);
   }
-  if (policy.role === "steward") names.add(WORKER_DELEGATION_TOOL_NAME);
+  if (policy.role === "steward") {
+    names.add(WORKER_DELEGATION_TOOL_NAME);
+    names.add(WORKER_DIRECTION_TOOL_NAME);
+  }
   if (policy.role === "butler") {
     for (const name of [...names]) {
       const metadata = TOOL_CAPABILITY_METADATA[name];

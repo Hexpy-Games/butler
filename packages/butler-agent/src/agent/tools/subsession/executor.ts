@@ -6,6 +6,7 @@ import {
   delegateToStewardToolDefinition,
   delegateToWorkerToolDefinition,
   steerStewardToolDefinition,
+  steerWorkerToolDefinition,
 } from "./definition.ts";
 
 export function createSubsessionToolHandlers(input: {
@@ -65,6 +66,22 @@ export function createSubsessionToolHandlers(input: {
       return { ok: true, status: "queued" };
     },
     [steerStewardToolDefinition.name]: async (call: ButlerToolCall) => {
+      const identity = requireParentIdentity(input);
+      const instruction = requiredString(call.args.instruction, "instruction");
+      const direction = await input.service!.steerSteward({
+        ...identity,
+        instruction,
+        ...optionalRelationSelector(call.args),
+      });
+      return {
+        ok: true,
+        relation_id: direction.relation_id,
+        instruction_id: direction.instruction_id,
+        revision: direction.revision,
+        status: direction.status,
+      };
+    },
+    [steerWorkerToolDefinition.name]: async (call: ButlerToolCall) => {
       const identity = requireParentIdentity(input);
       const instruction = requiredString(call.args.instruction, "instruction");
       const direction = await input.service!.steerSteward({
