@@ -61,15 +61,30 @@ export function assertProjectWorkProjectionOwnership(
     )) conflict();
   }
 
-  const heads = db.query<{ session_id: string; work_id: string }, []>(`
-    SELECT session_id, work_id FROM btcc_guided_work_session_heads
+  const heads = db.query<{
+    session_id: string;
+    work_id: string;
+    work_session_id: string | null;
+    scope_kind: string | null;
+    scope_ref: string | null;
+    ledger_project_id: string | null;
+  }, []>(`
+    SELECT head.session_id, head.work_id,
+      work.session_id AS work_session_id, work.scope_kind, work.scope_ref,
+      work.ledger_project_id
+    FROM btcc_guided_work_session_heads head
+    LEFT JOIN btcc_guided_works work ON work.work_id = head.work_id
   `).all();
   for (const row of heads) {
     if (!sessionIds.has(row.session_id) && !workIds.has(row.work_id)) continue;
     const expected = input.works.find(
       ({ work }) => work.sessionId === row.session_id,
     );
-    if (!expected || row.work_id !== input.sessionHeadWorkId) conflict();
+    if (!expected || expected.work.scope.kind !== "project" ||
+      row.work_session_id !== expected.work.sessionId ||
+      row.scope_kind !== "project" ||
+      row.scope_ref !== expected.work.scope.projectRef ||
+      row.ledger_project_id !== input.ledgerProjectId) conflict();
   }
 
   const bindings: ProjectionBinding[] = input.works.flatMap(({ work, bindings }) =>
