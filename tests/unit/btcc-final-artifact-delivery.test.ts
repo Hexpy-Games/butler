@@ -10,6 +10,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { collectGuidedFinalArtifacts } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
+import { boundedTerminalReportContent } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/terminal-results.ts";
 import { projectChildTerminalReport, projectTurnOutcome } from
   "../../packages/butler-agent/src/interfaces/gateway/btcc/project-turn-outcome.ts";
 import { artifactFilesFromOutbound } from
@@ -143,6 +145,26 @@ test("structured child reports become a natural summary and changed artifacts", 
     summary: "호환성 조사와 보고서 작성을 완료했습니다.",
     changedArtifacts: ["research/qwen-turboquant-vllm.md"],
   });
+});
+
+test("natural child reports retain material review findings for the parent role", () => {
+  const content = [
+    "독립 검토 결과",
+    "",
+    "판정: 완료 불가",
+    "- 직접 vision 호출의 telemetry가 누락되었습니다.",
+    "- tool query 원문이 로그에 남습니다.",
+  ].join("\n");
+  const report = projectChildTerminalReport(projectTurnOutcome({
+    kind: "delivered",
+    turnId: "turn-natural-report",
+    messageId: "message-natural-report",
+    content,
+  }));
+
+  expect(report).toEqual({ summary: content, changedArtifacts: [] });
+  expect(boundedTerminalReportContent(`  ${content.replaceAll("-", "-  ")}  `))
+    .toContain("판정: 완료 불가\n- 직접 vision 호출의 telemetry가 누락되었습니다.");
 });
 
 test("App artifact resolution rejects symlink escapes, missing files, and empty files", () => {

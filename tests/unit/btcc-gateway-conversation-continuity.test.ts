@@ -178,6 +178,49 @@ test("Steward delivery without completed Work is reported as failed", async () =
   });
 });
 
+test("Steward delivery preserves its bounded factual report for Butler synthesis", async () => {
+  const completed: Array<{ status?: string; summary?: string }> = [];
+  const report = [
+    "Sandy P0 telemetry 작업을 완료했습니다.",
+    "",
+    "- 검증: npm test, quality:check",
+    "- 커밋: 4e8cc7d, 568e046",
+    "- 남은 위험: 없음",
+  ].join("\n");
+  const handlers = createBtccGatewayHandlers({
+    btcc: {
+      runTurn: async () => ({
+        kind: "delivered",
+        turnId: "steward-turn-report",
+        messageId: "steward-message-report",
+        content: report,
+        workStatus: "completed",
+      }),
+      stopTurn: async ({ turnId }) => ({ kind: "cancelled", turnId }),
+    },
+    subsessionDelegation: {
+      activeParentDelegations: async () => [],
+      completeStewardResult: async (input: { status?: string; summary?: string }) => {
+        completed.push(input);
+        return undefined as never;
+      },
+    } as unknown as SubsessionDelegationService,
+  });
+
+  await handlers.steward!({
+    route: {
+      sessionId: "steward/report",
+      role: "steward",
+      reason: "steward-hint",
+      workspacePath: process.cwd(),
+    },
+    envelope: envelope("steward-turn-report", "steward-input-report", "작업을 완료해 주세요."),
+  });
+
+  expect(completed).toHaveLength(1);
+  expect(completed[0]).toMatchObject({ status: "success", summary: report });
+});
+
 test("BTCC facade commits each Turn and gives the next Turn recent conversation", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "btcc-facade-conversation-"));
   roots.push(butlerData);

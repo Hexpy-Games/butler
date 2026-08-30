@@ -1,6 +1,7 @@
 import { NativeInboundQueue } from "../../../gateways/core/inbound-queue.ts";
 import { digest } from "../identity/index.ts";
 import { subsessionResultId } from "./identities.ts";
+import { boundedTerminalReportContent } from "./terminal-results.ts";
 import type {
   CompleteStewardResultOutcome,
   SubsessionDelegationDependencies,
@@ -116,7 +117,7 @@ function safeWorkerSummary(
   value: string | undefined,
   status: string,
 ): string {
-  const safe = value?.replace(/\s+/gu, " ").trim().slice(0, 2_000);
+  const safe = value ? boundedTerminalReportContent(value) : "";
   if (safe) return safe;
   return status === "success"
     ? "Worker completed the bounded Task."
