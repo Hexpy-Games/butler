@@ -186,6 +186,7 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
     "grep_files",
     "list_files",
     "recall_memory",
+    "query_memory",
     "list_conversation_sessions",
     "read_conversation_session",
     ...DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name),

@@ -1537,6 +1537,9 @@ test("a stale cancellation acknowledgement is fenced after its advisory lookup",
       turnState: "cancelled",
       outboxState: "completed",
     });
+    expect(server.store.listSessionQueue("general").queued_messages).not.toContainEqual(
+      expect.objectContaining({ client_message_id: clientMessageId }),
+    );
     expect(server.store.db.query<{ count: number }, [string]>(`
       SELECT COUNT(*) AS count FROM app_transport_projection_receipts
       WHERE action_id = ?

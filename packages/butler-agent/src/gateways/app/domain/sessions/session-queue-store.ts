@@ -104,7 +104,11 @@ export class AppSessionQueueStore {
         claim_id, claim_owner, claimed_at, lease_expires_at,
         terminal_result_message_id, created_at, updated_at
       FROM session_queued_messages
-      WHERE chat_id = ? AND state IN ('queued', 'failed')
+      WHERE chat_id = ?
+        AND (
+          state = 'queued'
+          OR (state = 'failed' AND COALESCE(safe_error_code, '') <> 'turn_cancelled')
+        )
       ORDER BY rowid ASC
     `,
       )
@@ -363,7 +367,7 @@ export class AppSessionQueueStore {
 
   deleteQueuedMessage(queuedMessageId: string): SessionQueueView {
     const current = this.getQueuedMessageRow(queuedMessageId);
-    if (!current || current.state !== "queued") {
+    if (!current || !["queued", "failed"].includes(current.state)) {
       throw new AppStoreOperationError(
         404,
         "queued_message_not_found",
@@ -383,7 +387,7 @@ export class AppSessionQueueStore {
         `
       UPDATE session_queued_messages
       SET state = 'deleted', updated_at = ?
-      WHERE id = ? AND state = 'queued'
+      WHERE id = ? AND state IN ('queued', 'failed')
     `,
       )
       .run(now, queuedMessageId);
