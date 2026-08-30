@@ -124,6 +124,35 @@ test("public Project Work service publishes Result before SQLite projection and 
   fixture.close();
 });
 
+test("Project Work advances the SQLite session head to the canonical replacement", async () => {
+  const fixture = await createFixture(undefined, true);
+  const first = await fixture.service.startWork({
+    ...fixture.scope("turn-1"),
+    mutationCallId: "start-first",
+    objective: "First Project Work",
+  });
+  fixture.insertTurn("turn-2");
+  fixture.runtime.originals.set("turn-2", {
+    turnId: "turn-2",
+    messageId: "message-turn-2",
+    content: "replace",
+  });
+
+  const replacement = await fixture.service.startWork({
+    ...fixture.scope("turn-2"),
+    mutationCallId: "start-replacement",
+    objective: "Replacement Project Work",
+  });
+
+  expect(fixture.db.query<{ status: string }, [string]>(
+    "SELECT status FROM btcc_guided_works WHERE work_id = ?",
+  ).get(first.workId)?.status).toBe("abandoned");
+  expect(fixture.db.query<{ work_id: string }, [string]>(
+    "SELECT work_id FROM btcc_guided_work_session_heads WHERE session_id = ?",
+  ).get("session-1")?.work_id).toBe(replacement.workId);
+  fixture.close();
+});
+
 test("two canonical Results attach to one Work and the second replays without mutation", async () => {
   const fixture = await createFixture(undefined, true);
   const firstScope = fixture.scope("turn-1");
