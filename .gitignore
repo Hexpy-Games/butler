@@ -23,9 +23,7 @@ tests/.env.test
 # ── Build artifacts ───────────────────────────────────────────────────────────
 __pycache__/
 node_modules/
-app-client/ui/dist/
-packages/butler-app/client/ui/dist/
-packages/butler-app/client/electron/dist/
+dist/
 app-client/ui/.*/skills/
 app-client/ui/.*/**/skills/
 app-client/ui/skills/
