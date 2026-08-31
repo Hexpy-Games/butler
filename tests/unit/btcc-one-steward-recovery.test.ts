@@ -1073,6 +1073,8 @@ async function installReviewedDelegationPlan(input: {
       objective: input.objective,
       acceptance_criteria: input.check ? [input.check] : [],
       task_or_plan_refs: [],
+      actions: planned.currentPlan.actions.map((action) => ({ ...action })),
+      action_progress: reviewed.actionProgress.map((progress) => ({ ...progress })),
     };
   } finally {
     db.close();

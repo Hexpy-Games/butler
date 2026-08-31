@@ -2,6 +2,11 @@ import type { DurableWorkService } from "../work/index.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
 import type { WorkerProfile } from "../../../gateways/app/interface/protocol/settings-contract.ts";
 import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
+import type {
+  DurableWorkActionProgress,
+  DurableWorkCheckpoint,
+  DurableWorkPlanAction,
+} from "../work/index.ts";
 
 /** The only persisted SessionRelation shape for the SS-02 vertical. */
 export type SessionRelation = {
@@ -56,6 +61,14 @@ export type DelegationPacket = {
   objective: string;
   acceptance_criteria: string[];
   task_or_plan_refs: string[];
+  plan_action?: {
+    action_key: string;
+    description: string;
+    dependency_keys: string[];
+    effect?: { capability: string; target: string };
+    checkpoint_summary?: string;
+    next_step?: string;
+  };
   project_context?: DelegationProjectContextSnapshot;
   constraints_and_non_goals: string[];
   allowed_tools_and_effects: string[];
@@ -88,7 +101,8 @@ export type StewardResultStatus = "success" | "blocked" | "failed" | "cancelled"
 export type StewardResultCode =
   | "delegation_context_incomplete"
   | "steward_execution_failed"
-  | "steward_cancelled";
+  | "steward_cancelled"
+  | "worker_no_progress";
 
 export type StewardResultEnvelope = {
   result_id: string;
@@ -154,6 +168,9 @@ export type ReviewedDelegationPlan = {
   objective: string;
   acceptance_criteria: string[];
   task_or_plan_refs: string[];
+  actions: DurableWorkPlanAction[];
+  action_progress: DurableWorkActionProgress[];
+  latest_checkpoint?: Pick<DurableWorkCheckpoint, "publicSummary" | "nextStep">;
 };
 
 type ReviewedDelegationIdentity = Pick<DelegationRequest,
@@ -171,6 +188,7 @@ export type ReviewedDelegationRequest = ReviewedDelegationIdentity & {
 };
 
 export type ReviewedWorkerDelegationRequest = ReviewedDelegationIdentity & {
+  action_key: string;
   objective: string;
   acceptance_criteria: string[];
   safe_title?: string;

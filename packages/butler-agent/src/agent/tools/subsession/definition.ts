@@ -45,6 +45,7 @@ export const delegateToWorkerToolDefinition: ButlerToolDefinition = {
     type: "object",
     additionalProperties: false,
     properties: {
+      action_key: { type: "string", minLength: 1, maxLength: 160 },
       objective: { type: "string", minLength: 1, maxLength: 2000 },
       acceptance_criteria: {
         type: "array",
@@ -54,7 +55,7 @@ export const delegateToWorkerToolDefinition: ButlerToolDefinition = {
       safe_title: { type: "string", minLength: 1, maxLength: 120 },
       profile_id: { type: "string", minLength: 1, maxLength: 48 },
     },
-    required: ["objective", "acceptance_criteria"],
+    required: ["action_key", "objective", "acceptance_criteria"],
   },
   effectBoundary: "turn_local",
   concurrencySafe: false,

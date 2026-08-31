@@ -71,7 +71,8 @@ export function createBtccGatewayHandlers(
           childTurnId: outcome.turnId,
           resultId: subsessionResultId(route.sessionId, outcome.turnId),
           summary: childReport.summary,
-          status: "success",
+          status: result.workStatus === "blocked" ? "blocked" : "success",
+          ...(result.workStatus === "blocked" ? { code: "worker_no_progress" as const } : {}),
           changedArtifacts: childReport.changedArtifacts,
           changedFiles: childReport.changedFiles,
         });

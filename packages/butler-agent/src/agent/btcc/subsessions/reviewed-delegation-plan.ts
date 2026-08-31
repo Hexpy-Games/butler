@@ -32,6 +32,18 @@ export async function loadReviewedDelegationPlan(
     objective: plan.objective,
     acceptance_criteria: [...plan.checks],
     task_or_plan_refs: [...(plan.governingRefs ?? [])],
+    actions: plan.actions.map((action) => ({
+      ...action,
+      dependencyKeys: [...action.dependencyKeys],
+      ...(action.effect ? { effect: { ...action.effect } } : {}),
+    })),
+    action_progress: work.actionProgress.map((progress) => ({ ...progress })),
+    ...(work.latestCheckpoint?.planRevisionId === plan.planRevisionId ? {
+      latest_checkpoint: {
+        publicSummary: work.latestCheckpoint.publicSummary,
+        nextStep: work.latestCheckpoint.nextStep,
+      },
+    } : {}),
   };
 }
 

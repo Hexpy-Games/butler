@@ -29,11 +29,13 @@ export async function delegateReviewedWorker(
     parentSessionId: request.parent_session_id,
     parentTurnId: request.parent_turn_id,
   });
+  const planAction = selectedPlanAction(reviewed, request.action_key);
   if (!input.workerProfiles) throw new Error("worker_profiles_unavailable");
   const profile = await input.workerProfiles.read(request.profile_id);
   const identity = stableJson({
     parent_session_id: request.parent_session_id,
     parent_turn_id: request.parent_turn_id,
+    action_key: request.action_key,
     objective: request.objective,
     acceptance_criteria: request.acceptance_criteria,
     profile_id: profile.id,
@@ -69,6 +71,18 @@ export async function delegateReviewedWorker(
     objective: request.objective,
     acceptance_criteria: [...request.acceptance_criteria],
     task_or_plan_refs: [reviewed.parent_work_ref.plan_revision_id],
+    plan_action: {
+      action_key: planAction.actionKey,
+      description: planAction.description,
+      dependency_keys: [...planAction.dependencyKeys],
+      ...(planAction.effect ? { effect: { ...planAction.effect } } : {}),
+      ...(reviewed.latest_checkpoint?.publicSummary
+        ? { checkpoint_summary: reviewed.latest_checkpoint.publicSummary }
+        : {}),
+      ...(reviewed.latest_checkpoint?.nextStep
+        ? { next_step: reviewed.latest_checkpoint.nextStep }
+        : {}),
+    },
     constraints_and_non_goals: ["Execute only this bounded Task and report to the Steward."],
     allowed_tools_and_effects: allowedToolsAndEffects,
     mutation_scope: request.parent_access_mode === "read_only" ? [] : ["."],
@@ -158,6 +172,26 @@ export async function delegateReviewedWorker(
     root_work_id: taskId,
     child_workspace_path: parent.workspacePath,
   };
+}
+
+function selectedPlanAction(
+  reviewed: Awaited<ReturnType<typeof loadReviewedDelegationPlan>>,
+  actionKey: string,
+) {
+  const action = reviewed.actions.find((candidate) => candidate.actionKey === actionKey);
+  if (!action) throw new Error("worker_plan_action_missing");
+  const progress = new Map(reviewed.action_progress.map((item) => [item.actionKey, item.status]));
+  const status = progress.get(actionKey) ?? "pending";
+  if (status === "done" || status === "skipped" || status === "blocked") {
+    throw new Error("worker_plan_action_not_executable");
+  }
+  if (action.dependencyKeys.some((dependency) => {
+    const dependencyStatus = progress.get(dependency);
+    return dependencyStatus !== "done" && dependencyStatus !== "skipped";
+  })) {
+    throw new Error("worker_plan_action_dependency_incomplete");
+  }
+  return action;
 }
 
 function existingWorker(

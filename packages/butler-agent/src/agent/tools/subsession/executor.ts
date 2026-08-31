@@ -52,12 +52,14 @@ export function createSubsessionToolHandlers(input: {
     },
     [delegateToWorkerToolDefinition.name]: async (call: ButlerToolCall) => {
       const identity = requireDelegationIdentity(input);
+      const actionKey = requiredString(call.args.action_key, "action_key");
       const objective = requiredString(call.args.objective, "objective");
       const acceptanceCriteria = stringArray(call.args.acceptance_criteria, "acceptance_criteria");
       const safeTitle = optionalSafeTitle(call.args.safe_title);
       const profileId = optionalString(call.args.profile_id);
       await input.service!.delegateWorkerReviewed({
         ...identity,
+        action_key: actionKey,
         objective,
         acceptance_criteria: acceptanceCriteria,
         ...(safeTitle ? { safe_title: safeTitle } : {}),
