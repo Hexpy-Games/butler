@@ -15,11 +15,18 @@ export function migrateSubsessionResultSchema(db: Database): void {
   if (
     definition.includes("status IN ('success', 'blocked', 'failed', 'cancelled')") &&
     definition.includes("'delegation_context_incomplete'") &&
+    definition.includes("'worker_no_progress'") &&
     !definition.includes("'task_needs_split'")
   ) {
     addDetailedResultColumns(db);
     return;
   }
+  const legacyColumns = new Set(db.query<{ name: string }, []>(
+    "PRAGMA table_info(btcc_steward_results)",
+  ).all().map((column) => column.name));
+  const codeSource = definition.includes("'task_needs_split'")
+    ? "NULL"
+    : sourceColumn(legacyColumns, "code", "NULL");
   const legacyTable = "btcc_steward_results_ss02_success";
   db.exec(`ALTER TABLE btcc_steward_results RENAME TO ${legacyTable}`);
   db.exec(resultTableSchema());
@@ -27,15 +34,32 @@ export function migrateSubsessionResultSchema(db: Database): void {
     INSERT INTO btcc_steward_results (
       result_id, relation_id, task_id, child_session_id, child_turn_id,
       status, code, summary, acceptance_evidence_json, changed_artifacts_json,
+      changed_files_json, commits_json, tests_json, remaining_risks_json,
+      follow_up_recommendations_json, detail_refs_json,
       created_at
     )
     SELECT result_id, relation_id, task_id, child_session_id, child_turn_id,
-      status, NULL, summary, acceptance_evidence_json, changed_artifacts_json,
+      status, ${codeSource}, summary,
+      acceptance_evidence_json, changed_artifacts_json,
+      ${sourceColumn(legacyColumns, "changed_files_json", "'[]'")},
+      ${sourceColumn(legacyColumns, "commits_json", "'[]'")},
+      ${sourceColumn(legacyColumns, "tests_json", "'[]'")},
+      ${sourceColumn(legacyColumns, "remaining_risks_json", "'[]'")},
+      ${sourceColumn(legacyColumns, "follow_up_recommendations_json", "'[]'")},
+      ${sourceColumn(legacyColumns, "detail_refs_json", "'[]'")},
       created_at
     FROM ${legacyTable}
   `);
   db.exec(`DROP TABLE ${legacyTable}`);
   addDetailedResultColumns(db);
+}
+
+function sourceColumn(
+  columns: ReadonlySet<string>,
+  name: string,
+  fallback: string,
+): string {
+  return columns.has(name) ? name : fallback;
 }
 
 function addDetailedResultColumns(db: Database): void {

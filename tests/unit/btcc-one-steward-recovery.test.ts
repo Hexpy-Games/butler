@@ -832,6 +832,52 @@ test("populated current Steward results reopen through the additive detail migra
   db.close();
 });
 
+test("current Steward result schema adds worker no-progress without losing result detail", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-worker-result-code-migration-"));
+  roots.push(root);
+  const db = new Database(join(root, "btcc.sqlite"));
+  db.exec(BTCC_SUBSESSION_SCHEMA.replace(", 'worker_no_progress'", ""));
+  db.exec(`
+    INSERT INTO btcc_session_relations VALUES
+      ('relation-existing', 'parent', 'parent-turn', 'child-existing',
+       'message-existing', 1, 'Existing result', '2026-09-01T00:00:00.000Z'),
+      ('relation-worker', 'parent', 'parent-turn', 'child-worker',
+       'message-worker', 2, 'Worker result', '2026-09-01T00:00:01.000Z');
+    INSERT INTO btcc_steward_results (
+      result_id, relation_id, task_id, child_session_id, child_turn_id,
+      status, code, summary, acceptance_evidence_json, changed_artifacts_json,
+      changed_files_json, commits_json, tests_json, remaining_risks_json,
+      follow_up_recommendations_json, detail_refs_json, created_at
+    ) VALUES (
+      'result-existing', 'relation-existing', 'task-existing', 'child-existing',
+      'turn-existing', 'blocked', 'steward_execution_failed', 'Keep detail.',
+      '["evidence"]', '["artifact"]', '[{"path":"file.ts"}]', '["commit"]',
+      '["test"]', '["risk"]', '["follow-up"]', '["detail"]',
+      '2026-09-01T00:00:02.000Z'
+    );
+  `);
+
+  migrateSubsessionResultSchema(db);
+
+  expect(db.query<{ code: string; tests_json: string; changed_files_json: string }, []>(`
+    SELECT code, tests_json, changed_files_json FROM btcc_steward_results
+    WHERE result_id = 'result-existing'
+  `).get()).toEqual({
+    code: "steward_execution_failed",
+    tests_json: '["test"]',
+    changed_files_json: '[{"path":"file.ts"}]',
+  });
+  expect(() => db.exec(`
+    INSERT INTO btcc_steward_results (
+      result_id, relation_id, task_id, child_session_id, child_turn_id,
+      status, code, summary, acceptance_evidence_json, changed_artifacts_json, created_at
+    ) VALUES ('result-worker', 'relation-worker', 'task-worker', 'child-worker',
+      'turn-worker', 'blocked', 'worker_no_progress', 'No progress.', '[]', '[]',
+      '2026-09-01T00:00:03.000Z')
+  `)).not.toThrow();
+  db.close();
+});
+
 function recoveryRound(input: {
   childRequests: ModelRoundRequest[];
   synthesisEvidence: string[];
