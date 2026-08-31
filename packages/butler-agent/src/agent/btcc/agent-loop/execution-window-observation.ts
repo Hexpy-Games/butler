@@ -1,6 +1,10 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { relative, resolve } from "node:path";
 import type {
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
+import type { GuidedToolJournalRecord } from "../ports/index.ts";
 import type {
   DurableWorkContext,
   DurableWorkService,
@@ -14,10 +18,15 @@ export function createGuidedExecutionWindowObserver(input: {
   workScope: WorkTurnScope;
   turnId: string;
   trackingMode: "ledger" | "local" | "none";
+  role: string;
+  workspacePath: string;
+  listToolRecords: () => GuidedToolJournalRecord[];
   signal: AbortSignal;
 }) {
   let observedToolResults = 0;
-  return async ({
+  let priorWorkerState: string | null = null;
+  let workerBlockedReport: string | null = null;
+  const observe = async ({
     windowIndex,
     toolResults,
   }: {
@@ -27,6 +36,28 @@ export function createGuidedExecutionWindowObserver(input: {
     if (input.signal.aborted) throwGuidedAbort(input.signal);
     const windowToolResults = toolResults.slice(observedToolResults);
     observedToolResults = toolResults.length;
+    if (input.role === "worker") {
+      const issue = executionWindowIssueSignature(windowToolResults);
+      if (issue) {
+        const workspace = await trackedWorkspaceFingerprint(
+          input.workspacePath,
+          input.listToolRecords(),
+        );
+        const state = `${issue}\0${workspace}`;
+        if (state === priorWorkerState) {
+          workerBlockedReport = [
+            "Worker could not complete the assigned Plan action.",
+            "Two consecutive execution windows repeated the same failed, unchanged, or redundant tool pattern without changing the tracked workspace output.",
+            `Observed pattern: ${issue}.`,
+            "The Steward should inspect this result and steer, revise, split, or reassign the Plan action.",
+          ].join(" ");
+          return undefined;
+        }
+        priorWorkerState = state;
+      } else {
+        priorWorkerState = null;
+      }
+    }
     const context = input.trackingMode === "none"
       ? null
       : await safeLoadWorkContext(input.durableWork, input.workScope);
@@ -39,6 +70,10 @@ export function createGuidedExecutionWindowObserver(input: {
       boundWork,
       toolResults: windowToolResults,
     });
+  };
+  return {
+    observe,
+    blockedReport: () => workerBlockedReport,
   };
 }
 
@@ -109,6 +144,51 @@ function diagnoseExecutionWindow(toolResults: readonly BtccAgentLoopToolResult[]
     summary: `Window diagnosis: ${toolResults.length - failed.length} successful and ${failed.length} failed tool results.`,
     details,
   };
+}
+
+function executionWindowIssueSignature(
+  toolResults: readonly BtccAgentLoopToolResult[],
+): string | null {
+  if (toolResults.length === 0) return "no tool result";
+  const failedCodes = [...new Set(toolResults.flatMap((result) =>
+    result.ok ? [] : [result.error.code]))].sort();
+  const counts = new Map<string, number>();
+  for (const result of toolResults) {
+    counts.set(result.name, (counts.get(result.name) ?? 0) + 1);
+  }
+  const repeated = [...counts.entries()]
+    .filter(([, count]) => count >= 3)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0];
+  const parts = [
+    ...(failedCodes.length ? [`failures ${failedCodes.join(",")}`] : []),
+    ...(toolResults.some(isNoChangeMutation) ? ["no-change mutation"] : []),
+    ...(repeated ? [`repeated ${repeated[0]}`] : []),
+  ];
+  return parts.length ? parts.join("; ") : null;
+}
+
+async function trackedWorkspaceFingerprint(
+  workspacePath: string,
+  records: readonly GuidedToolJournalRecord[],
+): Promise<string> {
+  const paths = [...new Set(records.flatMap((record) =>
+    record.changedFiles?.map((file) => file.path) ?? []))].sort();
+  if (paths.length === 0) return "no tracked file output";
+  const workspaceRoot = resolve(workspacePath);
+  const hash = createHash("sha256");
+  for (const path of paths) {
+    const absolutePath = resolve(workspaceRoot, path);
+    const inside = relative(workspaceRoot, absolutePath);
+    if (inside.startsWith("..") || inside.startsWith("/")) continue;
+    hash.update(path).update("\0");
+    try {
+      hash.update(await readFile(absolutePath));
+    } catch {
+      hash.update("<missing>");
+    }
+    hash.update("\0");
+  }
+  return hash.digest("hex");
 }
 
 function isNoChangeMutation(result: BtccAgentLoopToolResult): boolean {

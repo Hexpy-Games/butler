@@ -320,6 +320,16 @@ export function createProductionGuidedTurnAgent(
           })
         : undefined;
       const directionAware = withStewardDirection({ modelRound, safeBoundary: subsessionDirectionSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: delegationRelease.reviewFinalCandidate });
+      const executionWindowObserver = createGuidedExecutionWindowObserver({
+        durableWork: input.durableWork,
+        workScope,
+        turnId: turn.turnId,
+        trackingMode: policy.trackingMode,
+        role: policy.role,
+        workspacePath: workspaceReference.get(),
+        listToolRecords: () => input.toolJournal.list(turn.turnId),
+        signal,
+      });
       const loopOptions: BtccAgentLoopInput = {
         prompt: requestAttribution.prompt,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
@@ -354,10 +364,11 @@ export function createProductionGuidedTurnAgent(
         operationResultReplay: operationResults.replay,
         ...(continuationBudget ? { continuationBudget } : {}),
         resolveOperationResultCallId: toolCalls.journalCallIdForProviderCall,
-        onExecutionWindowBoundary: createGuidedExecutionWindowObserver({
-          durableWork: input.durableWork, workScope, turnId: turn.turnId,
-          trackingMode: policy.trackingMode, signal,
-        }),
+        onExecutionWindowBoundary: executionWindowObserver.observe,
+        ...(policy.role === "worker" ? {
+          onLoopLimit: () => executionWindowObserver.blockedReport() ??
+            "Worker could not complete the assigned Plan action and returned control to the Steward.",
+        } : {}),
         ...authorityProjection.loopCallbacks,
         reviewFinalCandidate: directionAware.reviewFinalCandidate,
         executeTool: activeDelegationAdmission.execute(toolCalls.executeTool),
@@ -367,6 +378,7 @@ export function createProductionGuidedTurnAgent(
         parentSignal: signal,
         originalRequest: turn.originalMessage,
         emptyResponsePolicy: turn.context.emptyResponsePolicy,
+        acceptStoppedResult: policy.role === "worker",
         loadFacts: () => loadGuidedOperationalFacts({
           turnId: turn.turnId,
           readBoundWork: () => safeBoundWork(input.durableWork, turn.turnId),
@@ -383,6 +395,8 @@ export function createProductionGuidedTurnAgent(
         ? "no_visible" as const
         : undefined;
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
+      const workerBlocked = policy.role === "worker" &&
+        executionWindowObserver.blockedReport() !== null;
       const finalToolRecords = input.toolJournal.list(turn.turnId);
       const artifacts = collectGuidedFinalArtifacts(finalToolRecords);
       const changedFiles = collectGuidedChangedFiles(
@@ -392,7 +406,9 @@ export function createProductionGuidedTurnAgent(
       return guidedTurnResult({
         content: publicText,
         ...(terminalOutcome && !authorityProjection.continuation ? { terminalOutcome } : {}),
-        ...(finalWork?.status === "completed" || finalWork?.status === "blocked"
+        ...(workerBlocked
+          ? { workStatus: "blocked" as const }
+          : finalWork?.status === "completed" || finalWork?.status === "blocked"
           ? { workStatus: finalWork.status }
           : {}),
         artifacts,

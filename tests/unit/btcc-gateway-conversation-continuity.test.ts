@@ -178,6 +178,57 @@ test("Steward delivery without completed Work is reported as failed", async () =
   });
 });
 
+test("Worker diagnosed non-progress is reported to its Steward as blocked", async () => {
+  const completed: Array<
+    Parameters<SubsessionDelegationService["completeWorkerResult"]>[0]
+  > = [];
+  const handlers = createBtccGatewayHandlers({
+    btcc: {
+      runTurn: async () => ({
+        kind: "delivered",
+        turnId: "worker-turn-blocked",
+        messageId: "worker-message-blocked",
+        content: "Worker repeated the same non-progress pattern without changing workspace output.",
+        workStatus: "blocked",
+      }),
+      stopTurn: async ({ turnId }) => ({ kind: "cancelled", turnId }),
+    },
+    subsessionDelegation: {
+      completeWorkerResult: async (
+        input: Parameters<SubsessionDelegationService["completeWorkerResult"]>[0],
+      ) => {
+        completed.push(input);
+        return undefined as never;
+      },
+    } as unknown as SubsessionDelegationService,
+  });
+
+  await handlers.worker!({
+    route: {
+      sessionId: "worker/blocked",
+      role: "worker",
+      reason: "session-hint",
+      workspacePath: process.cwd(),
+    },
+    envelope: envelope(
+      "worker-turn-blocked",
+      "worker-input-blocked",
+      "Execute the assigned Plan action.",
+    ),
+  });
+
+  expect(completed).toEqual([{
+    childSessionId: "worker/blocked",
+    childTurnId: "worker-turn-blocked",
+    resultId: expect.any(String),
+    summary: "Worker repeated the same non-progress pattern without changing workspace output.",
+    status: "blocked",
+    code: "worker_no_progress",
+    changedArtifacts: [],
+    changedFiles: [],
+  }]);
+});
+
 test("Steward delivery preserves its bounded factual report for Butler synthesis", async () => {
   const completed: Array<{ status?: string; summary?: string }> = [];
   const report = [

@@ -19,6 +19,7 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
   parentSignal: AbortSignal;
   originalRequest: string;
   emptyResponsePolicy?: BtccEmptyResponsePolicy;
+  acceptStoppedResult?: boolean;
   loadFacts: () => Promise<Omit<OperationalFacts, "originalRequest">>;
 }): Promise<string> {
   try {
@@ -31,7 +32,7 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
     // Preserve it for the transport dispatcher to emit its typed queue
     // failure; converting it into an assistant fallback would hide the
     // durable input settlement obligation.
-    if (!result.stoppedByLimit &&
+    if ((!result.stoppedByLimit || input.acceptStoppedResult) &&
         (candidate || input.emptyResponsePolicy === "typed_terminal")) return candidate;
   } catch (error) {
     if (input.parentSignal.aborted) throwIfAborted(input.parentSignal);
