@@ -518,6 +518,15 @@ const butlerApp = Object.freeze({
   toggleWindowMaximize: () =>
     ipcRenderer.invoke("butler:window-toggle-maximize"),
   closeWindow: () => ipcRenderer.invoke("butler:window-close"),
+  getSessionFolderLaunchTargets: ({ sessionId } = {}) =>
+    ipcRenderer.invoke("butler:get-session-folder-launch-targets", {
+      sessionId,
+    }),
+  openSessionFolder: ({ sessionId, target } = {}) =>
+    ipcRenderer.invoke("butler:open-session-folder", {
+      sessionId,
+      target,
+    }),
   listChats: () => requestJson("/chats"),
   listNavigation: () => requestJson("/navigation"),
   getNewChatBriefing: ({ date, projectId } = {}) => {
