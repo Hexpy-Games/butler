@@ -15,6 +15,7 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { MessageContent } from "@/components/conversation/MessageContent.tsx";
 import { TurnActivityPanel } from "@/components/conversation/TurnActivityPanel.tsx";
+import { TurnActivityPending } from "@/components/conversation/TurnActivityPending.tsx";
 import { useSessionViewSubscription } from "./hooks/useSessionViewSubscription.ts";
 
 export function SessionObserverDialog() {
@@ -56,7 +57,7 @@ export function SessionObserverDialog() {
               <MessageRow
                 key={message.id}
                 role={message.role === "user" ? "user" : "assistant"}
-                data-test-class="steward-observer-message"
+                dataTestClass="steward-observer-message"
               >
                 <MessageContent
                   message={message}
@@ -69,7 +70,7 @@ export function SessionObserverDialog() {
               <MessageRow
                 role="assistant"
                 activity
-                data-test-class="steward-observer-activity"
+                dataTestClass="steward-observer-activity"
               >
                 <TurnActivityPanel
                   rows={view.active_turn.progress.safe_progress_rows}
@@ -79,7 +80,20 @@ export function SessionObserverDialog() {
                 />
               </MessageRow>
             ) : null}
-            {!view?.messages.length && !view?.active_turn ? (
+            {view?.waiting_for_children && !view.active_turn ? (
+              <MessageRow
+                role="assistant"
+                activity
+                dataTestClass="steward-observer-worker-wait"
+              >
+                <TurnActivityPending
+                  readModels={[]}
+                  state="waiting_for_children"
+                />
+              </MessageRow>
+            ) : null}
+            {!view?.messages.length && !view?.active_turn &&
+                !view?.waiting_for_children ? (
               <Typo.Caption>{appCopy.conversation.work.pendingLabel}</Typo.Caption>
             ) : null}
           </Stack>
@@ -100,7 +114,7 @@ export function SessionObserverDialog() {
                 : appCopy.conversation.work.resumeInterrupted}
             </Button>
           </Stack>
-        ) : view?.active_turn && view.relation ? (
+        ) : (view?.active_turn || view?.waiting_for_children) && view.relation ? (
           <Stack align="row" justify="end">
             <Button
               type="button"

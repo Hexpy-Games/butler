@@ -90,7 +90,7 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
   const resumedRelations: string[] = [];
   useButlerStore.setState({
     observerSessionId: sessionId,
-    sessionViews: { [sessionId]: observerView(sessionId) },
+    sessionViews: { [sessionId]: waitingObserverView(sessionId) },
     cancelObservedSteward: async (relationId) => {
       cancelledRelations.push(relationId);
       return true;
@@ -123,6 +123,13 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
   expect(timelineText.indexOf("Safe activity transcript")).toBeLessThan(
     timelineText.indexOf("Butler direction"),
   );
+  expect(dialog.querySelectorAll(
+    '[data-test-class*="steward-observer-worker-wait"]',
+  )).toHaveLength(1);
+  expect(dialog.querySelectorAll(
+    '[data-test-class="turn-current-phase-activity"]',
+  )).toHaveLength(1);
+  expect(timelineText).toContain("Waiting for Worker results.");
   const stopButton = Array.from(dialog.querySelectorAll("button")).find((button) =>
     /중지|stop/iu.test(button.textContent ?? ""),
   );
@@ -177,6 +184,7 @@ function observerView(sessionId: string): SessionView {
       status: "delivered",
     }, {
       id: "observer-assistant-message",
+      turn_id: "observer-active-turn",
       role: "assistant",
       text: "Safe activity transcript",
       status: "delivered",
@@ -207,6 +215,39 @@ function observerView(sessionId: string): SessionView {
     },
     generated_at: "2026-08-19T00:01:00.000Z",
     updated_at: "2026-08-19T00:01:00.000Z",
+  };
+}
+
+function waitingObserverView(sessionId: string): SessionView {
+  const view = observerView(sessionId);
+  return {
+    ...view,
+    active_turn: null,
+    waiting_for_children: true,
+    latest_turn: {
+      ...view.active_turn!,
+      state: "delivered",
+      cancellable: false,
+    },
+    messages: view.messages.map((message) =>
+      message.id === "observer-assistant-message"
+        ? {
+            ...message,
+            turn_activity_rows: [{
+              id: "completed-steward-activity",
+              kind: "ran_command",
+              state: "completed",
+              safe_label: "Completed Steward activity",
+              safe_tool_name: "Bun",
+              safe_input_label: "Completed Steward activity",
+              tool_call_id: "completed-steward-tool",
+              bridge_phase: "btcc_operation",
+              turn_id: "observer-active-turn",
+              semantic_block_id: "observer-active-turn",
+            }],
+          }
+        : message,
+    ),
   };
 }
 

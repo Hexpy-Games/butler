@@ -129,6 +129,7 @@ export async function runNativeButlerMain(
     const progressPublisher = createNativeButlerProgressPublisher({
       deliver: deliverThroughEnabledGate,
     });
+    btccHost?.progress.connect(progressPublisher);
     if (btccHost) await btccHost.progress.reconcile(progressPublisher);
     const recovered = inboundQueue.recoverRuntimeInterruptions(() => true);
     if (recovered.requeued > 0) {

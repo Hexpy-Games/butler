@@ -1,4 +1,5 @@
 import type {
+  BtccCommittedProgressEvent,
   BtccProgressDestination,
   BtccProgressEventRepository,
   BtccStopRequest,
@@ -15,6 +16,7 @@ export type TurnFacadeDependencies = {
   preparation: BtccTurnPreparation;
   progressEvents: BtccProgressEventRepository;
   turns: Pick<TurnStateRepository, "findTurn">;
+  publishCommitted?: (event: BtccCommittedProgressEvent) => Promise<void>;
 };
 
 export type TurnFacade = {
@@ -45,12 +47,13 @@ async function runPreparedTurn(
   );
   const progress = projectTurnProgressToEvents(async (event) => {
     prepared.recordEvent(event);
-    dependencies.progressEvents.append({
+    const committed = dependencies.progressEvents.append({
       sessionId: request.sessionId,
       turnId: request.turnId,
       destination: progressDestination,
       event,
     });
+    await dependencies.publishCommitted?.(committed);
   });
   const runtimeOutcome = await dependencies.runtime.runTurn(
     prepared.command,
@@ -60,12 +63,13 @@ async function runPreparedTurn(
       const admitted = await dependencies.turns.findTurn(request.turnId).catch(() => null);
       if (admitted?.semanticState === "cancelled") return;
       prepared.recordEvent({ kind: "turn.started" });
-      dependencies.progressEvents.append({
+      const committed = dependencies.progressEvents.append({
         sessionId: request.sessionId,
         turnId: request.turnId,
         destination: progressDestination,
         event: { kind: "turn.started" },
       });
+      await dependencies.publishCommitted?.(committed);
     },
   );
   const outcome: BtccTurnOutcome = {
@@ -102,12 +106,13 @@ async function stopPreparedTurn(
   if (!destination) {
     return { kind: "fenced_pending_persistence", turnId: request.turnId };
   }
-  dependencies.progressEvents.append({
+  const committed = dependencies.progressEvents.append({
     sessionId: turn.sessionId,
     turnId: turn.turnId,
     destination,
     event: { kind: "turn.cancelled" },
   });
+  await dependencies.publishCommitted?.(committed);
   return outcome;
 }
 

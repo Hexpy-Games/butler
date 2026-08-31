@@ -184,6 +184,40 @@ test("BTCC host replays pending progress across Turns without rerunning a Turn",
   expect(secondRuntime.commands).toHaveLength(0);
 });
 
+test("BTCC publishes committed progress immediately and preserves source time", async () => {
+  const progressEvents = new InMemoryBtccProgressEventRepository();
+  const published: import(
+    "../../packages/butler-agent/src/agent/btcc/projection/index.ts"
+  ).BtccCommittedProgressEvent[] = [];
+  const assembly = createBtcc({
+    runtime: new ProgressOnlyRuntime(),
+    preparation: preparation(),
+    progressEvents,
+    turns: { findTurn: async () => null },
+  });
+  assembly.host.progress.connect({
+    publish(event) {
+      published.push(event);
+    },
+  });
+
+  try {
+    const outcome = await assembly.btcc.runTurn(
+      request("session-immediate-progress", "turn-immediate-progress"),
+    );
+    expect(outcome.kind).toBe("delivered");
+    expect(published.map((event) => event.event.kind)).toEqual([
+      "turn.started",
+      "message.final.started",
+      "turn.completed",
+    ]);
+    expect(progressEvents.pending()).toEqual([]);
+    expect(published.every((event) => Boolean(event.event.createdAt))).toBe(true);
+  } finally {
+    await assembly.host.close();
+  }
+});
+
 function cancelledTurn(turnId: string): TurnRecord {
   return {
     turnId,

@@ -81,6 +81,7 @@ export function sessionViewForStewardObserver(
     status: projected.status,
     active_turn: projected.active_turn,
     latest_turn: projected.latest_turn,
+    waiting_for_children: projected.waiting_for_children,
     messages: fullMessages,
     message_window: {
       next_cursor: fullMessages.length,

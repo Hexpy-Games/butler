@@ -1,4 +1,5 @@
 import type {
+  BtccCommittedProgressEvent,
   BtccProgressEventRepository,
   BtccProgressProjectionHost,
   BtccTurnProgressPublisher,
@@ -14,24 +15,52 @@ import type {
 export function createBtccProgressProjectionHost(
   repository: BtccProgressEventRepository,
 ): BtccProgressProjectionHost {
-  let running: Promise<{
-    attempted: number;
-    published: number;
-    pending: number;
-  }> | null = null;
+  let publisher: BtccTurnProgressPublisher | null = null;
+  let deliveryTail: Promise<void> = Promise.resolve();
+
+  function enqueue<T>(delivery: () => Promise<T>): Promise<T> {
+    const next = deliveryTail.then(delivery, delivery);
+    deliveryTail = next.then(() => undefined, () => undefined);
+    return next;
+  }
 
   return {
     hasCommittedEvent(turnId: string, kind: string): boolean {
       return repository.forTurn(turnId).some((event) => event.event.kind === kind);
     },
-    reconcile(publisher: BtccTurnProgressPublisher) {
-      if (running) return running;
-      running = reconcile(repository, publisher).finally(() => {
-        running = null;
+    connect(nextPublisher: BtccTurnProgressPublisher): void {
+      publisher = nextPublisher;
+    },
+    publishCommitted(event: BtccCommittedProgressEvent) {
+      if (!publisher) return Promise.resolve();
+      return enqueue(async () => {
+        const pending = repository.pending(event.turnId).find(
+          (candidate) => candidate.eventId === event.eventId,
+        );
+        if (!pending || !publisher) return;
+        await publish(repository, publisher, pending);
       });
-      return running;
+    },
+    reconcile(nextPublisher: BtccTurnProgressPublisher) {
+      publisher = nextPublisher;
+      return enqueue(() => reconcile(repository, nextPublisher));
     },
   };
+}
+
+async function publish(
+  repository: BtccProgressEventRepository,
+  publisher: BtccTurnProgressPublisher,
+  event: BtccCommittedProgressEvent,
+): Promise<boolean> {
+  try {
+    await publisher.publish(event);
+    repository.markPublished(event.eventId);
+    return true;
+  } catch {
+    // The durable event remains pending for the normal reconciliation poll.
+    return false;
+  }
 }
 
 async function reconcile(
@@ -45,13 +74,8 @@ async function reconcile(
   const pending = repository.pending();
   let published = 0;
   for (const event of pending) {
-    try {
-      await publisher.publish(event);
-      repository.markPublished(event.eventId);
+    if (await publish(repository, publisher, event)) {
       published += 1;
-    } catch {
-      // Projection failure must not veto Turn state or prevent later events
-      // from being retried by the next host poll.
     }
   }
   return {

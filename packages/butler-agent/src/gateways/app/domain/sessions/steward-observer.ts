@@ -111,6 +111,7 @@ export interface ProjectedStewardSession {
   status: "idle" | "active" | "delivered" | "failed" | "cancelled";
   active_turn: SessionViewTurn | null;
   latest_turn: SessionViewTurn | null;
+  waiting_for_children: boolean;
   activity_rows: ProgressSummaryRow[];
   approved_plan_revision?: number;
   approved_plan_total?: number;
@@ -277,13 +278,15 @@ export function projectStewardSession(
     )
     : [];
   const recoverable = latestTurn?.recovery?.state === "recoverable";
-  const activeTurn = latestTurn && !result && !recoverable
+  const waitingForChildren = Boolean(snapshot.waiting_for_children);
+  const activeTurn = latestTurn && !result && !recoverable &&
+      isActiveObserverTurn(latestTurn.state)
     ? projectStewardTurn(
-        latestTurn, activityRows, true, Boolean(snapshot.waiting_for_children),
+        latestTurn, activityRows, true, waitingForChildren,
       )
     : null;
   const latestTurnView = projectStewardTurn(
-    latestTurn, activityRows, Boolean(activeTurn), Boolean(snapshot.waiting_for_children),
+    latestTurn, activityRows, Boolean(activeTurn), waitingForChildren,
   );
   const status = result
     ? observerResultStatus(result.status)
@@ -299,6 +302,7 @@ export function projectStewardSession(
     status,
     active_turn: activeTurn,
     latest_turn: latestTurnView,
+    waiting_for_children: waitingForChildren,
     activity_rows: activityRows,
     ...(approvedPlan
       ? {
@@ -340,6 +344,7 @@ export function emptyStewardProjection(
     status: "idle",
     active_turn: null,
     latest_turn: null,
+    waiting_for_children: false,
     activity_rows: [],
     artifacts: [],
     changed_files: [],
@@ -347,6 +352,10 @@ export function emptyStewardProjection(
     updated_at: relation.created_at,
     terminal: false,
   };
+}
+
+function isActiveObserverTurn(state: string): boolean {
+  return state !== "delivered" && state !== "cancelled" && state !== "failed";
 }
 
 function observerTurnState(state: string): SessionViewTurn["state"] {
