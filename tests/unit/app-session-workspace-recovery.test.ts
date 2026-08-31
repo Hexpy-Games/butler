@@ -62,6 +62,9 @@ test("public project-session creation binds a checked-out session worktree befor
     const binding = bindings.getBySessionId(runtimeSessionId);
     expect(binding).toBeTruthy();
     expect(binding?.workspacePath).not.toBe(projectRow!.workspace_path);
+    const worktreeName = basename(binding!.workspacePath);
+    expect(worktreeName.startsWith("automatic-worktree-project-")).toBe(true);
+    expect(worktreeName).not.toContain("butler-s");
     const workspaceMarker = binding?.metadata?.sessionWorkspace as
       Record<string, unknown> | undefined;
     const branch = String(workspaceMarker?.branch ?? "");

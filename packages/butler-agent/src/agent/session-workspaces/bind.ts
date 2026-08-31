@@ -77,7 +77,12 @@ async function bindSessionGitWorktreeUnlocked(
   let derivedTargetPath: string | undefined;
   if (action === "create") {
     try {
-      derivedTargetPath = deterministicTargetPath(input.butlerData, input.sessionId, branch);
+      derivedTargetPath = deterministicTargetPath(
+        input.butlerData,
+        input.sessionId,
+        branch,
+        input.projectName,
+      );
       ensureSessionWorktreeRoot(input.butlerData, derivedTargetPath);
     } catch {
       return failure("worktree_target_occupied", action, branch);
