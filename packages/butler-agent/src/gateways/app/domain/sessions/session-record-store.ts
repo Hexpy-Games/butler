@@ -300,6 +300,13 @@ export class AppSessionRecordStore {
     return this.messages.messageRecordById(messageId);
   }
 
+  replaceMessageChangedFiles(
+    messageId: string,
+    paths: readonly string[],
+  ): MessageRecord {
+    return this.messages.replaceMessageChangedFiles(messageId, paths);
+  }
+
   getLatestAssistantMessageForTurn(turnId: string): MessageRow | null {
     return this.messages.getLatestAssistantMessageForTurn(turnId);
   }

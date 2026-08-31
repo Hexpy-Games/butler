@@ -48,13 +48,19 @@ export interface AppStoreKernelMessageRecordHost {
     turnId: string,
     texts: string[],
     files?: MessageFileRow[],
+    changedFiles?: string[],
   ): MessageRecord[];
   insertOrReplaceAssistantReplies(
     chatId: string,
     turnId: string,
     texts: string[],
     files?: MessageFileRow[],
+    changedFiles?: string[],
   ): MessageRecord[];
+  replaceMessageChangedFiles(
+    messageId: string,
+    paths: readonly string[],
+  ): MessageRecord;
   finalizeResponderLimitedDelivery(
     chatId: string,
     turnId: string,
@@ -149,21 +155,32 @@ export function createMessageRecordHost(
         options,
       );
     },
-    insertAssistantReplies(chatId, turnId, texts, files = []) {
+    insertAssistantReplies(chatId, turnId, texts, files = [], changedFiles = []) {
       return kernel.assistantMessages.insertReplies(
         chatId,
         turnId,
         texts,
         files,
+        changedFiles,
       );
     },
-    insertOrReplaceAssistantReplies(chatId, turnId, texts, files = []) {
+    insertOrReplaceAssistantReplies(
+      chatId,
+      turnId,
+      texts,
+      files = [],
+      changedFiles = [],
+    ) {
       return kernel.assistantMessages.insertOrReplaceReplies(
         chatId,
         turnId,
         texts,
         files,
+        changedFiles,
       );
+    },
+    replaceMessageChangedFiles(messageId, paths) {
+      return kernel.sessionRecords.replaceMessageChangedFiles(messageId, paths);
     },
     finalizeResponderLimitedDelivery(
       chatId,

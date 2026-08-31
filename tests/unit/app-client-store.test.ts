@@ -2647,6 +2647,7 @@ test("openSession immediately restores active Steward state from the keyed Sessi
     approved_plan_total: 3,
     approved_plan_completed: 1,
     artifacts: [],
+    changed_files: [],
     result: null,
     updated_at: "2026-05-05T00:00:02.000Z",
     terminal: false,

@@ -75,6 +75,9 @@ export class SqliteGuidedStopController {
         ...(finalPayload.artifacts?.length
           ? { artifacts: finalPayload.artifacts }
           : {}),
+        ...(finalPayload.changedFiles?.length
+          ? { changedFiles: finalPayload.changedFiles }
+          : {}),
       };
     }
     if (turn.semantic_state === "cancelled") {

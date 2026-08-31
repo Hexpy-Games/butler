@@ -10,6 +10,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { collectGuidedFinalArtifacts } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
+import { collectGuidedChangedFiles } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-changed-files.ts";
 import { boundedTerminalReportContent } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/terminal-results.ts";
 import { projectChildTerminalReport, projectTurnOutcome } from
@@ -76,21 +78,18 @@ test("completed guided tool results become bounded safe final artifacts", () => 
   }]);
 });
 
-test("accepted parent result evidence carries safe child artifacts to the final message", () => {
-  const artifacts = collectGuidedFinalArtifacts([], [
+test("accepted parent result evidence carries changed files separately from artifacts", () => {
+  const evidence = [
     "Canonical child result synthesis",
     "Status: success",
     "Summary: 조사 완료",
     "Changed artifacts: research/memory-brain-structure-ko.md; ../private.txt; /private/leak.txt",
-  ].join("\n"));
+  ].join("\n");
 
-  expect(artifacts).toEqual([{
-    id: expect.stringMatching(/^artifact-/u),
-    kind: "file",
-    title: "memory-brain-structure-ko.md",
-    safePathLabel: "research/memory-brain-structure-ko.md",
-    mimeType: "text/plain",
-  }]);
+  expect(collectGuidedFinalArtifacts([])).toEqual([]);
+  expect(collectGuidedChangedFiles([], evidence)).toEqual([
+    "research/memory-brain-structure-ko.md",
+  ]);
 });
 
 test("BTCC gateway outcome projection preserves typed final artifacts", () => {
@@ -111,6 +110,7 @@ test("BTCC gateway outcome projection preserves typed final artifacts", () => {
 
   expect(result).toEqual({
     text: "캡처 결과입니다.",
+    changedFiles: [],
     artifacts: [{
       id: "artifact-page",
       kind: "chart_file",

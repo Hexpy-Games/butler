@@ -116,6 +116,7 @@ export interface ProjectedStewardSession {
   approved_plan_total?: number;
   approved_plan_completed?: number;
   artifacts: StewardSessionSummaryView["artifacts"];
+  changed_files: StewardSessionSummaryView["changed_files"];
   result: StewardResultView | null;
   updated_at: string;
   terminal: boolean;
@@ -308,16 +309,8 @@ export function projectStewardSession(
           ).length,
         }
       : {}),
-    artifacts: result?.changed_artifacts.map((path, index) => ({
-      id: `steward-artifact:${result.result_id}:${index}`,
-      session_id: snapshot.session_id,
-      turn_id: result.child_turn_id,
-      kind: "file" as const,
-      title: path.split("/").at(-1) ?? path,
-      safe_path_label: path,
-      created_at: result.created_at,
-      open_action: "unsupported" as const,
-    })) ?? [],
+    artifacts: [],
+    changed_files: result?.changed_artifacts ?? [],
     result,
     updated_at: snapshot.updated_at,
     terminal: Boolean(result),
@@ -348,6 +341,7 @@ export function emptyStewardProjection(
     latest_turn: null,
     activity_rows: [],
     artifacts: [],
+    changed_files: [],
     result: null,
     updated_at: relation.created_at,
     terminal: false,

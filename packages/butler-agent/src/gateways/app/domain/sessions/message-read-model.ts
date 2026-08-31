@@ -75,6 +75,7 @@ export interface TurnReadModelRow {
 export function messageFromRow(
   row: MessageReadModelRow,
   attachments: MessageFileRef[] = [],
+  changedFiles: string[] = [],
 ): MessageRecord {
   const message: MessageRecord = {
     id: row.id,
@@ -95,6 +96,7 @@ export function messageFromRow(
   if (attachments.length > 0) message.attachments = attachments;
   const artifacts = artifactSummariesFromMessage(row, attachments);
   if (artifacts.length > 0) message.artifacts = artifacts;
+  if (changedFiles.length > 0) message.changed_files = changedFiles;
   return message;
 }
 

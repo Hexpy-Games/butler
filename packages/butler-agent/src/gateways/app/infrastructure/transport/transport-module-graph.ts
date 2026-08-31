@@ -63,8 +63,19 @@ export function createAppTransportModuleGraph(input: {
       host.getLatestAssistantMessageForTurn(turnId),
     insertMessage: (chatId, role, text, status, options) =>
       host.insertMessage(chatId, role, text, status, options),
-    insertOrReplaceAssistantReplies: (chatId, turnId, texts, files) =>
-      host.insertOrReplaceAssistantReplies(chatId, turnId, texts, files),
+    insertOrReplaceAssistantReplies: (
+      chatId,
+      turnId,
+      texts,
+      files,
+      changedFiles,
+    ) => host.insertOrReplaceAssistantReplies(
+      chatId,
+      turnId,
+      texts,
+      files,
+      changedFiles,
+    ),
     updateTurnState: (turnId, state, options) =>
       host.updateTurnState(turnId, state, options),
     appendTerminalTurnStateChanged: (turn) =>

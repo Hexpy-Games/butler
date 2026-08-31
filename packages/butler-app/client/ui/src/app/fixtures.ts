@@ -191,6 +191,7 @@ const HARNESS_STEWARD_CHILD: StewardSessionSummaryView = {
   approved_plan_total: 3,
   approved_plan_completed: 1,
   artifacts: [],
+  changed_files: [],
   result: null,
   updated_at: "2026-05-01T00:10:00.000Z",
   terminal: false,

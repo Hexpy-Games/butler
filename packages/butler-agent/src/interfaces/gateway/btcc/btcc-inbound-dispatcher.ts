@@ -288,8 +288,9 @@ function finalActions(
   if (actions.length > 0) return actions;
   const text = result.handlerResult.metadata?.text;
   const artifacts = artifactRefs(result.handlerResult.metadata?.artifacts);
+  const changedFiles = changedFilePaths(result.handlerResult.metadata?.changedFiles);
   const noVisibleReply = typeof text !== "string" ||
-    (!text.trim() && artifacts.length === 0);
+    (!text.trim() && artifacts.length === 0 && changedFiles.length === 0);
   const finalTargets = noVisibleReply
     ? claimedAppTerminalTargets(item, targets)
     : targets;
@@ -302,6 +303,7 @@ function finalActions(
     target,
     text: typeof text === "string" ? text : "",
     artifacts,
+    changedFiles,
     generatedSessionTitle,
     executionModel: result.handlerResult.metadata?.executionModel,
     canonicalMessageId: optionalText(result.handlerResult.metadata?.canonicalMessageId),
@@ -330,6 +332,7 @@ function finalAction(input: {
   target: SessionTransportBinding;
   text: string;
   artifacts: ArtifactRef[];
+  changedFiles?: string[];
   generatedSessionTitle?: string;
   canonicalMessageId?: string;
   turnId?: string;
@@ -357,6 +360,7 @@ function finalAction(input: {
     message: {
       text: input.text,
       artifacts: input.artifacts.length > 0 ? input.artifacts : undefined,
+      changedFiles: input.changedFiles?.length ? input.changedFiles : undefined,
       replyToMessageId: item.envelope.message.id,
     },
     metadata: {
@@ -373,6 +377,13 @@ function finalAction(input: {
       ...(input.executionModel ? { executionModel: input.executionModel } : {}),
     },
   };
+}
+
+function changedFilePaths(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((path): path is string =>
+    typeof path === "string" && Boolean(path.trim()),
+  ).map((path) => path.trim()).slice(0, 40);
 }
 
 function artifactRefs(value: unknown): ArtifactRef[] {

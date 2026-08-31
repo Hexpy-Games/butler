@@ -154,6 +154,7 @@ export type BtccTurnOutcome = (
       content: string;
       workStatus?: "completed" | "blocked";
       artifacts?: BtccFinalArtifact[];
+      changedFiles?: string[];
       modelIdentity?: {
         requestedModelRef: string;
         effectiveModelRef: string;

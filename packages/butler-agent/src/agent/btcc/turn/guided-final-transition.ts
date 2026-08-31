@@ -18,6 +18,7 @@ export function guidedFinalTransition(
     content,
     ...(result.workStatus ? { workStatus: result.workStatus } : {}),
     ...(result.artifacts?.length ? { artifacts: result.artifacts } : {}),
+    ...(result.changedFiles?.length ? { changedFiles: result.changedFiles } : {}),
     ...(result.modelIdentity ? { modelIdentity: result.modelIdentity } : {}),
   };
   const finalPayload = {

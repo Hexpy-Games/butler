@@ -131,6 +131,7 @@ export interface OutboundAction {
     text?: string;
     attachments?: AttachmentRef[];
     artifacts?: ArtifactRef[];
+    changedFiles?: string[];
     replyToMessageId?: string;
     editMessageId?: string;
   };

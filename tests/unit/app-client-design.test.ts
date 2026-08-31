@@ -1601,6 +1601,9 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("function MessageAttachments");
   expect(renderer).toContain("function MessageArtifacts");
   expect(renderer).toContain('data-test-class="message-artifact-list"');
+  expect(renderer).toContain("function MessageChangedFiles");
+  expect(renderer).toContain('data-test-class="message-changed-file-list"');
+  expect(renderer).toContain("message.changed_files");
   expect(renderer).toContain("<ArtifactList");
   expect(renderer).toContain('data-test-class="artifact-viewer"');
   expect(renderer).toContain("message.artifacts");
@@ -1687,6 +1690,9 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
     "packages/butler-app/client/ui/src/components/conversation/MessageContent.tsx",
   );
   expect(messageContent.indexOf("<MessageArtifacts")).toBeLessThan(
+    messageContent.indexOf("<MessageChangedFiles"),
+  );
+  expect(messageContent.indexOf("<MessageChangedFiles")).toBeLessThan(
     messageContent.indexOf("<AssistantResponseFooter"),
   );
 });

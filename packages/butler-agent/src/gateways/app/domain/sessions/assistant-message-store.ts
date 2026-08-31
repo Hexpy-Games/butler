@@ -39,6 +39,10 @@ export class AppAssistantMessageStore {
         },
       ) => MessageRecord;
       messageRecordById: (messageId: string) => MessageRecord;
+      replaceMessageChangedFiles: (
+        messageId: string,
+        paths: readonly string[],
+      ) => MessageRecord;
       getLatestAssistantMessageForTurn: (turnId: string) => MessageRow | null;
       listMessages: (chatId: string) => MessageRecord[];
       messageWithTerminalWorkBlocks: (
@@ -54,10 +58,11 @@ export class AppAssistantMessageStore {
     turnId: string,
     texts: string[],
     files: MessageFileRow[] = [],
+    changedFiles: string[] = [],
   ): MessageRecord[] {
     return normalizedAssistantReplyTexts(texts, files).map(
       (replyText, index, normalizedReplies) => {
-        const reply = this.input.insertMessage(
+        let reply = this.input.insertMessage(
           chatId,
           "assistant",
           replyText,
@@ -67,6 +72,9 @@ export class AppAssistantMessageStore {
             attachments: index === normalizedReplies.length - 1 ? files : [],
           },
         );
+        if (index === normalizedReplies.length - 1) {
+          reply = this.input.replaceMessageChangedFiles(reply.id, changedFiles);
+        }
         this.input.appendEvent("message.created", { message: reply });
         return reply;
       },
@@ -78,10 +86,19 @@ export class AppAssistantMessageStore {
     turnId: string,
     texts: string[],
     files: MessageFileRow[] = [],
+    changedFiles: string[] = [],
   ): MessageRecord[] {
     const normalizedReplies = normalizedAssistantReplyTexts(texts, files);
     const existing = this.input.getLatestAssistantMessageForTurn(turnId);
-    if (!existing) return this.insertReplies(chatId, turnId, normalizedReplies, files);
+    if (!existing) {
+      return this.insertReplies(
+        chatId,
+        turnId,
+        normalizedReplies,
+        files,
+        changedFiles,
+      );
+    }
 
     const [firstReply, ...remainingReplies] = normalizedReplies;
     const attachFilesToUpdated = remainingReplies.length === 0 ? files : [];
@@ -99,11 +116,21 @@ export class AppAssistantMessageStore {
       );
       updated = this.input.messageRecordById(updated.id);
     }
+    updated = this.input.replaceMessageChangedFiles(
+      updated.id,
+      remainingReplies.length === 0 ? changedFiles : [],
+    );
     this.input.appendEvent("message.updated", { message: updated });
     if (remainingReplies.length === 0) return [updated];
     return [
       updated,
-      ...this.insertReplies(chatId, turnId, remainingReplies, files),
+      ...this.insertReplies(
+        chatId,
+        turnId,
+        remainingReplies,
+        files,
+        changedFiles,
+      ),
     ];
   }
 

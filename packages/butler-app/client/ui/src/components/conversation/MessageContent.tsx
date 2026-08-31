@@ -11,6 +11,7 @@ import {
 import { CompletedWorkBlocks } from "./CompletedWorkBlocks";
 import { CompletedTurnActivity } from "./CompletedTurnActivity";
 import { MessageArtifacts } from "./MessageArtifacts";
+import { MessageChangedFiles } from "./MessageChangedFiles";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
@@ -85,6 +86,9 @@ function MessageContentComponent({
           artifacts={artifacts}
           attachments={message.attachments ?? []}
         />
+      )}
+      {message.role === "assistant" && (
+        <MessageChangedFiles paths={message.changed_files ?? []} />
       )}
       {message.role === "assistant" && onCopyAssistantMessage && (
         <AssistantResponseFooter
