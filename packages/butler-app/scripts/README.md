@@ -1,11 +1,27 @@
 # Butler App Scripts
 
 `packages/butler-app/scripts/` contains app-owned development, HMR, release,
-and client-only quality checks. Development launches only the Electron client
-and Vite renderer; the local HTTP app gateway is agent-owned and must already
-be reachable through `BUTLER_APP_SERVER_URL` or `BUTLER_APP_SERVER_PORT`. The
-agent gateway allows the default Vite origin `http://127.0.0.1:5173` so the
-dev renderer can attach without starting a second app-server.
+and client-only quality checks. `bun run dev:butler` is the one-command local
+development path: it starts the existing Agent-owned app gateway, waits for
+its `/health` endpoint, and then starts the existing `app:client:dev` Vite and
+Electron path.
+
+The command uses the absolute repository-local `.dev-butler` data root by
+default, separate development ports (`28765` for the gateway and `25173` for
+Vite), and `.dev-butler/app/electron-user-data` for the Electron profile. It
+prints the selected data root and URLs before startup and keeps the data root
+when the run stops. Deliberate overrides are supported through
+`BUTLER_DEV_DATA`, `BUTLER_DEV_SERVER_PORT`, and `BUTLER_DEV_UI_PORT`. The
+runner intentionally does not inherit the corresponding normal Butler runtime
+variables; it maps only these explicit development overrides into the child
+processes. Gateway/UI hosts remain loopback-only, and the Electron profile
+always stays under the selected development data root.
+
+The runner owns the gateway and client children it starts. Ctrl-C, termination,
+readiness failure, or either child exiting settles the other child; it does not
+delete `.dev-butler`. It uses direct Node/Bun child-process APIs, with POSIX
+process groups and attached Windows children, and does not start a second
+gateway or Electron runtime.
 
 ## Key Areas
 
