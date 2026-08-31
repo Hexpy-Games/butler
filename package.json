@@ -35,6 +35,7 @@
     "conversation:historical-recovery": "${BUTLER_BUN:-bun} run packages/butler-agent/src/agent/conversation/historical-recovery-cli.ts",
     "cognition:memory:query-index": "${BUTLER_BUN:-bun} run packages/butler-agent/src/agent/cognition/memory/scripts/build-query-index.ts",
     "app:server": "${BUTLER_BUN:-bun} run packages/butler-agent/src/gateways/app/interface/cli/app-gateway-cli.ts",
+    "dev:butler": "${BUTLER_BUN:-bun} run packages/butler-app/scripts/dev-butler.ts",
     "tunnel:proxy": "${BUTLER_BUN:-bun} run packages/butler-agent/src/operations/tunnel/tunnel-proxy-cli.ts",
     "tunnel:configure": "${BUTLER_BUN:-bun} run packages/butler-agent/src/operations/tunnel/tunnel-service-config-cli.ts",
     "app:web": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run app:server",
