@@ -27,6 +27,7 @@ import {
 } from "@/app/utils.ts";
 import type { ActiveChatView } from "@/app/types.ts";
 import { TitlebarShell } from "@/butler-ds";
+import { SessionFolderMenu } from "./SessionFolderMenu";
 import { TitlebarWorkspaceSubtitle } from "./TitlebarWorkspaceSubtitle";
 import { WindowControls } from "./WindowControls";
 
@@ -63,6 +64,9 @@ export function Titlebar() {
   );
   const hasWorkspaceIdentity = branchInfo?.workspace_binding === "session_worktree" ||
     branchInfo?.workspace_binding === "project";
+  const canOpenSessionFolder = Boolean(
+    hasWorkspaceIdentity && branchInfo?.workspace_status === "available",
+  );
 
   return (
     <TitlebarShell
@@ -106,6 +110,10 @@ export function Titlebar() {
                   >
                     <PencilLine size={14} /> {appCopy.sessionActions.rename}
                   </DropdownMenuItem>
+                  <SessionFolderMenu
+                    disabled={!canOpenSessionFolder}
+                    sessionId={activeSession.id}
+                  />
                   <DropdownMenuItem
                     onSelect={() => runSessionAction(activeSession, "archive")}
                   >

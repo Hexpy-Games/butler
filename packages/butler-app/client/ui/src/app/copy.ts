@@ -67,6 +67,12 @@ export interface AppCopy {
     menuLabel: string;
     rename: string;
     archive: string;
+    openSessionFolder: string;
+    vsCode: string;
+    terminal: string;
+    loadingFolderTargets: string;
+    folderUnavailable: string;
+    folderLaunchFailed: string;
     renameTitle: string;
     renameField: string;
     cancel: string;
@@ -773,6 +779,12 @@ const koKrCopy: AppCopy = {
     menuLabel: "세션 메뉴",
     rename: "이름 바꾸기",
     archive: "보관하기",
+    openSessionFolder: "세션 폴더 열기",
+    vsCode: "VS Code",
+    terminal: "터미널",
+    loadingFolderTargets: "사용 가능한 앱 확인 중...",
+    folderUnavailable: "세션 폴더를 사용할 수 없습니다.",
+    folderLaunchFailed: "세션 폴더를 열지 못했습니다.",
     renameTitle: "세션 이름 바꾸기",
     renameField: "세션 이름",
     cancel: "취소",
@@ -1559,6 +1571,12 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     menuLabel: "Session menu",
     rename: "Rename",
     archive: "Archive",
+    openSessionFolder: "Open session folder",
+    vsCode: "VS Code",
+    terminal: "Terminal",
+    loadingFolderTargets: "Checking available apps...",
+    folderUnavailable: "The session folder is unavailable.",
+    folderLaunchFailed: "Could not open the session folder.",
     renameTitle: "Rename session",
     renameField: "Session name",
     cancel: "Cancel",
