@@ -14,6 +14,7 @@ import {
   type RegisteredEditFileInvocation,
 } from "./guided-workspace-file-edit-contracts.ts";
 import { workspaceFileEditBatchTarget } from "./guided-workspace-file-edit-batch.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 
 export type GuidedWorkspaceFileEditBatchAdapterOptions =
   GuidedWorkspaceEditGuardOptions & {
@@ -78,7 +79,11 @@ export async function dispatchGuidedWorkspaceEditBatch(
       state.sha256 === input.normalizedInput.edits[index]!.after_sha256,
   );
   if (afterMatches)
-    return appliedBatch(input.normalizedInput, afterStates.states);
+    return appliedBatch(
+      input.normalizedInput,
+      afterStates.states,
+      changedFilesFromRegisteredResult(registeredResult),
+    );
   const beforeMatches = afterStates.states.every(
     (state, index) =>
       state.sha256 === input.normalizedInput.edits[index]!.before_sha256,
@@ -182,6 +187,7 @@ async function observeBatchStates(
 function appliedBatch(
   input: GuidedWorkspaceFileEditBatchInput,
   states: readonly { bytes: number; sha256: string }[],
+  changedFiles: readonly ChangedFileDetail[] = [],
 ): Extract<
   EffectDispatchOutcome<GuidedWorkspaceFileEditBatchResult>,
   { status: "applied" }
@@ -202,8 +208,18 @@ function appliedBatch(
       bytes: entries.reduce((total, entry) => total + entry.bytes, 0),
       entries,
       target_observed: true,
+      ...(changedFiles.length > 0 ? { changed_files: [...changedFiles] } : {}),
     },
   };
+}
+
+function changedFilesFromRegisteredResult(value: unknown): ChangedFileDetail[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const details = (value as Record<string, unknown>).changed_files;
+  return Array.isArray(details)
+    ? details.filter((detail): detail is ChangedFileDetail =>
+      Boolean(detail && typeof detail === "object" && !Array.isArray(detail)))
+    : [];
 }
 
 function batchTargetInputMismatch(

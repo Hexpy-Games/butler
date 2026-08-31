@@ -48,6 +48,7 @@ export async function completeWorkerResultForDependencies(
     summary,
     acceptanceEvidence: [],
     changedArtifacts: resultInput.changedArtifacts ?? [],
+    changedFiles: resultInput.changedFiles ?? [],
     commits: [],
     tests: [],
     remainingRisks: [],

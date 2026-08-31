@@ -310,7 +310,7 @@ export function projectStewardSession(
         }
       : {}),
     artifacts: [],
-    changed_files: result?.changed_artifacts ?? [],
+    changed_files: result?.changed_files ?? [],
     result,
     updated_at: snapshot.updated_at,
     terminal: Boolean(result),
@@ -326,6 +326,7 @@ function projectedObserverResult(
     ...result,
     summary: projected.summary,
     changed_artifacts: projected.changedArtifacts,
+    changed_files: result.changed_files ?? [],
   };
 }
 

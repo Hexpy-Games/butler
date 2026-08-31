@@ -30,7 +30,9 @@ export function toolResultToMessage(input: {
     input.result.output,
     input.result.name,
   );
-  const providerOutput = withoutAgentLoopImageAttachments(input.result.output);
+  const providerOutput = withoutChangedFileDetails(
+    withoutAgentLoopImageAttachments(input.result.output),
+  );
   const payload = input.result.ok
     ? { ok: true, output: providerOutput }
     : {
@@ -51,6 +53,18 @@ export function toolResultToMessage(input: {
       ? { operationResultCallId: input.operationResultCallId }
       : {}),
   };
+}
+
+/** Changed lines are App-only projection data and must never enter a model round. */
+export function withoutChangedFileDetails(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutChangedFileDetails);
+  if (!value || typeof value !== "object") return value;
+  const result: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "changed_file" || key === "changed_files" || key === "changedFiles") continue;
+    result[key] = withoutChangedFileDetails(entry);
+  }
+  return result;
 }
 
 function toolResultSegmentKind(

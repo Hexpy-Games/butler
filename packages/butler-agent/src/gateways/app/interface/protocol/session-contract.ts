@@ -9,6 +9,7 @@ import type { MessageRecord, TurnRecord } from "./messaging-contract.ts";
 import type { ProgressSummaryRow } from "./progress-contract.ts";
 import type { SessionArtifactSummary } from "./attachment-contract.ts";
 import type { SettingsView } from "./settings-contract.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
 
 export interface SessionControlState {
   model: string;
@@ -134,6 +135,7 @@ export interface StewardResultView {
   summary: string;
   acceptance_evidence: string[];
   changed_artifacts: string[];
+  changed_files?: ChangedFileDetail[];
   created_at: string;
 }
 
@@ -149,7 +151,7 @@ export interface StewardSessionSummaryView {
   approved_plan_total?: number;
   approved_plan_completed?: number;
   artifacts: SessionArtifactSummary[];
-  changed_files: string[];
+  changed_files: ChangedFileDetail[];
   result: StewardResultView | null;
   updated_at: string;
   terminal: boolean;

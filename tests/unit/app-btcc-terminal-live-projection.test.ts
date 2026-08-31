@@ -22,6 +22,8 @@ import { executeGuidedReadOnlyCommand } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-read-only-command.ts";
 import { collectGuidedFinalArtifacts } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
+import type { ChangedFileDetail } from
+  "../../packages/butler-agent/src/agent/btcc/index.ts";
 
 afterEach(() => cleanupTranscriptProjectionHarnesses());
 
@@ -49,13 +51,23 @@ test("completed turn event waits for the durable transcript final", () => {
     turnId: "live-delivered-turn",
     text: "Canonical answer",
     generatedSessionTitle: "Useful title",
-    changedFiles: ["src/answer.ts"],
+    changedFiles: [{
+      path: "src/answer.ts",
+      additions: 1,
+      deletions: 0,
+      lines: [{ type: "added", new_line: 1, content: "answer" }],
+    }],
   }));
   expect(projection.syncNextBatch()).toBe(false);
   expect(turnState(harness.db, "live-delivered-turn")).toBe("delivered");
   expect(state.generatedTitles).toEqual(["Useful title"]);
   expect(state.assistantWrites).toBe(1);
-  expect(state.assistantChangedFiles).toEqual(["src/answer.ts"]);
+  expect(state.assistantChangedFiles).toEqual([{
+    path: "src/answer.ts",
+    additions: 1,
+    deletions: 0,
+    lines: [{ type: "added", new_line: 1, content: "answer" }],
+  }]);
 
   appendTranscript(harness, finalResultEvent({
     actionId: "late-conflicting-final",
@@ -210,11 +222,50 @@ test("changed files persist separately from message artifacts", () => {
     ["src/app.ts", "src/app.ts", "../private.env", "/tmp/private"],
   );
 
-  expect(stored.changed_files).toEqual(["src/app.ts"]);
+  expect(stored.changed_files).toEqual([{
+    path: "src/app.ts",
+    additions: 0,
+    deletions: 0,
+    lines: [],
+  }]);
   expect(stored.artifacts).toBeUndefined();
-  expect(messages.listMessages(harness.chatId)[0]?.changed_files).toEqual([
-    "src/app.ts",
-  ]);
+  expect(messages.listMessages(harness.chatId)[0]?.changed_files).toEqual([{
+    path: "src/app.ts",
+    additions: 0,
+    deletions: 0,
+    lines: [],
+  }]);
+  harness.close();
+});
+
+test("structured changed-file details survive App message reload", () => {
+  const harness = createHarness();
+  const messageFiles = new AppMessageFileStore(harness.db, harness.root, () => undefined);
+  const messages = new AppSessionMessageRecordStore(
+    harness.db,
+    harness.root,
+    messageFiles,
+    () => undefined,
+  );
+  const now = new Date().toISOString();
+  harness.db.query(`
+    INSERT INTO messages (
+      id, chat_id, role, text, status, created_at, updated_at,
+      safe_error_code, retryable
+    ) VALUES (?, ?, 'assistant', 'Updated.', 'delivered', ?, ?, NULL, 0)
+  `).run("assistant-detailed-files", harness.chatId, now, now);
+  const detail: ChangedFileDetail = {
+    path: "src/app.ts",
+    additions: 1,
+    deletions: 1,
+    lines: [
+      { type: "deleted", old_line: 2, content: "old" },
+      { type: "added", new_line: 2, content: "new" },
+    ],
+  };
+
+  messages.replaceMessageChangedFiles("assistant-detailed-files", [detail]);
+  expect(messages.listMessages(harness.chatId)[0]?.changed_files).toEqual([detail]);
   harness.close();
 });
 
@@ -406,7 +457,7 @@ test("preserves requested, effective, and provider-reported transcript identity"
 function projectionState(db: Database) {
   let assistant: MessageRow | null = null;
   let assistantWrites = 0;
-  let assistantChangedFiles: string[] = [];
+  let assistantChangedFiles: ChangedFileDetail[] = [];
   const turnEvents = new Set<string>();
   const generatedTitles: string[] = [];
   const cancelledTurns: string[] = [];
@@ -443,7 +494,7 @@ function projectionState(db: Database) {
         turnId: string,
         texts: string[],
         _files: unknown[] = [],
-        changedFiles: string[] = [],
+        changedFiles: ChangedFileDetail[] = [],
       ) => {
         assistantWrites += 1;
         assistantChangedFiles = [...changedFiles];
@@ -619,7 +670,7 @@ function finalResultEvent(input: {
   generatedSessionTitle: string;
   executionModel?: Record<string, string>;
   artifacts?: ReturnType<typeof collectGuidedFinalArtifacts>;
-  changedFiles?: string[];
+  changedFiles?: ChangedFileDetail[];
 }): TranscriptEvent {
   return {
     eventId: `event-${input.actionId}`,

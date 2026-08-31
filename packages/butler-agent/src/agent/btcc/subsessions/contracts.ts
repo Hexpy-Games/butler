@@ -1,6 +1,7 @@
 import type { DurableWorkService } from "../work/index.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
 import type { WorkerProfile } from "../../../gateways/app/interface/protocol/settings-contract.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 
 /** The only persisted SessionRelation shape for the SS-02 vertical. */
 export type SessionRelation = {
@@ -100,6 +101,7 @@ export type StewardResultEnvelope = {
   summary: string;
   acceptance_evidence: string[];
   changed_artifacts: string[];
+  changed_files?: ChangedFileDetail[];
   commits: string[];
   tests: string[];
   remaining_risks: string[];
@@ -207,6 +209,7 @@ export type CompleteStewardResultInput = {
   resultId: string;
   summary?: string;
   changedArtifacts?: string[];
+  changedFiles?: ChangedFileDetail[];
   status?: StewardResultStatus;
   code?: StewardResultCode;
 };
@@ -250,6 +253,7 @@ export interface SubsessionDelegationStore {
     summary: string;
     acceptanceEvidence: string[];
     changedArtifacts: string[];
+    changedFiles?: ChangedFileDetail[];
     commits: string[];
     tests: string[];
     remainingRisks: string[];
@@ -323,6 +327,7 @@ export type SubsessionDelegationService = {
   completeStewardResult(input: CompleteStewardResultInput): Promise<CompleteStewardResultOutcome>;
   completeWorkerResult(input: CompleteStewardResultInput & {
     changedArtifacts?: string[];
+    changedFiles?: ChangedFileDetail[];
   }): Promise<CompleteStewardResultOutcome>;
   recoverPendingParentInputs(): Promise<{ attempted: number; delivered: number }>;
   resolveParentResultEvidence(input: {
@@ -332,6 +337,7 @@ export type SubsessionDelegationService = {
     synthesisEvidence: string;
     outcome: StewardResultStatus;
     parentWorkId: string;
+    changedFiles: ChangedFileDetail[];
   } | null>;
   resultIdForRelation(relationId: string): string | null;
   pendingParentInputCount(): number;

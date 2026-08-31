@@ -19,6 +19,7 @@ import type {
   QueuedMessageRecord,
   SessionControlState,
 } from "../../interface/protocol/app-protocol.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
 import type { AppEventEnvelope } from "../../interface/protocol/app-protocol.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
 
@@ -48,18 +49,18 @@ export interface AppStoreKernelMessageRecordHost {
     turnId: string,
     texts: string[],
     files?: MessageFileRow[],
-    changedFiles?: string[],
+    changedFiles?: ChangedFileDetail[],
   ): MessageRecord[];
   insertOrReplaceAssistantReplies(
     chatId: string,
     turnId: string,
     texts: string[],
     files?: MessageFileRow[],
-    changedFiles?: string[],
+    changedFiles?: ChangedFileDetail[],
   ): MessageRecord[];
   replaceMessageChangedFiles(
     messageId: string,
-    paths: readonly string[],
+    details: readonly (ChangedFileDetail | string)[],
   ): MessageRecord;
   finalizeResponderLimitedDelivery(
     chatId: string,
@@ -179,8 +180,8 @@ export function createMessageRecordHost(
         changedFiles,
       );
     },
-    replaceMessageChangedFiles(messageId, paths) {
-      return kernel.sessionRecords.replaceMessageChangedFiles(messageId, paths);
+    replaceMessageChangedFiles(messageId, details) {
+      return kernel.sessionRecords.replaceMessageChangedFiles(messageId, details);
     },
     finalizeResponderLimitedDelivery(
       chatId,

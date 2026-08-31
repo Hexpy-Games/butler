@@ -10,6 +10,7 @@ import type {
   MessageRole,
   MessageStatus,
 } from "../../interface/protocol/app-protocol.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
 
 export class AppAssistantMessageStore {
   constructor(
@@ -41,7 +42,7 @@ export class AppAssistantMessageStore {
       messageRecordById: (messageId: string) => MessageRecord;
       replaceMessageChangedFiles: (
         messageId: string,
-        paths: readonly string[],
+        details: readonly (ChangedFileDetail | string)[],
       ) => MessageRecord;
       getLatestAssistantMessageForTurn: (turnId: string) => MessageRow | null;
       listMessages: (chatId: string) => MessageRecord[];
@@ -58,7 +59,7 @@ export class AppAssistantMessageStore {
     turnId: string,
     texts: string[],
     files: MessageFileRow[] = [],
-    changedFiles: string[] = [],
+    changedFiles: ChangedFileDetail[] = [],
   ): MessageRecord[] {
     return normalizedAssistantReplyTexts(texts, files).map(
       (replyText, index, normalizedReplies) => {
@@ -86,7 +87,7 @@ export class AppAssistantMessageStore {
     turnId: string,
     texts: string[],
     files: MessageFileRow[] = [],
-    changedFiles: string[] = [],
+    changedFiles: ChangedFileDetail[] = [],
   ): MessageRecord[] {
     const normalizedReplies = normalizedAssistantReplyTexts(texts, files);
     const existing = this.input.getLatestAssistantMessageForTurn(turnId);
