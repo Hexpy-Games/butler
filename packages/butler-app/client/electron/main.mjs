@@ -107,6 +107,7 @@ import {
   cacheBudgetAdditionalArgument,
   readCacheBudgetArtifact,
 } from "./cache-budget-runtime.mjs";
+import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
@@ -277,6 +278,10 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   startupTimeoutMs: 120_000,
   onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
   onGatewayStarting: prepareAppForegroundGatewayLaunch,
+});
+const sessionFolderLauncher = createSessionFolderLauncher({
+  platform: process.platform,
+  resolveWorkspacePath: resolveCanonicalSessionWorkspacePath,
 });
 const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
   ? createAppAgentNativeServiceBridge({
@@ -2126,6 +2131,15 @@ function currentBundledAgentVersion() {
 
 ipcMain.handle("butler:get-app-info", () => appInfoView());
 
+ipcMain.handle("butler:get-session-folder-launch-targets", async (_event, input = {}) =>
+  await sessionFolderLauncher.availableTargets(input?.sessionId));
+
+ipcMain.handle("butler:open-session-folder", async (_event, input = {}) =>
+  await sessionFolderLauncher.openSessionFolder({
+    sessionId: input?.sessionId,
+    target: input?.target,
+  }));
+
 ipcMain.handle("butler:composer-draft-read", (_event, input = {}) =>
   readComposerDraftFile(composerDraftDirectory, input.sessionId, {
     maxBytes: appCacheBudget.maxComposerDraftBytes,
@@ -2730,6 +2744,25 @@ async function appServerFetch(path, init = {}) {
       ...(init.headers ?? {}),
     },
   });
+}
+
+async function resolveCanonicalSessionWorkspacePath(sessionId) {
+  const normalizedSessionId = safeString(sessionId);
+  if (!normalizedSessionId) return null;
+  try {
+    await ensureServer();
+    const response = await appServerFetch(
+      `/internal/session-workspace?session_id=${encodeURIComponent(normalizedSessionId)}`,
+    );
+    const body = await response.json().catch(() => null);
+    if (!response.ok || body?.protocol_version !== appProtocolVersion) return null;
+    const workspacePath = body?.data?.workspace_path;
+    return typeof workspacePath === "string" && isAbsolute(workspacePath)
+      ? workspacePath
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 async function appLocalAuthHeaders() {
