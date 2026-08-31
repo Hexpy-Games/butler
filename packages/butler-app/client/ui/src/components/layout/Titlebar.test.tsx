@@ -186,12 +186,10 @@ test("titlebar ellipsis opens the session-folder submenu and launches the select
   );
   await act(async () => {
     submenuTrigger.focus();
-    submenuTrigger.dispatchEvent(
-      new dom.window.KeyboardEvent("keydown", {
-        key: "ArrowRight",
-        bubbles: true,
-      }),
-    );
+    submenuTrigger.dispatchEvent(new dom.window.MouseEvent("click", {
+      bubbles: true,
+      button: 0,
+    }));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
@@ -199,6 +197,10 @@ test("titlebar ellipsis opens the session-folder submenu and launches the select
   const submenuContent = dom.window.document.querySelector(
     '[data-slot="dropdown-menu-sub-content"]',
   );
+  const menuContent = dom.window.document.querySelector(
+    '[data-slot="dropdown-menu-content"]',
+  );
+  expect(menuContent?.contains(submenuContent)).toBe(false);
   expect(submenuContent?.textContent).toContain(appCopy.sessionActions.vsCode);
   expect(submenuContent?.textContent).toContain(appCopy.sessionActions.terminal);
   const vscodeItem = Array.from(
