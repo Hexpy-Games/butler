@@ -2,6 +2,7 @@ import { NativeInboundQueue } from "../../../gateways/core/inbound-queue.ts";
 import { digest } from "../identity/index.ts";
 import { subsessionResultId } from "./identities.ts";
 import { boundedTerminalReportContent } from "./terminal-results.ts";
+import { parentSubsessionIsTerminal } from "./outbox-recovery.ts";
 import type {
   CompleteStewardResultOutcome,
   SubsessionDelegationDependencies,
@@ -28,9 +29,11 @@ export async function completeWorkerResultForDependencies(
   }
   const existing = input.store.resultByRelationId(relation.relation_id);
   if (existing) {
-    await enqueueWorkerReport(input, queue, relation.parent_session_id, parent.workspacePath,
-      parent.projectId, parent.modelRef, parent.metadata?.reasoning_effort,
-      packet.parent_work_ref.work_id, existing);
+    if (!parentSubsessionIsTerminal(input.store, relation.parent_session_id)) {
+      await enqueueWorkerReport(input, queue, relation.parent_session_id, parent.workspacePath,
+        parent.projectId, parent.modelRef, parent.metadata?.reasoning_effort,
+        packet.parent_work_ref.work_id, existing);
+    }
     input.store.markParentInputDelivered(existing.result_id);
     return { status: "duplicate", result: existing };
   }
@@ -56,9 +59,11 @@ export async function completeWorkerResultForDependencies(
     detailRefs: [],
     parentChatId: relation.parent_session_id,
   });
-  await enqueueWorkerReport(input, queue, relation.parent_session_id, parent.workspacePath,
-    parent.projectId, parent.modelRef, parent.metadata?.reasoning_effort,
-    packet.parent_work_ref.work_id, committed.result);
+  if (!parentSubsessionIsTerminal(input.store, relation.parent_session_id)) {
+    await enqueueWorkerReport(input, queue, relation.parent_session_id, parent.workspacePath,
+      parent.projectId, parent.modelRef, parent.metadata?.reasoning_effort,
+      packet.parent_work_ref.work_id, committed.result);
+  }
   input.store.markParentInputDelivered(committed.result.result_id);
   return {
     status: committed.inserted ? "committed" : "duplicate",

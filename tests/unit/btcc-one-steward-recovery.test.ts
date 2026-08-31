@@ -730,6 +730,8 @@ test("pending Steward outbox handoff failure rejects startup recovery and preser
   let markedDelivered = false;
   const store = {
     pendingParentInputs: () => [pending],
+    relationByChildSessionId: () => null,
+    resultByRelationId: () => null,
     markParentInputDelivered: () => { markedDelivered = true; },
   } as unknown as SubsessionDelegationStore;
   await expect(recoverPendingParentInputs({
@@ -738,6 +740,42 @@ test("pending Steward outbox handoff failure rejects startup recovery and preser
   })).rejects.toThrow("app_subsession_result_ingress_401");
   expect(markedDelivered).toBe(false);
   expect(store.pendingParentInputs()).toEqual([pending]);
+});
+
+test("late Worker result is acknowledged without waking a terminal Steward", async () => {
+  const pending = {
+    result_id: "result-worker-after-steward-terminal",
+    relation_id: "relation-worker-after-steward-terminal",
+    parent_session_id: "steward-terminal",
+    parent_turn_id: "turn-steward-terminal",
+    parent_chat_id: "steward-terminal",
+    message_id: "message-worker-after-steward-terminal",
+    safe_title: "Late Worker result",
+    text: "Worker result after the owning Steward stopped.",
+    model_ref: "openai/gpt-5.6-luna",
+    reasoning_effort: "max",
+    access_mode: "full_access" as const,
+    timestamp: new Date().toISOString(),
+  };
+  let sinkCalls = 0;
+  const deliveredResultIds: string[] = [];
+  const store = {
+    pendingParentInputs: () => [pending],
+    relationByChildSessionId: (sessionId: string) => sessionId === "steward-terminal"
+      ? { relation_id: "relation-owning-steward" }
+      : null,
+    resultByRelationId: (relationId: string) => relationId === "relation-owning-steward"
+      ? { result_id: "result-owning-steward", status: "cancelled" }
+      : null,
+    markParentInputDelivered: (resultId: string) => { deliveredResultIds.push(resultId); },
+  } as unknown as SubsessionDelegationStore;
+
+  expect(await recoverPendingParentInputs({
+    store,
+    sink: async () => { sinkCalls += 1; },
+  })).toEqual({ attempted: 1, delivered: 1 });
+  expect(sinkCalls).toBe(0);
+  expect(deliveredResultIds).toEqual([pending.result_id]);
 });
 
 test("populated current Steward results reopen through the additive detail migration", () => {
