@@ -102,6 +102,21 @@ test("each active Steward has an ordered DS capsule with factual Plan progress",
     <StewardComposerCapsules children={[staleTerminalChild]} />,
   )).toBe("");
 
+  const waitingChild = structuredClone(
+    HARNESS_SS03_SUMMARY.steward_children![0]!,
+  );
+  waitingChild.active_turn = null;
+  waitingChild.latest_turn = {
+    ...HARNESS_SS03_SUMMARY.steward_children![0]!.active_turn!,
+    state: "delivered",
+  };
+  waitingChild.waiting_for_children = true;
+  const waitingHtml = renderToStaticMarkup(
+    <StewardComposerCapsules children={[waitingChild]} />,
+  );
+  expect(waitingHtml).toContain("Waiting for Worker results.");
+  expect(waitingHtml).not.toContain("Preparing final answer");
+
   const terminalSummary = {
     ...HARNESS_SS03_SUMMARY,
     turn_state: "delivered",

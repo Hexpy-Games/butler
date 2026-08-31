@@ -146,6 +146,7 @@ export interface StewardSessionSummaryView {
   status: SessionViewStatus;
   active_turn: SessionViewTurn | null;
   latest_turn: SessionViewTurn | null;
+  waiting_for_children?: boolean;
   activity_rows: ProgressSummaryRow[];
   approved_plan_revision?: number;
   approved_plan_total?: number;
@@ -165,6 +166,7 @@ export interface SessionView {
   status: SessionViewStatus;
   active_turn: SessionViewTurn | null;
   latest_turn: SessionViewTurn | null;
+  waiting_for_children?: boolean;
   messages: MessageRecord[];
   message_window: SessionViewMessageWindow;
   workers: WorkerActivitySummary[];

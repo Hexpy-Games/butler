@@ -1,4 +1,5 @@
 import { isVisibleToolActivity } from "@/app/conversation-progress";
+import { appCopy } from "@/app/copy.ts";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import type {
   ProgressRow,
@@ -15,7 +16,10 @@ export function activeStewardChildren(
   children: StewardSessionSummaryView[] = [],
 ): StewardSessionSummaryView[] {
   return children.filter((child) =>
-    Boolean(child.active_turn && ACTIVE_TURN_STATES.has(child.active_turn.state)) &&
+    Boolean(
+      child.waiting_for_children ||
+      (child.active_turn && ACTIVE_TURN_STATES.has(child.active_turn.state)),
+    ) &&
       !TERMINAL_STEWARD_STATES.has(child.status),
   );
 }
@@ -49,8 +53,11 @@ export function stewardPlanProgress(
 }
 
 export function stewardCurrentActivityTitle(
-  child: Pick<StewardSessionSummaryView, "active_turn">,
+  child: Pick<StewardSessionSummaryView, "active_turn" | "waiting_for_children">,
 ): string {
+  if (child.waiting_for_children && !child.active_turn) {
+    return appCopy.conversation.work.pendingStateLabels.waiting_for_children;
+  }
   const rows = child.active_turn?.progress.safe_progress_rows ?? [];
   const activeActivity = latestMatchingRow(rows, (row) =>
     row.kind !== "todo" &&

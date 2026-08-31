@@ -322,6 +322,8 @@ export interface BtccWakeProjectionHost {
 
 export interface BtccProgressProjectionHost {
   hasCommittedEvent(turnId: string, kind: string): boolean;
+  connect(publisher: BtccTurnProgressPublisher): void;
+  publishCommitted(event: BtccCommittedProgressEvent): Promise<void>;
   reconcile(publisher: BtccTurnProgressPublisher): Promise<{
     attempted: number;
     published: number;

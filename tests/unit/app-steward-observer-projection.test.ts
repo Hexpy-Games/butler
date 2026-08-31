@@ -303,7 +303,9 @@ describe("App Steward observer projection", () => {
     expect(view.messages[1]?.turn_activity_rows?.[0]?.safe_label).toBe("첫 번째 활동");
     expect(view.messages[3]?.turn_activity_rows?.[0]?.safe_label).toBe("두 번째 활동");
     expect(view.status).toBe("active");
-    expect(view.active_turn?.progress.summary).toBe("Worker 결과를 기다리는 중입니다.");
+    expect(view.active_turn).toBeNull();
+    expect(view.latest_turn?.state).toBe("delivered");
+    expect(view.waiting_for_children).toBe(true);
     expect(JSON.stringify(view)).not.toContain("raw Worker transport");
     db.close();
   });
