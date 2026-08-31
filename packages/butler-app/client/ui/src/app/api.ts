@@ -15,10 +15,42 @@ declare global {
   }
 }
 
+export type SessionFolderLaunchTarget = "vscode" | "terminal";
+
+export type SessionFolderBridgeCode =
+  | "bridge_unavailable"
+  | "session_workspace_unavailable"
+  | "launch_target_unavailable"
+  | "session_folder_launch_failed";
+
+export type SessionFolderLaunchTargetsResult =
+  | { ok: true; targets: SessionFolderLaunchTarget[] }
+  | {
+      ok: false;
+      code: SessionFolderBridgeCode;
+      recoverable: true;
+      targets: [];
+    };
+
+export type SessionFolderLaunchResult =
+  | { ok: true; target: SessionFolderLaunchTarget }
+  | {
+      ok: false;
+      code: SessionFolderBridgeCode;
+      recoverable: true;
+    };
+
 interface ButlerAppBridge {
   protocolVersion?: string;
   serverUrl?: string;
   platform?: string;
+  getSessionFolderLaunchTargets?: (input: {
+    sessionId: string;
+  }) => Promise<SessionFolderLaunchTargetsResult>;
+  openSessionFolder?: (input: {
+    sessionId: string;
+    target: SessionFolderLaunchTarget;
+  }) => Promise<SessionFolderLaunchResult>;
   saveMessageFile?: (input?: unknown) => Promise<unknown>;
   showDesktopNotification?: (input?: unknown) => Promise<unknown>;
   getNativeNotificationStatus?: () => Promise<unknown>;
@@ -684,6 +716,32 @@ export async function selectProjectFolder(): Promise<{ cancelled?: boolean; disp
     throw error;
   }
   return await callBridge(bridge, "selectProjectFolder");
+}
+
+export async function getSessionFolderLaunchTargets(
+  sessionId: string,
+): Promise<SessionFolderLaunchTargetsResult> {
+  const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
+  if (typeof bridge?.getSessionFolderLaunchTargets !== "function") {
+    return {
+      ok: false,
+      code: "bridge_unavailable",
+      recoverable: true,
+      targets: [],
+    };
+  }
+  return await bridge.getSessionFolderLaunchTargets({ sessionId });
+}
+
+export async function openSessionFolder(
+  sessionId: string,
+  target: SessionFolderLaunchTarget,
+): Promise<SessionFolderLaunchResult> {
+  const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
+  if (typeof bridge?.openSessionFolder !== "function") {
+    return { ok: false, code: "bridge_unavailable", recoverable: true };
+  }
+  return await bridge.openSessionFolder({ sessionId, target });
 }
 
 export function canSelectProjectFolder(): boolean {

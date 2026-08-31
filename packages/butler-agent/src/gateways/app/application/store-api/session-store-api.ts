@@ -38,6 +38,7 @@ import type {
   SessionMessagePage,
   SessionMessagePageOptions,
 } from "../../domain/sessions/session-message-page.ts";
+import { sessionHintForRow } from "../../domain/sessions/session-read-model.ts";
 
 const DEFAULT_CHAT_ID = "general";
 
@@ -54,6 +55,7 @@ export interface AppStoreSessionApi {
   ): SessionControlState;
   getContextDetails(sessionId: string): ContextDetailsView;
   getSessionSummary(sessionId: string): SessionSummaryView;
+  getSessionWorkspacePath(sessionId: string): string | null;
   refreshSessionProjection(sessionId: string): void;
   getConversationProjectionStatus(): AppConversationProjectionStatus;
   replayConversationProjection(input?: { limit?: number }): AppConversationProjectionReplayResult;
@@ -143,6 +145,14 @@ export function createSessionStoreApi(
     },
     getSessionSummary(sessionId) {
       return kernel.sessionViews.getSessionSummary(sessionId);
+    },
+    getSessionWorkspacePath(sessionId) {
+      const session = kernel.sessionRecords.getSession(sessionId);
+      const binding = kernel.sessionBindings.getBySessionId(
+        sessionHintForRow(session.id),
+      );
+      const workspacePath = binding?.workspacePath?.trim();
+      return workspacePath || null;
     },
     refreshSessionProjection(sessionId) {
       kernel.conversationProjection.replayOutbox();
