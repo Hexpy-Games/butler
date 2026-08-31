@@ -1,6 +1,7 @@
 # ── Private user data accidentally created inside the checkout ───────────────
 data/
 .project-ledger/
+.dev-butler/
 
 # ── Private top-level runtime paths must live under $BUTLER_DATA instead ─────
 .env
