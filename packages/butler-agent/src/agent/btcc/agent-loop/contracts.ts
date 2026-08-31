@@ -28,6 +28,7 @@ import type { OperationResultReplay } from "../operation-result-replay/index.ts"
 import type { TurnContinuationBudgetState } from "../turn/index.ts";
 import type { BtccRoundToolSurfaceSnapshot } from "./round-tool-surface.ts";
 import type { BtccFinalArtifact } from "../contracts.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 import type { RuntimeMemoryAttributionPort } from
   "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
 
@@ -41,7 +42,7 @@ export type BtccAgentLoopResult = {
   route: "direct" | "assisted" | "managed";
   workStatus?: "completed" | "blocked";
   artifacts?: BtccFinalArtifact[];
-  changedFiles?: string[];
+  changedFiles?: ChangedFileDetail[];
   modelIdentity?: {
     requestedModelRef: string;
     effectiveModelRef: string;

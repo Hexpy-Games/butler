@@ -42,6 +42,10 @@ interface ConversationCopy {
   fileChanges: {
     regionLabel: string;
     title: string;
+    titleSummary: (files: number, additions: number, deletions: number) => string;
+    fileCounts: (additions: number, deletions: number) => string;
+    noLineDetails: string;
+    diffRegionLabel: (path: string) => string;
   };
   scrollToBottom: {
     ariaLabel: string;
@@ -705,6 +709,11 @@ const koKrCopy: AppCopy = {
     fileChanges: {
       regionLabel: "변경된 파일",
       title: "파일 변경",
+      titleSummary: (files, additions, deletions) =>
+        `파일 변경 ${files}개 · +${additions} −${deletions}`,
+      fileCounts: (additions, deletions) => `+${additions} −${deletions}`,
+      noLineDetails: "라인 상세 없음",
+      diffRegionLabel: (path) => `${path} 변경 라인`,
     },
     work: {
       historyRegionLabel: "진행 내역",
@@ -1509,6 +1518,11 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     fileChanges: {
       regionLabel: "Changed files",
       title: "File changes",
+      titleSummary: (files, additions, deletions) =>
+        `File changes ${files} · +${additions} −${deletions}`,
+      fileCounts: (additions, deletions) => `+${additions} −${deletions}`,
+      noLineDetails: "No line details",
+      diffRegionLabel: (path) => `Changed lines for ${path}`,
     },
     work: {
       historyRegionLabel: "Progress history",

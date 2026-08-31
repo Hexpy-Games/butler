@@ -73,6 +73,7 @@ function ensureGuidedToolResultDeliveryColumns(db: Database): void {
   ensureColumn(db, "btcc_guided_tool_calls", "delivery_state", "TEXT");
   ensureColumn(db, "btcc_guided_tool_calls", "delivery_round_id", "TEXT");
   ensureColumn(db, "btcc_guided_tool_calls", "delivery_response_sha256", "TEXT");
+  ensureColumn(db, "btcc_guided_tool_calls", "changed_files_json", "TEXT");
 }
 
 function ensureGuidedWorkResultOrder(db: Database): void {

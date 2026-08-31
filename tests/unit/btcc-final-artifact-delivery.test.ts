@@ -78,18 +78,19 @@ test("completed guided tool results become bounded safe final artifacts", () => 
   }]);
 });
 
-test("accepted parent result evidence carries changed files separately from artifacts", () => {
-  const evidence = [
-    "Canonical child result synthesis",
-    "Status: success",
-    "Summary: 조사 완료",
-    "Changed artifacts: research/memory-brain-structure-ko.md; ../private.txt; /private/leak.txt",
-  ].join("\n");
-
+test("accepted parent result carries typed changed files separately from artifacts", () => {
   expect(collectGuidedFinalArtifacts([])).toEqual([]);
-  expect(collectGuidedChangedFiles([], evidence)).toEqual([
-    "research/memory-brain-structure-ko.md",
-  ]);
+  expect(collectGuidedChangedFiles([], [{
+    path: "research/memory-brain-structure-ko.md",
+    additions: 1,
+    deletions: 0,
+    lines: [{ type: "added", new_line: 1, content: "# Result" }],
+  }])).toEqual([{
+    path: "research/memory-brain-structure-ko.md",
+    additions: 1,
+    deletions: 0,
+    lines: [{ type: "added", new_line: 1, content: "# Result" }],
+  }]);
 });
 
 test("BTCC gateway outcome projection preserves typed final artifacts", () => {
@@ -144,6 +145,7 @@ test("structured child reports become a natural summary and changed artifacts", 
   expect(report).toEqual({
     summary: "호환성 조사와 보고서 작성을 완료했습니다.",
     changedArtifacts: ["research/qwen-turboquant-vllm.md"],
+    changedFiles: [],
   });
 });
 
@@ -162,7 +164,11 @@ test("natural child reports retain material review findings for the parent role"
     content,
   }));
 
-  expect(report).toEqual({ summary: content, changedArtifacts: [] });
+  expect(report).toEqual({
+    summary: content,
+    changedArtifacts: [],
+    changedFiles: [],
+  });
   expect(boundedTerminalReportContent(`  ${content.replaceAll("-", "-  ")}  `))
     .toContain("판정: 완료 불가\n- 직접 vision 호출의 telemetry가 누락되었습니다.");
 });

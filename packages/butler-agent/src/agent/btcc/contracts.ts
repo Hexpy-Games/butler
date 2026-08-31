@@ -6,6 +6,8 @@ import type { VisualAttachmentManifest } from "../../gateways/core/contracts.ts"
 import type { VisualImageAdmissionResult } from "../image-attachment/contracts.ts";
 import type { BtccTurnProgressObserver } from
   "./projection/progress-observer-contract.ts";
+import type { ChangedFileDetail } from "../tools/file-tools/shared/changed-file-detail.ts";
+export type { ChangedFileDetail } from "../tools/file-tools/shared/changed-file-detail.ts";
 export type {
   BtccTurnProgressObserver,
   WorkProgressTask,
@@ -154,7 +156,7 @@ export type BtccTurnOutcome = (
       content: string;
       workStatus?: "completed" | "blocked";
       artifacts?: BtccFinalArtifact[];
-      changedFiles?: string[];
+      changedFiles?: ChangedFileDetail[];
       modelIdentity?: {
         requestedModelRef: string;
         effectiveModelRef: string;

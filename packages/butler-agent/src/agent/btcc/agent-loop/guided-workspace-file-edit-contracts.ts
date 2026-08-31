@@ -1,5 +1,6 @@
 import type { GuidedWorkspaceEditGuardOptions } from "./guided-workspace-file-edit-observation.ts";
 import type { GuidedWorkspaceFileEditBatchInput } from "./guided-workspace-file-edit-batch.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 
 export const GUIDED_WORKSPACE_FILE_EDIT_CAPABILITY = "edit_file";
 
@@ -23,6 +24,7 @@ export type GuidedWorkspaceFileEditResult = {
   before_sha256: string;
   after_sha256: string;
   target_observed: true;
+  changed_file?: ChangedFileDetail;
 };
 
 export type GuidedWorkspaceFileEditBatchResult = {
@@ -38,6 +40,7 @@ export type GuidedWorkspaceFileEditBatchResult = {
     after_sha256: string;
   }[];
   target_observed: true;
+  changed_files?: ChangedFileDetail[];
 };
 
 export type RegisteredEditFileInput = {

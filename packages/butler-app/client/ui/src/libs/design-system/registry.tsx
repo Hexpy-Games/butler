@@ -88,6 +88,7 @@ import { MessageAvatarBlockFixture } from "./blocks/MessageAvatarBlock/MessageAv
 import { ActivityFeedFixture } from "./blocks/ActivityFeed/ActivityFeed.fixtures";
 import { WorkActivityBlockFixture } from "./blocks/WorkActivityBlock/WorkActivityBlock.fixtures";
 import { DisclosureRowFixture } from "./blocks/DisclosureRow/DisclosureRow.fixtures";
+import { ChangedLineDiffFixture } from "./blocks/ChangedLineDiff/ChangedLineDiff.fixtures";
 import { InspectorPanelFixture } from "./blocks/InspectorPanel/InspectorPanel.fixtures";
 import { InspectorShellFixture } from "./blocks/InspectorShell/InspectorShell.fixtures";
 import { KeyValueRowFixture } from "./blocks/KeyValueRow/KeyValueRow.fixtures";
@@ -1088,6 +1089,12 @@ export const designSystemBlocks: DesignSystemBlockMeta[] = [
     path: "blocks/DisclosureRow",
     tags: ["disclosure", "row", "details"],
     fixture: DisclosureRowFixture,
+  },
+  {
+    name: "ChangedLineDiff",
+    path: "blocks/ChangedLineDiff",
+    tags: ["diff", "code", "changes"],
+    fixture: ChangedLineDiffFixture,
   },
   {
     name: "InspectorPanel",

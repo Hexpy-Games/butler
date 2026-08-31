@@ -20,6 +20,7 @@ import type {
   TurnRecord,
   TurnState,
 } from "../../interface/protocol/app-protocol.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
 
 export type AppQueuedTurnClaimStatus =
   | "unlinked"
@@ -56,7 +57,7 @@ export interface AppTransportProjectionStoreOptions {
     turnId: string,
     texts: string[],
     files?: MessageFileRow[],
-    changedFiles?: string[],
+    changedFiles?: ChangedFileDetail[],
   ) => MessageRecord[];
   updateTurnState: (
     turnId: string,

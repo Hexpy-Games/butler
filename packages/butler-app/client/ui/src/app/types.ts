@@ -731,6 +731,20 @@ export interface MessageFileRef {
   created_at: string;
 }
 
+export interface ChangedFileLine {
+  type: "added" | "deleted";
+  old_line?: number;
+  new_line?: number;
+  content: string;
+}
+
+export interface ChangedFileDetail {
+  path: string;
+  additions: number;
+  deletions: number;
+  lines: ChangedFileLine[];
+}
+
 export interface MessageRecord {
   id: string;
   chat_id?: string;
@@ -745,7 +759,7 @@ export interface MessageRecord {
   text: string;
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
-  changed_files?: string[];
+  changed_files?: ChangedFileDetail[];
   work_blocks?: WorkBlockView[];
   turn_activity_rows?: ProgressRow[];
   status?: string;
@@ -980,6 +994,7 @@ export interface StewardResultView {
   summary: string;
   acceptance_evidence: string[];
   changed_artifacts: string[];
+  changed_files?: ChangedFileDetail[];
   created_at: string;
 }
 
@@ -995,7 +1010,7 @@ export interface StewardSessionSummaryView {
   approved_plan_total?: number;
   approved_plan_completed?: number;
   artifacts: SessionArtifactSummary[];
-  changed_files: string[];
+  changed_files: ChangedFileDetail[];
   result: StewardResultView | null;
   updated_at: string;
   terminal: boolean;

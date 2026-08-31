@@ -1,6 +1,7 @@
 import type {
   GatewayDispatchResult,
 } from "../../../gateways/core/contracts.ts";
+import type { ChangedFileDetail } from "../../../agent/btcc/index.ts";
 import type {
   ClaimedInboundEvent,
   NativeInboundQueue,
@@ -332,7 +333,7 @@ function finalAction(input: {
   target: SessionTransportBinding;
   text: string;
   artifacts: ArtifactRef[];
-  changedFiles?: string[];
+  changedFiles?: ChangedFileDetail[];
   generatedSessionTitle?: string;
   canonicalMessageId?: string;
   turnId?: string;
@@ -379,11 +380,13 @@ function finalAction(input: {
   };
 }
 
-function changedFilePaths(value: unknown): string[] {
+function changedFilePaths(value: unknown): ChangedFileDetail[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((path): path is string =>
-    typeof path === "string" && Boolean(path.trim()),
-  ).map((path) => path.trim()).slice(0, 40);
+  return value.filter((detail): detail is ChangedFileDetail =>
+    Boolean(detail && typeof detail === "object" && !Array.isArray(detail) &&
+      typeof (detail as Record<string, unknown>).path === "string" &&
+      Array.isArray((detail as Record<string, unknown>).lines)),
+  ).slice(0, 40);
 }
 
 function artifactRefs(value: unknown): ArtifactRef[] {

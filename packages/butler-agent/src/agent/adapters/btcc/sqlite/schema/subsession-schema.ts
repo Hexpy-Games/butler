@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS btcc_steward_results (
   summary TEXT NOT NULL,
   acceptance_evidence_json TEXT NOT NULL,
   changed_artifacts_json TEXT NOT NULL,
+  changed_files_json TEXT NOT NULL DEFAULT '[]',
   commits_json TEXT NOT NULL DEFAULT '[]',
   tests_json TEXT NOT NULL DEFAULT '[]',
   remaining_risks_json TEXT NOT NULL DEFAULT '[]',

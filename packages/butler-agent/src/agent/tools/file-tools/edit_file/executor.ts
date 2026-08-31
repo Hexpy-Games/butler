@@ -267,6 +267,7 @@ async function executeSingleEdit(
       after_sha256: committed.after_sha256,
       atomic_write: true as const,
       ...(committed.cleanup_failed ? { cleanup_failed: true } : {}),
+      ...(committed.changed_file ? { changed_file: committed.changed_file } : {}),
       metrics: { elapsed_ms: Math.max(0, Date.now() - startedAt), files_written: 1, bytes_written: committed.bytes },
       evidence_receipts: fileToolEvidenceReceipt({
         toolName: "edit_file",

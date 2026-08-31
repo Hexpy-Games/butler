@@ -73,6 +73,7 @@ export function createBtccGatewayHandlers(
           summary: childReport.summary,
           status: "success",
           changedArtifacts: childReport.changedArtifacts,
+          changedFiles: childReport.changedFiles,
         });
       } else if (route.role === "steward") {
         const activeChildren = await options.subsessionDelegation.activeParentDelegations({
@@ -85,6 +86,7 @@ export function createBtccGatewayHandlers(
             resultId: subsessionResultId(route.sessionId, outcome.turnId),
             summary: childReport.summary,
             changedArtifacts: childReport.changedArtifacts,
+            changedFiles: childReport.changedFiles,
             status: childTerminalStatus(result.workStatus),
           });
         }

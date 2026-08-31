@@ -48,6 +48,8 @@ import {
   priorTurnResultCallIds,
   replayRecordedGuidedToolCall,
 } from "./guided-recorded-tool-replay.ts";
+import { changedFileDetailsFromToolResult } from "./guided-changed-files.ts";
+import { withoutChangedFileDetails } from "./tool-result-message.ts";
 
 export type GuidedToolCallExecutionInput = {
   turn: TurnRecord;
@@ -222,7 +224,14 @@ export function createGuidedToolCallExecutor(
           : undefined,
       );
       rememberDescribedTools(call.name, result, input.describedToolIds);
-      input.toolJournal.finish({ callId, status: "completed", result });
+      const changedFiles = changedFileDetailsFromToolResult(result);
+      const replayableResult = withoutChangedFileDetails(result);
+      input.toolJournal.finish({
+        callId,
+        status: "completed",
+        result: replayableResult,
+        ...(changedFiles.length ? { changedFiles } : {}),
+      });
       if (call.name === "replace_work_plan" && toolResultSucceeded(result)) {
         await safeBindOpenWork(input.durableWork, input.workScope);
       }
@@ -243,7 +252,7 @@ export function createGuidedToolCallExecutor(
         toolName: effectiveToolName,
         args: presentationArgs,
         status: toolResultSucceeded(result) ? "completed" : "failed",
-        resultJson: safeJson(result),
+        resultJson: safeJson(replayableResult),
       });
       return result;
     } catch (error) {

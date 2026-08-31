@@ -17,6 +17,7 @@ type ResultRow = {
   summary: string;
   acceptance_evidence_json: string;
   changed_artifacts_json: string;
+  changed_files_json: string;
   commits_json: string;
   tests_json: string;
   remaining_risks_json: string;
@@ -32,6 +33,7 @@ export function readStewardResult(
   const row = db.query<ResultRow, [string]>(`
     SELECT result_id, relation_id, task_id, child_session_id, child_turn_id,
       status, code, summary, acceptance_evidence_json, changed_artifacts_json,
+      changed_files_json,
       commits_json, tests_json, remaining_risks_json,
       follow_up_recommendations_json, detail_refs_json, created_at
     FROM btcc_steward_results WHERE relation_id = ?
@@ -47,6 +49,9 @@ export function readStewardResult(
     summary: row.summary,
     acceptance_evidence: JSON.parse(row.acceptance_evidence_json) as string[],
     changed_artifacts: JSON.parse(row.changed_artifacts_json) as string[],
+    changed_files: row.changed_files_json
+      ? JSON.parse(row.changed_files_json) as NonNullable<StewardResultEnvelope["changed_files"]>
+      : [],
     commits: JSON.parse(row.commits_json) as string[],
     tests: JSON.parse(row.tests_json) as string[],
     remaining_risks: JSON.parse(row.remaining_risks_json) as string[],
@@ -61,13 +66,15 @@ export function insertStewardResult(db: Database, result: StewardResultEnvelope)
     INSERT INTO btcc_steward_results (
       result_id, relation_id, task_id, child_session_id, child_turn_id,
       status, code, summary, acceptance_evidence_json, changed_artifacts_json,
+      changed_files_json,
       commits_json, tests_json, remaining_risks_json,
       follow_up_recommendations_json, detail_refs_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     result.result_id, result.relation_id, result.task_id, result.child_session_id,
     result.child_turn_id, result.status, result.code, result.summary,
     stableJson(result.acceptance_evidence), stableJson(result.changed_artifacts),
+    stableJson(result.changed_files ?? []),
     stableJson(result.commits), stableJson(result.tests), stableJson(result.remaining_risks),
     stableJson(result.follow_up_recommendations), stableJson(result.detail_refs), result.created_at,
   );
