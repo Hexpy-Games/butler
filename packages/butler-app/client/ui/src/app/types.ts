@@ -745,6 +745,7 @@ export interface MessageRecord {
   text: string;
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
+  changed_files?: string[];
   work_blocks?: WorkBlockView[];
   turn_activity_rows?: ProgressRow[];
   status?: string;
@@ -994,6 +995,7 @@ export interface StewardSessionSummaryView {
   approved_plan_total?: number;
   approved_plan_completed?: number;
   artifacts: SessionArtifactSummary[];
+  changed_files: string[];
   result: StewardResultView | null;
   updated_at: string;
   terminal: boolean;

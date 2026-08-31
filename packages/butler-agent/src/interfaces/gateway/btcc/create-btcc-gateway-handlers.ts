@@ -101,6 +101,7 @@ export function createBtccGatewayHandlers(
       metadata: {
         text: result.text,
         artifacts: result.artifacts,
+        changedFiles: result.changedFiles,
         generatedSessionTitle,
         loadedSkillNames: [],
         ...("modelIdentity" in outcome && outcome.modelIdentity

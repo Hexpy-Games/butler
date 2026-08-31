@@ -97,8 +97,15 @@ export class AppSessionMessageRecordStore {
     const attachmentsByMessage = this.messageFiles.refsForMessages(
       pageRows.map((row) => row.id),
     );
+    const changedFilesByMessage = this.changedFilesForMessages(
+      pageRows.map((row) => row.id),
+    );
     const messages = pageRows.map((row) =>
-      messageFromRow(row, attachmentsByMessage.get(row.id) ?? []),
+      messageFromRow(
+        row,
+        attachmentsByMessage.get(row.id) ?? [],
+        changedFilesByMessage.get(row.id) ?? [],
+      ),
     );
     const compactionMessages =
       beforeCursor === undefined && afterCursor === undefined
@@ -224,7 +231,11 @@ export class AppSessionMessageRecordStore {
         "Message not found.",
       );
     }
-    return messageFromRow(row, this.messageFiles.refsForMessage(messageId));
+    return messageFromRow(
+      row,
+      this.messageFiles.refsForMessage(messageId),
+      this.changedFilesForMessages([messageId]).get(messageId) ?? [],
+    );
   }
 
   getLatestAssistantMessageForTurn(turnId: string): MessageRow | null {
@@ -344,7 +355,30 @@ export class AppSessionMessageRecordStore {
       );
     const row = this.getMessageRow(messageId);
     if (!row) throw new Error(`Failed to update message: ${messageId}`);
-    return messageFromRow(row, this.messageFiles.refsForMessage(messageId));
+    return messageFromRow(
+      row,
+      this.messageFiles.refsForMessage(messageId),
+      this.changedFilesForMessages([messageId]).get(messageId) ?? [],
+    );
+  }
+
+  replaceMessageChangedFiles(
+    messageId: string,
+    paths: readonly string[],
+  ): MessageRecord {
+    const normalized = [...new Set(paths.map(safeChangedFilePath).filter(
+      (path): path is string => Boolean(path),
+    ))].slice(0, 40);
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM message_changed_files WHERE message_id = ?")
+        .run(messageId);
+      const insert = this.db.query(`
+        INSERT INTO message_changed_files (message_id, position, safe_path_label)
+        VALUES (?, ?, ?)
+      `);
+      normalized.forEach((path, position) => insert.run(messageId, position, path));
+    })();
+    return this.messageRecordById(messageId);
   }
 
   touchChat(chatId: string): void {
@@ -352,6 +386,29 @@ export class AppSessionMessageRecordStore {
     this.db
       .query("UPDATE chats SET updated_at = ? WHERE id = ?")
       .run(now, chatId);
+  }
+
+  private changedFilesForMessages(
+    messageIds: readonly string[],
+  ): Map<string, string[]> {
+    const result = new Map<string, string[]>();
+    if (messageIds.length === 0) return result;
+    const placeholders = messageIds.map(() => "?").join(", ");
+    const rows = this.db.query<{
+      message_id: string;
+      safe_path_label: string;
+    }, string[]>(`
+      SELECT message_id, safe_path_label
+      FROM message_changed_files
+      WHERE message_id IN (${placeholders})
+      ORDER BY message_id ASC, position ASC
+    `).all(...messageIds);
+    for (const row of rows) {
+      const paths = result.get(row.message_id) ?? [];
+      paths.push(row.safe_path_label);
+      result.set(row.message_id, paths);
+    }
+    return result;
   }
 
   private compactionMarkerMessages(
@@ -415,4 +472,14 @@ export class AppSessionMessageRecordStore {
       ];
     });
   }
+}
+
+function safeChangedFilePath(value: string): string | null {
+  const normalized = value.trim().replaceAll("\\", "/");
+  if (!normalized || normalized.startsWith("/") || /^[A-Za-z]:\//u.test(normalized)) {
+    return null;
+  }
+  const parts = normalized.split("/");
+  if (parts.some((part) => !part || part === "." || part === "..")) return null;
+  return parts.join("/").slice(0, 1_024);
 }

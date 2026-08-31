@@ -51,6 +51,7 @@ export function projectAppFinalResult(input: {
 
   const text = sanitizeAppTransportFinalText(message.text);
   const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
+  const changedFiles = changedFilePathsFromOutbound(message.changedFiles);
   const delivery = deliveryLimitationMetadataFromRecord(metadata);
   const limitedDelivery = Boolean(delivery);
   const noVisibleReply =
@@ -80,7 +81,10 @@ export function projectAppFinalResult(input: {
     markProjectedTransportEvent(actionId, event.eventId, chatId);
     return false;
   }
-  if (!text && artifacts.length === 0 && !noVisibleReply) return false;
+  if (
+    !text && artifacts.length === 0 && changedFiles.length === 0 &&
+    !noVisibleReply
+  ) return false;
   if (noVisibleReply) {
     if (!hasDurableQueueClaim) {
       input.deleteStagedOutbound();
@@ -138,7 +142,7 @@ export function projectAppFinalResult(input: {
       });
       if (
         isSameDeliveredFinal(existing, text, options.getTurn(turnId).state) &&
-        artifactFiles.length === 0
+        artifactFiles.length === 0 && changedFiles.length === 0
       ) {
         const settled = settleQueuedTurn(options, chatId, turnId, metadata);
         if (!settled && queuedSettlementRequired(options, chatId, turnId, metadata)) {
@@ -164,6 +168,7 @@ export function projectAppFinalResult(input: {
         turnId,
         text ? [text] : [],
         files,
+        changedFiles,
       );
       if (
         terminalRecoverableCorrection ||
@@ -220,6 +225,13 @@ export function projectAppFinalResult(input: {
   if (!projected) return false;
   if (settledForDrain) void options.drainQueuedSessionMessages(chatId).catch(() => undefined);
   return true;
+}
+
+function changedFilePathsFromOutbound(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((path): path is string =>
+    typeof path === "string" && Boolean(path.trim()),
+  ).map((path) => path.trim()).slice(0, 40);
 }
 
 function settleQueuedTurn(

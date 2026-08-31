@@ -74,6 +74,8 @@ export function createAppSessionModuleGraph(input: {
       host.insertMessage(chatId, role, text, status, options),
     updateMessage: (messageId, update) => host.updateMessage(messageId, update),
     messageRecordById: (messageId) => host.messageRecordById(messageId),
+    replaceMessageChangedFiles: (messageId, paths) =>
+      host.replaceMessageChangedFiles(messageId, paths),
     getLatestAssistantMessageForTurn: (turnId) =>
       host.getLatestAssistantMessageForTurn(turnId),
     listMessages: (chatId) => host.listMessages(chatId),

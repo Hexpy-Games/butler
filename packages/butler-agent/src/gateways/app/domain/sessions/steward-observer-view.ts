@@ -43,6 +43,9 @@ export function sessionViewForStewardObserver(
         ...(index === snapshot.messages.length - 1 && projected.artifacts.length > 0
           ? { artifacts: projected.artifacts }
           : {}),
+        ...(index === snapshot.messages.length - 1 && projected.changed_files.length > 0
+          ? { changed_files: projected.changed_files }
+          : {}),
       } satisfies MessageRecord;
     })
     : [];
@@ -67,6 +70,7 @@ export function sessionViewForStewardObserver(
           ? { turn_activity_rows: projected.activity_rows }
           : {}),
         artifacts: projected.artifacts,
+        changed_files: projected.changed_files,
       }
     : null;
   const fullMessages = resultMessage ? [...messages, resultMessage] : messages;

@@ -7,6 +7,7 @@ export function guidedTurnResult(input: {
   terminalOutcome?: BtccAgentLoopResult["terminalOutcome"];
   workStatus?: BtccAgentLoopResult["workStatus"];
   artifacts?: BtccAgentLoopResult["artifacts"];
+  changedFiles?: BtccAgentLoopResult["changedFiles"];
   modelIdentity?: BtccAgentLoopResult["modelIdentity"];
   usedTools: readonly string[];
   hasFinalWork: boolean;
@@ -16,6 +17,7 @@ export function guidedTurnResult(input: {
     ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
     ...(input.workStatus ? { workStatus: input.workStatus } : {}),
     ...(input.artifacts?.length ? { artifacts: input.artifacts } : {}),
+    ...(input.changedFiles?.length ? { changedFiles: input.changedFiles } : {}),
     ...(input.modelIdentity ? { modelIdentity: input.modelIdentity } : {}),
     route: routeForUsedTools(
       input.usedTools,

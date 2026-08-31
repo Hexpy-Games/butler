@@ -79,6 +79,13 @@ export function migrateAppStoreSchema(
       PRIMARY KEY (message_id, file_id)
     );
 
+    CREATE TABLE IF NOT EXISTS message_changed_files (
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL,
+      safe_path_label TEXT NOT NULL,
+      PRIMARY KEY (message_id, position)
+    );
+
     CREATE TABLE IF NOT EXISTS session_queued_messages (
       id TEXT PRIMARY KEY,
       chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,

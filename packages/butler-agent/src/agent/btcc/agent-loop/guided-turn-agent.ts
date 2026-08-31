@@ -30,6 +30,7 @@ import { createFileStoreVerifiedImagePayloadPort } from "../../image-attachment/
 import { createGuidedAskFirstProgress, createGuidedAuthorityProjection, createGuidedOperationalProgressCapture } from "./guided-operational-progress.ts";
 import { loadGuidedOperationalFacts } from "./guided-operational-facts.ts";
 import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
+import { collectGuidedChangedFiles } from "./guided-changed-files.ts";
 import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
 import { privateModifyContinuationPromptInput } from "./guided-authority-continuation.ts";
 import type { PrincipalAuthority } from "../authority/index.ts";
@@ -382,8 +383,10 @@ export function createProductionGuidedTurnAgent(
         ? "no_visible" as const
         : undefined;
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
-      const artifacts = collectGuidedFinalArtifacts(
-        input.toolJournal.list(turn.turnId),
+      const finalToolRecords = input.toolJournal.list(turn.turnId);
+      const artifacts = collectGuidedFinalArtifacts(finalToolRecords);
+      const changedFiles = collectGuidedChangedFiles(
+        finalToolRecords,
         subsessionResultEvidence?.synthesisEvidence,
       );
       return guidedTurnResult({
@@ -393,6 +396,7 @@ export function createProductionGuidedTurnAgent(
           ? { workStatus: finalWork.status }
           : {}),
         artifacts,
+        changedFiles,
         modelIdentity: acceptedModelIdentity(),
         usedTools: toolCalls.usedTools,
         hasFinalWork: Boolean(finalWork),

@@ -69,9 +69,10 @@ describe("App Steward observer projection", () => {
       "research/qwen3.8-27b-awq-turboquant-vllm.md",
     ]);
     expect(view.messages.at(-1)?.text).toBe(projection.result?.summary);
-    expect(view.messages.at(-1)?.artifacts?.[0]?.safe_path_label).toBe(
+    expect(view.messages.at(-1)?.artifacts).toBeUndefined();
+    expect(view.messages.at(-1)?.changed_files).toEqual([
       "research/qwen3.8-27b-awq-turboquant-vllm.md",
-    );
+    ]);
     expect(JSON.stringify(view)).not.toContain('"changed_artifacts"');
   });
 
@@ -188,7 +189,8 @@ describe("App Steward observer projection", () => {
     );
     expect(projection.status).toBe("delivered");
     expect(projection.active_turn).toBeNull();
-    expect(projection.artifacts[0]?.safe_path_label).toBe("src/review.ts");
+    expect(projection.artifacts).toEqual([]);
+    expect(projection.changed_files).toEqual(["src/review.ts"]);
     expect(projection.activity_rows.find((row) => row.kind === "todo")?.safe_label)
       .toBe("Inspecting the task");
     expect(projection.activity_rows.find((row) => row.kind === "message")?.safe_label)
@@ -201,6 +203,7 @@ describe("App Steward observer projection", () => {
       2,
     );
     expect(publicView.messages.at(-1)?.text).toBe("Review complete");
+    expect(publicView.messages.at(-1)?.changed_files).toEqual(["src/review.ts"]);
     expect(publicView.messages.at(-1)?.turn_activity_rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

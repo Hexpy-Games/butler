@@ -56,6 +56,7 @@ export interface AppTransportProjectionStoreOptions {
     turnId: string,
     texts: string[],
     files?: MessageFileRow[],
+    changedFiles?: string[],
   ) => MessageRecord[];
   updateTurnState: (
     turnId: string,

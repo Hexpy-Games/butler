@@ -37,6 +37,7 @@ export interface MessageRecord {
   cursor: number;
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
+  changed_files?: string[];
   work_blocks?: WorkerActivityWorkBlock[];
   turn_activity_rows?: ProgressSummaryRow[];
 }
