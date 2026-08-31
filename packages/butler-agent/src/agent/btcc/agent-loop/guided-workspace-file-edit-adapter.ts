@@ -28,6 +28,7 @@ import {
   type GuidedWorkspaceFileEditInput,
   type GuidedWorkspaceFileEditResult,
 } from "./guided-workspace-file-edit-contracts.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 
 export {
   GUIDED_WORKSPACE_FILE_EDIT_CAPABILITY,
@@ -130,7 +131,11 @@ export function createGuidedWorkspaceFileEditEffectAdapter(
         after.ok &&
         after.value.sha256 === input.normalizedInput.after_sha256
       ) {
-        return applied(input.normalizedInput, after.value.bytes);
+        return applied(
+          input.normalizedInput,
+          after.value.bytes,
+          changedFileFromRegisteredResult(registeredResult),
+        );
       }
       const rejection = registeredToolRejection(registeredResult);
       if (rejection) return notApplied(rejection);
@@ -186,6 +191,7 @@ export function createGuidedWorkspaceFileEditEffectAdapter(
 function applied(
   input: GuidedWorkspaceFileEditInput,
   bytes: number,
+  changedFile?: ChangedFileDetail,
 ): EffectDispatchOutcome<GuidedWorkspaceFileEditResult> &
   EffectReconciliation<GuidedWorkspaceFileEditResult> {
   return {
@@ -199,8 +205,17 @@ function applied(
       before_sha256: input.before_sha256,
       after_sha256: input.after_sha256,
       target_observed: true,
+      ...(changedFile ? { changed_file: changedFile } : {}),
     },
   };
+}
+
+function changedFileFromRegisteredResult(value: unknown): ChangedFileDetail | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const detail = (value as Record<string, unknown>).changed_file;
+  return detail && typeof detail === "object" && !Array.isArray(detail)
+    ? detail as ChangedFileDetail
+    : undefined;
 }
 
 function targetInputMismatch(

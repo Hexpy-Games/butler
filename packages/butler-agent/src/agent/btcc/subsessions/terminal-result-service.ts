@@ -62,6 +62,7 @@ export async function completeStewardResultForDependencies(
     summary: string;
     acceptanceEvidence: string[];
     changedArtifacts: string[];
+    changedFiles: NonNullable<Parameters<SubsessionDelegationService["completeStewardResult"]>[0]["changedFiles"]>;
     commits: string[];
     tests: string[];
     remainingRisks: string[];
@@ -73,6 +74,7 @@ export async function completeStewardResultForDependencies(
       summary: safeSummary(resultInput.summary),
       acceptanceEvidence: [],
       changedArtifacts: resultInput.changedArtifacts ?? [],
+      changedFiles: resultInput.changedFiles ?? [],
       ...emptyReportDetails(),
     };
   } else {
@@ -86,6 +88,7 @@ export async function completeStewardResultForDependencies(
       summary: safeTerminalSummary(terminalStatus, terminalCode),
       acceptanceEvidence: [],
       changedArtifacts: [],
+      changedFiles: [],
       ...emptyReportDetails(),
     };
   }
@@ -108,6 +111,7 @@ export async function completeStewardResultForDependencies(
     summary: evidence.summary,
     acceptanceEvidence: evidence.acceptanceEvidence,
     changedArtifacts: evidence.changedArtifacts,
+    changedFiles: evidence.changedFiles,
     commits: evidence.commits,
     tests: evidence.tests,
     remainingRisks: evidence.remainingRisks,

@@ -24,6 +24,7 @@ import {
   type SessionMessagePage,
   type SessionMessagePageOptions,
 } from "./session-message-page.ts";
+import type { ChangedFileDetail, ChangedFileLine } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
 
 export class AppSessionMessageRecordStore {
   constructor(
@@ -364,19 +365,31 @@ export class AppSessionMessageRecordStore {
 
   replaceMessageChangedFiles(
     messageId: string,
-    paths: readonly string[],
+    details: readonly (ChangedFileDetail | string)[],
   ): MessageRecord {
-    const normalized = [...new Set(paths.map(safeChangedFilePath).filter(
-      (path): path is string => Boolean(path),
-    ))].slice(0, 40);
+    const byPath = new Map<string, ChangedFileDetail>();
+    for (const detail of details.flatMap(normalizeChangedFile)) {
+      const existing = byPath.get(detail.path);
+      if (!existing || existing.lines.length === 0 || detail.lines.length > 0) {
+        byPath.set(detail.path, detail);
+      }
+    }
+    const normalized = [...byPath.values()].slice(0, 40);
     this.db.transaction(() => {
       this.db.query("DELETE FROM message_changed_files WHERE message_id = ?")
         .run(messageId);
       const insert = this.db.query(`
-        INSERT INTO message_changed_files (message_id, position, safe_path_label)
-        VALUES (?, ?, ?)
+        INSERT INTO message_changed_files (message_id, position, safe_path_label, detail_json)
+        VALUES (?, ?, ?, ?)
       `);
-      normalized.forEach((path, position) => insert.run(messageId, position, path));
+      normalized.forEach((detail, position) => insert.run(
+        messageId,
+        position,
+        detail.path,
+        detail.lines.length > 0 || detail.additions > 0 || detail.deletions > 0
+          ? JSON.stringify(detail)
+          : null,
+      ));
     })();
     return this.messageRecordById(messageId);
   }
@@ -390,23 +403,24 @@ export class AppSessionMessageRecordStore {
 
   private changedFilesForMessages(
     messageIds: readonly string[],
-  ): Map<string, string[]> {
-    const result = new Map<string, string[]>();
+  ): Map<string, ChangedFileDetail[]> {
+    const result = new Map<string, ChangedFileDetail[]>();
     if (messageIds.length === 0) return result;
     const placeholders = messageIds.map(() => "?").join(", ");
     const rows = this.db.query<{
       message_id: string;
       safe_path_label: string;
+      detail_json: string | null;
     }, string[]>(`
-      SELECT message_id, safe_path_label
+      SELECT message_id, safe_path_label, detail_json
       FROM message_changed_files
       WHERE message_id IN (${placeholders})
       ORDER BY message_id ASC, position ASC
     `).all(...messageIds);
     for (const row of rows) {
-      const paths = result.get(row.message_id) ?? [];
-      paths.push(row.safe_path_label);
-      result.set(row.message_id, paths);
+      const details = result.get(row.message_id) ?? [];
+      details.push(parseChangedFileDetail(row.detail_json, row.safe_path_label));
+      result.set(row.message_id, details);
     }
     return result;
   }
@@ -471,6 +485,51 @@ export class AppSessionMessageRecordStore {
         },
       ];
     });
+  }
+}
+
+function normalizeChangedFile(value: ChangedFileDetail | string): ChangedFileDetail[] {
+  if (typeof value === "string") {
+    const path = safeChangedFilePath(value);
+    return path ? [{ path, additions: 0, deletions: 0, lines: [] }] : [];
+  }
+  const path = safeChangedFilePath(value.path);
+  if (!path || !Array.isArray(value.lines)) return [];
+  const lines = value.lines.flatMap(normalizeChangedFileLine);
+  return [{
+    path,
+    additions: lines.filter((line) => line.type === "added").length,
+    deletions: lines.filter((line) => line.type === "deleted").length,
+    lines,
+  }];
+}
+
+function normalizeChangedFileLine(value: ChangedFileLine): ChangedFileLine[] {
+  if ((value.type !== "added" && value.type !== "deleted") || typeof value.content !== "string") return [];
+  const oldLine = value.old_line;
+  const newLine = value.new_line;
+  if (oldLine !== undefined && (!Number.isSafeInteger(oldLine) || oldLine < 1)) return [];
+  if (newLine !== undefined && (!Number.isSafeInteger(newLine) || newLine < 1)) return [];
+  return [{
+    type: value.type,
+    ...(oldLine === undefined ? {} : { old_line: oldLine }),
+    ...(newLine === undefined ? {} : { new_line: newLine }),
+    content: value.content,
+  }];
+}
+
+function parseChangedFileDetail(value: string | null, fallbackPath: string): ChangedFileDetail {
+  if (!value) return { path: fallbackPath, additions: 0, deletions: 0, lines: [] };
+  try {
+    const parsed = JSON.parse(value) as ChangedFileDetail;
+    return normalizeChangedFile(parsed)[0] ?? {
+      path: fallbackPath,
+      additions: 0,
+      deletions: 0,
+      lines: [],
+    };
+  } catch {
+    return { path: fallbackPath, additions: 0, deletions: 0, lines: [] };
   }
 }
 

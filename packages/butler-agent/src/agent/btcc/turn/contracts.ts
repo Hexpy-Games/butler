@@ -15,6 +15,7 @@ import type {
   TurnContinuationBudgetEvent,
   TurnContinuationBudgetState,
 } from "./continuation-budget.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 
 export type TurnSemanticState =
   | "admitted"
@@ -64,7 +65,7 @@ export type TurnRecord = {
     contentSha256: string;
     workStatus?: "completed" | "blocked";
     artifacts?: BtccFinalArtifact[];
-    changedFiles?: string[];
+    changedFiles?: ChangedFileDetail[];
     modelIdentity?: {
       requestedModelRef: string;
       effectiveModelRef: string;
@@ -223,5 +224,5 @@ export type StopPersistenceOutcome =
       content: string;
       workStatus?: "completed" | "blocked";
       artifacts?: BtccFinalArtifact[];
-      changedFiles?: string[];
+      changedFiles?: ChangedFileDetail[];
     };

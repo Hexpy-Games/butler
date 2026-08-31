@@ -1604,7 +1604,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("function MessageChangedFiles");
   expect(renderer).toContain('data-test-class="message-changed-file-list"');
   expect(renderer).toContain("message.changed_files");
-  expect(renderer).toContain("<ArtifactList");
+  expect(renderer).toContain("<MessageChangedFileRow");
   expect(renderer).toContain('data-test-class="artifact-viewer"');
   expect(renderer).toContain("message.artifacts");
   expect(renderer).toContain("openArtifact(artifact.id, artifact)");

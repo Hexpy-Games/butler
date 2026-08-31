@@ -3,6 +3,7 @@ import { contentRef, digest } from "../identity/index.ts";
 import { subsessionChildTurnId, subsessionResultId } from "./identities.ts";
 import { terminalResultIntegrityFailure } from "./terminal-result-integrity.ts";
 import { projectBtccFinalContentSummary } from "../turn/final-content-summary.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 
 const MAX_SUMMARY_LENGTH = 1_000;
 const MAX_LIST_ITEMS = 12;
@@ -16,6 +17,7 @@ type AcceptedStewardReport = {
   followUpRecommendations: string[];
   detailRefs: string[];
   changedArtifacts: string[];
+  changedFiles: ChangedFileDetail[];
 };
 
 type ReportBinding = {
@@ -34,6 +36,7 @@ export async function resolveParentResultEvidence(input: {
   synthesisEvidence: string;
   outcome: "success" | "blocked" | "failed" | "cancelled";
   parentWorkId: string;
+  changedFiles: ChangedFileDetail[];
 } | null> {
   const refs = subsessionParentResultRefs(input.parentInputText);
   if (!refs) return null;
@@ -62,6 +65,7 @@ export async function resolveParentResultEvidence(input: {
     ].join("\n"),
     outcome: result.status,
     parentWorkId: packet.parent_work_ref.work_id,
+    changedFiles: result.changed_files ?? [],
   };
 }
 
@@ -91,6 +95,7 @@ export async function resolveAcceptedStewardReport(input: {
     content: payload.content,
     ...(payload.workStatus ? { workStatus: payload.workStatus } : {}),
     ...(payload.artifacts?.length ? { artifacts: payload.artifacts } : {}),
+    ...(payload.changedFiles?.length ? { changedFiles: payload.changedFiles } : {}),
     ...(payload.modelIdentity ? { modelIdentity: payload.modelIdentity } : {}),
   };
   const expectedRef = contentRef("payload", payloadBody);
@@ -122,6 +127,7 @@ export async function resolveAcceptedStewardReport(input: {
       ].join(":"),
     ],
     changedArtifacts: (payload.artifacts ?? []).map((artifact) => artifact.safePathLabel),
+    changedFiles: payload.changedFiles ?? [],
   };
 }
 
