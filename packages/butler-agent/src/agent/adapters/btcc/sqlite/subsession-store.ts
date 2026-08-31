@@ -187,6 +187,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     summary: string;
     acceptanceEvidence: string[];
     changedArtifacts: string[];
+    changedFiles: StewardResultEnvelope["changed_files"];
     commits: string[];
     tests: string[];
     remainingRisks: string[];
@@ -227,6 +228,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       summary,
       acceptance_evidence: input.acceptanceEvidence,
       changed_artifacts: input.changedArtifacts,
+      changed_files: input.changedFiles ?? [],
       commits: input.commits,
       tests: input.tests,
       remaining_risks: input.remainingRisks,
@@ -264,6 +266,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
         summary,
         acceptance_evidence: input.acceptanceEvidence,
         changed_artifacts: input.changedArtifacts,
+        changed_files: input.changedFiles ?? [],
         commits: input.commits,
         tests: input.tests,
         remaining_risks: input.remainingRisks,

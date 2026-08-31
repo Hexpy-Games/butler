@@ -20,6 +20,7 @@ import {
   workspaceMutationFailure,
 } from "./workspace-mutation-errors.ts";
 import { normalizeWorkspaceSha256 } from "./workspace-sha256.ts";
+import { changedFileDetail, type ChangedFileDetail } from "./changed-file-detail.ts";
 export { withButlerFileMutationLock } from "./workspace-file-mutation-lock.ts";
 export { workspaceMutationFailure } from "./workspace-mutation-errors.ts";
 
@@ -83,6 +84,7 @@ export interface CommittedWorkspaceFileMutation {
   after_sha256: string;
   atomic_write: true;
   cleanup_failed?: boolean;
+  changed_file?: ChangedFileDetail;
 }
 
 export type WorkspaceMutationResult =
@@ -368,6 +370,13 @@ export async function commitWorkspaceFileMutation(
     return mapped;
   }
 
+  const detail = changedFileDetail(
+    prepared.path,
+    prepared.before.bytes,
+    prepared.data,
+    { created: prepared.create },
+  );
+
   return {
     ok: true,
     path: prepared.path,
@@ -378,5 +387,6 @@ export async function commitWorkspaceFileMutation(
     after_sha256: sha256Hex(prepared.data),
     atomic_write: true,
     ...(cleanup_failed ? { cleanup_failed: true } : {}),
+    ...(detail ? { changed_file: detail } : {}),
   };
 }

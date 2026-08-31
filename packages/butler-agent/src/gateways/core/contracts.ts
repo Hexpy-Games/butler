@@ -1,5 +1,6 @@
 import type { TurnExecutionControlsV1 } from "./turn-execution-controls.ts";
 import type { VisualAttachmentManifest } from "../../agent/image-attachment/contracts.ts";
+import type { ChangedFileDetail } from "../../agent/tools/file-tools/shared/changed-file-detail.ts";
 import type { VisualImageAdmissionResult } from "../../agent/image-attachment/contracts.ts";
 
 export type { VisualAttachmentManifest } from "../../agent/image-attachment/contracts.ts";
@@ -131,7 +132,7 @@ export interface OutboundAction {
     text?: string;
     attachments?: AttachmentRef[];
     artifacts?: ArtifactRef[];
-    changedFiles?: string[];
+    changedFiles?: ChangedFileDetail[];
     replyToMessageId?: string;
     editMessageId?: string;
   };

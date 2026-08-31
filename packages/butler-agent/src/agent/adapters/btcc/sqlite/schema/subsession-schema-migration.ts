@@ -48,6 +48,7 @@ function addDetailedResultColumns(db: Database): void {
     ["remaining_risks_json", "TEXT NOT NULL DEFAULT '[]'"],
     ["follow_up_recommendations_json", "TEXT NOT NULL DEFAULT '[]'"],
     ["detail_refs_json", "TEXT NOT NULL DEFAULT '[]'"],
+    ["changed_files_json", "TEXT NOT NULL DEFAULT '[]'"],
   ] as const) {
     if (!columns.has(name)) db.exec(`ALTER TABLE btcc_steward_results ADD COLUMN ${name} ${definition}`);
   }

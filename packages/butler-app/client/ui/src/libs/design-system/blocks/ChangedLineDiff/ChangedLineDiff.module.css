@@ -1,0 +1,49 @@
+.diff {
+  overflow-x: auto;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.added,
+.deleted {
+  display: grid;
+  grid-template-columns:
+    minmax(var(--space-xl), auto)
+    minmax(var(--space-xl), auto)
+    var(--space-md)
+    minmax(0, 1fr);
+  min-width: max-content;
+  font: var(--font-code);
+}
+
+.added {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.deleted {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.lineNumber,
+.marker,
+.content {
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.lineNumber {
+  color: var(--text-tertiary);
+  text-align: end;
+  user-select: none;
+}
+
+.marker {
+  padding-inline: var(--space-xs);
+  user-select: none;
+}
+
+.content {
+  color: var(--text-primary);
+  white-space: pre;
+}

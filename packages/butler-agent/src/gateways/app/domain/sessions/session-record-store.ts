@@ -26,6 +26,7 @@ import type {
   TurnRecord,
   UpdateSessionRequest,
 } from "../../interface/protocol/app-protocol.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
 import { visibleMessageSqlPredicate } from "../sessions/visible-message-sql.ts";
 import { AppSessionMessageRecordStore } from "./session-message-record-store.ts";
 import type {
@@ -302,9 +303,9 @@ export class AppSessionRecordStore {
 
   replaceMessageChangedFiles(
     messageId: string,
-    paths: readonly string[],
+    details: readonly (ChangedFileDetail | string)[],
   ): MessageRecord {
-    return this.messages.replaceMessageChangedFiles(messageId, paths);
+    return this.messages.replaceMessageChangedFiles(messageId, details);
   }
 
   getLatestAssistantMessageForTurn(turnId: string): MessageRow | null {

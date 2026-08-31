@@ -1,6 +1,7 @@
 import type {
   BtccFinalArtifact,
   BtccTurnOutcome,
+  ChangedFileDetail,
 } from "../../../agent/btcc/index.ts";
 import { projectBtccFinalReport } from "../../../agent/btcc/index.ts";
 
@@ -9,7 +10,7 @@ export function projectTurnOutcome(
 ): {
   text: string;
   artifacts: BtccFinalArtifact[];
-  changedFiles: string[];
+  changedFiles: ChangedFileDetail[];
   workStatus?: "completed" | "blocked";
 } {
   if (outcome.kind === "delivered" || outcome.kind === "already_delivered") {
@@ -28,14 +29,15 @@ export function projectTurnOutcome(
 
 export function projectChildTerminalReport(
   result: ReturnType<typeof projectTurnOutcome>,
-): { summary: string; changedArtifacts: string[] } {
+): { summary: string; changedArtifacts: string[]; changedFiles: ChangedFileDetail[] } {
   const projected = projectBtccFinalReport(
     result.text,
-    result.changedFiles,
+    result.changedFiles.map((file) => file.path),
   );
   return {
     summary: structuredReport(result.text) ? projected.summary : result.text.trim(),
     changedArtifacts: projected.changedArtifacts,
+    changedFiles: result.changedFiles,
   };
 }
 

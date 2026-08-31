@@ -14,6 +14,7 @@ import {
   type ObservedWorkspaceFileTarget,
   workspaceFileEffectTarget,
 } from "./guided-workspace-file-target.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 
 export { workspaceFileEffectTarget } from "./guided-workspace-file-target.ts";
 
@@ -39,6 +40,7 @@ export type GuidedWorkspaceFileResult = {
   create_parents: boolean;
   target_observed: true;
   created_from_absent?: true;
+  changed_file?: ChangedFileDetail;
 };
 
 export type RegisteredWriteFile = (
@@ -112,6 +114,7 @@ export function createGuidedWorkspaceFileEffectAdapter(
           input.normalizedInput,
           observation,
           before.status === "missing",
+          changedFileFromRegisteredResult(registeredResult),
         );
       }
       const rejection = registeredToolRejection(registeredResult);
@@ -224,6 +227,7 @@ function applied(
   input: GuidedWorkspaceFileInput,
   observation: Extract<ObservedWorkspaceFileTarget, { status: "file" }>,
   createdFromAbsent = false,
+  changedFile?: ChangedFileDetail,
 ): Extract<
   EffectDispatchOutcome<GuidedWorkspaceFileResult>,
   { status: "applied" }
@@ -239,8 +243,17 @@ function applied(
       create_parents: input.create_parents,
       target_observed: true,
       ...(createdFromAbsent ? { created_from_absent: true as const } : {}),
+      ...(changedFile ? { changed_file: changedFile } : {}),
     },
   };
+}
+
+function changedFileFromRegisteredResult(value: unknown): ChangedFileDetail | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const detail = (value as Record<string, unknown>).changed_file;
+  return detail && typeof detail === "object" && !Array.isArray(detail)
+    ? detail as ChangedFileDetail
+    : undefined;
 }
 
 function notApplied(

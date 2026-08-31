@@ -88,7 +88,7 @@ function MessageContentComponent({
         />
       )}
       {message.role === "assistant" && (
-        <MessageChangedFiles paths={message.changed_files ?? []} />
+        <MessageChangedFiles files={message.changed_files ?? []} />
       )}
       {message.role === "assistant" && onCopyAssistantMessage && (
         <AssistantResponseFooter

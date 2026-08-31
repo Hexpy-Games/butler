@@ -13,6 +13,8 @@ export type GuidedToolJournalRecord = {
   arguments: Record<string, unknown>;
   status: "started" | "completed" | "failed" | "cancelled";
   result?: unknown;
+  /** Runtime-private mutation detail; excluded from replayable tool results. */
+  changedFiles?: import("../../tools/file-tools/shared/changed-file-detail.ts").ChangedFileDetail[];
   resultSha256?: string;
   errorCode?: string;
   deliveryState?: OperationResultDeliveryState;
@@ -33,6 +35,7 @@ export interface GuidedToolJournal {
     callId: string;
     status: "completed" | "failed" | "cancelled";
     result?: unknown;
+    changedFiles?: import("../../tools/file-tools/shared/changed-file-detail.ts").ChangedFileDetail[];
     errorCode?: string;
   }): void;
   find(callId: string): GuidedToolJournalRecord | null;

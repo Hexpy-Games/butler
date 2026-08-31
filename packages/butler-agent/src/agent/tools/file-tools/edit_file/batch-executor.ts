@@ -146,6 +146,7 @@ function batchRecord(input: {
   bytes?: number;
   start_line?: number;
   cleanup_failed?: boolean;
+  changed_file?: import("../shared/changed-file-detail.ts").ChangedFileDetail;
 }) {
   return {
     index: input.index,
@@ -157,6 +158,7 @@ function batchRecord(input: {
     ...(input.bytes === undefined ? {} : { bytes: input.bytes }),
     ...(input.start_line === undefined ? {} : { start_line: input.start_line }),
     ...(input.cleanup_failed === undefined ? {} : { cleanup_failed: input.cleanup_failed }),
+    ...(input.changed_file === undefined ? {} : { changed_file: input.changed_file }),
   };
 }
 
@@ -275,6 +277,7 @@ export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<st
         bytes: entry.result.bytes,
         start_line: edit.startLine,
         ...(entry.result.cleanup_failed ? { cleanup_failed: true } : {}),
+        ...(entry.result.changed_file ? { changed_file: entry.result.changed_file } : {}),
       });
     });
     if (!committedBatch.ok) {
@@ -315,6 +318,8 @@ export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<st
       ok: true as const,
       files: applied,
       applied,
+      changed_files: applied.flatMap((entry) =>
+        "changed_file" in entry && entry.changed_file ? [entry.changed_file] : []),
       metrics: { elapsed_ms: Math.max(0, Date.now() - startedAt), files_written: applied.length, bytes_written: bytesWritten },
       evidence_receipts: fileToolEvidenceReceipt({ toolName: "edit_file", summary: `Edited ${applied.length} workspace files`, references: { batch: true, applied }, satisfies: ["durable_artifact"] }),
       evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "edit_file", ok: true, paths, applied, edited: true, bytes: bytesWritten }),

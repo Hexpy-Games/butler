@@ -3,6 +3,7 @@ export type {
   Btcc,
   BtccStopRequest,
   BtccFinalArtifact,
+  ChangedFileDetail,
   BtccTurnOutcome,
   BtccTurnRequest,
 } from "./contracts.ts";

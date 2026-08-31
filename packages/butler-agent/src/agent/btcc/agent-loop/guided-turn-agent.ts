@@ -387,7 +387,7 @@ export function createProductionGuidedTurnAgent(
       const artifacts = collectGuidedFinalArtifacts(finalToolRecords);
       const changedFiles = collectGuidedChangedFiles(
         finalToolRecords,
-        subsessionResultEvidence?.synthesisEvidence,
+        subsessionResultEvidence?.changedFiles ?? [],
       );
       return guidedTurnResult({
         content: publicText,

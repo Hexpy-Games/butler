@@ -83,6 +83,7 @@ export function migrateAppStoreSchema(
       message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
       position INTEGER NOT NULL,
       safe_path_label TEXT NOT NULL,
+      detail_json TEXT,
       PRIMARY KEY (message_id, position)
     );
 
@@ -312,6 +313,7 @@ export function migrateAppStoreSchema(
   ensureColumn(db, "messages", "updated_at", "TEXT");
   ensureColumn(db, "messages", "safe_error_code", "TEXT");
   ensureColumn(db, "messages", "retryable", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "message_changed_files", "detail_json", "TEXT");
   ensureColumn(db, "projects", "ledger_project_id", "TEXT");
   ensureColumn(db, "turns", "execution_controls_json", "TEXT");
   ensureColumn(db, "turns", "execution_model_json", "TEXT");

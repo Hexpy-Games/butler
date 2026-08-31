@@ -12,6 +12,7 @@ import {
   verifyTurnExecutionControls,
   type TurnExecutionControlsV1,
 } from "../../../core/turn-execution-controls.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
 
 export interface MessageReadModelRow {
   rowid: number;
@@ -75,7 +76,7 @@ export interface TurnReadModelRow {
 export function messageFromRow(
   row: MessageReadModelRow,
   attachments: MessageFileRef[] = [],
-  changedFiles: string[] = [],
+  changedFiles: ChangedFileDetail[] = [],
 ): MessageRecord {
   const message: MessageRecord = {
     id: row.id,

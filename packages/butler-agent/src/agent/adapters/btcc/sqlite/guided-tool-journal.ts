@@ -16,6 +16,7 @@ type GuidedToolCallRow = {
   status: GuidedToolJournalRecord["status"];
   result_json: string | null;
   result_sha256: string | null;
+  changed_files_json: string | null;
   error_code: string | null;
   delivery_state: OperationResultDeliveryState | null;
   delivery_round_id: string | null;
@@ -72,18 +73,23 @@ export class SqliteGuidedToolJournal implements GuidedToolJournal {
     callId: string;
     status: "completed" | "failed" | "cancelled";
     result?: unknown;
+    changedFiles?: GuidedToolJournalRecord["changedFiles"];
     errorCode?: string;
   }): void {
     const resultJson = input.result === undefined ? null : json(input.result);
     const resultSha256 = resultJson === null ? null : digest(resultJson);
+    const changedFilesJson = input.changedFiles?.length
+      ? json(input.changedFiles)
+      : null;
     const updated = this.db.query(`
       UPDATE btcc_guided_tool_calls SET status = ?, result_json = ?,
-        result_sha256 = ?, error_code = ?, finished_at = ?
+        result_sha256 = ?, changed_files_json = ?, error_code = ?, finished_at = ?
       WHERE call_id = ? AND status = 'started'
     `).run(
       input.status,
       resultJson,
       resultSha256,
+      changedFilesJson,
       input.errorCode ?? null,
       new Date().toISOString(),
       input.callId,
@@ -92,12 +98,14 @@ export class SqliteGuidedToolJournal implements GuidedToolJournal {
     const current = this.db.query<{
       status: string;
       result_json: string | null;
+      changed_files_json: string | null;
       error_code: string | null;
     }, [string]>(`
-      SELECT status, result_json, error_code FROM btcc_guided_tool_calls
+      SELECT status, result_json, changed_files_json, error_code FROM btcc_guided_tool_calls
       WHERE call_id = ?
     `).get(input.callId);
     if (!current || current.status !== input.status || current.result_json !== resultJson ||
+      current.changed_files_json !== changedFilesJson ||
       current.error_code !== (input.errorCode ?? null)) {
       throw new Error("Guided tool result identity conflict");
     }
@@ -106,7 +114,7 @@ export class SqliteGuidedToolJournal implements GuidedToolJournal {
   find(callId: string): GuidedToolJournalRecord | null {
     const row = this.db.query<GuidedToolCallRow, [string]>(`
       SELECT call_id, tool_name, raw_arguments, arguments_json, status,
-        result_json, result_sha256, error_code, delivery_state,
+        result_json, result_sha256, changed_files_json, error_code, delivery_state,
         delivery_round_id, delivery_response_sha256
       FROM btcc_guided_tool_calls WHERE call_id = ?
     `).get(callId);
@@ -116,7 +124,7 @@ export class SqliteGuidedToolJournal implements GuidedToolJournal {
   findForTurn(turnId: string, callId: string): GuidedToolJournalRecord | null {
     const row = this.db.query<GuidedToolCallRow, [string, string]>(`
       SELECT call_id, tool_name, raw_arguments, arguments_json, status,
-        result_json, result_sha256, error_code, delivery_state,
+        result_json, result_sha256, changed_files_json, error_code, delivery_state,
         delivery_round_id, delivery_response_sha256
       FROM btcc_guided_tool_calls WHERE turn_id = ? AND call_id = ?
     `).get(turnId, callId);
@@ -127,7 +135,7 @@ export class SqliteGuidedToolJournal implements GuidedToolJournal {
     return this.db.query<GuidedToolCallRow, [string]>(`
       SELECT rowid AS journal_ordinal,
         call_id, tool_name, raw_arguments, arguments_json, status,
-        result_json, result_sha256, error_code, delivery_state,
+        result_json, result_sha256, changed_files_json, error_code, delivery_state,
         delivery_round_id, delivery_response_sha256
       FROM btcc_guided_tool_calls WHERE turn_id = ? ORDER BY rowid
     `).all(turnId).map(hydrate);
@@ -262,6 +270,9 @@ function hydrate(row: GuidedToolCallRow): GuidedToolJournalRecord {
     arguments: JSON.parse(row.arguments_json) as Record<string, unknown>,
     status: row.status,
     ...(row.result_json !== null ? { result: JSON.parse(row.result_json) as unknown } : {}),
+    ...(row.changed_files_json
+      ? { changedFiles: JSON.parse(row.changed_files_json) as NonNullable<GuidedToolJournalRecord["changedFiles"]> }
+      : {}),
     ...(row.result_sha256 ? { resultSha256: row.result_sha256 } : {}),
     ...(row.error_code ? { errorCode: row.error_code } : {}),
     ...(row.delivery_state ? { deliveryState: row.delivery_state } : {}),

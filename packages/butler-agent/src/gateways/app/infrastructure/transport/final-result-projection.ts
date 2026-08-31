@@ -227,11 +227,13 @@ export function projectAppFinalResult(input: {
   return true;
 }
 
-function changedFilePathsFromOutbound(value: unknown): string[] {
+function changedFilePathsFromOutbound(value: unknown): import("../../../../agent/tools/file-tools/shared/changed-file-detail.ts").ChangedFileDetail[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((path): path is string =>
-    typeof path === "string" && Boolean(path.trim()),
-  ).map((path) => path.trim()).slice(0, 40);
+  return value.filter((detail): detail is import("../../../../agent/tools/file-tools/shared/changed-file-detail.ts").ChangedFileDetail =>
+    Boolean(detail && typeof detail === "object" && !Array.isArray(detail) &&
+      typeof (detail as Record<string, unknown>).path === "string" &&
+      Array.isArray((detail as Record<string, unknown>).lines)),
+  ).slice(0, 40);
 }
 
 function settleQueuedTurn(

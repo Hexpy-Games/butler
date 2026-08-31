@@ -16,6 +16,7 @@ import type {
   SessionViewTurnDeliveryState,
   TurnProgressSnapshotView,
 } from "./session-contract.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
 
 export interface MessageRecord {
   id: string;
@@ -37,7 +38,7 @@ export interface MessageRecord {
   cursor: number;
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
-  changed_files?: string[];
+  changed_files?: ChangedFileDetail[];
   work_blocks?: WorkerActivityWorkBlock[];
   turn_activity_rows?: ProgressSummaryRow[];
 }

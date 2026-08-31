@@ -54,6 +54,12 @@ describe("App Steward observer projection", () => {
         summary: report,
         acceptance_evidence: [],
         changed_artifacts: [],
+        changed_files: [{
+          path: "src/steward.ts",
+          additions: 1,
+          deletions: 0,
+          lines: [{ type: "added" as const, new_line: 1, content: "export {};" }],
+        }],
         created_at: "2026-08-29T00:01:00.000Z",
       },
       updated_at: "2026-08-29T00:01:00.000Z",
@@ -70,9 +76,12 @@ describe("App Steward observer projection", () => {
     ]);
     expect(view.messages.at(-1)?.text).toBe(projection.result?.summary);
     expect(view.messages.at(-1)?.artifacts).toBeUndefined();
-    expect(view.messages.at(-1)?.changed_files).toEqual([
-      "research/qwen3.8-27b-awq-turboquant-vllm.md",
-    ]);
+    expect(view.messages.at(-1)?.changed_files).toEqual([{
+      path: "src/steward.ts",
+      additions: 1,
+      deletions: 0,
+      lines: [{ type: "added", new_line: 1, content: "export {};" }],
+    }]);
     expect(JSON.stringify(view)).not.toContain('"changed_artifacts"');
   });
 
@@ -190,7 +199,7 @@ describe("App Steward observer projection", () => {
     expect(projection.status).toBe("delivered");
     expect(projection.active_turn).toBeNull();
     expect(projection.artifacts).toEqual([]);
-    expect(projection.changed_files).toEqual(["src/review.ts"]);
+    expect(projection.changed_files).toEqual([]);
     expect(projection.activity_rows.find((row) => row.kind === "todo")?.safe_label)
       .toBe("Inspecting the task");
     expect(projection.activity_rows.find((row) => row.kind === "message")?.safe_label)
@@ -203,7 +212,7 @@ describe("App Steward observer projection", () => {
       2,
     );
     expect(publicView.messages.at(-1)?.text).toBe("Review complete");
-    expect(publicView.messages.at(-1)?.changed_files).toEqual(["src/review.ts"]);
+    expect(publicView.messages.at(-1)?.changed_files).toBeUndefined();
     expect(publicView.messages.at(-1)?.turn_activity_rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
