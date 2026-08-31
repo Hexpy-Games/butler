@@ -37,6 +37,7 @@ export function deterministicTargetPath(
   butlerData: string,
   sessionId: string,
   branch: string,
+  projectName?: string,
 ): string {
   const dataRoot = canonicalPath(butlerData);
   const root = resolve(dataRoot, "worktrees", "sessions");
@@ -44,7 +45,10 @@ export function deterministicTargetPath(
     .update(`${sessionId}\0${branch}`)
     .digest("hex")
     .slice(0, 16);
-  const target = resolve(root, `${safeLabel(sessionId)}-${safeLabel(branch)}-${digest}`);
+  const name = projectName
+    ? `${safeProjectLabel(projectName)}-${digest}`
+    : `${safeLabel(sessionId)}-${safeLabel(branch)}-${digest}`;
+  const target = resolve(root, name);
   const rel = relative(dataRoot, target);
   if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
     throw new Error("session_worktree_target_escape");
@@ -113,6 +117,15 @@ export function samePath(left: string, right: string): boolean {
 function safeLabel(value: string): string {
   const normalized = value.replace(/[^A-Za-z0-9._-]+/gu, "-").replace(/^-+|-+$/gu, "");
   return (normalized || "session").slice(0, 48);
+}
+
+function safeProjectLabel(value: string): string {
+  const normalized = value
+    .normalize("NFKC")
+    .toLocaleLowerCase("en-US")
+    .replace(/[^\p{L}\p{N}._-]+/gu, "-")
+    .replace(/^[._-]+|[._-]+$/gu, "");
+  return [...(normalized || "project")].slice(0, 32).join("");
 }
 
 function assertNoSymlink(path: string): void {

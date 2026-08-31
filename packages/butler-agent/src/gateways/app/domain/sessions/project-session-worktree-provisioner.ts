@@ -62,6 +62,7 @@ export class AppProjectSessionWorktreeProvisioner {
       branch,
       startPoint: "HEAD",
       sessionId: runtimeSessionId,
+      projectName: project.display_name,
       butlerData: this.input.butlerData,
       bindingStore: this.input.bindings,
       workspaceReference: createWorkspaceReference(project.workspace_path),
