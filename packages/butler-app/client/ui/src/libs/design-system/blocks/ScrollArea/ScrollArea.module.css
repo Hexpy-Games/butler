@@ -1,6 +1,7 @@
 .frame {
   --scroll-area-scrollbar-offset: 10px;
   --scroll-area-fade-size: 14px;
+  --scroll-area-fade-guard: 1px;
   --scroll-area-edge-padding: var(--scroll-area-fade-size);
   --scroll-area-frame-width: calc(100% + var(--scroll-area-scrollbar-offset));
   --scroll-area-content-width: calc(100% - var(--scroll-area-scrollbar-offset));
@@ -31,10 +32,10 @@
   -webkit-mask-image:
     linear-gradient(
       to bottom,
-      transparent 0,
+      transparent 0 var(--scroll-area-fade-guard),
       var(--text-primary) var(--scroll-area-fade-size),
       var(--text-primary) calc(100% - var(--scroll-area-fade-size)),
-      transparent 100%
+      transparent calc(100% - var(--scroll-area-fade-guard)) 100%
     ),
     linear-gradient(var(--text-primary), var(--text-primary));
   -webkit-mask-position:
@@ -47,10 +48,10 @@
   mask-image:
     linear-gradient(
       to bottom,
-      transparent 0,
+      transparent 0 var(--scroll-area-fade-guard),
       var(--text-primary) var(--scroll-area-fade-size),
       var(--text-primary) calc(100% - var(--scroll-area-fade-size)),
-      transparent 100%
+      transparent calc(100% - var(--scroll-area-fade-guard)) 100%
     ),
     linear-gradient(var(--text-primary), var(--text-primary));
   mask-position:
