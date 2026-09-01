@@ -34,6 +34,7 @@ import {
   assertProjectWorkPublicationTargets,
   projectWorkPublicationProofUpdates,
 } from "./project-work-publication-proof.ts";
+import { validateProjectWorkPublicationCandidate } from "./project-work-candidate-validation.ts";
 
 type PublicationInput = {
   butlerData: string;
@@ -156,6 +157,12 @@ async function publish(
       for (const view of ["dashboard", "handoff", "roadmap"] as const)
         core.render(candidateRoot, view, { write: true });
       core.writeIndex(candidateRoot);
+      validateProjectWorkPublicationCandidate({
+        core,
+        candidateRoot,
+        scope: input.scope,
+        updates,
+      });
     },
   });
   if (result.status === "applied")
