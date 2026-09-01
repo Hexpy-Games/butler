@@ -5,7 +5,6 @@ import { terminalResultIntegrityFailure } from "./terminal-result-integrity.ts";
 import { projectBtccFinalContentSummary } from "../turn/final-content-summary.ts";
 import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 
-const MAX_SUMMARY_LENGTH = 1_000;
 const MAX_LIST_ITEMS = 12;
 
 type AcceptedStewardReport = {
@@ -110,7 +109,7 @@ export async function resolveAcceptedStewardReport(input: {
   const parsed = projectAcceptedPublicReport(content);
   return {
     content,
-    summary: parsed.conclusion.slice(0, MAX_SUMMARY_LENGTH),
+    summary: parsed.conclusion,
     commits: reportItems(content, "commits?"),
     tests: parsed.tests ? [parsed.tests] : [],
     remainingRisks: reportItems(content, "remaining risks?"),

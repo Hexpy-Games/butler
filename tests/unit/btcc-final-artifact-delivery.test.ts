@@ -12,7 +12,7 @@ import { collectGuidedFinalArtifacts } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
 import { collectGuidedChangedFiles } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-changed-files.ts";
-import { boundedTerminalReportContent } from
+import { normalizeTerminalReportContent } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/terminal-results.ts";
 import { projectChildTerminalReport, projectTurnOutcome } from
   "../../packages/butler-agent/src/interfaces/gateway/btcc/project-turn-outcome.ts";
@@ -169,8 +169,10 @@ test("natural child reports retain material review findings for the parent role"
     changedArtifacts: [],
     changedFiles: [],
   });
-  expect(boundedTerminalReportContent(`  ${content.replaceAll("-", "-  ")}  `))
+  expect(normalizeTerminalReportContent(`  ${content.replaceAll("-", "-  ")}  `))
     .toContain("판정: 완료 불가\n- 직접 vision 호출의 telemetry가 누락되었습니다.");
+  expect(normalizeTerminalReportContent(`${"검토 본문 ".repeat(1_000)}\nTAIL_FINDING`))
+    .toEndWith("TAIL_FINDING");
 });
 
 test("App artifact resolution rejects symlink escapes, missing files, and empty files", () => {

@@ -8,15 +8,12 @@ import {
   subsessionFileMutationScopeRequired,
 } from "./scope.ts";
 
-const MAX_TERMINAL_REPORT_LENGTH = 8_000;
-
-/** Keeps the already-public child report readable while bounding parent context. */
-export function boundedTerminalReportContent(value: string): string {
+/** Normalizes the already-public child report without discarding its findings. */
+export function normalizeTerminalReportContent(value: string): string {
   return value
     .replace(/\r\n?/gu, "\n")
     .replace(/[^\S\n]+/gu, " ")
-    .trim()
-    .slice(0, MAX_TERMINAL_REPORT_LENGTH);
+    .trim();
 }
 
 export function completePacketContext(packet: DelegationPacket): boolean {

@@ -1,7 +1,7 @@
 import { NativeInboundQueue } from "../../../gateways/core/inbound-queue.ts";
 import { digest } from "../identity/index.ts";
 import { subsessionResultId } from "./identities.ts";
-import { boundedTerminalReportContent } from "./terminal-results.ts";
+import { normalizeTerminalReportContent } from "./terminal-results.ts";
 import { parentSubsessionIsTerminal } from "./outbox-recovery.ts";
 import type {
   CompleteStewardResultOutcome,
@@ -119,7 +119,7 @@ function safeWorkerSummary(
   value: string | undefined,
   status: string,
 ): string {
-  const safe = value ? boundedTerminalReportContent(value) : "";
+  const safe = value ? normalizeTerminalReportContent(value) : "";
   if (safe) return safe;
   return status === "success"
     ? "Worker completed the bounded Task."
