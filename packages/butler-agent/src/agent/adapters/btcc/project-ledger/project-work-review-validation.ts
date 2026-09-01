@@ -4,6 +4,7 @@ import {
 } from "./project-work-child-codec.ts";
 import type { ProjectWorkManifest } from "./project-work-codec.ts";
 import { projectWorkRecordId } from "./project-work-json.ts";
+import { sameActionKeys } from "./project-work-action-progress.ts";
 
 type ReviewChild = Extract<
   ProjectWorkChild,
@@ -74,7 +75,7 @@ export function validateProjectWorkReview(
       boundChild.boundResultSequence !== child.boundResultSequence ||
       JSON.stringify(boundChild.review.boundResultRefs) !==
         JSON.stringify(review.boundResultRefs) ||
-      !sameActionStates(
+      !sameActionKeys(
         boundChild.review.boundActionProgress,
         review.boundActionProgress,
       )
@@ -82,18 +83,6 @@ export function validateProjectWorkReview(
       invalid();
     validateProjectWorkReview(boundChild, "result", manifest, bodyForId);
   }
-}
-
-function sameActionStates(
-  left: Array<{ actionKey: string; status: string }> | undefined,
-  right: Array<{ actionKey: string; status: string }> | undefined,
-): boolean {
-  if (!left || !right) return false;
-  return left.length === right.length && left.every((action, index) => {
-    const candidate = right[index];
-    return candidate?.actionKey === action.actionKey &&
-      candidate.status === action.status;
-  });
 }
 
 export function validateProjectWorkPlanIdentity(

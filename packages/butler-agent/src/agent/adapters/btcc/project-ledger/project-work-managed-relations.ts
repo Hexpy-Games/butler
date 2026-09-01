@@ -1,6 +1,7 @@
 import type { ProjectWorkChild } from "./project-work-child-codec.ts";
 import type { ProjectWorkManifest } from "./project-work-codec.ts";
 import { canonicalJson } from "./project-work-json.ts";
+import { sameActionKeys } from "./project-work-action-progress.ts";
 
 /** Validates immutable historical relationships without requiring current freshness. */
 export function validateManagedProjectWorkRelations(
@@ -215,24 +216,12 @@ function validateReview(
     bound.boundResultSequence !== child.boundResultSequence ||
     canonicalJson(bound.review.boundResultRefs) !==
       canonicalJson(review.boundResultRefs) ||
-    !sameActionStates(
+    !sameActionKeys(
       bound.review.boundActionProgress,
       review.boundActionProgress,
     )
   )
     invalid();
-}
-
-function sameActionStates(
-  left: Array<{ actionKey: string; status: string }> | undefined,
-  right: Array<{ actionKey: string; status: string }> | undefined,
-): boolean {
-  if (!left || !right) return false;
-  return left.length === right.length && left.every((action, index) => {
-    const candidate = right[index];
-    return candidate?.actionKey === action.actionKey &&
-      candidate.status === action.status;
-  });
 }
 
 function validateDisposition(

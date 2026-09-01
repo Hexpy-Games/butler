@@ -2272,7 +2272,7 @@ test("strict snapshot proves checkpoint windows and historical Review dependenci
       ...resultReviewBody,
       review: {
         ...resultReviewBody.review,
-        boundActionProgress: [{ actionKey: "one", status: "blocked" }],
+        boundActionProgress: [{ actionKey: "different", status: "blocked" }],
       },
     },
     {
@@ -2531,6 +2531,158 @@ test("completion revise and partial remain strict-readable through correction wo
       expect(checkpoint.currentStage).toBe("execution");
     }
   }
+});
+
+test("completion accepts action progress after an accepted result review", async () => {
+  const fixture = await createFixture();
+  const service = createDurableWorkService(
+    createProjectWorkStore(fixture.adapterInput),
+  );
+  const scope = fixture.scope("turn-1");
+  await service.startWork({
+    ...scope,
+    mutationCallId: "progress-start",
+    objective: "Finish reviewed actions",
+  });
+  await service.replacePlan({
+    ...scope,
+    mutationCallId: "progress-plan",
+    objective: "Finish reviewed actions",
+    actions: [
+      { actionKey: "implement", description: "Implement", dependencyKeys: [] },
+      { actionKey: "review", description: "Review", dependencyKeys: ["implement"] },
+    ],
+    checks: ["completion is readable"],
+  });
+  await service.recordReview({
+    ...scope,
+    mutationCallId: "progress-plan-review",
+    subject: "plan",
+    verdict: "accept",
+    summary: "Plan accepted",
+    corrections: [],
+  });
+  const resultReviewed = await service.recordReview({
+    ...scope,
+    mutationCallId: "progress-result-review",
+    subject: "result",
+    verdict: "accept",
+    summary: "Implementation accepted",
+    corrections: [],
+    actionUpdates: [{ actionKey: "implement", status: "active" }],
+  });
+  expect(resultReviewed.actionProgress.map(({ status }) => status)).toEqual([
+    "active",
+    "pending",
+  ]);
+
+  const completed = await service.recordReview({
+    ...scope,
+    mutationCallId: "progress-completion-review",
+    subject: "completion",
+    verdict: "accept",
+    summary: "Work complete",
+    corrections: [],
+    actionUpdates: [
+      { actionKey: "implement", status: "done" },
+      { actionKey: "review", status: "done" },
+    ],
+  });
+
+  expect(completed.actionProgress.map(({ status }) => status)).toEqual([
+    "done",
+    "done",
+  ]);
+  expect((await service.loadContext(scope))?.work).toEqual(completed);
+});
+
+test("invalid Work candidates never replace the canonical Ledger", async () => {
+  const fixture = await createFixture();
+  const service = createDurableWorkService(
+    createProjectWorkStore(fixture.adapterInput),
+  );
+  const scope = fixture.scope("turn-1");
+  await service.startWork({
+    ...scope,
+    mutationCallId: "candidate-start",
+    objective: "Keep canonical Work readable",
+  });
+  await service.replacePlan({
+    ...scope,
+    mutationCallId: "candidate-plan",
+    objective: "Keep canonical Work readable",
+    actions: [{ actionKey: "finish", description: "Finish", dependencyKeys: [] }],
+    checks: ["candidate is readable"],
+  });
+  await service.recordReview({
+    ...scope,
+    mutationCallId: "candidate-plan-review",
+    subject: "plan",
+    verdict: "accept",
+    summary: "Plan accepted",
+    corrections: [],
+  });
+  await service.recordReview({
+    ...scope,
+    mutationCallId: "candidate-result-review",
+    subject: "result",
+    verdict: "accept",
+    summary: "Result accepted",
+    corrections: [],
+  });
+  const work = await service.recordReview({
+    ...scope,
+    mutationCallId: "candidate-completion-review",
+    subject: "completion",
+    verdict: "accept",
+    summary: "Completion accepted",
+    corrections: [],
+    actionUpdates: [{ actionKey: "finish", status: "done" }],
+  });
+  const completionId = work.latestCompletionValidation!.reviewRevisionId;
+  const completionRecord = fixture.core.resolveRecord(fixture.projectRoot, {
+    kind: "reference",
+    id: completionId,
+  });
+  const completionBody = JSON.parse(
+    fixture.core.readRecordBody(completionRecord.filePath)!,
+  );
+  const canonicalLedger = ledgerText(fixture.projectRoot);
+  const identity = {
+    kind: "mutation_call" as const,
+    id: "invalid-candidate-publication",
+    mutationCallId: "invalid-candidate-publication",
+    requestSha256: createHash("sha256")
+      .update("invalid-candidate-publication")
+      .digest("hex"),
+  };
+
+  await expect(publishProjectWorkRecords({
+    butlerData: fixture.butlerData,
+    scope: fixture.adapterInput.scope,
+    identity,
+    prepareUpdates: () => Promise.resolve([{
+      operation: "update",
+      kind: "reference",
+      id: completionId,
+      parentId: work.workId,
+      title: "Guided Work completion Review",
+      status: "active",
+      spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      body: resealProjectWorkChild({
+        ...completionBody,
+        review: {
+          ...completionBody.review,
+          boundActionProgress: [{ actionKey: "different", status: "done" }],
+        },
+      }),
+    }]),
+  })).rejects.toThrow();
+
+  expect(ledgerText(fixture.projectRoot)).toBe(canonicalLedger);
+  expect(fixture.core.readRecordBody(completionRecord.filePath)).toBe(
+    stableJson(completionBody),
+  );
 });
 
 async function createFixture(
