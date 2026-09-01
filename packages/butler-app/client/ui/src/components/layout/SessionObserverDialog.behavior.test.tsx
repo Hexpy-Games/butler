@@ -133,6 +133,9 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
     timelineText.indexOf("Safe activity transcript"),
   );
   expect(timelineText.indexOf("Safe activity transcript")).toBeLessThan(
+    timelineText.indexOf("Implementation Worker"),
+  );
+  expect(timelineText.indexOf("Implementation Worker")).toBeLessThan(
     timelineText.indexOf("Butler direction"),
   );
   expect(dialog.querySelectorAll(
@@ -147,6 +150,12 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
     '[data-test-class="steward-observer-message"]',
   )).find((row) => row.textContent?.includes("Safe activity transcript"));
   expect(assistantMessage?.querySelector(
+    '[data-test-class="steward-observer-worker-capsules"]',
+  )).toBeNull();
+  const workerMessage = dialog.querySelector(
+    '[data-test-class="steward-observer-worker-message"]',
+  );
+  expect(workerMessage?.querySelector(
     '[data-test-class="steward-observer-worker-capsules"]',
   )?.textContent).toContain("Implementation Worker");
   const stopButton = Array.from(dialog.querySelectorAll("button")).find((button) =>
@@ -201,17 +210,20 @@ function observerView(sessionId: string): SessionView {
       role: "user",
       text: "Butler request",
       status: "delivered",
+      created_at: "2026-08-19T00:00:00.000Z",
     }, {
       id: "observer-assistant-message",
       turn_id: "observer-active-turn",
       role: "assistant",
       text: "Safe activity transcript",
       status: "delivered",
+      created_at: "2026-08-19T00:01:00.000Z",
     }, {
       id: "observer-direction-message",
       role: "user",
       text: "Butler direction",
       status: "delivered",
+      created_at: "2026-08-19T00:03:00.000Z",
     }] as SessionView["messages"],
     message_window: { next_cursor: 3, complete: true },
     workers: [{
@@ -224,6 +236,7 @@ function observerView(sessionId: string): SessionView {
       phase: "complete",
       status_line: "Completed",
       terminal: true,
+      created_at: "2026-08-19T00:02:00.000Z",
       supported_controls: [],
     }],
     work_streams: [],

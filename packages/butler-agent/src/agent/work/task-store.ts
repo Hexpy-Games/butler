@@ -109,6 +109,7 @@ export interface TaskSummary {
   activity_work_blocks: WorkerActivityWorkBlock[];
   activity_updated_at: string | null;
   completion_evidence: WorkerCompletionEvidenceSummary;
+  created_at: string | null;
   updated_at: string | null;
 }
 
@@ -1116,6 +1117,7 @@ export class TaskStore {
         activity_work_blocks: activity.work_blocks,
         activity_updated_at: activity.updated_at,
         completion_evidence: task.completionEvidence,
+        created_at: task.origin?.created_at ?? null,
         updated_at: taskUpdatedAt(task.taskDir),
       };
     });
