@@ -197,9 +197,15 @@ export function createProductionBtccComposition(input: {
       });
     }
   };
-  startupRecovery = subsessions.recoverPendingParentInputs().then(() => {
-    recoverInterruptedStewards();
-  });
+  startupRecovery = subsessions.recoverPendingParentInputs()
+    .catch(() => {
+      // A persisted child result stays pending for a later retry, but it must
+      // not prevent unrelated user Turns from reaching the native executor.
+      console.error("btcc_subsession_parent_input_recovery_deferred");
+    })
+    .then(() => {
+      recoverInterruptedStewards();
+    });
   return {
     btcc: assembly.btcc,
     host: assembly.host,
