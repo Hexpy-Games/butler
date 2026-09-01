@@ -1,10 +1,6 @@
 import { expect, test } from "bun:test";
-import type { BtccAgentLoopToolResult } from
-  "../../packages/butler-agent/src/agent/btcc/agent-loop/contracts.ts";
 import { createGuidedExecutionWindowObserver } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/execution-window-observation.ts";
-import { runGuidedAgentLoopWithOperationalReport } from
-  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-report.ts";
 import type { DelegationPacket } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/contracts.ts";
 import { renderWorkerInput } from
@@ -19,6 +15,7 @@ test("Worker delegation requires and renders one reviewed Plan action", () => {
     "action_key",
     "objective",
     "acceptance_criteria",
+    "implementation_brief",
   ]);
   const packet: DelegationPacket = {
     delegation_id: "delegation-worker",
@@ -29,6 +26,7 @@ test("Worker delegation requires and renders one reviewed Plan action", () => {
     execution_mode: "mutation",
     objective: "Implement the approved renderer change.",
     acceptance_criteria: ["The focused interaction works."],
+    implementation_brief: "Edit renderer.tsx through the existing component path and preserve the design-system boundary.",
     task_or_plan_refs: ["plan-1"],
     plan_action: {
       action_key: "implement-renderer",
@@ -51,7 +49,7 @@ test("Worker delegation requires and renders one reviewed Plan action", () => {
       status: "success",
       required_fields: ["summary", "acceptance_evidence", "changed_artifacts"],
     },
-    work_creation_policy: "none",
+    work_creation_policy: "one_recoverable_child_work",
     access_and_budget_policy: {
       access_mode: "full_access",
       max_turns: 8,
@@ -74,80 +72,33 @@ test("Worker delegation requires and renders one reviewed Plan action", () => {
   expect(input).toContain("plan_action_effect: edit_file renderer.tsx");
   expect(input).toContain("latest_checkpoint: The existing renderer path was inspected.");
   expect(input).toContain("recorded_next_step: Implement the renderer action.");
+  expect(input).toContain("implementation_brief:\nEdit renderer.tsx");
+  expect(input).toContain("session-scoped Micro Work");
 });
 
-test("Worker returns a factual blocked report after repeated diagnosed non-progress", async () => {
-  const durableWork = unusedDurableWork();
+test("Worker execution windows diagnose repeated results without ending the Turn", async () => {
   const observer = createGuidedExecutionWindowObserver({
-    durableWork,
+    durableWork: {
+      loadContext: async () => null,
+      boundWorkForTurn: async () => null,
+    } as unknown as DurableWorkService,
     workScope: { turnId: "worker-turn", sessionId: "worker-session" },
     turnId: "worker-turn",
-    trackingMode: "none",
+    trackingMode: "local",
     role: "worker",
     workspacePath: process.cwd(),
     listToolRecords: () => [],
     signal: new AbortController().signal,
   });
-  const firstWindow = failedNoChangeResults(0);
-  const secondWindow = [...firstWindow, ...failedNoChangeResults(3)];
-
-  expect(await observer.observe({ windowIndex: 0, toolResults: firstWindow }))
-    .toContain("Execution checkpoint 1");
-  expect(await observer.observe({ windowIndex: 1, toolResults: secondWindow }))
-    .toBeUndefined();
-  const blockedReport = observer.blockedReport();
-  expect(blockedReport).not.toBeNull();
-  if (!blockedReport) throw new Error("Worker blocked report was not recorded");
-  expect(blockedReport).toContain("Two consecutive execution windows");
-
-  const report = await runGuidedAgentLoopWithOperationalReport({
-    options: {
-      prompt: "Return the Worker result.",
-      tools: [],
-      modelRound: {
-        async runRound() {
-          return { text: "", toolCalls: [] };
-        },
-      },
-      maxIterations: 1,
-      executeTool: async () => undefined,
-      onExecutionWindowBoundary: () => undefined,
-      onLoopLimit: () => blockedReport,
-    },
-    parentSignal: new AbortController().signal,
-    originalRequest: "Execute the assigned Plan action.",
-    acceptStoppedResult: true,
-    loadFacts: async () => ({ work: null, toolCalls: [], effects: [] }),
-  });
-  expect(report).toBe(blockedReport);
-});
-
-function failedNoChangeResults(offset: number): BtccAgentLoopToolResult[] {
-  return Array.from({ length: 3 }, (_, index) => ({
-    toolCallId: `edit-${offset + index}`,
+  const repeatedResult = [{
+    toolCallId: "edit-1",
     name: "edit_file",
     ok: false as const,
     error: { code: "no_change_requested", message: "No change was requested." },
-  }));
-}
+  }];
 
-function unusedDurableWork(): DurableWorkService {
-  const unavailable = async (): Promise<never> => {
-    throw new Error("unused durable Work operation");
-  };
-  return {
-    loadContext: async () => null,
-    importOpenLegacyWork: async () => null,
-    bindOpenWork: async () => null,
-    startWork: unavailable,
-    continueWork: unavailable,
-    replacePlan: unavailable,
-    recordCheckpoint: unavailable,
-    recordReview: unavailable,
-    recordDisposition: unavailable,
-    claimCloseoutCorrection: async () => false,
-    attachToolResult: unavailable,
-    boundWorkForTurn: async () => null,
-    abandonBoundWorkForTurn: async () => null,
-  };
-}
+  expect(await observer.observe({ windowIndex: 0, toolResults: repeatedResult }))
+    .toContain("internal diagnosis boundary, not a failure or completion condition");
+  expect(await observer.observe({ windowIndex: 1, toolResults: [...repeatedResult, ...repeatedResult] }))
+    .toContain("Do not repeat an unchanged or failed action");
+});

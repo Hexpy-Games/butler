@@ -55,6 +55,7 @@ export function createSubsessionToolHandlers(input: {
       const actionKey = requiredString(call.args.action_key, "action_key");
       const objective = requiredString(call.args.objective, "objective");
       const acceptanceCriteria = stringArray(call.args.acceptance_criteria, "acceptance_criteria");
+      const implementationBrief = requiredString(call.args.implementation_brief, "implementation_brief");
       const safeTitle = optionalSafeTitle(call.args.safe_title);
       const profileId = optionalString(call.args.profile_id);
       await input.service!.delegateWorkerReviewed({
@@ -62,6 +63,7 @@ export function createSubsessionToolHandlers(input: {
         action_key: actionKey,
         objective,
         acceptance_criteria: acceptanceCriteria,
+        implementation_brief: implementationBrief,
         ...(safeTitle ? { safe_title: safeTitle } : {}),
         ...(profileId ? { profile_id: profileId } : {}),
       });

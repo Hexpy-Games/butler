@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS btcc_steward_results (
   status TEXT NOT NULL CHECK (status IN ('success', 'blocked', 'failed', 'cancelled')),
   code TEXT CHECK (code IS NULL OR code IN (
     'delegation_context_incomplete',
-    'steward_execution_failed', 'steward_cancelled', 'worker_no_progress'
+    'steward_execution_failed', 'steward_cancelled',
+    'worker_work_incomplete', 'worker_no_progress'
   )),
   summary TEXT NOT NULL,
   acceptance_evidence_json TEXT NOT NULL,

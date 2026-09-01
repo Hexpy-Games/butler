@@ -6,6 +6,8 @@ import {
   SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS,
 } from "./scope.ts";
 import { renderWorkerInput } from "./worker-input.ts";
+import { subsessionRootWorkId } from "./identities.ts";
+import { snapshotChildProjectContext } from "./project-context.ts";
 import type {
   CreatedDelegation,
   DelegationPacket,
@@ -30,6 +32,13 @@ export async function delegateReviewedWorker(
     parentTurnId: request.parent_turn_id,
   });
   const planAction = selectedPlanAction(reviewed, request.action_key);
+  const { projectContext, inheritedProject } = await snapshotChildProjectContext({
+    parentSessionId: request.parent_session_id,
+    parentTurnId: request.parent_turn_id,
+    parent,
+    turns: input.parentTurns,
+    documents: input.contextDocuments,
+  });
   if (!input.workerProfiles) throw new Error("worker_profiles_unavailable");
   const profile = await input.workerProfiles.read(request.profile_id);
   const identity = stableJson({
@@ -38,6 +47,7 @@ export async function delegateReviewedWorker(
     action_key: request.action_key,
     objective: request.objective,
     acceptance_criteria: request.acceptance_criteria,
+    implementation_brief: request.implementation_brief,
     profile_id: profile.id,
   });
   const delegationId = `delegation-${digest(`btcc.worker.delegation.v1\0${identity}`)}`;
@@ -47,6 +57,7 @@ export async function delegateReviewedWorker(
   const taskId = `worker-task-${digest(`btcc.worker.task.v1\0${delegationId}`).slice(0, 40)}`;
   const childSessionId = `worker-${digest(`btcc.worker.session.v1\0${relationId}`).slice(0, 32)}`;
   const childTurnId = `worker-turn-${digest(`btcc.worker.turn.v1\0${relationId}`).slice(0, 32)}`;
+  const rootWorkId = subsessionRootWorkId(delegationId, taskId, childSessionId);
   const now = new Date().toISOString();
   const allowedToolsAndEffects = request.parent_access_mode === "read_only"
     ? [...SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS]
@@ -70,7 +81,9 @@ export async function delegateReviewedWorker(
     execution_mode: request.parent_access_mode === "read_only" ? "read_only" : "mutation",
     objective: request.objective,
     acceptance_criteria: [...request.acceptance_criteria],
+    implementation_brief: request.implementation_brief,
     task_or_plan_refs: [reviewed.parent_work_ref.plan_revision_id],
+    ...(projectContext ? { project_context: projectContext } : {}),
     plan_action: {
       action_key: planAction.actionKey,
       description: planAction.description,
@@ -96,7 +109,7 @@ export async function delegateReviewedWorker(
       status: "success",
       required_fields: ["summary", "acceptance_evidence", "changed_artifacts"],
     },
-    work_creation_policy: "none",
+    work_creation_policy: "one_recoverable_child_work",
     access_and_budget_policy: {
       access_mode: request.parent_access_mode,
       max_turns: 8,
@@ -110,9 +123,7 @@ export async function delegateReviewedWorker(
   input.sessionBindings.upsert({
     sessionId: childSessionId,
     role: "worker",
-    ...(parent.projectId ? { projectId: parent.projectId } : {}),
-    ...(parent.appProjectId ? { appProjectId: parent.appProjectId } : {}),
-    ...(parent.ledgerProjectId ? { ledgerProjectId: parent.ledgerProjectId } : {}),
+    ...(inheritedProject?.sessionBinding ?? {}),
     workspacePath: parent.workspacePath,
     runtimeAdapterId: "btcc-turn-runtime",
     modelProviderId: profile.model.split("/", 1)[0] || parent.modelProviderId,
@@ -129,11 +140,12 @@ export async function delegateReviewedWorker(
         execution_mode: packet.execution_mode,
         mutation_scope: [...packet.mutation_scope],
         allowed_tools_and_effects: allowedToolsAndEffects,
+        ...(inheritedProject ? { project_context: inheritedProject.metadata } : {}),
       },
       runtimePolicy: {
         accessMode: request.parent_access_mode,
-        trackingMode: "none",
-        tracking_mode: "none",
+        trackingMode: "local",
+        tracking_mode: "local",
         requiredNativeTools: [],
         required_tools: [],
         requiredNativeToolProfiles: request.parent_access_mode === "full_access" ? ["workspace"] : [],
@@ -142,7 +154,7 @@ export async function delegateReviewedWorker(
       },
     },
   });
-  input.store.create({ relation, packet, childTurnId, rootWorkId: taskId });
+  input.store.create({ relation, packet, childTurnId, rootWorkId });
   queue.enqueueIdempotent({
     eventId: `worker:${delegationId}`,
     transport: "app",
@@ -169,7 +181,7 @@ export async function delegateReviewedWorker(
     relation,
     packet,
     child_turn_id: childTurnId,
-    root_work_id: taskId,
+    root_work_id: rootWorkId,
     child_workspace_path: parent.workspacePath,
   };
 }
@@ -200,13 +212,14 @@ function existingWorker(
 ): CreatedDelegation {
   const packet = input.store.packetByRelationId(relation.relation_id);
   const childTurnId = input.store.childTurnIdByRelationId(relation.relation_id);
+  const rootWorkId = input.store.rootWorkIdByRelationId(relation.relation_id);
   const child = input.sessionBindings.getBySessionId(relation.child_session_id);
-  if (!packet || !childTurnId || !child) throw new Error("worker_existing_identity_incomplete");
+  if (!packet || !childTurnId || !rootWorkId || !child) throw new Error("worker_existing_identity_incomplete");
   return {
     relation,
     packet,
     child_turn_id: childTurnId,
-    root_work_id: packet.task_id,
+    root_work_id: rootWorkId,
     child_workspace_path: child.workspacePath,
   };
 }

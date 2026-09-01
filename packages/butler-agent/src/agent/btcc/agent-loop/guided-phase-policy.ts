@@ -33,7 +33,7 @@ import {
 import { ordinaryChatPhaseForIntent } from "./guided-delegation-intent.ts";
 
 const FLAG_NAME = "BUTLER_PHASE_TOOL_SURFACE";
-const POLICY_REVISION = "butler.btcc-tool-instruction-policy.v1";
+const POLICY_REVISION = "butler.btcc-tool-instruction-policy.v2";
 const TRUE_FLAG_VALUES = new Set(["1", "true", "on", "yes"]);
 const STEWARD_PARENT_TOOL_NAMES = new Set([
   "delegate_to_steward", "steer_steward", "cancel_steward",
@@ -121,13 +121,13 @@ export function selectGuidedTurnPhasePolicy(
   ].map((tool) => [tool.name, tool]));
   const phaseAuthority = new Map([
     ...admittedAuthority.values(),
-    ...(executionPolicy.role === "steward" && executionPolicy.subsession
+    ...(executionPolicy.subsession && executionPolicy.trackingMode !== "none"
       ? DURABLE_WORK_TOOL_DEFINITIONS
       : []),
   ].map((tool) => [tool.name, tool] as const));
   const admittedAuthorizedTools = admitExactResultReadTool(
     [...phaseAuthority.values()].filter((tool) =>
-      executionPolicy.role === "steward" && executionPolicy.subsession &&
+      executionPolicy.subsession && executionPolicy.trackingMode !== "none" &&
         DURABLE_WORK_TOOL_DEFINITIONS.some((candidate) => candidate.name === tool.name)
         ? true
         : phaseAllowsTool(phase, tool),
@@ -196,7 +196,8 @@ function providerCandidateToolNames(
   phase: GuidedTurnPhase,
   authorizedTools: readonly FunctionToolDefinition[],
   admittedRequiredToolNames: ReadonlySet<string>,
-  policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "subsession">,
+  policy: Pick<ButlerExecutionPolicy,
+    "role" | "accessMode" | "trackingMode" | "subsession">,
 ): Set<string> {
   const baselineProfiles = [
     "public-web",
@@ -226,7 +227,8 @@ function providerCandidateToolNames(
       names.add(tool.name);
     }
   }
-  if (phase === "execution" || (policy.role === "steward" && policy.subsession)) {
+  if (phase === "execution" ||
+    (policy.subsession && policy.trackingMode !== "none")) {
     for (const tool of DURABLE_WORK_TOOL_DEFINITIONS) names.add(tool.name);
   }
   if (policy.role === "butler") {

@@ -9,8 +9,10 @@ export async function ensureSubsessionChildRootWork(input: {
     childSessionId: input.turn.sessionId,
     childTurnId: input.turn.turnId,
     objective: input.turn.originalMessage.split("\n")
-      .find((line) => line.startsWith("objective: "))
-      ?.slice("objective: ".length) ?? "Complete the bounded Steward task.",
+      .find((line) => line.startsWith("assigned_objective: ") ||
+        line.startsWith("objective: "))
+      ?.replace(/^(assigned_)?objective: /u, "") ??
+      "Complete the bounded subsession task.",
   });
 }
 

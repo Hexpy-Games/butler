@@ -15,6 +15,7 @@ export function migrateSubsessionResultSchema(db: Database): void {
   if (
     definition.includes("status IN ('success', 'blocked', 'failed', 'cancelled')") &&
     definition.includes("'delegation_context_incomplete'") &&
+    definition.includes("'worker_work_incomplete'") &&
     definition.includes("'worker_no_progress'") &&
     !definition.includes("'task_needs_split'")
   ) {
