@@ -89,6 +89,48 @@ test("typed cancellation invokes only BTCC stop and returns a durable ack", asyn
   });
 });
 
+test("cancelling an already delivered Turn completes the control request", async () => {
+  const btcc: Btcc = {
+    runTurn: async () => {
+      throw new Error("cancellation must not enter runTurn");
+    },
+    stopTurn: async ({ turnId }) => ({
+      kind: "already_delivered",
+      turnId,
+      messageId: "assistant-delivered",
+      content: "already complete",
+    }),
+  };
+
+  const result = await createBtccGatewayHandlers({ btcc }).butler!({
+    route: {
+      sessionId: "butler/app-cancel-delivered",
+      role: "butler",
+      reason: "session-hint",
+      workspacePath: process.cwd(),
+    },
+    envelope: createAppCancellationEnvelope({
+      chatId: "app-cancel-delivered",
+      sessionId: "butler/app-cancel-delivered",
+      turnId: "turn-already-delivered",
+      requestId: "cancel-delivered-request",
+      requestedAt: "2026-09-01T00:00:00.000Z",
+    }),
+  });
+
+  expect(result.metadata).toMatchObject({
+    text: "",
+    kind: "turn_cancellation_noop",
+    turnId: "turn-already-delivered",
+    controlAck: {
+      kind: "cancel_turn",
+      requestId: "cancel-delivered-request",
+      turnId: "turn-already-delivered",
+      outcome: "already_delivered",
+    },
+  });
+});
+
 test("typed resume re-enters the exact admitted BTCC request identity", async () => {
   const requests: Parameters<Btcc["runTurn"]>[0][] = [];
   const btcc: Btcc = {

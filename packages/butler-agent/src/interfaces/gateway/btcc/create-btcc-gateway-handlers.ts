@@ -21,19 +21,26 @@ export function createBtccGatewayHandlers(
         throw new Error("BTCC cancellation identity mismatch");
       }
       const outcome = await options.btcc.stopTurn({ turnId });
-      if (outcome.kind !== "cancelled" && outcome.kind !== "already_cancelled") {
+      const alreadyDelivered = outcome.kind === "already_delivered";
+      if (
+        outcome.kind !== "cancelled" &&
+        outcome.kind !== "already_cancelled" &&
+        !alreadyDelivered
+      ) {
         throw new Error(`BTCC cancellation remains recoverable: ${outcome.kind}`);
       }
-      await completeChildTerminalResult(options, route, turnId);
+      if (!alreadyDelivered) {
+        await completeChildTerminalResult(options, route, turnId);
+      }
       return {
         ok: true,
         handledBy: "btcc/turn-stop",
         metadata: {
           text: "",
-          kind: "turn_cancelled",
+          kind: alreadyDelivered ? "turn_cancellation_noop" : "turn_cancelled",
           turnId,
           appQueueClaimId: envelope.routingHints?.appQueueClaimId,
-          safeErrorCode: "turn_cancelled",
+          ...(!alreadyDelivered ? { safeErrorCode: "turn_cancelled" } : {}),
           controlAck: {
             kind: "cancel_turn",
             requestId: envelope.control.requestId,

@@ -349,6 +349,63 @@ test("delivered cancellation ack and terminal event settle the App outbox", () =
   harness.close();
 });
 
+test("late cancellation ack completes its outbox without changing a delivered Turn", () => {
+  const harness = createHarness();
+  seedAppTurn(harness.db, harness.chatId, "delivered-cancel-turn");
+  const now = new Date().toISOString();
+  harness.db.query(`
+    UPDATE turns SET state = 'delivered', safe_status_label = 'Completed',
+      cancellable = 0, updated_at = ?
+    WHERE id = ?
+  `).run(now, "delivered-cancel-turn");
+  harness.db.query(`
+    INSERT INTO app_turn_cancel_outbox (turn_id, state, created_at)
+    VALUES (?, 'pending', ?)
+  `).run("delivered-cancel-turn", now);
+  const state = projectionState(harness.db);
+  const projection = harness.createProjectionStore(state.options);
+  const actionId = "delivered-cancel-ack-action";
+  writeTranscript(harness, [{
+    eventId: "delivered-cancel-ack-outbound",
+    sessionId: "runtime-session",
+    kind: "outbound",
+    timestamp: now,
+    transport: "app",
+    payload: {
+      actionId,
+      message: { text: "" },
+      metadata: {
+        kind: "turn_cancellation_ack",
+        turnId: "delivered-cancel-turn",
+        requestId: "late-cancel-request",
+        queueId: "late-cancel-queue",
+        dispatchClaimId: "late-cancel-claim",
+        outcome: "already_delivered",
+      },
+    },
+  }, {
+    eventId: "delivered-cancel-ack-delivery",
+    sessionId: "runtime-session",
+    kind: "delivery",
+    timestamp: now,
+    transport: "app",
+    payload: { actionId, ok: true },
+  }]);
+
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(harness.db.query<Record<string, string>, [string]>(`
+    SELECT state, queue_id, dispatch_claim_id FROM app_turn_cancel_outbox
+    WHERE turn_id = ?
+  `).get("delivered-cancel-turn")).toMatchObject({
+    state: "completed",
+    queue_id: "late-cancel-queue",
+    dispatch_claim_id: "late-cancel-claim",
+  });
+  expect(turnState(harness.db, "delivered-cancel-turn")).toBe("delivered");
+  expect(state.cancelledTurns).toEqual([]);
+  harness.close();
+});
+
 test("projects execution model only from final transcript metadata", () => {
   const harness = createHarness();
   seedBtccTerminalSchema(harness.db);

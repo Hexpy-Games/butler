@@ -141,6 +141,10 @@ export interface AppCopy {
     queuedAttachmentCount: (count: number) => string;
     editQueuedMessage: string;
     deleteQueuedMessage: string;
+    failedMessages: string;
+    failedMessageStatus: string;
+    retryFailedMessage: string;
+    deleteFailedMessage: string;
     contextDetails: string;
     approval: {
       title: string;
@@ -861,6 +865,10 @@ const koKrCopy: AppCopy = {
     queuedAttachmentCount: (count) => `첨부 ${count}개`,
     editQueuedMessage: "대기 메시지 수정",
     deleteQueuedMessage: "대기 메시지 삭제",
+    failedMessages: "전송하지 못한 메시지",
+    failedMessageStatus: "전송 실패",
+    retryFailedMessage: "다시 작성",
+    deleteFailedMessage: "실패 메시지 삭제",
     contextDetails: "컨텍스트 세부정보 표시",
     approval: {
       title: "승인 대기 중인 명령",
@@ -1659,6 +1667,10 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     queuedAttachmentCount: (count) => `${count} attachments`,
     editQueuedMessage: "Edit queued message",
     deleteQueuedMessage: "Delete queued message",
+    failedMessages: "Failed messages",
+    failedMessageStatus: "Send failed",
+    retryFailedMessage: "Retry message",
+    deleteFailedMessage: "Delete failed message",
     contextDetails: "Show context details",
     approval: {
       title: "Command awaiting approval",

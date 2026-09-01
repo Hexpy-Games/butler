@@ -31,15 +31,18 @@ export function projectAppCancellationAck(input: {
         input.stage();
         return false;
       }
+      const alreadyDelivered = input.metadata.outcome === "already_delivered";
       input.options.db.query(`
         UPDATE app_turn_cancel_outbox
-        SET state = 'accepted', queue_id = ?, dispatch_claim_id = ?,
-          accepted_at = ?, safe_error_code = NULL
+        SET state = ?, queue_id = ?, dispatch_claim_id = ?,
+          accepted_at = ?, completed_at = ?, safe_error_code = NULL
         WHERE turn_id = ? AND state = 'pending'
       `).run(
+        alreadyDelivered ? "completed" : "accepted",
         safeOptionalShortToken(input.metadata.queueId) ?? null,
         safeOptionalShortToken(input.metadata.dispatchClaimId) ?? null,
         input.event.timestamp,
+        alreadyDelivered ? input.event.timestamp : null,
         input.turnId,
       );
       input.markProjected();
