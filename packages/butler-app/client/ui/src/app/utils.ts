@@ -967,6 +967,14 @@ export function isRuntimeFaultRetryableMessage(
   return message.retryable === true && message.safe_error_code === "runtime_fault";
 }
 
+export function isAssistantFailureNoticeMessage(
+  message: Pick<MessageRecord, "role" | "status" | "safe_error_code">,
+): boolean {
+  return message.role === "assistant" &&
+    message.status === "failed" &&
+    Boolean(message.safe_error_code);
+}
+
 function systemEventMessageFromEvent(
   event: TimelineEvent,
   activeChatId: string,
