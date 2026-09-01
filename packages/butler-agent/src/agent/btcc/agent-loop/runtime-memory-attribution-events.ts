@@ -33,14 +33,6 @@ export function recordRuntimeMemoryEvent(
         iteration: event.iteration,
       });
       return;
-    case "execution_window_boundary":
-      attribution.checkpoint({
-        event: "execution_window_boundary",
-        operation: "window",
-        iteration: event.iteration,
-        windowIndex: event.windowIndex,
-      });
-      return;
   }
 }
 

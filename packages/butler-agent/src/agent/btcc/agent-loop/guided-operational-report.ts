@@ -19,7 +19,6 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
   parentSignal: AbortSignal;
   originalRequest: string;
   emptyResponsePolicy?: BtccEmptyResponsePolicy;
-  acceptStoppedResult?: boolean;
   loadFacts: () => Promise<Omit<OperationalFacts, "originalRequest">>;
 }): Promise<string> {
   try {
@@ -28,12 +27,11 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
       signal: input.parentSignal,
     });
     const candidate = result.finalText.trim();
-    // An empty, non-limited result is a genuine terminal no-visible outcome.
+    // An empty result is a genuine terminal no-visible outcome.
     // Preserve it for the transport dispatcher to emit its typed queue
     // failure; converting it into an assistant fallback would hide the
     // durable input settlement obligation.
-    if ((!result.stoppedByLimit || input.acceptStoppedResult) &&
-        (candidate || input.emptyResponsePolicy === "typed_terminal")) return candidate;
+    if (candidate || input.emptyResponsePolicy === "typed_terminal") return candidate;
   } catch (error) {
     if (input.parentSignal.aborted) throwIfAborted(input.parentSignal);
     if (!allowsOperationalReport(error)) throw error;

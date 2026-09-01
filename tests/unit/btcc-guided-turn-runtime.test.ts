@@ -23,7 +23,7 @@ import { buildModelRoute } from
 import { ModelProviderRequestError } from
   "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 
-const executionWindowEchoTool = {
+const echoTool = {
   name: "echo",
   description: "Echo a message.",
   parameters: {
@@ -171,7 +171,7 @@ test("Guided Turn persists final artifacts and returns them unchanged on replay"
   }
 });
 
-test("Guided execution windows stay in one Turn and commit one canonical answer", async () => {
+test("Guided tool rounds stay in one Turn and commit one canonical answer", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-same-turn-window-"));
   const dbPath = join(root, "btcc.sqlite");
   const stores = openBtccSqliteStores({
@@ -208,14 +208,11 @@ test("Guided execution windows stay in one Turn and commit one canonical answer"
         const loop = await runBtccAgentLoop({
           prompt: turn.originalMessage,
           turnId: turn.turnId,
-          tools: [executionWindowEchoTool],
-          maxIterations: 1,
+          tools: [echoTool],
           modelRound,
           executeTool: async (call) => ({
             message: call.arguments.message,
           }),
-          onExecutionWindowBoundary: () =>
-            "Execution checkpoint: use the existing evidence and finish the original request.",
         });
         return { route: "direct", content: loop.finalText };
       },

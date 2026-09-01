@@ -140,8 +140,11 @@ test("an incomplete newest tool pair is mandatory and overflow remains explicit"
   expect(JSON.stringify(bounded.messages)).toContain("open-call");
 });
 
-test("durable budget admissions are monotonic idempotent and terminal exactly once", () => {
-  let state = createTurnContinuationBudgetState({ turnId: "turn", limits, nowMs: 1_000 });
+test("durable context admission treats round counts as metrics and still enforces request size", () => {
+  const oneRoundLimits = { ...limits, maxModelRequests: 1, maxToolRounds: 1 };
+  let state = createTurnContinuationBudgetState({
+    turnId: "turn", limits: oneRoundLimits, nowMs: 1_000,
+  });
   const event = { kind: "admit_request" as const, roundId: "round-1", requestDigest: "a".repeat(64), modelFacingBytes: 900 };
   state = transitionTurnContinuationBudget(state, event, 1_001);
   state = transitionTurnContinuationBudget(state, event, 1_002);
@@ -149,16 +152,24 @@ test("durable budget admissions are monotonic idempotent and terminal exactly on
   state = transitionTurnContinuationBudget(state, { kind: "record_tool_round", roundId: "tool-1" }, 1_003);
   state = transitionTurnContinuationBudget(state, { kind: "record_tool_round", roundId: "tool-1" }, 1_004);
   expect(state.completedToolRounds).toEqual(["tool-1"]);
+  state = transitionTurnContinuationBudget(state, {
+    ...event, roundId: "round-2", requestDigest: "b".repeat(64),
+  }, 1_005);
+  state = transitionTurnContinuationBudget(state, {
+    kind: "record_tool_round", roundId: "tool-2",
+  }, 1_006);
+  expect(state.admittedRequests).toHaveLength(2);
+  expect(state.completedToolRounds).toEqual(["tool-1", "tool-2"]);
   let terminal: TurnContinuationBudgetExhaustedError | undefined;
   try {
-    transitionTurnContinuationBudget(state, { ...event, roundId: "round-over", modelFacingBytes: limits.maxModelFacingBytes + 1 }, 1_005);
+    transitionTurnContinuationBudget(state, { ...event, roundId: "round-over", modelFacingBytes: limits.maxModelFacingBytes + 1 }, 1_007);
   } catch (error) {
     terminal = error as TurnContinuationBudgetExhaustedError;
   }
   expect(terminal?.state.terminal).toMatchObject({
     code: "turn_continuation_budget_exhausted", reason: "model_facing_bytes",
   });
-  expect(() => transitionTurnContinuationBudget(terminal!.state, event, 1_006))
+  expect(() => transitionTurnContinuationBudget(terminal!.state, event, 1_008))
     .toThrow(TurnContinuationBudgetExhaustedError);
 });
 

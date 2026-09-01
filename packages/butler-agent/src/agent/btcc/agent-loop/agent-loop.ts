@@ -6,14 +6,7 @@ import type { ModelRoundResult } from "../ports/model-round.ts";
 import { executePreparedBtccToolCall, prepareBtccToolCall } from "./tool-execution.ts";
 import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
 import { publishModelRoundWaiting } from "./guided-tool-progress.ts";
-import { renderPartialLimitResponse } from "./partial-limit-response.ts";
 import { toolResultToMessage } from "./tool-result-message.ts";
-import {
-  emitExecutionWindowBoundary,
-  modelRoundRequestId,
-  resolveExecutionWindowSize,
-  throwIfExecutionWindowAborted,
-} from "./execution-window.ts";
 import { modelRoundOutputBytes, prepareBoundedModelContext } from "./bounded-turn-context.ts";
 import { appendAssistantResponse } from "./assistant-response.ts";
 import { createTurnContinuationItems } from "./continuation-item-identity.ts";
@@ -24,13 +17,11 @@ export async function runBtccAgentLoop(
   const continuationItems = createTurnContinuationItems(input.prompt);
   const { messages } = continuationItems;
   const events: BtccAgentLoopEvent[] = [];
-  const maxIterations = resolveExecutionWindowSize(input);
   const toolResults: BtccAgentLoopToolResult[] = [];
   const modelPreviewContext = createToolResultModelPreviewContext();
   let continuation: unknown;
   let emptyResponseRecoveryUsed = false;
   let consecutiveEmptyResponses = 0, modelRoundIndex = 0;
-  let windowIndex = 0;
   let iteration = 0;
   const runModelRound = async (request: {
     tools: readonly BtccAgentLoopInput["tools"][number][]; toolSurfaceDigest?: string;
@@ -118,7 +109,7 @@ export async function runBtccAgentLoop(
   const synthesizeFinalResponseForLoop = (iterationBase: number) => synthesizeFinalResponse({
     synthesis: input.finalSynthesis,
     messages,
-    maxIterations: iterationBase,
+    iterationBase,
     runModelRound: (request) => runModelRound({ ...request, ...finalRoundToolSurface(request.tools, !!input.resolveTools) }),
     appendAssistantResponse: (response) => appendAssistantResponse(messages, response),
     emit: (event) => emit(events, input.onEvent, event),
@@ -147,12 +138,10 @@ export async function runBtccAgentLoop(
   };
 
   while (true) {
-    const windowEndIteration = iteration + maxIterations;
-    while (iteration < windowEndIteration) {
-      throwIfExecutionWindowAborted(input.signal);
-      const currentIteration = iteration;
-      iteration += 1;
-      emit(events, input.onEvent, { type: "model_call", iteration: currentIteration });
+    throwIfAgentLoopAborted(input.signal);
+    const currentIteration = iteration;
+    iteration += 1;
+    emit(events, input.onEvent, { type: "model_call", iteration: currentIteration });
     const { tools, ...toolSurfaceIdentity } = await resolveRoundToolSurface(input.resolveTools, input.tools);
     const response = await runModelRound({
       tools,
@@ -205,20 +194,15 @@ export async function runBtccAgentLoop(
       if (shouldSynthesize) {
         const synthesized = await synthesizeFinalResponseForLoop(iteration);
         if (synthesized) {
-          return { finalText: synthesized, messages, events, stoppedByLimit: false };
+          return { finalText: synthesized, messages, events };
         }
-        return {
-          finalText: renderPartialLimitResponse(toolResults),
-          messages,
-          events,
-          stoppedByLimit: true,
-        };
+        return { finalText: text, messages, events };
       }
       const recoveryObservation = text
         ? null
         : emptyResponseRecoveryObservation({
             recoveryUsed: emptyResponseRecoveryUsed,
-            hasNextModelRound: iteration < windowEndIteration,
+            hasNextModelRound: true,
           });
       if (recoveryObservation) {
         emptyResponseRecoveryUsed = true;
@@ -226,11 +210,8 @@ export async function runBtccAgentLoop(
         continue;
       }
       if (!text && consecutiveEmptyResponses >= 2)
-        return { finalText: "", messages, events, stoppedByLimit: false };
-      if (!text && input.onExecutionWindowBoundary) {
-        break;
-      }
-      if (!text) return { finalText: "", messages, events, stoppedByLimit: false };
+        return { finalText: "", messages, events };
+      if (!text) return { finalText: "", messages, events };
       if (input.reviewFinalCandidate) {
         const review = await input.reviewFinalCandidate({
           text,
@@ -246,10 +227,9 @@ export async function runBtccAgentLoop(
           finalText: review.text?.trim() || text,
           messages,
           events,
-          stoppedByLimit: false,
         };
       }
-      return { finalText: text, messages, events, stoppedByLimit: false };
+      return { finalText: text, messages, events };
     }
 
     if (input.continuationBudget) {
@@ -289,7 +269,7 @@ export async function runBtccAgentLoop(
       }
       if (finalText) {
         continuationItems.push({ role: "assistant", content: finalText });
-        return { finalText, messages, events, stoppedByLimit: false };
+        return { finalText, messages, events };
       }
       continue;
     }
@@ -308,43 +288,18 @@ export async function runBtccAgentLoop(
       });
       if (finalText) {
         continuationItems.push({ role: "assistant", content: finalText });
-        return { finalText, messages, events, stoppedByLimit: false };
+        return { finalText, messages, events };
       }
     }
   }
-    const boundaryObservation = await emitExecutionWindowBoundary({
-      events,
-      onEvent: input.onEvent,
-      callback: input.onExecutionWindowBoundary,
-      signal: input.signal,
-      windowIndex,
-      iteration,
-      messages,
-      toolResults,
-    });
-    if (boundaryObservation !== undefined) {
-      continuationItems.push({ role: "user", content: boundaryObservation });
-      windowIndex += 1;
-      continue;
-    }
-    break;
-  }
-  const synthesizedText = (await input.onLoopLimit?.({
-    messages,
-    toolResults,
-    maxIterations,
-  }))?.trim();
-  if (synthesizedText) {
-    continuationItems.push({ role: "assistant", content: synthesizedText });
-    return { finalText: synthesizedText, messages, events, stoppedByLimit: true };
-  }
-  const finalSynthesisText = toolResults.length > 0
-    ? await synthesizeFinalResponseForLoop(iteration)
-    : null;
-  if (finalSynthesisText) {
-    return { finalText: finalSynthesisText, messages, events, stoppedByLimit: true };
-  }
-  const finalText = renderPartialLimitResponse(toolResults);
-  continuationItems.push({ role: "assistant", content: finalText });
-  return { finalText, messages, events, stoppedByLimit: true };
+}
+
+function modelRoundRequestId(index: number, recoveryAttempt = 1): string {
+  return `btcc-model-round-${index}${recoveryAttempt > 1 ? `:retry:${recoveryAttempt}` : ""}`;
+}
+
+function throwIfAgentLoopAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new Error("BTCC agent loop was aborted");
 }

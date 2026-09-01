@@ -42,7 +42,6 @@ import {
   resolveRuntimeMessageLanguage,
   runtimeMessages,
 } from "../../packages/butler-agent/src/agent/output/messages.ts";
-import { isToolBatchCompletedHandoffText } from "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-batch-handoff.ts";
 import {
   isContainerRuntime,
   resolveOAuthListenHost,
@@ -579,8 +578,6 @@ test("registered Z.AI adapter keeps consecutive decisions and tool results in on
   const text = await runFunctionToolPromptText({
     model: "zai/glm-5.2",
     prompt: "inspect two states",
-    maxToolRounds: 4,
-    handoffAfterToolBatch: false,
     tools: [{
       type: "function",
       name: "lookup",
@@ -613,60 +610,6 @@ test("registered Z.AI adapter keeps consecutive decisions and tool results in on
     role: "tool",
     tool_call_id: "call_2",
   }));
-});
-
-test("registered Z.AI typed tool batches hand off before hidden final synthesis", async () => {
-  registerHostedModelConfig({
-    providerId: "zai",
-    modelId: "glm-5.2",
-    authType: "api_key",
-    apiKey: "zai-secret-key",
-  }, tempDir);
-
-  const bodies: Record<string, any>[] = [];
-  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-    bodies.push(JSON.parse(String(init?.body || "{}")));
-    if (bodies.length > 1) throw new Error("unexpected hidden synthesis request");
-    return new Response(JSON.stringify({
-      choices: [{
-        message: {
-          role: "assistant",
-          content: "summary: 후보를 검색합니다.",
-          tool_calls: [{
-            id: "call_1",
-            type: "function",
-            function: {
-              name: "lookup",
-              arguments: "{\"query\":\"butler\"}",
-            },
-          }],
-        },
-      }],
-      usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
-    }), { status: 200 });
-  }) as unknown as typeof fetch;
-
-  const text = await runFunctionToolPromptText({
-    model: "zai/glm-5.2",
-    prompt: "search",
-    maxToolRounds: 1,
-    handoffAfterToolBatch: true,
-    tools: [{
-      type: "function",
-      name: "lookup",
-      description: "Look up a term.",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: { query: { type: "string" } },
-        required: ["query"],
-      },
-    }],
-    executeTool: async () => ({ answer: "found" }),
-  });
-
-  expect(isToolBatchCompletedHandoffText(text)).toBe(true);
-  expect(bodies).toHaveLength(1);
 });
 
 test("registered Z.AI hosted tool result preserves exact structured payload", async () => {
@@ -794,7 +737,6 @@ test("registered Z.AI preserves every completed tool result exactly", async () =
     model: "zai/glm-5.2",
     prompt: "inspect several bounded results",
     butlerData: tempDir,
-    maxToolRounds: 3,
     usageAttribution: { turnId: "turn-hosted-rolling-context" },
     tools: [{
       type: "function",
@@ -3402,7 +3344,6 @@ test("Codex stateless replay forwards one contentless-response recovery observat
   const result = await runFunctionToolPromptText({
     model: "gpt-5.5-codex",
     prompt: "Recover once.",
-    maxToolRounds: 3,
     tools: [],
     executeTool: async () => ({ unreachable: true }),
   });
@@ -3479,7 +3420,6 @@ test("Codex stateless replay keeps prior web results provider-compact", async ()
   const result = await runFunctionToolPromptText({
     model: "gpt-5.5-codex",
     prompt: "Research the current market.",
-    maxToolRounds: 3,
     tools: [{
       type: "function",
       name: "web_search",
@@ -3600,59 +3540,7 @@ test("Codex stateless replay keeps prior web results provider-compact", async ()
   expect(JSON.stringify(seenBodies[2]!.input)).not.toContain(rawReadChunkMarker);
 });
 
-test("Codex typed tool batches hand off before a continuation response request", async () => {
-  const token = fakeJwt({
-    "https://api.openai.com/auth": {
-      chatgpt_account_id: "chatgpt-account",
-    },
-  });
-  writeButlerOpenAIAuthProfile({
-    provider: "openai-codex",
-    type: "oauth",
-    accessToken: token,
-    provenance: "codex-subscription-oauth",
-    updatedAt: new Date(0).toISOString(),
-  });
-  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
-
-  const seenBodies: Array<Record<string, any>> = [];
-  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-    seenBodies.push(JSON.parse(String(init?.body || "{}")));
-    if (seenBodies.length > 1) throw new Error("unexpected hidden continuation request");
-    return new Response([
-      'data: {"type":"response.output_item.done","item":{"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{\\"query\\":\\"status\\"}"}}',
-      "",
-      'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":1,"total_tokens":2}}}',
-      "",
-      "data: [DONE]",
-      "",
-    ].join("\n"), { status: 200 });
-  }) as unknown as typeof fetch;
-
-  const result = await runFunctionToolPromptText({
-    model: "gpt-5.5-codex",
-    prompt: "check",
-    maxToolRounds: 1,
-    handoffAfterToolBatch: true,
-    tools: [{
-      type: "function",
-      name: "lookup",
-      description: "lookup status",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: { query: { type: "string" } },
-        required: ["query"],
-      },
-    }],
-    executeTool: async () => ({ ok: true }),
-  });
-
-  expect(isToolBatchCompletedHandoffText(result)).toBe(true);
-  expect(seenBodies).toHaveLength(1);
-});
-
-test("OpenAI function tool prompt keeps one Turn across exhausted usage and reaches final synthesis", async () => {
+test("OpenAI function tool prompt keeps one Turn across ordinary tool rounds", async () => {
   const token = fakeJwt({
     "https://api.openai.com/auth": {
       chatgpt_account_id: "chatgpt-account",
@@ -3670,21 +3558,19 @@ test("OpenAI function tool prompt keeps one Turn across exhausted usage and reac
 
   const seenBodies: Array<Record<string, any>> = [];
   let fetchCalls = 0;
-  let requestCount = 0;
-  let boundaryCalls = 0;
   globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const body = JSON.parse(String(init?.body || "{}"));
     seenBodies.push(body);
     fetchCalls += 1;
-    if (fetchCalls === 34) {
+    if (fetchCalls === 3) {
       return codexSseResponse({
-        id: "resp_34",
+        id: "resp_3",
         item: {
           type: "message",
-          content: [{ type: "output_text", text: "final synthesis after same-Turn continuation" }],
+          content: [{ type: "output_text", text: "final answer after same-Turn tool rounds" }],
         },
-        inputTokens: 34,
-        totalTokens: 55,
+        inputTokens: 3,
+        totalTokens: 5,
       });
     }
     return codexSseResponse({
@@ -3703,7 +3589,6 @@ test("OpenAI function tool prompt keeps one Turn across exhausted usage and reac
   const result = await runFunctionToolPromptText({
     model: "gpt-5.5-codex",
     prompt: "loop",
-    maxToolRounds: 1,
     cacheScope: "session-turn",
     butlerData: tempDir,
     tools: [{
@@ -3717,54 +3602,13 @@ test("OpenAI function tool prompt keeps one Turn across exhausted usage and reac
         required: ["query"],
       },
     }],
-    usageAttribution: {
-      turnId: "turn-high-model-calls",
-      phase: "initial_tool_loop",
-      beforeModelRequest: () => {
-        requestCount += 1;
-      },
-      getBudgetState: () => ({
-        status: requestCount >= 32 ? "exhausted" : requestCount >= 30 ? "warning" : "ok",
-        requestCount,
-        maxRequests: 32,
-      }),
-    },
-    onExecutionWindowBoundary: ({ windowIndex }) => {
-      boundaryCalls += 1;
-      return windowIndex < 32
-        ? `Continue the same Turn after execution window ${windowIndex}.`
-        : undefined;
-    },
     executeTool: async () => ({ ok: true }),
   });
 
-  expect(result).toBe("final synthesis after same-Turn continuation");
-  expect(fetchCalls).toBe(34);
-  expect(requestCount).toBe(34);
-  expect(boundaryCalls).toBe(33);
-  expect(seenBodies).toHaveLength(34);
-  expect(seenBodies.slice(0, 33).every((body) => Array.isArray(body.tools))).toBe(true);
-  expect(seenBodies[32]!.tools).toEqual(expect.any(Array));
-  expect(seenBodies[33]!.tools).toBeUndefined();
-  expect(seenBodies[33]!.instructions).toContain("Do not call any more tools");
-  const events = readPromptCacheMetrics({ butlerData: tempDir })
-    .filter((event) => event.turnId === "turn-high-model-calls");
-  expect(events).toHaveLength(34);
-  expect(events.at(29)?.budgetState).toMatchObject({
-    status: "warning",
-    requestCount: 30,
-    maxRequests: 32,
-  });
-  expect(events.at(31)?.budgetState).toMatchObject({
-    status: "exhausted",
-    requestCount: 32,
-    maxRequests: 32,
-  });
-  expect(events.at(-1)?.budgetState).toMatchObject({
-    status: "exhausted",
-    requestCount: 34,
-    maxRequests: 32,
-  });
+  expect(result).toBe("final answer after same-Turn tool rounds");
+  expect(fetchCalls).toBe(3);
+  expect(seenBodies).toHaveLength(3);
+  expect(seenBodies.every((body) => Array.isArray(body.tools))).toBe(true);
 });
 
 test("OpenAI function tool prompt records live budgetState for each provider usage event", async () => {
@@ -3954,7 +3798,6 @@ test("OpenAI function tool prompt refreshes promoted dynamic schemas between too
   const result = await runFunctionToolPromptText({
     model: "gpt-5.5",
     prompt: "check promoted tool",
-    maxToolRounds: 3,
     tools: [{
       type: "function",
       name: "tool_describe",
@@ -4071,79 +3914,6 @@ test("function tool prompt normalizes model tool names before dispatch", async (
   expect(seenCalls).toEqual([{ name: "lookup", args: { query: "status" } }]);
 });
 
-test("function tool prompt synthesizes a final answer instead of exposing tool budget fallback", async () => {
-  process.env.OPENAI_API_KEY = "sk-test";
-
-  const seenBodies: Array<Record<string, any>> = [];
-  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-    const body = JSON.parse(String(init?.body || "{}"));
-    seenBodies.push(body);
-    if (seenBodies.length === 1) {
-      return Response.json({
-        id: "resp_1",
-        output: [{
-          type: "function_call",
-          call_id: "call_1",
-          name: "lookup",
-          arguments: JSON.stringify({ query: "first" }),
-        }],
-      });
-    }
-    if (seenBodies.length === 2) {
-      return Response.json({
-        id: "resp_2",
-        output: [{
-          type: "function_call",
-          call_id: "call_2",
-          name: "lookup",
-          arguments: JSON.stringify({ query: "second" }),
-        }],
-      });
-    }
-    return Response.json({
-      id: "resp_3",
-      output: [{
-        type: "message",
-        content: [{ type: "output_text", text: "최종 요약입니다." }],
-      }],
-    });
-  }) as unknown as typeof fetch;
-
-  const result = await runFunctionToolPromptText({
-    model: "gpt-5.5-codex",
-    prompt: "내일 날씨 요약",
-    maxToolRounds: 2,
-    tools: [{
-      type: "function",
-      name: "lookup",
-      description: "lookup status",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          query: { type: "string" },
-        },
-        required: ["query"],
-      },
-    }],
-    executeTool: async (call) => ({
-      ok: true,
-      query: call.args.query,
-    }),
-  });
-
-  expect(result).toBe("최종 요약입니다.");
-  expect(seenBodies).toHaveLength(3);
-  expect(seenBodies[2]!.tools).toBeUndefined();
-  expect(seenBodies[2]!.previous_response_id).toBe("resp_2");
-  expect(seenBodies[2]!.instructions).toContain("Do not call any more tools");
-  expect(seenBodies[2]!.input).toEqual([{
-    type: "function_call_output",
-    call_id: "call_2",
-    output: expect.stringContaining("\"ok\":true"),
-  }]);
-});
-
 test("function tool prompt can terminate immediately from a terminal tool result", async () => {
   process.env.OPENAI_API_KEY = "sk-test";
 
@@ -4186,59 +3956,6 @@ test("function tool prompt can terminate immediately from a terminal tool result
 
   expect(result).toBe("최종 보고입니다.");
   expect(seenBodies).toHaveLength(1);
-});
-
-test("function tool prompt falls back safely when final synthesis fails", async () => {
-  process.env.OPENAI_API_KEY = "sk-test";
-
-  const logs: string[] = [];
-  const seenBodies: Array<Record<string, any>> = [];
-  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-    const body = JSON.parse(String(init?.body || "{}"));
-    seenBodies.push(body);
-    if (seenBodies.length === 1) {
-      return Response.json({
-        id: "resp_1",
-        output: [{
-          type: "function_call",
-          call_id: "call_1",
-          name: "lookup",
-          arguments: JSON.stringify({ query: "first" }),
-        }],
-      });
-    }
-    return Response.json({ error: { message: "temporary backend failure" } }, { status: 503 });
-  }) as unknown as typeof fetch;
-
-  const result = await runFunctionToolPromptText({
-    model: "gpt-5.5-codex",
-    prompt: "내일 날씨 요약",
-    maxToolRounds: 1,
-    log: (line) => logs.push(line),
-    tools: [{
-      type: "function",
-      name: "lookup",
-      description: "lookup status",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          query: { type: "string" },
-        },
-        required: ["query"],
-      },
-    }],
-    executeTool: async (call) => ({
-      ok: true,
-      query: call.args.query,
-    }),
-  });
-
-  expect(result).toContain("available tool budget");
-  expect(result).toContain("lookup: ok");
-  expect(result).not.toContain("agent loop");
-  expect(logs.some((line) => line.includes("final no-tool synthesis failed"))).toBe(true);
-  expect(seenBodies).toHaveLength(4);
 });
 
 test("shell worker synthesizes a report when the shell tool budget is reached", async () => {

@@ -61,8 +61,6 @@ import { prepareBtccToolCall } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-execution.ts";
 import { createGuidedTurnCloseout } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-closeout.ts";
-import { renderExecutionWindowObservation } from
-  "../../packages/butler-agent/src/agent/btcc/agent-loop/execution-window-observation.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tools.ts";
 import { guidedToolOccurrence } from
@@ -1677,139 +1675,6 @@ test("production feature execution instructions preserve guarded effects and ato
     }
     fixture.close();
   }
-});
-
-test("production Guided Turn rereads Work across execution windows in one agent run", async () => {
-  const fixture = createFixture("guided-production-window-continuation");
-  try {
-    const requests: ModelRoundRequest[] = [];
-    let modelCalls = 0;
-    let loadContextCalls = 0;
-    let boundWorkCalls = 0;
-    const durableWork = fixture.stores.durableWork;
-    const trackedDurableWork = {
-      ...durableWork,
-      async loadContext(scope: Parameters<typeof durableWork.loadContext>[0]) {
-        loadContextCalls += 1;
-        return durableWork.loadContext(scope);
-      },
-      async boundWorkForTurn(turnId: string) {
-        boundWorkCalls += 1;
-        return durableWork.boundWorkForTurn(turnId);
-      },
-    };
-    const modelRound: ModelRoundPort = {
-      async runRound(request) {
-        requests.push(request);
-        modelCalls += 1;
-        if (modelCalls === 1) {
-          return toolResponse([toolCall("window-plan", "replace_work_plan", {
-            start_new: true,
-            objective: "Preserve evidence across the execution windows.",
-            actions: [{
-              action_key: "preserve-evidence",
-              description: "Keep the collected evidence available for the final answer.",
-            }],
-            checks: ["The final answer uses the collected evidence."],
-          })]);
-        }
-        if (modelCalls === 2) {
-          return toolResponse([toolCall("window-checkpoint", "record_work_checkpoint", {
-            action_updates: [{
-              action_key: "preserve-evidence",
-              status: "active",
-            }],
-            public_summary: "The collected evidence remains available.",
-            next_step: "Use the evidence in the final answer.",
-          })]);
-        }
-        if (modelCalls === 3) {
-          const bound = await durableWork.boundWorkForTurn(
-            "guided-production-window-turn",
-          );
-          return toolResponse([toolCall("window-disposition", "record_work_disposition", {
-            work_id: bound!.workId,
-            disposition: "open",
-            summary: "수집한 근거를 유지하며 답변을 준비합니다.",
-            remaining_actions: ["최종 답변을 전달한다"],
-          })]);
-        }
-        return { text: "확인된 근거를 바탕으로 답변을 완료했습니다.", toolCalls: [] };
-      },
-    };
-    const agent = fixture.admitEol(createProductionGuidedTurnAgent({
-      phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
-      butlerHome: fixture.root,
-      butlerData: fixture.root,
-      contextDocuments: fixture.stores.contextDocuments,
-      toolJournal: fixture.stores.guidedToolJournal,
-      effectJournal: fixture.stores.guidedEffectJournal,
-      durableWork: trackedDurableWork,
-      modelRound,
-      executionWindowSize: 1,
-    }));
-    const turnId = "guided-production-window-turn";
-    const runtime = createGuidedTurnRuntime({
-      admission: fixture.stores.admission,
-      turns: fixture.stores.turns,
-      messages: fixture.stores.messages,
-      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
-      agent,
-    });
-    const result = await runtime.runTurn(localRunCommand(fixture.root, turnId));
-    expect(result).toMatchObject({
-      kind: "delivered",
-      content: "확인된 근거를 바탕으로 답변을 완료했습니다.",
-    });
-    await expect(fixture.stores.durableWork.boundWorkForTurn(turnId)).resolves
-      .toMatchObject({ status: "open", latestDisposition: { disposition: "open" } });
-    expect(modelCalls).toBe(4);
-    expect(loadContextCalls).toBeGreaterThanOrEqual(4);
-    expect(boundWorkCalls).toBeGreaterThanOrEqual(4);
-    expect(requests).toHaveLength(4);
-    expect(requests[0]?.messages.filter((message) => message.role === "user"))
-      .toHaveLength(1);
-    expect(requests[1]?.messages.filter((message) => message.role === "user"))
-      .toHaveLength(2);
-    expect(requests[2]?.messages.filter((message) => message.role === "user"))
-      .toHaveLength(3);
-    expect(requests[1]?.messages.at(-1)?.content).toContain("Execution checkpoint 1");
-    expect(requests[1]?.messages.at(-1)?.content)
-      .toContain("Window diagnosis: 1 successful and 0 failed tool results.");
-    expect(requests[1]?.messages.at(-1)?.content).toContain("Durable Work status");
-    expect(requests[2]?.messages.at(-1)?.content).toContain("Execution checkpoint 2");
-    expect(requests[2]?.messages.at(-1)?.content)
-      .toContain("Before another tool call, determine why the previous window did not finish.");
-    expect(requests[2]?.messages.at(-1)?.content)
-      .toContain("The collected evidence remains available.");
-    expect(requests[3]?.messages.filter((message) => message.role === "user"))
-      .toHaveLength(4);
-  } finally {
-    fixture.close();
-  }
-});
-
-test("Guided execution-window diagnosis names repeated no-change work without ending the Turn", () => {
-  const result = {
-    toolCallId: "same-edit",
-    name: "edit_file",
-    ok: false as const,
-    error: {
-      code: "no_change_requested",
-      message: "No change was requested.",
-    },
-  };
-  const observation = renderExecutionWindowObservation({
-    windowIndex: 2,
-    context: null,
-    boundWork: null,
-    toolResults: [result, result, result],
-  });
-
-  expect(observation).toContain("internal diagnosis boundary, not a failure or completion condition");
-  expect(observation).toContain("No-change mutations: 3");
-  expect(observation).toContain("Repeated tool pattern: edit_file appeared 3 times");
-  expect(observation).toContain("take one materially different next step");
 });
 
 test("Guided fallback projects the cursor model into public iteration and fallback evidence", async () => {
@@ -6285,7 +6150,6 @@ test("Guided operational fallback is captured without a second report model call
       prompt: "현재까지 확인한 내용을 알려 주세요.",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6317,7 +6181,6 @@ test("Guided operational fallback never exposes a model budget or retry request"
       prompt: "결과를 알려 주세요.",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6350,7 +6213,6 @@ test("Guided operational fallback is deterministic instead of a persona model ca
       prompt: "작업을 완료해 줘.",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6378,7 +6240,6 @@ test("Guided empty main response returns a deterministic fact-based fallback", a
       prompt: "빈 응답을 보고 가능한 실패로 처리해 주세요.",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6393,47 +6254,6 @@ test("Guided empty main response returns a deterministic fact-based fallback", a
   expect(answer).not.toMatch(/다시 요청|retry|continue/iu);
   expect(calls).toBe(1);
   expect(factLoads).toBe(1);
-});
-
-test("Guided model exhaustion uses the deterministic fallback without another model round", async () => {
-  let calls = 0;
-  let factLoads = 0;
-  const answer = await runGuidedAgentLoopWithOperationalReport({
-    options: {
-      prompt: "도구 실행이 끝나지 않은 요청입니다.",
-      tools: [{
-        name: "echo",
-        description: "Echo a safe message.",
-        parameters: {
-          type: "object",
-          properties: { message: { type: "string" } },
-          required: ["message"],
-        },
-      }],
-      modelRound: scriptedModelRound([
-        () => {
-          calls += 1;
-          return toolResponse([toolCall("exhaustion-call", "echo", {
-            message: "still working",
-          })]);
-        },
-      ]),
-      maxIterations: 1,
-      executeTool: async () => ({ ok: true }),
-    },
-    parentSignal: new AbortController().signal,
-    originalRequest: "도구 실행이 끝나지 않은 요청입니다.",
-    loadFacts: async () => {
-      factLoads += 1;
-      return { work: null, toolCalls: [], effects: [] };
-    },
-  });
-
-  expect(calls).toBe(1);
-  expect(factLoads).toBe(1);
-  expect(answer).toContain("답변 생성을 마치지 못했습니다");
-  expect(answer).not.toContain("available tool budget");
-  expect(answer).not.toContain("echo: ok");
 });
 
 test("Guided unexpected local failure does not start an operational report request", async () => {
@@ -6452,7 +6272,6 @@ test("Guided unexpected local failure does not start an operational report reque
       prompt: "로컬 오류는 위로 전달해 주세요.",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6487,7 +6306,6 @@ test("Guided permanent provider failure does not start an operational report req
           throw permanent;
         },
       ]),
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6518,7 +6336,6 @@ test("Guided parent cancellation does not deliver an operational fallback", asyn
       prompt: "중지할 작업",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: controller.signal,
