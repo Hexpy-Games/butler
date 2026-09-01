@@ -134,6 +134,12 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(prompt).toContain("Objective: Prepare a market brief");
   expect(prompt).not.toContain("tracking:");
   expect(instructions).toContain("Use Work when the task needs continuation across turns");
+  expect(instructions).toContain(
+    "Never repeat internal workflow or status labels, tool names, schema fields, identifiers, or labels coined for the model's convenience",
+  );
+  expect(instructions).toContain(
+    "Translate them into what was done, what remains, why it matters, and what happens next",
+  );
   expect(instructions).toContain("Skip Work for simple conversation");
   expect(instructions).not.toContain("turn_time_remaining_seconds");
   expect(instructions).toContain("single-step read-only lookup");
