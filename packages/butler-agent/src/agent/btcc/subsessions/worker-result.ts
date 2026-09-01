@@ -33,7 +33,7 @@ export async function completeWorkerResultForDependencies(
     if (pending && !parentSubsessionIsTerminal(input.store, relation.parent_session_id)) {
       await enqueueWorkerReport(input, queue, relation.parent_session_id, parent.workspacePath,
         parent.projectId, parent.modelRef, parent.metadata?.reasoning_effort,
-        packet.parent_work_ref.work_id, existing, pending.text);
+        existing, pending.text);
       input.store.markParentInputDelivered(existing.result_id);
     }
     return { status: "duplicate", result: existing };
@@ -63,7 +63,7 @@ export async function completeWorkerResultForDependencies(
   if (!parentSubsessionIsTerminal(input.store, relation.parent_session_id)) {
     await enqueueWorkerReport(input, queue, relation.parent_session_id, parent.workspacePath,
       parent.projectId, parent.modelRef, parent.metadata?.reasoning_effort,
-      packet.parent_work_ref.work_id, committed.result, committed.parentInput.text);
+      committed.result, committed.parentInput.text);
   }
   input.store.markParentInputDelivered(committed.result.result_id);
   return {
@@ -80,17 +80,10 @@ async function enqueueWorkerReport(
   projectId: string | undefined,
   modelRef: string,
   reasoningEffort: unknown,
-  workId: string,
   result: CompleteStewardResultOutcome["result"],
   parentInputText: string,
 ): Promise<void> {
   const turnId = `steward-worker-result-${digest(result.result_id).slice(0, 32)}`;
-  const work = await input.durableWork.bindOpenWork({
-    turnId,
-    sessionId: stewardSessionId,
-    ...(projectId ? { projectRef: projectId } : {}),
-  }, workId);
-  if (!work || work.workId !== workId) throw new Error("worker_parent_work_missing");
   queue.enqueueIdempotent({
     eventId: `worker-result:${result.result_id}`,
     transport: "app",
