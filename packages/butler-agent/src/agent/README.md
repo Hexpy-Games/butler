@@ -36,12 +36,12 @@ continuation prompt must preserve the current-turn persona reminder along with
 the compact WorkStream state so long-running work does not drift into a neutral
 reporting voice.
 
-Worker and Steward non-trivial work share the same native tool-loop and
-WorkStream discipline as Butler-facing sessions. Role differences are policy:
-Workers cannot spawn child workers/orchestrations or publish principal-facing
-reports, while Stewards remain internal project/workstream custodians. Neither
-role may claim completion from task status alone; implementation work needs
-durable execution evidence, validation evidence, or an explicit blocker.
+Worker and Steward non-trivial work share the same native BTCC tool loop.
+Each Worker owns one session-scoped Micro Work and receives the Steward's
+compact implementation brief plus admitted project context. Role differences
+are policy: Workers cannot delegate, mutate the parent Work or Project Ledger,
+or publish principal-facing reports. Completion follows the actual Micro Work
+result and proportional checks, not a separate proof campaign.
 
 ## Related Specs
 
@@ -49,7 +49,7 @@ durable execution evidence, validation evidence, or an explicit blocker.
 - `SPEC-OPENAI-AUTH-AND-MODELS` - OpenAI Auth And Model Discovery
 - `SPEC-MODEL-PROVIDER-CONTROL-UX` - Model And Provider Control UX
 - `SPEC-AUTONOMOUS-PLANNED-DISPATCH` - Autonomous Planned Dispatch
-- `SPEC-WORKER-BTCC-RUNTIME-NORMALIZATION` - Worker BTCC Runtime Normalization
+- `SPEC-WORKER-MICRO-WORK-BTCC` - Worker Micro Work BTCC
 - `SPEC-BUTLER-EXPERIENCE-POLISH` - Butler Experience Polish
 - `SPEC-TOOL-RUNTIME-PROGRESSIVE-SURFACE` - Progressive Tool Surface
 - `SPEC-TOOL-RUNTIME-EVIDENCE-CAPABILITY-LEDGER` - Evidence Capability Ledger

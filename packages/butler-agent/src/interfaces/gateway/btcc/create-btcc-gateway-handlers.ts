@@ -66,13 +66,14 @@ export function createBtccGatewayHandlers(
       (outcome.kind === "delivered" || outcome.kind === "already_delivered")) {
       const childReport = projectChildTerminalReport(result);
       if (route.role === "worker") {
+        const workCompleted = result.workStatus === "completed";
         await options.subsessionDelegation.completeWorkerResult({
           childSessionId: route.sessionId,
           childTurnId: outcome.turnId,
           resultId: subsessionResultId(route.sessionId, outcome.turnId),
           summary: childReport.summary,
-          status: result.workStatus === "blocked" ? "blocked" : "success",
-          ...(result.workStatus === "blocked" ? { code: "worker_no_progress" as const } : {}),
+          status: workCompleted ? "success" : "blocked",
+          ...(!workCompleted ? { code: "worker_work_incomplete" as const } : {}),
           changedArtifacts: childReport.changedArtifacts,
           changedFiles: childReport.changedFiles,
         });

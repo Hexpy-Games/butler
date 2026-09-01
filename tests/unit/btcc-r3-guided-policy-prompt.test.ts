@@ -463,7 +463,7 @@ test("Steward may delegate one Plan action while Worker has only execution duty"
     "direct execution and/or bounded Worker orchestration",
   );
 
-  const workerPolicy = { ...stewardPolicy, role: "worker", trackingMode: "none" as const };
+  const workerPolicy = { ...stewardPolicy, role: "worker" };
   const workerTools = authorizedToolDefinitions(turnRecord({
     accessMode: "full_access",
     executionPolicy: workerPolicy,
@@ -472,9 +472,9 @@ test("Steward may delegate one Plan action while Worker has only execution duty"
   expect(workerTools).not.toContain("delegate_to_steward");
   expect(workerTools).not.toContain("delegate_to_worker");
   expect(workerTools).not.toContain("steer_worker");
-  expect(workerTools).not.toContain("start_work");
+  expect(workerTools).toContain("start_work");
   expect(guidedWorkerInstructions(workerPolicy)).toContain(
-    "Do not delegate, create Work or Plan records",
+    "bound session-scoped Micro Work",
   );
 });
 

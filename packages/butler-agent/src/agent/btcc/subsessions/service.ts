@@ -46,7 +46,7 @@ export function createSubsessionDelegationService(
     if (!expectedRootWorkId) throw new Error("subsession_root_work_identity_missing");
     const packet = input.store.packetByRelationId(relation.relation_id);
     const childBinding = input.sessionBindings.getBySessionId(child.childSessionId);
-    if (!childBinding || childBinding.role !== "steward") {
+    if (!childBinding || (childBinding.role !== "steward" && childBinding.role !== "worker")) {
       throw new Error("subsession_child_binding_missing");
     }
     const existing = await input.durableWork.boundWorkForTurn(child.childTurnId);
@@ -57,7 +57,11 @@ export function createSubsessionDelegationService(
       return existing.workId;
     }
     if (!packet || !completePacketContext(packet) || !await delegationProjectContextReady(packet.project_context, { sessionId: child.childSessionId, turnId: child.childTurnId }, input)) {
-      await completeResult({
+      const completeContextFailure = childBinding.role === "worker"
+        ? (result: Parameters<SubsessionDelegationService["completeWorkerResult"]>[0]) =>
+            completeWorkerResultForDependencies(input, childQueue, result)
+        : completeResult;
+      await completeContextFailure({
         childSessionId: child.childSessionId,
         childTurnId: child.childTurnId,
         resultId: subsessionResultId(relation.child_session_id, child.childTurnId),
@@ -67,13 +71,13 @@ export function createSubsessionDelegationService(
       throw new Error("delegation_context_incomplete");
     }
     assertExactChildLedgerProjectIdentity(childBinding);
-    const rootWorkScope = stewardRootWorkScope(childBinding);
+    const rootWorkScope = childBinding.role === "worker" ? {} : stewardRootWorkScope(childBinding);
     const work = await input.durableWork.startWork({
       sessionId: child.childSessionId,
       turnId: child.childTurnId,
       ...rootWorkScope,
       mutationCallId: `subsession-root-work:${packet.delegation_id}:${packet.task_id}:${child.childSessionId}`,
-      objective: child.objective,
+      objective: packet.objective,
     });
     if (work.workId !== expectedRootWorkId) throw new Error("subsession_root_work_identity_mismatch");
     return work.workId;

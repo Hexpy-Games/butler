@@ -5,7 +5,7 @@ import { guidedWorkerInstructions } from "./guided-worker-instructions.ts";
 import { GUIDED_EOL_STABLE_ANCHOR } from "./guided-eol-instructions.ts";
 
 export const GUIDED_STABLE_PROVIDER_PREFIX_REVISION =
-  "butler.btcc-stable-provider-prefix.v3" as const;
+  "butler.btcc-stable-provider-prefix.v4" as const;
 
 export function phaseMinimalStableInstructionSurface(
   phase: "direct" | "read_only" | "execution",

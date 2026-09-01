@@ -178,7 +178,7 @@ test("Steward delivery without completed Work is reported as failed", async () =
   });
 });
 
-test("Worker diagnosed non-progress is reported to its Steward as blocked", async () => {
+test("Worker without a completed Micro Work is reported to its Steward as blocked", async () => {
   const completed: Array<
     Parameters<SubsessionDelegationService["completeWorkerResult"]>[0]
   > = [];
@@ -223,7 +223,7 @@ test("Worker diagnosed non-progress is reported to its Steward as blocked", asyn
     resultId: expect.any(String),
     summary: "Worker repeated the same non-progress pattern without changing workspace output.",
     status: "blocked",
-    code: "worker_no_progress",
+    code: "worker_work_incomplete",
     changedArtifacts: [],
     changedFiles: [],
   }]);

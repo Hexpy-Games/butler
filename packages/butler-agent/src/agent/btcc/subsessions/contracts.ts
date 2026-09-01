@@ -60,6 +60,7 @@ export type DelegationPacket = {
   execution_mode: SubsessionExecutionMode;
   objective: string;
   acceptance_criteria: string[];
+  implementation_brief?: string;
   task_or_plan_refs: string[];
   plan_action?: {
     action_key: string;
@@ -102,6 +103,7 @@ export type StewardResultCode =
   | "delegation_context_incomplete"
   | "steward_execution_failed"
   | "steward_cancelled"
+  | "worker_work_incomplete"
   | "worker_no_progress";
 
 export type StewardResultEnvelope = {
@@ -191,6 +193,7 @@ export type ReviewedWorkerDelegationRequest = ReviewedDelegationIdentity & {
   action_key: string;
   objective: string;
   acceptance_criteria: string[];
+  implementation_brief: string;
   safe_title?: string;
   profile_id?: string;
 };
