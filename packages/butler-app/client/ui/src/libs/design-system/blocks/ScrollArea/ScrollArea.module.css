@@ -1,7 +1,7 @@
 .frame {
   --scroll-area-scrollbar-offset: 10px;
   --scroll-area-fade-size: 14px;
-  --scroll-area-fade-guard: 1px;
+  --scroll-area-fade-guard: var(--space-xs);
   --scroll-area-edge-padding: var(--scroll-area-fade-size);
   --scroll-area-frame-width: calc(100% + var(--scroll-area-scrollbar-offset));
   --scroll-area-content-width: calc(100% - var(--scroll-area-scrollbar-offset));
