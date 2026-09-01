@@ -1,12 +1,8 @@
 import { expect, test } from "bun:test";
-import { createGuidedExecutionWindowObserver } from
-  "../../packages/butler-agent/src/agent/btcc/agent-loop/execution-window-observation.ts";
 import type { DelegationPacket } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/contracts.ts";
 import { renderWorkerInput } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/worker-input.ts";
-import type { DurableWorkService } from
-  "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import { delegateToWorkerToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
 
@@ -74,31 +70,4 @@ test("Worker delegation requires and renders one reviewed Plan action", () => {
   expect(input).toContain("recorded_next_step: Implement the renderer action.");
   expect(input).toContain("implementation_brief:\nEdit renderer.tsx");
   expect(input).toContain("session-scoped Micro Work");
-});
-
-test("Worker execution windows diagnose repeated results without ending the Turn", async () => {
-  const observer = createGuidedExecutionWindowObserver({
-    durableWork: {
-      loadContext: async () => null,
-      boundWorkForTurn: async () => null,
-    } as unknown as DurableWorkService,
-    workScope: { turnId: "worker-turn", sessionId: "worker-session" },
-    turnId: "worker-turn",
-    trackingMode: "local",
-    role: "worker",
-    workspacePath: process.cwd(),
-    listToolRecords: () => [],
-    signal: new AbortController().signal,
-  });
-  const repeatedResult = [{
-    toolCallId: "edit-1",
-    name: "edit_file",
-    ok: false as const,
-    error: { code: "no_change_requested", message: "No change was requested." },
-  }];
-
-  expect(await observer.observe({ windowIndex: 0, toolResults: repeatedResult }))
-    .toContain("internal diagnosis boundary, not a failure or completion condition");
-  expect(await observer.observe({ windowIndex: 1, toolResults: [...repeatedResult, ...repeatedResult] }))
-    .toContain("Do not repeat an unchanged or failed action");
 });

@@ -117,8 +117,8 @@ export function beforeAttributedModelRequest(input: {
   roundIndex: number;
 }): void {
   // Usage budgets are observational. They must not terminate a Turn or tool
-  // loop: BTCC rolls execution windows forward in the same Turn, while the
-  // provider route owns physical retry/dispatch bounds for each model round.
+  // loop; the provider route owns physical retry/dispatch bounds for each
+  // individual model round.
   input.attribution?.beforeModelRequest?.({
     roundIndex: input.roundIndex,
     phase: input.attribution.phase,

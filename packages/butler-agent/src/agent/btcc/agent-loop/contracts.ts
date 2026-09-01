@@ -184,18 +184,6 @@ export interface BtccAgentLoopInput {
     recordToolRound(input: { roundId: string }): Promise<void>;
   };
   resolveOperationResultCallId?: (providerCallId: string) => string | undefined;
-  /**
-   * The execution window is an internal scheduling boundary, not a semantic
-   * model/tool budget. A guided caller supplies this callback to reread
-   * durable Work and append one internal observation before the next window.
-   */
-  onExecutionWindowBoundary?: (input: {
-    windowIndex: number;
-    iteration: number;
-    messages: readonly BtccAgentLoopMessage[];
-    toolResults: readonly BtccAgentLoopToolResult[];
-  }) => Promise<string | undefined> | string | undefined;
-  maxIterations?: number;
   onAssistantTextBeforeTools?: (input: {
     text: string;
     toolCalls: BtccAgentLoopToolCall[];
@@ -229,11 +217,6 @@ export interface BtccAgentLoopInput {
     | { status: "continue"; observation: string }
   );
   onEvent?: (event: BtccAgentLoopEvent) => void;
-  onLoopLimit?: (input: {
-    messages: BtccAgentLoopMessage[];
-    toolResults: BtccAgentLoopToolResult[];
-    maxIterations: number;
-  }) => Promise<string> | string;
   finalSynthesis?: BtccFinalSynthesisOptions;
 }
 
@@ -243,10 +226,8 @@ export interface BtccAgentLoopEvent {
     | "model_response"
     | "model_failure"
     | "tool_call"
-    | "tool_result"
-    | "execution_window_boundary";
+    | "tool_result";
   iteration: number;
-  windowIndex?: number;
   toolCall?: BtccAgentLoopToolCall;
   toolResult?: BtccAgentLoopToolResult;
   text?: string;
@@ -256,5 +237,4 @@ export interface BtccAgentLoopOutput {
   finalText: string;
   messages: BtccAgentLoopMessage[];
   events: BtccAgentLoopEvent[];
-  stoppedByLimit: boolean;
 }

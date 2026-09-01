@@ -6,7 +6,9 @@ export const TURN_CONTINUATION_EXHAUSTED_CODE =
   "turn_continuation_budget_exhausted" as const;
 
 export type TurnContinuationBudgetLimits = {
+  /** Retained for persisted v2 compatibility; round count does not terminate a Turn. */
   maxModelRequests: number;
+  /** Retained for persisted v2 compatibility; round count does not terminate a Turn. */
   maxToolRounds: number;
   maxModelFacingBytes: number;
   maxCumulativeModelFacingBytes: number;
@@ -150,9 +152,6 @@ export function parseTurnContinuationBudgetState(
   const limits = validateTurnContinuationLimits(state.limits);
   if (!Array.isArray(state.admittedRequests) || !Array.isArray(state.completedOutputRounds) ||
       !Array.isArray(state.completedToolRounds)) throw new Error("invalid_continuation_budget_rounds");
-  if (state.admittedRequests.length > limits.maxModelRequests ||
-      state.completedOutputRounds.length > limits.maxModelRequests ||
-      state.completedToolRounds.length > limits.maxToolRounds) throw new Error("invalid_continuation_budget_bounds");
   const admittedRequests = state.admittedRequests.map((item) => ({
     roundId: requiredText(item.roundId),
     requestDigest: requiredDigest(item.requestDigest),
@@ -230,7 +229,6 @@ export function transitionTurnContinuationBudget(
       };
     }
     if (event.modelFacingBytes > state.limits.maxModelFacingBytes) return exhaust(state, "model_facing_bytes", now);
-    if (state.admittedRequests.length >= state.limits.maxModelRequests) return exhaust(state, "max_model_requests", now);
     const consumedModelFacingBytes = safeAdd(
       state.consumedModelFacingBytes,
       integer(event.modelFacingBytes),
@@ -250,7 +248,6 @@ export function transitionTurnContinuationBudget(
   }
   if (event.kind === "record_tool_round") {
     if (state.completedToolRounds.includes(event.roundId)) return state;
-    if (state.completedToolRounds.length >= state.limits.maxToolRounds) return exhaust(state, "max_tool_rounds", now);
     return { ...state, completedToolRounds: [...state.completedToolRounds, requiredText(event.roundId)], lastProgressAtMs: now };
   }
   if (state.completedOutputRounds.includes(event.roundId)) return state;

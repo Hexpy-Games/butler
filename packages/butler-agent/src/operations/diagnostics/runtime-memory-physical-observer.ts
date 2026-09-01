@@ -338,7 +338,6 @@ function sanitizeEvent(value: RuntimeMemoryPhysicalObserverEvent): RuntimeMemory
     case "tool_call_start":
     case "tool_call_end":
     case "tool_call_failure":
-    case "execution_window_boundary":
     case "terminal_state":
     case "idle_checkpoint":
     case "idle_pre_gc":

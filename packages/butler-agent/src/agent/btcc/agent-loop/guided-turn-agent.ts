@@ -15,7 +15,6 @@ import { createGuidedToolCallExecutor } from "./guided-tool-call-execution.ts";
 import { runGuidedAgentLoopWithOperationalReport } from "./guided-operational-report.ts";
 import { createGuidedActivityProjection } from "../projection/index.ts";
 import { createGuidedPersistentEffectResolver } from "./guided-persistent-effect-resolution.ts";
-import { createGuidedExecutionWindowObserver } from "./execution-window-observation.ts";
 import { createGuidedSessionWorkspaceRuntime } from "./guided-session-workspace-recovery.ts";
 import { createGuidedOperationResultRuntime } from "../operation-result-replay/index.ts";
 import type { ProductionGuidedTurnAgentInput } from "./guided-turn-agent-input.ts";
@@ -322,16 +321,6 @@ export function createProductionGuidedTurnAgent(
           })
         : undefined;
       const directionAware = withStewardDirection({ modelRound, safeBoundary: subsessionDirectionSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: delegationRelease.reviewFinalCandidate });
-      const executionWindowObserver = createGuidedExecutionWindowObserver({
-        durableWork: input.durableWork,
-        workScope,
-        turnId: turn.turnId,
-        trackingMode: policy.trackingMode,
-        role: policy.role,
-        workspacePath: workspaceReference.get(),
-        listToolRecords: () => input.toolJournal.list(turn.turnId),
-        signal,
-      });
       const loopOptions: BtccAgentLoopInput = {
         prompt: requestAttribution.prompt,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
@@ -359,14 +348,10 @@ export function createProductionGuidedTurnAgent(
         onEvent: (event) => recordRuntimeMemoryEvent(memoryAttribution, event),
         tools: visibleTools,
         ...(resolveGuidedTools ? { resolveTools: resolveGuidedTools } : {}),
-        // This is an internal execution-window size. The same Turn remains
-        // active across windows until the model reaches a final answer.
-        maxIterations: Math.max(1, input.executionWindowSize ?? 60),
         modelRound: directionAware.modelRound,
         operationResultReplay: operationResults.replay,
         ...(continuationBudget ? { continuationBudget } : {}),
         resolveOperationResultCallId: toolCalls.journalCallIdForProviderCall,
-        onExecutionWindowBoundary: executionWindowObserver.observe,
         ...authorityProjection.loopCallbacks,
         reviewFinalCandidate: directionAware.reviewFinalCandidate,
         executeTool: activeDelegationAdmission.execute(toolCalls.executeTool),

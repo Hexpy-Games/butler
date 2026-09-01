@@ -24,7 +24,6 @@ export type ProductionGuidedTurnAgentInput = {
   durableWork: DurableWorkService;
   modelRound?: ModelRoundPort;
   sessionBindingStore?: GuidedSessionWorkspaceBindingStore;
-  executionWindowSize?: number;
   subsessionDelegation?: SubsessionDelegationService;
   /** TEST-ONLY deterministic fault proof; production composition callers omit it. */
   guidedEffectFaultHook?: GuidedEffectFaultHook;
