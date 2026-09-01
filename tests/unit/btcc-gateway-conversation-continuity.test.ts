@@ -271,7 +271,53 @@ test("Worker without a completed Micro Work is reported to its Steward as blocke
   }]);
 });
 
-test("Steward delivery preserves its bounded factual report for Butler synthesis", async () => {
+test("Worker terminal findings reach its Steward without truncation", async () => {
+  const completed: Array<
+    Parameters<SubsessionDelegationService["completeWorkerResult"]>[0]
+  > = [];
+  const actionableTail = "REVIEW_TAIL: restore the missing regression test before completion.";
+  const report = ["Worker review", "x".repeat(9_000), actionableTail].join("\n");
+  const handlers = createBtccGatewayHandlers({
+    btcc: {
+      runTurn: async () => ({
+        kind: "delivered",
+        turnId: "worker-turn-full-report",
+        messageId: "worker-message-full-report",
+        content: report,
+        workStatus: "completed",
+      }),
+      stopTurn: async ({ turnId }) => ({ kind: "cancelled", turnId }),
+    },
+    subsessionDelegation: {
+      completeWorkerResult: async (
+        input: Parameters<SubsessionDelegationService["completeWorkerResult"]>[0],
+      ) => {
+        completed.push(input);
+        return undefined as never;
+      },
+    } as unknown as SubsessionDelegationService,
+  });
+
+  await handlers.worker!({
+    route: {
+      sessionId: "worker/full-report",
+      role: "worker",
+      reason: "session-hint",
+      workspacePath: process.cwd(),
+    },
+    envelope: envelope(
+      "worker-turn-full-report",
+      "worker-input-full-report",
+      "Review the implementation and report every finding.",
+    ),
+  });
+
+  expect(completed).toHaveLength(1);
+  expect(completed[0]?.summary).toBe(report);
+  expect(completed[0]?.summary).toEndWith(actionableTail);
+});
+
+test("Steward delivery preserves its complete factual report for Butler synthesis", async () => {
   const completed: Array<{ status?: string; summary?: string }> = [];
   const report = [
     "Sandy P0 telemetry 작업을 완료했습니다.",

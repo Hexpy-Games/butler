@@ -1,6 +1,6 @@
 import { subsessionResultId } from "./identities.ts";
 import {
-  boundedTerminalReportContent,
+  normalizeTerminalReportContent,
   defaultCode,
   safeTerminalSummary,
 } from "./terminal-results.ts";
@@ -131,7 +131,7 @@ export async function completeStewardResultForDependencies(
 }
 
 function safeSummary(value: string): string {
-  return boundedTerminalReportContent(value);
+  return normalizeTerminalReportContent(value);
 }
 
 function nonEmpty(value: unknown): string | null {
