@@ -2,6 +2,7 @@ import {
   APP_PROTOCOL_VERSION,
   type MessageRecord,
   type SessionView,
+  type WorkerActivitySummary,
 } from "../../interface/protocol/app-protocol.ts";
 import { encodeSessionCursor } from "./session-message-page.ts";
 import {
@@ -17,6 +18,7 @@ export function sessionViewForStewardObserver(
   relation: StewardObserverRelation,
   snapshot: StewardObserverSnapshot | null,
   latestEventCursor: number,
+  workers: WorkerActivitySummary[] = [],
 ): SessionView {
   const projected = snapshot
     ? projectStewardSession(relation, snapshot)
@@ -26,13 +28,20 @@ export function sessionViewForStewardObserver(
       const activityRows = message.role === "assistant"
         ? projectStewardActivityRows(snapshot, message.turn_id)
         : [];
+      const terminalResultMessage = isTerminalResultMessage(
+        snapshot.messages,
+        index,
+        projected.result?.child_turn_id,
+      );
       return {
         id: message.id,
         chat_id: message.session_id,
         turn_id: message.turn_id,
         role: message.role,
         text: safeChildMessageText(message, projected),
-        status: projectedStatus(projected.status),
+        status: terminalResultMessage
+          ? projectedStatus(projected.status)
+          : "delivered",
         retryable: false,
         cursor: index + 1,
         created_at: message.created_at,
@@ -90,7 +99,7 @@ export function sessionViewForStewardObserver(
         ? { next_cursor_token: encodeSessionCursor(projected.session_id, fullMessages.length) }
         : {}),
     },
-    workers: [],
+    workers,
     work_streams: [],
     artifacts: projected.artifacts,
     context: null,
@@ -114,11 +123,21 @@ function safeChildMessageText(
   message: StewardObserverSnapshot["messages"][number],
   projected: ProjectedStewardSession,
 ): string {
-  if (message.role === "assistant" &&
-    projected.result?.child_turn_id === message.turn_id) {
-    return projected.result.summary;
-  }
-  return message.text;
+  if (message.turn_id !== projected.result?.child_turn_id) return message.text;
+  return message.role === "assistant"
+    ? projected.result.summary
+    : projected.title;
+}
+
+function isTerminalResultMessage(
+  messages: StewardObserverSnapshot["messages"],
+  index: number,
+  resultTurnId?: string,
+): boolean {
+  if (!resultTurnId) return false;
+  return messages.findLastIndex((message) =>
+    message.role === "assistant" && message.turn_id === resultTurnId,
+  ) === index;
 }
 
 function projectedStatus(

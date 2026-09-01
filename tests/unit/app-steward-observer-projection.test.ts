@@ -182,7 +182,6 @@ describe("App Steward observer projection", () => {
       JSON.stringify(["src/review.ts"]),
       "2026-08-19T00:03:00.000Z",
     );
-
     const observer = new SqliteStewardObserverStore(db);
     const snapshot = observer.snapshot("steward-1");
     expect(snapshot?.messages).toHaveLength(1);
@@ -212,7 +211,6 @@ describe("App Steward observer projection", () => {
       2,
     );
     expect(publicView.messages.at(-1)?.text).toBe("Review complete");
-    expect(publicView.messages.at(-1)?.changed_files).toBeUndefined();
     expect(publicView.messages.at(-1)?.turn_activity_rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -224,6 +222,67 @@ describe("App Steward observer projection", () => {
           safe_input_label: "action-1",
         }),
       ]),
+    );
+    db.close();
+  });
+
+  test("reads Worker changed files into the Steward message projection", () => {
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(
+        "relation-files",
+        "parent-files",
+        "parent-turn-files",
+        "steward-files",
+        "anchor-files",
+        1,
+        "Worker file changes",
+        "2026-08-31T00:00:00.000Z",
+      );
+    db.query(`
+      INSERT INTO btcc_steward_results (
+        result_id, relation_id, task_id, child_session_id, child_turn_id,
+        status, code, summary, acceptance_evidence_json,
+        changed_artifacts_json, changed_files_json, commits_json, tests_json,
+        remaining_risks_json, follow_up_recommendations_json, detail_refs_json,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "result-files",
+      "relation-files",
+      "task-files",
+      "steward-files",
+      "turn-files",
+      "success",
+      null,
+      "Worker changes completed",
+      "[]",
+      "[]",
+      JSON.stringify([{
+        path: "src/worker-output.ts",
+        additions: 2,
+        deletions: 1,
+        lines: [{ type: "added", new_line: 2, content: "worker output" }],
+      }]),
+      "[]",
+      "[]",
+      "[]",
+      "[]",
+      "[]",
+      "2026-08-31T00:01:00.000Z",
+    );
+
+    const observer = new SqliteStewardObserverStore(db);
+    const relation = observer.relationsForParent("parent-files")[0]!;
+    const snapshot = observer.snapshot("steward-files")!;
+    const view = sessionViewForStewardObserver(relation, snapshot, 0);
+
+    expect(snapshot.result?.changed_files?.[0]?.path).toBe(
+      "src/worker-output.ts",
+    );
+    expect(view.messages.at(-1)?.changed_files?.[0]?.path).toBe(
+      "src/worker-output.ts",
     );
     db.close();
   });
@@ -708,5 +767,73 @@ describe("App Steward observer projection", () => {
     expect(view.messages.filter((message) => message.turn_activity_rows?.length))
       .toHaveLength(1);
     expect(view.message_window.complete).toBe(true);
+  });
+
+  test("keeps earlier Steward messages delivered when the terminal result fails", () => {
+    const relation = {
+      relation_id: "relation-failed",
+      parent_session_id: "parent-failed",
+      parent_turn_id: "parent-turn-failed",
+      child_session_id: "steward-failed",
+      anchor_message_id: "anchor-failed",
+      ordinal: 1,
+      safe_title: "Failed child",
+      created_at: "2026-08-31T00:00:00.000Z",
+    };
+    const view = sessionViewForStewardObserver(relation, {
+      session_id: relation.child_session_id,
+      title: relation.safe_title,
+      turns: [{
+        id: "turn-progress",
+        state: "delivered",
+        created_at: "2026-08-31T00:00:00.000Z",
+        updated_at: "2026-08-31T00:01:00.000Z",
+      }, {
+        id: "turn-failed",
+        state: "failed",
+        created_at: "2026-08-31T00:00:00.000Z",
+        updated_at: "2026-08-31T00:02:00.000Z",
+      }],
+      messages: [{
+        id: "assistant-progress",
+        session_id: relation.child_session_id,
+        turn_id: "turn-progress",
+        role: "assistant",
+        text: "Worker 작업을 시작했습니다.",
+        created_at: "2026-08-31T00:01:00.000Z",
+        updated_at: "2026-08-31T00:01:00.000Z",
+      }, {
+        id: "assistant-terminal",
+        session_id: relation.child_session_id,
+        turn_id: "turn-failed",
+        role: "assistant",
+        text: "raw terminal text",
+        created_at: "2026-08-31T00:02:00.000Z",
+        updated_at: "2026-08-31T00:02:00.000Z",
+      }],
+      progress_events: [],
+      plan: null,
+      result: {
+        result_id: "result-failed",
+        relation_id: relation.relation_id,
+        task_id: "task-failed",
+        child_session_id: relation.child_session_id,
+        child_turn_id: "turn-failed",
+        status: "failed",
+        code: "steward_execution_failed",
+        summary: "완료하지 못했지만 확인한 내용입니다.",
+        acceptance_evidence: [],
+        changed_artifacts: [],
+        created_at: "2026-08-31T00:02:00.000Z",
+      },
+      updated_at: "2026-08-31T00:02:00.000Z",
+    }, 1);
+
+    expect(view.messages.map((message) => [message.text, message.status]))
+      .toEqual([
+        ["Worker 작업을 시작했습니다.", "delivered"],
+        ["완료하지 못했지만 확인한 내용입니다.", "failed"],
+      ]);
+    expect(view.messages.every((message) => !message.safe_error_code)).toBe(true);
   });
 });

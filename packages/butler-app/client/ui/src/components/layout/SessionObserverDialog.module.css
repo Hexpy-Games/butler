@@ -1,0 +1,12 @@
+.dialog {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.header {
+  border-bottom: 1px solid var(--composer-glass-divider);
+  padding-bottom: var(--space-3);
+  box-shadow: inset 0 1px 0 var(--tinted-glass-highlight);
+}

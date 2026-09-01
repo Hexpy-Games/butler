@@ -111,6 +111,18 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
   expect(window.document.getElementById(labelledBy ?? "")?.textContent)
     .toBe("Read-only Steward observer");
   expect(dialog.getAttribute("aria-describedby")).toBe("steward-observer-description");
+  const header = dialog.querySelector(
+    '[data-test-class="steward-observer-header"]',
+  );
+  const transcript = dialog.querySelector(
+    '[data-test-class="steward-observer-transcript"]',
+  );
+  expect(header?.parentElement).toBe(dialog);
+  expect(dialog.contains(transcript)).toBe(true);
+  expect(header?.contains(transcript)).toBe(false);
+  expect(header && transcript
+    ? Boolean(header.compareDocumentPosition(transcript) & window.Node.DOCUMENT_POSITION_FOLLOWING)
+    : false).toBe(true);
   expect(dialog.contains(window.document.activeElement)).toBe(true);
   expect(Array.from(dialog.querySelectorAll("button")).map((button) => button.textContent))
     .not.toContain(expect.stringMatching(/copy/iu));
@@ -130,6 +142,13 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
     '[data-test-class="turn-current-phase-activity"]',
   )).toHaveLength(1);
   expect(timelineText).toContain("Waiting for Worker results.");
+  expect(timelineText).toContain("Implementation Worker");
+  const assistantMessage = Array.from(dialog.querySelectorAll(
+    '[data-test-class="steward-observer-message"]',
+  )).find((row) => row.textContent?.includes("Safe activity transcript"));
+  expect(assistantMessage?.querySelector(
+    '[data-test-class="steward-observer-worker-capsules"]',
+  )?.textContent).toContain("Implementation Worker");
   const stopButton = Array.from(dialog.querySelectorAll("button")).find((button) =>
     /중지|stop/iu.test(button.textContent ?? ""),
   );
@@ -195,7 +214,18 @@ function observerView(sessionId: string): SessionView {
       status: "delivered",
     }] as SessionView["messages"],
     message_window: { next_cursor: 3, complete: true },
-    workers: [],
+    workers: [{
+      worker_id: "worker-1",
+      activity_kind: "worker",
+      worker_label: "Worker",
+      worker_display_name: "Implementation Worker",
+      worker_ordinal_label: "W1",
+      objective: "Implement the requested change",
+      phase: "complete",
+      status_line: "Completed",
+      terminal: true,
+      supported_controls: [],
+    }],
     work_streams: [],
     artifacts: [],
     context: null,

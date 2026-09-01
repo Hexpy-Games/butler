@@ -10,6 +10,7 @@ import {
 import { MessageRow } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageRecord } from "@/app/types.ts";
+import { isAssistantFailureNoticeMessage } from "@/app/utils.ts";
 import { MessageAvatar } from "./MessageAvatar";
 
 interface VirtualMessageRowProps {
@@ -65,7 +66,7 @@ export function VirtualMessageRow({
 }
 
 function messageTone(message: MessageRecord) {
-  if (message.status === "failed") return "failed";
+  if (isAssistantFailureNoticeMessage(message)) return "failed";
   if (message.status === "pending") return "pending";
   return "complete";
 }
@@ -78,7 +79,7 @@ function messageTestClassName(
     "message",
     message.role,
     isCompactionEvent ? "compaction-event" : "",
-    message.status === "failed" ? "failed" : "",
+    isAssistantFailureNoticeMessage(message) ? "failed" : "",
     message.status === "pending" ? "pending" : "",
   ]
     .filter(Boolean)

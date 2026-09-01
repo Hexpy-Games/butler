@@ -351,10 +351,15 @@ export class AppSessionViewStore {
   private getStewardSessionView(
     relation: StewardObserverRelation,
   ): SessionView {
+    const workers = this.listWorkerActivity({
+      sessionId: relation.child_session_id,
+      includeHistory: true,
+    }).workers.filter((worker) => worker.activity_kind === "worker");
     return sessionViewForStewardObserver(
       relation,
       this.stewardObserver.snapshot(relation.child_session_id),
       this.latestEventCursor(),
+      workers,
     );
   }
 }

@@ -13,10 +13,11 @@ import {
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { MessageContent } from "@/components/conversation/MessageContent.tsx";
 import { TurnActivityPanel } from "@/components/conversation/TurnActivityPanel.tsx";
 import { TurnActivityPending } from "@/components/conversation/TurnActivityPending.tsx";
+import { SessionObserverTimeline } from "./SessionObserverTimeline.tsx";
 import { useSessionViewSubscription } from "./hooks/useSessionViewSubscription.ts";
+import styles from "./SessionObserverDialog.module.css";
 
 export function SessionObserverDialog() {
   const [cancelling, setCancelling] = useState(false);
@@ -42,10 +43,14 @@ export function SessionObserverDialog() {
     >
       <DialogContent
         aria-describedby="steward-observer-description"
+        className={styles.dialog}
         data-test-class="steward-observer-dialog"
         glassRadius="composer"
       >
-        <DialogHeader>
+        <DialogHeader
+          className={styles.header}
+          data-test-class="steward-observer-header"
+        >
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription id="steward-observer-description">
             {appCopy.inspector.tabs.activity}
@@ -53,19 +58,10 @@ export function SessionObserverDialog() {
         </DialogHeader>
         <ScrollArea fill dataTestClass="steward-observer-transcript">
           <Stack as="section" aria-label={appCopy.inspector.tabs.activity} gap="lg">
-            {view?.messages.map((message) => (
-              <MessageRow
-                key={message.id}
-                role={message.role === "user" ? "user" : "assistant"}
-                dataTestClass="steward-observer-message"
-              >
-                <MessageContent
-                  message={message}
-                  copied={false}
-                  footerMeta={null}
-                />
-              </MessageRow>
-            ))}
+            <SessionObserverTimeline
+              messages={view?.messages ?? []}
+              workers={view?.workers ?? []}
+            />
             {view?.active_turn ? (
               <MessageRow
                 role="assistant"

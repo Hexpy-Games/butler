@@ -2,7 +2,10 @@ import { memo } from "react";
 import type { MessageRecord } from "@/app/types.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Stack, Tag } from "@/butler-ds";
-import { isRuntimeFaultRetryableMessage } from "@/app/utils.ts";
+import {
+  isAssistantFailureNoticeMessage,
+  isRuntimeFaultRetryableMessage,
+} from "@/app/utils.ts";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
 import {
   AssistantFailureNotice,
@@ -34,6 +37,7 @@ function MessageContentComponent({
   stewardProgress,
 }: MessageContentProps) {
   const artifacts = message.artifacts ?? [];
+  const failureNotice = isAssistantFailureNoticeMessage(message);
   return (
     <>
       {message.role === "assistant" ? (
@@ -49,7 +53,7 @@ function MessageContentComponent({
           />
           {stewardProgress ? (
             <Stack data-test-class="steward-message-content" gap="md">
-              {message.status === "failed" ? (
+              {failureNotice ? (
                 <AssistantFailureNotice message={message} />
               ) : (
                 <MessageMarkdown
@@ -59,7 +63,7 @@ function MessageContentComponent({
               )}
               <StewardParentProgress progress={stewardProgress} />
             </Stack>
-          ) : message.status === "failed" ? (
+          ) : failureNotice ? (
             <AssistantFailureNotice message={message} />
           ) : (
             <MessageMarkdown

@@ -29,12 +29,13 @@ export async function completeWorkerResultForDependencies(
   }
   const existing = input.store.resultByRelationId(relation.relation_id);
   if (existing) {
-    if (!parentSubsessionIsTerminal(input.store, relation.parent_session_id)) {
+    const pending = input.store.pendingParentInputForResult(existing.result_id);
+    if (pending && !parentSubsessionIsTerminal(input.store, relation.parent_session_id)) {
       await enqueueWorkerReport(input, queue, relation.parent_session_id, parent.workspacePath,
         parent.projectId, parent.modelRef, parent.metadata?.reasoning_effort,
-        packet.parent_work_ref.work_id, existing);
+        packet.parent_work_ref.work_id, existing, pending.text);
+      input.store.markParentInputDelivered(existing.result_id);
     }
-    input.store.markParentInputDelivered(existing.result_id);
     return { status: "duplicate", result: existing };
   }
   const status = resultInput.status ?? "success";
@@ -62,7 +63,7 @@ export async function completeWorkerResultForDependencies(
   if (!parentSubsessionIsTerminal(input.store, relation.parent_session_id)) {
     await enqueueWorkerReport(input, queue, relation.parent_session_id, parent.workspacePath,
       parent.projectId, parent.modelRef, parent.metadata?.reasoning_effort,
-      packet.parent_work_ref.work_id, committed.result);
+      packet.parent_work_ref.work_id, committed.result, committed.parentInput.text);
   }
   input.store.markParentInputDelivered(committed.result.result_id);
   return {
@@ -81,6 +82,7 @@ async function enqueueWorkerReport(
   reasoningEffort: unknown,
   workId: string,
   result: CompleteStewardResultOutcome["result"],
+  parentInputText: string,
 ): Promise<void> {
   const turnId = `steward-worker-result-${digest(result.result_id).slice(0, 32)}`;
   const work = await input.durableWork.bindOpenWork({
@@ -97,13 +99,7 @@ async function enqueueWorkerReport(
     sender: { id: "butler-worker-result", displayName: "Worker" },
     message: {
       id: `worker-result-message:${result.result_id}`,
-      text: [
-        "Worker report for the current Steward Plan action.",
-        `Status: ${result.status}`,
-        `Summary: ${result.summary}`,
-        `Changed artifacts: ${result.changed_artifacts.join("; ") || "none"}`,
-        "Integrate this result, review and validate the whole delegated Work, correct it if needed, then report once to Butler.",
-      ].join("\n"),
+      text: parentInputText,
       timestamp: result.created_at,
     },
     routingHints: { sessionId: stewardSessionId, turnId },

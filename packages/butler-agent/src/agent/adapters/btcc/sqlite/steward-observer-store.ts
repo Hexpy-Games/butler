@@ -23,6 +23,7 @@ import {
 } from "./steward-recovery-reader.ts";
 import { readStewardOperationOutputChunks } from "./steward-operation-output-reader.ts";
 import { readStewardObserverMessages } from "./steward-observer-message-reader.ts";
+import type { ChangedFileDetail } from "../../../tools/file-tools/shared/changed-file-detail.ts";
 
 type RelationRow = StewardObserverRelation;
 
@@ -47,6 +48,7 @@ type ResultRow = {
   summary: string;
   acceptance_evidence_json: string;
   changed_artifacts_json: string;
+  changed_files_json: string;
   created_at: string;
   work_status: string | null;
   final_payload_json: string | null;
@@ -217,7 +219,8 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
         SELECT result.result_id, result.relation_id, result.task_id,
           result.child_session_id, result.child_turn_id, result.status,
           result.code, result.summary, result.acceptance_evidence_json,
-          result.changed_artifacts_json, result.created_at,
+          result.changed_artifacts_json, result.changed_files_json,
+          result.created_at,
           work.status AS work_status, turn.final_payload_json
         FROM btcc_steward_results AS result
         LEFT JOIN btcc_guided_turn_work_bindings AS binding
@@ -243,6 +246,7 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       }),
       acceptance_evidence: parseStringList(row.acceptance_evidence_json),
       changed_artifacts: parseStringList(row.changed_artifacts_json),
+      changed_files: parseChangedFiles(row.changed_files_json),
       created_at: row.created_at,
     };
   }
@@ -280,6 +284,15 @@ function parseStringList(value: string): string[] {
     return Array.isArray(parsed)
       ? parsed.filter((item): item is string => typeof item === "string")
       : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseChangedFiles(value: string): ChangedFileDetail[] {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed as ChangedFileDetail[] : [];
   } catch {
     return [];
   }
