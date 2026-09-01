@@ -197,7 +197,9 @@ export function createGuidedActivityProjection(input: {
     const group: ActivityGroup = {
       activityId: activityId(input.turnId),
       ...(content.displayStage ? { displayStage: content.displayStage } : {}),
-      deferredUntilAccepted: first ? activityKind(first.name) !== "ordinary" : false,
+      deferredUntilAccepted: first
+        ? !["ordinary", "work_selection"].includes(activityKind(first.name))
+        : false,
       title: boundedTitle(
         groupInput.title ||
           (first?.name === "record_work_checkpoint" && activeActionTitle) ||
