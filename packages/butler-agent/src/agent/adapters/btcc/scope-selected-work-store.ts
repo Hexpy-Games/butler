@@ -168,6 +168,10 @@ class ScopeSelectedWorkStore implements DurableWorkStore {
 
   private storeForScope(scope: WorkTurnScope): DurableWorkStore {
     const binding = this.requireBinding(scope.sessionId);
+    if (isLocalWorker(binding)) {
+      if (scope.projectRef) throw new Error("work_scope_session_binding_mismatch");
+      return this.input.sessionStore;
+    }
     const appProjectId = binding.appProjectId ?? binding.projectId;
     if (!appProjectId) {
       if (scope.projectRef) throw new Error("work_scope_session_binding_mismatch");
@@ -185,6 +189,7 @@ class ScopeSelectedWorkStore implements DurableWorkStore {
     if (persisted.kind === "session") return this.input.sessionStore;
     if (persisted.kind === "unbound") {
       const binding = this.requireBinding(persisted.sessionId);
+      if (isLocalWorker(binding)) return this.input.sessionStore;
       return binding.appProjectId ?? binding.projectId
         ? this.projectStore(binding)
         : this.input.sessionStore;
@@ -236,6 +241,15 @@ class ScopeSelectedWorkStore implements DurableWorkStore {
     if (!binding) throw new Error("work_scope_session_binding_missing");
     return binding;
   }
+}
+
+function isLocalWorker(binding: StoredSessionBinding): boolean {
+  if (binding.role !== "worker") return false;
+  const policy = binding.metadata?.runtimePolicy;
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) return false;
+  const value = (policy as Record<string, unknown>).trackingMode ??
+    (policy as Record<string, unknown>).tracking_mode;
+  return value === "local";
 }
 
 function persistedScopeForTurn(

@@ -77,6 +77,61 @@ test("unknown turn-only Work lookups fail closed without invoking Session store"
   expect(calls).toEqual({ bound: 0, abandoned: 0 });
 });
 
+test("project-aware local Worker keeps its Micro Work in Session storage", async () => {
+  const calls = { bound: 0, start: 0, projectResolution: 0 };
+  const sessionStore = {
+    async boundWorkForTurn() {
+      calls.bound += 1;
+      return null;
+    },
+    async startWork() {
+      calls.start += 1;
+      return {};
+    },
+  } as unknown as DurableWorkStore;
+  const store = createScopeSelectedWorkStore({
+    sessionBindings: {
+      getBySessionId: () => ({
+        sessionId: "worker-project-aware",
+        role: "worker",
+        lifecycleState: "active",
+        projectId: "app-project-sandy",
+        appProjectId: "app-project-sandy",
+        ledgerProjectId: "sandy",
+        workspacePath: "/workspace/sandy",
+        runtimeAdapterId: "btcc-turn-runtime",
+        modelProviderId: "openai",
+        modelRef: "openai/gpt-5.6-luna",
+        metadata: { runtimePolicy: { trackingMode: "local" } },
+        transportBindings: [],
+      }),
+    } as never,
+    sessionStore,
+    resolveProjectScope: () => {
+      calls.projectResolution += 1;
+      throw new Error("local_worker_must_not_resolve_project_work");
+    },
+    createProjectStore: () => {
+      throw new Error("local_worker_must_not_create_project_work_store");
+    },
+    persistedScopeForTurn: () => ({
+      kind: "unbound",
+      sessionId: "worker-project-aware",
+    }),
+  });
+
+  expect(await store.boundWorkForTurn("worker-turn")).toBeNull();
+  await store.startWork({
+    turnId: "worker-turn",
+    sessionId: "worker-project-aware",
+    mutationCallId: "worker-micro-work",
+    requestSha256: "request",
+    objective: "Complete the bounded Worker Task.",
+  });
+
+  expect(calls).toEqual({ bound: 1, start: 1, projectResolution: 0 });
+});
+
 test("production composition initializes and writes only the exact differing Ledger project", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-project-selection-"));
   const workspace = join(root, "workspace");

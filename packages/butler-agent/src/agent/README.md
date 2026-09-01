@@ -42,6 +42,9 @@ compact implementation brief plus admitted project context. Role differences
 are policy: Workers cannot delegate, mutate the parent Work or Project Ledger,
 or publish principal-facing reports. Completion follows the actual Micro Work
 result and proportional checks, not a separate proof campaign.
+Project context may identify the inherited workspace and memory, but a local
+Worker still selects Session Work storage; project knowledge never promotes its
+Micro Work into Project Ledger ownership.
 
 ## Related Specs
 
