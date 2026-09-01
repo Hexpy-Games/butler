@@ -56,7 +56,11 @@ export function SessionObserverDialog() {
             {appCopy.inspector.tabs.activity}
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea fill dataTestClass="steward-observer-transcript">
+        <ScrollArea
+          fill
+          className={styles.transcript}
+          dataTestClass="steward-observer-transcript"
+        >
           <Stack as="section" aria-label={appCopy.inspector.tabs.activity} gap="lg">
             <SessionObserverTimeline
               messages={view?.messages ?? []}
