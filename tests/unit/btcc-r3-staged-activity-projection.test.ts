@@ -121,6 +121,35 @@ test("completion review projects a distinct validation activity without another 
   })]);
 });
 
+test("Work continuation publishes user language before the internal operation completes", async () => {
+  const updates: Array<{
+    displayStage?: string;
+    title: string;
+    summary: string;
+  }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-continue-work-activity",
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const call = { name: "continue_work", args: { work_id: "internal-work-id" } };
+  projection.observeToolBatch({ text: "", toolCalls: [call] });
+
+  await projection.observeTool({ ...call, effectiveToolName: call.name });
+
+  expect(updates).toEqual([expect.objectContaining({
+    displayStage: "conception",
+    title: "진행 내용 확인",
+    summary: "이전에 진행하던 내용과 현재 상태를 확인하고 있습니다.",
+  })]);
+  expect(publicToolTitle("continue_work")).toBe("진행 내용 확인");
+  expect(publicToolTitle("start_work")).toBe("요청 내용 확인");
+});
+
 test("accepted completion projects the model-authored reporting direction after validation", async () => {
   const updates: Array<{
     displayStage?: string;

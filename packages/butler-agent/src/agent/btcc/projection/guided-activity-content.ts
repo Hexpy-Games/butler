@@ -40,8 +40,8 @@ export function publicToolTitle(
   if (name.startsWith("project_ledger")) {
     return isProjectLedgerMutation(name) ? "프로젝트 기록 변경" : "프로젝트 기록 확인";
   }
-  if (name === "start_work") return "작업 시작";
-  if (name === "continue_work") return "작업 이어가기";
+  if (name === "start_work") return "요청 내용 확인";
+  if (name === "continue_work") return "진행 내용 확인";
   if (name === "replace_work_plan") return "실행 계획 수립";
   if (name === "record_work_checkpoint") return "진행 상태 기록";
   if (name === "record_work_review") return reviewTitle(args.subject);
@@ -61,6 +61,16 @@ export function activityContent(
   rationale?: string;
   nextStep?: string;
 } {
+  if (first?.name === "start_work" || first?.name === "continue_work") {
+    const continuing = first.name === "continue_work";
+    return {
+      displayStage: "conception",
+      title: continuing ? "진행 내용 확인" : "요청 내용 확인",
+      summary: continuing
+        ? "이전에 진행하던 내용과 현재 상태를 확인하고 있습니다."
+        : "요청하신 내용과 필요한 결과를 정리하고 있습니다.",
+    };
+  }
   if (first?.name === "replace_work_plan") {
     const summary = publicText(first.args.objective) || publicText(assistantText) ||
       publicToolTitle(first.name);
@@ -110,7 +120,8 @@ export function activityContent(
 
 export function activityKind(
   name: string,
-): "ordinary" | "plan" | "review" | "checkpoint" {
+): "ordinary" | "work_selection" | "plan" | "review" | "checkpoint" {
+  if (name === "start_work" || name === "continue_work") return "work_selection";
   if (name === "replace_work_plan") return "plan";
   if (name === "record_work_review") return "review";
   if (name === "record_work_checkpoint") return "checkpoint";
