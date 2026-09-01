@@ -1,6 +1,7 @@
 .dialog {
   grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: 60%;
+  gap: 0;
   overflow: hidden;
   -webkit-mask-image: none;
   mask-image: none;
@@ -9,4 +10,8 @@
 .header {
   border-bottom: 1px solid var(--composer-glass-divider);
   padding-bottom: var(--space-3);
+}
+
+.actions {
+  padding-top: var(--space-4);
 }

@@ -95,7 +95,7 @@ export function SessionObserverDialog() {
           </Stack>
         </ScrollArea>
         {view?.latest_turn?.retryable && !view.active_turn && view.relation ? (
-          <Stack align="row" justify="end">
+          <Stack className={styles.actions} align="row" justify="end">
             <Button
               type="button"
               disabled={resuming}
@@ -111,7 +111,7 @@ export function SessionObserverDialog() {
             </Button>
           </Stack>
         ) : (view?.active_turn || view?.waiting_for_children) && view.relation ? (
-          <Stack align="row" justify="end">
+          <Stack className={styles.actions} align="row" justify="end">
             <Button
               type="button"
               variant="destructive"

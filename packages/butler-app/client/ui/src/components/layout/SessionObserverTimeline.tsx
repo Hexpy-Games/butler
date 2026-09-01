@@ -1,7 +1,7 @@
 import type { MessageRecord, WorkerActivitySummary } from "@/app/types.ts";
-import { workerActivityDisplayName } from "@/app/utils.ts";
-import { MessageRow, Stack, Tag } from "@/butler-ds";
+import { MessageRow } from "@/butler-ds";
 import { MessageContent } from "@/components/conversation/MessageContent.tsx";
+import { SessionObserverWorkerRecord } from "./SessionObserverWorkerRecord.tsx";
 
 export function SessionObserverTimeline({
   messages,
@@ -10,38 +10,42 @@ export function SessionObserverTimeline({
   messages: MessageRecord[];
   workers: WorkerActivitySummary[];
 }) {
-  let workerAnchor = -1;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === "assistant") {
-      workerAnchor = index;
-      break;
-    }
-  }
-  const workerNames = [...new Set(
-    workers
+  const records = [
+    ...messages.map((message, index) => ({
+      kind: "message" as const,
+      id: message.id,
+      at: message.created_at,
+      order: index,
+      message,
+    })),
+    ...workers
       .filter((worker) => worker.activity_kind !== "planned")
-      .map(workerActivityDisplayName),
-  )];
+      .map((worker, index) => ({
+        kind: "worker" as const,
+        id: worker.worker_id,
+        at: worker.created_at ?? worker.updated_at,
+        order: messages.length + index,
+        worker,
+      })),
+  ].sort((left, right) =>
+    left.at && right.at
+      ? left.at.localeCompare(right.at) || left.order - right.order
+      : left.order - right.order,
+  );
 
-  return messages.map((message, index) => (
+  return records.map((record) => record.kind === "worker" ? (
+    <SessionObserverWorkerRecord key={record.id} worker={record.worker} />
+  ) : (
     <MessageRow
-      key={message.id}
-      role={message.role === "user" ? "user" : "assistant"}
+      key={record.id}
+      role={record.message.role === "user" ? "user" : "assistant"}
       dataTestClass="steward-observer-message"
     >
-      <MessageContent message={message} copied={false} footerMeta={null} />
-      {index === workerAnchor && workerNames.length > 0 ? (
-        <Stack
-          align="row"
-          gap="xs"
-          wrap
-          data-test-class="steward-observer-worker-capsules"
-        >
-          {workerNames.map((name) => (
-            <Tag key={name} ariaLabel={`Worker ${name}`}>{name}</Tag>
-          ))}
-        </Stack>
-      ) : null}
+      <MessageContent
+        message={record.message}
+        copied={false}
+        footerMeta={null}
+      />
     </MessageRow>
   ));
 }

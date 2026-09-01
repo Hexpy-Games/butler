@@ -130,6 +130,7 @@ export interface WorkerActivitySummary {
   task_id?: string;
   orchestration_id?: string;
   terminal: boolean;
+  created_at?: string;
   updated_at: string;
   supported_controls: Array<"cancel" | "resume">;
 }
