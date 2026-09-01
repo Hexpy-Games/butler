@@ -72,6 +72,20 @@ export function createSubsessionDelegationService(
     }
     assertExactChildLedgerProjectIdentity(childBinding);
     const rootWorkScope = childBinding.role === "worker" ? {} : stewardRootWorkScope(childBinding);
+    const initialChildTurnId = input.store.childTurnIdByRelationId(relation.relation_id);
+    if (!initialChildTurnId) throw new Error("subsession_child_turn_identity_missing");
+    if (child.childTurnId !== initialChildTurnId) {
+      const work = await input.durableWork.bindOpenWork({
+        sessionId: child.childSessionId,
+        turnId: child.childTurnId,
+        ...rootWorkScope,
+      }, expectedRootWorkId);
+      if (!work || work.workId !== expectedRootWorkId ||
+        work.sessionId !== child.childSessionId) {
+        throw new Error("subsession_root_work_identity_mismatch");
+      }
+      return work.workId;
+    }
     const work = await input.durableWork.startWork({
       sessionId: child.childSessionId,
       turnId: child.childTurnId,

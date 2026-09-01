@@ -778,6 +778,102 @@ test("late Worker result is acknowledged without waking a terminal Steward", asy
   expect(deliveredResultIds).toEqual([pending.result_id]);
 });
 
+test("Worker result continuation reuses the admitted Steward Work", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-steward-worker-result-work-"));
+  roots.push(root);
+  initializeGitWorkspace(root);
+  publishNativeReadiness(root);
+  const authToken = "steward-worker-result-auth-token-012345678901234567";
+  const bindings = new SessionBindingStore(
+    join(root, "runtime", "session-store.sqlite"),
+    "ephemeral",
+  );
+  const parentSessionId = sessionHintForRow("general");
+  bindings.upsert({
+    sessionId: parentSessionId,
+    role: "butler",
+    workspacePath: root,
+    runtimeAdapterId: "btcc-turn-runtime",
+    modelProviderId: "openai",
+    modelRef: "openai/gpt-5.5",
+    transportBindings: [{ transport: "app", accountId: "local", peerId: "general" }],
+  });
+  const app = createAppServer({
+    dbPath: join(root, "app.sqlite"),
+    butlerHome: root,
+    butlerData: root,
+    port: 0,
+    localAuth: { required: true, token: authToken },
+  });
+  const composition = createProductionBtccComposition({
+    butlerHome: root,
+    butlerData: root,
+    ownerId: "steward-worker-result-work-test",
+    sessionBindings: bindings,
+    appServerUrl: app.url,
+    appLocalAuth: { required: true, token: authToken },
+    modelRound: { async runRound() { return { text: "unused", toolCalls: [] }; } },
+  });
+  try {
+    const parentTurnId = "parent-turn-worker-result-work";
+    const reviewed = await installReviewedDelegationPlan({
+      dbPath: join(root, "agent-runtime", "btcc.sqlite"),
+      sessionId: parentSessionId,
+      turnId: parentTurnId,
+      objective: "Delegate one bounded Worker task and integrate its result.",
+      check: "The Worker result continues the same Steward Work.",
+    });
+    const created = await composition.subsessions.delegate({
+      parent_session_id: parentSessionId,
+      parent_turn_id: parentTurnId,
+      anchor_message_id: "anchor-worker-result-work",
+      parent_access_mode: "full_access",
+      execution_mode: "mutation",
+      safe_title: "Integrate Worker result",
+      objective: reviewed.objective,
+      acceptance_criteria: reviewed.acceptance_criteria,
+      task_or_plan_refs: reviewed.task_or_plan_refs,
+      constraints_and_non_goals: [],
+      allowed_tools_and_effects: ["write_file:workspace"],
+      mutation_scope: ["worker-result.txt"],
+      parent_work_ref: reviewed.parent_work_ref,
+      model_ref: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+    const dbPath = join(root, "agent-runtime", "btcc.sqlite");
+    admitSubsessionTurn(dbPath, created.relation.child_session_id, created.child_turn_id);
+    const initialWorkId = await composition.subsessions.ensureChildRootWork({
+      childSessionId: created.relation.child_session_id,
+      childTurnId: created.child_turn_id,
+      objective: reviewed.objective,
+    });
+    const continuationTurnId = `steward-worker-result-${"a".repeat(32)}`;
+    admitSubsessionTurn(dbPath, created.relation.child_session_id, continuationTurnId);
+    expect(await composition.subsessions.ensureChildRootWork({
+      childSessionId: created.relation.child_session_id,
+      childTurnId: continuationTurnId,
+      objective: "Integrate the completed Worker result.",
+    })).toBe(initialWorkId);
+
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_works WHERE session_id = ?
+      `).get(created.relation.child_session_id)?.count).toBe(1);
+      expect(db.query<{ work_id: string }, [string]>(`
+        SELECT work_id FROM btcc_guided_turn_work_bindings WHERE turn_id = ?
+      `).get(continuationTurnId)?.work_id).toBe(initialWorkId);
+    } finally {
+      db.close();
+    }
+  } finally {
+    app.stop();
+    await composition.host.close();
+    bindings.close();
+    clearNativeReadiness(root);
+  }
+});
+
 test("populated current Steward results reopen through the additive detail migration", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-steward-result-migration-"));
   roots.push(root);
@@ -1114,6 +1210,45 @@ async function installReviewedDelegationPlan(input: {
       actions: planned.currentPlan.actions.map((action) => ({ ...action })),
       action_progress: reviewed.actionProgress.map((progress) => ({ ...progress })),
     };
+  } finally {
+    db.close();
+  }
+}
+
+function admitSubsessionTurn(dbPath: string, sessionId: string, turnId: string): void {
+  const db = new Database(dbPath);
+  try {
+    const checkpointId = `checkpoint-${turnId}`;
+    db.query(`
+      INSERT INTO btcc_turns (
+        turn_id, session_id, inbox_id, trigger_key, original_message_id,
+        original_message, admission_snapshot_ref, model_selection_json,
+        context_json, semantic_state, active_checkpoint_id, revision, execution_fence
+      ) VALUES (?, ?, ?, ?, ?, 'subsession input', 'snapshot', ?, ?,
+        'admitted', ?, 1, 0)
+    `).run(
+      turnId,
+      sessionId,
+      `inbox-${turnId}`,
+      `trigger-${turnId}`,
+      `message-${turnId}`,
+      JSON.stringify({
+        provider: "openai", model: "gpt-5.5", reasoningEffort: "low",
+        controls: { accessMode: "full_access" }, controlsHash: "controls",
+      }),
+      JSON.stringify({
+        userRef: "local-user", profileRefs: [], recentFeedbackRefs: [],
+        mandatoryHotCacheRefs: [], optionalHotCacheRefs: [],
+        baselineObservationScopeRefs: [],
+      }),
+      checkpointId,
+    );
+    db.query(`
+      INSERT INTO btcc_checkpoints (
+        checkpoint_id, turn_id, turn_revision, semantic_state, kind,
+        checkpoint_revision, is_active
+      ) VALUES (?, ?, 1, 'admitted', 'runtime', 1, 1)
+    `).run(checkpointId, turnId);
   } finally {
     db.close();
   }
