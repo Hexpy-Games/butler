@@ -1,5 +1,6 @@
 .dialog {
   grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: 60%;
   overflow: hidden;
   -webkit-mask-image: none;
   mask-image: none;
