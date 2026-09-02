@@ -7,6 +7,8 @@ import {
   projectStewardSession,
 } from "../../packages/butler-agent/src/gateways/app/domain/sessions/steward-observer.ts";
 import { sessionViewForStewardObserver } from "../../packages/butler-agent/src/gateways/app/domain/sessions/steward-observer-view.ts";
+import { projectStewardWorkerActivity } from "../../packages/butler-agent/src/gateways/app/domain/sessions/steward-observer-worker.ts";
+import { relabelWorkerActivities } from "../../packages/butler-agent/src/gateways/app/domain/workers/worker-activity-ordering.ts";
 
 describe("App Steward observer projection", () => {
   test("merges one tool call's start and completion into one activity row", () => {
@@ -366,6 +368,13 @@ describe("App Steward observer projection", () => {
         "steward-turn-1", "work-timeline",
         JSON.stringify({ objective: "Butler가 작성한 원래 요청" }),
         "2026-08-30T00:00:00.000Z");
+    db.query(`INSERT INTO btcc_subsession_delegations
+      (delegation_id, relation_id, task_id, child_turn_id, root_work_id,
+       packet_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run("delegation-worker", "relation-worker", "task-worker",
+        "worker-turn-1", "worker-work-1", JSON.stringify({
+          objective: "운영 배포 기준 확인",
+        }), "2026-08-30T00:01:30.000Z");
     for (const [turnId, messageId, state] of [
       ["steward-turn-1", "steward-message:delegation-timeline", "delivered"],
       ["steward-turn-2", "subsession-direction-message:direction-timeline", "delivered"],
@@ -415,7 +424,13 @@ describe("App Steward observer projection", () => {
     const observer = new SqliteStewardObserverStore(db);
     const relation = observer.relationsForParent("parent-timeline")[0]!;
     const snapshot = observer.snapshot("steward-timeline")!;
-    const view = sessionViewForStewardObserver(relation, snapshot, 2);
+    const workerRelation = observer.relationsForParent("steward-timeline")[0]!;
+    const worker = relabelWorkerActivities([projectStewardWorkerActivity(
+      workerRelation,
+      observer.snapshot(workerRelation.child_session_id),
+      observer.delegationPresentation(workerRelation.relation_id),
+    )])[0]!;
+    const view = sessionViewForStewardObserver(relation, snapshot, 2, [worker]);
     expect(view.messages.map((message) => [message.role, message.text])).toEqual([
       ["user", "Butler가 작성한 원래 요청"],
       ["assistant", "첫 번째 스튜어드 응답"],
@@ -428,6 +443,13 @@ describe("App Steward observer projection", () => {
     expect(view.active_turn).toBeNull();
     expect(view.latest_turn?.state).toBe("delivered");
     expect(view.waiting_for_children).toBe(true);
+    expect(view.workers).toEqual([expect.objectContaining({
+      worker_display_name: "Kai",
+      worker_ordinal_label: "Worker 1",
+      objective: "운영 배포 기준 확인",
+      phase: "executing",
+      terminal: false,
+    })]);
     expect(JSON.stringify(view)).not.toContain("raw Worker transport");
     db.close();
   });
