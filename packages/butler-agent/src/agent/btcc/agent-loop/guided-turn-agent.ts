@@ -64,6 +64,7 @@ export function createProductionGuidedTurnAgent(
       const policy = phasePolicy.executionPolicy;
       const workerResultIntegration = policy.role === "steward" &&
         turn.turnId.startsWith("steward-worker-result-");
+      const terminalParentSynthesis = Boolean(subsessionResultEvidence) && !workerResultIntegration;
       const askFirstTurn = policy.accessMode === "ask_first";
       const progressCapture = createGuidedOperationalProgressCapture(
         askFirstTurn
@@ -85,7 +86,7 @@ export function createProductionGuidedTurnAgent(
         input.subsessionDelegation) {
         await ensureSubsessionChildRootWork({ service: input.subsessionDelegation, turn });
       }
-      if (subsessionResultEvidence?.outcome === "success" && !workerResultIntegration) {
+      if (subsessionResultEvidence?.outcome === "success" && terminalParentSynthesis) {
         const parentWork = await safeBindOpenWork(
           input.durableWork,
           workScope,
@@ -128,9 +129,9 @@ export function createProductionGuidedTurnAgent(
         sessionId: turn.sessionId,
         projectRef: policy.projectId ?? turn.context.projectRef,
       });
-      const authorizedTools = subsessionResultEvidence ? directSynthesisToolDefinitions(phasePolicy.authorizedTools) : phasePolicy.authorizedTools;
+      const authorizedTools = terminalParentSynthesis ? directSynthesisToolDefinitions(phasePolicy.authorizedTools) : phasePolicy.authorizedTools;
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
-      const baseVisibleTools = subsessionResultEvidence ? directSynthesisToolDefinitions(phasePolicy.providerTools) : phasePolicy.providerTools;
+      const baseVisibleTools = terminalParentSynthesis ? directSynthesisToolDefinitions(phasePolicy.providerTools) : phasePolicy.providerTools;
       const workerProfiles = policy.role === "steward" &&
           baseVisibleTools.some((tool) => tool.name === "delegate_to_worker")
         ? await input.subsessionDelegation?.enabledWorkerProfiles?.() ?? []
@@ -288,7 +289,6 @@ export function createProductionGuidedTurnAgent(
         durableWork: input.durableWork, workScope,
         turnId: turn.turnId, originalRequest: turn.originalMessage,
         trackingMode: policy.trackingMode, responseLanguage,
-        parentResultIntegration: workerResultIntegration,
       });
       const delegationRelease = createGuidedDelegationTurnRelease({
         reviewFinalCandidate: closeout.reviewFinalCandidate,

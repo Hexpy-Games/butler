@@ -15,7 +15,6 @@ type GuidedTurnCloseoutInput = {
   trackingMode: "ledger" | "local" | "none";
   responseLanguage: string;
   originalRequest: string;
-  parentResultIntegration?: boolean;
 };
 
 type GuidedTurnCloseoutReview =
@@ -92,9 +91,6 @@ export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
   return {
     async reviewFinalCandidate(candidate) {
       try {
-        if (input.parentResultIntegration) {
-          return { status: "accepted" as const };
-        }
         if (input.trackingMode === "none") {
           return { status: "accepted" as const };
         }
@@ -128,7 +124,6 @@ export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
 
     async reconcileAfterLoop(text) {
       try {
-        if (input.parentResultIntegration) return text;
         if (input.trackingMode === "none") return text;
         const bound = await loadBoundWork(input);
         if (!bound) return text;

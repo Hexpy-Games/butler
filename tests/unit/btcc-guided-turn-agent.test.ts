@@ -14,6 +14,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TurnRecord, TurnStateRepository } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
+import type { SubsessionDelegationService } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
 import type { BtccRunCommand } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { DurableWorkService, DurableWorkView } from
@@ -267,6 +269,127 @@ test("feature Guided Turn restores the existing bounded Work closeout opportunit
     } else {
       process.env.BUTLER_PHASE_TOOL_SURFACE = previousSurface;
     }
+  }
+});
+
+test("Worker result returns to the current Steward Work before reporting", async () => {
+  const previousSurface = process.env.BUTLER_PHASE_TOOL_SURFACE;
+  process.env.BUTLER_PHASE_TOOL_SURFACE = "on";
+  const fixture = createFixture("guided-worker-result-resume");
+  try {
+    const turnId = `steward-worker-result-${"a".repeat(32)}`;
+    const turn = await admitTurn(
+      localRunCommand(fixture.root, turnId),
+      fixture.stores.admission,
+      fixture.stores.turns,
+    );
+    turn.context.executionPolicy = {
+      role: "steward",
+      accessMode: "full_access",
+      trackingMode: "local",
+      requiredNativeToolProfiles: [],
+      requiredNativeTools: [],
+      workspacePath: fixture.root,
+      subsession: {
+        relationId: "relation-worker-result-resume",
+        delegationId: "delegation-worker-result-resume",
+        taskId: "task-worker-result-resume",
+        executionMode: "mutation",
+        mutationScope: ["."],
+        allowedToolsAndEffects: [],
+      },
+    };
+    const subsessionDelegation = {
+      async ensureChildRootWork(input: {
+        childTurnId: string;
+        childSessionId: string;
+        objective: string;
+      }) {
+        const existing = await fixture.stores.durableWork.boundWorkForTurn(
+          input.childTurnId,
+        );
+        if (existing) return existing.workId;
+        const work = await fixture.stores.durableWork.replacePlan({
+          turnId: input.childTurnId,
+          sessionId: input.childSessionId,
+          mutationCallId: "worker-result-resume-plan",
+          startNew: true,
+          objective: input.objective,
+          actions: [{
+            actionKey: "finish-requested-outcome",
+            description: "Finish the requested outcome after Worker return",
+            dependencyKeys: [],
+          }],
+          checks: [],
+        });
+        return work.workId;
+      },
+      async resolveParentResultEvidence() {
+        return {
+          synthesisEvidence: "The Worker completed its assigned implementation.",
+          outcome: "success" as const,
+          parentWorkId: "worker-parent-work",
+          changedFiles: [],
+        };
+      },
+      async enabledWorkerProfiles() { return []; },
+      async activeParentDelegations() { return []; },
+      async consumeStewardDirection() { return null; },
+    } as unknown as SubsessionDelegationService;
+    let modelCalls = 0;
+    const agent = fixture.admitEol(createProductionGuidedTurnAgent({
+      phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
+      butlerHome: fixture.root,
+      butlerData: fixture.root,
+      contextDocuments: fixture.stores.contextDocuments,
+      toolJournal: fixture.stores.guidedToolJournal,
+      operationResultReader: fixture.stores.guidedOperationResultReader,
+      effectJournal: fixture.stores.guidedEffectJournal,
+      durableWork: fixture.stores.durableWork,
+      subsessionDelegation,
+      modelRound: {
+        async runRound(request) {
+          modelCalls += 1;
+          if (modelCalls === 1) {
+            expect(request.tools.map((tool) => tool.name)).toContain("read_file");
+            expect(request.messages[0]?.content).toContain(
+              "Integrate it as an intermediate tool result",
+            );
+            return { text: "Worker review completed; other work remains.", toolCalls: [] };
+          }
+          if (modelCalls === 2) {
+            expect(request.messages.at(-1)?.content).toContain(
+              "record_work_disposition",
+            );
+            const work = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+            return toolResponse([toolCall(
+              "worker-result-resume-disposition",
+              "record_work_disposition",
+              {
+                work_id: work!.workId,
+                disposition: "completed",
+                summary: "The requested outcome is complete.",
+                action_updates: [{
+                  action_key: "finish-requested-outcome",
+                  status: "done",
+                }],
+              },
+            )]);
+          }
+          return { text: "The requested outcome is complete.", toolCalls: [] };
+        },
+      },
+    }));
+
+    const result = await agent.run({ turn, signal: new AbortController().signal });
+
+    expect(result.content).toBe("The requested outcome is complete.");
+    expect(modelCalls).toBe(3);
+    await expect(fixture.stores.durableWork.boundWorkForTurn(turnId)).resolves
+      .toMatchObject({ status: "completed" });
+  } finally {
+    fixture.close();
+    restoreEnv("BUTLER_PHASE_TOOL_SURFACE", previousSurface);
   }
 });
 
