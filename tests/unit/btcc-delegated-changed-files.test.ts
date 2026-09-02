@@ -6,6 +6,7 @@ import { SqliteSubsessionDelegationStore } from "../../packages/butler-agent/src
 import { SqliteStewardObserverStore } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/steward-observer-store.ts";
 import { changedFileDetail, type ChangedFileDetail } from "../../packages/butler-agent/src/agent/tools/file-tools/shared/changed-file-detail.ts";
 import { collectGuidedChangedFiles } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-changed-files.ts";
+import { collectGuidedFinalArtifacts } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
 import { resolveParentResultEvidence } from "../../packages/butler-agent/src/agent/btcc/subsessions/accepted-terminal-report.ts";
 import { sessionViewForStewardObserver } from "../../packages/butler-agent/src/gateways/app/domain/sessions/steward-observer-view.ts";
 
@@ -57,9 +58,31 @@ test("delegated changes survive a review-only continuation through Worker, Stewa
       parentSessionId: "butler",
       parentInputText: final.parentInput.text,
       store,
-      turns: { findTurn: async () => null },
+      turns: { findTurn: async (turnId) => {
+        expect(turnId).toBe("steward-review");
+        return {
+          turnId, sessionId: "steward", inboxId: "inbox", triggerKey: "trigger",
+          originalMessageId: "input", originalMessage: "Report the result",
+          modelSelection: {
+            provider: "openai", model: "test", reasoningEffort: "low",
+            controls: { accessMode: "full_access" }, controlsHash: "controls",
+          },
+          context: { userRef: "user", profileRefs: [], recentFeedbackRefs: [],
+            mandatoryHotCacheRefs: [], optionalHotCacheRefs: [], baselineObservationScopeRefs: [] },
+          semanticState: "delivered", revision: 1, executionFence: 0,
+          finalPayload: {
+            ref: { id: "payload", sha256: "digest" }, content: "Completed", contentSha256: "digest",
+            artifacts: [{ id: "artifact-report", kind: "report", title: "report.md",
+              safePathLabel: "artifacts/generated/report.md" }],
+          },
+        };
+      } },
     });
     expect(collectGuidedChangedFiles([], evidence?.changedFiles)).toEqual(expected);
+    expect(collectGuidedFinalArtifacts([], evidence?.artifacts)).toEqual([{
+      id: "artifact-report", kind: "report", title: "report.md",
+      safePathLabel: "artifacts/generated/report.md",
+    }]);
     expect(evidence?.synthesisEvidence).not.toContain("src/app.ts");
 
     const observer = new SqliteStewardObserverStore(db);

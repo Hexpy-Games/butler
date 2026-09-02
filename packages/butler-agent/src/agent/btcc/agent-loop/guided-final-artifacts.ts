@@ -9,9 +9,16 @@ const MAX_FINAL_ARTIFACT_BYTES = 10 * 1024 * 1024;
 
 export function collectGuidedFinalArtifacts(
   records: readonly GuidedToolJournalRecord[],
+  inherited: readonly BtccFinalArtifact[] = [],
 ): BtccFinalArtifact[] {
   const artifacts: BtccFinalArtifact[] = [];
   const seen = new Set<string>();
+  for (const artifact of inherited) {
+    if (seen.has(artifact.safePathLabel)) continue;
+    seen.add(artifact.safePathLabel);
+    artifacts.push(artifact);
+    if (artifacts.length >= MAX_FINAL_ARTIFACTS) return artifacts;
+  }
   for (const record of records) {
     if (record.status !== "completed") continue;
     const result = object(record.result);

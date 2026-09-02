@@ -1,4 +1,5 @@
 import type { SubsessionDelegationDependencies } from "./contracts.ts";
+import type { BtccFinalArtifact } from "../contracts.ts";
 import { contentRef, digest } from "../identity/index.ts";
 import { subsessionChildTurnId, subsessionResultId } from "./identities.ts";
 import { terminalResultIntegrityFailure } from "./terminal-result-integrity.ts";
@@ -36,6 +37,7 @@ export async function resolveParentResultEvidence(input: {
   outcome: "success" | "blocked" | "failed" | "cancelled";
   parentWorkId: string;
   changedFiles: ChangedFileDetail[];
+  artifacts: BtccFinalArtifact[];
 } | null> {
   const refs = subsessionParentResultRefs(input.parentInputText);
   if (!refs) return null;
@@ -55,6 +57,7 @@ export async function resolveParentResultEvidence(input: {
     "Canonical child result synthesis",
     "Report completed work, remaining work, and the next action in user terms; do not start Work in this result-report Turn.",
   ];
+  const childTurn = await input.turns.findTurn(result.child_turn_id);
   return {
     synthesisEvidence: [
       ...synthesisInstruction,
@@ -65,6 +68,7 @@ export async function resolveParentResultEvidence(input: {
     outcome: result.status,
     parentWorkId: packet.parent_work_ref.work_id,
     changedFiles: result.changed_files ?? [],
+    artifacts: childTurn?.finalPayload?.artifacts ?? [],
   };
 }
 

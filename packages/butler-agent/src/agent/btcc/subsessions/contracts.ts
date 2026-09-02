@@ -1,4 +1,5 @@
 import type { DurableWorkService } from "../work/index.ts";
+import type { BtccFinalArtifact } from "../contracts.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
 import type { WorkerProfile } from "../../../gateways/app/interface/protocol/settings-contract.ts";
 import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
@@ -359,6 +360,7 @@ export type SubsessionDelegationService = {
     outcome: StewardResultStatus;
     parentWorkId: string;
     changedFiles: ChangedFileDetail[];
+    artifacts: BtccFinalArtifact[];
   } | null>;
   resultIdForRelation(relationId: string): string | null;
   pendingParentInputCount(): number;
