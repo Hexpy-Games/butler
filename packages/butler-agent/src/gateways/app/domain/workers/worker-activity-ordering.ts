@@ -13,7 +13,47 @@ const WORKER_DISPLAY_NAMES = [
   "Rina",
   "Noel",
   "Yuna",
+  "Milo",
+  "Luna",
+  "Remi",
+  "Niko",
+  "Maya",
+  "Rio",
+  "Cora",
+  "Eden",
+  "Finn",
+  "Hana",
+  "Iris",
+  "Jude",
+  "Kira",
+  "Luca",
+  "Mira",
+  "Nia",
+  "Oren",
+  "Pia",
+  "Quinn",
+  "Ravi",
+  "Sora",
+  "Tali",
+  "Uma",
+  "Vera",
+  "Wynn",
+  "Xena",
+  "Yuri",
+  "Zane",
+  "Asha",
+  "Bo",
+  "Cleo",
+  "Dara",
+  "Elio",
+  "Faye",
+  "Gio",
+  "Hope",
+  "Ivo",
+  "Jo",
 ] as const;
+
+const LEGACY_WORKER_DISPLAY_NAME_COUNT = 12;
 
 export function relabelWorkerActivities(
   workers: WorkerActivitySummary[],
@@ -88,17 +128,38 @@ function uniqueWorkerDisplayNameFor(
   usedNames: Set<string>,
 ): string {
   const seed = stableNameSeed(workerId);
-  for (let cycle = 0; ; cycle += 1) {
-    for (let offset = 0; offset < WORKER_DISPLAY_NAMES.length; offset += 1) {
-      const baseName =
-        WORKER_DISPLAY_NAMES[(seed + offset) % WORKER_DISPLAY_NAMES.length] ??
-          "Ari";
-      const candidate = cycle === 0 ? baseName : `${baseName} ${cycle + 1}`;
-      if (usedNames.has(candidate)) continue;
-      usedNames.add(candidate);
-      return candidate;
-    }
+  const legacyNames = WORKER_DISPLAY_NAMES.slice(
+    0,
+    LEGACY_WORKER_DISPLAY_NAME_COUNT,
+  );
+  const expandedNames = WORKER_DISPLAY_NAMES.slice(
+    LEGACY_WORKER_DISPLAY_NAME_COUNT,
+  );
+  const baseName = firstAvailableName(legacyNames, seed, usedNames) ??
+    firstAvailableName(expandedNames, seed, usedNames);
+  if (baseName) return baseName;
+  for (let suffix = 2; ; suffix += 1) {
+    const suffixedName = firstAvailableName(
+      WORKER_DISPLAY_NAMES.map((name) => `${name} ${suffix}`),
+      seed,
+      usedNames,
+    );
+    if (suffixedName) return suffixedName;
   }
+}
+
+function firstAvailableName(
+  names: readonly string[],
+  seed: number,
+  usedNames: Set<string>,
+): string | null {
+  for (let offset = 0; offset < names.length; offset += 1) {
+    const candidate = names[(seed + offset) % names.length] ?? null;
+    if (!candidate || usedNames.has(candidate)) continue;
+    usedNames.add(candidate);
+    return candidate;
+  }
+  return null;
 }
 
 function stableNameSeed(value: string): number {
