@@ -30,7 +30,7 @@ import {
 } from "../../packages/butler-agent/src/agent/btcc/identity/index.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
-import { createProductionGuidedTurnAgent, type BtccAgentLoop } from
+import { createProductionGuidedTurnAgent, runBtccAgentLoop, type BtccAgentLoop } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import { dispositionMaterialFingerprint } from
   "../../packages/butler-agent/src/agent/btcc/work/index.ts";
@@ -6478,6 +6478,49 @@ test("Guided parent cancellation does not deliver an operational fallback", asyn
 
   await expect(running).rejects.toThrow("user stopped the Turn");
   expect(factLoads).toBe(0);
+});
+
+test("Guided tool exceptions retain the full message in the journal and next model round", async () => {
+  const fixture = createFixture("guided-full-tool-error");
+  try {
+    const turn = turnRecord(fixture.root, { turnId: "turn-full-tool-error" });
+    const message = `${"diagnostic detail ".repeat(150)}ROOT CAUSE: missing dependency`;
+    const expected = `grep_files could not complete: ${message}`;
+    const executor = createGuidedToolCallExecutor({
+      turn, signal: new AbortController().signal,
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["grep_files"]), describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      workspacePath: () => fixture.root, butlerData: fixture.root,
+      executeButlerTool: async () => { throw new Error(message); },
+    });
+    const result = await runBtccAgentLoop({
+      prompt: "Find the cause.",
+      tools: authorizedToolDefinitions(turn, {}).filter((tool) => tool.name === "grep_files"),
+      executeTool: (call) => executor.executeTool({
+        name: call.name, args: call.arguments, rawArguments: call.rawArguments,
+        providerCallId: call.id,
+      }),
+      modelRound: scriptedModelRound([
+        toolResponse([toolCall("long-error", "grep_files", { pattern: "fact", root: "." })]),
+        (request) => {
+          const output = toolMessageOutput(messagesWithToolResults(request)[0]);
+          expect(output).toEqual({
+            ok: false, error: { code: "tool_error", message: expected },
+            output: { ok: false, error: { code: "tool_error", message: expected } },
+          });
+          return { text: "The missing dependency caused the failure.", toolCalls: [] };
+        },
+      ]),
+    });
+    expect(result.finalText).toBe("The missing dependency caused the failure.");
+    const records = fixture.stores.guidedToolJournal.list(turn.turnId);
+    expect(records).toHaveLength(1);
+    expect(records[0]?.result).toEqual({ ok: false, error: { code: "tool_error", message: expected } });
+  } finally {
+    fixture.close();
+  }
 });
 
 test("process replacement interruption rejects identically without finalizing the tool call", async () => {

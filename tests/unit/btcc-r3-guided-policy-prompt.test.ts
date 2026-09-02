@@ -669,6 +669,23 @@ test("guided read-only policy authorizes and visibly exposes list_files", () => 
   expect(visible.find((tool) => tool.name === "list_files")?.parameters.properties).toHaveProperty("include_globs");
 });
 
+test("command-capable guided roles expose the existing output artifact reader", () => {
+  for (const role of ["butler", "steward", "worker"] as const) {
+    for (const accessMode of ["ask_first", "full_access"] as const) {
+      const turn = turnRecord({
+        accessMode,
+        executionPolicy: { ...executionPolicy("local"), role, accessMode },
+      });
+      const authorized = authorizedToolDefinitions(turn, {});
+      const visible = visibleToolDefinitions(authorized, guidedPolicy(turn));
+      for (const surface of [authorized, visible]) {
+        expect(surface.map((tool) => tool.name)).toContain("run_command");
+        expect(surface.map((tool) => tool.name)).toContain("read_tool_output_artifact");
+      }
+    }
+  }
+});
+
 test("session worktree binding is visible only on full-access project surfaces", () => {
   const projectFullAccess = turnRecord({
     projectRef: "butler",

@@ -60,7 +60,10 @@ export function applyGuidedWorkspaceAuthorization(input: {
     if (hasProject) input.names.add("bind_session_git_worktree");
     return;
   }
-  if (input.policy.accessMode === "ask_first") input.names.add("run_command");
+  if (input.policy.accessMode === "ask_first") {
+    input.names.add("run_command");
+    input.names.add("read_tool_output_artifact");
+  }
   for (const name of input.names) {
     if (
       !NON_FULL_ACCESS_TOOL_NAMES.has(name) ||
@@ -73,9 +76,10 @@ export function guidedWorkspaceVisibleToolNames(
   policy: WorkspacePolicy,
 ): string[] {
   if (policy.accessMode === "read_only") return [];
-  if (policy.accessMode === "ask_first") return ["run_command"];
+  if (policy.accessMode === "ask_first") return ["run_command", "read_tool_output_artifact"];
   return [
     "run_command",
+    "read_tool_output_artifact",
     "write_file",
     "edit_file",
     ...(policy.projectId ? ["bind_session_git_worktree"] : []),
