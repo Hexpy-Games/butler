@@ -94,7 +94,7 @@ export interface AppStoreSessionApi {
     mimeType?: string;
     bytes: Uint8Array | ArrayBuffer | string;
     allowGeneric?: boolean;
-  }): MessageFileUploadResult;
+  }): Promise<MessageFileUploadResult>;
   getMessageFileDownload(fileId: string): {
     file: MessageFileRef;
     bytes: Buffer;
@@ -228,8 +228,10 @@ export function createSessionStoreApi(
         ),
       });
     },
-    createMessageFile(input) {
-      return kernel.messageFiles.create(input);
+    async createMessageFile(input) {
+      const result = kernel.messageFiles.create(input);
+      await kernel.messageFiles.prepareUploadedContent(result.file.file_id);
+      return result;
     },
     getMessageFileDownload(fileId) {
       return kernel.messageFiles.download(fileId);

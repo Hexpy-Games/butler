@@ -2,18 +2,27 @@
   overflow-x: auto;
   border-radius: var(--radius-control);
   background: var(--surface);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
-.added,
-.deleted {
+.lines {
   display: grid;
   grid-template-columns:
     minmax(var(--space-xl), auto)
     minmax(var(--space-xl), auto)
     var(--space-md)
-    minmax(0, 1fr);
-  min-width: max-content;
+    minmax(max-content, 1fr);
+  width: max-content;
+  min-width: 100%;
   font: var(--font-code);
+}
+
+.added,
+.deleted {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
 }
 
 .added {
@@ -45,5 +54,6 @@
 
 .content {
   color: var(--text-primary);
+  font: inherit;
   white-space: pre;
 }
