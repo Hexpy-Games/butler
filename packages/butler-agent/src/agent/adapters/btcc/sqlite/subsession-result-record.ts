@@ -1,5 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { stableJson } from "../../../btcc/identity/index.ts";
+import {
+  aggregateChangedFileDetails,
+  type ChangedFileDetail,
+} from "../../../tools/file-tools/shared/changed-file-detail.ts";
 import type {
   StewardResultCode,
   StewardResultEnvelope,
@@ -78,6 +82,32 @@ export function insertStewardResult(db: Database, result: StewardResultEnvelope)
     stableJson(result.commits), stableJson(result.tests), stableJson(result.remaining_risks),
     stableJson(result.follow_up_recommendations), stableJson(result.detail_refs), result.created_at,
   );
+}
+
+/** One delegated session and its Workers share a result, even across review continuations. */
+export function collectSubsessionChangedFiles(
+  db: Database,
+  childSessionId: string,
+  reported: readonly ChangedFileDetail[],
+): ChangedFileDetail[] {
+  const mutations = db.query<{ changed_files_json: string }, [string, string]>(`
+    SELECT calls.changed_files_json
+    FROM btcc_turns AS turns
+    JOIN btcc_guided_tool_calls AS calls ON calls.turn_id = turns.turn_id
+    WHERE turns.session_id IN (
+      SELECT ? UNION ALL
+      SELECT child_session_id FROM btcc_session_relations WHERE parent_session_id = ?
+    ) AND calls.status = 'completed' AND calls.changed_files_json IS NOT NULL
+    ORDER BY calls.finished_at, calls.rowid
+  `).all(childSessionId, childSessionId).flatMap((row) =>
+    JSON.parse(row.changed_files_json) as ChangedFileDetail[]);
+  const recordedPaths = new Set(mutations.map((detail) => detail.path));
+  return aggregateChangedFileDetails([
+    // Preserve supplied details without a local mutation record. Recorded paths
+    // use their full history, including a net-zero reversion in a later Turn.
+    ...reported.filter((detail) => !recordedPaths.has(detail.path)),
+    ...mutations,
+  ]);
 }
 
 export function safeStewardSummary(value: string): string {

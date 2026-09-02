@@ -18,6 +18,7 @@ import {
 } from "./subsession-outbox-store.ts";
 import {
   insertStewardResult,
+  collectSubsessionChangedFiles,
   readStewardResult,
   renderParentResult,
   safeStewardSummary,
@@ -266,7 +267,9 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
         summary,
         acceptance_evidence: input.acceptanceEvidence,
         changed_artifacts: input.changedArtifacts,
-        changed_files: input.changedFiles ?? [],
+        changed_files: collectSubsessionChangedFiles(
+          this.db, input.relation.child_session_id, input.changedFiles ?? [],
+        ),
         commits: input.commits,
         tests: input.tests,
         remaining_risks: input.remainingRisks,

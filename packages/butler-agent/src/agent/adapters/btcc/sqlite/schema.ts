@@ -139,6 +139,8 @@ CREATE TABLE IF NOT EXISTS btcc_turns (
   )
 );
 
+CREATE INDEX IF NOT EXISTS idx_btcc_turns_session ON btcc_turns(session_id);
+
 CREATE TABLE IF NOT EXISTS btcc_model_route_events (
   event_id TEXT PRIMARY KEY,
   turn_id TEXT NOT NULL,

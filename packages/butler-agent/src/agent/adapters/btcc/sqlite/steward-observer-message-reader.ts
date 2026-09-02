@@ -11,6 +11,7 @@ type MessageRow = {
   role: "user" | "assistant" | string;
   content: string;
   created_at: string;
+  changed_files_json: string | null;
 };
 
 type DelegationRow = {
@@ -36,14 +37,18 @@ export function readStewardObserverMessages(
     WHERE relation_id = ?
   `).get(relation.relation_id);
   const stored = db.query<MessageRow, [string]>(`
-    SELECT message_id, session_id, turn_id, role, content, created_at
-    FROM btcc_messages
-    WHERE session_id = ? AND role IN ('user', 'assistant')
+    SELECT message_id, messages.session_id, messages.turn_id, role, content, messages.created_at,
+      CASE WHEN role = 'assistant' AND message_id = turns.canonical_assistant_message_id
+        THEN json_extract(turns.final_payload_json, '$.changedFiles')
+      END AS changed_files_json
+    FROM btcc_messages AS messages
+    LEFT JOIN btcc_turns AS turns ON turns.turn_id = messages.turn_id
+    WHERE messages.session_id = ? AND role IN ('user', 'assistant')
       AND message_id NOT LIKE 'steward-message:%'
       AND idempotency_key NOT LIKE 'inbound:%:steward:%'
       AND message_id NOT LIKE 'worker-result-message:%'
       AND message_id NOT LIKE 'subsession-direction-message:%'
-    ORDER BY created_at ASC, message_id ASC
+    ORDER BY messages.created_at ASC, message_id ASC
   `).all(relation.child_session_id).map<StewardObserverMessage>((message) => ({
     id: message.message_id,
     session_id: message.session_id,
@@ -52,6 +57,10 @@ export function readStewardObserverMessages(
     text: message.content,
     created_at: message.created_at,
     updated_at: message.created_at,
+    ...(message.changed_files_json
+      ? { changed_files: JSON.parse(message.changed_files_json) as
+          StewardObserverMessage["changed_files"] }
+      : {}),
   }));
   const directions = db.query<DirectionRow, [string]>(`
     SELECT instruction_id, instruction, created_at, applied_child_turn_id

@@ -31,6 +31,7 @@ export interface StewardObserverMessage {
   text: string;
   created_at: string;
   updated_at: string;
+  changed_files?: StewardResultView["changed_files"];
 }
 
 export interface StewardObserverProgressEvent {
