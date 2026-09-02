@@ -294,7 +294,7 @@ test("guided instructions require reviewed Butler intent before delegation", () 
     "follow the Butler conception, Plan, and Plan Review flow, then call delegate_to_steward",
   );
   expect(instructions).toContain(
-    "Do not add Project Ledger records, commit requirements, proof campaigns, or test matrices that the user and reviewed Plan did not request",
+    "Do not add Project Ledger records, commit requirements, independent reviews, proof campaigns, broad quality gates, or test matrices that the current user request and reviewed Plan did not require",
   );
   expect(instructions).toContain(
     "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",
@@ -376,8 +376,8 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
     "Use record_work_disposition as the sole Work closeout authority, exactly as an ordinary Butler BTCC Turn does. Reviews and completion Validation are optional quality records, never Steward-only completion gates.";
   const inheritedAccessContract =
     "You inherit the Composer Turn's admitted full_access access mode exactly.";
-  const multiStepPlanContract =
-    "Use at least two truthful top-level Plan actions for this substantial delegated Work; do not collapse materially separate discovery, mutation, verification, or synthesis stages into one umbrella action.";
+  const optionalQualityContract =
+    "Independent review and broad validation are optional. Do not turn them into Plan actions or completion conditions unless the user requested them or a concrete current risk makes that specific check necessary.";
   const common = {
     relationId: "relation",
     delegationId: "delegation",
@@ -403,7 +403,8 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
   expect(readOnlyInstructions).toContain(
     "do not treat this task label as an access mode or tool restriction",
   );
-  expect(readOnlyInstructions).toContain(multiStepPlanContract);
+  expect(readOnlyInstructions).toContain(optionalQualityContract);
+  expect(readOnlyInstructions).not.toContain("Use at least two truthful top-level Plan actions");
   const mutationInstructions = guidedStewardInstructions({
     accessMode: "full_access",
     subsession: {
@@ -415,7 +416,7 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
   });
   expect(mutationInstructions).toContain(commonCloseout);
   expect(mutationInstructions).not.toContain("only then settle the child Work as completed");
-  expect(mutationInstructions).toContain(multiStepPlanContract);
+  expect(mutationInstructions).toContain(optionalQualityContract);
   expect(mutationInstructions).toContain(
     "project Hot Cache, Project Memory, durable feedback and corrections",
   );
@@ -466,7 +467,7 @@ test("Steward may delegate one Plan action while Worker has only execution duty"
   expect(stewardTools).toContain(steerWorkerToolDefinition.name);
   expect(stewardTools).toContain("write_file");
   expect(guidedStewardInstructions(stewardPolicy)).toContain(
-    "direct execution and/or bounded Worker orchestration",
+    "execute directly and/or through a bounded Worker",
   );
 
   const workerPolicy = { ...stewardPolicy, role: "worker" };
