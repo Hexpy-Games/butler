@@ -7,6 +7,7 @@ import type {
 } from "../../interface/protocol/app-protocol.ts";
 import { progressRowFromSharedTurnEvent } from "../../../../../../butler-progress-projection/src/index.ts";
 import { projectBtccFinalReport } from "../../../../agent/btcc/index.ts";
+import { dedupeProgressRows } from "../progress-summary/progress-row-merge.ts";
 import { normalizeProgressSummaryRow } from "../progress-summary/progress-row-normalizer.ts";
 
 export interface StewardObserverRelation extends SessionRelationView {}
@@ -127,7 +128,7 @@ export function projectStewardActivityRows(
   snapshot: StewardObserverSnapshot,
   turnId?: string,
 ): ProgressSummaryRow[] {
-  const rows = snapshot.progress_events
+  const rows = dedupeProgressRows(snapshot.progress_events
     .filter((event) => event.visibility === "public")
     .filter((event) => !turnId || event.turn_id === turnId)
     .flatMap((event) => {
@@ -140,7 +141,7 @@ export function projectStewardActivityRows(
         payload: event.payload,
       });
       return row ? [normalizeProgressSummaryRow(row)] : [];
-  });
+    }));
   const planRows = !turnId || turnId === snapshot.turns.at(-1)?.id
     ? approvedPlanRows(snapshot.plan, rows)
     : [];

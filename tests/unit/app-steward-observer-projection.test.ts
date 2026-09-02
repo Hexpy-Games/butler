@@ -2,10 +2,73 @@ import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { BTCC_SUCCESSOR_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { SqliteStewardObserverStore } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/steward-observer-store.ts";
-import { projectStewardSession } from "../../packages/butler-agent/src/gateways/app/domain/sessions/steward-observer.ts";
+import {
+  projectStewardActivityRows,
+  projectStewardSession,
+} from "../../packages/butler-agent/src/gateways/app/domain/sessions/steward-observer.ts";
 import { sessionViewForStewardObserver } from "../../packages/butler-agent/src/gateways/app/domain/sessions/steward-observer-view.ts";
 
 describe("App Steward observer projection", () => {
+  test("merges one tool call's start and completion into one activity row", () => {
+    const rows = projectStewardActivityRows({
+      session_id: "steward-tool-merge",
+      title: "Tool merge",
+      turns: [{
+        id: "turn-tool-merge",
+        state: "delivered",
+        created_at: "2026-09-02T00:00:00.000Z",
+        updated_at: "2026-09-02T00:01:00.000Z",
+      }],
+      messages: [],
+      progress_events: [{
+        id: "tool-started",
+        session_id: "steward-tool-merge",
+        turn_id: "turn-tool-merge",
+        session_sequence: 1,
+        turn_sequence: 1,
+        kind: "tool.started",
+        visibility: "public",
+        payload: {
+          activityKind: "used_tool",
+          safeLabel: "수정 상태와 diff 확인",
+          toolName: "run_command",
+          toolCallId: "tool-call-1",
+          bridgePhase: "btcc_operation",
+          state: "running",
+        },
+        created_at: "2026-09-02T00:00:30.000Z",
+      }, {
+        id: "tool-completed",
+        session_id: "steward-tool-merge",
+        turn_id: "turn-tool-merge",
+        session_sequence: 2,
+        turn_sequence: 2,
+        kind: "tool.completed",
+        visibility: "public",
+        payload: {
+          activityKind: "used_tool",
+          safeLabel: "수정 상태와 diff 확인",
+          toolName: "run_command",
+          toolCallId: "tool-call-1",
+          resultId: "tool-result-1",
+          bridgePhase: "btcc_operation",
+          state: "delivered",
+        },
+        created_at: "2026-09-02T00:01:00.000Z",
+      }],
+      plan: null,
+      result: null,
+      updated_at: "2026-09-02T00:01:00.000Z",
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      state: "delivered",
+      tool_call_id: "tool-call-1",
+      tool_result_id: "tool-result-1",
+    });
+  });
+
   test("projects a stored structured report instead of showing raw JSON", () => {
     const report = JSON.stringify({
       status: "success",
