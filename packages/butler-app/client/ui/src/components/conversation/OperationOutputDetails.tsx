@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import type { OperationOutputView } from "@/app/types.ts";
 import { Button, Stack, Typo, WorkActivityOutput } from "@/butler-ds";
+import { presentOperationOutput } from "./operationOutputPresentation";
 
 export function OperationOutputDetails({
   turnId,
@@ -68,6 +69,11 @@ export function OperationOutputDetails({
     <Stack gap="xs">
       {output.kind === "summary" ? (
         <Typo.Caption>{output.content}</Typo.Caption>
+      ) : output.kind === "command" ? (
+        <Stack gap="xs">
+          <Typo.Caption>{output.summary}</Typo.Caption>
+          {output.content ? <WorkActivityOutput>{output.content}</WorkActivityOutput> : null}
+        </Stack>
       ) : (
         <WorkActivityOutput>{output.content}</WorkActivityOutput>
       )}
@@ -83,46 +89,4 @@ export function OperationOutputDetails({
       ) : null}
     </Stack>
   );
-}
-
-export function presentOperationOutput(
-  toolName: string | undefined,
-  content: string,
-  complete: boolean,
-): { kind: "code" | "summary"; content: string } {
-  if (!complete || !isBasicFileTool(toolName)) {
-    return { kind: "code", content };
-  }
-  let value: Record<string, unknown>;
-  try {
-    const parsed = JSON.parse(content);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { kind: "code", content };
-    }
-    value = parsed as Record<string, unknown>;
-  } catch {
-    return { kind: "code", content };
-  }
-  if (value.ok !== true) return { kind: "code", content };
-  if (toolName === "read_file" && typeof value.content === "string") {
-    return { kind: "code", content: value.content };
-  }
-  const fileName = operationFileName(value.path);
-  if (!fileName) return { kind: "code", content };
-  const action = toolName === "edit_file" ? "수정 완료" : "작성 완료";
-  const byteLabel = typeof value.bytes === "number"
-    ? ` · ${new Intl.NumberFormat("ko-KR").format(value.bytes)}바이트`
-    : "";
-  return { kind: "summary", content: `${action} · ${fileName}${byteLabel}` };
-}
-
-function isBasicFileTool(
-  value: string | undefined,
-): value is "edit_file" | "write_file" | "read_file" {
-  return value === "edit_file" || value === "write_file" || value === "read_file";
-}
-
-function operationFileName(value: unknown): string {
-  if (typeof value !== "string") return "";
-  return value.replace(/\\/gu, "/").split("/").filter(Boolean).at(-1) ?? "";
 }
