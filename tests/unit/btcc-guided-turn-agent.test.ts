@@ -278,6 +278,10 @@ test("Worker result returns to the current Steward Work before reporting", async
   process.env.BUTLER_PHASE_TOOL_SURFACE = "on";
   const fixture = createFixture("guided-worker-result-resume");
   try {
+    const artifacts = [{
+      id: "artifact-worker-report", kind: "report" as const,
+      title: "report.md", safePathLabel: "artifacts/generated/report.md",
+    }];
     const turnId = `steward-worker-result-${"a".repeat(32)}`;
     const turn = await admitTurn(
       localRunCommand(fixture.root, turnId),
@@ -331,6 +335,7 @@ test("Worker result returns to the current Steward Work before reporting", async
           outcome: "success" as const,
           parentWorkId: "worker-parent-work",
           changedFiles: [],
+          artifacts,
         };
       },
       async enabledWorkerProfiles() { return []; },
@@ -385,6 +390,7 @@ test("Worker result returns to the current Steward Work before reporting", async
     const result = await agent.run({ turn, signal: new AbortController().signal });
 
     expect(result.content).toBe("The requested outcome is complete.");
+    expect(result.artifacts).toEqual(artifacts);
     expect(modelCalls).toBe(3);
     await expect(fixture.stores.durableWork.boundWorkForTurn(turnId)).resolves
       .toMatchObject({ status: "completed" });

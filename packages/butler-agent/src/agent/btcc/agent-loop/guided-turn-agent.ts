@@ -383,7 +383,10 @@ export function createProductionGuidedTurnAgent(
         : undefined;
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
       const finalToolRecords = input.toolJournal.list(turn.turnId);
-      const artifacts = collectGuidedFinalArtifacts(finalToolRecords);
+      const artifacts = collectGuidedFinalArtifacts(
+        finalToolRecords,
+        subsessionResultEvidence?.artifacts ?? [],
+      );
       const changedFiles = collectGuidedChangedFiles(
         finalToolRecords,
         subsessionResultEvidence?.changedFiles ?? [],

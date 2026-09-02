@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import {
   mkdirSync,
   mkdtempSync,
@@ -18,6 +19,39 @@ import { projectChildTerminalReport, projectTurnOutcome } from
   "../../packages/butler-agent/src/interfaces/gateway/btcc/project-turn-outcome.ts";
 import { artifactFilesFromOutbound } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/transport/outbound-artifact-files.ts";
+import { AppMessageFileStore } from
+  "../../packages/butler-agent/src/gateways/app/domain/message-files/message-file-store.ts";
+import { migrateAppStoreSchema } from
+  "../../packages/butler-agent/src/gateways/app/infrastructure/core/schema.ts";
+
+test("a child report reaches the parent attachment store without another tool call", () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-inherited-artifact-"));
+  const db = new Database(":memory:");
+  try {
+    migrateAppStoreSchema(db);
+    const messageFiles = new AppMessageFileStore(db, root, () => {});
+    mkdirSync(join(root, "artifacts"));
+    writeFileSync(join(root, "artifacts", "report.md"), "# Completed report\n");
+    const report = {
+      id: "artifact-report", kind: "report" as const, title: "report.md",
+      safePathLabel: "artifacts/report.md", mimeType: "text/plain",
+    };
+    const artifacts = collectGuidedFinalArtifacts([], [report, report]);
+    expect(artifacts).toEqual([report]);
+    const files = messageFiles.createResponderFiles("general", artifactFilesFromOutbound({
+      butlerData: root, butlerHome: root, chatId: "general", artifacts, messageFiles,
+      getChatRow: () => null, getProjectRow: () => null,
+    }));
+    messageFiles.attachToMessage("general", "answer", files);
+    const refs = messageFiles.refsForMessage("answer");
+    expect(refs).toHaveLength(1);
+    expect(refs[0]?.safe_name).toBe("report.md");
+    expect(messageFiles.download(refs[0]!.file_id).bytes.toString()).toBe("# Completed report\n");
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("completed guided tool results become bounded safe final artifacts", () => {
   const artifacts = collectGuidedFinalArtifacts([
