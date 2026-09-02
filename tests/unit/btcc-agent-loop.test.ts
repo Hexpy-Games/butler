@@ -612,7 +612,7 @@ test("BTCC converts thrown tool errors into model-visible tool results", async (
   expect(result.finalText).toBe("The tool failed truthfully.");
 });
 
-test("BTCC promotes resolved logical failures and exposes one compact error", async () => {
+test("BTCC classifies logical failures without discarding their recovery context", async () => {
   let observed: Record<string, unknown> | undefined;
   const rawFailure = {
     ok: false,
@@ -623,10 +623,10 @@ test("BTCC promotes resolved logical failures and exposes one compact error", as
       next_action: "Review the result.",
     },
     work: {
-      work_id: "private-work-id",
-      actions: [{ action_key: "private-action", status: "done" }],
+      work_id: "current-work-id",
+      actions: [{ action_key: "inspect-current-result", status: "done" }],
     },
-    evidence_capability_receipts: [{ private: "receipt" }],
+    evidence_capability_receipts: [{ capability: "source_verified", verified: true }],
   };
   const { port } = scriptedModelRound([
     response({ toolCalls: [call("call-1", "echo", { message: "hello" })] }),
@@ -660,9 +660,8 @@ test("BTCC promotes resolved logical failures and exposes one compact error", as
       code: "invalid_work_stage_transition",
       message: "Result review is required before completion review.",
     },
+    output: rawFailure,
   });
-  expect(JSON.stringify(observed)).not.toContain("private-work-id");
-  expect(JSON.stringify(observed)).not.toContain("receipt");
 });
 
 test("BTCC rejects removed read_file aliases without executing or echoing arguments", async () => {

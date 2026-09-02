@@ -103,7 +103,7 @@ export function ordinaryToolError(
     ok: false,
     error: {
       code: "tool_error",
-      message: `${toolName} could not complete: ${message.slice(0, 1_000)}`,
+      message: `${toolName} could not complete: ${message}`,
     },
   };
 }

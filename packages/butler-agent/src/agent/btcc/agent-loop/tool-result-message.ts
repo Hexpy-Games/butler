@@ -38,6 +38,7 @@ export function toolResultToMessage(input: {
     : {
         ok: false,
         error: input.result.error,
+        ...(providerOutput === undefined ? {} : { output: providerOutput }),
       };
   return {
     role: "tool",
