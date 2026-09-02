@@ -33,6 +33,7 @@ export function projectStewardWorkerActivity(
     phase,
     status_line: workerStatusLine(phase),
     session_id: relation.child_session_id,
+    parent_turn_id: relation.parent_turn_id,
     ...(presentation?.task_id ? { task_id: presentation.task_id } : {}),
     terminal: Boolean(result),
     created_at: relation.created_at,

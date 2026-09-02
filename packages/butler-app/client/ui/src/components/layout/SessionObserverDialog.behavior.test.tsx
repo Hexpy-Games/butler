@@ -228,6 +228,7 @@ function observerView(sessionId: string): SessionView {
     message_window: { next_cursor: 3, complete: true },
     workers: [{
       worker_id: "worker-1",
+      parent_turn_id: "observer-active-turn",
       activity_kind: "worker",
       worker_label: "Worker",
       worker_display_name: "Implementation Worker",
@@ -236,7 +237,7 @@ function observerView(sessionId: string): SessionView {
       phase: "complete",
       status_line: "Completed",
       terminal: true,
-      created_at: "2026-08-19T00:02:00.000Z",
+      created_at: "2026-08-19T00:00:45.000Z",
       supported_controls: [],
     }],
     work_streams: [],

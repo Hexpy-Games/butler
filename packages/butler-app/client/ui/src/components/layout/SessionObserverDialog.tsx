@@ -61,21 +61,22 @@ export function SessionObserverDialog() {
             <SessionObserverTimeline
               messages={view?.messages ?? []}
               workers={view?.workers ?? []}
-            />
-            {view?.active_turn ? (
-              <MessageRow
-                role="assistant"
-                activity
-                dataTestClass="steward-observer-activity"
-              >
-                <TurnActivityPanel
-                  rows={view.active_turn.progress.safe_progress_rows}
-                  state={view.active_turn.state}
-                  startedAt={view.active_turn.created_at}
-                  turnId={view.active_turn.id}
-                />
-              </MessageRow>
-            ) : null}
+            >
+              {view?.active_turn ? (
+                <MessageRow
+                  role="assistant"
+                  activity
+                  dataTestClass="steward-observer-activity"
+                >
+                  <TurnActivityPanel
+                    rows={view.active_turn.progress.safe_progress_rows}
+                    state={view.active_turn.state}
+                    startedAt={view.active_turn.created_at}
+                    turnId={view.active_turn.id}
+                  />
+                </MessageRow>
+              ) : null}
+            </SessionObserverTimeline>
             {view?.waiting_for_children && !view.active_turn ? (
               <MessageRow
                 role="assistant"
