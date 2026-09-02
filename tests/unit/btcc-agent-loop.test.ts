@@ -874,6 +874,43 @@ test("BTCC records every completed parallel result before terminal finalization"
   ]);
 });
 
+test("BTCC turns a completed tool batch into one tool-free final report round", async () => {
+  const tools: BtccAgentLoopToolDefinition[] = [
+    { name: "finish", description: "Finish work.", parameters: {}, concurrencySafe: true },
+    { name: "observe", description: "Observe work.", parameters: {}, concurrencySafe: true },
+  ];
+  const { port, requests } = scriptedModelRound([
+    response({ toolCalls: [call("observe", "observe", {}), call("finish", "finish", {})] }),
+    response({ text: "Work is complete." }),
+  ]);
+  const executed: string[] = [];
+
+  const result = await runBtccAgentLoop({
+    prompt: "finish the work",
+    model: "test/model",
+    tools,
+    modelRound: port,
+    executeTool: async (toolCall) => {
+      executed.push(toolCall.name);
+      return { ok: true };
+    },
+    afterToolBatch: ({ toolCalls, toolResults }) =>
+      toolCalls.some((toolCall, index) =>
+        toolCall.name === "finish" && toolResults[index]?.ok === true,
+      )
+        ? "final_report"
+        : "continue",
+    reviewFinalCandidate: async () => {
+      throw new Error("a final report is not another completion gate");
+    },
+  });
+
+  expect(executed).toEqual(["observe", "finish"]);
+  expect(requests).toHaveLength(2);
+  expect(requests[1]?.tools).toEqual([]);
+  expect(result.finalText).toBe("Work is complete.");
+});
+
 test("BTCC does not terminalize repeated failed tool calls when error text changes", async () => {
   let attempts = 0;
   const { port } = scriptedModelRound([
