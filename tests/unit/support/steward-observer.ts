@@ -5,6 +5,7 @@ export const EMPTY_STEWARD_OBSERVER: StewardObserverReader = {
   relationsForParent: () => [],
   relationById: () => null,
   relationForChild: () => null,
+  delegationPresentation: () => null,
   isParentResultInput: () => false,
   snapshot: () => null,
   recoverableTurns: () => [],

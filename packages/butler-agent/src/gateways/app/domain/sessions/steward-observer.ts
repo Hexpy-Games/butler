@@ -84,10 +84,18 @@ export interface StewardObserverOperationOutputChunk {
   content_sha256: string;
 }
 
+export interface StewardObserverDelegationPresentation {
+  task_id: string;
+  objective: string;
+}
+
 export interface StewardObserverReader {
   relationsForParent(sessionId: string): StewardObserverRelation[];
   relationById(relationId: string): StewardObserverRelation | null;
   relationForChild(sessionId: string): StewardObserverRelation | null;
+  delegationPresentation(
+    relationId: string,
+  ): StewardObserverDelegationPresentation | null;
   isParentResultInput(sessionId: string, text: string): boolean;
   snapshot(sessionId: string): StewardObserverSnapshot | null;
   recoverableTurns(): Array<{

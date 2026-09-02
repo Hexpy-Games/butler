@@ -3,6 +3,7 @@ import { readStewardObserverPlan } from "./steward-observer-plan-reader.ts";
 import type {
   StewardObserverProgressEvent,
   StewardObserverReader,
+  StewardObserverDelegationPresentation,
   StewardObserverRelation,
   StewardObserverSnapshot,
   StewardObserverOperationOutputChunk,
@@ -54,6 +55,11 @@ type ResultRow = {
   final_payload_json: string | null;
 };
 
+type DelegationPresentationRow = {
+  task_id: string;
+  packet_json: string;
+};
+
 /**
  * Read-only projection over the durable BTCC relation/session tables. The App
  * never writes through this adapter; BTCC remains the sole owner of child
@@ -83,6 +89,27 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
 
   relationForChild(sessionId: string): StewardObserverRelation | null {
     return this.relation("child_session_id", sessionId);
+  }
+
+  delegationPresentation(
+    relationId: string,
+  ): StewardObserverDelegationPresentation | null {
+    const row = this.db.query<DelegationPresentationRow, [string]>(`
+      SELECT task_id, packet_json
+      FROM btcc_subsession_delegations
+      WHERE relation_id = ?
+    `).get(relationId);
+    if (!row) return null;
+    try {
+      const packet = JSON.parse(row.packet_json) as Record<string, unknown>;
+      if (typeof packet.objective !== "string") return null;
+      return {
+        task_id: row.task_id,
+        objective: packet.objective,
+      };
+    } catch {
+      return null;
+    }
   }
 
   isParentResultInput(sessionId: string, text: string): boolean {
