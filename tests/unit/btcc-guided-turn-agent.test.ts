@@ -231,6 +231,7 @@ test("feature Guided Turn restores the existing bounded Work closeout opportunit
           (message) => message.name === "record_work_disposition",
         );
         expect(dispositionResult).toBeDefined();
+        expect(request.tools).toEqual([]);
         dispositionOutput = JSON.parse(dispositionResult!.content);
         return { text: "최종 답변", toolCalls: [] };
       },
@@ -3758,7 +3759,7 @@ test("feature Guided Turn refreshes disposition from durable Work and effect fac
             },
           )]);
         }
-        expect(surfaces[4]).toContain("record_work_disposition");
+        expect(surfaces[4]).toEqual([]);
         return { text: "facts were refreshed", toolCalls: [] };
       },
     };
@@ -3779,7 +3780,7 @@ test("feature Guided Turn refreshes disposition from durable Work and effect fac
     expect(digests[2]).not.toBe(digests[0]);
     expect(digests[2]).not.toBe(digests[1]);
     expect(digests[3]).toBe(digests[1]);
-    expect(digests[4]).toBe(digests[3]);
+    expect(digests[4]).not.toBe(digests[3]);
     expect(result.content).toBe("facts were refreshed");
 
     const disposition = DURABLE_WORK_TOOL_DEFINITIONS.find((tool) =>

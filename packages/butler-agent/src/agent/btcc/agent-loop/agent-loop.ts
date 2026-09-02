@@ -23,6 +23,7 @@ export async function runBtccAgentLoop(
   let emptyResponseRecoveryUsed = false;
   let consecutiveEmptyResponses = 0, modelRoundIndex = 0;
   let iteration = 0;
+  let finalReportRound = false;
   const runModelRound = async (request: {
     tools: readonly BtccAgentLoopInput["tools"][number][]; toolSurfaceDigest?: string;
     instructions?: string;
@@ -142,12 +143,16 @@ export async function runBtccAgentLoop(
     const currentIteration = iteration;
     iteration += 1;
     emit(events, input.onEvent, { type: "model_call", iteration: currentIteration });
-    const { tools, ...toolSurfaceIdentity } = await resolveRoundToolSurface(input.resolveTools, input.tools);
+    const { tools, ...toolSurfaceIdentity } = finalReportRound
+      ? finalRoundToolSurface([], Boolean(input.resolveTools))
+      : await resolveRoundToolSurface(input.resolveTools, input.tools);
     const response = await runModelRound({
       tools,
       ...toolSurfaceIdentity,
       instructions: input.instructions,
-      toolChoice: input.resolveToolChoice?.() ?? input.toolChoice,
+      toolChoice: finalReportRound
+        ? undefined
+        : input.resolveToolChoice?.() ?? input.toolChoice,
       iteration: currentIteration,
     });
     emit(events, input.onEvent, {
@@ -183,6 +188,7 @@ export async function runBtccAgentLoop(
     }
 
     if (calls.length === 0) {
+      if (finalReportRound) return { finalText: text, messages, events };
       if (!text) consecutiveEmptyResponses += 1;
       const candidateAccepted = text && input.finalSynthesis?.acceptCandidate
         ? await input.finalSynthesis.acceptCandidate({ text, response })
@@ -271,9 +277,18 @@ export async function runBtccAgentLoop(
         continuationItems.push({ role: "assistant", content: finalText });
         return { finalText, messages, events };
       }
+      if (await nextTurnAfterToolBatch(
+        input,
+        preparedCalls.map((item) => item.call),
+        results,
+        currentIteration,
+      ) === "final_report") {
+        finalReportRound = true;
+      }
       continue;
     }
 
+    const batchResults: BtccAgentLoopToolResult[] = [];
     for (const prepared of preparedCalls) {
       emit(events, input.onEvent, {
         type: "tool_call",
@@ -281,6 +296,7 @@ export async function runBtccAgentLoop(
         toolCall: prepared.call,
       });
       const result = await executePreparedBtccToolCall(input, prepared, input.signal);
+      batchResults.push(result);
       const finalText = await recordToolResult({
         call: prepared.call,
         result,
@@ -291,7 +307,25 @@ export async function runBtccAgentLoop(
         return { finalText, messages, events };
       }
     }
+    if (finalReportRound) return { finalText: text, messages, events };
+    if (await nextTurnAfterToolBatch(
+      input,
+      preparedCalls.map((item) => item.call),
+      batchResults,
+      currentIteration,
+    ) === "final_report") {
+      finalReportRound = true;
+    }
   }
+}
+
+async function nextTurnAfterToolBatch(
+  input: BtccAgentLoopInput,
+  toolCalls: readonly BtccAgentLoopToolCall[],
+  toolResults: readonly BtccAgentLoopToolResult[],
+  iteration: number,
+): Promise<"continue" | "final_report"> {
+  return await input.afterToolBatch?.({ toolCalls, toolResults, iteration }) ?? "continue";
 }
 
 function modelRoundRequestId(index: number, recoveryAttempt = 1): string {

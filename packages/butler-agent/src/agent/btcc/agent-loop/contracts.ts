@@ -118,6 +118,8 @@ export type BtccTextToolCallDisposition =
   | { status: "continue"; observation: string }
   | { status: "fail"; error?: unknown };
 
+export type BtccAfterToolBatchDisposition = "continue" | "final_report";
+
 export interface BtccFinalSynthesisOptions {
   instructions: string;
   retryInstructions?: string;
@@ -189,6 +191,11 @@ export interface BtccAgentLoopInput {
     toolCalls: BtccAgentLoopToolCall[];
     iteration: number;
   }) => Promise<void> | void;
+  afterToolBatch?: (input: {
+    toolCalls: readonly BtccAgentLoopToolCall[];
+    toolResults: readonly BtccAgentLoopToolResult[];
+    iteration: number;
+  }) => Promise<BtccAfterToolBatchDisposition> | BtccAfterToolBatchDisposition;
   executeTool: (call: {
     id: string;
     name: string;

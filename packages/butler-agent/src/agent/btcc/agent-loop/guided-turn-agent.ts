@@ -3,6 +3,7 @@ import type { BtccAgentLoop, BtccAgentLoopInput, BtccAgentLoopResult } from "./c
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
 import { ActiveProjectLedgerResolver } from "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { createProviderModelRoundPort } from "../../../integrations/providers/runtime.ts";
+import { createGuidedToolBatchTransition } from "./guided-tool-batch-transition.ts";
 import { providerImageAttachments, renderGuidedResponseLanguage } from "./guided-turn-prompt.ts";
 import { directSynthesisToolDefinitions, GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES, guidedNativeToolDefinitions, hiddenNativeToolNamesForGuidedTurn } from "./guided-turn-policy.ts";
 import { selectGuidedTurnPhasePolicy } from "./guided-phase-policy.ts";
@@ -346,6 +347,10 @@ export function createProductionGuidedTurnAgent(
         verifiedImagePayloadPort: createFileStoreVerifiedImagePayloadPort(input.butlerData),
         onProviderResponseIdentity,
         onEvent: (event) => recordRuntimeMemoryEvent(memoryAttribution, event),
+        afterToolBatch: createGuidedToolBatchTransition({
+          turnId: turn.turnId,
+          durableWork: input.durableWork,
+        }),
         tools: visibleTools,
         ...(resolveGuidedTools ? { resolveTools: resolveGuidedTools } : {}),
         modelRound: directionAware.modelRound,
