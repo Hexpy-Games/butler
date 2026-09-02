@@ -33,7 +33,7 @@ export async function handleMessageFileRoutes(
     const bytes = await file.arrayBuffer();
     return json(
       apiEnvelope<MessageFileUploadResult>(
-        input.store.createMessageFile({
+        await input.store.createMessageFile({
           ownerSessionId: safeOptionalString(form.get("session_id")),
           name: file.name,
           mimeType: file.type,

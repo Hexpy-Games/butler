@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from "fs";
 import { homedir } from "os";
 import { extname, isAbsolute, join, resolve, sep } from "path";
 import type { AttachmentRef } from "../../test-support/harness/contracts.ts";
+import { isPdfAttachment, pdfTextPath } from "./pdf-attachment.ts";
 
 const MESSAGE_FILE_ID_PATTERN = /^file-[0-9a-f-]{36}$/iu;
 const DEFAULT_MAX_ATTACHMENT_TEXT_CHARS = 24_000;
@@ -99,6 +100,18 @@ function trimAttachmentText(text: string, maxChars: number): string {
 }
 
 function attachmentContent(attachment: AttachmentRef, butlerData: string, maxChars: number): string | null {
+  if (isPdfAttachment(attachment.mimeType, attachment.fileName)) {
+    const originalPath = attachmentFilePath(attachment, butlerData);
+    if (!originalPath) return "[PDF attachment is unavailable; its contents have not been read.]";
+    const textPath = pdfTextPath(originalPath);
+    try {
+      const text = readFileSync(textPath, "utf8");
+      return `Full extracted text file (use a file-reading command for sections beyond this preview): ${textPath}\n` +
+        trimAttachmentText(text, maxChars);
+    } catch {
+      return "[PDF text extraction is unavailable; its contents have not been read.]";
+    }
+  }
   if (!isTextAttachment(attachment)) return null;
   const bytes = readAttachmentBytes(attachment, butlerData);
   if (!bytes) return null;
