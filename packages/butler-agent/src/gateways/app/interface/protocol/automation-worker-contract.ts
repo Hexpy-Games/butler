@@ -126,6 +126,7 @@ export interface WorkerActivitySummary {
   current_activity_title?: string;
   work_blocks?: WorkerActivityWorkBlock[];
   session_id?: string;
+  parent_turn_id?: string;
   project_id?: string;
   task_id?: string;
   orchestration_id?: string;

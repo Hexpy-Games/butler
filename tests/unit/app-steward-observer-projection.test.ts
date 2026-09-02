@@ -447,6 +447,7 @@ describe("App Steward observer projection", () => {
       worker_display_name: "Kai",
       worker_ordinal_label: "Worker 1",
       objective: "운영 배포 기준 확인",
+      parent_turn_id: "steward-turn-1",
       phase: "executing",
       terminal: false,
     })]);
