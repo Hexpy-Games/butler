@@ -73,7 +73,7 @@ export const delegateToWorkerToolMetadata: ToolCapabilityMetadata = {
 export const waitForWorkerToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "wait_for_worker",
-  description: "Suspend this Steward execution until a Worker result or direction arrives. Use after useful independent work is exhausted. This does not finish the Work or report to Butler. If no Worker is active, continue and handle available results.",
+  description: "Suspend this Steward execution until a Worker result or direction arrives. Use after Worker assignment or steering is finished; do not execute independently while Workers are outstanding. This does not finish the Work or report to Butler. If no Worker is active, continue and handle available results.",
   parameters: { type: "object", additionalProperties: false, properties: {} },
   effectBoundary: "turn_local",
   concurrencySafe: false,

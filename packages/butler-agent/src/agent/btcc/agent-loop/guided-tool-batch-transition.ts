@@ -11,11 +11,19 @@ import { isFreshCurrentDisposition } from "./guided-turn-closeout.ts";
 export function createGuidedToolBatchTransition(input: {
   turnId: string;
   durableWork: DurableWorkService;
+  shouldWaitForWorker: () => Promise<boolean>;
 }): NonNullable<BtccAgentLoopInput["afterToolBatch"]> {
   return async (batch): Promise<BtccAfterToolBatchDisposition> => {
     if (batch.toolResults.some((result) => result.name === "wait_for_worker" &&
       result.ok && result.output && typeof result.output === "object" &&
       Reflect.get(result.output, "status") === "waiting")) return "wait";
+    // A queued assignment permits another management round for additional
+    // bounded assignments. Finished management yields to existing result delivery.
+    const assignedWorker = batch.toolResults.some((result) =>
+      result.name === "delegate_to_worker" && result.ok && result.output &&
+      typeof result.output === "object" && Reflect.get(result.output, "status") === "queued",
+    );
+    if (!assignedWorker && await input.shouldWaitForWorker()) return "wait";
     if (!hasSuccessfulDisposition(batch.toolCalls, batch.toolResults)) {
       return "continue";
     }

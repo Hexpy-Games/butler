@@ -30,6 +30,7 @@ type ReportBinding = {
 export async function resolveParentResultEvidence(input: {
   parentSessionId: string;
   parentInputText: string;
+  includeSiblingWorkerResults?: boolean;
   store: SubsessionDelegationDependencies["store"];
   turns: SubsessionDelegationDependencies["parentTurns"];
 }): Promise<{
@@ -53,22 +54,34 @@ export async function resolveParentResultEvidence(input: {
   if (!packet) {
     throw new Error("subsession_parent_result_relation_mismatch");
   }
-  const synthesisInstruction = [
-    "Canonical child result synthesis",
-    "Report completed work, remaining work, and the next action in user terms; do not start Work in this result-report Turn.",
-  ];
-  const childTurn = await input.turns.findTurn(result.child_turn_id);
+  const results = [result];
+  if (input.includeSiblingWorkerResults) {
+    for (const sibling of input.store.relationsByParentSessionId(input.parentSessionId)) {
+      if (sibling.relation_id === relation.relation_id) continue;
+      const siblingPacket = input.store.packetByRelationId(sibling.relation_id);
+      if (siblingPacket?.parent_work_ref.work_id !== packet.parent_work_ref.work_id) continue;
+      const siblingResult = input.store.resultByRelationId(sibling.relation_id);
+      if (siblingResult) results.push(siblingResult);
+    }
+    results.sort((left, right) => left.created_at.localeCompare(right.created_at));
+  }
+  const childTurns = await Promise.all(results.map((child) =>
+    input.turns.findTurn(child.child_turn_id),
+  ));
   return {
     synthesisEvidence: [
-      ...synthesisInstruction,
-      `Status: ${result.status}`,
-      `Summary: ${result.summary}`,
-      `Changed artifacts: ${result.changed_artifacts.join("; ") || "none"}`,
+      "Canonical child result synthesis",
+      "Report completed work, remaining work, and the next action in user terms; do not start Work in this result-report Turn.",
+      ...results.map((child) => [
+        `Status: ${child.status}`,
+        `Summary: ${child.summary}`,
+        `Changed artifacts: ${child.changed_artifacts.join("; ") || "none"}`,
+      ].join("\n")),
     ].join("\n"),
     outcome: result.status,
     parentWorkId: packet.parent_work_ref.work_id,
-    changedFiles: result.changed_files ?? [],
-    artifacts: childTurn?.finalPayload?.artifacts ?? [],
+    changedFiles: results.flatMap((child) => child.changed_files ?? []),
+    artifacts: childTurns.flatMap((child) => child?.finalPayload?.artifacts ?? []),
   };
 }
 

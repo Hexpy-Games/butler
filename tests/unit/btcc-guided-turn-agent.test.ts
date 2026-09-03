@@ -405,7 +405,7 @@ test("Worker result returns to the current Steward Work before reporting", async
   }
 });
 
-test.each(["ordinary", "direction", "fast-result"])("Steward keeps tools after Worker assignment and explicitly releases without Work closeout (%s)", async (scenario) => {
+test.each(["ordinary", "direction", "fast-result"])("Steward executes directly before assignment, then manages Workers and waits without Work closeout (%s)", async (scenario) => {
   const directionDuringWait = scenario === "direction";
   const fastResult = scenario === "fast-result";
   const fixture = createFixture("guided-explicit-worker-wait");
@@ -418,8 +418,11 @@ test.each(["ordinary", "direction", "fast-result"])("Steward keeps tools after W
     const turn = await admitTurn(command, fixture.stores.admission, fixture.stores.turns);
     const work = await fixture.stores.durableWork.replacePlan({
       turnId: turn.turnId, sessionId: turn.sessionId, mutationCallId: "wait-plan",
-      startNew: true, objective: "Integrate Worker and independent inspection",
-      actions: [{ actionKey: "worker-action", description: "Bounded Worker task", dependencyKeys: [] }], checks: [],
+      startNew: true, objective: "Inspect context, assign Worker, then integrate its result",
+      actions: [
+        { actionKey: "worker-action", description: "Bounded Worker task", dependencyKeys: [] },
+        ...(!fastResult ? [{ actionKey: "worker-next", description: "Another bounded task", dependencyKeys: [] }] : []),
+      ], checks: [],
     });
     writeFileSync(join(fixture.root, "independent.txt"), "independent work verified");
     let active = false;
@@ -452,7 +455,19 @@ test.each(["ordinary", "direction", "fast-result"])("Steward keeps tools after W
       },
       async enabledWorkerProfiles() { return []; },
       async activeParentDelegations() { return active ? [{}] : []; },
-      async delegateWorkerReviewed() { active = true; },
+      async delegateWorkerReviewed() {
+        active = true;
+        if (fastResult) {
+          active = false;
+          workerCompleted = true;
+          queue.enqueueIdempotent({
+            eventId: `worker-result:${resultId}`, transport: "app", accountId: "local",
+            peer: { kind: "dm", id: turn.sessionId }, sender: { id: "butler-worker-result" },
+            message: { id: "fast-worker-message", text: "Worker completed its assigned action.", timestamp: new Date().toISOString() },
+            routingHints: { sessionId: turn.sessionId, turnId: resultTurnId },
+          });
+        }
+      },
       async steerSteward(input: { relationId?: string; instruction: string }) {
         steered.push(input);
         return { relation_id: input.relationId, instruction_id: "worker-direction", revision: 1, status: "pending" };
@@ -468,48 +483,64 @@ test.each(["ordinary", "direction", "fast-result"])("Steward keeps tools after W
       subsessionDelegation: service,
       modelRound: { async runRound(request) {
         rounds += 1;
-        if (rounds === 1) return toolResponse([toolCall("assign", "delegate_to_worker", {
-          action_key: "worker-action", objective: "Do the bounded task",
-          acceptance_criteria: [], implementation_brief: "Only the assigned action",
-        })], "Worker에게 맡기고 독립 점검을 진행합니다.");
-        if (rounds <= 3 || directionDuringWait) expect(request.tools.map((tool) => tool.name)).toContain("wait_for_worker");
+        if (rounds === 1) return toolResponse([toolCall("inspect-context", "read_file", {
+          requests: [{ path: "independent.txt" }],
+        })]);
         if (rounds === 2) {
-          expect(toolMessageOutput(messagesWithToolResults(request).at(-1))).toMatchObject({ status: "queued" });
-          expect(request.tools.map((tool) => tool.name)).toContain("read_file");
-          if (fastResult) {
-            active = false;
-            workerCompleted = true;
-            queue.enqueueIdempotent({
-              eventId: `worker-result:${resultId}`, transport: "app", accountId: "local",
-              peer: { kind: "dm", id: turn.sessionId }, sender: { id: "butler-worker-result" },
-              message: { id: "fast-worker-message", text: "Worker completed its assigned action.", timestamp: new Date().toISOString() },
-              routingHints: { sessionId: turn.sessionId, turnId: resultTurnId },
-            });
-          }
-          return toolResponse([toolCall("inspect", "read_file", { requests: [{ path: "independent.txt" }] })]);
+          expect(JSON.stringify(messagesWithToolResults(request).at(-1))).toContain("independent work verified");
+          return toolResponse([
+            toolCall("assign", "delegate_to_worker", {
+              action_key: "worker-action", objective: "Do the bounded task",
+              acceptance_criteria: [], implementation_brief: "Only the assigned action",
+            }),
+            toolCall("forbidden-inspect", "read_file", { requests: [{ path: "independent.txt" }] }),
+            toolCall("forbidden-command", "run_command", {
+              command: "printf forbidden > concurrent.txt", summary: "Attempt concurrent execution",
+            }),
+          ]);
         }
         if (rounds === 3) {
-          expect(JSON.stringify(messagesWithToolResults(request).at(-1))).toContain("independent work verified");
+          expect(request.tools.map((tool) => tool.name).sort()).toEqual([
+            "delegate_to_worker", "steer_worker", "wait_for_worker",
+          ]);
+          const outputs = messagesWithToolResults(request).slice(-3).map(toolMessageOutput);
+          expect(outputs[0]).toMatchObject({ status: "queued" });
+          expect(outputs[1]).toMatchObject({ ok: false, error: { code: "tool_unavailable" } });
+          expect(outputs[2]).toMatchObject({ ok: false, error: { code: "tool_unavailable" } });
+          expect(existsSync(join(fixture.root, "concurrent.txt"))).toBe(false);
+          if (!fastResult) return toolResponse([toolCall("assign-next", "delegate_to_worker", {
+            action_key: "worker-next", objective: "Another bounded assignment",
+            acceptance_criteria: [], implementation_brief: "Only the assigned action",
+          })]);
+        }
+        if ((!fastResult && rounds === 4) || (fastResult && rounds === 3)) {
           pendingDirection = directionDuringWait;
           return toolResponse([toolCall("wait", "wait_for_worker", {})]);
         }
-        if (directionDuringWait && rounds === 4) {
+        if (directionDuringWait && rounds === 5) {
           expect(request.messages.at(-1)?.content).toContain("check the updated requirement");
+          expect(request.tools.map((tool) => tool.name).sort()).toEqual([
+            "delegate_to_worker", "steer_worker", "wait_for_worker",
+          ]);
           return toolResponse([toolCall("steer", "steer_worker", {
             relation_id: "same-worker-relation", instruction: "Check the updated requirement.",
           })]);
         }
-        if (directionDuringWait && rounds === 5) {
-          return toolResponse([toolCall("wait-after-steering", "wait_for_worker", {})]);
-        }
         if (fastResult && rounds === 4) {
           expect(request.messages[0]?.content).toContain("Worker completed its assigned action.");
+          expect(request.tools.map((tool) => tool.name)).toContain("read_file");
+          return toolResponse([toolCall("review-result", "read_file", {
+            requests: [{ path: "independent.txt" }],
+          })]);
+        }
+        if (fastResult && rounds === 5) {
+          expect(JSON.stringify(messagesWithToolResults(request).at(-1))).toContain("independent work verified");
           return toolResponse([toolCall("integrated-result", "record_work_disposition", {
             work_id: work.workId, disposition: "completed", summary: "Worker result integrated and reviewed.",
             action_updates: [{ action_key: "worker-action", status: "done" }],
           })]);
         }
-        if (fastResult && rounds === 5) return { text: "Worker result integrated and reviewed.", toolCalls: [] };
+        if (fastResult && rounds === 6) return { text: "Worker result integrated and reviewed.", toolCalls: [] };
         throw new Error("Wait must not request a final model round");
       } },
     }));
@@ -519,13 +550,13 @@ test.each(["ordinary", "direction", "fast-result"])("Steward keeps tools after W
       committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness, agent,
     });
     const result = await runtime.runTurn(command);
-    expect(rounds).toBe(directionDuringWait ? 5 : 3);
+    expect(rounds).toBe(directionDuringWait ? 5 : fastResult ? 3 : 4);
     expect(steered).toEqual(directionDuringWait
       ? [expect.objectContaining({ relationId: "same-worker-relation", instruction: "Check the updated requirement." })]
       : []);
     expect(result).toMatchObject({ kind: "delivered", content: "", executionOutcome: "waiting_for_worker" });
     expect(await runtime.runTurn(command)).toMatchObject({ content: "", executionOutcome: "waiting_for_worker" });
-    expect(rounds).toBe(directionDuringWait ? 5 : 3);
+    expect(rounds).toBe(directionDuringWait ? 5 : fastResult ? 3 : 4);
     expect(closeoutRowCounts(fixture.dbPath, turn.turnId)).toEqual({ diagnostics: 0, dispositions: 0 });
     expect((await fixture.stores.durableWork.boundWorkForTurn(turn.turnId))?.status).toBe("open");
     if (fastResult) {
@@ -546,10 +577,11 @@ test.each(["ordinary", "direction", "fast-result"])("Steward keeps tools after W
   } finally { fixture.close(); }
 });
 
-test("Steward no-tool answers cannot finalize active Workers and an idle wait does not strand execution", async () => {
+test("Steward no-tool answers cannot finalize active Workers; failed assignment and idle wait preserve direct execution", async () => {
   const fixture = createFixture("guided-worker-wait-admission");
   try {
     for (const active of [true, false]) {
+      writeFileSync(join(fixture.root, "direct.txt"), "direct execution remains available");
       let rounds = 0;
       const turn = turnRecord(fixture.root, { turnId: active ? "active-worker-answer" : "idle-worker-wait" });
       turn.context.executionPolicy!.role = "steward";
@@ -565,10 +597,24 @@ test("Steward no-tool answers cannot finalize active Workers and an idle wait do
           async enabledWorkerProfiles() { return []; },
           async activeParentDelegations() { return active ? [{}] : []; },
           async shouldWaitForWorker() { return active; },
+          async delegateWorkerReviewed() { throw new Error("No suitable Worker is available"); },
         } as unknown as SubsessionDelegationService,
         modelRound: { async runRound(request) {
           rounds += 1;
-          if (!active && rounds === 1) return toolResponse([toolCall("idle-wait", "wait_for_worker", {})]);
+          if (!active && rounds === 1) return toolResponse([
+            toolCall("failed-assignment", "delegate_to_worker", {
+              action_key: "bounded-task", objective: "Attempt Worker assignment",
+              acceptance_criteria: [], implementation_brief: "Only the assigned action",
+            }),
+            toolCall("direct-after-failure", "read_file", { requests: [{ path: "direct.txt" }] }),
+          ]);
+          if (!active && rounds === 2) {
+            const outputs = messagesWithToolResults(request).slice(-2).map(toolMessageOutput);
+            expect(outputs[0]).toMatchObject({ ok: false });
+            expect(JSON.stringify(outputs[1])).toContain("direct execution remains available");
+            expect(request.tools.map((tool) => tool.name)).toContain("read_file");
+            return toolResponse([toolCall("idle-wait", "wait_for_worker", {})]);
+          }
           if (!active) expect(toolMessageOutput(messagesWithToolResults(request).at(-1))).toMatchObject({ status: "no_active_worker" });
           return { text: "normal answer", toolCalls: [] };
         } },
@@ -576,7 +622,7 @@ test("Steward no-tool answers cannot finalize active Workers and an idle wait do
       const result = await agent.run({ turn, signal: new AbortController().signal });
       expect(result.content).toBe(active ? "" : "normal answer");
       expect(result.executionOutcome).toBe(active ? "waiting_for_worker" : undefined);
-      expect(rounds).toBe(active ? 1 : 2);
+      expect(rounds).toBe(active ? 1 : 3);
     }
   } finally { fixture.close(); }
 });

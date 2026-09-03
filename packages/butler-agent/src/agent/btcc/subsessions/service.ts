@@ -199,7 +199,10 @@ export function createSubsessionDelegationService(
       return recoverPendingParentInputs({ store: input.store, sink: parentInputSink });
     },
     async resolveParentResultEvidence(parentInput) {
-      return resolveParentResultEvidence({ ...parentInput, store: input.store, turns: input.parentTurns });
+      return resolveParentResultEvidence({
+        ...parentInput, store: input.store, turns: input.parentTurns,
+        includeSiblingWorkerResults: input.sessionBindings.getBySessionId(parentInput.parentSessionId)?.role === "steward",
+      });
     },
     resultIdForRelation(relationId) {
       return input.store.resultIdForRelation(relationId);

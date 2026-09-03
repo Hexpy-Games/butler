@@ -142,7 +142,11 @@ export function createProductionGuidedTurnAgent(
       );
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
       const describedToolIds = new Set<string>();
-      const activeDelegationAdmission = createActiveDelegationAdmissionGuard();
+      const shouldWaitForWorker = async () => policy.role === "steward" &&
+        Boolean(await input.subsessionDelegation?.shouldWaitForWorker({
+          parentSessionId: turn.sessionId, parentTurnId: turn.turnId,
+        }));
+      const activeDelegationAdmission = createActiveDelegationAdmissionGuard(shouldWaitForWorker);
       const effectService = createGuidedEffectService(input.effectJournal, input.guidedEffectFaultHook ? { faultHook: input.guidedEffectFaultHook } : {});
       const execute = createButlerToolExecutor({
         butlerHome: input.butlerHome,
@@ -298,11 +302,7 @@ export function createProductionGuidedTurnAgent(
         toolJournal: input.toolJournal,
         delegationTool: "delegate_to_steward",
       }) : closeout;
-      const shouldWaitForWorker = async () => policy.role === "steward" &&
-        Boolean(await input.subsessionDelegation?.shouldWaitForWorker({
-          parentSessionId: turn.sessionId, parentTurnId: turn.turnId,
-        }));
-      const resolveGuidedTools = phasePolicy.mode === "phase_minimal" ||
+      const resolveGuidedTools = policy.role === "steward" || phasePolicy.mode === "phase_minimal" ||
         visibleTools.some((tool) =>
           tool.name === "delegate_to_steward" || tool.name === "delegate_to_worker",
         )
@@ -313,6 +313,7 @@ export function createProductionGuidedTurnAgent(
             parentSessionId: turn.sessionId,
             subsessionDelegation: input.subsessionDelegation,
             onActiveDelegationAdmission: activeDelegationAdmission.observe,
+            shouldWaitForWorker,
             ...(policy.role === "butler"
               ? { forcedDelegationTool: "delegate_to_steward" as const }
               : {}),
@@ -330,6 +331,7 @@ export function createProductionGuidedTurnAgent(
         afterToolBatch: createGuidedToolBatchTransition({
           turnId: turn.turnId,
           durableWork: input.durableWork,
+          shouldWaitForWorker,
         }),
       });
       const loopOptions: BtccAgentLoopInput = {

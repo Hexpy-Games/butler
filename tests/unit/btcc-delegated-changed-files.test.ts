@@ -1,5 +1,8 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { BTCC_SUCCESSOR_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { SqliteGuidedToolJournal } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/guided-tool-journal.ts";
 import { SqliteSubsessionDelegationStore } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/subsession-store.ts";
@@ -8,7 +11,77 @@ import { changedFileDetail, type ChangedFileDetail } from "../../packages/butler
 import { collectGuidedChangedFiles } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-changed-files.ts";
 import { collectGuidedFinalArtifacts } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
 import { resolveParentResultEvidence } from "../../packages/butler-agent/src/agent/btcc/subsessions/accepted-terminal-report.ts";
+import { createSubsessionDelegationService, type SubsessionDelegationDependencies } from "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
 import { sessionViewForStewardObserver } from "../../packages/butler-agent/src/gateways/app/domain/sessions/steward-observer-view.ts";
+
+test("later Worker result includes earlier same-Work reports and files for final Steward integration", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-worker-sibling-results-"));
+  try {
+    const parentSessionId = "owning-session";
+    let parentRole = "steward";
+    let secondCompleted = false;
+    const reports = [
+      { id: "a1", workId: "same-work", summary: `Earlier full report\n${"detail ".repeat(500)}\nEarlier final finding` },
+      { id: "a2", workId: "same-work", summary: "Later full report" },
+      { id: "a3", workId: "different-work", summary: "Unrelated report must not be inherited" },
+    ];
+    const relations = reports.map((report) => ({
+      relation_id: `relation-${report.id}`, parent_session_id: parentSessionId,
+      child_session_id: `worker-${report.id}`,
+    }));
+    const changedFiles = reports.map((report) => changedFileDetail(`src/${report.id}.ts`, "", "done\n")!);
+    const artifacts = reports.map((report) => ({
+      id: `artifact-${report.id}`, kind: "report" as const, title: `${report.id}.md`,
+      safePathLabel: `artifacts/${report.id}.md`,
+    }));
+    const service = createSubsessionDelegationService({
+      butlerData: root,
+      sessionBindings: { getBySessionId: () => ({ role: parentRole }) },
+      store: {
+        relationById: (id: string) => relations.find((relation) => relation.relation_id === id),
+        relationsByParentSessionId: () => relations,
+        packetByRelationId: (id: string) => ({
+          parent_work_ref: { work_id: reports.find((report) => `relation-${report.id}` === id)!.workId },
+        }),
+        resultByRelationId: (id: string) => {
+          const index = reports.findIndex((report) => `relation-${report.id}` === id);
+          if (index === 1 && !secondCompleted) return null;
+          const report = reports[index]!;
+          return {
+            result_id: `steward-result-${report.id}`, child_turn_id: `result-turn-${report.id}`,
+            status: "success", summary: report.summary, changed_files: [changedFiles[index]],
+            changed_artifacts: [artifacts[index]!.safePathLabel], created_at: `2026-09-03T00:00:0${index}.000Z`,
+          };
+        },
+      },
+      parentTurns: { findTurn: async (id: string) => ({
+        finalPayload: { artifacts: [artifacts[reports.findIndex((report) => `result-turn-${report.id}` === id)]] },
+      }) },
+    } as unknown as SubsessionDelegationDependencies);
+    const evidenceFor = (id: string) => service.resolveParentResultEvidence({
+      parentSessionId,
+      parentInputText: `Subsession result\nRelation ref: relation-${id}\nResult ref: steward-result-${id}`,
+    });
+    const first = await evidenceFor("a1");
+    expect(first?.synthesisEvidence).toContain(reports[0]!.summary);
+    expect(first?.synthesisEvidence).not.toContain(reports[1]!.summary);
+    secondCompleted = true;
+    const final = await evidenceFor("a2");
+    expect(final?.parentWorkId).toBe("same-work");
+    expect(final?.synthesisEvidence).toContain(reports[0]!.summary);
+    expect(final?.synthesisEvidence).toContain(reports[1]!.summary);
+    expect(final?.synthesisEvidence).not.toContain(reports[2]!.summary);
+    expect(collectGuidedFinalArtifacts([], final?.artifacts)).toEqual(artifacts.slice(0, 2));
+    expect(collectGuidedChangedFiles([], final?.changedFiles).map((file) => file.path))
+      .toEqual(["src/a1.ts", "src/a2.ts"]);
+    parentRole = "butler";
+    const butler = await evidenceFor("a2");
+    expect(butler?.synthesisEvidence).not.toContain(reports[0]!.summary);
+    expect(butler?.artifacts).toEqual([artifacts[1]!]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("delegated changes survive a review-only continuation through Worker, Steward and Butler", async () => {
   const db = new Database(":memory:");

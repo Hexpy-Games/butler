@@ -16,6 +16,11 @@ import {
   type BtccRoundToolSurfaceSnapshot,
 } from "./round-tool-surface.ts";
 const DISPOSITION_TOOL = "record_work_disposition";
+const WORKER_MANAGEMENT_TOOLS = new Set([
+  "delegate_to_worker",
+  "steer_worker",
+  "wait_for_worker",
+]);
 const ACTIVE_DELEGATION_TOOLS = new Set([
   "start_work",
   "steer_steward",
@@ -47,6 +52,7 @@ export function createGuidedRoundToolSurfaceResolver(input: {
   parentSessionId?: string;
   subsessionDelegation?: Pick<SubsessionDelegationService, "activeParentDelegations">;
   onActiveDelegationAdmission?: (active: boolean) => void;
+  shouldWaitForWorker?: () => Promise<boolean>;
   /** Butler hands off after Plan Review; Steward may execute directly or use a Worker. */
   forcedDelegationTool?: "delegate_to_steward";
   /** A successful handoff gets one tool-free round for the role's natural reply. */
@@ -60,6 +66,11 @@ export function createGuidedRoundToolSurfaceResolver(input: {
         isQueuedDelegationResult(record.result),
       )) {
       return createRoundToolSurfaceSnapshot([]);
+    }
+    if (await input.shouldWaitForWorker?.()) {
+      return createRoundToolSurfaceSnapshot(input.tools.filter((tool) =>
+        WORKER_MANAGEMENT_TOOLS.has(tool.name),
+      ));
     }
     const activeDelegations = input.parentSessionId && input.subsessionDelegation
       ? await input.subsessionDelegation.activeParentDelegations({
@@ -136,7 +147,9 @@ function isActiveDelegationAdmissionTool(name: string): boolean {
   return EFFECT_FREE_TOOL_NAMES.has(name) || ACTIVE_DELEGATION_TOOLS.has(name);
 }
 
-export function createActiveDelegationAdmissionGuard(): {
+export function createActiveDelegationAdmissionGuard(
+  shouldWaitForWorker?: () => Promise<boolean>,
+): {
   observe(active: boolean): void;
   execute(execute: ButlerToolExecutor): BtccAgentLoopInput["executeTool"];
 } {
@@ -147,6 +160,17 @@ export function createActiveDelegationAdmissionGuard(): {
     },
     execute(execute) {
       return async (call) => {
+        // Recheck immediately before execution: an earlier call in this same
+        // response may have assigned a Worker after the round surface was built.
+        if (!WORKER_MANAGEMENT_TOOLS.has(call.name) && await shouldWaitForWorker?.()) {
+          return {
+            ok: false,
+            error: {
+              code: "tool_unavailable",
+              message: "Worker execution or an unconsumed result is outstanding. Manage Workers and wait; this execution call was not run.",
+            },
+          };
+        }
         if (active && !isActiveDelegationAdmissionTool(call.name)) {
           return {
             ok: false,
