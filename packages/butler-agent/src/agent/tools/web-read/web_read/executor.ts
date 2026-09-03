@@ -114,7 +114,9 @@ export function createWebReadHandler(input: {
         evidenceReceipt({
           producerName: "web_read",
           receiptType: "source",
-          summary: "A public source page was read and bounded page evidence was returned.",
+          summary: sourceVerified
+            ? "A public source page was read and bounded page evidence was returned."
+            : "A public source read did not produce readable evidence; its limitation was returned.",
           verified: sourceVerified,
           covers: ["source_verified"],
           references: urlReferences([capabilitySourceUrl]),

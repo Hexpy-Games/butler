@@ -14,6 +14,7 @@ import {
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { textPdf } from "../fixtures/text-pdf.ts";
 
 function response(body: string, options: {
   url?: string;
@@ -47,7 +48,7 @@ test("lightweight page reader forwards AbortSignal into fetch", async () => {
         );
       });
       throw new Error("unreachable");
-    }) as unknown as typeof fetch,
+    }) as unknown as unknown as typeof fetch,
   });
   controller.abort(Object.assign(new Error("cancelled"), { name: "AbortError" }));
   await expect(pending).rejects.toMatchObject({ name: "AbortError" });
@@ -64,10 +65,69 @@ function fetchMap(fixtures: Record<string, Response>): typeof fetch {
       configurable: true,
     });
     return fixture;
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
 }
 
 describe("lightweight page reader", () => {
+  test("dispatches normalized textual MIME without treating XML as HTML", async () => {
+    for (const [contentType, body, method] of [
+      ["Application/Xhtml+Xml; charset=UTF-8", "<html><title>XHTML</title><body><p>Readable XHTML content.</p></body></html>", "readability"],
+      ["Application/JSON; charset=UTF-8", '{"message":"Plain JSON"}', "plain-text"],
+      ["application/xml", "<report><value>Preserved XML</value></report>", "plain-text"],
+    ] as const) {
+      const result = await readPageLightweight({ url: "https://example.test/document", fetchImpl: (async () => response(body, { contentType })) as unknown as typeof fetch });
+      expect(result.ok).toBe(true);
+      expect(result.method).toBe(method);
+      if (method === "plain-text") expect(result.text).toBe(body);
+    }
+  });
+
+  test("sniffs PDF bytes under generic MIME and rejects unknown binary without rendering", async () => {
+    const pdf = await readPageLightweight({
+      url: "https://example.test/download",
+      fetchImpl: (async () => new Response(textPdf(["First page evidence.", "Second page evidence."]), { headers: { "content-type": "application/octet-stream" } })) as unknown as typeof fetch,
+    });
+    expect(pdf).toMatchObject({ ok: true, method: "pdf", title: "Butler PDF Evidence", renderRecommended: false });
+    expect(pdf.text).toContain("First page evidence.\n\n---\n\nSecond page evidence.");
+    const binary = await readPageConfigured({
+      butlerData: "/tmp/unused", backend: "auto", url: "https://example.test/not-really.pdf",
+      fetchImpl: (async () => new Response(new Uint8Array([0, 255, 23, 0]), { headers: { "content-type": "application/octet-stream" } })) as unknown as typeof fetch,
+    });
+    expect(binary).toMatchObject({ ok: false, method: "unsupported", renderRecommended: false, chunks: [] });
+    expect(binary.warnings).toEqual(["unsupported-document-type"]);
+  });
+
+  test("deadline cancels response body consumption", async () => {
+    let cancelled = false;
+    const result = await readPageLightweight({
+      url: "https://example.test/slow-body", timeoutMs: 30,
+      fetchImpl: (async () => new Response(new ReadableStream({ cancel() { cancelled = true; } }))) as unknown as typeof fetch,
+    });
+    expect(cancelled).toBe(true);
+    expect(result).toMatchObject({ ok: false, renderRecommended: false });
+    expect(result.error).toContain("timed out");
+  });
+
+  test("terminates actual large HTML parsing on timeout and cancellation", async () => {
+    const html = `<html><body>${"<article><p>Substantial article evidence for parsing cancellation.</p></article>".repeat(100_000)}</body></html>`;
+    const fetchImpl = (async () => response(html)) as unknown as typeof fetch;
+    const started = Date.now();
+    const timedOut = await readPageLightweight({ url: "https://example.test/large", fetchImpl, timeoutMs: 1_200 });
+    expect(timedOut).toMatchObject({ ok: false, renderRecommended: false });
+    expect(timedOut.error).toContain("timed out");
+    expect(Date.now() - started).toBeLessThan(3_000);
+    const controller = new AbortController();
+    const cancel = setTimeout(() => controller.abort(new DOMException("Parsing cancelled", "AbortError")), 1_200);
+    const cancelStarted = Date.now();
+    try {
+      await expect(readPageLightweight({ url: "https://example.test/large", fetchImpl, signal: controller.signal }))
+        .rejects.toMatchObject({ name: "AbortError" });
+      expect(Date.now() - cancelStarted).toBeLessThan(3_000);
+    } finally {
+      clearTimeout(cancel);
+    }
+  }, 8_000);
+
   test("extracts static HTML text without Docker or browser state", async () => {
     const result = await readPageLightweight({
       url: "https://example.test",

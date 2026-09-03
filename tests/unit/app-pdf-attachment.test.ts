@@ -6,27 +6,7 @@ import { createTestAppServer } from "../../packages/butler-agent/src/test-suppor
 import { AppMessageFileStore } from "../../packages/butler-agent/src/gateways/app/domain/message-files/message-file-store.ts";
 import { renderAttachmentContext } from "../../packages/butler-agent/src/agent/context/attachment-context.ts";
 
-function textPdf(text: string): Uint8Array<ArrayBuffer> {
-  const stream = `BT /F1 12 Tf 40 700 Td (${text}) Tj ET`;
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
-  ];
-  let pdf = "%PDF-1.4\n";
-  const offsets = [0];
-  objects.forEach((object, index) => {
-    offsets.push(pdf.length);
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-  const xref = pdf.length;
-  pdf += "xref\n0 6\n0000000000 65535 f \n";
-  pdf += offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("");
-  pdf += `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  return new TextEncoder().encode(pdf);
-}
+import { textPdf } from "../fixtures/text-pdf.ts";
 
 test("PDF upload preserves the original and supplies extracted content after message admission", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-pdf-upload-"));

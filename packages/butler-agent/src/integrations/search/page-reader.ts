@@ -1,8 +1,9 @@
 import { accessSync, constants, existsSync, readFileSync } from "fs";
 import { join } from "path";
-import { Readability } from "@mozilla/readability";
-import { JSDOM } from "jsdom";
-import TurndownService from "turndown";
+import { fileURLToPath } from "node:url";
+import { shouldRecommendRender } from "./page-extraction.ts";
+import type { PageExtractionResult } from "./page-extraction.ts";
+export { stripHtmlToText, titleFromHtml, pageWarnings, shouldRecommendRender } from "./page-extraction.ts";
 
 export interface PageReadRequest {
   url: string;
@@ -24,7 +25,7 @@ export interface PageReadResult {
   markdown: string;
   document: string;
   chunks: EvidenceChunk[];
-  method: "readability" | "raw-html" | "plain-text" | "github-raw";
+  method: "readability" | "raw-html" | "plain-text" | "github-raw" | "pdf" | "unsupported";
   durationMs: number;
   warnings: string[];
   renderRecommended: boolean;
@@ -48,7 +49,7 @@ export interface EvidenceChunk {
 interface FetchAttempt {
   url: string;
   response: Response;
-  body: string;
+  bytes: Uint8Array;
 }
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -164,62 +165,6 @@ export function githubRawUrl(url: string): string | null {
   return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path}`;
 }
 
-export function stripHtmlToText(html: string): string {
-  return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export function titleFromHtml(html: string): string | undefined {
-  return html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim();
-}
-
-function normalizeMarkdown(markdown: string): string {
-  return markdown
-    .replace(/\n{4,}/g, "\n\n\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n[ \t]+/g, "\n")
-    .trim();
-}
-
-function createTurndown(): TurndownService {
-  const turndown = new TurndownService({
-    headingStyle: "atx",
-    codeBlockStyle: "fenced",
-    bulletListMarker: "-",
-  });
-  turndown.keep(["table", "thead", "tbody", "tr", "th", "td"]);
-  turndown.addRule("preCode", {
-    filter: (node) =>
-      node.nodeName === "PRE" &&
-      node.firstChild?.nodeName === "CODE",
-    replacement: (_content, node) => {
-      const code = node.textContent?.replace(/\n+$/g, "") ?? "";
-      return `\n\n\`\`\`\n${code}\n\`\`\`\n\n`;
-    },
-  });
-  return turndown;
-}
-
-function htmlToMarkdown(html: string): string {
-  return normalizeMarkdown(createTurndown().turndown(html));
-}
-
-function plainTextToMarkdown(text: string): string {
-  return normalizeMarkdown(`\`\`\`\n${text.trim()}\n\`\`\``);
-}
-
 function simpleHash(input: string): string {
   let hash = 5381;
   for (let index = 0; index < input.length; index += 1) {
@@ -293,120 +238,100 @@ export function buildEvidenceDocument(input: {
   ].join("\n").trim();
 }
 
-export function pageWarnings(input: {
-  body: string;
-  text: string;
-  contentType?: string | null;
-  method: PageReadResult["method"];
-}): string[] {
-  const warnings: string[] = [];
-  const scriptCount = (input.body.match(/<script\b/gi) ?? []).length;
-  if (scriptCount >= 8 && input.text.length < 1_000) warnings.push("likely-csr-app-shell");
-  if (/enable javascript|requires javascript|please enable javascript/i.test(input.body)) {
-    warnings.push("javascript-required");
-  }
-  if (/challenge-platform|__cf_chl|turnstile|just a moment|verification successful/i.test(input.body)) {
-    warnings.push("cloudflare-challenge");
-  }
-  if (/login|sign in|captcha|access denied|blocked/i.test(input.text.slice(0, 2_000))) {
-    warnings.push("possible-login-or-block");
-  }
-  if (input.text.length > 0 && input.text.length < 500) warnings.push("tiny-content");
-  if (input.method === "raw-html") warnings.push("readability-fallback-to-raw-html");
-  if (input.contentType && !/html|text|json|xml|javascript|typescript/i.test(input.contentType)) {
-    warnings.push(`unexpected-content-type:${input.contentType}`);
-  }
-  return [...new Set(warnings)];
+interface ReadBudget {
+  signal: AbortSignal;
+  deadline: number;
 }
 
-export function shouldRecommendRender(result: Pick<PageReadResult, "text" | "warnings" | "method">): boolean {
-  if (result.warnings.some((warning) =>
-    warning === "likely-csr-app-shell" ||
-    warning === "javascript-required" ||
-    warning === "cloudflare-challenge" ||
-    warning === "possible-login-or-block",
-  )) return true;
-  if (result.warnings.includes("tiny-content") && /loading|enable javascript|requires javascript/i.test(result.text)) {
-    return true;
-  }
-  if (result.text.length < 50 && result.method !== "github-raw") return true;
-  return false;
-}
-
-async function fetchWithTimeout(
-  url: string,
-  timeoutMs: number,
-  fetchImpl: typeof fetch,
-  signal?: AbortSignal,
-): Promise<FetchAttempt> {
+async function withReadBudget<T>(request: PageReadRequest, read: (budget: ReadBudget) => Promise<T>): Promise<T> {
+  request.signal?.throwIfAborted();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
+  const timeout = setTimeout(() => {
+    controller.abort(new DOMException("Page read timed out.", "TimeoutError"));
+  }, timeoutMs);
+  const signal = request.signal ? AbortSignal.any([controller.signal, request.signal]) : controller.signal;
   try {
-    const response = await fetchImpl(url, {
-      signal: signal
-        ? AbortSignal.any([controller.signal, signal])
-        : controller.signal,
-      headers: {
-        "user-agent": "butler-lightweight-page-reader/0.1",
-        accept: "text/html,application/xhtml+xml,text/plain,application/json;q=0.8,*/*;q=0.5",
-      },
-    });
-    return {
-      url: response.url || url,
-      response,
-      body: await response.text(),
-    };
+    return await read({ signal, deadline });
   } finally {
     clearTimeout(timeout);
   }
 }
 
-function isTextLike(contentType: string | null): boolean {
-  return Boolean(contentType && /text|json|javascript|typescript|xml/i.test(contentType));
+async function fetchPageBytes(url: string, fetchImpl: typeof fetch, signal: AbortSignal): Promise<FetchAttempt> {
+  signal.throwIfAborted();
+  const response = await fetchImpl(url, {
+    signal,
+    headers: {
+      "user-agent": "butler-lightweight-page-reader/0.1",
+      accept: "text/html,application/xhtml+xml,application/pdf,text/plain,application/json;q=0.8,*/*;q=0.5",
+    },
+  });
+  signal.throwIfAborted();
+  const reader = response.body?.getReader();
+  if (!reader) return { url: response.url || url, response, bytes: new Uint8Array() };
+  const abort = () => { void reader.cancel(signal.reason).catch(() => {}); };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    const parts: Uint8Array[] = [];
+    let length = 0;
+    while (true) {
+      signal.throwIfAborted();
+      const next = await reader.read();
+      signal.throwIfAborted();
+      if (next.done) break;
+      parts.push(next.value);
+      length += next.value.length;
+    }
+    const bytes = new Uint8Array(length);
+    let offset = 0;
+    for (const part of parts) {
+      bytes.set(part, offset);
+      offset += part.length;
+    }
+    return { url: response.url || url, response, bytes };
+  } finally {
+    signal.removeEventListener("abort", abort);
+    reader.releaseLock();
+  }
 }
 
-function extract(attempt: FetchAttempt): Omit<PageReadResult, "reader" | "requestedUrl" | "durationMs" | "renderRecommended" | "document" | "chunks"> {
-  const contentType = attempt.response.headers.get("content-type");
-  if (isTextLike(contentType) && !/html|xml/i.test(contentType ?? "")) {
-    const text = attempt.body.trim();
-    const method = attempt.url.includes("raw.githubusercontent.com") ? "github-raw" : "plain-text";
-    const markdown = plainTextToMarkdown(text);
-    return {
-      finalUrl: attempt.url,
-      ok: attempt.response.ok && text.length > 0,
-      status: attempt.response.status,
-      text,
-      markdown,
-      method,
-      warnings: pageWarnings({ body: attempt.body, text, contentType, method }),
-    };
+async function extract(attempt: FetchAttempt, signal: AbortSignal): Promise<PageExtractionResult> {
+  signal.throwIfAborted();
+  // Bun workers cannot interrupt all synchronous parser work. A one-shot process
+  // gives cancellation a real kill boundary and ships with the existing source payload.
+  const message: { result?: PageExtractionResult; error?: string } = {};
+  const proc = Bun.spawn([
+    process.execPath,
+    fileURLToPath(new URL("./page-extraction-process.ts", import.meta.url)),
+    attempt.url,
+    attempt.response.headers.get("content-type") ?? "",
+    String(attempt.response.status),
+  ], {
+    stdin: "pipe", stdout: "ignore", stderr: "ignore",
+    ipc(result: typeof message) { Object.assign(message, result); },
+  });
+  const abort = () => proc.kill("SIGKILL");
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    if (signal.aborted) abort();
+    proc.stdin.write(attempt.bytes);
+    await proc.stdin.end();
+    const exitCode = await proc.exited;
+    signal.throwIfAborted();
+    if (exitCode !== 0) throw new Error("Page extraction process failed.");
+    if (!message.result) throw new Error(message.error || "Page extraction failed.");
+    return message.result;
+  } finally {
+    signal.removeEventListener("abort", abort);
+    proc.kill("SIGKILL");
+    await proc.exited;
   }
-
-  const dom = new JSDOM(attempt.body, { url: attempt.url });
-  const parsed = new Readability(dom.window.document).parse();
-  const readabilityHtml = parsed?.content || "";
-  const readabilityText = stripHtmlToText(readabilityHtml || parsed?.textContent || "");
-  const rawText = stripHtmlToText(attempt.body);
-  const method = readabilityText.length >= 200 || readabilityText.length >= rawText.length * 0.25
-    ? "readability"
-    : "raw-html";
-  const text = method === "readability" ? readabilityText : rawText;
-  const markdown = method === "readability" && readabilityHtml
-    ? htmlToMarkdown(readabilityHtml)
-    : normalizeMarkdown(rawText);
-  return {
-    finalUrl: attempt.url,
-    ok: attempt.response.ok && text.length > 0,
-    status: attempt.response.status,
-    title: parsed?.title || titleFromHtml(attempt.body),
-    text,
-    markdown,
-    method,
-    warnings: pageWarnings({ body: attempt.body, text, contentType, method }),
-  };
 }
 
 function needsGithubRawRetry(originalUrl: string, result: Pick<PageReadResult, "method" | "warnings" | "text">): boolean {
+  if (result.method === "pdf" || result.method === "unsupported") return false;
   if (!githubRawUrl(originalUrl)) return false;
   if (result.method === "github-raw") return false;
   if (result.warnings.includes("possible-login-or-block")) return true;
@@ -415,19 +340,21 @@ function needsGithubRawRetry(originalUrl: string, result: Pick<PageReadResult, "
 }
 
 export async function readPageLightweight(request: PageReadRequest): Promise<PageReadResult> {
+  return withReadBudget(request, (budget) => readLightweight(request, budget));
+}
+
+async function readLightweight(request: PageReadRequest, budget: ReadBudget): Promise<PageReadResult> {
   const started = Date.now();
   const fetchImpl = request.fetchImpl ?? fetch;
-  const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  let finalUrl = request.url;
   try {
-    const first = extract(
-      await fetchWithTimeout(request.url, timeoutMs, fetchImpl, request.signal),
-    );
+    const attempt = await fetchPageBytes(request.url, fetchImpl, budget.signal);
+    finalUrl = attempt.url;
+    const first = await extract(attempt, budget.signal);
     let selected = first;
     const rawUrl = githubRawUrl(request.url);
     if (rawUrl && needsGithubRawRetry(request.url, first)) {
-      const raw = extract(
-        await fetchWithTimeout(rawUrl, timeoutMs, fetchImpl, request.signal),
-      );
+      const raw = await extract(await fetchPageBytes(rawUrl, fetchImpl, budget.signal), budget.signal);
       if (raw.text.length > first.text.length || raw.method === "github-raw") selected = raw;
     }
     const renderRecommended = shouldRecommendRender(selected);
@@ -458,7 +385,7 @@ export async function readPageLightweight(request: PageReadRequest): Promise<Pag
     return {
       reader: "butler-lightweight",
       requestedUrl: request.url,
-      finalUrl: request.url,
+      finalUrl,
       ok: false,
       text: "",
       markdown: "",
@@ -467,7 +394,7 @@ export async function readPageLightweight(request: PageReadRequest): Promise<Pag
       method: "raw-html",
       durationMs: Date.now() - started,
       warnings: [],
-      renderRecommended: true,
+      renderRecommended: !budget.signal.aborted,
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -487,6 +414,7 @@ async function runLightpandaHtmlDump(input: {
   timeoutMs: number;
   signal?: AbortSignal;
 }): Promise<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }> {
+  input.signal?.throwIfAborted();
   const proc = Bun.spawn([
     input.binary,
     "fetch",
@@ -507,22 +435,17 @@ async function runLightpandaHtmlDump(input: {
       LIGHTPANDA_DISABLE_TELEMETRY: "true",
     },
   });
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    proc.kill();
-  }, input.timeoutMs);
   const abort = () => proc.kill();
   input.signal?.addEventListener("abort", abort, { once: true });
+  if (input.signal?.aborted) abort();
   try {
     const [stdout, stderr, exitCode] = await Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
       proc.exited,
     ]);
-    return { stdout, stderr, exitCode, timedOut };
+    return { stdout, stderr, exitCode, timedOut: input.signal?.aborted ?? false };
   } finally {
-    clearTimeout(timeout);
     input.signal?.removeEventListener("abort", abort);
   }
 }
@@ -551,6 +474,10 @@ function shouldUseLightpandaResult(lightweight: PageReadResult, lightpanda: Page
 }
 
 export async function readPageLightpanda(request: PageReadRequest & { binary?: string }): Promise<PageReadResult> {
+  return withReadBudget(request, (budget) => readLightpanda(request, budget));
+}
+
+async function readLightpanda(request: PageReadRequest & { binary?: string }, budget: ReadBudget): Promise<PageReadResult> {
   const started = Date.now();
   const binary = request.binary ?? resolveLightpandaBinary();
   if (!binary) {
@@ -571,15 +498,16 @@ export async function readPageLightpanda(request: PageReadRequest & { binary?: s
     };
   }
 
-  const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = Math.max(1, budget.deadline - Date.now());
   try {
+    budget.signal.throwIfAborted();
     const dump = await runLightpandaHtmlDump({
       binary,
       url: request.url,
       timeoutMs,
-      signal: request.signal,
+      signal: budget.signal,
     });
-    if (request.signal?.aborted) throw request.signal.reason;
+    budget.signal.throwIfAborted();
     if (dump.timedOut || dump.exitCode !== 0 || dump.stdout.trim().length === 0) {
       const reason = dump.timedOut ? "timed out" : `exit ${dump.exitCode}`;
       return {
@@ -599,14 +527,14 @@ export async function readPageLightpanda(request: PageReadRequest & { binary?: s
       };
     }
 
-    const extracted = extract({
+    const extracted = await extract({
       url: request.url,
       response: new Response(dump.stdout, {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8" },
       }),
-      body: dump.stdout,
-    });
+      bytes: new TextEncoder().encode(dump.stdout),
+    }, budget.signal);
     const warnings = [...new Set([...extracted.warnings, "lightpanda-rendered-fallback-used"])];
     const chunks = chunkEvidence({
       markdown: extracted.markdown,
@@ -661,6 +589,12 @@ function pageReadAbortError(signal: AbortSignal): Error {
 
 export async function readPageConfigured(request: ConfiguredPageReadRequest): Promise<PageReadResult> {
   const started = Date.now();
+  const result = await withReadBudget(request, (budget) => readConfigured(request, budget));
+  return { ...result, durationMs: Date.now() - started };
+}
+
+async function readConfigured(request: ConfiguredPageReadRequest, budget: ReadBudget): Promise<PageReadResult> {
+  const started = Date.now();
   const backend = request.backend ?? configuredPageReaderBackend({
     butlerData: request.butlerData,
   });
@@ -670,22 +604,22 @@ export async function readPageConfigured(request: ConfiguredPageReadRequest): Pr
   }
 
   if (backend === "lightweight") {
-    return readPageLightweight(request);
+    return readLightweight(request, budget);
   }
 
   if (backend === "jina-hosted") {
-    const lightweight = await readPageLightweight(request);
+    const lightweight = await readLightweight(request, budget);
     return withBackendWarning(lightweight, "jina-hosted-reader-not-yet-enabled");
   }
 
   if (backend === "lightpanda" || backend === "auto") {
-    const lightweight = await readPageLightweight(request);
-    if (!lightweight.renderRecommended) return lightweight;
+    const lightweight = await readLightweight(request, budget);
+    if (!lightweight.renderRecommended || budget.signal.aborted) return lightweight;
     const binary = resolveLightpandaBinary();
     if (!binary) {
       return withBackendWarning(lightweight, "lightpanda-unavailable-fell-back-to-lightweight");
     }
-    const rendered = await readPageLightpanda({ ...request, binary });
+    const rendered = await readLightpanda({ ...request, binary }, budget);
     if (shouldUseLightpandaResult(lightweight, rendered)) {
       return rendered;
     }
@@ -695,5 +629,5 @@ export async function readPageConfigured(request: ConfiguredPageReadRequest): Pr
     return withBackendWarning(lightweight, warning);
   }
 
-  return readPageLightweight(request);
+  return readLightweight(request, budget);
 }
