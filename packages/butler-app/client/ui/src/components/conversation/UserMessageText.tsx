@@ -37,8 +37,7 @@ export function UserMessageText({ text }: { text: string }) {
       {overflowing && (
         <Button
           type="button"
-          size="sm"
-          variant="ghost"
+          variant="inline"
           aria-controls={id}
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
