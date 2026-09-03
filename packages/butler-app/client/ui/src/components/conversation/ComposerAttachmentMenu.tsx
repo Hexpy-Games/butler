@@ -4,8 +4,11 @@ import { useButlerStore } from "@/app/store.ts";
 import { appThemeClasses } from "@/app/utils.ts";
 import {
   IconButton,
+  ListChecks,
+  MessageSquarePlus,
   OptionMenu,
   OptionMenuItem,
+  OptionMenuSection,
   Paperclip,
   Plus,
   Popover,
@@ -22,6 +25,10 @@ export function ComposerAttachmentMenu() {
   const settings = useButlerStore((state) => state.settings);
   const projectId = activeProjectId(navigation, activeChatId);
   const uploadingCount = useComposerStore((store) => store.uploadingCount);
+  const planMode = useComposerStore((store) => store.planMode);
+  const handlePlanModeChange = useComposerStore(
+    (store) => store.handlePlanModeChange,
+  );
   const openAttachmentPicker = useComposerStore(
     (store) => store.openAttachmentPicker,
   );
@@ -33,7 +40,7 @@ export function ComposerAttachmentMenu() {
       <PopoverTrigger asChild>
         <IconButton
           data-test-class="attachment-button"
-          label={appCopy.composer.attachFile}
+          label={appCopy.composer.featureDrawer}
           disabled={uploadingCount > 0}
         >
           <Plus size={16} />
@@ -46,22 +53,44 @@ export function ComposerAttachmentMenu() {
         side="top"
         sideOffset={10}
       >
-        <OptionMenu title="첨부" size="fit">
-          {projectId ? (
-            <ComposerProjectDocumentMenu
-              className={themeClass}
-              projectId={projectId}
-              onClose={() => setOpen(false)}
+        <OptionMenu title={appCopy.composer.featureDrawer} size="fit">
+          <OptionMenuSection title={appCopy.composer.attachments}>
+            {projectId ? (
+              <ComposerProjectDocumentMenu
+                className={themeClass}
+                projectId={projectId}
+                onClose={() => setOpen(false)}
+              />
+            ) : null}
+            <OptionMenuItem
+              icon={<Paperclip size={15} />}
+              label={appCopy.composer.attachFile}
+              onClick={() => {
+                openAttachmentPicker();
+                setOpen(false);
+              }}
             />
-          ) : null}
-          <OptionMenuItem
-            icon={<Paperclip size={15} />}
-            label="파일 첨부"
-            onClick={() => {
-              openAttachmentPicker();
-              setOpen(false);
-            }}
-          />
+          </OptionMenuSection>
+          <OptionMenuSection title={appCopy.composer.responseMode}>
+            <OptionMenuItem
+              icon={<MessageSquarePlus size={15} />}
+              label={appCopy.composer.normal}
+              selected={!planMode}
+              onClick={() => {
+                handlePlanModeChange(false);
+                setOpen(false);
+              }}
+            />
+            <OptionMenuItem
+              icon={<ListChecks size={15} />}
+              label={appCopy.composer.plan}
+              selected={planMode}
+              onClick={() => {
+                handlePlanModeChange(true);
+                setOpen(false);
+              }}
+            />
+          </OptionMenuSection>
         </OptionMenu>
       </PopoverContent>
     </Popover>
