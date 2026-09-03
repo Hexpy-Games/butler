@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, setSystemTime, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -45,6 +45,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   dom.window.close();
+  setSystemTime();
   for (const key of ["window", "document", "navigator", "HTMLElement", "Node", "ResizeObserver", "IS_REACT_ACT_ENVIRONMENT"]) {
     Reflect.deleteProperty(globalThis, key);
   }
@@ -83,13 +84,37 @@ test("user footer displays original sent date and copies the complete text", asy
   expect(container.querySelector("time")?.dateTime).toBe("2026-09-03T10:00:00.000Z");
   const button = container.querySelector("button")!;
   expect(button.getAttribute("aria-label")).toBe(appCopy.conversation.messageActions.copyMessage);
+  expect(button.textContent).toBe("");
+  await act(async () => button.focus());
+  expect(dom.window.document.querySelector('[role="tooltip"]')?.textContent)
+    .toBe(appCopy.conversation.messageActions.copyMessage);
   await act(async () => button.click());
   expect(copied).toEqual([text]);
-  expect(button.textContent).toContain(appCopy.conversation.messageActions.copied);
+  expect(button.textContent).toBe("");
+  expect(button.getAttribute("aria-label")).toBe(appCopy.conversation.messageActions.copied);
+  expect(dom.window.document.querySelector('[role="tooltip"]')?.textContent)
+    .toBe(appCopy.conversation.messageActions.copied);
   await act(async () => root.render(
     <UserMessageFooter message={{ id: "missing-date", role: "user", text }} />,
   ));
   expect(container.querySelector("time")).toBeNull();
+});
+
+test("sent time includes only the date parts needed for the local calendar day", async () => {
+  setSystemTime(new Date(2026, 8, 3, 12, 0));
+  const time: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  const cases: Array<[Date, Intl.DateTimeFormatOptions]> = [
+    [new Date(2026, 8, 3, 9, 15), time],
+    [new Date(2026, 7, 3, 9, 15), { ...time, month: "short", day: "numeric" }],
+    [new Date(2025, 8, 3, 9, 15), { ...time, year: "numeric", month: "short", day: "numeric" }],
+  ];
+  for (const [date, options] of cases) {
+    await act(async () => root.render(
+      <UserMessageFooter message={{ id: "dated", role: "user", text: "hello", created_at: date.toISOString() }} />,
+    ));
+    expect(container.querySelector("time")?.textContent)
+      .toBe(new Intl.DateTimeFormat(undefined, options).format(date));
+  }
 });
 
 test("Markdown code copy copies only the selected full block and preserves inline code", async () => {
