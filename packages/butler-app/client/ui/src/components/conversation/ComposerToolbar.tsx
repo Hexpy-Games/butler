@@ -11,6 +11,7 @@ import { ComposerAttachmentMenu } from "./ComposerAttachmentMenu";
 import { ComposerContextControl } from "./ComposerContextControl";
 import { ModelMenu } from "./ModelMenu";
 import { ComposerCompactPreview } from "./ComposerCompactPreview";
+import { ComposerStateIndicator } from "./ComposerStateIndicator";
 
 export function ComposerToolbar() {
   const isSending = useComposerStore((store) => store.isSending);
@@ -22,6 +23,7 @@ export function ComposerToolbar() {
   return (
     <ComposerCardToolbar>
       <ComposerAttachmentMenu />
+      <ComposerStateIndicator />
       <ComposerCompactPreview />
       <ComposerCardExpandedControls>
         <AccessModeMenu />
