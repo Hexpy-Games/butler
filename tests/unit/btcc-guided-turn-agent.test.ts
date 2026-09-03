@@ -405,6 +405,36 @@ test("Worker result returns to the current Steward Work before reporting", async
   }
 });
 
+test("legacy Worker uses its existing bound Micro Work surface", async () => {
+  const fixture = createFixture("guided-bound-worker-surface");
+  try {
+    const command = localRunCommand(fixture.root, "bound-worker-surface");
+    command.context.executionPolicy = {
+      role: "worker", accessMode: "full_access", trackingMode: "local",
+      requiredNativeToolProfiles: [], requiredNativeTools: [], workspacePath: fixture.root,
+    };
+    const turn = await admitTurn(command, fixture.stores.admission, fixture.stores.turns);
+    await fixture.stores.durableWork.startWork({
+      sessionId: turn.sessionId, turnId: turn.turnId, mutationCallId: "runtime-micro-work",
+      objective: "The assigned bounded Worker action",
+    });
+    const captured = new Error("surface captured");
+    const agent = fixture.agent({ async runRound(request) {
+      const names = new Set(request.tools.map((tool) => tool.name));
+      expect(names.has("start_work")).toBe(false);
+      expect(names.has("continue_work")).toBe(false);
+      expect(names.has("replace_work_plan")).toBe(true);
+      expect(names.has("record_work_review")).toBe(false);
+      expect(names.has("delegate_to_worker")).toBe(false);
+      expect(names.has("delegate_to_steward")).toBe(false);
+      throw captured;
+    } });
+    await expect(agent.run({ turn, signal: new AbortController().signal })).rejects.toBe(captured);
+  } finally {
+    fixture.close();
+  }
+});
+
 test.each(["ordinary", "direction", "fast-result"])("Steward executes directly before assignment, then manages Workers and waits without Work closeout (%s)", async (scenario) => {
   const directionDuringWait = scenario === "direction";
   const fastResult = scenario === "fast-result";

@@ -49,7 +49,6 @@ function stringArray(value: unknown): string[] {
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
 const MAX_COMMAND_TIMEOUT_MS = 300_000;
-const MAX_COMMAND_CAPTURE_CHARS = 5_000_000;
 const COMMAND_GENERATED_ARTIFACT_DIR = "generated";
 function commandArtifactDataRoot(butlerData: string): string {
   return join(butlerData, "artifacts");
@@ -547,7 +546,7 @@ async function executeCommandCompatibility(input: {
   signal?: AbortSignal;
   commandExecutor: CommandExecutor;
 }): Promise<ShellCommandResult> {
-  const raw = await executeLegacyCommandCompatibility(input.commandExecutor, {
+  return await executeLegacyCommandCompatibility(input.commandExecutor, {
     readOnlyProgramHome: input.butlerHome ?? process.env.BUTLER_HOME,
     command: input.command,
     cwd: input.cwd,
@@ -556,47 +555,12 @@ async function executeCommandCompatibility(input: {
     pipefail: input.pipefail,
     signal: input.signal,
   });
-  return {
-    ...raw,
-    stdout: boundedCommandCapture(raw.stdout, "stdout"),
-    stderr: boundedCommandCapture(raw.stderr, "stderr"),
-  };
-}
-
-function boundedCommandCapture(value: string, stream: "stdout" | "stderr"): string {
-  if (value.length <= MAX_COMMAND_CAPTURE_CHARS) return value;
-  return `${value.slice(0, MAX_COMMAND_CAPTURE_CHARS)}\n[${stream} truncated after ${MAX_COMMAND_CAPTURE_CHARS} chars]`;
 }
 
 function throwIfCommandAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) return;
   if (signal.reason instanceof Error) throw signal.reason;
   throw new Error("Runtime turn was cancelled.");
-}
-
-function sliceLastCharacters(value: string, maxChars: number): string {
-  const chars = Array.from(value);
-  if (chars.length <= maxChars) return value;
-  return chars.slice(-maxChars).join("");
-}
-
-function boundOutputOnFailure(output: string, maxLines: number = 20, maxChars: number = 1000): string {
-  if (!output) return output;
-  const lines = output.split("\n");
-  if (lines.length <= maxLines && Array.from(output).length <= maxChars) return output;
-
-  const lastLines = lines.slice(-maxLines);
-  let result = lastLines.join("\n");
-
-  if (Array.from(result).length > maxChars) {
-    result = sliceLastCharacters(result, maxChars);
-    const newlineIndex = result.indexOf("\n");
-    if (newlineIndex > 0) {
-      result = result.slice(newlineIndex + 1);
-    }
-  }
-
-  return `...[output truncated]\n${result}`;
 }
 
 export async function runCommandTool(input: {
@@ -630,11 +594,6 @@ export async function runCommandTool(input: {
     fallback: DEFAULT_COMMAND_TIMEOUT_MS,
     min: 1_000,
     max: MAX_COMMAND_TIMEOUT_MS,
-  });
-  const maxModelTokens = boundedInteger(input.args.max_output_tokens, {
-    fallback: 1_200,
-    min: 200,
-    max: 8_000,
   });
   const outputMode = typeof input.args.output_mode === "string" &&
     ["auto", "silent_on_success", "full"].includes(input.args.output_mode)
@@ -683,43 +642,25 @@ export async function runCommandTool(input: {
     cwd,
     timeoutMs,
     butlerData: input.butlerData,
-    pipefail: Boolean(validationSuiteFromArgs(input.args)),
+    pipefail: true,
     signal: input.signal,
     commandExecutor,
   });
   throwIfCommandAborted(input.signal);
 
   const success = raw.exit_code === 0 && raw.timed_out === false;
-  const shouldSuppressOutput = success && (
-    outputMode === "silent_on_success" ||
-    (outputMode === "auto" && Boolean(validationSuiteFromArgs(input.args)))
-  );
-
-  let processedResult = raw;
-  if (shouldSuppressOutput) {
-    processedResult = {
-      stdout: "",
-      stderr: "",
-      exit_code: raw.exit_code,
-      timed_out: raw.timed_out,
-    };
-  } else if (!success && (outputMode === "silent_on_success" || outputMode === "auto")) {
-    processedResult = {
-      stdout: boundOutputOnFailure(raw.stdout),
-      stderr: boundOutputOnFailure(raw.stderr),
-      exit_code: raw.exit_code,
-      timed_out: raw.timed_out,
-    };
-  }
-
   const budgeted = budgetToolOutput({
-    result: processedResult,
+    result: raw,
     butlerData: input.butlerData,
     command,
     cwd,
-    maxModelTokens,
+    maxModelTokens: typeof input.args.max_output_tokens === "number" ? input.args.max_output_tokens : undefined,
+    outputMode,
+    validationSuite: input.args.validation_suite,
   });
   const declaredArtifacts = declaredCommandArtifacts(input.args, cwd, workspace, input.butlerData);
+  const requestedArtifacts = stringArray(input.args.output_paths).length;
+  const unpublishedArtifacts = Math.max(0, requestedArtifacts - declaredArtifacts.length);
   const stdoutArtifacts = declaredArtifacts.length > 0
     ? []
     : structuredStdoutCommandArtifacts({
@@ -761,6 +702,17 @@ export async function runCommandTool(input: {
     timed_out: budgeted.timed_out,
     stdout: budgeted.stdout,
     stderr: budgeted.stderr,
+    output_presentation: budgeted.output_presentation,
+    ...(requestedArtifacts > 0 ? { artifact_publication: {
+      ok: unpublishedArtifacts === 0,
+      requested: requestedArtifacts,
+      published: declaredArtifacts.length,
+      unpublished: unpublishedArtifacts,
+      ...(unpublishedArtifacts > 0 ? { error: {
+        code: "declared_output_files_unavailable",
+        message: "Some declared output files could not be published. Declare existing regular files inside the active workspace or Butler artifact directory.",
+      } } : {}),
+    } } : {}),
     ...(budgeted.butler_tool_artifact
       ? { butler_tool_artifact: budgeted.butler_tool_artifact }
       : {}),
@@ -772,7 +724,7 @@ export async function runCommandTool(input: {
     evidence_capability_receipts: commandEvidenceCapabilityReceipts({
       exitCode: budgeted.exit_code,
       timedOut: budgeted.timed_out,
-      outputSuppressed: shouldSuppressOutput,
+      outputSuppressed: budgeted.output_presentation?.suppressed === true,
       outputBudgeted: Boolean(budgeted.butler_tool_artifact),
       artifacts,
       validations: commandValidationEvidence(input.args, raw),

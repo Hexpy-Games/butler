@@ -28,6 +28,7 @@ export type GuidedCommandEffectInput = {
   max_output_tokens?: number;
   output_paths?: string[];
   output_mode?: "auto" | "silent_on_success" | "full";
+  validation_suite?: string;
 };
 
 export type GuidedCommandEffectResult = Record<string, unknown> & {
@@ -180,13 +181,12 @@ function normalizeCommandEffectInput(value: unknown): GuidedCommandEffectInput {
       "run_command persistent effect requires state_effect mutation or remote_observation",
     );
   }
-  if (optionalTrimmedString(record.validation_suite, "validation_suite")) {
-    throw new Error("A persistent command cannot also be a validation suite");
-  }
+  const validationSuite = optionalTrimmedString(record.validation_suite, "validation_suite");
   const normalized: GuidedCommandEffectInput = {
     command: requiredString(record.command, "command"),
     cwd: requiredString(record.cwd, "cwd"),
     state_effect: record.state_effect,
+    ...(validationSuite ? { validation_suite: validationSuite } : {}),
   };
   if (record.timeout_ms !== undefined) {
     normalized.timeout_ms = positiveInteger(record.timeout_ms, "timeout_ms");

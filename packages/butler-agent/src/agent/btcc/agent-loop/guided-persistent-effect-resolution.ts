@@ -255,11 +255,7 @@ export async function loadGuidedEffectWork(
   service: DurableWorkService,
   scope: WorkTurnScope,
 ): Promise<DurableWorkView | null> {
-  try {
-    return await service.boundWorkForTurn(scope.turnId);
-  } catch {
-    return null;
-  }
+  return await service.boundWorkForTurn(scope.turnId);
 }
 
 export function unavailableGuidedEffect(toolName: string): Record<string, unknown> {
@@ -279,8 +275,6 @@ export function ordinaryGuidedEffectError(
     error: {
       code,
       message,
-      recoverable: true,
-      next_action: "Amend or review the current Plan, choose a safe typed tool, or report the concrete limitation.",
       ...details,
     },
   };

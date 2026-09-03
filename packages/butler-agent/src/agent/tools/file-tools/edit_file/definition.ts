@@ -7,7 +7,7 @@ import { WORKSPACE_SHA256_PATTERN } from "../shared/workspace-sha256.ts";
 export const editFileToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "edit_file",
-  description: "Make one small, exact change in a UTF-8 workspace file or a conflict-safe 2-20 file batch. Single edits locate old_text exactly; start_line is an optional location hint. Batches require each current expected_sha256, preflight all entries, and report bounded partial state on external change. Use write_file for complete content and Project Ledger tools for Ledger files.",
+  description: "Make one small, exact change in a UTF-8 workspace file or an ordered 2-20 edit batch. Repeated paths are allowed: each edit addresses the preceding in-memory result, and each file is committed once. start_line is an optional location hint. Batches require each file's initial expected_sha256, preflight all entries, and report partial state on external change. Use write_file for complete content and Project Ledger tools for Ledger files.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -39,7 +39,7 @@ export const editFileToolDefinition: ButlerToolDefinition = {
         type: "array",
         minItems: 2,
         maxItems: 20,
-        description: "Conflict-safe batch in request order.",
+        description: "Ordered exact edits, including repeated paths. Later edits address preceding results. Runtime guards each file's initial state and commits it once.",
         items: {
           type: "object",
           additionalProperties: false,
@@ -98,7 +98,7 @@ export const editFileToolMetadata: ToolCapabilityMetadata = {
   tags: ["file", "edit", "native"],
   safetyNotes: [
     "Edits one exact text range in an existing regular UTF-8 file inside the workspace after realpath and sensitive-path checks.",
-    "Canonical edits batches contain 2-20 distinct targets, preflight every entry before mutation, and stop with bounded partial state when a later target changes externally.",
+    "Canonical edits batches contain 2-20 ordered edits, including repeated targets, preflight every entry before mutation, and stop with bounded partial state when a later target changes externally.",
     "Supports stale-byte protection for guarded callers, rejects symbolic-link leaves and Project Ledger paths, and writes through an atomic same-directory replacement.",
     "One Butler agent process serializes its write_file and edit_file mutations. External editors and other processes are not locked.",
   ],

@@ -127,7 +127,6 @@ function decodeBatchEditInput(
       "edit_file_invalid_batch",
       `edit_file edits must contain ${GUIDED_EDIT_BATCH_MIN}-${GUIDED_EDIT_BATCH_MAX} entries.`,
     );
-  const seen = new Set<string>();
   const edits: DecodedGuidedWorkspaceFileEditEntry[] = [];
   for (const [index, value] of input.entries()) {
     if (!value || typeof value !== "object" || Array.isArray(value))
@@ -168,12 +167,6 @@ function decodeBatchEditInput(
         workspacePath,
         requiredText(entry.path, `edits[${index}].path`),
       );
-      if (seen.has(path))
-        return rejected(
-          "edit_file_duplicate_target",
-          `edit_file edits[${index}] targets a duplicate file.`,
-        );
-      seen.add(path);
       edits.push({
         path,
         ...(entry.start_line === undefined
