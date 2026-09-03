@@ -31,6 +31,7 @@
 
 .user {
   grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--space-1);
   justify-content: end;
   justify-items: end;
 }
@@ -83,6 +84,21 @@
   margin-top: var(--space-3);
   color: var(--text-tertiary);
   font-size: var(--font-size-2);
+}
+
+.rowFooter {
+  grid-column: 1 / -1;
+  min-width: 0;
+  white-space: normal;
+}
+
+.user .rowFooter {
+  justify-self: end;
+}
+
+.rowFooter .footer {
+  margin-top: 0;
+  justify-content: flex-end;
 }
 
 .footer button {

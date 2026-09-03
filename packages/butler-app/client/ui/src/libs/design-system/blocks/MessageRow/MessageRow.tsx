@@ -25,6 +25,7 @@ export interface MessageRowProps extends Omit<
   role: MessageRowRole;
   children: ReactNode;
   avatar?: ReactNode;
+  footer?: ReactNode;
   tone?: MessageRowTone;
   compactionEvent?: boolean;
   activity?: boolean;
@@ -52,6 +53,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
       role,
       children,
       avatar,
+      footer,
       tone = "complete",
       compactionEvent = false,
       activity = false,
@@ -89,14 +91,17 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
         <div className={styles.body} data-test-class="message-body">
           {children}
         </div>
+        {footer && <div className={styles.rowFooter}>{footer}</div>}
       </article>
     );
   },
 );
 
-export function MessageFooter({ children }: { children: ReactNode }) {
+export function MessageFooter({
+  children, dataTestClass = "assistant-footer",
+}: { children: ReactNode; dataTestClass?: string }) {
   return (
-    <div className={styles.footer} data-test-class="assistant-footer">
+    <div className={styles.footer} data-test-class={dataTestClass}>
       {children}
     </div>
   );

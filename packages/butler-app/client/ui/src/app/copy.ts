@@ -37,6 +37,14 @@ interface ConversationWorkCopy {
 }
 
 interface ConversationCopy {
+  messageActions: {
+    showMore: string;
+    showLess: string;
+    copyMessage: string;
+    copyCode: string;
+    copied: string;
+    copyFailed: string;
+  };
   work: ConversationWorkCopy;
   stoppedStatus: string;
   fileChanges: {
@@ -717,6 +725,14 @@ export interface AppCopy {
 
 const koKrCopy: AppCopy = {
   conversation: {
+    messageActions: {
+      showMore: "더보기",
+      showLess: "접기",
+      copyMessage: "메시지 복사",
+      copyCode: "코드 복사",
+      copied: "복사됨",
+      copyFailed: "복사하지 못했습니다.",
+    },
     stoppedStatus: "중지됨",
     fileChanges: {
       regionLabel: "변경된 파일",
@@ -1539,6 +1555,14 @@ function mergeCopy<T extends object>(
 
 const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
   conversation: {
+    messageActions: {
+      showMore: "Show more",
+      showLess: "Show less",
+      copyMessage: "Copy message",
+      copyCode: "Copy code",
+      copied: "Copied",
+      copyFailed: "Could not copy.",
+    },
     stoppedStatus: "Stopped",
     fileChanges: {
       regionLabel: "Changed files",
