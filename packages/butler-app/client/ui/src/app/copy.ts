@@ -546,6 +546,8 @@ export interface AppCopy {
       empty: string;
       unavailable: string;
       details: string;
+      latestReport: string;
+      recentArtifacts: string;
       actions: (completed: number, total: number) => string;
       effects: (count: number) => string;
       states: Record<import("./types.ts").WorkStatusState, string>;
@@ -1337,6 +1339,8 @@ const koKrCopy: AppCopy = {
       empty: "표시할 작업이 없습니다.",
       unavailable: "작업 상태를 불러올 수 없습니다.",
       details: "대화 열기",
+      latestReport: "최근 보고",
+      recentArtifacts: "최근 결과물",
       actions: (completed, total) => `단계 ${completed}/${total}`,
       effects: (count) => `효과 ${count}건`,
       states: {
@@ -2158,6 +2162,8 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       empty: "No work to show.",
       unavailable: "Work status is unavailable.",
       details: "Open conversation",
+      latestReport: "Latest report",
+      recentArtifacts: "Recent artifacts",
       actions: (completed, total) => `${completed}/${total} steps`,
       effects: (count) => `${count} effects`,
       states: {

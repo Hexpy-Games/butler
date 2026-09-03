@@ -1471,6 +1471,8 @@ export interface WorkStatusItemView {
   completed_actions: number;
   total_actions: number;
   effect_count: number;
+  latest_report_summary?: string;
+  recent_artifacts?: string[];
   updated_at: string;
 }
 

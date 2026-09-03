@@ -1,7 +1,6 @@
 import { appCopy } from "@/app/copy.ts";
 import type { WorkStatusItemView, WorkStatusView } from "@/app/types.ts";
 import { Button, Stack, SurfacePanel, Tag, Typo } from "@/butler-ds";
-import styles from "./WorkStatusPanel.module.css";
 
 export interface WorkStatusPanelProps {
   view: WorkStatusView | null;
@@ -49,17 +48,23 @@ function WorkStatusRow({
     item.effect_count > 0 ? copy.effects(item.effect_count) : null,
   ].filter((value): value is string => Boolean(value));
   return (
-    <SurfacePanel
-      elevation="none"
-      className={styles.row}
-      data-state={item.state}
-    >
+    <SurfacePanel elevation="none">
       <Stack gap="xs">
         <Stack align="row" cross="center" justify="between" gap="sm" wrap>
           <Typo.Body as="div">{item.safe_title}</Typo.Body>
           <Tag ariaLabel={copy.states[item.state]}>{copy.states[item.state]}</Tag>
         </Stack>
         <Typo.Caption>{item.safe_summary}</Typo.Caption>
+        {item.latest_report_summary ? (
+          <Typo.Caption>
+            {copy.latestReport}: {item.latest_report_summary}
+          </Typo.Caption>
+        ) : null}
+        {item.recent_artifacts?.length ? (
+          <Typo.Caption>
+            {copy.recentArtifacts}: {item.recent_artifacts.join(" · ")}
+          </Typo.Caption>
+        ) : null}
         <Stack align="row" cross="center" justify="between" gap="sm" wrap>
           {meta.length > 0 ? <Typo.Caption>{meta.join(" · ")}</Typo.Caption> : <span />}
           <Button

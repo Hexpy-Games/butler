@@ -34,6 +34,8 @@ test("work status panel renders empty state and navigates without showing sessio
   ));
   expect(container.textContent).toContain("Safe work title");
   expect(container.textContent).toContain("2/3");
+  expect(container.textContent).toContain("Reviewed the delivered result.");
+  expect(container.textContent).toContain("summary.pdf");
   expect(container.textContent).not.toContain("session-private-123");
   (container.querySelector("button") as HTMLButtonElement).click();
   expect(opened).toEqual(["session-private-123"]);
@@ -72,6 +74,8 @@ function populatedView(): WorkStatusView {
       completed_actions: 2,
       total_actions: 3,
       effect_count: 1,
+      latest_report_summary: "Reviewed the delivered result.",
+      recent_artifacts: ["summary.pdf"],
       updated_at: "2026-09-04T00:00:00.000Z",
     }],
     counts: {
