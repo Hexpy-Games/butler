@@ -23,8 +23,9 @@ export function PersonalizationTextFields({
   return (
     <>
       <Field data-test-class="settings-field">
-        <FieldLabel>{fields.persona}</FieldLabel>
+        <FieldLabel htmlFor="personalization-persona">{fields.persona}</FieldLabel>
         <Textarea
+          id="personalization-persona"
           value={personalizationDraft.persona}
           onChange={(event) =>
             setPersonalizationDraft((current) => ({
@@ -38,8 +39,9 @@ export function PersonalizationTextFields({
         />
       </Field>
       <Field data-test-class="settings-field">
-        <FieldLabel>{fields.eol}</FieldLabel>
+        <FieldLabel htmlFor="personalization-eol">{fields.eol}</FieldLabel>
         <Textarea
+          id="personalization-eol"
           value={personalizationDraft.eol}
           onChange={(event) =>
             setPersonalizationDraft((current) => ({

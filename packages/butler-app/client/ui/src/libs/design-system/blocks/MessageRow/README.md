@@ -36,6 +36,12 @@ Agents building chat timelines, transcript previews, or message fixtures.
 Keep markdown rendering, copy actions, retries, and domain records in the
 container. Use `MessageFooter` for footer controls and metadata.
 
+The optional `footer` slot renders metadata outside the message bubble. User
+messages use this slot for their sent date/time and full-text copy action.
+Long user text is folded by the conversation container at five rendered lines;
+attachments remain outside the folded text. Neither folding nor copying changes
+the stored message.
+
 ## Wrong use cases
 
 Do not use this for activity lists or inspector rows. Use `ActivityFeed`,

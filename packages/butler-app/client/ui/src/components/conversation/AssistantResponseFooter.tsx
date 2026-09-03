@@ -1,4 +1,5 @@
-import { Copy, MessageFooter, MessageStatusRow, Typo } from "@/butler-ds";
+import { Copy, MessageFooter, MessageStatusRow, Tooltip, Typo } from "@/butler-ds";
+import { appCopy } from "@/app/copy.ts";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
 import { AssistantStatusLabel } from "./AssistantStatusLabel";
 import { useButlerMarkTheme } from "./hooks/useButlerMarkTheme";
@@ -34,14 +35,18 @@ export function AssistantResponseFooter({
   return (
     <>
       <MessageFooter>
-        <button
-          type="button"
-          onClick={onCopy}
-          aria-label="Copy assistant response"
+        <Tooltip label={copied
+          ? appCopy.conversation.messageActions.copied
+          : appCopy.conversation.messageActions.copyMessage}
         >
-          <Copy size={14} />
-          <span>{copied ? "Copied" : "Copy"}</span>
-        </button>
+          <button
+            type="button"
+            onClick={onCopy}
+            aria-label="Copy assistant response"
+          >
+            <Copy size={14} />
+          </button>
+        </Tooltip>
         {meta?.durationLabel && <span>Worked for {meta.durationLabel}</span>}
         {meta?.timeLabel && (
           <time dateTime={meta.completedAtIso ?? undefined}>{meta.timeLabel}</time>

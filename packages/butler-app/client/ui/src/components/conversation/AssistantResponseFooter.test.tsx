@@ -13,6 +13,8 @@ test("delivered assistant footer keeps completion in a separate bottom row", () 
   const statusIndex = html.indexOf("assistant-terminal-status-row");
 
   expect(metadataRow).toContain("Copy");
+  expect(metadataRow).not.toContain("<span>Copy</span>");
+  expect(metadataRow).toMatch(/<button[^>]*><svg[\s\S]*?<\/svg><\/button>/u);
   expect(metadataRow).toContain("Worked for 12초");
   expect(metadataRow).toContain("오전 1:23");
   expect(metadataRow).not.toContain("assistant-status-label");

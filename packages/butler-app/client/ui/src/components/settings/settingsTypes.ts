@@ -35,5 +35,18 @@ export type PersonalizationDraft = {
 export interface SettingsSectionDescriptor {
   id: SettingsSectionId;
   label: string;
+  description: string;
+  aliases: string[];
   icon: ReactNode;
+}
+
+export type SettingsSectionGroupId =
+  | "general"
+  | "models-and-extensions"
+  | "app-and-system";
+
+export interface SettingsSectionGroupDescriptor {
+  id: SettingsSectionGroupId;
+  label: string;
+  sections: SettingsSectionDescriptor[];
 }

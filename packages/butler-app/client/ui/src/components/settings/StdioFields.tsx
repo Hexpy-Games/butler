@@ -20,23 +20,26 @@ export function StdioFields({
   return (
     <>
       <Field>
-        <FieldLabel>{copy.fields.mcpCommand}</FieldLabel>
+        <FieldLabel htmlFor="mcp-stdio-command">{copy.fields.mcpCommand}</FieldLabel>
         <Input
+          id="mcp-stdio-command"
           value={form.command}
           onChange={(event) => onChange({ command: event.target.value })}
         />
       </Field>
       <Field>
-        <FieldLabel>{copy.fields.mcpArgs}</FieldLabel>
+        <FieldLabel htmlFor="mcp-stdio-args">{copy.fields.mcpArgs}</FieldLabel>
         <Textarea
+          id="mcp-stdio-args"
           placeholder={copy.placeholders.mcpArgs}
           value={form.argsText}
           onChange={(event) => onChange({ argsText: event.target.value })}
         />
       </Field>
       <Field>
-        <FieldLabel>{copy.fields.mcpCwd}</FieldLabel>
+        <FieldLabel htmlFor="mcp-stdio-cwd">{copy.fields.mcpCwd}</FieldLabel>
         <Input
+          id="mcp-stdio-cwd"
           value={form.cwd}
           onChange={(event) => onChange({ cwd: event.target.value })}
         />

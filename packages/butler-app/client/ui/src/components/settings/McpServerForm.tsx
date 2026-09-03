@@ -30,22 +30,25 @@ export function McpServerForm({
   return (
     <Stack gap="sm">
       <Field>
-        <FieldLabel>{copy.fields.mcpServerId}</FieldLabel>
+        <FieldLabel htmlFor="mcp-server-id">{copy.fields.mcpServerId}</FieldLabel>
         <Input
+          id="mcp-server-id"
           value={form.id}
           onChange={(event) => onChange({ id: event.target.value })}
         />
       </Field>
       <Field>
-        <FieldLabel>{copy.fields.mcpServerName}</FieldLabel>
+        <FieldLabel htmlFor="mcp-server-name">{copy.fields.mcpServerName}</FieldLabel>
         <Input
+          id="mcp-server-name"
           value={form.displayName}
           onChange={(event) => onChange({ displayName: event.target.value })}
         />
       </Field>
       <Field>
-        <FieldLabel>{copy.fields.mcpTransport}</FieldLabel>
+        <FieldLabel htmlFor="mcp-transport">{copy.fields.mcpTransport}</FieldLabel>
         <NativeSelect
+          id="mcp-transport"
           value={form.transport}
           onChange={(event) =>
             onChange({ transport: event.target.value as McpTransportKind })
@@ -63,8 +66,9 @@ export function McpServerForm({
         </NativeSelect>
       </Field>
       <Field>
-        <FieldLabel>{copy.fields.enabled}</FieldLabel>
+        <FieldLabel htmlFor="mcp-enabled">{copy.fields.enabled}</FieldLabel>
         <Switch
+          id="mcp-enabled"
           checked={form.enabled}
           onCheckedChange={(enabled) => onChange({ enabled })}
         />

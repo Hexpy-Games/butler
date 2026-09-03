@@ -51,10 +51,12 @@ export function WorkerProfileControls({
         {!canAdd && <Typo.Caption>{panelCopy.addLimitReached}</Typo.Caption>}
       </Stack>
       <SettingsField
+        id="worker-max-simultaneous"
         data-test-class="settings-field"
         label={panelCopy.maxSimultaneousWorkers}
         control={
           <Input
+            id="worker-max-simultaneous"
             type="number"
             inputMode="numeric"
             min={SIMULTANEOUS_WORKERS_MIN}

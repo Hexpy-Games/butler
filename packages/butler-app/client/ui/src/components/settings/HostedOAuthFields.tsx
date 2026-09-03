@@ -36,8 +36,9 @@ export function HostedOAuthFields({
       <Typo.Body>{status}</Typo.Body>
       {login?.auth_url && (
         <SettingsField
+          id="model-oauth-link"
           label={copy.oauthLink}
-          control={<Input value={login.auth_url} readOnly />}
+          control={<Input id="model-oauth-link" value={login.auth_url} readOnly />}
         />
       )}
       {login?.auth_url && (

@@ -16,9 +16,15 @@ import {
   type SessionActionResult,
   type SessionControlsView,
   type SessionListView,
+  type WorkStatusItemView,
+  type WorkStatusView,
 } from "../../protocol/app-protocol.ts";
+import type { AppServerStore } from "../../../application/store/app-server-store.ts";
 import { paginationFromSearchParams } from "../route-params.ts";
 import { json, parseJson, RequestError } from "../responses.ts";
+import { conversationSessionIdForDurableSession } from
+  "../../../../../agent/conversation/index.ts";
+import { sanitizePublicText } from "../../../../../agent/events/public-text.ts";
 import {
   projectLifecycleActionWithAuthorityClose,
   sessionLifecycleStopWithAuthorityClose,
@@ -35,6 +41,14 @@ export async function handleProjectSessionRoutes(
   }
   if (input.request.method === "GET" && url.pathname === "/navigation") {
     return json(apiEnvelope<NavigationView>(input.store.listNavigation()));
+  }
+  if (input.request.method === "GET" && url.pathname === "/work-status") {
+    return json(apiEnvelope<WorkStatusView>(
+      enrichWorkStatusFromConversation(
+        input.store,
+        input.stewardObserver.workStatus(),
+      ),
+    ));
   }
   if (input.request.method === "GET" && url.pathname === "/new-chat-briefing") {
     return json(
@@ -313,4 +327,105 @@ export async function handleProjectSessionRoutes(
     );
   }
   return null;
+}
+
+const RECENT_ARTIFACT_LIMIT = 3;
+const WORK_STATUS_TEXT_LIMIT = 180;
+
+function enrichWorkStatusFromConversation(
+  store: AppServerStore,
+  view: WorkStatusView,
+): WorkStatusView {
+  return {
+    ...view,
+    items: view.items.map((item) => enrichWorkStatusItem(store, item)),
+  };
+}
+
+function enrichWorkStatusItem(
+  store: AppServerStore,
+  item: WorkStatusItemView,
+): WorkStatusItemView {
+  const messages = store.listConversationProjectionMessages(
+    conversationSessionIdForDurableSession(item.session_id),
+  );
+  const delivered = messages.filter((message) =>
+    message.role === "assistant" && message.status === "delivered",
+  );
+  const artifacts = delivered.flatMap((message) => message.artifacts ?? []);
+  const internalRefs = [
+    item.session_id,
+    ...messages.flatMap((message) => [
+      message.id,
+      message.chat_id,
+      message.turn_id,
+      message.conversation_session_id,
+      message.conversation_turn_id,
+      message.conversation_message_id,
+    ]),
+    ...artifacts.flatMap((artifact) => [
+      artifact.id,
+      artifact.session_id,
+      artifact.project_id,
+      artifact.message_id,
+      artifact.turn_id,
+      artifact.file_id,
+    ]),
+  ].filter((value): value is string => Boolean(value));
+  const latestReport = delivered.findLast((message) => message.text.trim());
+  const recentArtifacts = uniqueStrings(
+    artifacts.map((artifact) => safeConversationLabel(artifact.title, internalRefs)),
+  ).slice(-RECENT_ARTIFACT_LIMIT);
+  return {
+    ...item,
+    ...(latestReport
+      ? {
+        latest_report_summary: safeConversationLabel(
+          latestReport.text,
+          internalRefs,
+          "A recent report is available.",
+        ),
+      }
+      : {}),
+    ...(recentArtifacts.length > 0 ? { recent_artifacts: recentArtifacts } : {}),
+  };
+}
+
+function safeConversationLabel(
+  value: string,
+  internalRefs: string[],
+  fallback = "Artifact",
+): string {
+  let text = value;
+  for (
+    const ref of [...new Set(internalRefs)].sort((left, right) =>
+      right.length - left.length,
+    )
+  ) {
+    text = text.split(ref).join("internal reference");
+  }
+  text = text.replace(/!?(?:\[([^\]]*)\])\([^)]*\)/gu, "$1")
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/giu, "reference")
+    .replace(
+      /(?:\/Users|\/home|\/private|\/var|\/tmp|\/Volumes|\/opt|\/usr|\/etc)\/[^\s),;]+/gu,
+      "local reference",
+    )
+    .replace(/(?:~\/|\$HOME\/)[^\s),;]+/gu, "local reference")
+    .replace(/\b[A-Za-z]:\\[^\s),;]+/gu, "local reference")
+    .replace(/\\\\[^\s\\]+\\[^\s),;]+/gu, "local reference")
+    .replace(/\b(?:packages|src|tests|docs|project-ledger)\/[^\s),;]+/gu, "local reference")
+    .replace(
+      /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/giu,
+      "internal reference",
+    )
+    .replace(/\b[0-9a-f]{24,}\b/giu, "internal reference")
+    .trim();
+  const safeText = sanitizePublicText(text, fallback);
+  return safeText.length > WORK_STATUS_TEXT_LIMIT
+    ? `${safeText.slice(0, WORK_STATUS_TEXT_LIMIT - 3)}...`
+    : safeText;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }

@@ -17,6 +17,7 @@ import { MessageArtifacts } from "./MessageArtifacts";
 import { MessageChangedFiles } from "./MessageChangedFiles";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageMarkdown } from "./MessageMarkdown";
+import { UserMessageText } from "./UserMessageText";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
 import { StewardParentProgress } from "./StewardParentProgress";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
@@ -79,6 +80,8 @@ function MessageContentComponent({
             </div>
           )}
         </>
+      ) : message.role === "user" ? (
+        <UserMessageText key={message.id} text={message.text} />
       ) : (
         message.text
       )}

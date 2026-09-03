@@ -15,6 +15,7 @@ export * from "./progress-contract.ts";
 export * from "./operation-output-contract.ts";
 export * from "./attachment-contract.ts";
 export * from "./session-contract.ts";
+export * from "./work-status-contract.ts";
 export * from "./automation-worker-contract.ts";
 export * from "./messaging-contract.ts";
 export * from "./message-guards.ts";
