@@ -1,4 +1,6 @@
 import path from "node:path";
+import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -21,6 +23,10 @@ function hugeiconsPureAnnotationPatch(): Plugin {
 }
 
 export default defineConfig({
+  cacheDir: path.join(
+    process.env.BUTLER_DATA || path.join(homedir(), ".butler"), "cache", "vite",
+    createHash("sha256").update(srcRoot).digest("hex").slice(0, 12),
+  ),
   base: "./",
   plugins: [hugeiconsPureAnnotationPatch(), react()],
   resolve: {

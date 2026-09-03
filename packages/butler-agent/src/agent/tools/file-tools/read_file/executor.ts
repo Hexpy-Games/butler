@@ -24,6 +24,7 @@ import {
 import type { WorkspaceReference } from "../../../session-workspaces/index.ts";
 
 export interface FileToolExecutionContext {
+  butlerHome?: string;
   workspacePath?: string;
   workspaceReference?: WorkspaceReference;
   protectedProjectLedgerRoots?: string[];

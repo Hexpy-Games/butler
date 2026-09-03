@@ -254,3 +254,27 @@ test("App artifact resolution rejects symlink escapes, missing files, and empty 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("legacy source artifact references read relocated data only", () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-relocated-artifacts-"));
+  const butlerData = join(root, "data"), butlerHome = join(root, "source");
+  mkdirSync(join(butlerData, "artifacts"), { recursive: true });
+  mkdirSync(join(butlerHome, "artifacts"), { recursive: true });
+  const localPath = join(butlerHome, "artifacts", "report.md");
+  writeFileSync(localPath, "must not read source");
+  const input = {
+    butlerData, butlerHome, chatId: "general",
+    messageFiles: { refsForMessage: () => [] } as never,
+    getChatRow: () => null, getProjectRow: () => null,
+    artifacts: [{ id: "report", kind: "file" as const, title: "report.md", localPath }],
+  };
+  try {
+    expect(artifactFilesFromOutbound(input)).toEqual([]);
+    writeFileSync(join(butlerData, "artifacts", "report.md"), "preserved report");
+    const files = artifactFilesFromOutbound(input);
+    expect(files).toHaveLength(1);
+    expect(files[0]!.bytes).toEqual(Buffer.from("preserved report"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

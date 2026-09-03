@@ -1,4 +1,5 @@
 import type { ButlerExecutionPolicy } from "../contracts.ts";
+import { butlerDataPath } from "../../../runtime/paths.ts";
 import type { BtccAgentLoopResult } from "./contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
 import { parseToolCatalogId } from "../../tools/progressive-catalog.ts";
@@ -73,7 +74,7 @@ export function guidedPolicy(turn: TurnRecord): ButlerExecutionPolicy {
     trackingMode: turn.context.projectRef ? "ledger" : "local",
     requiredNativeToolProfiles: [],
     requiredNativeTools: [],
-    workspacePath: workspaceFromScopes(turn) ?? process.cwd(),
+    workspacePath: workspaceFromScopes(turn) ?? butlerDataPath(),
     ...(turn.context.projectRef ? { projectId: turn.context.projectRef } : {}),
   };
 }

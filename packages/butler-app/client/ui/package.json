@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite --host 127.0.0.1",
+    "dev": "vite --configLoader runner --host 127.0.0.1",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

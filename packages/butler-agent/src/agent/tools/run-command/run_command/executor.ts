@@ -538,6 +538,7 @@ function commandArtifactEvidenceFields(artifacts: CommandArtifactEvidence[]): Re
 }
 
 async function executeCommandCompatibility(input: {
+  butlerHome?: string;
   command: string;
   cwd: string;
   timeoutMs: number;
@@ -547,6 +548,7 @@ async function executeCommandCompatibility(input: {
   commandExecutor: CommandExecutor;
 }): Promise<ShellCommandResult> {
   const raw = await executeLegacyCommandCompatibility(input.commandExecutor, {
+    readOnlyProgramHome: input.butlerHome ?? process.env.BUTLER_HOME,
     command: input.command,
     cwd: input.cwd,
     timeoutMs: input.timeoutMs,
@@ -676,6 +678,7 @@ export async function runCommandTool(input: {
   const commandStartedAtMs = Date.now();
   mkdirSync(commandGeneratedArtifactRoot(input.butlerData), { recursive: true });
   const raw = await executeCommandCompatibility({
+    butlerHome: input.butlerHome,
     command,
     cwd,
     timeoutMs,

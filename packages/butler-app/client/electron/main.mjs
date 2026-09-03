@@ -405,7 +405,7 @@ function managedGatewayCommand() {
     return {
       command: runtime,
       args: [localButlerCli, "gateway", "app"],
-      cwd: home,
+      cwd: data,
       appManaged: false,
       env: {
         BUTLER_HOME: home,
@@ -869,7 +869,7 @@ function beginOAuthLoginProcess(command, args, env) {
     };
     openAIOAuthLoginSession = session;
     const child = spawn(command, args, {
-      cwd: env.BUTLER_HOME,
+      cwd: env.BUTLER_DATA,
       env,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -1260,7 +1260,7 @@ function appLaunchArgs(extraArgs = []) {
 }
 
 function appLaunchCwd() {
-  return app.isPackaged ? dirname(process.execPath) : __dirname;
+  return butlerDataRoot;
 }
 
 function spawnDetachedProcess(

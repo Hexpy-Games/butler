@@ -75,6 +75,7 @@ export async function runNativeButlerMain(
   const config = readButlerConfig(butlerData);
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
+  store.relocateLegacyGeneralWorkspaces(butlerHome, butlerData);
   let btcc: Btcc | undefined = input.btcc;
   let btccHost: BtccComposition["host"] | undefined = input.btccHost;
   let subsessionDelegation: BtccComposition["subsessions"] | undefined;

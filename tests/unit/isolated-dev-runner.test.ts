@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -15,12 +16,14 @@ import {
 test("isolated dev runner composes isolated defaults and settles the gateway", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-isolated-dev-runner-"));
   try {
-    const config = resolveIsolatedDevConfig({}, root);
-    expect(config.dataRoot).toBe(join(root, ".dev-butler"));
+    const env = { BUTLER_DATA: join(root, "data") };
+    const dataRoot = join(env.BUTLER_DATA, "development", createHash("sha256").update(root).digest("hex").slice(0, 12));
+    const config = resolveIsolatedDevConfig(env, root);
+    expect(config.dataRoot).toBe(dataRoot);
     expect(config.serverPort).toBe(DEFAULT_ISOLATED_DEV_SERVER_PORT);
     expect(config.uiPort).toBe(DEFAULT_ISOLATED_DEV_UI_PORT);
     expect(config.electronUserDataDir).toBe(
-      join(root, ".dev-butler", "app", "electron-user-data"),
+      join(dataRoot, "app", "electron-user-data"),
     );
 
     const explicit = resolveIsolatedDevConfig({
@@ -33,20 +36,20 @@ test("isolated dev runner composes isolated defaults and settles the gateway", a
     expect(explicit.serverPort).toBe(29_001);
 
     const environment = isolatedDevEnvironment(config, {});
-    expect(environment.BUTLER_DATA).toBe(join(root, ".dev-butler"));
+    expect(environment.BUTLER_DATA).toBe(dataRoot);
     expect(environment.BUTLER_APP_SERVER_PORT).toBe(
       String(DEFAULT_ISOLATED_DEV_SERVER_PORT),
     );
     expect(environment.BUTLER_APP_UI_PORT).toBe(String(DEFAULT_ISOLATED_DEV_UI_PORT));
     expect(environment.BUTLER_APP_ELECTRON_USER_DATA_DIR).toBe(
-      join(root, ".dev-butler", "app", "electron-user-data"),
+      join(dataRoot, "app", "electron-user-data"),
     );
 
     const spawned: Array<{ command: string; args: string[]; child: FakeChild }> = [];
     const killed: Array<{ pid: number; signal: NodeJS.Signals }> = [];
     const result = await runIsolatedDev({
       cwd: root,
-      env: {},
+      env,
       dependencies: {
         platform: "linux",
         healthCheck: async () => true,

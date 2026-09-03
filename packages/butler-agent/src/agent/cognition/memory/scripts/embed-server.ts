@@ -1,4 +1,6 @@
 import type { FeatureExtractionPipeline } from "@huggingface/transformers";
+import { join } from "node:path";
+import { butlerDataPath } from "../../../../runtime/paths.ts";
 import { createServer as netCreateServer } from "net";
 import { chmodSync, existsSync, unlinkSync } from "fs";
 import {
@@ -56,9 +58,12 @@ async function loadDefaultPipeline(): Promise<FeatureExtractionPipeline> {
   const createPipeline = pipeline as unknown as (
     task: "feature-extraction",
     model: string,
-    options: { dtype: "q8" },
+    options: { dtype: "q8"; cache_dir: string },
   ) => Promise<FeatureExtractionPipeline>;
-  return createPipeline("feature-extraction", "Xenova/bge-m3", { dtype: "q8" });
+  return createPipeline("feature-extraction", "Xenova/bge-m3", {
+    dtype: "q8",
+    cache_dir: join(butlerDataPath(), "cache", "models"),
+  });
 }
 
 export function createLazyEmbeddingFunctions(
