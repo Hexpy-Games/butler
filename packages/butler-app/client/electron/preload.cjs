@@ -640,6 +640,7 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/project-sessions?${query}` : "/project-sessions");
   },
+  getWorkStatus: () => requestJson("/work-status"),
   listMessages: ({ chatId = "general", cursor = 0 } = {}) => {
     const params = new URLSearchParams({
       chat_id: chatId,

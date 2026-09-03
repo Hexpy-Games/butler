@@ -1455,6 +1455,32 @@ export interface TimelineEvent {
   };
 }
 
+export type WorkStatusState =
+  | "running"
+  | "completed"
+  | "attention"
+  | "operational_action"
+  | "operational_interruption";
+
+export interface WorkStatusItemView {
+  session_id: string;
+  safe_title: string;
+  safe_summary: string;
+  state: WorkStatusState;
+  stage?: "conception" | "planning" | "execution" | "review" | "validation" | "reporting";
+  completed_actions: number;
+  total_actions: number;
+  effect_count: number;
+  latest_report_summary?: string;
+  recent_artifacts?: string[];
+  updated_at: string;
+}
+
+export interface WorkStatusView {
+  items: WorkStatusItemView[];
+  counts: Record<WorkStatusState, number>;
+}
+
 export type AppView =
   | { kind: "session" }
   | { kind: "settings"; section: SettingsSectionId }

@@ -7,6 +7,7 @@ import type {
   SessionView,
   SessionViewBridgeInput,
   SessionViewBridgeResult,
+  WorkStatusView,
 } from "./types.ts";
 
 declare global {
@@ -58,6 +59,7 @@ interface ButlerAppBridge {
   getSessionView?: (
     input?: SessionViewBridgeInput,
   ) => Promise<SessionViewBridgeResult | SessionView>;
+  getWorkStatus?: () => Promise<WorkStatusView>;
   getAuthorityRequests?: (input?: unknown) => Promise<unknown>;
   allowAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   denyAuthorityRequest?: (input?: unknown) => Promise<unknown>;
@@ -91,6 +93,10 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
     if (!resyncPath) throw error;
     return await request(resyncPath);
   }
+}
+
+export async function getWorkStatus(): Promise<WorkStatusView> {
+  return await api<WorkStatusView>("/work-status");
 }
 
 function sessionViewResyncPath(
@@ -249,6 +255,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/setup/diagnostics") return await callBridge<T>(bridge, "exportSetupDiagnostics");
   if (method === "GET" && url.pathname === "/chats") return await callBridge<T>(bridge, "listChats");
   if (method === "GET" && url.pathname === "/navigation") return await callBridge<T>(bridge, "listNavigation");
+  if (method === "GET" && url.pathname === "/work-status") return await callBridge<T>(bridge, "getWorkStatus");
   if (method === "GET" && url.pathname === "/new-chat-briefing") {
     return await callBridge<T>(bridge, "getNewChatBriefing", {
       date: url.searchParams.get("date") ?? undefined,

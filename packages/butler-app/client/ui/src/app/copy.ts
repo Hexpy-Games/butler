@@ -584,6 +584,20 @@ export interface AppCopy {
         fallback: string;
       };
     };
+    workStatus: {
+      title: string;
+      description: string;
+      loading: string;
+      empty: string;
+      unavailable: string;
+      details: string;
+      latestReport: string;
+      recentArtifacts: string;
+      actions: (completed: number, total: number) => string;
+      effects: (count: number) => string;
+      states: Record<import("./types.ts").WorkStatusState, string>;
+      stages: Record<NonNullable<import("./types.ts").WorkStatusItemView["stage"]>, string>;
+    };
     systemEventLabels: {
       titles: {
         consolidation: string;
@@ -1406,6 +1420,33 @@ const koKrCopy: AppCopy = {
         macos: "macOS 알림 설정",
         windows: "Windows 알림 설정",
         fallback: "시스템 설정",
+      },
+    },
+    workStatus: {
+      title: "작업 상태",
+      description: "현재 실행, 완료, 주의가 필요한 작업을 표시합니다.",
+      loading: "작업 상태를 확인 중입니다.",
+      empty: "표시할 작업이 없습니다.",
+      unavailable: "작업 상태를 불러올 수 없습니다.",
+      details: "대화 열기",
+      latestReport: "최근 보고",
+      recentArtifacts: "최근 결과물",
+      actions: (completed, total) => `단계 ${completed}/${total}`,
+      effects: (count) => `효과 ${count}건`,
+      states: {
+        running: "진행 중",
+        completed: "완료",
+        attention: "확인 필요",
+        operational_action: "복구 중",
+        operational_interruption: "운영 중단",
+      },
+      stages: {
+        conception: "구상",
+        planning: "계획",
+        execution: "실행",
+        review: "리뷰",
+        validation: "검증",
+        reporting: "보고",
       },
     },
     systemEventLabels: {
@@ -2247,6 +2288,33 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
         macos: "macOS notification settings",
         windows: "Windows notification settings",
         fallback: "System settings",
+      },
+    },
+    workStatus: {
+      title: "Work status",
+      description: "Shows running, completed, and attention-needed work.",
+      loading: "Checking work status.",
+      empty: "No work to show.",
+      unavailable: "Work status is unavailable.",
+      details: "Open conversation",
+      latestReport: "Latest report",
+      recentArtifacts: "Recent artifacts",
+      actions: (completed, total) => `${completed}/${total} steps`,
+      effects: (count) => `${count} effects`,
+      states: {
+        running: "Running",
+        completed: "Completed",
+        attention: "Needs attention",
+        operational_action: "Recovering",
+        operational_interruption: "Interrupted",
+      },
+      stages: {
+        conception: "Conception",
+        planning: "Planning",
+        execution: "Execution",
+        review: "Review",
+        validation: "Validation",
+        reporting: "Reporting",
       },
     },
     systemEventLabels: {
