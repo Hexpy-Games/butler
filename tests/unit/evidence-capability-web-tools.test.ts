@@ -6,6 +6,7 @@ import { createWebReadHandler } from "../../packages/butler-agent/src/agent/tool
 import { createWebSearchHandler } from "../../packages/butler-agent/src/agent/tools/web-search/index.ts";
 import type { WebSearchProvider } from "../../packages/butler-agent/src/integrations/search/provider.ts";
 import type { PageReadResult } from "../../packages/butler-agent/src/integrations/search/page-reader.ts";
+import { textPdf } from "../fixtures/text-pdf.ts";
 
 let tempDir = "";
 
@@ -15,6 +16,50 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
+});
+
+test("web_read reads real HTTP PDF bytes, preserves final URL, and continues cached chunks", async () => {
+  const bytes = textPdf(["First PDF page evidence. ".repeat(120), "Second PDF page evidence. ".repeat(120)]);
+  let requests = 0;
+  const server = Bun.serve({ port: 0, fetch(request) {
+    requests++;
+    if (new URL(request.url).pathname === "/redirect") return Response.redirect(new URL("/document", request.url));
+    return new Response(bytes, { headers: { "content-type": "Application/PDF; version=1.4" } });
+  } });
+  try {
+    const handler = createWebReadHandler({ butlerData: tempDir });
+    const url = new URL("/redirect", server.url).href;
+    const first = await handler({ args: { url, backend: "lightweight", max_chunks: 1 } });
+    expect(first).toMatchObject({ ok: true, method: "pdf", title: "Butler PDF Evidence", content_has_more: true, returned_chunks: 1, next_start_chunk: 1, final_url: new URL("/document", server.url).href });
+    expect(first.markdown).toContain("First PDF page evidence");
+    const ledger = buildEvidenceCapabilityLedger({ required: ["source_verified"], receipts: first.evidence_capability_receipts as unknown[] });
+    expect(ledger.satisfied).toContain("source_verified");
+    const next = await handler({ args: { url, backend: "lightweight", start_chunk: first.next_start_chunk, max_chunks: 1 } });
+    expect(next).toMatchObject({ ok: true, cache_hit: true, start_chunk: 1, next_start_chunk: 2 });
+    expect(next.markdown).not.toBe(first.markdown);
+    expect(requests).toBe(2);
+  } finally {
+    server.stop(true);
+  }
+});
+
+test("unreadable real PDFs produce unavailable evidence and never source_verified", async () => {
+  for (const bytes of [new TextEncoder().encode("%PDF-1.4 damaged"), textPdf("")]) {
+    const server = Bun.serve({ port: 0, fetch() { return new Response(bytes, { headers: { "content-type": "application/pdf" } }); } });
+    try {
+      const handler = createWebReadHandler({ butlerData: tempDir });
+      const result = await handler({ args: { url: server.url.href, backend: "auto" } });
+      expect(result).toMatchObject({ ok: false, method: "pdf", evidence_quality: "unavailable", render_recommended: false, source_url: server.url.href });
+      expect(result.error).toContain("not been read");
+      expect(result.public_web_evidence_items).toEqual([]);
+      const ledger = buildEvidenceCapabilityLedger({ required: ["source_verified"], receipts: result.evidence_capability_receipts as unknown[] });
+      expect(ledger.satisfied).toEqual([]);
+      expect(ledger.missing).toEqual(["source_verified"]);
+      expect(result.evidence_receipts).toEqual([expect.objectContaining({ verified: false, summary: expect.stringContaining("did not produce readable evidence") })]);
+    } finally {
+      server.stop(true);
+    }
+  }
 });
 
 test("web_search emits candidate discovery capability receipts only", async () => {
