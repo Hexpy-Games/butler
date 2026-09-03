@@ -36,6 +36,7 @@ export interface SettingsSectionDescriptor {
   id: SettingsSectionId;
   label: string;
   description: string;
+  aliases: string[];
   icon: ReactNode;
 }
 

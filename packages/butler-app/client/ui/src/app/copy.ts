@@ -257,6 +257,9 @@ export interface AppCopy {
     saving: string;
     saved: string;
     sectionsLabel: string;
+    searchLabel: string;
+    searchPlaceholder: string;
+    searchEmpty: (query: string) => string;
     groups: {
       general: string;
       modelsAndExtensions: string;
@@ -295,6 +298,22 @@ export interface AppCopy {
       system: string;
       archives: string;
       about: string;
+    };
+    sectionAliases: {
+      general: string[];
+      models: string[];
+      appearance: string[];
+      server: string[];
+      updates: string[];
+      mcp: string[];
+      skills: string[];
+      usage: string[];
+      logs: string[];
+      personalization: string[];
+      privacy: string[];
+      system: string[];
+      archives: string[];
+      about: string[];
     };
     panels: {
       butlerModel: string;
@@ -1013,6 +1032,9 @@ const koKrCopy: AppCopy = {
     saving: "저장 중",
     saved: "저장됨",
     sectionsLabel: "설정 섹션",
+    searchLabel: "설정 검색",
+    searchPlaceholder: "설정 검색",
+    searchEmpty: (query) => `일치하는 설정이 없습니다: ${query}`,
     groups: {
       general: "일반",
       modelsAndExtensions: "모델 및 확장 기능",
@@ -1051,6 +1073,22 @@ const koKrCopy: AppCopy = {
       system: "정기 정리와 유지보수 이벤트를 확인합니다.",
       archives: "보관한 프로젝트와 대화를 복원하거나 삭제합니다.",
       about: "버틀러 버전과 앱 정보를 확인합니다.",
+    },
+    sectionAliases: {
+      general: ["기본", "일반 설정", "대화"],
+      models: ["모델 설정", "작업자", "예비 모델"],
+      appearance: ["테마", "화면 설정", "디자인"],
+      server: ["연결", "프로젝트 폴더"],
+      updates: ["업그레이드", "새 버전"],
+      mcp: ["도구 서버", "외부 도구"],
+      skills: ["스킬 관리", "기능"],
+      usage: ["토큰", "사용량"],
+      logs: ["개발자 로그", "디버그", "원문"],
+      personalization: ["사용자 정보", "페르소나", "말투"],
+      privacy: ["진단", "개인정보"],
+      system: ["유지보수", "기억 정리"],
+      archives: ["보관", "아카이브"],
+      about: ["버전", "앱 정보"],
     },
     panels: {
       butlerModel: "모델 설정",
@@ -1846,6 +1884,9 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     saving: "Saving",
     saved: "Saved",
     sectionsLabel: "Settings sections",
+    searchLabel: "Settings search",
+    searchPlaceholder: "Search settings",
+    searchEmpty: (query) => `No settings match: ${query}`,
     groups: {
       general: "General",
       modelsAndExtensions: "Models and extensions",
@@ -1884,6 +1925,22 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       system: "Review regular maintenance and system events.",
       archives: "Restore or delete archived projects and chats.",
       about: "View Butler version and app information.",
+    },
+    sectionAliases: {
+      general: ["basics", "general settings", "conversation"],
+      models: ["model settings", "workers", "backup models"],
+      appearance: ["theme", "display", "design"],
+      server: ["connection", "project folder"],
+      updates: ["upgrade", "new version"],
+      mcp: ["tool servers", "external tools"],
+      skills: ["skill management", "capabilities"],
+      usage: ["tokens", "telemetry"],
+      logs: ["developer logs", "debug", "raw"],
+      personalization: ["user profile", "persona", "tone"],
+      privacy: ["diagnostics", "personal data"],
+      system: ["maintenance", "memory consolidation"],
+      archives: ["saved chats", "archive"],
+      about: ["version", "app info"],
     },
     panels: {
       butlerModel: "Model settings",
