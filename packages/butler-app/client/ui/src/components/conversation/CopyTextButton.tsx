@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Copy } from "@/butler-ds";
+import { Copy, Tooltip } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
 
@@ -21,10 +21,12 @@ export function CopyTextButton({ text, label }: { text: string; label: string })
       notifyError(error, appCopy.conversation.messageActions.copyFailed);
     }
   };
+  const feedbackLabel = copied ? appCopy.conversation.messageActions.copied : label;
   return (
-    <button type="button" onClick={() => void copy()} aria-label={label}>
-      <Copy size={14} />
-      <span role="status">{copied ? appCopy.conversation.messageActions.copied : label}</span>
-    </button>
+    <Tooltip label={feedbackLabel}>
+      <button type="button" onClick={() => void copy()} aria-label={feedbackLabel}>
+        <Copy size={14} />
+      </button>
+    </Tooltip>
   );
 }
