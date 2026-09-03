@@ -447,7 +447,8 @@ export class ContinuityStore {
         text: input.summary,
         targetRef: input.mutationId,
         category: "model_selected_continuity",
-        scope: input.scope,
+        scope: input.scope === "session" ? `session:${input.sessionId}`
+          : input.scope === "project" ? `project:${input.projectId}` : input.scope,
         promotionTarget: "review",
         priority: "high",
       });

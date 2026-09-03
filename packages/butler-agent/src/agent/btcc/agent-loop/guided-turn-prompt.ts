@@ -209,7 +209,10 @@ export function renderGuidedResponseLanguage(
   turn: TurnRecord,
   documents: { resolve(contextRef: string): string },
 ): string {
-  for (const ref of turn.context.optionalHotCacheRefs) {
+  for (const ref of [
+    ...turn.context.mandatoryHotCacheRefs,
+    ...turn.context.optionalHotCacheRefs,
+  ]) {
     try {
       const match = /^Assistant Response Language:\s*(.+)$/imu.exec(
         documents.resolve(ref).slice(0, 12_000),

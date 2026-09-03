@@ -53,6 +53,7 @@ export function readSubsessionMetadata(
         )
       : [],
     allowedToolsAndEffects: normalizedAllowedToolsAndEffects,
+    recentFeedbackRefs: stringArray(metadata.recent_feedback_refs),
     ...(projectContext ? { projectContext } : {}),
   };
 }
@@ -75,15 +76,7 @@ function readProjectContext(value: unknown): NonNullable<
 }
 
 export function admitStewardContextAssembly(assembly: ContextAssembly): ContextAssembly {
-  const hasDisallowedContext = [
-    ...assembly.staticContext,
-    ...assembly.runtimeState,
-    ...assembly.workingContext,
-    ...assembly.retrievedContext,
-    ...assembly.currentInput,
-  ].length > 0 || assembly.references.length > 0;
-  if (hasDisallowedContext || !hasExactEol(assembly) ||
-      assembly.liveConfiguration.length !== 1) {
+  if (!hasExactEol(assembly)) {
     throw new Error("subsession_context_assembly_invalid");
   }
   return assembly;

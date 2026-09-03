@@ -83,14 +83,29 @@ export async function snapshotChildProjectContext(input: {
 }): Promise<{
   projectContext: DelegationProjectContextSnapshot | undefined;
   inheritedProject: ReturnType<typeof childProjectContextBinding>;
+  recentFeedbackRefs: string[];
 }> {
   const projectContext = await snapshotDelegationProjectContext({
     ...input,
     projectId: input.parent.appProjectId ?? input.parent.projectId,
   });
+  const parentTurn = await input.turns.findTurn(input.parentTurnId).catch(() => null);
+  const recentFeedbackRefs = parentTurn?.sessionId === input.parentSessionId
+    ? parentTurn.context.recentFeedbackRefs.filter((ref) => {
+        try {
+          const document = input.documents.read(ref);
+          return document.contextRef === ref && document.sourceId === "session-feedback-buffer" &&
+            document.projectionClass === "recent_feedback" && document.scopeKind === "session";
+        } catch {
+          // Missing optional feedback never prevents delegation.
+          return false;
+        }
+      })
+    : [];
   return {
     projectContext,
     inheritedProject: childProjectContextBinding(projectContext, input.parent),
+    recentFeedbackRefs,
   };
 }
 
@@ -146,9 +161,7 @@ export async function delegationProjectContextReady(
   const bindingProject = record(record(binding?.metadata).subsession).project_context;
   if (!context) {
     return !binding.projectId && bindingProject === undefined && !turn.context.projectRef &&
-      !turn.context.executionPolicy?.projectId &&
-      turn.context.mandatoryHotCacheRefs.length === 0 &&
-      turn.context.optionalHotCacheRefs.length === 0;
+      !turn.context.executionPolicy?.projectId;
   }
   const bindingContext = record(bindingProject);
   const mandatoryRefs = context.mandatory_refs.map((ref) => ref.context_ref);
@@ -159,8 +172,8 @@ export async function delegationProjectContextReady(
       !sameStrings(bindingContext.optional_hot_cache_refs, optionalRefs) ||
       turn.context.projectRef !== context.project_id ||
       turn.context.executionPolicy?.projectId !== context.project_id ||
-      !sameStrings(turn.context.mandatoryHotCacheRefs, mandatoryRefs) ||
-      !sameStrings(turn.context.optionalHotCacheRefs, optionalRefs)) return false;
+      !mandatoryRefs.every((ref) => turn.context.mandatoryHotCacheRefs.includes(ref)) ||
+      !optionalRefs.every((ref) => turn.context.optionalHotCacheRefs.includes(ref))) return false;
   return [...context.mandatory_refs, ...context.optional_refs].every((ref) => {
     try {
       const document = dependencies.contextDocuments.read(ref.context_ref);

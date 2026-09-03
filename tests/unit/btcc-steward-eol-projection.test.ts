@@ -17,6 +17,20 @@ import { PromptAssembler } from
   "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import type { StoredSessionBinding } from
   "../../packages/butler-agent/src/test-support/harness/contracts.ts";
+import { inboundEnvelopeFor } from
+  "../../packages/butler-agent/src/agent/btcc/turn/prepare-turn-request.ts";
+import { openBtccSqliteStores } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+import { createProductionGuidedTurnAgent } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
+import { snapshotChildProjectContext } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/project-context.ts";
+import { addFeedbackEntry } from
+  "../../packages/butler-agent/src/agent/cognition/feedback/buffer.ts";
+import type { ModelRoundRequest } from
+  "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
+import { TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER } from
+  "../support/phase-continuity-private-digester.ts";
 
 const roots: string[] = [];
 
@@ -24,26 +38,25 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-test("Steward prompt assembly reads only the data-first EOL surface", () => {
+test("Steward shares system context without Butler personalization", () => {
   const fixture = createFixture();
   try {
     const assembler = new PromptAssembler({
       butlerHome: fixture.butlerHome,
       butlerData: fixture.butlerData,
     });
-    const assembly = assembler.buildStewardContextAssembly();
+    const input = { binding: fixture.binding, envelope: inboundEnvelopeFor(requestFor(fixture.binding, "assembly")) };
+    const assembly = assembler.buildStewardContextAssembly(input);
 
-    expect(assembly.liveConfiguration).toEqual([{
+    expect(assembly.liveConfiguration).toContainEqual({
       id: "eol",
       title: "Butler Operating Ethos / EOL",
       content: "DATA_EOL_V1",
       region: "live_configuration",
       projectionClass: "profile",
       scopeKind: "user",
-    }]);
+    });
     expect([
-      ...assembly.staticContext,
-      ...assembly.runtimeState,
       ...assembly.workingContext,
       ...assembly.retrievedContext,
       ...assembly.currentInput,
@@ -52,10 +65,12 @@ test("Steward prompt assembly reads only the data-first EOL surface", () => {
     expect(JSON.stringify(assembly)).not.toContain("STEWARD_CONFIG_PRIVATE");
     expect(JSON.stringify(assembly)).not.toContain("BUTLER_PERSONA_PRIVATE");
     expect(JSON.stringify(assembly)).not.toContain("BUTLER_PROFILE_PRIVATE");
-    expect(JSON.stringify(assembly)).not.toContain("BUTLER_RULE_PRIVATE");
+    expect(JSON.stringify(assembly)).toContain("SHARED_USER_RULE");
+    expect(JSON.stringify(assembly)).toContain("RUNTIME_CONTRACT_SHARED");
+    expect(JSON.stringify(assembly)).toContain("Current Time UTC: 2026-08-24T00:00:00.000Z");
 
     rmSync(join(fixture.butlerData, "eol.md"));
-    expect(assembler.buildStewardContextAssembly().liveConfiguration[0]?.content).toBe(
+    expect(assembler.buildStewardContextAssembly(input).liveConfiguration[0]?.content).toBe(
       "RESOURCE_EOL_FALLBACK",
     );
   } finally {
@@ -83,10 +98,10 @@ test("Steward Turn admission snapshots EOL while replay retains its durable ref"
     const firstRequest = requestFor(fixture.binding, "turn-steward-eol-1");
     const first = await preparation.prepare(firstRequest);
     if (first.command.kind !== "run") throw new Error("fresh Steward command missing");
-    const [firstEolRef] = first.command.context.profileRefs;
+    const firstEolRef = first.command.context.profileRefs.find((ref) => documents.resolve(ref).includes("DATA_EOL_V1"));
     if (!firstEolRef) throw new Error("admitted Steward EOL ref missing");
 
-    expect(first.command.context.profileRefs).toHaveLength(1);
+    expect(first.command.context.profileRefs).toHaveLength(2);
     expect(first.command.context.recentFeedbackRefs).toEqual([]);
     expect(documents.resolve(firstEolRef)).toContain("DATA_EOL_V1");
     expect(documents.resolve(firstEolRef)).not.toContain("BUTLER_PERSONA_PRIVATE");
@@ -101,17 +116,110 @@ test("Steward Turn admission snapshots EOL while replay retains its durable ref"
       recoveryAttempt: undefined,
     });
     expect(documents.size).toBe(persistedBeforeReplay);
-    expect(admittedTurns.get(firstRequest.turnId)?.context.profileRefs).toEqual([firstEolRef]);
+    expect(admittedTurns.get(firstRequest.turnId)?.context.profileRefs).toContain(firstEolRef);
     expect(documents.resolve(firstEolRef)).toContain("DATA_EOL_V1");
     expect(documents.resolve(firstEolRef)).not.toContain("DATA_EOL_V2");
 
-    const second = await preparation.prepare(requestFor(fixture.binding, "turn-steward-eol-2"));
+    const nextRequest = requestFor(fixture.binding, "turn-steward-eol-2");
+    nextRequest.message.timestamp = "2026-09-03T01:02:03.000Z";
+    const second = await preparation.prepare(nextRequest);
     if (second.command.kind !== "run") throw new Error("later Steward command missing");
-    const [secondEolRef] = second.command.context.profileRefs;
+    const secondEolRef = second.command.context.profileRefs.find((ref) => documents.resolve(ref).includes("DATA_EOL_V2"));
     if (!secondEolRef) throw new Error("later Steward EOL ref missing");
     expect(secondEolRef).not.toBe(firstEolRef);
     expect(documents.resolve(secondEolRef)).toContain("DATA_EOL_V2");
+    const contextText = (turn: TurnRecord) => turn.context.mandatoryHotCacheRefs.map((ref) => documents.resolve(ref)).join("\n");
+    expect(contextText(admittedTurns.get(firstRequest.turnId)!)).toContain("2026-08-24T00:00:00.000Z");
+    expect(contextText(turnFrom(second.command))).toContain("2026-09-03T01:02:03.000Z");
   } finally {
+    fixture.conversations.close();
+  }
+});
+
+test("real child preparation carries own environment and admitted project/feedback into both role requests", async () => {
+  const fixture = createFixture();
+  const stores = openBtccSqliteStores({
+    dbPath: join(fixture.root, "contexts.sqlite"), ownerId: "shared-context", storageProfile: "ephemeral",
+  });
+  try {
+    writeFileSync(join(fixture.butlerData, "butler.config.json"), JSON.stringify({ user: {
+      timezone: "Asia/Seoul", language: "ko", responseLanguage: "Korean",
+      techLanguage: "English", location: "Seoul, Korea",
+    } }));
+    mkdirSync(join(fixture.butlerData, "cognition", "memory", "projects"), { recursive: true });
+    writeFileSync(join(fixture.butlerData, "cognition", "memory", "projects", "shared-project.md"), "PROJECT_MEMORY_SHARED");
+    mkdirSync(join(fixture.binding.workspacePath, ".butler"), { recursive: true });
+    writeFileSync(join(fixture.binding.workspacePath, ".butler", "hot-cache.md"), "PROJECT_HOT_CACHE_SHARED");
+    addFeedbackEntry(fixture.butlerData, { scope: "session:parent-session", targetRef: "request", text: "PARENT_CORRECTION_SHARED" });
+    addFeedbackEntry(fixture.butlerData, { scope: "session:unrelated", targetRef: "request", text: "UNRELATED_SESSION_PRIVATE" });
+    addFeedbackEntry(fixture.butlerData, { scope: "style", targetRef: "answers", text: "USER_STYLE_SHARED" });
+    let binding: StoredSessionBinding = {
+      ...fixture.binding, sessionId: "parent-session", role: "butler", metadata: {},
+      projectId: "shared-project", appProjectId: "shared-project", ledgerProjectId: "ledger-shared-project",
+    };
+    const turns = new Map<string, TurnRecord>();
+    const preparation = new DefaultBtccTurnPreparation({
+      bindingStore: { getBySessionId: () => binding }, conversationStore: fixture.conversations,
+      butlerData: fixture.butlerData,
+      promptAssembler: new PromptAssembler({ butlerHome: fixture.butlerHome, butlerData: fixture.butlerData }),
+      contextDocuments: stores.contextDocuments,
+      turns: { findTurn: async (id) => turns.get(id) ?? null },
+      wakeAuthorizations: { validateWake: async () => false },
+    });
+    const captured: ModelRoundRequest[] = [];
+    const agent = createProductionGuidedTurnAgent({
+      phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
+      butlerHome: fixture.butlerHome, butlerData: fixture.butlerData,
+      contextDocuments: stores.contextDocuments, toolJournal: stores.guidedToolJournal,
+      effectJournal: stores.guidedEffectJournal, durableWork: stores.durableWork,
+      modelRound: { async runRound(request) { captured.push(request); return { text: "done", toolCalls: [] }; } },
+    });
+    let parentTurn: TurnRecord | undefined;
+    for (const [index, role] of (["butler", "steward", "worker"] as const).entries()) {
+      if (parentTurn) {
+        const inherited = await snapshotChildProjectContext({
+          parentSessionId: binding.sessionId, parentTurnId: parentTurn.turnId, parent: binding,
+          turns: { findTurn: async (id) => turns.get(id) ?? null }, documents: stores.contextDocuments,
+        });
+        binding = { ...fixture.binding, ...inherited.inheritedProject?.sessionBinding,
+          role, sessionId: `${role}-session`, metadata: { subsession: {
+            ...fixture.binding.metadata?.subsession as object,
+            project_context: inherited.inheritedProject?.metadata,
+            recent_feedback_refs: inherited.recentFeedbackRefs,
+          } },
+        };
+      }
+      const request = requestFor(binding, `turn-shared-${role}`);
+      request.message.timestamp = `2026-09-03T0${index}:02:03.000Z`;
+      const prepared = await preparation.prepare(request);
+      if (prepared.command.kind !== "run") throw new Error("fresh command required");
+      const turn = turnFrom(prepared.command);
+      turns.set(turn.turnId, turn);
+      await agent.run({ turn, signal: new AbortController().signal });
+      const providerRequest = captured.at(-1)!;
+      const text = JSON.stringify(providerRequest);
+      for (const expected of ["RUNTIME_CONTRACT_SHARED", "DATA_EOL_V1", "SHARED_USER_RULE",
+        "Asia/Seoul", "User Language: ko", "Assistant Response Language: Korean",
+        "User Technical Language: English", "Seoul, Korea", "Current Local Time:",
+        request.message.timestamp, "PROJECT_MEMORY_SHARED", "PROJECT_HOT_CACHE_SHARED",
+        "PARENT_CORRECTION_SHARED", "USER_STYLE_SHARED", request.message.content]) {
+        expect(text).toContain(expected!);
+      }
+      expect(providerRequest.instructions).toContain("Use Korean for every user-facing message");
+      expect(text).not.toContain("UNRELATED_SESSION_PRIVATE");
+      expect(text.split("PARENT_CORRECTION_SHARED")).toHaveLength(2);
+      expect(text.split("USER_STYLE_SHARED")).toHaveLength(2);
+      if (role !== "butler") {
+        expect(providerRequest.instructions).toContain(role === "steward" ? "You are the Steward role" : "You are Worker");
+        expect(text).not.toContain("BUTLER_PERSONA_PRIVATE");
+        expect(text).not.toContain("BUTLER_PROFILE_PRIVATE");
+        expect(text).not.toContain("First-Chat Onboarding");
+        expect(text).not.toContain(parentTurn!.originalMessageId);
+      }
+      parentTurn = turn;
+    }
+  } finally {
+    stores.close();
     fixture.conversations.close();
   }
 });
@@ -157,10 +265,10 @@ test("Steward Turn rejects one blank EOL before durable context snapshot", async
       promptAssembler: {
         buildButlerContextAssembly: (input) =>
           assembler.buildButlerContextAssembly(input),
-        buildStewardContextAssembly: () => ({
-          ...assembler.buildStewardContextAssembly(),
+        buildStewardContextAssembly: (input) => ({
+          ...assembler.buildStewardContextAssembly(input),
           liveConfiguration: [{
-            ...assembler.buildStewardContextAssembly().liveConfiguration[0]!,
+            ...assembler.buildStewardContextAssembly(input).liveConfiguration[0]!,
             content: "   ",
           }],
         }),
@@ -234,7 +342,7 @@ test("Butler Turn rejects a misplaced duplicate EOL before durable context snaps
       conversationStore: fixture.conversations,
       butlerData: fixture.butlerData,
       promptAssembler: {
-        buildStewardContextAssembly: () => assembler.buildStewardContextAssembly(),
+        buildStewardContextAssembly: (input) => assembler.buildStewardContextAssembly(input),
         buildButlerContextAssembly: (input) => {
           const assembly = assembler.buildButlerContextAssembly(input);
           return {
@@ -295,6 +403,7 @@ function createFixture() {
   mkdirSync(join(butlerData, "cognition", "memory", "rules"), { recursive: true });
   mkdirSync(workspacePath, { recursive: true });
   writeFileSync(join(butlerHome, "resources", "eol.md"), "RESOURCE_EOL_FALLBACK", "utf8");
+  writeFileSync(join(butlerHome, "resources", "prompts", "runtime-system-contract.md"), "RUNTIME_CONTRACT_SHARED", "utf8");
   writeFileSync(join(butlerData, "eol.md"), "DATA_EOL_V1", "utf8");
   writeFileSync(join(butlerData, "config", "steward.md"), "STEWARD_CONFIG_PRIVATE", "utf8");
   writeFileSync(join(butlerData, "personas", "active.md"), "BUTLER_PERSONA_PRIVATE", "utf8");
@@ -304,7 +413,7 @@ function createFixture() {
     "utf8",
   );
   writeFileSync(join(butlerData, "cognition", "memory", "rules", "INDEX.md"), "[Rule](core.md)", "utf8");
-  writeFileSync(join(butlerData, "cognition", "memory", "rules", "core.md"), "BUTLER_RULE_PRIVATE", "utf8");
+  writeFileSync(join(butlerData, "cognition", "memory", "rules", "core.md"), "SHARED_USER_RULE", "utf8");
   const binding = stewardBinding(workspacePath);
   return {
     root,
@@ -363,7 +472,7 @@ function requestFor(binding: StoredSessionBinding, turnId: string): BtccTurnRequ
     },
     trigger: { kind: "user_message" },
     route: {
-      role: "steward",
+      role: binding.role,
       reason: "steward-hint",
       workspacePath: binding.workspacePath,
     },

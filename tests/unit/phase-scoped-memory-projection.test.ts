@@ -108,6 +108,31 @@ test("production Guided Turn applies the fixed phase memory allowlist in typed o
   }
 });
 
+test("basic Turn environment survives direct/read-only memory reduction before large rules", async () => {
+  const fixture = createFixture("feature-memory-environment");
+  try {
+    const refs = persistAll(fixture, 4_000);
+    refs.mandatoryHotCacheRefs.unshift(
+      persist(fixture, "mandatory_hot_cache", "rules", "rules-r1", `USER_RULE ${"x".repeat(20_000)}`),
+      persist(fixture, "mandatory_hot_cache", "runtime-state", "runtime-r1", [
+        "Current Time UTC: 2026-09-03T01:02:03.000Z",
+        "User Timezone: Asia/Seoul",
+        "Assistant Response Language: Korean",
+      ].join("\n")),
+    );
+    for (const phase of ["direct", "read_only"] as const) {
+      const request = await runCaptured(fixture, turnRecord(fixture.root, phase, refs));
+      expect(combined(request)).toContain("Current Time UTC: 2026-09-03T01:02:03.000Z");
+      expect(combined(request)).toContain("User Timezone: Asia/Seoul");
+      expect(combined(request)).toContain("USER_RULE");
+      expect(request.instructions).toContain("Use Korean for every user-facing message");
+      expect(combined(request)).not.toContain("optional-body-");
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
 test("default-off Guided Turn preserves the exact pre-v4 request body", async () => {
   const fixture = createFixture("feature-memory-default-off");
   try {
