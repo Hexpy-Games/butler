@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { ArrowLeft, Input, NavRow, SettingsNav, Stack, Typo } from "@/butler-ds";
 import type { SettingsSectionId } from "@/app/types.ts";
@@ -27,7 +27,32 @@ export function SettingsSidebar({
     () => filterSettingsSectionGroups(sectionGroups, searchQuery),
     [searchQuery, sectionGroups],
   );
+  const matchingSections = useMemo(
+    () => filteredGroups.flatMap((group) => group.sections),
+    [filteredGroups],
+  );
+  const soleMatchingSectionId =
+    searchQuery.trim() && matchingSections.length === 1
+      ? matchingSections[0]?.id
+      : undefined;
+  const autoOpenedSearchRef = useRef<string | null>(null);
   const settingsCopy = appCopy.settings;
+
+  useEffect(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase("en-US");
+    if (!normalizedQuery || !soleMatchingSectionId) {
+      autoOpenedSearchRef.current = null;
+      return;
+    }
+
+    const searchKey = `${normalizedQuery}:${soleMatchingSectionId}`;
+    if (autoOpenedSearchRef.current === searchKey) return;
+    autoOpenedSearchRef.current = searchKey;
+
+    if (activeSection !== soleMatchingSectionId) {
+      onSectionChange(soleMatchingSectionId);
+    }
+  }, [activeSection, onSectionChange, searchQuery, soleMatchingSectionId]);
 
   return (
     <Stack gap="md" data-active={isActive ? "true" : undefined}>
