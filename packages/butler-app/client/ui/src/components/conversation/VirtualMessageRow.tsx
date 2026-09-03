@@ -12,6 +12,7 @@ import { appCopy } from "@/app/copy.ts";
 import type { MessageRecord } from "@/app/types.ts";
 import { isAssistantFailureNoticeMessage } from "@/app/utils.ts";
 import { MessageAvatar } from "./MessageAvatar";
+import { UserMessageFooter } from "./UserMessageFooter";
 
 interface VirtualMessageRowProps {
   message: MessageRecord;
@@ -40,6 +41,7 @@ export function VirtualMessageRow({
         <MessageRow
           role={message.role}
           tone={messageTone(message)}
+          footer={message.role === "user" ? <UserMessageFooter message={message} /> : undefined}
           compactionEvent={isCompactionEvent}
           avatar={
             <MessageAvatar
