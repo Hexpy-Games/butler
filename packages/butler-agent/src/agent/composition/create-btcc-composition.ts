@@ -58,6 +58,7 @@ export function createProductionBtccComposition(input: {
   const bindings = input.sessionBindings ?? new SessionBindingStore(
     `${input.butlerData}/runtime/session-store.sqlite`,
   );
+  bindings.relocateLegacyGeneralWorkspaces(input.butlerHome, input.butlerData);
   const legacyProjectWorkSource = createProjectLedgerLegacyWorkSource({
     butlerData: input.butlerData,
     resolver: projectLedgerResolver,

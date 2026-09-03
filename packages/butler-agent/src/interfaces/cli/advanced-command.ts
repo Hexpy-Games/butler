@@ -129,7 +129,7 @@ function memoryIngest(parsed: ParsedCommonOptions, args: string[], commandBase: 
     butlerAgentSourcePath(parsed.options.home, "agent", "cognition", "memory", "scripts", "import-session.ts"),
     path,
   ], {
-    cwd: parsed.options.home,
+    cwd: parsed.options.data,
     encoding: "utf8",
     env: process.env,
   });
@@ -217,7 +217,7 @@ function backfillHotCacheVectorIndex(parsed: ParsedCommonOptions): {
           "hot-cache",
           "--plain-text",
         ], {
-          cwd: parsed.options.home,
+          cwd: parsed.options.data,
           encoding: "utf8",
           env: process.env,
         });
@@ -252,7 +252,7 @@ function memoryMaintain(parsed: ParsedCommonOptions, args: string[], commandBase
       "run",
       butlerAgentSourcePath(parsed.options.home, "agent", "cognition", "memory", "scripts", "consolidation-cycle.ts"),
     ], {
-      cwd: parsed.options.home,
+      cwd: parsed.options.data,
       encoding: "utf8",
       env: process.env,
     });

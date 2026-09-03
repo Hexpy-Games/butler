@@ -1327,8 +1327,9 @@ test("App-managed gateway command uses App runtime instead of standalone BUTLER_
 
     expect(command).not.toBeNull();
     if (!command) throw new Error("expected app-managed gateway command");
+    const runtimeHome = join(butlerData, "app", "runtime", "agent", "versions", "3.0.0");
     const appBundledBun = join(
-      command.cwd,
+      runtimeHome,
       "packages",
       "butler-agent",
       "resources",
@@ -1337,18 +1338,18 @@ test("App-managed gateway command uses App runtime instead of standalone BUTLER_
       process.platform === "win32" ? "bun.exe" : "bun",
     );
     expect(command.command).toBe(appBundledBun);
-    expect(command.cwd).toBe(join(butlerData, "app", "runtime", "agent", "versions", "3.0.0"));
+    expect(command.cwd).toBe(butlerData);
     expect(command.args).toEqual([
-      join(command.cwd, "bin", "butler.js"),
+      join(runtimeHome, "bin", "butler.js"),
       "gateway",
       "app",
     ]);
     expect(command.env).toMatchObject({
-      BUTLER_HOME: command.cwd,
-      BUTLER_APP_BUTLER_HOME: command.cwd,
+      BUTLER_HOME: runtimeHome,
+      BUTLER_APP_BUTLER_HOME: runtimeHome,
       BUTLER_DATA: butlerData,
       BUTLER_BUN: appBundledBun,
-      BUTLER_APP_MANAGED_RUNTIME_HOME: command.cwd,
+      BUTLER_APP_MANAGED_RUNTIME_HOME: runtimeHome,
     });
     expect(command.env.BUTLER_HOME).not.toBe(standaloneHome);
     expect(existsSync(appManagedAgentPointerPath(butlerData))).toBe(false);
@@ -1374,8 +1375,10 @@ test("App-managed foreground command uses the platform owner with a parent lease
     });
     expect(command).not.toBeNull();
     if (!command) throw new Error("expected App foreground command");
+    const runtimeHome = join(butlerData, "app", "runtime", "agent", "versions", "3.1.0");
+    expect(command.cwd).toBe(butlerData);
     const runtimeBin = join(
-      command.cwd,
+      runtimeHome,
       "packages",
       "butler-agent",
       "resources",
@@ -1389,7 +1392,7 @@ test("App-managed foreground command uses the platform owner with a parent lease
         String(process.pid),
         join(runtimeBin, "bun.exe"),
         "run",
-        join(command.cwd, "packages/butler-agent/scripts/native-service-daemon.ts"),
+        join(runtimeHome, "packages/butler-agent/scripts/native-service-daemon.ts"),
       ]);
       expect(command.stdio).toEqual(["ignore", "inherit", "inherit"]);
       expect(command.detached).toBe(false);
@@ -1397,13 +1400,13 @@ test("App-managed foreground command uses the platform owner with a parent lease
       expect(command.command).toBe(join(runtimeBin, "bun"));
       expect(command.args).toEqual([
         "run",
-        join(command.cwd, "packages/butler-agent/scripts/native-service-daemon.ts"),
+        join(runtimeHome, "packages/butler-agent/scripts/native-service-daemon.ts"),
       ]);
       expect(command.stdio).toEqual(["pipe", "inherit", "inherit"]);
       expect(command.detached).toBe(true);
     }
     expect(command.env).toMatchObject({
-      BUTLER_APP_MANAGED_RUNTIME_HOME: command.cwd,
+      BUTLER_APP_MANAGED_RUNTIME_HOME: runtimeHome,
       BUTLER_DATA: butlerData,
       EMBED_HEALTH_PORT: String(prepareAppManagedEmbedHealthPort({ butlerData })),
     });
@@ -1429,7 +1432,7 @@ test("App-managed foreground command uses the platform owner with a parent lease
 
 test("Windows App foreground command uses the owner-death Job host and foreground daemon", () => {
   const command = windowsAppForegroundCommand({
-    runtimeHome: "C:\\Users\\테스터\\Butler Data\\runtime",
+    butlerData: "C:\\Users\\테스터\\Butler Data",
     runtime: "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\bun.exe",
     processHost:
       "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\butler-process-host.exe",
@@ -1447,12 +1450,12 @@ test("Windows App foreground command uses the owner-death Job host and foregroun
       "run",
       "C:\\Users\\테스터\\Butler Data\\runtime\\packages\\butler-agent\\scripts\\native-service-daemon.ts",
     ],
-    cwd: "C:\\Users\\테스터\\Butler Data\\runtime",
+    cwd: "C:\\Users\\테스터\\Butler Data",
     stdio: ["ignore", "inherit", "inherit"],
     detached: false,
   });
   expect(() => windowsAppForegroundCommand({
-    runtimeHome: "C:\\runtime",
+    butlerData: "C:\\Butler Data",
     runtime: "bun.exe",
     processHost: "butler-process-host.exe",
     daemon: "native-service-daemon.ts",

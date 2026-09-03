@@ -1,11 +1,13 @@
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 
 export const DEFAULT_ISOLATED_DEV_SERVER_PORT = 28_765;
 export const DEFAULT_ISOLATED_DEV_UI_PORT = 25_173;
 
-const DEFAULT_DATA_DIR = ".dev-butler";
+const DEFAULT_DATA_DIR = "development";
 const READINESS_TIMEOUT_MS = 15_000;
 const READINESS_POLL_INTERVAL_MS = 150;
 const HEALTH_REQUEST_TIMEOUT_MS = 500;
@@ -58,8 +60,8 @@ export function resolveIsolatedDevConfig(
 ) {
   const root = resolve(cwd);
   const dataRoot = resolve(
-    root,
-    env.BUTLER_DEV_DATA?.trim() || DEFAULT_DATA_DIR,
+    env.BUTLER_DATA?.trim() || join(homedir(), ".butler"),
+    env.BUTLER_DEV_DATA?.trim() || join(DEFAULT_DATA_DIR, createHash("sha256").update(root).digest("hex").slice(0, 12)),
   );
   const serverPort = parsePort(
     env.BUTLER_DEV_SERVER_PORT,

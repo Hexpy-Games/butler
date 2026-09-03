@@ -109,7 +109,7 @@ export function bindButlerSession(input: {
     return registerRuntimeSession({
       sessionId: input.sessionId,
       role: "butler",
-      workspacePath: input.butlerHome,
+      workspacePath: input.butlerData,
       runtimeAdapterId: "btcc-turn-runtime",
       modelProviderId: input.provider.id,
       butlerHome: input.butlerHome,

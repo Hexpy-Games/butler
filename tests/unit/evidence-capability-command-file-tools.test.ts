@@ -126,7 +126,7 @@ describe("run_command evidence capability receipts", () => {
       "/bin/sh -c \"sleep 1; printf 'late\\n' > command-late.txt\"",
     ].join("; ");
     const running = runCommandTool({
-      butlerHome: workspace,
+      butlerHome: join(workspace, "installed-program"),
       butlerData,
       workspacePath: workspace,
       args: { command, timeout_ms: 30_000 },

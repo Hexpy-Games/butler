@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
@@ -221,13 +221,13 @@ describe("projectLedgerProjectPath", () => {
     ));
   });
 
-  test("falls back to the Butler repository only when no session workspace is available", () => {
+  test("uses data instead of the Butler repository when no session workspace is available", () => {
     const butlerHome = join(makeTempDir(), "butler");
     const butlerData = makeTempDir();
     mkdirSync(butlerHome, { recursive: true });
 
     expect(projectLedgerProjectPath({ butlerHome, butlerData }, {})).toBe(
-      join(butlerData, "project-ledger", "projects", "butler"),
+      join(butlerData, "project-ledger", "projects", basename(butlerData)),
     );
   });
 

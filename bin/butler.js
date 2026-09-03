@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -94,8 +94,9 @@ function resolveBun(data) {
 }
 
 function run(program, programArgs, common) {
+  mkdirSync(common.data, { recursive: true });
   const result = spawnSync(program, programArgs, {
-    cwd: root,
+    cwd: common.data,
     stdio: "inherit",
     env: {
       ...process.env,

@@ -375,7 +375,7 @@ test("App-managed native service manifest resolves from active runtime pointer",
       "butler-main",
       "app-gateway",
     ]);
-    expect(specs.every((spec) => spec.cwd === runtimeHome)).toBe(true);
+    expect(specs.every((spec) => spec.cwd === butlerData)).toBe(true);
     expect(specs.every((spec) => spec.env?.BUTLER_HOME === runtimeHome)).toBe(true);
     expect(specs.every((spec) => spec.env?.BUTLER_DATA === butlerData)).toBe(true);
     expect(specs.every((spec) => spec.env?.BUTLER_BUN === serviceBun)).toBe(true);

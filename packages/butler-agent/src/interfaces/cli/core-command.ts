@@ -115,7 +115,7 @@ function authLogin(parsed: ParsedCommonOptions): never {
     "run",
     `${parsed.options.home}/packages/butler-agent/scripts/openai-oauth-login.ts`,
   ], {
-    cwd: parsed.options.home,
+    cwd: parsed.options.data,
     stdio: "inherit",
     env: process.env,
   });
@@ -201,7 +201,7 @@ function metrics(parsed: ParsedCommonOptions, args: string[]): never | void {
     ...rest,
     ...(parsed.options.json ? ["--json"] : []),
   ], {
-    cwd: parsed.options.home,
+    cwd: parsed.options.data,
     stdio: "inherit",
     env: process.env,
   });

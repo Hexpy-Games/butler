@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { butlerDataPath } from "../src/runtime/paths.ts";
 
 const PROJECT_ROOT = join(import.meta.dir, "..", "..", "..");
+const DATA_ROOT = butlerDataPath();
 
 function checkPrerequisites() {
   console.log("Checking prerequisites...");
@@ -46,7 +48,7 @@ function askWithDefault(label: string, defaultValue: string): string {
 async function configureButler() {
   console.log("\nConfiguring butler.config.json...");
 
-  const configPath = join(PROJECT_ROOT, "butler.config.json");
+  const configPath = join(DATA_ROOT, "butler.config.json");
   const templatePath = join(PROJECT_ROOT, "butler.config.template.json");
 
   if (existsSync(configPath)) {
@@ -86,6 +88,7 @@ async function configureButler() {
     },
   };
 
+  mkdirSync(DATA_ROOT, { recursive: true });
   writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
   console.log("  ✓ butler.config.json written");
 }
@@ -93,11 +96,11 @@ async function configureButler() {
 function initMemoryStructure() {
   console.log("\nInitializing memory structure...");
 
-  const dataRoot = join(PROJECT_ROOT, "data");
+  const dataRoot = DATA_ROOT;
   const dirs = [
-    "memory/hot",
-    "memory/db",
-    "memory/projects",
+    "cognition/memory/hot",
+    "cognition/memory/db",
+    "cognition/memory/projects",
     "tasks",
     "logs",
   ];
@@ -112,12 +115,12 @@ function initMemoryStructure() {
     }
   }
 
-  const profilePath = join(dataRoot, "memory/user-profile.md");
+  const profilePath = join(dataRoot, "cognition/memory/user-profile.md");
   if (!existsSync(profilePath)) {
     let name = "User";
     try {
       const config = JSON.parse(
-        readFileSync(join(PROJECT_ROOT, "butler.config.json"), "utf-8"),
+        readFileSync(join(DATA_ROOT, "butler.config.json"), "utf-8"),
       );
       name = config.user?.name ?? name;
     } catch {}
@@ -137,26 +140,6 @@ function initMemoryStructure() {
     console.log("  ✓ created memory/user-profile.md");
   } else {
     console.log("  · memory/user-profile.md already exists");
-  }
-}
-
-function checkGitignore() {
-  console.log("\nChecking .gitignore...");
-
-  const gitignorePath = join(PROJECT_ROOT, ".gitignore");
-  const entry = "butler.config.json";
-
-  if (existsSync(gitignorePath)) {
-    const contents = readFileSync(gitignorePath, "utf-8");
-    if (!contents.includes(entry)) {
-      appendFileSync(gitignorePath, `\n${entry}\n`);
-      console.log("  ✓ Added butler.config.json to .gitignore");
-    } else {
-      console.log("  · butler.config.json already in .gitignore");
-    }
-  } else {
-    writeFileSync(gitignorePath, `${entry}\n`);
-    console.log("  ✓ Created .gitignore with butler.config.json");
   }
 }
 
@@ -180,5 +163,4 @@ checkPrerequisites();
 bunInstall();
 await configureButler();
 initMemoryStructure();
-checkGitignore();
 printNextSteps();

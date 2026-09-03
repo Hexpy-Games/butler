@@ -14,6 +14,6 @@ export const BUTLER_DIR = {
   COGNITION: BUTLER_COGNITION,
   TASKS: join(BUTLER_DATA, "tasks"),
   SCRIPTS: butlerAgentScriptPath(BUTLER_HOME),
-  CONFIG: join(BUTLER_HOME, "config"),
+  CONFIG: join(BUTLER_DATA, "config"),
   MEMORY: BUTLER_COGNITION_MEMORY,
 };

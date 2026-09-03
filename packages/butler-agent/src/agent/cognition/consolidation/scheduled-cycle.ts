@@ -55,7 +55,7 @@ function defaultLegacyMemoryCycle(home: string, data: string): LegacyMemoryCycle
     bun,
     ["run", butlerAgentSourcePath(home, "agent", "cognition", "memory", "scripts", "consolidation-cycle.ts")],
     {
-      cwd: home,
+      cwd: data,
       encoding: "utf8",
       env: {
         ...process.env,

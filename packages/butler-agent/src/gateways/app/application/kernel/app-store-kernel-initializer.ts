@@ -57,9 +57,6 @@ export function initializeAppStoreKernel(
   options: AppServerStoreOptions,
 ): void {
   kernel.closed = false;
-  kernel.projectWorkspaceRoot = resolve(
-    options.projectWorkspaceRoot ?? join(homedir(), "butler-workspace"),
-  );
   kernel.folderSelectionSecret = options.folderSelectionSecret;
   kernel.butlerData = resolve(
     options.butlerData ??
@@ -68,6 +65,9 @@ export function initializeAppStoreKernel(
   );
   kernel.butlerHome = resolve(
     options.butlerHome ?? process.env.BUTLER_HOME ?? process.cwd(),
+  );
+  kernel.projectWorkspaceRoot = resolve(
+    options.projectWorkspaceRoot ?? join(kernel.butlerData, "workspaces", "projects"),
   );
   kernel.stewardObserver = options.stewardObserver;
   if (options.sessionBindings) {

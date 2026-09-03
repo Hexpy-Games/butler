@@ -448,7 +448,7 @@ ${Object.entries(runtime.env).map(([key, value]) =>
   ).join("\n")}
   </dict>
   <key>WorkingDirectory</key>
-  <string>${xml(runtime.runtimeHome)}</string>
+  <string>${xml(runtime.butlerData)}</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -491,7 +491,7 @@ ${Object.entries(env).map(([key, value]) =>
   ).join("\n")}
   </dict>
   <key>WorkingDirectory</key>
-  <string>${xml(dirname(menuBarHelper.executablePath))}</string>
+  <string>${xml(runtime.butlerData)}</string>
   <key>LimitLoadToSessionType</key>
   <string>Aqua</string>
   <key>RunAtLoad</key>
@@ -508,7 +508,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=${systemdPathValue(runtime.runtimeHome)}
+WorkingDirectory=${systemdPathValue(runtime.butlerData)}
 ${Object.entries(runtime.env).map(([key, value]) =>
     `Environment=${key}=${systemdValue(value)}`,
   ).join("\n")}

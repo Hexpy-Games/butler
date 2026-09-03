@@ -6,20 +6,22 @@ development path: it starts the existing Agent-owned app gateway, waits for
 its `/health` endpoint, and then starts the existing `app:client:dev` Vite and
 Electron path.
 
-The command uses the absolute repository-local `.dev-butler` data root by
-default, separate development ports (`28765` for the gateway and `25173` for
-Vite), and `.dev-butler/app/electron-user-data` for the Electron profile. It
+The command uses `BUTLER_DATA/development/<checkout-id>` by default (with
+`~/.butler` as the default `BUTLER_DATA`), separate development ports (`28765`
+for the gateway and `25173` for Vite), and `app/electron-user-data` beneath that
+isolated data root for the Electron profile. It
 prints the selected data root and URLs before startup and keeps the data root
 when the run stops. Deliberate overrides are supported through
 `BUTLER_DEV_DATA`, `BUTLER_DEV_SERVER_PORT`, and `BUTLER_DEV_UI_PORT`. The
-runner intentionally does not inherit the corresponding normal Butler runtime
-variables; it maps only these explicit development overrides into the child
-processes. Gateway/UI hosts remain loopback-only, and the Electron profile
+runner uses the normal data root only as the parent of the isolated development
+directory; relative `BUTLER_DEV_DATA` overrides resolve there, not in source.
+It maps the development configuration into the child processes without using
+normal runtime ports. Gateway/UI hosts remain loopback-only, and the Electron profile
 always stays under the selected development data root.
 
 The runner owns the gateway and client children it starts. Ctrl-C, termination,
 readiness failure, or either child exiting settles the other child; it does not
-delete `.dev-butler`. It uses direct Node/Bun child-process APIs, with POSIX
+delete development data. It uses direct Node/Bun child-process APIs, with POSIX
 process groups and attached Windows children, and does not start a second
 gateway or Electron runtime.
 

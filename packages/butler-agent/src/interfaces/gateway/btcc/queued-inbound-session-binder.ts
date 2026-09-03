@@ -4,6 +4,8 @@ import type { SessionBindingStore } from
   "../../../test-support/harness/session-store.ts";
 import { resolveSessionWorkspaceAuthority } from
   "../../../agent/session-workspaces/index.ts";
+import { butlerDataPath } from "../../../runtime/paths.ts";
+import { dirname } from "node:path";
 
 export function bindQueuedInboundSession(
   envelope: InboundEnvelope,
@@ -32,8 +34,8 @@ function bindAppTurn(envelope: InboundEnvelope, store: SessionBindingStore): voi
     ledgerProjectId: context.project?.ledgerProjectId,
     workspacePath:
       workspaceAuthority.kind === "project"
-        ? workspaceAuthority.workspacePath ?? process.cwd()
-        : existing?.workspacePath ?? process.cwd(),
+        ? workspaceAuthority.workspacePath ?? butlerDataPath(dirname(dirname(store.path)))
+        : existing?.workspacePath ?? butlerDataPath(dirname(dirname(store.path))),
     runtimeAdapterId: "btcc-turn-runtime",
     modelProviderId: modelRef.split("/", 1)[0] || "openai",
     modelRef,

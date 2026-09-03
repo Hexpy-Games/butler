@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { butlerDataPath } from "../../../runtime/paths.ts";
 import type { WorkspaceReference } from "../../session-workspaces/index.ts";
 import type { ButlerToolExecutorRegistry } from "../butler-tools.ts";
 import { executeReadFileTool } from "./read_file/index.ts";
@@ -14,9 +15,10 @@ export { grepFilesToolDefinition, grepFilesToolMetadata } from "./grep_files/ind
 export { listFilesToolDefinition, listFilesToolMetadata } from "./list_files/index.ts";
 export { resolveWorkspacePathGuard, looksSensitiveWorkspacePath } from "./shared/workspace-path-guard.ts";
 
-export function createFileToolHandlers(input: { butlerData?: string; workspacePath?: string; workspaceReference?: WorkspaceReference; mutationScope?: readonly string[]; allowedToolsAndEffects?: readonly string[] } = {}): ButlerToolExecutorRegistry {
+export function createFileToolHandlers(input: { butlerHome?: string; butlerData?: string; workspacePath?: string; workspaceReference?: WorkspaceReference; mutationScope?: readonly string[]; allowedToolsAndEffects?: readonly string[] } = {}): ButlerToolExecutorRegistry {
   const context = {
     ...input,
+    workspacePath: input.workspacePath ?? butlerDataPath(input.butlerData),
     protectedProjectLedgerRoots: input.butlerData
       ? [join(input.butlerData, "project-ledger", "projects")]
       : undefined,

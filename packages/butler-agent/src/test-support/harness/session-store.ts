@@ -1,6 +1,7 @@
 import { mkdirSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
+import { resolve } from "node:path";
 import type {
   SessionBinding,
   SessionBindingLookup,
@@ -123,6 +124,17 @@ export class SessionBindingStore {
 
   get path(): string {
     return this.dbPath;
+  }
+
+  /** Repair the old general-session default; never alter a project/worktree. */
+  relocateLegacyGeneralWorkspaces(programHome: string, butlerData: string): number {
+    return this.db.query(`
+      UPDATE session_bindings SET workspace_path = ?
+      WHERE workspace_path = ?
+        AND COALESCE(project_id, '') = '' AND COALESCE(app_project_id, '') = ''
+        AND COALESCE(ledger_project_id, '') = ''
+        AND json_extract(COALESCE(metadata_json, '{}'), '$.sessionWorkspace') IS NULL
+    `).run(resolve(butlerData), resolve(programHome)).changes;
   }
 
   upsert(binding: UpsertSessionBindingInput): StoredSessionBinding {

@@ -37,6 +37,7 @@ export async function observeGuidedWorkspaceEditTarget(
       workspaceRoot: options.workspacePath,
       relativePath: path,
       rejectProtectedProjectLedgerWrites: true,
+      mutation: true,
       protectedProjectLedgerRoots,
     });
     if (!guard.ok || !guard.absolutePath) {

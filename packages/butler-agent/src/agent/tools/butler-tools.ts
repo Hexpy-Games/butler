@@ -127,7 +127,7 @@ export function createButlerToolExecutor(
 ): ContextualButlerToolExecutor {
   const workspaceReference = input.workspaceReference ?? (input.sessionId && input.sessionBindingStore
     ? createUnavailableWorkspaceReference()
-    : createWorkspaceReference(input.workspacePath ?? input.butlerHome));
+    : createWorkspaceReference(input.workspacePath ?? input.butlerData));
   const projectLedgerWorkspaceReference = input.workspaceReference || input.sessionId
     ? workspaceReference
     : undefined;

@@ -125,6 +125,8 @@ export async function executeWriteFileTool(
     relativeOnly: context.allowedToolsAndEffects !== undefined,
     allowMissingLeaf: true,
     rejectProtectedProjectLedgerWrites: true,
+    mutation: true,
+    programHome: context.butlerHome,
     protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
   });
   if (!guard.ok) {

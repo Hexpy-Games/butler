@@ -181,6 +181,8 @@ async function executeSingleEdit(
     relativePath: edit.path,
     relativeOnly: context.allowedToolsAndEffects !== undefined,
     rejectProtectedProjectLedgerWrites: true,
+    mutation: true,
+    programHome: context.butlerHome,
     protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
   });
   if (!guard.ok) {
