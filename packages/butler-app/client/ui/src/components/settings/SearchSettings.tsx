@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { DEFAULT_WEB_SEARCH_SETTINGS } from "@/app/constants.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -22,6 +22,8 @@ export function SearchSettings({ draft }: { draft: SettingsView }) {
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
   const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const apiKeyId = useId();
+  const apiKeyDescriptionId = useId();
   const copy = appCopy.settings;
   const fields = copy.fields;
   const options = copy.options;
@@ -78,12 +80,16 @@ export function SearchSettings({ draft }: { draft: SettingsView }) {
       />
       {apiKeyEnvVar ? (
         <SettingsField
+          id={apiKeyId}
           data-test-class="settings-field search-provider-api-key-field"
           label={fields.searchProviderApiKey}
           description={descriptions.searchProviderApiKey(apiKeyEnvVar)}
+          descriptionId={apiKeyDescriptionId}
           control={(
             <Stack align="row" gap="2" wrap>
               <Input
+                id={apiKeyId}
+                aria-describedby={apiKeyDescriptionId}
                 type="password"
                 autoComplete="off"
                 value={apiKeyDraft}

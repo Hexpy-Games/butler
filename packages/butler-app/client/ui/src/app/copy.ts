@@ -280,6 +280,22 @@ export interface AppCopy {
       archives: string;
       about: string;
     };
+    sectionDescriptions: {
+      general: string;
+      models: string;
+      appearance: string;
+      server: string;
+      updates: string;
+      mcp: string;
+      skills: string;
+      usage: string;
+      logs: string;
+      personalization: string;
+      privacy: string;
+      system: string;
+      archives: string;
+      about: string;
+    };
     panels: {
       butlerModel: string;
       workerProfiles: string;
@@ -1019,6 +1035,22 @@ const koKrCopy: AppCopy = {
       system: "시스템 이벤트",
       archives: "아카이브",
       about: "정보",
+    },
+    sectionDescriptions: {
+      general: "언어, 시간대, 대화 입력과 검색 기본값을 설정합니다.",
+      models: "버틀러와 작업자 모델, 예비 모델을 관리합니다.",
+      appearance: "앱의 테마와 화면 표시 방식을 설정합니다.",
+      server: "버틀러 서버 연결과 새 프로젝트 폴더를 설정합니다.",
+      updates: "Butler App을 확인하고 업데이트합니다.",
+      mcp: "MCP 서버와 연결 정보를 관리합니다.",
+      skills: "기본 스킬과 프로젝트 스킬을 관리합니다.",
+      usage: "모델과 도구 사용량을 확인합니다.",
+      logs: "개발자 모드에서 모델 요청과 응답 로그를 확인합니다.",
+      personalization: "버틀러가 사용할 이름, 말투와 사용자 정보를 관리합니다.",
+      privacy: "진단 정보 수집과 개인정보 관련 설정을 관리합니다.",
+      system: "정기 정리와 유지보수 이벤트를 확인합니다.",
+      archives: "보관한 프로젝트와 대화를 복원하거나 삭제합니다.",
+      about: "버틀러 버전과 앱 정보를 확인합니다.",
     },
     panels: {
       butlerModel: "모델 설정",
@@ -1836,6 +1868,22 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       system: "System events",
       archives: "Archives",
       about: "About",
+    },
+    sectionDescriptions: {
+      general: "Configure language, timezone, conversation input, and search defaults.",
+      models: "Manage Butler, worker, and backup models.",
+      appearance: "Configure the app theme and display behavior.",
+      server: "Configure the Butler server connection and new project folder.",
+      updates: "Check and update Butler App.",
+      mcp: "Manage MCP servers and their connection settings.",
+      skills: "Manage built-in and project skills.",
+      usage: "Review model and tool usage.",
+      logs: "Inspect model requests and responses in developer mode.",
+      personalization: "Manage the name, tone, and personal settings Butler uses.",
+      privacy: "Manage diagnostics and privacy settings.",
+      system: "Review regular maintenance and system events.",
+      archives: "Restore or delete archived projects and chats.",
+      about: "View Butler version and app information.",
     },
     panels: {
       butlerModel: "Model settings",

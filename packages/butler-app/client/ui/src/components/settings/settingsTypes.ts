@@ -35,6 +35,7 @@ export type PersonalizationDraft = {
 export interface SettingsSectionDescriptor {
   id: SettingsSectionId;
   label: string;
+  description: string;
   icon: ReactNode;
 }
 
