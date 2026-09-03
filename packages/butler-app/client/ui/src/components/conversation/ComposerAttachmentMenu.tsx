@@ -50,6 +50,12 @@ export function ComposerAttachmentMenu() {
         align="start"
         className={themeClass}
         data-menu-size="content"
+        onOpenAutoFocus={(event) => {
+          const drawer = event.currentTarget as HTMLElement;
+          drawer.querySelector<HTMLButtonElement>(
+            '[data-slot="option-menu-item"]:not(:disabled)',
+          )?.focus();
+        }}
         side="top"
         sideOffset={10}
       >
