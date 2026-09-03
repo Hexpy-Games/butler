@@ -29,11 +29,11 @@ export const runCommandToolDefinition = {
       },
       max_output_tokens: {
         type: "integer",
-        description: "Optional stdout/stderr token budget.",
+        description: "Optional preview token budget, default 1200, applied range 200-8000. The result reports requested/applied limits and truncation. Omitted output stays in the existing artifact reader.",
       },
       output_paths: {
         type: "array",
-        description: "Existing workspace paths or artifact labels to publish after success. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR. If none can be published, the tool returns a recoverable failure.",
+        description: "Existing workspace paths or artifact labels to publish after success. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR. Publication failure is reported separately and does not change the command exit status or success.",
         items: {
           type: "string",
         },
@@ -54,7 +54,7 @@ export const runCommandToolDefinition = {
           "silent_on_success",
           "full",
         ],
-        description: "Output mode: auto suppresses successes only with validation_suite and bounds failures; silent_on_success suppresses successes; full preserves output.",
+        description: "Preview only: auto suppresses successes with validation_suite and bounds failures; silent_on_success suppresses successes; full avoids suppression and failure-tail reduction but still obeys the preview token cap. Original stdout/stderr remains retrievable for every omitted portion.",
       },
     },
     required: [

@@ -44,6 +44,9 @@ export async function completeWorkerResultForDependencies(
     throw new Error("worker_parent_steward_missing");
   }
   const existing = input.store.resultByRelationId(relation.relation_id);
+  if (resultInput.status === "cancelled") {
+    await input.durableWork.abandonBoundWorkForTurn(childTurnId);
+  }
   if (existing) {
     const pending = input.store.pendingParentInputForResult(existing.result_id);
     if (pending && !parentSubsessionIsTerminal(input.store, relation.parent_session_id)) {

@@ -7,7 +7,8 @@ import { join } from "node:path";
 import { SqliteGuidedEffectJournal } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { migrateBtccSchema } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/migrate-schema.ts";
-import type { DurableWorkView } from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
+import type { DurableWorkView, DurableWorkService, WorkTurnScope } from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
+import { ordinaryGuidedEffectError, loadGuidedEffectWork } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-persistent-effect-resolution.ts";
 import { createGuidedEffectService } from "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
 import { guidedToolDefinition } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-definition.ts";
 import { guidedWorkspaceEditInputSha256 } from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-workspace-file-edit-adapter.ts";
@@ -72,6 +73,16 @@ test("guided edit schema validates single and SHA-free batch model input", () =>
   ).toMatchObject({ ok: false });
 });
 
+test("ordinary effect failures keep causes without invented recovery and distinguish failed Work reads", async () => {
+  expect(ordinaryGuidedEffectError("edit_file_no_change", "No files changed.", { changed: false })).toEqual({ ok: false, error: { code: "edit_file_no_change", message: "No files changed.", changed: false } });
+  const scope = { turnId: "read-test" } as WorkTurnScope;
+  const absent = { boundWorkForTurn: async () => null } as unknown as DurableWorkService;
+  expect(await loadGuidedEffectWork(absent, scope)).toBeNull();
+  const failure = new Error("durable Work storage is unavailable");
+  const failed = { boundWorkForTurn: async () => { throw failure; } } as unknown as DurableWorkService;
+  await expect(loadGuidedEffectWork(failed, scope)).rejects.toBe(failure);
+});
+
 test("guided batch prepares without mutation and dispatches one real registered edit_file call", async () => {
   const root = await mkdtemp(join(tmpdir(), "butler-guided-batch-real-"));
   await writeFile(join(root, "one.txt"), "one old\n", "utf8");
@@ -127,6 +138,36 @@ test("guided batch prepares without mutation and dispatches one real registered 
     expect(dispatches).toBe(1);
     expect(await readFile(join(root, "one.txt"), "utf8")).toBe("one new\n");
     expect(await readFile(join(root, "two.txt"), "utf8")).toBe("two new\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("guided repeated-file edits share native ordering and durable aggregate recovery", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-ordered-"));
+  try {
+    await writeFile(join(root, "one.txt"), "before\n", "utf8");
+    const args = { edits: [
+      { path: "one.txt", old_text: "before", new_text: "middle" },
+      { path: "one.txt", old_text: "middle", new_text: "after" },
+    ] };
+    const executeEditFile = registeredEditFile({ workspacePath: root, onDispatch() {} });
+    const prepared = await prepareGuidedWorkspaceFileEdit({ workspacePath: root, args, executeEditFile });
+    if (!prepared.ok) throw new Error(prepared.error.message);
+    const { adapter, input, target } = prepared.effect;
+    const recovery = { priorInputSha256: guidedWorkspaceEditInputSha256(input), priorRecoveryHint: adapter.recoveryHint!(input) };
+    expect(await prepareGuidedWorkspaceFileEdit({ workspacePath: root, args, executeEditFile, ...recovery })).toMatchObject({ ok: true, effect: { input } });
+    expect(await adapter.dispatch({ normalizedInput: input, normalizedTarget: target, idempotencyKey: "ordered", signal: new AbortController().signal })).toMatchObject({ status: "applied", result: { files: 1, bytes: 6 } });
+    expect(await readFile(join(root, "one.txt"), "utf8")).toBe("after\n");
+    expect(await prepareGuidedWorkspaceFileEdit({ workspacePath: root, args, executeEditFile, ...recovery })).toMatchObject({ ok: true, effect: { input } });
+    expect(await adapter.reconcile({ normalizedInput: input, normalizedTarget: target, dispatchAttempts: 1, idempotencyKey: "ordered", signal: new AbortController().signal })).toMatchObject({ status: "applied", result: { files: 1 } });
+    const mismatch = await prepareGuidedWorkspaceFileEdit({ workspacePath: root, args, executeEditFile });
+    expect(mismatch).toMatchObject({ ok: false, error: { code: "old_text_mismatch" } });
+    if (!mismatch.ok) {
+      expect(mismatch.error.message).toContain("edits[0] (one.txt)");
+      expect(mismatch.error.message).not.toContain("every file");
+    }
+    expect(await prepareGuidedWorkspaceFileEdit({ workspacePath: root, args: { path: "one.txt", old_text: "after", new_text: "after" }, executeEditFile })).toMatchObject({ ok: false, error: { code: "edit_file_no_change" } });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -70,4 +70,6 @@ test("Worker delegation requires and renders one reviewed Plan action", () => {
   expect(input).toContain("recorded_next_step: Implement the renderer action.");
   expect(input).toContain("implementation_brief:\nEdit renderer.tsx");
   expect(input).toContain("session-scoped Micro Work");
+  expect(input).toContain("Runtime has already created and bound");
+  expect(input).not.toContain("Create and complete one session-scoped Micro Work");
 });

@@ -52,6 +52,14 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     this.continuationBudget = new SqliteTurnContinuationBudgetStore(db);
   }
 
+  async findLatestTurnForSession(sessionId: string): Promise<TurnRecord | null> {
+    const row = this.db.query<{ turn_id: string }, [string]>(`
+      SELECT turn_id FROM btcc_turns WHERE session_id = ?
+      ORDER BY rowid DESC LIMIT 1
+    `).get(sessionId);
+    return row ? this.findTurn(row.turn_id) : null;
+  }
+
   async findTurn(turnId: string): Promise<TurnRecord | null> {
     const row = this.db.query<TurnRow, [string]>(`
       SELECT turn_id, session_id, inbox_id, trigger_key, original_message_id,

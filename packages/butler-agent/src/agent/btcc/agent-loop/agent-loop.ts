@@ -20,6 +20,7 @@ export async function runBtccAgentLoop(
   const toolResults: BtccAgentLoopToolResult[] = [];
   const modelPreviewContext = createToolResultModelPreviewContext();
   let continuation: unknown;
+  let historyRebased = false;
   let emptyResponseRecoveryUsed = false;
   let consecutiveEmptyResponses = 0, modelRoundIndex = 0;
   let iteration = 0;
@@ -33,7 +34,6 @@ export async function runBtccAgentLoop(
     const roundIndex = (input.usageAttribution?.roundIndex ?? 0) + modelRoundIndex;
     modelRoundIndex += 1;
     const requestId = modelRoundRequestId(roundIndex, input.recoveryAttempt);
-    const responseItemId = continuationItems.nextId();
     const resolveModelRef = () => input.resolveModelRef?.() ?? input.model ?? "";
     const publishWaiting = async (
       status: "started" | "completed" | "failed" | "cancelled",
@@ -49,6 +49,15 @@ export async function runBtccAgentLoop(
     };
     await publishWaiting("started");
     try {
+      for (const content of await input.beforeModelRound?.() ?? []) {
+        if (content.trim()) continuationItems.push({ role: "user", content, requestSegmentKind: "current_user_request" });
+      }
+      // Final synthesis may append an ordinary user instruction to this same
+      // history; give it the same canonical identity before provider projection.
+      for (const message of messages) {
+        message.continuationItemId ??= continuationItems.nextId();
+      }
+      const responseItemId = continuationItems.nextId();
       const replayMessages = input.operationResultReplay
         ? input.operationResultReplay.prepareMessages(messages, requestId, { statelessMessageBytes: input.modelRound.statelessMessageBytes, butlerData: input.butlerData })
         : [...messages];
@@ -58,10 +67,12 @@ export async function runBtccAgentLoop(
         tools: request.tools,
         toolChoice: request.toolChoice,
         budget: input.continuationBudget,
+        maxModelFacingBytes: input.maxModelFacingBytes,
         roundId: requestId, responseItemId,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
         statelessMessageBytes: input.modelRound.statelessMessageBytes, butlerData: input.butlerData,
       });
+      historyRebased ||= bounded.requiresRebase;
       const response = await input.modelRound.runRound({
         roundId: requestId,
         model: resolveModelRef(),
@@ -84,7 +95,7 @@ export async function runBtccAgentLoop(
         cacheScope: input.cacheScope,
         stableProviderCachePrefix: input.stableProviderCachePrefix,
         providerRetryAttempts: input.providerRetryAttempts,
-        continuation,
+        continuation: historyRebased ? undefined : continuation,
         ...(bounded.envelope
           ? { boundedContinuation: bounded.envelope }
           : {}),

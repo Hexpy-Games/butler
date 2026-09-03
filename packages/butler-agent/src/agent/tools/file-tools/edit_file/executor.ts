@@ -20,7 +20,7 @@ import {
   safeWorkspaceResultPath,
 } from "../shared/workspace-path-guard.ts";
 import { normalizeWorkspaceSha256 } from "../shared/workspace-sha256.ts";
-import { locateExactText } from "./exact-text-locator.ts";
+import { prepareOrderedExactEdits } from "./ordered-edits.ts";
 import {
   executeBatchEdits,
   normalizeBatchEdits,
@@ -102,7 +102,7 @@ function noChangeRequested(message: string) {
   return failure({
     error: "no_change_requested",
     message,
-    recoveryHint: "Continue from the current file state and choose a materially different next action.",
+    details: { changed: false },
   });
 }
 
@@ -226,28 +226,25 @@ async function executeSingleEdit(
     });
     if (!guarded.ok) return mutationFailureResult(guarded);
 
-    const location = locateExactText({
-      text: decoded.text,
-      oldText: edit.oldText,
-      ...(edit.startLine === undefined ? {} : { startLine: edit.startLine }),
-    });
-    if (!location.ok) {
+    const ordered = prepareOrderedExactEdits([edit], new Map([[edit.path, decoded.text]]));
+    if (!ordered.ok) {
       return failure({
-        error: location.error,
+        error: ordered.error,
         path,
-        message: location.error === "old_text_ambiguous"
+        message: ordered.error === "old_text_ambiguous"
           ? "old_text occurs more than once in the target file."
           : "old_text was not found in the target file.",
         recoveryHint: "Retry with exact text and, when needed, a correct start_line hint.",
         details: {
           ...(edit.startLine === undefined ? {} : { start_line: edit.startLine }),
           before_sha256: snapshot.sha256,
-          occurrences: location.occurrenceCount,
+          occurrences: ordered.occurrenceCount,
         },
       });
     }
 
-    const afterText = `${decoded.text.slice(0, location.value.offset)}${edit.newText}${decoded.text.slice(location.value.offset + edit.oldText.length)}`;
+    const location = { value: ordered.locations[0]! };
+    const afterText = ordered.files.get(edit.path)!.afterText;
     const prepared = prepareWorkspaceFileMutation({
       snapshot,
       data: Buffer.from(afterText, "utf8"),

@@ -329,6 +329,10 @@ export interface SubsessionDelegationStore {
 }
 
 export type SubsessionDelegationService = {
+  activeChildCancellationTarget(childSessionId: string): Promise<{
+    relation: SessionRelation;
+    child_turn_id: string;
+  } | null>;
   enabledWorkerProfiles?(): Promise<WorkerProfile[]>;
   activeParentDelegations(input: {
     parentSessionId: string;
@@ -397,7 +401,9 @@ export type SubsessionDelegationDependencies = {
   parentInputSink: ParentInputSink;
   toolJournal: import("../ports/guided-tool-journal.ts").GuidedToolJournal;
   effectJournal: import("../effects/contracts.ts").GuidedEffectJournal;
-  parentTurns: Pick<import("../turn/index.ts").TurnStateRepository, "findTurn">;
+  parentTurns: Pick<import("../turn/index.ts").TurnStateRepository, "findTurn"> & {
+    findLatestTurnForSession(sessionId: string): Promise<import("../turn/index.ts").TurnRecord | null>;
+  };
   contextDocuments: import("../../context/context-projection.ts").ContextDocumentReader;
   conversations: import("../../conversation/index.ts").ConversationContextStoreReader;
   workerProfiles?: {

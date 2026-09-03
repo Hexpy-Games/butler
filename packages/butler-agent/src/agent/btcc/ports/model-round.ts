@@ -250,8 +250,8 @@ export interface ModelRoundRequest {
     requestDigest: string;
     responseItemId: string;
     contextProjection?: ContextProjectionRebaseIdentity;
-    /** Required exact serialized-body admission owned by the durable Turn. */
-    admitProviderBody(serializedBytes: number): Promise<void>;
+    /** Present only when the durable Turn explicitly enables execution-budget admission. */
+    admitProviderBody?(serializedBytes: number): Promise<void>;
   };
   onProviderStreamEvent?: ProviderStreamProjectionHandler;
   onProviderResponseIdentity?: (identity: {

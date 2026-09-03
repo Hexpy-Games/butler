@@ -3203,6 +3203,8 @@ test("tool output artifact reader schema exposes focused recovery controls", () 
     "path",
     "stream",
     "offset_lines",
+    "offset_chars",
+    "search",
     "limit_lines",
     "max_tokens",
   ]);
