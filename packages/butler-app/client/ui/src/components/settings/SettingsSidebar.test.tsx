@@ -85,7 +85,7 @@ test("settings sidebar renders each group through the existing settings nav", ()
   expect(markup).not.toContain("Notifications");
 });
 
-test("settings sidebar filters pages, shows an empty state, and keeps selection routed", async () => {
+test("settings sidebar opens a sole result, preserves multi-match search, and keeps selection routed", async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
   const container = dom.window.document.querySelector("#root");
   if (!(container instanceof dom.window.HTMLElement)) {
@@ -135,15 +135,23 @@ test("settings sidebar filters pages, shows an empty state, and keeps selection 
     await act(async () => setInputValue("tokens"));
     expect(container.textContent).toContain("Usage");
     expect(container.textContent).not.toContain("Models");
+    expect(selected).toEqual(["usage"]);
 
     const usageRow = Array.from(
       container.querySelectorAll<HTMLElement>('[role="button"]'),
     ).find((row) => row.textContent?.includes("Usage"));
     if (!usageRow) throw new Error("Missing filtered settings result.");
+    selected.length = 0;
     await act(async () => usageRow.click());
     expect(selected).toEqual(["usage"]);
 
+    selected.length = 0;
+    await act(async () => setInputValue("model"));
+    expect(selected).toEqual([]);
+
+    selected.length = 0;
     await act(async () => setInputValue("missing setting"));
+    expect(selected).toEqual([]);
     expect(container.textContent).toContain("No settings match: missing setting");
     expect(container.querySelector('nav [role="button"]')).toBeNull();
   } finally {
