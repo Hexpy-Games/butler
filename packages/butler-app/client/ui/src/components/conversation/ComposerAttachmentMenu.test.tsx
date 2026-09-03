@@ -74,10 +74,23 @@ test("plus opens grouped attachment and response mode options", async () => {
     throw new Error("Missing attachment trigger.");
   }
   await act(async () => {
-    trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    trigger.focus();
+    trigger.dispatchEvent(
+      new dom.window.KeyboardEvent("keydown", {
+        bubbles: true,
+        key: "Enter",
+      }),
+    );
+    trigger.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, detail: 0 }),
+    );
     await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
+  const firstActiveItem = dom.window.document.querySelector(
+    '[data-slot="option-menu-item"]:not(:disabled)',
+  );
+  expect(dom.window.document.activeElement === firstActiveItem).toBe(true);
   const titles = Array.from(
     dom.window.document.querySelectorAll('[data-slot="option-menu-section-title"]'),
   ).map((element) => element.textContent);
