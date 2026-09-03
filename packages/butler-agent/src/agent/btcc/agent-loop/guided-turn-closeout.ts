@@ -27,7 +27,7 @@ export function createGuidedDelegationTurnRelease(input: {
   reconcileAfterLoop(text: string): Promise<string>;
   turnId: string;
   toolJournal: Pick<GuidedToolJournal, "list">;
-  delegationTool: "delegate_to_steward" | "delegate_to_worker";
+  delegationTool: "delegate_to_steward";
 }): {
   reviewFinalCandidate(candidate: { text: string }): Promise<GuidedTurnCloseoutReview>;
   reconcileAfterLoop(text: string): Promise<string>;
@@ -45,7 +45,7 @@ export function createGuidedDelegationTurnRelease(input: {
 function hasQueuedDelegation(input: {
   turnId: string;
   toolJournal: Pick<GuidedToolJournal, "list">;
-  delegationTool: "delegate_to_steward" | "delegate_to_worker";
+  delegationTool: "delegate_to_steward";
 }): boolean {
   return input.toolJournal.list(input.turnId).some((record) => {
     const result = record.result;

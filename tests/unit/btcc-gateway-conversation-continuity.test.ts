@@ -220,6 +220,27 @@ test("Steward delivery without completed Work is reported as failed", async () =
   });
 });
 
+test("explicit Steward wait is non-terminal even when the Worker has already returned", async () => {
+  let reports = 0;
+  const handlers = createBtccGatewayHandlers({
+    btcc: {
+      runTurn: async () => ({ kind: "already_delivered", turnId: "steward-wait",
+        messageId: "wait-message", content: "", executionOutcome: "waiting_for_worker" }),
+      stopTurn: async ({ turnId }) => ({ kind: "cancelled", turnId }),
+    },
+    subsessionDelegation: {
+      activeParentDelegations: async () => [],
+      completeStewardResult: async () => { reports += 1; },
+    } as unknown as SubsessionDelegationService,
+  });
+  const result = await handlers.steward!({
+    route: { sessionId: "steward/wait", role: "steward", reason: "steward-hint", workspacePath: process.cwd() },
+    envelope: envelope("steward-wait", "steward-wait-input", "Wait for the Worker"),
+  });
+  expect(reports).toBe(0);
+  expect(result.metadata).toMatchObject({ text: "", executionOutcome: "waiting_for_worker" });
+});
+
 test("Worker without a completed Micro Work is reported to its Steward as blocked", async () => {
   const completed: Array<
     Parameters<SubsessionDelegationService["completeWorkerResult"]>[0]

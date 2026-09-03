@@ -223,6 +223,9 @@ export async function runBtccAgentLoop(
           text,
           iteration: currentIteration,
         });
+        if (review.status === "wait") {
+          return { finalText: "", executionOutcome: "waiting_for_worker", messages, events };
+        }
         if (review.status === "continue") {
           const observation = review.observation.trim();
           if (!observation) throw new Error("btcc_agent_loop_final_candidate_observation_missing");
@@ -277,12 +280,16 @@ export async function runBtccAgentLoop(
         continuationItems.push({ role: "assistant", content: finalText });
         return { finalText, messages, events };
       }
-      if (await nextTurnAfterToolBatch(
+      const disposition = await nextTurnAfterToolBatch(
         input,
         preparedCalls.map((item) => item.call),
         results,
         currentIteration,
-      ) === "final_report") {
+      );
+      if (disposition === "wait") {
+        return { finalText: "", executionOutcome: "waiting_for_worker", messages, events };
+      }
+      if (disposition === "final_report") {
         finalReportRound = true;
       }
       continue;
@@ -308,12 +315,16 @@ export async function runBtccAgentLoop(
       }
     }
     if (finalReportRound) return { finalText: text, messages, events };
-    if (await nextTurnAfterToolBatch(
+    const disposition = await nextTurnAfterToolBatch(
       input,
       preparedCalls.map((item) => item.call),
       batchResults,
       currentIteration,
-    ) === "final_report") {
+    );
+    if (disposition === "wait") {
+      return { finalText: "", executionOutcome: "waiting_for_worker", messages, events };
+    }
+    if (disposition === "final_report") {
       finalReportRound = true;
     }
   }
@@ -324,7 +335,7 @@ async function nextTurnAfterToolBatch(
   toolCalls: readonly BtccAgentLoopToolCall[],
   toolResults: readonly BtccAgentLoopToolResult[],
   iteration: number,
-): Promise<"continue" | "final_report"> {
+): Promise<"continue" | "final_report" | "wait"> {
   return await input.afterToolBatch?.({ toolCalls, toolResults, iteration }) ?? "continue";
 }
 

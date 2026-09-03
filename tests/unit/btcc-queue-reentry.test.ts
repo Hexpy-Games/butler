@@ -76,6 +76,43 @@ test("a recovered queue item re-enters the same BTCC path without a resume marke
   }
 });
 
+test("Worker wait releases the dispatcher silently so the same session can resume", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-worker-wait-queue-"));
+  const sessionId = "steward/wait";
+  const queue = new NativeInboundQueue(butlerData);
+  const store = createSessionStore(butlerData, sessionId);
+  try {
+    const dispatcher = new BtccInboundDispatcher();
+    const delivered: string[] = [];
+    const options = {
+      queue, store, deliveryGuard: new DeliveryGuard({ adapters: [] }),
+      server: { async handleInbound(envelope: InboundEnvelope) {
+        const result = handledResult(sessionId, butlerData, "continued result");
+        return envelope.routingHints?.turnId === "wait-turn"
+          ? { ...result, handlerResult: { ...result.handlerResult, metadata: {
+            ...result.handlerResult.metadata, text: "", executionOutcome: "waiting_for_worker",
+            artifacts: [{ id: "prior-artifact", kind: "file", path: "prior.txt" }],
+          } } }
+          : result;
+      } },
+      deliverAction: async (_sessionId: string, action: { message: { text?: string } }) => {
+        delivered.push(action.message.text ?? ""); return { ok: true };
+      },
+    };
+    queue.enqueue(appEnvelope({ sessionId, turnId: "wait-turn" }));
+    const waited = dispatcher.poll(options);
+    await dispatcher.waitForIdle();
+    expect(waited.handled).toBe(1);
+    expect(waited.failed).toBe(0);
+    expect(delivered).toEqual([]);
+    queue.enqueue(appEnvelope({ sessionId, turnId: "worker-result-turn" }));
+    const resumed = dispatcher.poll(options);
+    await dispatcher.waitForIdle();
+    expect(resumed.handled).toBe(1);
+    expect(delivered).toEqual(["continued result"]);
+  } finally { store.close(); rmSync(butlerData, { recursive: true, force: true }); }
+});
+
 test("queue dispatch does not read or decide from an App lifecycle database", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-queue-no-db-read-"));
   const sessionId = "butler/app-general";

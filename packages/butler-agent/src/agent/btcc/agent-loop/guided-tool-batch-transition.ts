@@ -13,6 +13,9 @@ export function createGuidedToolBatchTransition(input: {
   durableWork: DurableWorkService;
 }): NonNullable<BtccAgentLoopInput["afterToolBatch"]> {
   return async (batch): Promise<BtccAfterToolBatchDisposition> => {
+    if (batch.toolResults.some((result) => result.name === "wait_for_worker" &&
+      result.ok && result.output && typeof result.output === "object" &&
+      Reflect.get(result.output, "status") === "waiting")) return "wait";
     if (!hasSuccessfulDisposition(batch.toolCalls, batch.toolResults)) {
       return "continue";
     }

@@ -5,6 +5,7 @@ import { routeForUsedTools } from "./guided-turn-policy.ts";
 export function guidedTurnResult(input: {
   content: string;
   terminalOutcome?: BtccAgentLoopResult["terminalOutcome"];
+  executionOutcome?: BtccAgentLoopResult["executionOutcome"];
   workStatus?: BtccAgentLoopResult["workStatus"];
   artifacts?: BtccAgentLoopResult["artifacts"];
   changedFiles?: BtccAgentLoopResult["changedFiles"];
@@ -15,6 +16,7 @@ export function guidedTurnResult(input: {
   return {
     content: input.content,
     ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
+    ...(input.executionOutcome ? { executionOutcome: input.executionOutcome } : {}),
     ...(input.workStatus ? { workStatus: input.workStatus } : {}),
     ...(input.artifacts?.length ? { artifacts: input.artifacts } : {}),
     ...(input.changedFiles?.length ? { changedFiles: input.changedFiles } : {}),

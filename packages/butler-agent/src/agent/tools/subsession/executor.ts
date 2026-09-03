@@ -7,6 +7,7 @@ import {
   delegateToWorkerToolDefinition,
   steerStewardToolDefinition,
   steerWorkerToolDefinition,
+  waitForWorkerToolDefinition,
 } from "./definition.ts";
 
 export function createSubsessionToolHandlers(input: {
@@ -20,6 +21,13 @@ export function createSubsessionToolHandlers(input: {
 }): Record<string, ButlerToolHandler> {
   if (!input.service) return {};
   return {
+    [waitForWorkerToolDefinition.name]: async () => {
+      const { parentSessionId, sourceParentTurnId } = requireParentIdentity(input);
+      const waiting = await input.service!.shouldWaitForWorker({
+        parentSessionId, parentTurnId: sourceParentTurnId,
+      });
+      return { ok: true, status: waiting ? "waiting" : "no_active_worker" };
+    },
     [delegateToStewardToolDefinition.name]: async (call: ButlerToolCall) => {
       if (!input.parentSessionId || !input.parentTurnId || !input.anchorMessageId) {
         throw new Error("subsession_parent_turn_identity_missing");

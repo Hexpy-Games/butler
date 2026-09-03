@@ -7,7 +7,7 @@ export function guidedFinalTransition(
   turn: TurnRecord,
   result: BtccAgentLoopResult,
 ) {
-  const content = result.terminalOutcome === "no_visible"
+  const content = result.executionOutcome === "waiting_for_worker" || result.terminalOutcome === "no_visible"
     ? ""
     : result.content.trim() || operationalFailureMessage(turn.originalMessage);
   const finalPayloadBody = {
@@ -16,6 +16,7 @@ export function guidedFinalTransition(
     route: result.route,
     disposition: "completed" as const,
     content,
+    ...(result.executionOutcome ? { executionOutcome: result.executionOutcome } : {}),
     ...(result.workStatus ? { workStatus: result.workStatus } : {}),
     ...(result.artifacts?.length ? { artifacts: result.artifacts } : {}),
     ...(result.changedFiles?.length ? { changedFiles: result.changedFiles } : {}),

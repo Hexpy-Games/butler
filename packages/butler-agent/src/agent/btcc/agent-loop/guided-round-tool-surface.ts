@@ -21,6 +21,7 @@ const ACTIVE_DELEGATION_TOOLS = new Set([
   "steer_steward",
   "cancel_steward",
   "steer_worker",
+  "wait_for_worker",
 ]);
 const ACTIVE_RELATION_CONTROL_TOOLS = new Set([
   "steer_steward",
@@ -49,7 +50,7 @@ export function createGuidedRoundToolSurfaceResolver(input: {
   /** Butler hands off after Plan Review; Steward may execute directly or use a Worker. */
   forcedDelegationTool?: "delegate_to_steward";
   /** A successful handoff gets one tool-free round for the role's natural reply. */
-  turnReleaseDelegationTool?: "delegate_to_steward" | "delegate_to_worker";
+  turnReleaseDelegationTool?: "delegate_to_steward";
 }): () => Promise<BtccRoundToolSurfaceSnapshot> {
   return async () => {
     if (input.turnReleaseDelegationTool && input.toolJournal.list(input.turnId)

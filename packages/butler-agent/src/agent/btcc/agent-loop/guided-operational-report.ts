@@ -20,6 +20,7 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
   originalRequest: string;
   emptyResponsePolicy?: BtccEmptyResponsePolicy;
   loadFacts: () => Promise<Omit<OperationalFacts, "originalRequest">>;
+  onExecutionWait?: () => void;
 }): Promise<string> {
   try {
     const result = await runBtccAgentLoop({
@@ -27,6 +28,10 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
       signal: input.parentSignal,
     });
     const candidate = result.finalText.trim();
+    if (result.executionOutcome === "waiting_for_worker") {
+      input.onExecutionWait?.();
+      return "";
+    }
     // An empty result is a genuine terminal no-visible outcome.
     // Preserve it for the transport dispatcher to emit its typed queue
     // failure; converting it into an assistant fallback would hide the

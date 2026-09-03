@@ -84,7 +84,7 @@ export function createBtccGatewayHandlers(
           changedArtifacts: childReport.changedArtifacts,
           changedFiles: childReport.changedFiles,
         });
-      } else if (route.role === "steward") {
+      } else if (route.role === "steward" && result.executionOutcome !== "waiting_for_worker") {
         const activeChildren = await options.subsessionDelegation.activeParentDelegations({
           parentSessionId: route.sessionId,
         });
@@ -111,6 +111,7 @@ export function createBtccGatewayHandlers(
         : "btcc/turn",
       metadata: {
         text: result.text,
+        ...(result.executionOutcome ? { executionOutcome: result.executionOutcome } : {}),
         artifacts: result.artifacts,
         changedFiles: result.changedFiles,
         generatedSessionTitle,
