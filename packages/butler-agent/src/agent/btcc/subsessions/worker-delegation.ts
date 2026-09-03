@@ -32,7 +32,7 @@ export async function delegateReviewedWorker(
     parentTurnId: request.parent_turn_id,
   });
   const planAction = selectedPlanAction(reviewed, request.action_key);
-  const { projectContext, inheritedProject } = await snapshotChildProjectContext({
+  const { projectContext, inheritedProject, recentFeedbackRefs } = await snapshotChildProjectContext({
     parentSessionId: request.parent_session_id,
     parentTurnId: request.parent_turn_id,
     parent,
@@ -137,6 +137,7 @@ export async function delegateReviewedWorker(
         delegation_id: delegationId,
         task_id: taskId,
         parent_session_id: request.parent_session_id,
+        recent_feedback_refs: recentFeedbackRefs,
         execution_mode: packet.execution_mode,
         mutation_scope: [...packet.mutation_scope],
         allowed_tools_and_effects: allowedToolsAndEffects,

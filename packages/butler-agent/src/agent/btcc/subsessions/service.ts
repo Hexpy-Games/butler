@@ -132,7 +132,7 @@ export function createSubsessionDelegationService(
       if (normalizedRequest.model_ref !== parent.modelRef) throw new Error("subsession_parent_model_mismatch");
       const parentReasoning = parent.metadata?.reasoning_effort;
       if (typeof parentReasoning === "string" && parentReasoning !== normalizedRequest.reasoning_effort) throw new Error("subsession_parent_reasoning_mismatch");
-      const { projectContext, inheritedProject } = await snapshotChildProjectContext({
+      const { projectContext, inheritedProject, recentFeedbackRefs } = await snapshotChildProjectContext({
         parentSessionId: normalizedRequest.parent_session_id, parentTurnId: normalizedRequest.parent_turn_id, parent,
         turns: input.parentTurns, documents: input.contextDocuments,
       });
@@ -174,7 +174,7 @@ export function createSubsessionDelegationService(
         parentTurnId: normalizedRequest.parent_turn_id,
         modelRef: normalizedRequest.model_ref,
       });
-      registerChildSession(input, parent, normalizedRequest, packet, childSessionId, inheritedProject);
+      registerChildSession(input, parent, normalizedRequest, packet, childSessionId, inheritedProject, recentFeedbackRefs);
       const childWorkspacePath = parent.workspacePath;
       const storedChild = input.sessionBindings.getBySessionId(childSessionId);
       if (!storedChild || storedChild.workspacePath !== parent.workspacePath) {
@@ -281,6 +281,7 @@ function registerChildSession(
   packet: DelegationPacket,
   childSessionId: string,
   inheritedProject: ReturnType<typeof childProjectContextBinding>,
+  recentFeedbackRefs: string[],
 ): void {
   input.sessionBindings.upsert({
     sessionId: childSessionId,
@@ -298,6 +299,7 @@ function registerChildSession(
         delegation_id: packet.delegation_id,
         task_id: packet.task_id,
         parent_session_id: request.parent_session_id,
+        recent_feedback_refs: recentFeedbackRefs,
         execution_mode: packet.execution_mode,
         mutation_scope: [...packet.mutation_scope],
         allowed_tools_and_effects: [...packet.allowed_tools_and_effects],

@@ -89,7 +89,9 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
     const envelope = inboundEnvelopeFor(request);
     const subsession = isSubsessionBinding(binding);
     const assembly = subsession
-      ? admitStewardContextAssembly(this.dependencies.promptAssembler.buildStewardContextAssembly())
+      ? admitStewardContextAssembly(this.dependencies.promptAssembler.buildStewardContextAssembly({
+          binding, envelope,
+        }))
       : includeRecentContext(
         this.dependencies.conversationStore,
         binding,
@@ -204,8 +206,18 @@ export function snapshotTurnContext(input: {
     }, input.documents);
   const snapshot = subsession ? {
       ...documentSnapshot,
-      mandatoryHotCacheRefs: [...(subsession.projectContext?.mandatoryHotCacheRefs ?? [])],
-      optionalHotCacheRefs: [...(subsession.projectContext?.optionalHotCacheRefs ?? [])],
+      recentFeedbackRefs: uniqueStrings([
+        ...documentSnapshot.recentFeedbackRefs,
+        ...(subsession.recentFeedbackRefs ?? []),
+      ]),
+      mandatoryHotCacheRefs: uniqueStrings([
+        ...documentSnapshot.mandatoryHotCacheRefs,
+        ...(subsession.projectContext?.mandatoryHotCacheRefs ?? []),
+      ]),
+      optionalHotCacheRefs: uniqueStrings([
+        ...documentSnapshot.optionalHotCacheRefs,
+        ...(subsession.projectContext?.optionalHotCacheRefs ?? []),
+      ]),
       baselineObservationScopeRefs: [],
     }
     : documentSnapshot;
