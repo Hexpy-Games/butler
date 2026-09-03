@@ -36,11 +36,7 @@ export async function safeLoadWorkContext(
   service: DurableWorkService,
   scope: WorkTurnScope,
 ): Promise<DurableWorkContext | null> {
-  try {
-    return await service.loadContext(scope);
-  } catch {
-    return null;
-  }
+  return await service.loadContext(scope);
 }
 
 export async function safeImportOpenLegacyWork(
@@ -58,11 +54,7 @@ export async function safeBoundWork(
   service: DurableWorkService,
   turnId: string,
 ): Promise<DurableWorkView | null> {
-  try {
-    return await service.boundWorkForTurn(turnId);
-  } catch {
-    return null;
-  }
+  return await service.boundWorkForTurn(turnId);
 }
 
 export async function safeBindOpenWork(
@@ -70,11 +62,7 @@ export async function safeBindOpenWork(
   scope: WorkTurnScope,
   expectedWorkId?: string,
 ): Promise<DurableWorkView | null> {
-  try {
-    return await service.bindOpenWork(scope, expectedWorkId);
-  } catch {
-    return null;
-  }
+  return await service.bindOpenWork(scope, expectedWorkId);
 }
 
 export async function loadInitialGuidedWork(

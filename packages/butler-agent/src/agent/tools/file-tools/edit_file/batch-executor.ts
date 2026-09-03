@@ -20,7 +20,7 @@ import {
   type WorkspacePathGuardResult,
 } from "../shared/workspace-path-guard.ts";
 import { normalizeWorkspaceSha256 } from "../shared/workspace-sha256.ts";
-import { locateExactText } from "./exact-text-locator.ts";
+import { prepareOrderedExactEdits } from "./ordered-edits.ts";
 import type { FileToolExecutionContext } from "../read_file/executor.ts";
 
 const BATCH_MIN_EDITS = 2;
@@ -76,8 +76,8 @@ function noChangeRequested(index: number) {
   return {
     ok: false as const,
     error: "no_change_requested",
+    changed: false,
     message: `edits[${index}] has identical old_text and new_text, so no file change was requested.`,
-    recovery_hint: "Remove the unchanged entry and continue with only material edits.",
     evidence_capability_receipts: fileToolCapabilityReceipt({
       toolName: "edit_file",
       ok: false,
@@ -118,7 +118,7 @@ export function normalizeBatchEdits(value: unknown):
     const startLine = normalizeStartLine(item.start_line);
     if (startLine === "invalid") return { ok: false, result: invalidArguments(`edits[${index}].start_line must be a positive integer.`, "Retry with one-based line hints or omit them.") };
     const expectedSha256 = normalizeWorkspaceSha256(item.expected_sha256);
-    if (expectedSha256 === undefined) return { ok: false, result: invalidArguments(`edits[${index}].expected_sha256 must be a 64-character hexadecimal SHA-256 digest.`, "Read every file and provide its complete lowercase or uppercase SHA-256.") };
+    if (expectedSha256 === undefined) return { ok: false, result: invalidArguments(`edits[${index}].expected_sha256 must be a 64-character hexadecimal SHA-256 digest.`, `Read the target for edits[${index}] and provide its current SHA-256.`) };
     edits.push({
       index,
       path: item.path.trim(),
@@ -139,6 +139,7 @@ function targetKey(guard: WorkspacePathGuardResult): string {
 function batchRecord(input: {
   path?: string;
   index: number;
+  edit_indexes?: number[];
   error?: string;
   before_sha256?: string;
   current_sha256?: string;
@@ -150,6 +151,7 @@ function batchRecord(input: {
 }) {
   return {
     index: input.index,
+    ...(input.edit_indexes ? { edit_indexes: input.edit_indexes } : {}),
     ...(input.path === undefined ? {} : { path: input.path }),
     ...(input.error === undefined ? {} : { error: input.error }),
     ...(input.before_sha256 === undefined ? {} : { before_sha256: input.before_sha256 }),
@@ -213,7 +215,7 @@ export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<st
   );
   const guardedEdits: NormalizedEdit[] = [];
   const failures: Record<string, unknown>[] = [];
-  const seenTargets = new Set<string>();
+  const targetPaths = new Map<string, string>();
   const safePaths = new Map<number, string | undefined>();
   for (const edit of edits) {
     const guard = await resolveWorkspacePathGuard({ workspaceRoot, relativePath: edit.path, relativeOnly: context.allowedToolsAndEffects !== undefined, mutation: true, programHome: context.butlerHome, rejectProtectedProjectLedgerWrites: true, protectedProjectLedgerRoots: context.protectedProjectLedgerRoots });
@@ -235,12 +237,9 @@ export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<st
     const path = publicMutationPath(guard.workspaceRoot, guard.absolutePath!);
     safePaths.set(edit.index, path);
     const key = targetKey(guard);
-    if (seenTargets.has(key)) {
-      failures.push({ index: edit.index, path, error: "duplicate_target" });
-      continue;
-    }
-    seenTargets.add(key);
-    guardedEdits.push({ ...edit, path, absolutePath: guard.absolutePath!, guard });
+    const canonicalPath = targetPaths.get(key) ?? path;
+    targetPaths.set(key, canonicalPath);
+    guardedEdits.push({ ...edit, path: canonicalPath, absolutePath: guard.absolutePath!, guard });
   }
   if (failures.length > 0) return batchFailureResult(edits, failures, safePaths);
 
@@ -248,20 +247,35 @@ export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<st
   return withButlerFileMutationLock(async () => {
     const preparedEdits: PreparedEdit[] = [];
     const preflightFailures: Record<string, unknown>[] = [];
+    const snapshots = new Map<string, WorkspaceMutationSnapshot>();
+    const texts = new Map<string, string>();
     for (const edit of guardedEdits) {
-      const snapshot = await observeWorkspaceFileMutation({ path: edit.path, absolutePath: edit.absolutePath! });
+      const snapshot = snapshots.get(edit.path) ?? await observeWorkspaceFileMutation({ path: edit.path, absolutePath: edit.absolutePath! });
       if (!snapshot.ok) { preflightFailures.push({ index: edit.index, path: edit.path, error: snapshot.error }); continue; }
       if (!snapshot.exists) { preflightFailures.push({ index: edit.index, path: edit.path, error: "not_found" }); continue; }
       const decoded = decodeUtf8(snapshot.bytes);
       if (!decoded.ok) { preflightFailures.push({ index: edit.index, path: edit.path, error: decoded.error }); continue; }
       const guarded = prepareWorkspaceFileMutation({ snapshot, data: snapshot.bytes, expectedSha256: edit.expectedSha256 });
       if (!guarded.ok) { preflightFailures.push({ index: edit.index, path: edit.path, error: guarded.error, before_sha256: guarded.before_sha256 }); continue; }
-      const location = locateExactText({ text: decoded.text, oldText: edit.oldText, ...(edit.startLine === undefined ? {} : { startLine: edit.startLine }) });
-      if (!location.ok) { preflightFailures.push({ index: edit.index, path: edit.path, error: location.error, occurrences: location.occurrenceCount }); continue; }
-      const afterText = `${decoded.text.slice(0, location.value.offset)}${edit.newText}${decoded.text.slice(location.value.offset + edit.oldText.length)}`;
+      snapshots.set(edit.path, snapshot);
+      texts.set(edit.path, decoded.text);
+    }
+    if (preflightFailures.length > 0) return batchFailureResult(edits, preflightFailures, safePaths);
+    const ordered = prepareOrderedExactEdits(guardedEdits, texts);
+    if (!ordered.ok) return batchFailureResult(edits, [{ index: ordered.index, path: ordered.path, error: ordered.error, occurrences: ordered.occurrenceCount }], safePaths);
+    const unchanged: Record<string, unknown>[] = [];
+    for (const [path, file] of ordered.files) {
+      const position = guardedEdits.findIndex((edit) => edit.path === path);
+      const edit = guardedEdits[position]!;
+      const snapshot = snapshots.get(path)!;
+      if (file.beforeText === file.afterText) {
+        unchanged.push({ index: edit.index, path, changed: false });
+        continue;
+      }
+      const afterText = file.afterText;
       const prepared = prepareWorkspaceFileMutation({ snapshot, data: Buffer.from(afterText, "utf8"), expectedSha256: edit.expectedSha256 });
       if (!prepared.ok) { preflightFailures.push({ index: edit.index, path: edit.path, error: prepared.error, before_sha256: prepared.before_sha256 }); continue; }
-      preparedEdits.push({ ...edit, absolutePath: edit.absolutePath!, snapshot, prepared, startLine: location.value.startLine });
+      preparedEdits.push({ ...edit, absolutePath: edit.absolutePath!, snapshot, prepared, startLine: ordered.locations[position]!.startLine });
     }
     if (preflightFailures.length > 0) return batchFailureResult(edits, preflightFailures, safePaths);
 
@@ -271,6 +285,7 @@ export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<st
       const edit = preparedEdits[entry.index]!;
       return batchRecord({
         index: edit.index,
+        edit_indexes: guardedEdits.filter((entry) => entry.path === edit.path).map((entry) => entry.index),
         path: edit.path,
         before_sha256: entry.result.before_sha256,
         after_sha256: entry.result.after_sha256,
@@ -285,6 +300,7 @@ export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<st
       const conflictEdit = preparedEdits[conflict.index]!;
       const conflicting = [batchRecord({
         index: conflictEdit.index,
+        edit_indexes: guardedEdits.filter((entry) => entry.path === conflictEdit.path).map((entry) => entry.index),
         path: conflictEdit.path,
         error: conflict.result.error,
         before_sha256: conflict.result.before_sha256,
@@ -292,7 +308,7 @@ export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<st
       })];
       const notAttempted = committedBatch.not_attempted.map((entry) => {
         const edit = preparedEdits[entry.index]!;
-        return batchRecord({ index: edit.index, path: edit.path });
+        return batchRecord({ index: edit.index, path: edit.path, edit_indexes: guardedEdits.filter((entry) => entry.path === edit.path).map((entry) => entry.index) });
       });
       return partialResult({
         error: committedBatch.error,
@@ -305,7 +321,7 @@ export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<st
           ? "Re-read the conflicting file and retry the complete batch from current SHA-256 values."
           : committedBatch.error === "partial_apply"
             ? "Review applied and conflicting files, then re-read and retry only the remaining intended edits."
-            : "Resolve the first file error, re-read every target, and retry the complete batch.",
+            : "Resolve the conflicting file error before retrying the intended edits.",
         applied,
         conflicting,
         notAttempted,
@@ -316,13 +332,15 @@ export async function executeBatchEdits(edits: NormalizedEdit[], args: Record<st
     const bytesWritten = applied.reduce((total, item) => total + (typeof item.bytes === "number" ? item.bytes : 0), 0);
     return {
       ok: true as const,
+      changed: applied.length > 0,
+      unchanged,
       files: applied,
       applied,
       changed_files: applied.flatMap((entry) =>
         "changed_file" in entry && entry.changed_file ? [entry.changed_file] : []),
       metrics: { elapsed_ms: Math.max(0, Date.now() - startedAt), files_written: applied.length, bytes_written: bytesWritten },
-      evidence_receipts: fileToolEvidenceReceipt({ toolName: "edit_file", summary: `Edited ${applied.length} workspace files`, references: { batch: true, applied }, satisfies: ["durable_artifact"] }),
-      evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "edit_file", ok: true, paths, applied, edited: true, bytes: bytesWritten }),
+      evidence_receipts: applied.length > 0 ? fileToolEvidenceReceipt({ toolName: "edit_file", summary: `Edited ${applied.length} workspace files`, references: { batch: true, applied }, satisfies: ["durable_artifact"] }) : [],
+      evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "edit_file", ok: true, paths, applied, edited: applied.length > 0, bytes: bytesWritten }),
     };
   });
 }

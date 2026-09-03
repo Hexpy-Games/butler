@@ -186,6 +186,10 @@ export interface BtccAgentLoopInput {
     recordOutput(input: { roundId: string; outputBytes: number }): Promise<void>;
     recordToolRound(input: { roundId: string }): Promise<void>;
   };
+  /** Context selection only; never enables execution-budget termination. */
+  maxModelFacingBytes?: number;
+  /** Consume new steering before assigning item identities and selecting context. */
+  beforeModelRound?: () => Promise<readonly string[]>;
   resolveOperationResultCallId?: (providerCallId: string) => string | undefined;
   onAssistantTextBeforeTools?: (input: {
     text: string;

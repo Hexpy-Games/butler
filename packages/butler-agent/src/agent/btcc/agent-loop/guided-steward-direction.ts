@@ -8,34 +8,33 @@ export function withStewardDirection(input: {
   afterToolBatch: NonNullable<BtccAgentLoopInput["afterToolBatch"]>;
 }): {
   modelRound: ModelRoundPort;
+  beforeModelRound?: BtccAgentLoopInput["beforeModelRound"];
   reviewFinalCandidate: NonNullable<BtccAgentLoopInput["reviewFinalCandidate"]>;
   afterToolBatch: NonNullable<BtccAgentLoopInput["afterToolBatch"]>;
 } {
   if (!input.safeBoundary) return input;
-  const carriedDirections: string[] = [];
+  const pendingDirections: string[] = [];
   return {
-    modelRound: {
-      ...input.modelRound,
-      async runRound(request) {
-        const observation = (await input.safeBoundary!())?.trim();
-        if (observation) carriedDirections.push(observation);
-        return input.modelRound.runRound(carriedDirections.length > 0
-          ? { ...request, messages: [...request.messages, ...carriedDirections.map((content) => ({ role: "user" as const, content }))] }
-          : request);
-      },
+    modelRound: input.modelRound,
+    beforeModelRound: async () => {
+      const observation = (await input.safeBoundary!())?.trim();
+      if (observation) pendingDirections.push(observation);
+      return pendingDirections.splice(0);
     },
     reviewFinalCandidate: async (candidate) => {
       const observation = (await input.safeBoundary!())?.trim();
-      return observation
-        ? { status: "continue" as const, observation }
-        : input.reviewFinalCandidate(candidate);
+      if (observation) {
+        pendingDirections.push(observation);
+        return { status: "continue" as const, observation: "A new user direction is available for the next model round." };
+      }
+      return input.reviewFinalCandidate(candidate);
     },
     afterToolBatch: async (batch) => {
       const disposition = await input.afterToolBatch(batch);
       if (disposition !== "wait") return disposition;
       const observation = (await input.safeBoundary!())?.trim();
       if (!observation) return "wait";
-      carriedDirections.push(observation);
+      pendingDirections.push(observation);
       return "continue";
     },
   };

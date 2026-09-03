@@ -22,7 +22,7 @@ export async function handleStewardControlRoutes(
   }
   const snapshot = input.stewardObserver.snapshot(relation.child_session_id);
   const activeTurn = snapshot?.turns.find((turn) => turn.state === "admitted") ?? null;
-  const turnId = activeTurn?.id ?? null;
+  const turnId = activeTurn?.id ?? (action === "cancel" ? snapshot?.turns.at(-1)?.id : null);
   if (!turnId || snapshot?.result) {
     throw new RequestError(409, "steward_relation_not_active", "Steward relation is not active.");
   }

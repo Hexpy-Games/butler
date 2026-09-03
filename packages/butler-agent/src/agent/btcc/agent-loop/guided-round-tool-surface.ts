@@ -48,7 +48,6 @@ export function createGuidedRoundToolSurfaceResolver(input: {
   durableWork: DurableWorkService;
   workScope: WorkTurnScope;
   effectJournal: Pick<GuidedEffectJournal, "listForWork">;
-  projectWorkSurface?: boolean;
   parentSessionId?: string;
   subsessionDelegation?: Pick<SubsessionDelegationService, "activeParentDelegations">;
   onActiveDelegationAdmission?: (active: boolean) => void;
@@ -67,20 +66,20 @@ export function createGuidedRoundToolSurfaceResolver(input: {
       )) {
       return createRoundToolSurfaceSnapshot([]);
     }
-    if (await input.shouldWaitForWorker?.()) {
-      return createRoundToolSurfaceSnapshot(input.tools.filter((tool) =>
-        WORKER_MANAGEMENT_TOOLS.has(tool.name),
-      ));
-    }
     const activeDelegations = input.parentSessionId && input.subsessionDelegation
       ? await input.subsessionDelegation.activeParentDelegations({
           parentSessionId: input.parentSessionId,
         })
       : [];
-    const { bound, work, readFailed } = await currentWork(input);
+    if (await input.shouldWaitForWorker?.()) {
+      return createRoundToolSurfaceSnapshot(projectRelationSelectors(input.tools.filter((tool) =>
+        WORKER_MANAGEMENT_TOOLS.has(tool.name),
+      ), activeDelegations));
+    }
+    const { bound, work } = await currentWork(input);
     const activeDelegationAdmission = activeDelegations.length > 0 &&
-      (readFailed || (!bound && activeDelegations.some((delegation) =>
-        sameCurrentReviewedWork(work, delegation.parent_work_ref))));
+      (!bound && activeDelegations.some((delegation) =>
+        sameCurrentReviewedWork(work, delegation.parent_work_ref)));
     input.onActiveDelegationAdmission?.(activeDelegationAdmission);
     const dispositionReady = activeDelegationAdmission
       ? false
@@ -99,14 +98,12 @@ export function createGuidedRoundToolSurfaceResolver(input: {
         return tool.name === input.forcedDelegationTool;
       }
       if (tool.name === DISPOSITION_TOOL) {
-        return input.projectWorkSurface === false || dispositionReady;
+        return dispositionReady;
       }
       if (tool.name === input.forcedDelegationTool) return delegationReady;
       return true;
     });
-    const tools = input.projectWorkSurface === false
-      ? eligibleTools
-      : projectDurableWorkToolSurface(eligibleTools, work);
+    const tools = projectDurableWorkToolSurface(eligibleTools, work);
     const names = new Set(tools.map((tool) => tool.name));
     const missingRequired = delegationReady || activeDelegationAdmission
       ? undefined
@@ -115,8 +112,33 @@ export function createGuidedRoundToolSurfaceResolver(input: {
     if (missingRequired) {
       throw new RoundToolSurfaceError("round_tool_surface_required_tool_missing");
     }
-    return createRoundToolSurfaceSnapshot(tools);
+    return createRoundToolSurfaceSnapshot(projectRelationSelectors(tools, activeDelegations));
   };
+}
+
+function projectRelationSelectors(
+  tools: readonly BtccAgentLoopToolDefinition[],
+  active: Awaited<ReturnType<SubsessionDelegationService["activeParentDelegations"]>>,
+): BtccAgentLoopToolDefinition[] {
+  return tools.map((tool) => {
+    if (!ACTIVE_RELATION_CONTROL_TOOLS.has(tool.name) || active.length === 0) return tool;
+    const properties = { ...tool.parameters.properties as Record<string, unknown> };
+    delete properties.safe_title;
+    delete properties.relation_id;
+    const required = (tool.parameters.required as string[] | undefined ?? [])
+      .filter((name) => name !== "safe_title" && name !== "relation_id");
+    if (active.length > 1) {
+      properties.relation_id = { type: "string", enum: active.map(({ relation }) => relation.relation_id) };
+      required.push("relation_id");
+    }
+    return {
+      ...tool,
+      description: `${tool.description} ${active.length === 1
+        ? "Runtime selects the sole active owned delegation. Omit selectors; do not invent a Work or relation ID."
+        : `Select an exact relation_id from these active owned delegations: ${JSON.stringify(active.map(({ relation }) => ({ relation_id: relation.relation_id, title: relation.safe_title })))}.`}`,
+      parameters: { ...tool.parameters, properties, required },
+    };
+  });
 }
 
 function isQueuedDelegationResult(result: unknown): boolean {
@@ -224,24 +246,11 @@ async function currentWork(input: {
 }): Promise<{
   bound: DurableWorkView | undefined;
   work: DurableWorkView | undefined;
-  readFailed: boolean;
 }> {
-  let bound: DurableWorkView | null = null;
-  let context: Awaited<ReturnType<DurableWorkService["loadContext"]>> = null;
-  let readFailed = false;
-  try {
-    bound = await input.durableWork.boundWorkForTurn(input.turnId);
-  } catch {
-    readFailed = true;
-  }
-  try {
-    context = await input.durableWork.loadContext(input.workScope);
-  } catch {
-    readFailed = true;
-  }
+  const bound = await input.durableWork.boundWorkForTurn(input.turnId);
+  const context = bound ? null : await input.durableWork.loadContext(input.workScope);
   return {
     bound: bound ?? undefined,
     work: bound ?? context?.work ?? undefined,
-    readFailed,
   };
 }

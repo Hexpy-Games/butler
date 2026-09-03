@@ -1,4 +1,4 @@
-import { locateExactText } from "../../tools/file-tools/edit_file/index.ts";
+import { prepareOrderedExactEdits } from "../../tools/file-tools/edit_file/index.ts";
 import type {
   EffectAdapterError,
   GuidedEffectRecoveryHint,
@@ -54,7 +54,7 @@ export async function prepareGuidedWorkspaceFileEditBatch(input: {
     text: string;
     identityPath: string;
   }> = [];
-  const actualTargets = new Set<string>();
+  const actualTargets = new Map<string, string>();
   let firstError: EffectAdapterError | undefined;
   for (const [index, decoded] of input.args.entries()) {
     const state = await observeGuidedWorkspaceEditTarget(
@@ -62,24 +62,18 @@ export async function prepareGuidedWorkspaceFileEditBatch(input: {
       decoded.path,
     );
     if (!state.ok) {
-      firstError ??= state.error;
+      firstError ??= { ...state.error, message: `edits[${index}] (${decoded.path}): ${state.error.message}` };
       continue;
     }
-    if (actualTargets.has(state.value.identityPath)) {
-      firstError ??= rejected(
-        "edit_file_duplicate_target",
-        `edit_file edits[${index}] resolves to a duplicate file.`,
-      ).error;
-      continue;
-    }
-    actualTargets.add(state.value.identityPath);
+    const canonicalPath = actualTargets.get(state.value.identityPath) ?? decoded.path;
+    actualTargets.set(state.value.identityPath, canonicalPath);
     const decodedText = decodeGuidedWorkspaceUtf8(state.value.bytesValue);
     if (!decodedText.ok) {
-      firstError ??= decodedText.error;
+      firstError ??= { ...decodedText.error, message: `edits[${index}] (${decoded.path}): ${decodedText.error.message}` };
       continue;
     }
     observed.push({
-      decoded,
+      decoded: { ...decoded, path: canonicalPath },
       sha256: state.value.sha256,
       text: decodedText.text,
       identityPath: state.value.identityPath,
@@ -87,10 +81,13 @@ export async function prepareGuidedWorkspaceFileEditBatch(input: {
   }
   if (firstError) return { ok: false, error: firstError };
 
+  const unchangedIndex = input.args.findIndex((entry) => entry.oldText === entry.newText);
+  if (unchangedIndex >= 0 && !input.priorInputSha256) return rejected("edit_file_no_change", `edits[${unchangedIndex}] (${input.args[unchangedIndex]!.path}) requests no change; no files were written.`);
+
   if (input.priorInputSha256) {
     const recovered = recoverGuidedWorkspaceFileEditBatch({
       adapter: input.adapter,
-      decoded: input.args,
+      decoded: observed.map((state) => state.decoded),
       observed,
       priorInputSha256: input.priorInputSha256,
       priorRecoveryHint: input.priorRecoveryHint,
@@ -111,39 +108,23 @@ export async function prepareGuidedWorkspaceFileEditBatch(input: {
     };
   }
 
+  const texts = new Map<string, string>();
+  for (const state of observed) if (!texts.has(state.decoded.path)) texts.set(state.decoded.path, state.text);
+  const ordered = prepareOrderedExactEdits(observed.map((state) => state.decoded), texts);
+  if (!ordered.ok) return rejected(ordered.error, `edits[${ordered.index}] (${ordered.path}): ${ordered.error === "old_text_ambiguous" ? "old_text is ambiguous; provide a more specific exact range." : "old_text was not found in the preceding edit result; inspect this file or correct this edit."}`);
+  if ([...ordered.files.values()].every((file) => file.beforeText === file.afterText)) {
+    return rejected("edit_file_no_change", "The ordered edits leave every file unchanged; no files were written.");
+  }
   const preparedEntries: GuidedWorkspaceFileEditEntry[] = [];
-  for (const state of observed) {
-    const location = locateExactText({
-      text: state.text,
-      oldText: state.decoded.oldText,
-      ...(state.decoded.startLine === undefined
-        ? {}
-        : { startLine: state.decoded.startLine }),
-    });
-    if (!location.ok) {
-      return rejected(
-        location.error,
-        location.error === "old_text_ambiguous"
-          ? "One batch file contains multiple unresolved old_text occurrences."
-          : "One batch file does not contain old_text; read every file again and retry.",
-      );
-    }
-    const afterText =
-      state.text.slice(0, location.value.offset) +
-      state.decoded.newText +
-      state.text.slice(location.value.offset + state.decoded.oldText.length);
-    if (afterText === state.text)
-      return rejected(
-        "edit_file_no_change",
-        "edit_file batch contains an edit that does not change its file.",
-      );
+  for (const [index, state] of observed.entries()) {
+    const file = ordered.files.get(state.decoded.path)!;
     preparedEntries.push({
       path: state.decoded.path,
-      start_line: location.value.startLine,
+      start_line: ordered.locations[index]!.startLine,
       old_text: state.decoded.oldText,
       new_text: state.decoded.newText,
-      before_sha256: state.sha256,
-      after_sha256: textSha256(afterText),
+      before_sha256: textSha256(file.beforeText),
+      after_sha256: textSha256(file.afterText),
     });
   }
   const normalized = normalizedGuidedWorkspaceEditBatchCandidate({
