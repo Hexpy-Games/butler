@@ -155,6 +155,7 @@ export type BtccTurnOutcome = (
       messageId: string;
       content: string;
       workStatus?: "completed" | "blocked";
+      executionOutcome?: "waiting_for_worker";
       artifacts?: BtccFinalArtifact[];
       changedFiles?: ChangedFileDetail[];
       modelIdentity?: {

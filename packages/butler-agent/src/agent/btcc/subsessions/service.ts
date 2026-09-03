@@ -25,7 +25,7 @@ import {
 } from "./runtime-policy.ts";
 import { createSubsessionControlService } from "./control.ts";
 import { delegateReviewedWorker } from "./worker-delegation.ts";
-import { completeWorkerResultForDependencies } from "./worker-result.ts";
+import { completeWorkerResultForDependencies, hasQueuedWorkerResult } from "./worker-result.ts";
 import type {
   CreatedDelegation, DelegationPacket, DelegationRequest, ParentInputSink,
   SessionRelation, SubsessionExecutionMode, SubsessionDelegationDependencies,
@@ -97,6 +97,10 @@ export function createSubsessionDelegationService(
     return work.workId;
   };
   const service: SubsessionDelegationService = {
+    async shouldWaitForWorker(parentInput) {
+      return (await service.activeParentDelegations(parentInput)).length > 0 ||
+        hasQueuedWorkerResult(input.store, childQueue, parentInput);
+    },
     async enabledWorkerProfiles() {
       const profiles = await input.workerProfiles?.list() ?? [];
       return profiles.filter((profile) => profile.enabled);

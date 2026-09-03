@@ -31,6 +31,7 @@ import { readOperationResultsToolDefinition } from
 const STEWARD_PARENT_TOOL_NAMES = ["delegate_to_steward", "steer_steward", "cancel_steward"];
 const WORKER_DELEGATION_TOOL_NAME = "delegate_to_worker";
 const WORKER_DIRECTION_TOOL_NAME = "steer_worker";
+const WORKER_WAIT_TOOL_NAME = "wait_for_worker";
 const GUIDED_MANAGED_LEDGER_EFFECT_TOOL_NAMES =
   GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES.filter((name) =>
     name !== "project_ledger_work_complete",
@@ -133,9 +134,11 @@ export function authorizedToolDefinitions(
   if (policy.role === "steward") {
     names.add(WORKER_DELEGATION_TOOL_NAME);
     names.add(WORKER_DIRECTION_TOOL_NAME);
+    names.add(WORKER_WAIT_TOOL_NAME);
   } else {
     names.delete(WORKER_DELEGATION_TOOL_NAME);
     names.delete(WORKER_DIRECTION_TOOL_NAME);
+    names.delete(WORKER_WAIT_TOOL_NAME);
   }
   for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
   const guidedLedgerEffects = new Set<string>(
@@ -204,7 +207,7 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
       ? ["delegate_to_steward", "steer_steward", "cancel_steward"]
       : []),
     ...(policy.role === "steward"
-      ? [WORKER_DELEGATION_TOOL_NAME, WORKER_DIRECTION_TOOL_NAME]
+      ? [WORKER_DELEGATION_TOOL_NAME, WORKER_DIRECTION_TOOL_NAME, WORKER_WAIT_TOOL_NAME]
       : []),
     ...guidedWorkspaceVisibleToolNames(policy),
   ]);

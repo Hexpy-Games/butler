@@ -212,7 +212,7 @@ function projectStewardTurn(
     cancellable: !terminal,
     retryable: state === "failed",
     progress: {
-      summary: waitingForChildren
+      summary: waitingForChildren && !active
         ? "Worker 결과를 기다리는 중입니다."
         : currentStewardActivityLabel(activityRows) ?? stewardStateLabel(turn.state),
       updated_at: activityUpdatedAt,

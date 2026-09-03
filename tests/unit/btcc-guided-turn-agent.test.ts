@@ -14,8 +14,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TurnRecord, TurnStateRepository } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
-import type { SubsessionDelegationService } from
+import type { SubsessionDelegationDependencies, SubsessionDelegationService } from
   "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
+import { createSubsessionDelegationService } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
+import { NativeInboundQueue } from
+  "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 import type { BtccRunCommand } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { DurableWorkService, DurableWorkView } from
@@ -340,6 +344,7 @@ test("Worker result returns to the current Steward Work before reporting", async
       },
       async enabledWorkerProfiles() { return []; },
       async activeParentDelegations() { return []; },
+      async shouldWaitForWorker() { return false; },
       async consumeStewardDirection() { return null; },
     } as unknown as SubsessionDelegationService;
     let modelCalls = 0;
@@ -398,6 +403,182 @@ test("Worker result returns to the current Steward Work before reporting", async
     fixture.close();
     restoreEnv("BUTLER_PHASE_TOOL_SURFACE", previousSurface);
   }
+});
+
+test.each(["ordinary", "direction", "fast-result"])("Steward keeps tools after Worker assignment and explicitly releases without Work closeout (%s)", async (scenario) => {
+  const directionDuringWait = scenario === "direction";
+  const fastResult = scenario === "fast-result";
+  const fixture = createFixture("guided-explicit-worker-wait");
+  try {
+    const command = localRunCommand(fixture.root, "steward-wait");
+    command.context.executionPolicy = {
+      role: "steward", accessMode: "full_access", trackingMode: "local",
+      requiredNativeToolProfiles: [], requiredNativeTools: [], workspacePath: fixture.root,
+    };
+    const turn = await admitTurn(command, fixture.stores.admission, fixture.stores.turns);
+    const work = await fixture.stores.durableWork.replacePlan({
+      turnId: turn.turnId, sessionId: turn.sessionId, mutationCallId: "wait-plan",
+      startNew: true, objective: "Integrate Worker and independent inspection",
+      actions: [{ actionKey: "worker-action", description: "Bounded Worker task", dependencyKeys: [] }], checks: [],
+    });
+    writeFileSync(join(fixture.root, "independent.txt"), "independent work verified");
+    let active = false;
+    let rounds = 0;
+    let pendingDirection = false;
+    let workerCompleted = false;
+    const resultId = "worker-fast-result";
+    const resultTurnId = `steward-worker-result-${digest(resultId).slice(0, 32)}`;
+    const queue = new NativeInboundQueue(fixture.root);
+    const steered: Array<{ relationId?: string; instruction: string }> = [];
+    const service = createSubsessionDelegationService({
+      butlerData: fixture.root,
+      store: {
+        relationsByParentSessionId: () => [{ relation_id: "same-worker-relation" }],
+        resultByRelationId: () => workerCompleted ? { result_id: resultId } : null,
+      },
+    } as unknown as SubsessionDelegationDependencies);
+    Object.assign(service, {
+      async resolveParentResultEvidence() { return null; },
+      async ensureChildRootWork(input: { childTurnId: string }) {
+        if (input.childTurnId !== turn.turnId) await fixture.stores.durableWork.bindOpenWork({
+          turnId: input.childTurnId, sessionId: turn.sessionId,
+        }, work.workId);
+        return work.workId;
+      },
+      async consumeStewardDirection() {
+        if (!pendingDirection) return null;
+        pendingDirection = false;
+        return { revision: 1, instruction: "Keep the same Worker and check the updated requirement." };
+      },
+      async enabledWorkerProfiles() { return []; },
+      async activeParentDelegations() { return active ? [{}] : []; },
+      async delegateWorkerReviewed() { active = true; },
+      async steerSteward(input: { relationId?: string; instruction: string }) {
+        steered.push(input);
+        return { relation_id: input.relationId, instruction_id: "worker-direction", revision: 1, status: "pending" };
+      },
+    });
+    const agent = fixture.admitEol(createProductionGuidedTurnAgent({
+      phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
+      butlerHome: fixture.root, butlerData: fixture.root,
+      contextDocuments: fixture.stores.contextDocuments,
+      toolJournal: fixture.stores.guidedToolJournal,
+      effectJournal: fixture.stores.guidedEffectJournal,
+      durableWork: fixture.stores.durableWork,
+      subsessionDelegation: service,
+      modelRound: { async runRound(request) {
+        rounds += 1;
+        if (rounds === 1) return toolResponse([toolCall("assign", "delegate_to_worker", {
+          action_key: "worker-action", objective: "Do the bounded task",
+          acceptance_criteria: [], implementation_brief: "Only the assigned action",
+        })], "Worker에게 맡기고 독립 점검을 진행합니다.");
+        if (rounds <= 3 || directionDuringWait) expect(request.tools.map((tool) => tool.name)).toContain("wait_for_worker");
+        if (rounds === 2) {
+          expect(toolMessageOutput(messagesWithToolResults(request).at(-1))).toMatchObject({ status: "queued" });
+          expect(request.tools.map((tool) => tool.name)).toContain("read_file");
+          if (fastResult) {
+            active = false;
+            workerCompleted = true;
+            queue.enqueueIdempotent({
+              eventId: `worker-result:${resultId}`, transport: "app", accountId: "local",
+              peer: { kind: "dm", id: turn.sessionId }, sender: { id: "butler-worker-result" },
+              message: { id: "fast-worker-message", text: "Worker completed its assigned action.", timestamp: new Date().toISOString() },
+              routingHints: { sessionId: turn.sessionId, turnId: resultTurnId },
+            });
+          }
+          return toolResponse([toolCall("inspect", "read_file", { requests: [{ path: "independent.txt" }] })]);
+        }
+        if (rounds === 3) {
+          expect(JSON.stringify(messagesWithToolResults(request).at(-1))).toContain("independent work verified");
+          pendingDirection = directionDuringWait;
+          return toolResponse([toolCall("wait", "wait_for_worker", {})]);
+        }
+        if (directionDuringWait && rounds === 4) {
+          expect(request.messages.at(-1)?.content).toContain("check the updated requirement");
+          return toolResponse([toolCall("steer", "steer_worker", {
+            relation_id: "same-worker-relation", instruction: "Check the updated requirement.",
+          })]);
+        }
+        if (directionDuringWait && rounds === 5) {
+          return toolResponse([toolCall("wait-after-steering", "wait_for_worker", {})]);
+        }
+        if (fastResult && rounds === 4) {
+          expect(request.messages[0]?.content).toContain("Worker completed its assigned action.");
+          return toolResponse([toolCall("integrated-result", "record_work_disposition", {
+            work_id: work.workId, disposition: "completed", summary: "Worker result integrated and reviewed.",
+            action_updates: [{ action_key: "worker-action", status: "done" }],
+          })]);
+        }
+        if (fastResult && rounds === 5) return { text: "Worker result integrated and reviewed.", toolCalls: [] };
+        throw new Error("Wait must not request a final model round");
+      } },
+    }));
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission, turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness, agent,
+    });
+    const result = await runtime.runTurn(command);
+    expect(rounds).toBe(directionDuringWait ? 5 : 3);
+    expect(steered).toEqual(directionDuringWait
+      ? [expect.objectContaining({ relationId: "same-worker-relation", instruction: "Check the updated requirement." })]
+      : []);
+    expect(result).toMatchObject({ kind: "delivered", content: "", executionOutcome: "waiting_for_worker" });
+    expect(await runtime.runTurn(command)).toMatchObject({ content: "", executionOutcome: "waiting_for_worker" });
+    expect(rounds).toBe(directionDuringWait ? 5 : 3);
+    expect(closeoutRowCounts(fixture.dbPath, turn.turnId)).toEqual({ diagnostics: 0, dispositions: 0 });
+    expect((await fixture.stores.durableWork.boundWorkForTurn(turn.turnId))?.status).toBe("open");
+    if (fastResult) {
+      expect(await service.shouldWaitForWorker({ parentSessionId: turn.sessionId, parentTurnId: turn.turnId })).toBe(true);
+      const queuedResult = queue.claim(1)[0]!;
+      expect(queuedResult.envelope.routingHints?.turnId).toBe(resultTurnId);
+      expect(await service.shouldWaitForWorker({ parentSessionId: turn.sessionId, parentTurnId: resultTurnId })).toBe(false);
+      const continuation = localRunCommand(fixture.root, resultTurnId);
+      continuation.context.executionPolicy = command.context.executionPolicy;
+      continuation.message.content = queuedResult.envelope.message.text!;
+      expect(await runtime.runTurn(continuation)).toMatchObject({
+        kind: "delivered", content: "Worker result integrated and reviewed.", workStatus: "completed",
+      });
+      queue.complete(queuedResult);
+      expect(await service.shouldWaitForWorker({ parentSessionId: turn.sessionId, parentTurnId: "later-turn" })).toBe(false);
+      expect((await fixture.stores.durableWork.boundWorkForTurn(resultTurnId))?.workId).toBe(work.workId);
+    }
+  } finally { fixture.close(); }
+});
+
+test("Steward no-tool answers cannot finalize active Workers and an idle wait does not strand execution", async () => {
+  const fixture = createFixture("guided-worker-wait-admission");
+  try {
+    for (const active of [true, false]) {
+      let rounds = 0;
+      const turn = turnRecord(fixture.root, { turnId: active ? "active-worker-answer" : "idle-worker-wait" });
+      turn.context.executionPolicy!.role = "steward";
+      const agent = fixture.admitEol(createProductionGuidedTurnAgent({
+        phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
+        butlerHome: fixture.root, butlerData: fixture.root,
+        contextDocuments: fixture.stores.contextDocuments, toolJournal: fixture.stores.guidedToolJournal,
+        effectJournal: fixture.stores.guidedEffectJournal, durableWork: fixture.stores.durableWork,
+        subsessionDelegation: {
+          async resolveParentResultEvidence() { return null; },
+          async ensureChildRootWork() { return "unused"; },
+          async consumeStewardDirection() { return null; },
+          async enabledWorkerProfiles() { return []; },
+          async activeParentDelegations() { return active ? [{}] : []; },
+          async shouldWaitForWorker() { return active; },
+        } as unknown as SubsessionDelegationService,
+        modelRound: { async runRound(request) {
+          rounds += 1;
+          if (!active && rounds === 1) return toolResponse([toolCall("idle-wait", "wait_for_worker", {})]);
+          if (!active) expect(toolMessageOutput(messagesWithToolResults(request).at(-1))).toMatchObject({ status: "no_active_worker" });
+          return { text: "normal answer", toolCalls: [] };
+        } },
+      }));
+      const result = await agent.run({ turn, signal: new AbortController().signal });
+      expect(result.content).toBe(active ? "" : "normal answer");
+      expect(result.executionOutcome).toBe(active ? "waiting_for_worker" : undefined);
+      expect(rounds).toBe(active ? 1 : 2);
+    }
+  } finally { fixture.close(); }
 });
 
 test("a terminal Turn fences late effects from reopening completed Work", async () => {

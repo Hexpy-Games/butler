@@ -39,6 +39,7 @@ export type BtccAgentLoopToolCall = ModelRoundToolCall;
 export type BtccAgentLoopResult = {
   content: string;
   terminalOutcome?: "no_visible";
+  executionOutcome?: "waiting_for_worker";
   route: "direct" | "assisted" | "managed";
   workStatus?: "completed" | "blocked";
   artifacts?: BtccFinalArtifact[];
@@ -118,7 +119,7 @@ export type BtccTextToolCallDisposition =
   | { status: "continue"; observation: string }
   | { status: "fail"; error?: unknown };
 
-export type BtccAfterToolBatchDisposition = "continue" | "final_report";
+export type BtccAfterToolBatchDisposition = "continue" | "final_report" | "wait";
 
 export interface BtccFinalSynthesisOptions {
   instructions: string;
@@ -218,9 +219,11 @@ export interface BtccAgentLoopInput {
     iteration: number;
   }) => Promise<
     | { status: "accepted"; text?: string }
+    | { status: "wait" }
     | { status: "continue"; observation: string }
   > | (
     | { status: "accepted"; text?: string }
+    | { status: "wait" }
     | { status: "continue"; observation: string }
   );
   onEvent?: (event: BtccAgentLoopEvent) => void;
@@ -242,6 +245,7 @@ export interface BtccAgentLoopEvent {
 
 export interface BtccAgentLoopOutput {
   finalText: string;
+  executionOutcome?: "waiting_for_worker";
   messages: BtccAgentLoopMessage[];
   events: BtccAgentLoopEvent[];
 }

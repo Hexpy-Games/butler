@@ -70,6 +70,23 @@ export const delegateToWorkerToolMetadata: ToolCapabilityMetadata = {
   safetyNotes: ["Worker executes one bounded Task and reports only to Steward."],
 };
 
+export const waitForWorkerToolDefinition: ButlerToolDefinition = {
+  type: "function",
+  name: "wait_for_worker",
+  description: "Suspend this Steward execution until a Worker result or direction arrives. Use after useful independent work is exhausted. This does not finish the Work or report to Butler. If no Worker is active, continue and handle available results.",
+  parameters: { type: "object", additionalProperties: false, properties: {} },
+  effectBoundary: "turn_local",
+  concurrencySafe: false,
+  interruptBehavior: "continue",
+  transcriptVisibility: "visible",
+};
+
+export const waitForWorkerToolMetadata: ToolCapabilityMetadata = {
+  category: "dispatch",
+  tags: ["subsession", "worker", "wait"],
+  safetyNotes: ["Releases model execution without completing Steward Work."],
+};
+
 export function withWorkerProfileChoices(
   definition: FunctionToolDefinition,
   profiles: readonly WorkerProfile[],

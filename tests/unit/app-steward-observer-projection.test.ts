@@ -443,6 +443,10 @@ describe("App Steward observer projection", () => {
     expect(view.active_turn).toBeNull();
     expect(view.latest_turn?.state).toBe("delivered");
     expect(view.waiting_for_children).toBe(true);
+    expect(view.latest_turn?.progress?.summary).toBe("Worker 결과를 기다리는 중입니다.");
+    db.query("UPDATE btcc_turns SET semantic_state = 'admitted' WHERE turn_id = 'steward-turn-2'").run();
+    const executing = sessionViewForStewardObserver(relation, observer.snapshot("steward-timeline")!, 2, [worker]);
+    expect(executing.active_turn?.progress?.summary).toBe("두 번째 활동");
     expect(view.workers).toEqual([expect.objectContaining({
       worker_display_name: "Kai",
       worker_ordinal_label: "Worker 1",

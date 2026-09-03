@@ -291,15 +291,17 @@ export function createProductionGuidedTurnAgent(
         turnId: turn.turnId, originalRequest: turn.originalMessage,
         trackingMode: policy.trackingMode, responseLanguage,
       });
-      const delegationRelease = createGuidedDelegationTurnRelease({
+      const delegationRelease = policy.role === "butler" ? createGuidedDelegationTurnRelease({
         reviewFinalCandidate: closeout.reviewFinalCandidate,
         reconcileAfterLoop: closeout.reconcileAfterLoop,
         turnId: turn.turnId,
         toolJournal: input.toolJournal,
-        delegationTool: policy.role === "butler"
-          ? "delegate_to_steward"
-          : "delegate_to_worker",
-      });
+        delegationTool: "delegate_to_steward",
+      }) : closeout;
+      const shouldWaitForWorker = async () => policy.role === "steward" &&
+        Boolean(await input.subsessionDelegation?.shouldWaitForWorker({
+          parentSessionId: turn.sessionId, parentTurnId: turn.turnId,
+        }));
       const resolveGuidedTools = phasePolicy.mode === "phase_minimal" ||
         visibleTools.some((tool) =>
           tool.name === "delegate_to_steward" || tool.name === "delegate_to_worker",
@@ -314,14 +316,22 @@ export function createProductionGuidedTurnAgent(
             ...(policy.role === "butler"
               ? { forcedDelegationTool: "delegate_to_steward" as const }
               : {}),
-            ...(policy.role === "butler" || policy.role === "steward"
-              ? { turnReleaseDelegationTool: policy.role === "butler"
-                  ? "delegate_to_steward" as const
-                  : "delegate_to_worker" as const }
+            ...(policy.role === "butler"
+              ? { turnReleaseDelegationTool: "delegate_to_steward" as const }
               : {}),
           })
         : undefined;
-      const directionAware = withStewardDirection({ modelRound, safeBoundary: subsessionDirectionSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: delegationRelease.reviewFinalCandidate });
+      const directionAware = withStewardDirection({
+        modelRound,
+        safeBoundary: subsessionDirectionSafeBoundary({ service: input.subsessionDelegation, turn }),
+        reviewFinalCandidate: async (candidate) => await shouldWaitForWorker()
+          ? { status: "wait" }
+          : delegationRelease.reviewFinalCandidate(candidate),
+        afterToolBatch: createGuidedToolBatchTransition({
+          turnId: turn.turnId,
+          durableWork: input.durableWork,
+        }),
+      });
       const loopOptions: BtccAgentLoopInput = {
         prompt: requestAttribution.prompt,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
@@ -347,10 +357,7 @@ export function createProductionGuidedTurnAgent(
         verifiedImagePayloadPort: createFileStoreVerifiedImagePayloadPort(input.butlerData),
         onProviderResponseIdentity,
         onEvent: (event) => recordRuntimeMemoryEvent(memoryAttribution, event),
-        afterToolBatch: createGuidedToolBatchTransition({
-          turnId: turn.turnId,
-          durableWork: input.durableWork,
-        }),
+        afterToolBatch: directionAware.afterToolBatch,
         tools: visibleTools,
         ...(resolveGuidedTools ? { resolveTools: resolveGuidedTools } : {}),
         modelRound: directionAware.modelRound,
@@ -361,7 +368,9 @@ export function createProductionGuidedTurnAgent(
         reviewFinalCandidate: directionAware.reviewFinalCandidate,
         executeTool: activeDelegationAdmission.execute(toolCalls.executeTool),
       };
+      let waitingForWorker = false;
       const candidate = await runGuidedAgentLoopWithOperationalReport({
+        onExecutionWait: () => { waitingForWorker = true; },
         options: loopOptions,
         parentSignal: signal,
         originalRequest: turn.originalMessage,
@@ -375,9 +384,9 @@ export function createProductionGuidedTurnAgent(
           responseLanguage,
         }),
       });
-      const text = await delegationRelease.reconcileAfterLoop(candidate);
+      const text = waitingForWorker ? "" : await delegationRelease.reconcileAfterLoop(candidate);
       const publicText = authorityProjection.project(text);
-      const terminalOutcome = turn.context.emptyResponsePolicy === "typed_terminal" &&
+      const terminalOutcome = (waitingForWorker || turn.context.emptyResponsePolicy === "typed_terminal") &&
         !text.trim()
         ? "no_visible" as const
         : undefined;
@@ -393,6 +402,7 @@ export function createProductionGuidedTurnAgent(
       );
       return guidedTurnResult({
         content: publicText,
+        ...(waitingForWorker ? { executionOutcome: "waiting_for_worker" as const } : {}),
         ...(terminalOutcome && !authorityProjection.continuation ? { terminalOutcome } : {}),
         ...(finalWork?.status === "completed" || finalWork?.status === "blocked"
           ? { workStatus: finalWork.status }

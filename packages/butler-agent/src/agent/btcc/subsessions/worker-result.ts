@@ -9,6 +9,22 @@ import type {
   SubsessionDelegationService,
 } from "./contracts.ts";
 
+export function hasQueuedWorkerResult(
+  store: SubsessionDelegationDependencies["store"],
+  queue: NativeInboundQueue,
+  input: { parentSessionId: string; parentTurnId: string },
+): boolean {
+  return store.relationsByParentSessionId(input.parentSessionId).some((relation) => {
+    const result = store.resultByRelationId(relation.relation_id);
+    return Boolean(result && workerResultTurnId(result.result_id) !== input.parentTurnId &&
+      queue.hasPendingOrProcessingEvent(`worker-result:${result.result_id}`));
+  });
+}
+
+function workerResultTurnId(resultId: string): string {
+  return `steward-worker-result-${digest(resultId).slice(0, 32)}`;
+}
+
 export async function completeWorkerResultForDependencies(
   input: SubsessionDelegationDependencies,
   queue: NativeInboundQueue,
@@ -83,7 +99,7 @@ async function enqueueWorkerReport(
   result: CompleteStewardResultOutcome["result"],
   parentInputText: string,
 ): Promise<void> {
-  const turnId = `steward-worker-result-${digest(result.result_id).slice(0, 32)}`;
+  const turnId = workerResultTurnId(result.result_id);
   queue.enqueueIdempotent({
     eventId: `worker-result:${result.result_id}`,
     transport: "app",

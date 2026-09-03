@@ -334,6 +334,10 @@ export type SubsessionDelegationService = {
     parentSessionId: string;
   }): Promise<Array<{ relation: SessionRelation; parent_work_ref:
       DelegationPacket["parent_work_ref"]; child_turn_id: string }>>;
+  shouldWaitForWorker(input: {
+    parentSessionId: string;
+    parentTurnId: string;
+  }): Promise<boolean>;
   reviewedDelegationPlan(input: {
     parentSessionId: string;
     parentTurnId: string;
