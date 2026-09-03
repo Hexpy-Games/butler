@@ -257,6 +257,11 @@ export interface AppCopy {
     saving: string;
     saved: string;
     sectionsLabel: string;
+    groups: {
+      general: string;
+      modelsAndExtensions: string;
+      appAndSystem: string;
+    };
     sections: {
       general: string;
       notifications: string;
@@ -992,6 +997,11 @@ const koKrCopy: AppCopy = {
     saving: "저장 중",
     saved: "저장됨",
     sectionsLabel: "설정 섹션",
+    groups: {
+      general: "일반",
+      modelsAndExtensions: "모델 및 확장 기능",
+      appAndSystem: "앱 및 시스템",
+    },
     sections: {
       general: "일반",
       notifications: "알림",
@@ -1804,6 +1814,11 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     saving: "Saving",
     saved: "Saved",
     sectionsLabel: "Settings sections",
+    groups: {
+      general: "General",
+      modelsAndExtensions: "Models and extensions",
+      appAndSystem: "App and system",
+    },
     sections: {
       general: "General",
       notifications: "Notifications",

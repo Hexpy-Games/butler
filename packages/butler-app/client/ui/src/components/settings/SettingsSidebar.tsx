@@ -2,10 +2,10 @@ import { ArrowLeft } from "@/butler-ds";
 import { NavRow, Stack } from "@/butler-ds";
 import { SettingsNav } from "@/butler-ds";
 import type { SettingsSectionId } from "@/app/types.ts";
-import type { SettingsSectionDescriptor } from "./settingsTypes";
+import type { SettingsSectionGroupDescriptor } from "./settingsTypes";
 
 interface SettingsSidebarProps {
-  sections: SettingsSectionDescriptor[];
+  sectionGroups: SettingsSectionGroupDescriptor[];
   activeSection: SettingsSectionId;
   backLabel: string;
   onClose: () => void;
@@ -14,7 +14,7 @@ interface SettingsSidebarProps {
 }
 
 export function SettingsSidebar({
-  sections,
+  sectionGroups,
   activeSection,
   backLabel,
   onClose,
@@ -38,15 +38,21 @@ export function SettingsSidebar({
           onClick={onClose}
         />
       </Stack>
-      <SettingsNav
-        items={sections.map((item) => ({
-          id: item.id,
-          label: item.label,
-          icon: item.icon,
-          active: activeSection === item.id,
-          onSelect: () => onSectionChange(item.id),
-        }))}
-      />
+      <Stack gap="lg">
+        {sectionGroups.map((group) => (
+          <SettingsNav
+            key={group.id}
+            title={group.label}
+            items={group.sections.map((item) => ({
+              id: item.id,
+              label: item.label,
+              icon: item.icon,
+              active: activeSection === item.id,
+              onSelect: () => onSectionChange(item.id),
+            }))}
+          />
+        ))}
+      </Stack>
     </Stack>
   );
 }
