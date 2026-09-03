@@ -57,6 +57,7 @@ test("user message folding follows rendered height and keeps More/Less while exp
   const button = container.querySelector("button")!;
   const content = container.querySelector('[data-test-class="user-message-text"]')!;
   expect(button.textContent).toBe(appCopy.conversation.messageActions.showMore);
+  expect(button.getAttribute("data-variant")).toBe("inline");
   expect(button.getAttribute("aria-controls")).toBe(content.id);
   expect(button.getAttribute("aria-expanded")).toBe("false");
   await act(async () => button.click());
