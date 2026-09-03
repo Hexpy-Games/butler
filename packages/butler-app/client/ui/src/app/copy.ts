@@ -262,6 +262,14 @@ export interface AppCopy {
     saving: string;
     saved: string;
     sectionsLabel: string;
+    searchLabel: string;
+    searchPlaceholder: string;
+    searchEmpty: (query: string) => string;
+    groups: {
+      general: string;
+      modelsAndExtensions: string;
+      appAndSystem: string;
+    };
     sections: {
       general: string;
       notifications: string;
@@ -279,6 +287,38 @@ export interface AppCopy {
       system: string;
       archives: string;
       about: string;
+    };
+    sectionDescriptions: {
+      general: string;
+      models: string;
+      appearance: string;
+      server: string;
+      updates: string;
+      mcp: string;
+      skills: string;
+      usage: string;
+      logs: string;
+      personalization: string;
+      privacy: string;
+      system: string;
+      archives: string;
+      about: string;
+    };
+    sectionAliases: {
+      general: string[];
+      models: string[];
+      appearance: string[];
+      server: string[];
+      updates: string[];
+      mcp: string[];
+      skills: string[];
+      usage: string[];
+      logs: string[];
+      personalization: string[];
+      privacy: string[];
+      system: string[];
+      archives: string[];
+      about: string[];
     };
     panels: {
       butlerModel: string;
@@ -543,6 +583,20 @@ export interface AppCopy {
         windows: string;
         fallback: string;
       };
+    };
+    workStatus: {
+      title: string;
+      description: string;
+      loading: string;
+      empty: string;
+      unavailable: string;
+      details: string;
+      latestReport: string;
+      recentArtifacts: string;
+      actions: (completed: number, total: number) => string;
+      effects: (count: number) => string;
+      states: Record<import("./types.ts").WorkStatusState, string>;
+      stages: Record<NonNullable<import("./types.ts").WorkStatusItemView["stage"]>, string>;
     };
     systemEventLabels: {
       titles: {
@@ -1002,6 +1056,14 @@ const koKrCopy: AppCopy = {
     saving: "저장 중",
     saved: "저장됨",
     sectionsLabel: "설정 섹션",
+    searchLabel: "설정 검색",
+    searchPlaceholder: "설정 검색",
+    searchEmpty: (query) => `일치하는 설정이 없습니다: ${query}`,
+    groups: {
+      general: "일반",
+      modelsAndExtensions: "모델 및 확장 기능",
+      appAndSystem: "앱 및 시스템",
+    },
     sections: {
       general: "일반",
       notifications: "알림",
@@ -1019,6 +1081,38 @@ const koKrCopy: AppCopy = {
       system: "시스템 이벤트",
       archives: "아카이브",
       about: "정보",
+    },
+    sectionDescriptions: {
+      general: "언어, 시간대, 대화 입력과 검색 기본값을 설정합니다.",
+      models: "버틀러와 작업자 모델, 예비 모델을 관리합니다.",
+      appearance: "앱의 테마와 화면 표시 방식을 설정합니다.",
+      server: "버틀러 서버 연결과 새 프로젝트 폴더를 설정합니다.",
+      updates: "Butler App을 확인하고 업데이트합니다.",
+      mcp: "MCP 서버와 연결 정보를 관리합니다.",
+      skills: "기본 스킬과 프로젝트 스킬을 관리합니다.",
+      usage: "모델과 도구 사용량을 확인합니다.",
+      logs: "개발자 모드에서 모델 요청과 응답 로그를 확인합니다.",
+      personalization: "버틀러가 사용할 이름, 말투와 사용자 정보를 관리합니다.",
+      privacy: "진단 정보 수집과 개인정보 관련 설정을 관리합니다.",
+      system: "정기 정리와 유지보수 이벤트를 확인합니다.",
+      archives: "보관한 프로젝트와 대화를 복원하거나 삭제합니다.",
+      about: "버틀러 버전과 앱 정보를 확인합니다.",
+    },
+    sectionAliases: {
+      general: ["기본", "일반 설정", "대화"],
+      models: ["모델 설정", "작업자", "예비 모델"],
+      appearance: ["테마", "화면 설정", "디자인"],
+      server: ["연결", "프로젝트 폴더"],
+      updates: ["업그레이드", "새 버전"],
+      mcp: ["도구 서버", "외부 도구"],
+      skills: ["스킬 관리", "기능"],
+      usage: ["토큰", "사용량"],
+      logs: ["개발자 로그", "디버그", "원문"],
+      personalization: ["사용자 정보", "페르소나", "말투"],
+      privacy: ["진단", "개인정보"],
+      system: ["유지보수", "기억 정리"],
+      archives: ["보관", "아카이브"],
+      about: ["버전", "앱 정보"],
     },
     panels: {
       butlerModel: "모델 설정",
@@ -1326,6 +1420,33 @@ const koKrCopy: AppCopy = {
         macos: "macOS 알림 설정",
         windows: "Windows 알림 설정",
         fallback: "시스템 설정",
+      },
+    },
+    workStatus: {
+      title: "작업 상태",
+      description: "현재 실행, 완료, 주의가 필요한 작업을 표시합니다.",
+      loading: "작업 상태를 확인 중입니다.",
+      empty: "표시할 작업이 없습니다.",
+      unavailable: "작업 상태를 불러올 수 없습니다.",
+      details: "대화 열기",
+      latestReport: "최근 보고",
+      recentArtifacts: "최근 결과물",
+      actions: (completed, total) => `단계 ${completed}/${total}`,
+      effects: (count) => `효과 ${count}건`,
+      states: {
+        running: "진행 중",
+        completed: "완료",
+        attention: "확인 필요",
+        operational_action: "복구 중",
+        operational_interruption: "운영 중단",
+      },
+      stages: {
+        conception: "구상",
+        planning: "계획",
+        execution: "실행",
+        review: "리뷰",
+        validation: "검증",
+        reporting: "보고",
       },
     },
     systemEventLabels: {
@@ -1819,6 +1940,14 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     saving: "Saving",
     saved: "Saved",
     sectionsLabel: "Settings sections",
+    searchLabel: "Settings search",
+    searchPlaceholder: "Search settings",
+    searchEmpty: (query) => `No settings match: ${query}`,
+    groups: {
+      general: "General",
+      modelsAndExtensions: "Models and extensions",
+      appAndSystem: "App and system",
+    },
     sections: {
       general: "General",
       notifications: "Notifications",
@@ -1836,6 +1965,38 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       system: "System events",
       archives: "Archives",
       about: "About",
+    },
+    sectionDescriptions: {
+      general: "Configure language, timezone, conversation input, and search defaults.",
+      models: "Manage Butler, worker, and backup models.",
+      appearance: "Configure the app theme and display behavior.",
+      server: "Configure the Butler server connection and new project folder.",
+      updates: "Check and update Butler App.",
+      mcp: "Manage MCP servers and their connection settings.",
+      skills: "Manage built-in and project skills.",
+      usage: "Review model and tool usage.",
+      logs: "Inspect model requests and responses in developer mode.",
+      personalization: "Manage the name, tone, and personal settings Butler uses.",
+      privacy: "Manage diagnostics and privacy settings.",
+      system: "Review regular maintenance and system events.",
+      archives: "Restore or delete archived projects and chats.",
+      about: "View Butler version and app information.",
+    },
+    sectionAliases: {
+      general: ["basics", "general settings", "conversation"],
+      models: ["model settings", "workers", "backup models"],
+      appearance: ["theme", "display", "design"],
+      server: ["connection", "project folder"],
+      updates: ["upgrade", "new version"],
+      mcp: ["tool servers", "external tools"],
+      skills: ["skill management", "capabilities"],
+      usage: ["tokens", "telemetry"],
+      logs: ["developer logs", "debug", "raw"],
+      personalization: ["user profile", "persona", "tone"],
+      privacy: ["diagnostics", "personal data"],
+      system: ["maintenance", "memory consolidation"],
+      archives: ["saved chats", "archive"],
+      about: ["version", "app info"],
     },
     panels: {
       butlerModel: "Model settings",
@@ -2127,6 +2288,33 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
         macos: "macOS notification settings",
         windows: "Windows notification settings",
         fallback: "System settings",
+      },
+    },
+    workStatus: {
+      title: "Work status",
+      description: "Shows running, completed, and attention-needed work.",
+      loading: "Checking work status.",
+      empty: "No work to show.",
+      unavailable: "Work status is unavailable.",
+      details: "Open conversation",
+      latestReport: "Latest report",
+      recentArtifacts: "Recent artifacts",
+      actions: (completed, total) => `${completed}/${total} steps`,
+      effects: (count) => `${count} effects`,
+      states: {
+        running: "Running",
+        completed: "Completed",
+        attention: "Needs attention",
+        operational_action: "Recovering",
+        operational_interruption: "Interrupted",
+      },
+      stages: {
+        conception: "Conception",
+        planning: "Planning",
+        execution: "Execution",
+        review: "Review",
+        validation: "Validation",
+        reporting: "Reporting",
       },
     },
     systemEventLabels: {

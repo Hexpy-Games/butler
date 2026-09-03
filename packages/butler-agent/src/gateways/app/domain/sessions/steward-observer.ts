@@ -4,6 +4,7 @@ import type {
   SessionViewTurn,
   StewardResultView,
   StewardSessionSummaryView,
+  WorkStatusView,
 } from "../../interface/protocol/app-protocol.ts";
 import { progressRowFromSharedTurnEvent } from "../../../../../../butler-progress-projection/src/index.ts";
 import { projectBtccFinalReport } from "../../../../agent/btcc/index.ts";
@@ -91,6 +92,7 @@ export interface StewardObserverDelegationPresentation {
 }
 
 export interface StewardObserverReader {
+  workStatus(): WorkStatusView;
   relationsForParent(sessionId: string): StewardObserverRelation[];
   relationById(relationId: string): StewardObserverRelation | null;
   relationForChild(sessionId: string): StewardObserverRelation | null;
