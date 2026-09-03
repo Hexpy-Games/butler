@@ -131,6 +131,7 @@ export interface AppCopy {
     attachments: string;
     responseMode: string;
     normal: string;
+    attachmentCount: CountFormatter;
     permission: string;
     plan: string;
     model: string;
@@ -868,6 +869,7 @@ const koKrCopy: AppCopy = {
     attachments: "첨부",
     responseMode: "응답 방식",
     normal: "일반",
+    attachmentCount: (count) => `첨부 ${count}개`,
     permission: "권한",
     plan: "계획",
     model: "모델",
@@ -1684,6 +1686,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     attachments: "Attachments",
     responseMode: "Response mode",
     normal: "Normal",
+    attachmentCount: (count) => `${count} attachments`,
     permission: "Permission",
     plan: "Plan",
     model: "Model",
