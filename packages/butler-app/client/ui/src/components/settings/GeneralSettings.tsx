@@ -6,6 +6,7 @@ import { SettingsSection, SettingsSelect } from "./SettingsFormComponents";
 import { DesktopShellSettings } from "./DesktopShellSettings";
 import { SettingsSearchableSelect } from "./SettingsSearchableSelect";
 import { SearchSettings } from "./SearchSettings";
+import { WorkStatusPanelContainer } from "./WorkStatusPanelContainer";
 
 export function GeneralSettings() {
   const draft = useSettingsUIStore((state) => state.draft);
@@ -86,6 +87,7 @@ export function GeneralSettings() {
           ]}
         />
       </SettingsSection>
+      <WorkStatusPanelContainer />
       <DesktopShellSettings draft={draft} />
       <SearchSettings draft={draft} />
     </>

@@ -11,6 +11,8 @@ import type {
 } from "../../../../gateways/app/domain/sessions/steward-observer.ts";
 import type { StewardResultView as StewardObserverResult } from
   "../../../../gateways/app/interface/protocol/app-protocol.ts";
+import type { WorkStatusView } from
+  "../../../../gateways/app/interface/protocol/app-protocol.ts";
 import { subsessionParentResultRefs } from "../../../btcc/subsessions/index.ts";
 import { publicStewardTerminalFields } from "./steward-observer-terminal-result.ts";
 import {
@@ -25,6 +27,7 @@ import {
 import { readStewardOperationOutputChunks } from "./steward-operation-output-reader.ts";
 import { readStewardObserverMessages } from "./steward-observer-message-reader.ts";
 import type { ChangedFileDetail } from "../../../tools/file-tools/shared/changed-file-detail.ts";
+import { readWorkStatus } from "./steward-observer-work-status.ts";
 
 type RelationRow = StewardObserverRelation;
 
@@ -70,6 +73,10 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
     private readonly db: Database,
     private readonly processLiveness: ProcessLiveness = new LocalProcessLiveness(),
   ) {}
+
+  workStatus(): WorkStatusView {
+    return readWorkStatus(this.db);
+  }
 
   relationsForParent(sessionId: string): StewardObserverRelation[] {
     return this.db
