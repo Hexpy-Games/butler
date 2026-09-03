@@ -16,6 +16,7 @@ import {
   type SessionActionResult,
   type SessionControlsView,
   type SessionListView,
+  type WorkStatusView,
 } from "../../protocol/app-protocol.ts";
 import { paginationFromSearchParams } from "../route-params.ts";
 import { json, parseJson, RequestError } from "../responses.ts";
@@ -35,6 +36,9 @@ export async function handleProjectSessionRoutes(
   }
   if (input.request.method === "GET" && url.pathname === "/navigation") {
     return json(apiEnvelope<NavigationView>(input.store.listNavigation()));
+  }
+  if (input.request.method === "GET" && url.pathname === "/work-status") {
+    return json(apiEnvelope<WorkStatusView>(input.stewardObserver.workStatus()));
   }
   if (input.request.method === "GET" && url.pathname === "/new-chat-briefing") {
     return json(
