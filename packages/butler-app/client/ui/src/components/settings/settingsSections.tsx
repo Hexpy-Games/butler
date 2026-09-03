@@ -32,6 +32,7 @@ function createSettingsSectionMap(
     id,
     label,
     description: settingsCopy.sectionDescriptions[id],
+    aliases: settingsCopy.sectionAliases[id],
     icon,
   });
 
@@ -108,4 +109,35 @@ export function createSettingsSectionGroups(
       .filter((id) => visibleIds.has(id))
       .map((id) => sections[id]),
   }));
+}
+
+function normalizeSettingsSearchValue(value: string): string {
+  return value.trim().toLocaleLowerCase("en-US");
+}
+
+function matchesSettingsSearchValue(value: string, query: string): boolean {
+  return normalizeSettingsSearchValue(value).includes(query);
+}
+
+export function filterSettingsSectionGroups(
+  groups: SettingsSectionGroupDescriptor[],
+  query: string,
+): SettingsSectionGroupDescriptor[] {
+  const normalizedQuery = normalizeSettingsSearchValue(query);
+  if (!normalizedQuery) return groups;
+
+  return groups
+    .map((group) => {
+      if (matchesSettingsSearchValue(group.label, normalizedQuery)) return group;
+
+      return {
+        ...group,
+        sections: group.sections.filter((section) =>
+          [section.label, section.description, ...section.aliases].some((value) =>
+            matchesSettingsSearchValue(value, normalizedQuery),
+          ),
+        ),
+      };
+    })
+    .filter((group) => group.sections.length > 0);
 }

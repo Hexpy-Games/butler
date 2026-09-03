@@ -1,7 +1,8 @@
-import { ArrowLeft } from "@/butler-ds";
-import { NavRow, Stack } from "@/butler-ds";
-import { SettingsNav } from "@/butler-ds";
+import { useMemo, useState } from "react";
+import { appCopy } from "@/app/copy.ts";
+import { ArrowLeft, Input, NavRow, SettingsNav, Stack, Typo } from "@/butler-ds";
 import type { SettingsSectionId } from "@/app/types.ts";
+import { filterSettingsSectionGroups } from "./settingsSections";
 import type { SettingsSectionGroupDescriptor } from "./settingsTypes";
 
 interface SettingsSidebarProps {
@@ -21,6 +22,13 @@ export function SettingsSidebar({
   onSectionChange,
   isActive = false,
 }: SettingsSidebarProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredGroups = useMemo(
+    () => filterSettingsSectionGroups(sectionGroups, searchQuery),
+    [searchQuery, sectionGroups],
+  );
+  const settingsCopy = appCopy.settings;
+
   return (
     <Stack gap="md" data-active={isActive ? "true" : undefined}>
       <Stack
@@ -38,8 +46,31 @@ export function SettingsSidebar({
           onClick={onClose}
         />
       </Stack>
+      <Stack gap="sm">
+        <Typo.Label htmlFor="settings-navigation-search">
+          {settingsCopy.searchLabel}
+        </Typo.Label>
+        <Input
+          id="settings-navigation-search"
+          type="search"
+          aria-label={settingsCopy.searchLabel}
+          placeholder={settingsCopy.searchPlaceholder}
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.currentTarget.value)}
+          data-test-class="settings-navigation-search"
+        />
+      </Stack>
+      {searchQuery.trim() && filteredGroups.length === 0 ? (
+        <Typo.Caption
+          role="status"
+          aria-live="polite"
+          data-test-class="settings-search-empty"
+        >
+          {settingsCopy.searchEmpty(searchQuery.trim())}
+        </Typo.Caption>
+      ) : null}
       <Stack gap="lg">
-        {sectionGroups.map((group) => (
+        {filteredGroups.map((group) => (
           <SettingsNav
             key={group.id}
             title={group.label}
