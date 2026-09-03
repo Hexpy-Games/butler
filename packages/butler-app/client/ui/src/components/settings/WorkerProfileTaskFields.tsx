@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Input, SettingsField } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
@@ -28,13 +28,16 @@ function DeferredTextField({
   onCommit,
   onUnchanged,
 }: DeferredTextFieldProps) {
+  const controlId = useId();
   const [draft, setDraft] = useState<string | null>(null);
   return (
     <SettingsField
+      id={controlId}
       data-test-class="settings-field"
       label={label}
       control={
         <Input
+          id={controlId}
           value={draft ?? value}
           maxLength={maxLength}
           disabled={disabled}

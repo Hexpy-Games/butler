@@ -8,7 +8,7 @@ import {
   SettingsField,
   Stack,
 } from "@/butler-ds";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 interface SettingsOption {
   value: string;
@@ -19,6 +19,7 @@ interface SettingsOption {
 export function SettingsSelect({
   label,
   description,
+  id,
   disabled,
   controlWidth,
   action,
@@ -29,6 +30,7 @@ export function SettingsSelect({
 }: {
   label: string;
   description?: string;
+  id?: string;
   disabled?: boolean;
   controlWidth?: "default" | "full";
   action?: ReactNode;
@@ -37,12 +39,17 @@ export function SettingsSelect({
   onChange: (value: string) => void;
   options: SettingsOption[];
 }) {
+  const generatedId = useId();
+  const controlId = id ?? generatedId;
+  const descriptionId = useId();
   const selectedOption = options.find((option) => option.value === value);
   const selectedHasDescription = Boolean(selectedOption?.description);
 
   const selectControl = (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
+        id={controlId}
+        aria-describedby={description ? descriptionId : undefined}
         data-test-class={triggerTestClass}
         data-multiline={selectedHasDescription ? "true" : undefined}
         disabled={disabled}
@@ -108,8 +115,10 @@ export function SettingsSelect({
   return (
     <SettingsField
       data-test-class="settings-field"
+      id={controlId}
       label={label}
       description={description}
+      descriptionId={description ? descriptionId : undefined}
       controlWidth={controlWidth}
       control={control}
     />

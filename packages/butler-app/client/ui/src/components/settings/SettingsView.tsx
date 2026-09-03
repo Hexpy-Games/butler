@@ -8,7 +8,7 @@ import { SettingsDetailContent } from "./SettingsDetailContent";
 import { SettingsDetailHeader } from "./SettingsDetailHeader";
 import { ModelSettingsTitle } from "./ModelSettingsTitle";
 import { SettingsSidebar } from "./SettingsSidebar";
-import { createSettingsSections } from "./settingsSections";
+import { createSettingsSectionGroups } from "./settingsSections";
 import { useDeveloperLogsAvailability } from "./useDeveloperLogsAvailability";
 import { useCompactSettingsPaneEntry } from "./useCompactSettingsPaneEntry";
 import { ArrowLeft, IconButton, SettingsShell } from "@/butler-ds";
@@ -65,10 +65,13 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
 
   const settingsCopy = appCopy.settings;
   const developerModeEnabled = useDeveloperLogsAvailability(settings.diagnostics_enabled === true);
-  const sections = createSettingsSections(settingsCopy, developerModeEnabled);
-  const title =
-    sections.find((item) => item.id === activeSection)?.label ??
-    settingsCopy.title;
+  const sectionGroups = createSettingsSectionGroups(
+    settingsCopy,
+    developerModeEnabled,
+  );
+  const sections = sectionGroups.flatMap((group) => group.sections);
+  const activeDescriptor = sections.find((item) => item.id === activeSection);
+  const title = activeDescriptor?.label ?? settingsCopy.title;
 
   const changeSection = (section: SettingsSectionId) => {
     setLocalMessage(null);
@@ -116,7 +119,7 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
       }
       sidebar={
         <SettingsSidebar
-          sections={sections}
+          sectionGroups={sectionGroups}
           activeSection={activeSection}
           backLabel={settingsCopy.back}
           onClose={closeView}
@@ -127,6 +130,7 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
       detailHeader={
         <SettingsDetailHeader
           title={title}
+          description={activeDescriptor?.description}
           secondary={titleSecondary}
           localMessage={localMessage}
         />

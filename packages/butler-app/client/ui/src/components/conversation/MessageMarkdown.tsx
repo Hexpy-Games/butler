@@ -5,11 +5,13 @@ import { appCopy } from "@/app/copy.ts";
 import type { MessageFileRef } from "@/app/types.ts";
 import { MarkdownContent } from "@/butler-ds";
 import { resolveMarkdownImageSource } from "./messageMedia";
+import { MarkdownCodeBlock } from "./MarkdownCodeBlock";
 
 const EMPTY_ATTACHMENTS: MessageFileRef[] = [];
 
 function markdownComponents(attachments: MessageFileRef[]) {
   return {
+    pre: MarkdownCodeBlock,
     a: ({
       children,
       ...props

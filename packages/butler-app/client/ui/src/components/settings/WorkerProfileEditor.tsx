@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   Button,
   Input,
@@ -38,6 +38,8 @@ export function WorkerProfileEditor({
   onUpdate,
   onDelete,
 }: WorkerProfileEditorProps) {
+  const nameId = useId();
+  const enabledId = useId();
   const saving = useSettingsUIStore((state) => state.saving);
   const [labelDraft, setLabelDraft] = useState<string | null>(null);
   const settingsFields = appCopy.settings.fields;
@@ -60,10 +62,12 @@ export function WorkerProfileEditor({
       <Stack gap="md">
         <Typo.PanelSectionTitle as="h3">{profile.label}</Typo.PanelSectionTitle>
         <SettingsField
+          id={nameId}
           data-test-class="settings-field"
           label={settingsFields.name}
           control={
             <Input
+              id={nameId}
               value={labelDraft ?? profile.label}
               disabled={saving}
               onChange={(event) => setLabelDraft(event.target.value)}
@@ -72,10 +76,12 @@ export function WorkerProfileEditor({
           }
         />
         <SettingsField
+          id={enabledId}
           data-test-class="settings-field"
           label={settingsFields.enabled}
           control={
             <Switch
+              id={enabledId}
               checked={profile.enabled}
               disabled={saving || isDefault}
               onCheckedChange={(value) => {
