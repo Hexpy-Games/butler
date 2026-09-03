@@ -253,7 +253,10 @@ function registeredToolRejection(value: unknown): EffectAdapterError | null {
       : "registered_edit_file_rejected";
   return {
     code,
-    message: `The registered edit_file tool rejected the reviewed edit (${code}).`,
+    message: [
+      typeof record.message === "string" ? record.message : `The registered edit_file tool rejected the reviewed edit (${code}).`,
+      typeof record.recovery_hint === "string" ? record.recovery_hint : "",
+    ].filter(Boolean).join(" "),
   };
 }
 

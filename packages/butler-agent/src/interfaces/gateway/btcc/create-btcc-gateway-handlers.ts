@@ -20,18 +20,9 @@ export function createBtccGatewayHandlers(
       if (envelope.control.turnId !== turnId) {
         throw new Error("BTCC cancellation identity mismatch");
       }
-      const outcome = await options.btcc.stopTurn({ turnId });
-      const alreadyDelivered = outcome.kind === "already_delivered";
-      if (
-        outcome.kind !== "cancelled" &&
-        outcome.kind !== "already_cancelled" &&
-        !alreadyDelivered
-      ) {
-        throw new Error(`BTCC cancellation remains recoverable: ${outcome.kind}`);
-      }
-      if (!alreadyDelivered) {
-        await completeChildTerminalResult(options, route, turnId);
-      }
+      const cancellation = await cancelOwnedDelegation(options, route, turnId);
+      const { outcome } = cancellation;
+      const alreadyDelivered = outcome.kind === "already_delivered" && !cancellation.settledDelegation;
       return {
         ok: true,
         handledBy: "btcc/turn-stop",
@@ -133,6 +124,46 @@ export function createBtccGatewayHandlers(
     steward: ({ route, envelope }) => handle(route, envelope),
     worker: ({ route, envelope }) => handle(route, envelope),
   };
+}
+
+async function cancelOwnedDelegation(
+  options: BtccGatewayHandlerOptions,
+  route: GatewayRoute,
+  requestedTurnId: string,
+) {
+  const service = options.subsessionDelegation;
+  const stopOwned = async (current: GatewayRoute, requested: string): Promise<{
+    outcome: Awaited<ReturnType<BtccGatewayHandlerOptions["btcc"]["stopTurn"]>>;
+    settledDelegation: boolean;
+  }> => {
+    const owned = service && current.role !== "butler"
+      ? await service.activeChildCancellationTarget(current.sessionId)
+      : null;
+    const turnId = owned?.child_turn_id ?? requested;
+    const outcome = await options.btcc.stopTurn({ turnId });
+    if (outcome.kind !== "cancelled" && outcome.kind !== "already_cancelled" &&
+      outcome.kind !== "already_delivered") {
+      throw new Error(`BTCC cancellation remains recoverable: ${outcome.kind}`);
+    }
+    // Close parent waiting before aborting descendants: an in-flight Worker can
+    // concurrently publish its normal cancelled result as soon as stop is installed.
+    if (owned || outcome.kind !== "already_delivered") {
+      await completeChildTerminalResult(options, current, turnId);
+    }
+    const children = service ? await service.activeParentDelegations({
+      parentSessionId: current.sessionId,
+    }) : [];
+    for (const child of children) {
+      if (current.role === "butler" && child.relation.parent_turn_id !== turnId) continue;
+      await stopOwned({
+        ...current,
+        sessionId: child.relation.child_session_id,
+        role: current.role === "butler" ? "steward" : "worker",
+      }, child.child_turn_id);
+    }
+    return { outcome, settledDelegation: Boolean(owned) };
+  };
+  return stopOwned(route, requestedTurnId);
 }
 
 function childTerminalStatus(

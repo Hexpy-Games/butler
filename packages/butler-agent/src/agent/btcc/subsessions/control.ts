@@ -11,7 +11,7 @@ import { activeParentDelegations } from "./active-parent-delegation.ts";
 
 type ControlService = Pick<
   SubsessionDelegationService,
-  "activeParentDelegations" | "steerSteward" | "cancelSteward" |
+  "activeParentDelegations" | "activeChildCancellationTarget" | "steerSteward" | "cancelSteward" |
     "consumeStewardDirection"
 >;
 
@@ -19,7 +19,18 @@ export function createSubsessionControlService(
   input: SubsessionDelegationDependencies,
   childQueue: NativeInboundQueue,
 ): ControlService {
+  const activeChildCancellationTarget: ControlService["activeChildCancellationTarget"] = async (childSessionId) => {
+    const relation = input.store.relationByChildSessionId(childSessionId);
+    if (!relation) return null;
+    const active = (await activeParentDelegations(input, {
+      parentSessionId: relation.parent_session_id,
+    })).find((candidate) => candidate.relation.relation_id === relation.relation_id);
+    if (!active) return null;
+    const latest = await input.parentTurns.findLatestTurnForSession(childSessionId);
+    return { relation, child_turn_id: latest?.turnId ?? active.child_turn_id };
+  };
   return {
+    activeChildCancellationTarget,
     async activeParentDelegations(parentInput) {
       return activeParentDelegations(input, parentInput);
     },
@@ -49,7 +60,9 @@ export function createSubsessionControlService(
       return direction;
     },
     async cancelSteward(cancelInput) {
-      const active = await resolveActiveRelation(input, cancelInput);
+      const selected = await resolveActiveRelation(input, cancelInput);
+      const active = await activeChildCancellationTarget(selected.relation.child_session_id);
+      if (!active) throw new Error("active_steward_relation_not_found");
       const requestedAt = new Date().toISOString();
       const requestId = `cancel-steward-${digest(stableJson({
         relation_id: active.relation.relation_id,
@@ -136,13 +149,12 @@ async function resolveActiveRelation(
   input: SubsessionDelegationDependencies,
   selector: { parentSessionId: string; relationId?: string; safeTitle?: string },
 ): Promise<{ relation: SessionRelation; child_turn_id: string }> {
-  const active = (await activeParentDelegations(input, {
+  const owned = await activeParentDelegations(input, {
     parentSessionId: selector.parentSessionId,
-  }))
-    .filter(({ relation }) =>
-      !selector.relationId || relation.relation_id === selector.relationId)
-    .filter(({ relation }) =>
-      !selector.safeTitle || relation.safe_title === selector.safeTitle);
+  });
+  const active = owned.filter(({ relation }) => selector.relationId
+    ? relation.relation_id === selector.relationId
+    : !selector.safeTitle || relation.safe_title === selector.safeTitle);
   if (active.length === 0) throw new Error("active_steward_relation_not_found");
   if (active.length !== 1) throw new Error("active_steward_relation_ambiguous");
   return active[0]!;

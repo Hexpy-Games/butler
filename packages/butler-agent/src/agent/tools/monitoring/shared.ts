@@ -87,6 +87,8 @@ export function createMonitoringToolHandlers(input: {
           ? call.args.stream
           : undefined,
       offsetLines: typeof call.args.offset_lines === "number" ? call.args.offset_lines : undefined,
+      offsetChars: typeof call.args.offset_chars === "number" ? call.args.offset_chars : undefined,
+      search: typeof call.args.search === "string" ? call.args.search : undefined,
       limitLines: typeof call.args.limit_lines === "number" ? call.args.limit_lines : undefined,
       maxTokens: typeof call.args.max_tokens === "number" ? call.args.max_tokens : undefined,
     }),

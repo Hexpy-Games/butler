@@ -46,7 +46,7 @@ export function guidedToolDefinition<T extends FunctionToolDefinition>(
       : tool.name === "edit_file"
         ? {
             description: [
-              "Apply one exact text edit or a batch of exact text edits to existing workspace files.",
+              "Apply one exact text edit or an ordered batch of exact text edits to existing workspace files. Repeated paths are allowed: later edits address the preceding in-memory result, and each file is committed once.",
               "The runtime observes each file and injects its stale-state guard; provide only path, start_line, old_text, and new_text.",
               "Use Project Ledger tools for Ledger files.",
             ].join(" "),

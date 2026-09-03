@@ -123,7 +123,7 @@ test("active parent delegation read model rejects packet and task corruption", a
   })).rejects.toThrow("active_parent_delegation_task_mismatch");
 });
 
-test("active relation plus Work read failure stays on the restricted surface", async () => {
+test("active relation plus Work read failure preserves the storage error", async () => {
   let activeReads = 0;
   const active = delegationFact("work-active", "plan-active", "review-active");
   const resolve = surfaceResolver({
@@ -136,11 +136,8 @@ test("active relation plus Work read failure stays on the restricted surface", a
       return [active];
     },
   });
-  const names = (await resolve()).names;
+  await expect(resolve()).rejects.toThrow("bound read corrupt");
   expect(activeReads).toBe(1);
-  expect([...names].sort()).toEqual([
-    "cancel_steward", "read_file", "start_work", "steer_steward",
-  ]);
 });
 
 test("delivery-committed child stays active until its terminal result exists", async () => {
@@ -163,6 +160,21 @@ test("delivery-committed child stays active until its terminal result exists", a
   expect(names.has("cancel_steward")).toBe(true);
   expect(names.has("start_work")).toBe(true);
   expect(names.has("read_file")).toBe(true);
+});
+
+test("control schemas resolve one owned target and expose exact multiple selectors", async () => {
+  const active = [delegationFact("first", "plan", "review")];
+  const resolve = surfaceResolver({
+    durableWork: { boundWorkForTurn: async () => null, loadContext: async () => null } as unknown as DurableWorkService,
+    active: async () => active,
+  });
+  const sole = (await resolve()).tools.find((tool) => tool.name === "cancel_steward")!;
+  expect(sole.parameters.properties).not.toHaveProperty("relation_id");
+  expect(sole.parameters.properties).not.toHaveProperty("safe_title");
+  active.push(delegationFact("second", "plan", "review"));
+  const multiple = (await resolve()).tools.find((tool) => tool.name === "cancel_steward")!;
+  expect(multiple.parameters.properties).toMatchObject({ relation_id: { enum: ["relation-first", "relation-second"] } });
+  expect(multiple.parameters.required).toContain("relation_id");
 });
 
 test("an exact reviewed Work is selected among unrelated active siblings", async () => {
@@ -443,7 +455,10 @@ function delegationFixture() {
   const dependencies = {
     butlerData: "/tmp",
     store,
-    parentTurns: { findTurn: async () => childTurn },
+    parentTurns: {
+      findTurn: async () => childTurn,
+      findLatestTurnForSession: async () => childTurn,
+    },
   } as unknown as SubsessionDelegationDependencies;
   return {
     relation,

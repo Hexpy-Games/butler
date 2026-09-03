@@ -32,7 +32,7 @@ export async function resolveParentResultEvidence(input: {
   parentInputText: string;
   includeSiblingWorkerResults?: boolean;
   store: SubsessionDelegationDependencies["store"];
-  turns: SubsessionDelegationDependencies["parentTurns"];
+  turns: Pick<SubsessionDelegationDependencies["parentTurns"], "findTurn">;
 }): Promise<{
   synthesisEvidence: string;
   outcome: "success" | "blocked" | "failed" | "cancelled";
@@ -89,7 +89,7 @@ export async function resolveParentResultEvidence(input: {
 export async function resolveAcceptedStewardReport(input: {
   binding: ReportBinding;
   reportedContent?: string;
-  turns: SubsessionDelegationDependencies["parentTurns"];
+  turns: Pick<SubsessionDelegationDependencies["parentTurns"], "findTurn">;
 }): Promise<AcceptedStewardReport> {
   validateReportBinding(input.binding);
   const turn = await input.turns.findTurn(input.binding.childTurnId);

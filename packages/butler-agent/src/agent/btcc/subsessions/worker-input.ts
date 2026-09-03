@@ -4,7 +4,7 @@ export function renderWorkerInput(packet: DelegationPacket, profilePrompt?: stri
   if (!packet.plan_action) throw new Error("worker_plan_action_context_missing");
   return [
     "Worker role contract: run the normal BTCC lifecycle for this one bounded Task, then report factual output to the Steward.",
-    "Create and complete one session-scoped Micro Work with a concise Plan and accepted Plan Review before persistent effects. Review and validate the result before closeout.",
+    "Runtime has already created and bound your one session-scoped Micro Work. Use that existing Work; do not create or select another Work. Create a concise Plan and accepted Plan Review before persistent effects. Review and validate the result before completing that Micro Work.",
     "Do not delegate, mutate the parent Work, create Project Ledger records, broaden scope, or report to Butler or the user.",
     `plan_action_key: ${packet.plan_action.action_key}`,
     `plan_action_description: ${packet.plan_action.description}`,

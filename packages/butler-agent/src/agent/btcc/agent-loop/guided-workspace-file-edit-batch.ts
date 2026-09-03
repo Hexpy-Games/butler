@@ -86,7 +86,6 @@ export function normalizeGuidedWorkspaceFileEditBatchInput(
       `edit_file batch requires ${GUIDED_EDIT_BATCH_MIN}-${GUIDED_EDIT_BATCH_MAX} entries`,
     );
   }
-  const seen = new Set<string>();
   const edits = input.edits.map((value, index) => {
     if (!isRecord(value)) {
       throw new Error(`edit_file batch entry ${index} must be an object`);
@@ -121,10 +120,6 @@ export function normalizeGuidedWorkspaceFileEditBatchInput(
       workspacePath,
       requiredText(value.path, `edits[${index}].path`),
     );
-    if (seen.has(path)) {
-      throw new Error(`edit_file batch has duplicate target: ${path}`);
-    }
-    seen.add(path);
     return {
       path,
       start_line: Number(value.start_line),

@@ -302,26 +302,20 @@ export function createProductionGuidedTurnAgent(
         toolJournal: input.toolJournal,
         delegationTool: "delegate_to_steward",
       }) : closeout;
-      const resolveGuidedTools = policy.role === "steward" || phasePolicy.mode === "phase_minimal" ||
-        visibleTools.some((tool) =>
-          tool.name === "delegate_to_steward" || tool.name === "delegate_to_worker",
-        )
-        ? createGuidedRoundToolSurfaceResolver({
-            turnId: turn.turnId, tools: visibleTools, workScope, durableWork: input.durableWork,
-            requiredToolNames: new Set(policy.requiredNativeTools), toolJournal: input.toolJournal, effectJournal: input.effectJournal,
-            projectWorkSurface: phasePolicy.mode === "phase_minimal",
-            parentSessionId: turn.sessionId,
-            subsessionDelegation: input.subsessionDelegation,
-            onActiveDelegationAdmission: activeDelegationAdmission.observe,
-            shouldWaitForWorker,
-            ...(policy.role === "butler"
-              ? { forcedDelegationTool: "delegate_to_steward" as const }
-              : {}),
-            ...(policy.role === "butler"
-              ? { turnReleaseDelegationTool: "delegate_to_steward" as const }
-              : {}),
-          })
-        : undefined;
+      const resolveGuidedTools = createGuidedRoundToolSurfaceResolver({
+        turnId: turn.turnId, tools: visibleTools, workScope, durableWork: input.durableWork,
+        requiredToolNames: new Set(policy.requiredNativeTools), toolJournal: input.toolJournal, effectJournal: input.effectJournal,
+        parentSessionId: turn.sessionId,
+        subsessionDelegation: input.subsessionDelegation,
+        onActiveDelegationAdmission: activeDelegationAdmission.observe,
+        shouldWaitForWorker,
+        ...(policy.role === "butler" && visibleTools.some((tool) => tool.name === "delegate_to_steward")
+          ? { forcedDelegationTool: "delegate_to_steward" as const }
+          : {}),
+        ...(policy.role === "butler"
+          ? { turnReleaseDelegationTool: "delegate_to_steward" as const }
+          : {}),
+      });
       const directionAware = withStewardDirection({
         modelRound,
         safeBoundary: subsessionDirectionSafeBoundary({ service: input.subsessionDelegation, turn }),
@@ -361,8 +355,9 @@ export function createProductionGuidedTurnAgent(
         onEvent: (event) => recordRuntimeMemoryEvent(memoryAttribution, event),
         afterToolBatch: directionAware.afterToolBatch,
         tools: visibleTools,
-        ...(resolveGuidedTools ? { resolveTools: resolveGuidedTools } : {}),
+        resolveTools: resolveGuidedTools,
         modelRound: directionAware.modelRound,
+        beforeModelRound: directionAware.beforeModelRound,
         operationResultReplay: operationResults.replay,
         ...(continuationBudget ? { continuationBudget } : {}),
         resolveOperationResultCallId: toolCalls.journalCallIdForProviderCall,
