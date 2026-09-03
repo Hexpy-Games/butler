@@ -4,6 +4,7 @@ import {
   Switch,
   Typo,
 } from "@/butler-ds";
+import { useId } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { AppModelSummary, SettingsView } from "@/app/types.ts";
 import type { SettingsUpdate } from "./settingsTypes";
@@ -26,6 +27,7 @@ export function BackupModelsSettings({
   onUpdate,
 }: BackupModelsSettingsProps) {
   const copy = appCopy.settings.backupModels;
+  const descriptionId = useId();
   const fallback = draft.model_fallback;
   const candidates = selectableBackupModels(
     models,
@@ -46,12 +48,15 @@ export function BackupModelsSettings({
     <Stack gap="md" data-test-class="settings-backup-models">
       <Typo.Body>{copy.title}</Typo.Body>
       <SettingsField
+        id="model-fallback-enabled"
         data-test-class="settings-backup-models-toggle"
         label={copy.enabled}
         description={copy.enabledDescription}
+        descriptionId={descriptionId}
         control={
           <Switch
             id="model-fallback-enabled"
+            aria-describedby={descriptionId}
             checked={fallback.enabled}
             disabled={saving}
             onCheckedChange={(enabled) =>

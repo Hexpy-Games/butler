@@ -14,8 +14,9 @@ export function HttpFields({
   return (
     <>
       <Field>
-        <FieldLabel>{copy.fields.mcpUrl}</FieldLabel>
+        <FieldLabel htmlFor="mcp-http-url">{copy.fields.mcpUrl}</FieldLabel>
         <Input
+          id="mcp-http-url"
           value={form.url}
           onChange={(event) => onChange({ url: event.target.value })}
         />

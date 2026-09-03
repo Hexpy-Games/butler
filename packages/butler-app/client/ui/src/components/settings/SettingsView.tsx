@@ -70,9 +70,8 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
     developerModeEnabled,
   );
   const sections = sectionGroups.flatMap((group) => group.sections);
-  const title =
-    sections.find((item) => item.id === activeSection)?.label ??
-    settingsCopy.title;
+  const activeDescriptor = sections.find((item) => item.id === activeSection);
+  const title = activeDescriptor?.label ?? settingsCopy.title;
 
   const changeSection = (section: SettingsSectionId) => {
     setLocalMessage(null);
@@ -131,6 +130,7 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
       detailHeader={
         <SettingsDetailHeader
           title={title}
+          description={activeDescriptor?.description}
           secondary={titleSecondary}
           localMessage={localMessage}
         />

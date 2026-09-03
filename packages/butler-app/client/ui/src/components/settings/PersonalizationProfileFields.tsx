@@ -25,8 +25,11 @@ export function PersonalizationProfileFields({
     <>
       {fields.map((field) => (
         <Field key={field.key} data-test-class="settings-field">
-          <FieldLabel>{field.label}</FieldLabel>
+          <FieldLabel htmlFor={`personalization-profile-${field.key}`}>
+            {field.label}
+          </FieldLabel>
           <Input
+            id={`personalization-profile-${field.key}`}
             value={profileDraft[field.key]}
             onChange={(event) =>
               setPersonalizationDraft((current) => ({

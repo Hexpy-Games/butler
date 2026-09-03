@@ -24,77 +24,32 @@ import { visibleSettingsSectionIds } from "./settingsSectionIds";
 function createSettingsSectionMap(
   settingsCopy: SettingsCopy,
 ): Record<SettingsSectionDescriptor["id"], SettingsSectionDescriptor> {
+  const section = (
+    id: SettingsSectionDescriptor["id"],
+    label: string,
+    icon: SettingsSectionDescriptor["icon"],
+  ): SettingsSectionDescriptor => ({
+    id,
+    label,
+    description: settingsCopy.sectionDescriptions[id],
+    icon,
+  });
+
   return {
-    general: {
-      id: "general",
-      label: settingsCopy.sections.general,
-      icon: <SlidersHorizontal />,
-    },
-    models: {
-      id: "models",
-      label: settingsCopy.sections.models,
-      icon: <Sparkles />,
-    },
-    appearance: {
-      id: "appearance",
-      label: settingsCopy.sections.appearance,
-      icon: <Palette />,
-    },
-    server: {
-      id: "server",
-      label: settingsCopy.sections.server,
-      icon: <Server />,
-    },
-    updates: {
-      id: "updates",
-      label: settingsCopy.sections.updates,
-      icon: <RefreshCcw />,
-    },
-    mcp: {
-      id: "mcp",
-      label: settingsCopy.sections.mcp,
-      icon: <Blocks />,
-    },
-    skills: {
-      id: "skills",
-      label: settingsCopy.sections.skills,
-      icon: <Sparkles />,
-    },
-    usage: {
-      id: "usage",
-      label: settingsCopy.sections.usage,
-      icon: <Database />,
-    },
-    logs: {
-      id: "logs",
-      label: settingsCopy.sections.logs,
-      icon: <Terminal />,
-    },
-    personalization: {
-      id: "personalization",
-      label: settingsCopy.sections.personalization,
-      icon: <UserRound />,
-    },
-    privacy: {
-      id: "privacy",
-      label: settingsCopy.sections.privacy,
-      icon: <ShieldCheck />,
-    },
-    system: {
-      id: "system",
-      label: settingsCopy.sections.system,
-      icon: <Activity />,
-    },
-    archives: {
-      id: "archives",
-      label: settingsCopy.sections.archives,
-      icon: <Archive />,
-    },
-    about: {
-      id: "about",
-      label: settingsCopy.sections.about,
-      icon: <BookOpenText />,
-    },
+    general: section("general", settingsCopy.sections.general, <SlidersHorizontal />),
+    models: section("models", settingsCopy.sections.models, <Sparkles />),
+    appearance: section("appearance", settingsCopy.sections.appearance, <Palette />),
+    server: section("server", settingsCopy.sections.server, <Server />),
+    updates: section("updates", settingsCopy.sections.updates, <RefreshCcw />),
+    mcp: section("mcp", settingsCopy.sections.mcp, <Blocks />),
+    skills: section("skills", settingsCopy.sections.skills, <Sparkles />),
+    usage: section("usage", settingsCopy.sections.usage, <Database />),
+    logs: section("logs", settingsCopy.sections.logs, <Terminal />),
+    personalization: section("personalization", settingsCopy.sections.personalization, <UserRound />),
+    privacy: section("privacy", settingsCopy.sections.privacy, <ShieldCheck />),
+    system: section("system", settingsCopy.sections.system, <Activity />),
+    archives: section("archives", settingsCopy.sections.archives, <Archive />),
+    about: section("about", settingsCopy.sections.about, <BookOpenText />),
   };
 }
 
