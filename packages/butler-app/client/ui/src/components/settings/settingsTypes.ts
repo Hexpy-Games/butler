@@ -37,3 +37,14 @@ export interface SettingsSectionDescriptor {
   label: string;
   icon: ReactNode;
 }
+
+export type SettingsSectionGroupId =
+  | "general"
+  | "models-and-extensions"
+  | "app-and-system";
+
+export interface SettingsSectionGroupDescriptor {
+  id: SettingsSectionGroupId;
+  label: string;
+  sections: SettingsSectionDescriptor[];
+}

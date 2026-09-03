@@ -13,17 +13,18 @@ import {
   Terminal,
   UserRound,
 } from "@/butler-ds";
-import type { SettingsCopy, SettingsSectionDescriptor } from "./settingsTypes";
+import type {
+  SettingsCopy,
+  SettingsSectionDescriptor,
+  SettingsSectionGroupDescriptor,
+  SettingsSectionGroupId,
+} from "./settingsTypes";
 import { visibleSettingsSectionIds } from "./settingsSectionIds";
 
-export function createSettingsSections(
+function createSettingsSectionMap(
   settingsCopy: SettingsCopy,
-  developerModeEnabled = false,
-): SettingsSectionDescriptor[] {
-  const sections: Record<
-    SettingsSectionDescriptor["id"],
-    SettingsSectionDescriptor
-  > = {
+): Record<SettingsSectionDescriptor["id"], SettingsSectionDescriptor> {
+  return {
     general: {
       id: "general",
       label: settingsCopy.sections.general,
@@ -95,5 +96,61 @@ export function createSettingsSections(
       icon: <BookOpenText />,
     },
   };
+}
+
+export function createSettingsSections(
+  settingsCopy: SettingsCopy,
+  developerModeEnabled = false,
+): SettingsSectionDescriptor[] {
+  const sections = createSettingsSectionMap(settingsCopy);
   return visibleSettingsSectionIds(developerModeEnabled).map((id) => sections[id]);
+}
+
+type SettingsSectionGroupDefinition = {
+  id: SettingsSectionGroupId;
+  label: keyof SettingsCopy["groups"];
+  sectionIds: SettingsSectionDescriptor["id"][];
+};
+
+const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
+  {
+    id: "general",
+    label: "general",
+    sectionIds: ["general", "appearance", "personalization"],
+  },
+  {
+    id: "models-and-extensions",
+    label: "modelsAndExtensions",
+    sectionIds: ["models", "mcp", "skills"],
+  },
+  {
+    id: "app-and-system",
+    label: "appAndSystem",
+    sectionIds: [
+      "server",
+      "updates",
+      "usage",
+      "logs",
+      "privacy",
+      "system",
+      "archives",
+      "about",
+    ],
+  },
+];
+
+export function createSettingsSectionGroups(
+  settingsCopy: SettingsCopy,
+  developerModeEnabled = false,
+): SettingsSectionGroupDescriptor[] {
+  const sections = createSettingsSectionMap(settingsCopy);
+  const visibleIds = new Set(visibleSettingsSectionIds(developerModeEnabled));
+
+  return SETTINGS_SECTION_GROUPS.map((group) => ({
+    id: group.id,
+    label: settingsCopy.groups[group.label],
+    sections: group.sectionIds
+      .filter((id) => visibleIds.has(id))
+      .map((id) => sections[id]),
+  }));
 }
