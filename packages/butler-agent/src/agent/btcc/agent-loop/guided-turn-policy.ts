@@ -143,7 +143,7 @@ export function authorizedToolDefinitions(
   }
   for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
   const guidedLedgerEffects = new Set<string>(
-    policy.accessMode === "full_access" &&
+    policy.accessMode !== "read_only" &&
       policy.trackingMode === "ledger" &&
       (policy.projectId || turn.context.projectRef)
       ? GUIDED_MANAGED_LEDGER_EFFECT_TOOL_NAMES
@@ -199,7 +199,7 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
     ...(projectLedgerWork
       ? ["project_ledger_list"]
       : []),
-    ...(projectLedgerWork && policy.accessMode === "full_access"
+    ...(projectLedgerWork && policy.accessMode !== "read_only"
       ? [
           "project_ledger_create",
         ]

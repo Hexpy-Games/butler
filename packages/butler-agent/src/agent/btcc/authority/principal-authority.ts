@@ -107,7 +107,8 @@ export function createPrincipalAuthority(
         : undefined;
       const current = repository.findByPublicRef(input.requestRef);
       if (!current || current.ownerSessionId !== input.ownerSessionId ||
-          current.sourceSessionId !== input.sourceSessionId ||
+          (input.sourceSessionId !== undefined &&
+            current.sourceSessionId !== input.sourceSessionId) ||
           !repository.isSourceWorkEligible({
             sourceSessionId: current.sourceSessionId,
             sourceWorkId: current.sourceWorkId,
@@ -127,7 +128,7 @@ export function createPrincipalAuthority(
       const decided = repository.decide({
         requestRef: input.requestRef,
         ownerSessionId: input.ownerSessionId,
-        sourceSessionId: input.sourceSessionId,
+        sourceSessionId: current.sourceSessionId,
         action: input.action,
         ...(alternativeInput ? { alternativeInput } : {}),
         now: new Date().toISOString(),

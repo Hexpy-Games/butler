@@ -251,6 +251,10 @@ function toBtccRequest(
       : "safe_fallback",
     ...(envelope.appTurnContext
       ? { appTurnContext: envelope.appTurnContext } : {}),
+    ...(envelope.routingHints?.authorityRequestRef
+      ? { authorityRequestRef: envelope.routingHints.authorityRequestRef } : {}),
+    ...(envelope.routingHints?.authorityClientMessageId
+      ? { authorityClientMessageId: envelope.routingHints.authorityClientMessageId } : {}),
     ...(envelope.routingHints?.appQueueClaimId
       ? { appQueueClaimId: envelope.routingHints.appQueueClaimId } : {}),
     ...(envelope.signal ? { signal: envelope.signal } : {}),

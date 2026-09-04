@@ -111,11 +111,15 @@ test("ordinary tracked chat admits reviewed Work without keyword or access routi
       "record_work_review",
       "delegate_to_steward",
     ]));
-    if (accessMode !== "full_access") {
+    if (accessMode === "read_only") {
       expect(names).not.toContain("write_file");
       expect(names).not.toContain("edit_file");
     }
-    if (accessMode === "ask_first") expect(names).toContain("run_command");
+    if (accessMode === "ask_first") {
+      expect(names).toContain("run_command");
+      expect(names).toContain("write_file");
+      expect(names).toContain("edit_file");
+    }
     if (accessMode === "read_only") expect(names).not.toContain("run_command");
     if (accessMode === "full_access") {
       expect(names).toContain("write_file");
@@ -307,6 +311,22 @@ test("feature accepts the real writable App project profile set with a reduced s
   expect(names).toContain("tool_call");
   expect(byteLength(JSON.stringify(modelFacingFunctionTools(enabled.providerTools))))
     .toBeLessThan(byteLength(JSON.stringify(modelFacingFunctionTools(legacy.providerTools))));
+});
+
+test("ask-first project surfaces expose effects for the existing authority boundary", () => {
+  const selection = selectGuidedTurnPhasePolicy(turnRecord({
+    accessMode: "ask_first",
+    trackingMode: "ledger",
+    projectRef: "butler",
+  }), ENABLED);
+  const authorized = selection.authorizedTools.map((tool) => tool.name);
+  const visible = selection.providerTools.map((tool) => tool.name);
+
+  expect(authorized).toContain("project_ledger_create");
+  expect(visible).toContain("write_file");
+  expect(visible).toContain("edit_file");
+  expect(visible).toContain("tool_search");
+  expect(visible).toContain("tool_call");
 });
 
 test("feature treats real full-access App chat workspace authority as execution", () => {

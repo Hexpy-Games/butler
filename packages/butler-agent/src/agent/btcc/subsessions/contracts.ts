@@ -329,6 +329,7 @@ export interface SubsessionDelegationStore {
 }
 
 export type SubsessionDelegationService = {
+  authorityOwnerSessionId(input: { sourceSessionId: string }): string;
   activeChildCancellationTarget(childSessionId: string): Promise<{
     relation: SessionRelation;
     child_turn_id: string;

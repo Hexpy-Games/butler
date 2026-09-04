@@ -13,6 +13,7 @@ export function resolveGuidedAuthorityContinuation(input: {
   authority?: PrincipalAuthority;
   requestRef: string;
   ownerSessionId?: string;
+  sourceSessionId?: string;
   sourceTurnId?: string;
   clientMessageId?: string;
   workspacePath?: string;
@@ -27,6 +28,9 @@ export function resolveGuidedAuthorityContinuation(input: {
   if (!input.ownerSessionId) {
     return failedContinuation("authority_context_missing", "The approved command owner session is unavailable.");
   }
+  if (!input.sourceSessionId) {
+    return failedContinuation("authority_context_missing", "The approved command source session is unavailable.");
+  }
   if (!input.sourceTurnId) {
     return failedContinuation("authority_context_missing", "The approved command source Turn is unavailable.");
   }
@@ -39,7 +43,7 @@ export function resolveGuidedAuthorityContinuation(input: {
     execution = input.authority.execution({
       ownerSessionId: input.ownerSessionId,
       requestRef: input.requestRef,
-      sourceSessionId: input.ownerSessionId,
+      sourceSessionId: input.sourceSessionId,
       clientMessageId: input.clientMessageId,
       turnId: input.sourceTurnId,
     });
@@ -51,7 +55,7 @@ export function resolveGuidedAuthorityContinuation(input: {
   }
   if (execution.sourceWorkId !== input.sourceWorkId ||
       execution.sourceTurnId === input.sourceTurnId ||
-      execution.sourceSessionId !== input.ownerSessionId ||
+      execution.sourceSessionId !== input.sourceSessionId ||
       !input.workspacePath || execution.workspacePath !== input.workspacePath) {
     return failedContinuation(
       "authority_request_identity_mismatch",
@@ -122,6 +126,7 @@ export function hasModifyReplanProvenance(input: {
 export function privateModifyContinuationPromptInput(
   authority: PrincipalAuthority | undefined,
   ownerSessionId: string,
+  sourceSessionId: string,
   requestRef: string | undefined,
   turnId: string,
   clientMessageId: string | undefined,
@@ -129,6 +134,7 @@ export function privateModifyContinuationPromptInput(
   const value = loadPrivateModifyContinuationInput({
     authority,
     ownerSessionId,
+    sourceSessionId,
     requestRef,
     turnId,
     clientMessageId,
@@ -139,6 +145,7 @@ export function privateModifyContinuationPromptInput(
 function loadPrivateModifyContinuationInput(input: {
   authority?: PrincipalAuthority;
   ownerSessionId: string;
+  sourceSessionId: string;
   requestRef?: string;
   turnId: string;
   clientMessageId?: string;
@@ -148,7 +155,7 @@ function loadPrivateModifyContinuationInput(input: {
     const execution = input.authority.execution({
       ownerSessionId: input.ownerSessionId,
       requestRef: input.requestRef,
-      sourceSessionId: input.ownerSessionId,
+      sourceSessionId: input.sourceSessionId,
       clientMessageId: input.clientMessageId,
       turnId: input.turnId,
     });

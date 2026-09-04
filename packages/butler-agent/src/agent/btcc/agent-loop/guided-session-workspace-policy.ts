@@ -4,6 +4,8 @@ import { TOOL_CAPABILITY_METADATA } from "../../tools/registry.ts";
 
 const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "run_command",
+  "write_file",
+  "edit_file",
   "list_tool_capabilities",
   "tool_search",
   "tool_describe",
@@ -62,6 +64,8 @@ export function applyGuidedWorkspaceAuthorization(input: {
   }
   if (input.policy.accessMode === "ask_first") {
     input.names.add("run_command");
+    input.names.add("write_file");
+    input.names.add("edit_file");
     input.names.add("read_tool_output_artifact");
   }
   for (const name of input.names) {
@@ -76,7 +80,9 @@ export function guidedWorkspaceVisibleToolNames(
   policy: WorkspacePolicy,
 ): string[] {
   if (policy.accessMode === "read_only") return [];
-  if (policy.accessMode === "ask_first") return ["run_command", "read_tool_output_artifact"];
+  if (policy.accessMode === "ask_first") {
+    return ["run_command", "read_tool_output_artifact", "write_file", "edit_file"];
+  }
   return [
     "run_command",
     "read_tool_output_artifact",

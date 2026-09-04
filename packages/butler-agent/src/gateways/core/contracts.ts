@@ -77,6 +77,10 @@ export interface InboundEnvelope {
     turnAttempt?: number;
     appQueueClaimId?: string;
     canonicalEventId?: string;
+    /** Internal durable authority continuation identity for a child Session. */
+    authorityRequestRef?: string;
+    /** Internal queue identity paired with authorityRequestRef. */
+    authorityClientMessageId?: string;
   };
   executionControls?: TurnExecutionControlsV1;
   appTurnContext?: {

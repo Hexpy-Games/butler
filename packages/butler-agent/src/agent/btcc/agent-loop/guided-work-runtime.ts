@@ -92,6 +92,7 @@ export async function loadGuidedTurnWork(input: {
   authority?: PrincipalAuthority;
   authorityRequestRef?: string;
   authorityClientMessageId?: string;
+  authorityOwnerSessionId?: string;
   workspacePath: string;
 }): Promise<{
   context: DurableWorkContext | null;
@@ -100,7 +101,7 @@ export async function loadGuidedTurnWork(input: {
   const storedAuthority = input.authorityRequestRef && input.authority &&
     input.authorityClientMessageId
     ? input.authority.execution({
-        ownerSessionId: input.scope.sessionId,
+        ownerSessionId: input.authorityOwnerSessionId ?? input.scope.sessionId,
         requestRef: input.authorityRequestRef,
         sourceSessionId: input.scope.sessionId,
         clientMessageId: input.authorityClientMessageId,

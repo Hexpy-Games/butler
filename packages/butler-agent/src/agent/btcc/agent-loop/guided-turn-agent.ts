@@ -81,6 +81,15 @@ export function createProductionGuidedTurnAgent(
         turn.turnId.startsWith("steward-worker-result-");
       const terminalParentSynthesis = Boolean(subsessionResultEvidence) && !workerResultIntegration;
       const askFirstTurn = policy.accessMode === "ask_first";
+      const authorityOwnerSessionId = askFirstTurn &&
+          (policy.role === "steward" || policy.role === "worker")
+        ? input.subsessionDelegation?.authorityOwnerSessionId({
+            sourceSessionId: turn.sessionId,
+          })
+        : turn.sessionId;
+      if (!authorityOwnerSessionId) {
+        throw new Error("subsession_authority_owner_missing");
+      }
       const progressCapture = createGuidedOperationalProgressCapture(
         askFirstTurn && !planMode
           ? createGuidedAskFirstProgress(progress)
@@ -146,6 +155,7 @@ export function createProductionGuidedTurnAgent(
         authority,
         authorityRequestRef: turn.context.authorityRequestRef,
         authorityClientMessageId: turn.context.authorityClientMessageId,
+        authorityOwnerSessionId,
         workspacePath: workspaceReference.get(),
       });
       const operationResults = createGuidedOperationResultRuntime({
@@ -215,7 +225,7 @@ export function createProductionGuidedTurnAgent(
           phasePolicy.exactResultReplay.exactReadCapability,
         ),
         hiddenNativeToolNames: hiddenNativeToolNamesForGuidedTurn(
-          policy.accessMode === "full_access" &&
+          policy.accessMode !== "read_only" &&
             policy.trackingMode === "ledger" &&
             Boolean(policy.projectId),
         ),
@@ -226,7 +236,8 @@ export function createProductionGuidedTurnAgent(
           durableWork: input.durableWork,
           workScope,
           effectService,
-          authority: authority!, ownerSessionId: turn.sessionId, sourceTurnId: turn.turnId,
+          authority: authority!, ownerSessionId: authorityOwnerSessionId,
+          sourceSessionId: turn.sessionId, sourceTurnId: turn.turnId,
           authorityClientMessageId: turn.context.authorityClientMessageId,
           modelRef: `${turn.modelSelection.provider}/${turn.modelSelection.model}`, reasoningEffort: turn.modelSelection.reasoningEffort,
           workspacePath: workspaceReference.get(),
@@ -278,7 +289,7 @@ export function createProductionGuidedTurnAgent(
           turn.sessionId,
           turn.context.authorityClientMessageId,
         ),
-        ownerSessionId: turn.sessionId,
+        ownerSessionId: authorityOwnerSessionId,
         turnId: turn.turnId,
         ...(turn.context.authorityRequestRef
           ? { requestRef: turn.context.authorityRequestRef }
@@ -332,7 +343,8 @@ export function createProductionGuidedTurnAgent(
             ? { subsessionResultEvidence: subsessionResultEvidence.synthesisEvidence }
             : {}),
           ...privateModifyContinuationPromptInput(
-            authority, turn.sessionId, turn.context.authorityRequestRef, turn.turnId,
+            authority, authorityOwnerSessionId, turn.sessionId,
+            turn.context.authorityRequestRef, turn.turnId,
             turn.context.authorityClientMessageId,
           ),
         },

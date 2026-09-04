@@ -277,6 +277,10 @@ export type BtccTurnRequest = {
   executionControls?: BtccTurnExecutionControls;
   emptyResponsePolicy?: BtccEmptyResponsePolicy;
   appTurnContext?: InboundEnvelope["appTurnContext"];
+  /** Internal authority identity for a fresh descendant continuation Turn. */
+  authorityRequestRef?: string;
+  /** Queue identity paired with authorityRequestRef. */
+  authorityClientMessageId?: string;
   appQueueClaimId?: string;
   signal?: AbortSignal;
 };

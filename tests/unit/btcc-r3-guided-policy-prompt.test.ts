@@ -655,7 +655,7 @@ test("R3 Conception guidance actively selects associative recall and exposes cro
     authorizedToolDefinitions(askFirst, {}), guidedPolicy(askFirst),
   ).map((tool) => tool.name);
   expect(askFirstVisible).toContain("delegate_to_steward");
-  expect(askFirstVisible).not.toContain("write_file");
+  expect(askFirstVisible).toContain("write_file");
 });
 
 test("guided read-only policy authorizes and visibly exposes list_files", () => {

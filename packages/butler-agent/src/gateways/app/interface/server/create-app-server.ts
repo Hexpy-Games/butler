@@ -143,7 +143,12 @@ function createComposedAppServer(
     },
   });
 
-  void retryDecidedAuthorityInputs({ authority, store }).catch(() => undefined);
+  void retryDecidedAuthorityInputs({
+    authority,
+    store,
+    butlerData,
+    stewardObserver,
+  }).catch(() => undefined);
 
   return {
     url: server.url.toString(),
