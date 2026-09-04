@@ -170,8 +170,12 @@ export interface AppCopy {
     contextDetails: string;
     approval: {
       title: string;
+      titleEffect: string;
       categoryCommand: string;
+      categoryEffect: string;
+      effectReason: string;
       commandSummary: (executable: string, count: number) => string;
+      effectSummary: (capability: string) => string;
       allowOnce: string;
       deny: string;
       modify: string;
@@ -970,9 +974,16 @@ const koKrCopy: AppCopy = {
     contextDetails: "컨텍스트 세부정보 표시",
     approval: {
       title: "승인 대기 중인 명령",
+      titleEffect: "변경 승인 대기 중",
       categoryCommand: "명령",
+      categoryEffect: "작업 승인",
+      effectReason: "검토한 작업을 이번 한 번 실행합니다.",
       commandSummary: (executable, count) =>
         count <= 1 ? executable : `${executable} · 총 ${count}개`,
+      effectSummary: (capability) =>
+        capability === "write_file" || capability === "edit_file"
+          ? "파일 변경"
+          : "작업 실행",
       allowOnce: "이번만 허용",
       deny: "거부",
       modify: "수정 또는 다른 방법 제안",
@@ -1861,9 +1872,16 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     contextDetails: "Show context details",
     approval: {
       title: "Command awaiting approval",
+      titleEffect: "Change awaiting approval",
       categoryCommand: "Command",
+      categoryEffect: "Operation approval",
+      effectReason: "Run this reviewed operation once.",
       commandSummary: (executable, count) =>
         count <= 1 ? executable : `${executable} · ${count} total`,
+      effectSummary: (capability) =>
+        capability === "write_file" || capability === "edit_file"
+          ? "File change"
+          : "Run operation",
       allowOnce: "Allow once",
       deny: "Deny",
       modify: "Modify or suggest another approach",

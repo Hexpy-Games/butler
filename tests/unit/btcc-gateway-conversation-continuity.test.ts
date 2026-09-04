@@ -177,7 +177,7 @@ test("typed resume re-enters the exact admitted BTCC request identity", async ()
   expect(result.handledBy).toBe("btcc/turn-resume");
 });
 
-test("Steward delivery without completed Work is reported as failed", async () => {
+test("Steward public reply without an accepted Work result stays nonterminal", async () => {
   const completed: Array<{ status?: string; summary?: string }> = [];
   const subsessionDelegation = {
     activeParentDelegations: async () => [],
@@ -213,19 +213,62 @@ test("Steward delivery without completed Work is reported as failed", async () =
     ),
   });
 
-  expect(completed).toHaveLength(1);
-  expect(completed[0]).toMatchObject({
-    status: "failed",
-    summary: "내부 실행 오류로 작업을 완료하지 못했습니다.",
+  expect(completed).toHaveLength(0);
+});
+
+test("Gateway preserves a common accepted failure without reclassifying it", async () => {
+  const completed: Array<{ status?: string; summary?: string }> = [];
+  const handlers = createBtccGatewayHandlers({
+    btcc: {
+      runTurn: async () => ({
+        kind: "delivered",
+        turnId: "steward-accepted-failure",
+        messageId: "steward-accepted-failure-message",
+        content: "The provider rejected the request.",
+        acceptedWorkResult: { status: "failed" },
+      }),
+      stopTurn: async ({ turnId }) => ({ kind: "cancelled", turnId }),
+    },
+    subsessionDelegation: {
+      activeParentDelegations: async () => [],
+      completeStewardResult: async (input: { status?: string; summary?: string }) => {
+        completed.push(input);
+        return undefined as never;
+      },
+    } as unknown as SubsessionDelegationService,
   });
+
+  await handlers.steward!({
+    route: {
+      sessionId: "steward/accepted-failure",
+      role: "steward",
+      reason: "steward-hint",
+      workspacePath: process.cwd(),
+    },
+    envelope: envelope(
+      "steward-accepted-failure",
+      "steward-accepted-failure-input",
+      "Complete the delegated task.",
+    ),
+  });
+
+  expect(completed).toEqual([
+    expect.objectContaining({
+      status: "failed",
+      summary: "The provider rejected the request.",
+    }),
+  ]);
 });
 
 test("explicit Steward wait is non-terminal even when the Worker has already returned", async () => {
   let reports = 0;
   const handlers = createBtccGatewayHandlers({
     btcc: {
-      runTurn: async () => ({ kind: "already_delivered", turnId: "steward-wait",
-        messageId: "wait-message", content: "", executionOutcome: "waiting_for_worker" }),
+      runTurn: async () => ({
+        kind: "suspended",
+        turnId: "steward-wait",
+        reason: "waiting_for_worker",
+      }),
       stopTurn: async ({ turnId }) => ({ kind: "cancelled", turnId }),
     },
     subsessionDelegation: {
@@ -238,7 +281,11 @@ test("explicit Steward wait is non-terminal even when the Worker has already ret
     envelope: envelope("steward-wait", "steward-wait-input", "Wait for the Worker"),
   });
   expect(reports).toBe(0);
-  expect(result.metadata).toMatchObject({ text: "", executionOutcome: "waiting_for_worker" });
+  expect(result.metadata).toMatchObject({
+    kind: "turn_suspended",
+    suspension: "waiting_for_worker",
+    text: "",
+  });
 });
 
 test("Worker without a completed Micro Work is reported to its Steward as blocked", async () => {
@@ -253,6 +300,7 @@ test("Worker without a completed Micro Work is reported to its Steward as blocke
         messageId: "worker-message-blocked",
         content: "Worker repeated the same non-progress pattern without changing workspace output.",
         workStatus: "blocked",
+        acceptedWorkResult: { status: "blocked" },
       }),
       stopTurn: async ({ turnId }) => ({ kind: "cancelled", turnId }),
     },
@@ -286,7 +334,6 @@ test("Worker without a completed Micro Work is reported to its Steward as blocke
     resultId: expect.any(String),
     summary: "Worker repeated the same non-progress pattern without changing workspace output.",
     status: "blocked",
-    code: "worker_work_incomplete",
     changedArtifacts: [],
     changedFiles: [],
   }]);
@@ -306,6 +353,7 @@ test("Worker terminal findings reach its Steward without truncation", async () =
         messageId: "worker-message-full-report",
         content: report,
         workStatus: "completed",
+        acceptedWorkResult: { status: "success" },
       }),
       stopTurn: async ({ turnId }) => ({ kind: "cancelled", turnId }),
     },
@@ -355,6 +403,7 @@ test("Steward delivery preserves its complete factual report for Butler synthesi
         messageId: "steward-message-report",
         content: report,
         workStatus: "completed",
+        acceptedWorkResult: { status: "success" },
       }),
       stopTurn: async ({ turnId }) => ({ kind: "cancelled", turnId }),
     },

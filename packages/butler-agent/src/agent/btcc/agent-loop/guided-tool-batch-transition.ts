@@ -19,11 +19,11 @@ export function createGuidedToolBatchTransition(input: {
       Reflect.get(result.output, "status") === "waiting")) return "wait";
     // A queued assignment permits another management round for additional
     // bounded assignments. Finished management yields to existing result delivery.
-    const assignedWorker = batch.toolResults.some((result) =>
-      result.name === "delegate_to_worker" && result.ok && result.output &&
-      typeof result.output === "object" && Reflect.get(result.output, "status") === "queued",
+    const handledWorkerManagement = batch.toolResults.some((result) =>
+      result.name === "delegate_to_worker" || result.name === "steer_worker",
     );
-    if (!assignedWorker && await input.shouldWaitForWorker()) return "wait";
+    if (handledWorkerManagement) return "continue";
+    if (await input.shouldWaitForWorker()) return "wait";
     if (!hasSuccessfulDisposition(batch.toolCalls, batch.toolResults)) {
       return "continue";
     }

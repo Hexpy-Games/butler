@@ -708,7 +708,7 @@ function normalizeAuthorityApprovalCard(
   if (typeof record.request_ref !== "string" || !record.request_ref.trim()) {
     return null;
   }
-  if (record.category !== "command") return null;
+  if (record.category !== "command" && record.category !== "reviewed_effect") return null;
   if (typeof record.reason !== "string" || !record.reason.trim()) return null;
   if (typeof record.executable !== "string" || !record.executable.trim()) {
     return null;
@@ -722,7 +722,7 @@ function normalizeAuthorityApprovalCard(
   }
   return {
     requestRef: record.request_ref,
-    category: "command",
+    category: record.category,
     reason: record.reason,
     executable: record.executable,
     commandCount: record.command_count,

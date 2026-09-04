@@ -1,6 +1,7 @@
 import type { DurableWorkService } from "../work/index.ts";
 import type { BtccFinalArtifact } from "../contracts.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
+import type { InboundEnvelope } from "../../../gateways/core/contracts.ts";
 import type { WorkerProfile } from "../../../gateways/app/interface/protocol/settings-contract.ts";
 import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 import type {
@@ -207,6 +208,12 @@ export type CreatedDelegation = {
   child_workspace_path: string;
 };
 
+export type SubsessionDispatchIntent = {
+  childBinding: Parameters<SessionBindingStore["upsert"]>[0];
+  envelope: InboundEnvelope;
+  metadata: Record<string, unknown>;
+};
+
 export type StewardDirection = {
   instruction_id: string;
   relation_id: string;
@@ -247,7 +254,16 @@ export interface SubsessionDelegationStore {
     packet: DelegationPacket;
     childTurnId: string;
     rootWorkId: string;
+    /** Required for new delegations; optional only for legacy/test callers. */
+    dispatchIntent?: SubsessionDispatchIntent;
   }): void;
+  createWorkerAssignment?(input: {
+    relation: SessionRelation;
+    packet: DelegationPacket;
+    childTurnId: string;
+    rootWorkId: string;
+    dispatchIntent: SubsessionDispatchIntent;
+  }): SessionRelation;
   relationById(relationId: string): SessionRelation | null;
   relationByDelegationId(delegationId: string): SessionRelation | null;
   relationsByParentSessionId(parentSessionId: string): SessionRelation[];
@@ -256,6 +272,12 @@ export interface SubsessionDelegationStore {
   rootWorkIdByRelationId(relationId: string): string | null;
   taskIdByRelationId(relationId: string): string | null;
   childTurnIdByRelationId(relationId: string): string | null;
+  dispatchIntentByRelationId?(relationId: string): SubsessionDispatchIntent | null;
+  pendingDispatchIntents?(): Array<{
+    relationId: string;
+    intent: SubsessionDispatchIntent;
+  }>;
+  markDispatchEnqueued?(relationId: string): void;
   createDirection(direction: CreateStewardDirectionInput): StewardDirection;
   consumePendingDirection(input: {
     relationId: string;

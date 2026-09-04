@@ -155,6 +155,7 @@ test("production composition initializes and writes only the exact differing Led
     modelRound: scriptedModelRound([
       toolResponse("project-plan", "replace_work_plan", {
         objective: "Prove exact Project Work production selection",
+        execution_mode: "direct",
         actions: [{
           action_key: "verify_selection",
           description: "Verify the selected Project Work adapter",

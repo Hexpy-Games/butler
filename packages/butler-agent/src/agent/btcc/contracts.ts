@@ -159,6 +159,7 @@ export type BtccTurnOutcome = (
       messageId: string;
       content: string;
       workStatus?: "completed" | "blocked";
+      acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
       executionOutcome?: "waiting_for_worker";
       artifacts?: BtccFinalArtifact[];
       changedFiles?: ChangedFileDetail[];
@@ -170,6 +171,11 @@ export type BtccTurnOutcome = (
       };
     }
   | { kind: "cancelled"; turnId: string }
+  | {
+      kind: "suspended";
+      turnId: string;
+      reason: "authority_pending" | "waiting_for_worker";
+    }
   | { kind: "already_cancelled"; turnId: string }
   | { kind: "already_finalizing"; turnId: string }
   | { kind: "fenced_pending_persistence"; turnId: string }

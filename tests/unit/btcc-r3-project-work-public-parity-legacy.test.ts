@@ -34,6 +34,7 @@ test("a real Session B1 source imports into Project authority once, then public 
         workId = workIdFrom(request, "start_work");
         return tool("legacy-plan", "replace_work_plan", {
           objective: "Import this real Session Work",
+          execution_mode: "direct",
           actions: [{ action_key: "publish", dependency_keys: [] }],
           checks: ["One canonical Project authority remains"],
         });

@@ -3,19 +3,20 @@ import type { GuidedToolJournal } from "../ports/index.ts";
 import { RoundToolSurfaceError } from "../ports/model-round.ts";
 import type { DurableWorkService, WorkTurnScope } from "../work/index.ts";
 import type { DurableWorkView } from "../work/index.ts";
+import { isDurableWorkTool } from "../work/index.ts";
 import type {
   DelegationPacket,
   SubsessionDelegationService,
 } from "../subsessions/index.ts";
 import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
 import type { ButlerToolExecutor } from "../../tools/butler-tools.ts";
+import { normalizeGuidedToolCall } from "../../tools/tool-call-normalization.ts";
 import type { BtccAgentLoopInput, BtccAgentLoopToolDefinition } from "./contracts.ts";
 import { projectDurableWorkToolSurface } from "./durable-work-tool-surface.ts";
 import {
   createRoundToolSurfaceSnapshot,
   type BtccRoundToolSurfaceSnapshot,
 } from "./round-tool-surface.ts";
-const DISPOSITION_TOOL = "record_work_disposition";
 const WORKER_MANAGEMENT_TOOLS = new Set([
   "delegate_to_worker",
   "steer_worker",
@@ -28,17 +29,11 @@ const ACTIVE_DELEGATION_TOOLS = new Set([
   "steer_worker",
   "wait_for_worker",
 ]);
-const ACTIVE_RELATION_CONTROL_TOOLS = new Set([
-  "steer_steward",
-  "cancel_steward",
-  "steer_worker",
-]);
 const EFFECT_FREE_TOOL_NAMES = new Set(
   BUTLER_TOOLS
     .filter((tool) => tool.effectBoundary === "none")
     .map((tool) => tool.name),
 );
-const MAX_EFFECT_RECORDS = 50;
 
 export function createGuidedRoundToolSurfaceResolver(input: {
   turnId: string;
@@ -72,73 +67,22 @@ export function createGuidedRoundToolSurfaceResolver(input: {
         })
       : [];
     if (await input.shouldWaitForWorker?.()) {
-      return createRoundToolSurfaceSnapshot(projectRelationSelectors(input.tools.filter((tool) =>
-        WORKER_MANAGEMENT_TOOLS.has(tool.name),
-      ), activeDelegations));
+      return createRoundToolSurfaceSnapshot(input.tools);
     }
     const { bound, work } = await currentWork(input);
     const activeDelegationAdmission = activeDelegations.length > 0 &&
       (!bound && activeDelegations.some((delegation) =>
         sameCurrentReviewedWork(work, delegation.parent_work_ref)));
     input.onActiveDelegationAdmission?.(activeDelegationAdmission);
-    const dispositionReady = activeDelegationAdmission
-      ? false
-      : await canExposeDisposition(input, work);
-    const delegationReady = canExposeDelegation(bound);
-    const eligibleTools = input.tools.filter((tool) => {
-      if (activeDelegationAdmission) {
-        return isActiveDelegationAdmissionTool(tool.name);
-      }
-      if (ACTIVE_RELATION_CONTROL_TOOLS.has(tool.name) &&
-        activeDelegations.length === 0) return false;
-      if (bound && (tool.name === "start_work" || tool.name === "continue_work")) {
-        return false;
-      }
-      if (delegationReady && input.forcedDelegationTool) {
-        return tool.name === input.forcedDelegationTool;
-      }
-      if (tool.name === DISPOSITION_TOOL) {
-        return dispositionReady;
-      }
-      if (tool.name === input.forcedDelegationTool) return delegationReady;
-      return true;
-    });
-    const tools = projectDurableWorkToolSurface(eligibleTools, work);
+    const tools = projectDurableWorkToolSurface(input.tools, work);
     const names = new Set(tools.map((tool) => tool.name));
-    const missingRequired = delegationReady || activeDelegationAdmission
-      ? undefined
-      : [...input.requiredToolNames]
+    const missingRequired = [...input.requiredToolNames]
       .find((name) => input.tools.some((tool) => tool.name === name) && !names.has(name));
     if (missingRequired) {
       throw new RoundToolSurfaceError("round_tool_surface_required_tool_missing");
     }
-    return createRoundToolSurfaceSnapshot(projectRelationSelectors(tools, activeDelegations));
+    return createRoundToolSurfaceSnapshot(tools);
   };
-}
-
-function projectRelationSelectors(
-  tools: readonly BtccAgentLoopToolDefinition[],
-  active: Awaited<ReturnType<SubsessionDelegationService["activeParentDelegations"]>>,
-): BtccAgentLoopToolDefinition[] {
-  return tools.map((tool) => {
-    if (!ACTIVE_RELATION_CONTROL_TOOLS.has(tool.name) || active.length === 0) return tool;
-    const properties = { ...tool.parameters.properties as Record<string, unknown> };
-    delete properties.safe_title;
-    delete properties.relation_id;
-    const required = (tool.parameters.required as string[] | undefined ?? [])
-      .filter((name) => name !== "safe_title" && name !== "relation_id");
-    if (active.length > 1) {
-      properties.relation_id = { type: "string", enum: active.map(({ relation }) => relation.relation_id) };
-      required.push("relation_id");
-    }
-    return {
-      ...tool,
-      description: `${tool.description} ${active.length === 1
-        ? "Runtime selects the sole active owned delegation. Omit selectors; do not invent a Work or relation ID."
-        : `Select an exact relation_id from these active owned delegations: ${JSON.stringify(active.map(({ relation }) => ({ relation_id: relation.relation_id, title: relation.safe_title })))}.`}`,
-      parameters: { ...tool.parameters, properties, required },
-    };
-  });
 }
 
 function isQueuedDelegationResult(result: unknown): boolean {
@@ -171,6 +115,13 @@ function isActiveDelegationAdmissionTool(name: string): boolean {
 
 export function createActiveDelegationAdmissionGuard(
   shouldWaitForWorker?: () => Promise<boolean>,
+  work?: {
+    role: "butler" | "steward" | "worker";
+    turnId: string;
+    durableWork: DurableWorkService;
+    workScope: WorkTurnScope;
+    workerResultIntegration?: boolean;
+  },
 ): {
   observe(active: boolean): void;
   execute(execute: ButlerToolExecutor): BtccAgentLoopInput["executeTool"];
@@ -182,9 +133,11 @@ export function createActiveDelegationAdmissionGuard(
     },
     execute(execute) {
       return async (call) => {
+        const effective = normalizeGuidedToolCall({ toolName: call.name, args: call.arguments });
         // Recheck immediately before execution: an earlier call in this same
         // response may have assigned a Worker after the round surface was built.
-        if (!WORKER_MANAGEMENT_TOOLS.has(call.name) && await shouldWaitForWorker?.()) {
+        const workerOutstanding = await shouldWaitForWorker?.() ?? false;
+        if (!WORKER_MANAGEMENT_TOOLS.has(effective.name) && workerOutstanding) {
           return {
             ok: false,
             error: {
@@ -193,7 +146,7 @@ export function createActiveDelegationAdmissionGuard(
             },
           };
         }
-        if (active && !isActiveDelegationAdmissionTool(call.name)) {
+        if (active && !isActiveDelegationAdmissionTool(effective.name)) {
           return {
             ok: false,
             error: {
@@ -201,6 +154,20 @@ export function createActiveDelegationAdmissionGuard(
               message: "This fresh Turn cannot continue, mutate, execute, or re-delegate the active Steward-owned Work.",
             },
           };
+        }
+        const current = work?.role === "steward"
+          ? (await currentWork(work)).work
+          : undefined;
+        const executionMode = current?.currentPlan?.executionMode;
+        const executingPlan = current?.currentStage === "execution";
+        if (executingPlan && effective.name === "delegate_to_worker" &&
+          executionMode !== "workers" && !workerOutstanding) {
+          return unavailableForExecutionMode(executionMode);
+        }
+        if (executingPlan && isPlanExecutionCall(effective.name) &&
+          executionMode !== "direct" &&
+          !(work?.workerResultIntegration && isIntegrationReadOrValidation(effective))) {
+          return unavailableForExecutionMode(executionMode);
         }
         return await execute({
           name: call.name,
@@ -214,29 +181,23 @@ export function createActiveDelegationAdmissionGuard(
   };
 }
 
-function canExposeDelegation(work: DurableWorkView | undefined): boolean {
-  const plan = work?.currentPlan;
-  const review = work?.latestPlanReview;
-  return Boolean(
-    work && (work.status === "open" || work.status === "blocked") &&
-    plan && review?.subject === "plan" &&
-    review.verdict === "accept" &&
-    review.boundPlanRevisionId === plan.planRevisionId,
-  );
+function isPlanExecutionCall(name: string): boolean {
+  return !WORKER_MANAGEMENT_TOOLS.has(name) && !isDurableWorkTool(name);
 }
 
-async function canExposeDisposition(input: {
-  effectJournal: Pick<GuidedEffectJournal, "listForWork">;
-}, work: DurableWorkView | undefined): Promise<boolean> {
-  if (!work || (work.status !== "open" && work.status !== "blocked") ||
-      (work.effectBlockers?.length ?? 0) > 0) return false;
-  const effects = await input.effectJournal.listForWork(
-    work.workId,
-    MAX_EFFECT_RECORDS,
-  );
-  return effects.length < MAX_EFFECT_RECORDS && effects.every((effect) =>
-    effect.status === "applied" || effect.status === "failed",
-  );
+function isIntegrationReadOrValidation(call: { name: string; args: Record<string, unknown> }): boolean {
+  return EFFECT_FREE_TOOL_NAMES.has(call.name) ||
+    (call.name === "run_command" &&
+      (call.args.state_effect === "read_only" || call.args.state_effect === "validation"));
+}
+
+function unavailableForExecutionMode(mode: "direct" | "workers" | undefined) {
+  const message = mode === "workers"
+    ? "The reviewed Plan assigns execution to Workers. Use Worker management for execution; Steward retains integration, review, validation, and reporting."
+    : mode === "direct"
+      ? "The reviewed Plan assigns execution directly to Steward; Worker assignment is unavailable for this Plan."
+      : "The current Plan has no reviewed execution ownership. Replace and review the Plan with direct or workers before new owned execution.";
+  return { ok: false, error: { code: "tool_unavailable", message } };
 }
 
 async function currentWork(input: {
@@ -248,7 +209,9 @@ async function currentWork(input: {
   work: DurableWorkView | undefined;
 }> {
   const bound = await input.durableWork.boundWorkForTurn(input.turnId);
-  const context = bound ? null : await input.durableWork.loadContext(input.workScope);
+  const context = bound
+    ? null
+    : await input.durableWork.loadContext(input.workScope);
   return {
     bound: bound ?? undefined,
     work: bound ?? context?.work ?? undefined,

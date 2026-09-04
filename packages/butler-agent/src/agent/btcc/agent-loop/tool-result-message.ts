@@ -6,6 +6,10 @@ import {
 } from "../../tools/tool-result-media.ts";
 import type { ToolResultModelPreviewContext } from
   "../../tools/tool-result-model-preview.ts";
+import type { ToolResultExactReadReference } from
+  "../../tools/tool-result-serialization.ts";
+import type { OperationResultReference } from
+  "../operation-result-replay/index.ts";
 import type {
   BtccAgentLoopMessage,
   BtccAgentLoopToolResult,
@@ -25,6 +29,8 @@ export function toolResultToMessage(input: {
   result: BtccAgentLoopToolResult;
   modelPreviewContext: ToolResultModelPreviewContext;
   operationResultCallId?: string;
+  operationResultReference?: OperationResultReference;
+  exactReadReference?: ToolResultExactReadReference;
 }): BtccAgentLoopMessage {
   const imageAttachments = extractAgentLoopImageAttachments(
     input.result.output,
@@ -47,11 +53,17 @@ export function toolResultToMessage(input: {
     content: serializeToolResultPayloadForProvider(payload, {
       toolName: input.result.name,
       context: input.modelPreviewContext,
+      ...(input.exactReadReference
+        ? { exactReadReference: input.exactReadReference }
+        : {}),
     }),
     requestSegmentKind: toolResultSegmentKind(input.result),
     ...(imageAttachments.length > 0 ? { imageAttachments } : {}),
     ...(input.operationResultCallId
       ? { operationResultCallId: input.operationResultCallId }
+      : {}),
+    ...(input.operationResultReference
+      ? { operationResultReference: input.operationResultReference }
       : {}),
   };
 }

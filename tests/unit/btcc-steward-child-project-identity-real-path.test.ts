@@ -228,6 +228,7 @@ function delegationRounds(): ModelRoundPort & {
       })] };
       if (parentRound === 2) return { toolCalls: [toolCall("plan", "replace_work_plan", {
         objective: "Verify exact child project identity inheritance.",
+        execution_mode: "direct",
         governing_refs: [],
         actions: [{
           action_key: "delegate-identity-check",

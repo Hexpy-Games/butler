@@ -90,7 +90,10 @@ test("Worker wait releases the dispatcher silently so the same session can resum
         const result = handledResult(sessionId, butlerData, "continued result");
         return envelope.routingHints?.turnId === "wait-turn"
           ? { ...result, handlerResult: { ...result.handlerResult, metadata: {
-            ...result.handlerResult.metadata, text: "", executionOutcome: "waiting_for_worker",
+            ...result.handlerResult.metadata,
+            kind: "turn_suspended",
+            suspension: "waiting_for_worker",
+            text: "",
             artifacts: [{ id: "prior-artifact", kind: "file", path: "prior.txt" }],
           } } }
           : result;

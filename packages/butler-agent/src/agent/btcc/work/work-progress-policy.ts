@@ -223,3 +223,22 @@ export function unresolvedWorkActionKeys(
     .filter((action) => action.status !== "done" && action.status !== "skipped")
     .map((action) => action.actionKey);
 }
+
+export function executableWorkActionKeys(
+  work: Pick<DurableWorkView, "currentPlan" | "actionProgress">,
+): string[] {
+  if (!work.currentPlan) return [];
+  const progressByKey = new Map(
+    work.actionProgress.map((progress) => [progress.actionKey, progress.status]),
+  );
+  return work.currentPlan.actions
+    .filter((action) => {
+      const status = progressByKey.get(action.actionKey) ?? "pending";
+      if (status === "done" || status === "skipped" || status === "blocked") return false;
+      return action.dependencyKeys.every((dependencyKey) => {
+        const dependencyStatus = progressByKey.get(dependencyKey);
+        return dependencyStatus === "done" || dependencyStatus === "skipped";
+      });
+    })
+    .map((action) => action.actionKey);
+}

@@ -26,6 +26,8 @@ export type DurableWorkPlanAction = {
   };
 };
 
+export type DurableWorkExecutionMode = "direct" | "workers";
+
 export type DurableWorkActionStatus =
   | "pending"
   | "active"
@@ -46,6 +48,8 @@ export type DurableWorkPlan = {
   revision: number;
   objective: string;
   governingRefs?: string[];
+  /** Required on new Plans; absent only on records created before execution ownership was explicit. */
+  executionMode?: DurableWorkExecutionMode;
   actions: DurableWorkPlanAction[];
   checks: string[];
   originTurnId: string;
@@ -54,6 +58,8 @@ export type DurableWorkPlan = {
 
 export type DurableWorkToolResultRef = {
   resultRef: string;
+  /** Exact-reader revision; absent only on legacy records whose ordered position is authoritative. */
+  revision?: number;
   toolCallId: string;
   toolName: string;
   status: "completed" | "failed" | "cancelled";
@@ -165,6 +171,8 @@ export type DurableWorkContext = {
     content: string;
   };
   resultFacts: Array<{
+    /** Durable join key; absent only on legacy context projections. */
+    resultRef?: string;
     toolName: string;
     status: "completed" | "failed" | "cancelled";
     resultJson?: unknown;
@@ -179,6 +187,8 @@ export type ReplaceWorkPlanInput = WorkTurnScope & {
   backfillToolCallIds?: string[];
   objective: string;
   governingRefs?: string[];
+  /** Ordinary model calls always provide this; optional only for legacy programmatic callers. */
+  executionMode?: DurableWorkExecutionMode;
   actions: DurableWorkPlanAction[];
   checks: string[];
 };

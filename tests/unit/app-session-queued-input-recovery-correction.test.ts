@@ -3446,6 +3446,7 @@ test("production App replay does not execute a reviewed workspace effect twice",
                 arguments: {
                   start_new: true,
                   objective: "Create the reviewed effect file",
+                  execution_mode: "direct",
                   actions: [{
                     action_key: "write-effect-file",
                     description: "Write the requested effect file",
@@ -3459,6 +3460,7 @@ test("production App replay does not execute a reviewed workspace effect twice",
                 rawArguments: JSON.stringify({
                   start_new: true,
                   objective: "Create the reviewed effect file",
+                  execution_mode: "direct",
                   actions: [{
                     action_key: "write-effect-file",
                     description: "Write the requested effect file",

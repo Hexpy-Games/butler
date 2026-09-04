@@ -85,6 +85,7 @@ export function readRecoverableStewardTurns(
       ON claim.claim_id = checkpoint.active_claim_id
     LEFT JOIN btcc_runtime_owners AS owner ON owner.owner_id = claim.owner_id
     WHERE turn.semantic_state = 'admitted'
+      AND turn.suspension_reason IS NULL
       AND NOT EXISTS (
         SELECT 1 FROM btcc_turns AS newer
         WHERE newer.session_id = turn.session_id AND newer.rowid > turn.rowid

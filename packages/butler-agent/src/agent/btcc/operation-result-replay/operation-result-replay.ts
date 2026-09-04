@@ -7,6 +7,8 @@ import type {
 } from "../ports/model-round.ts";
 import { OPERATION_RESULT_EXACT_READ_MAX_BYTES } from
   "../../tools/monitoring/read_operation_results/index.ts";
+import type { ToolResultExactReadReference } from
+  "../../tools/tool-result-serialization.ts";
 import type {
   GuidedOperationResultReader,
   GuidedToolJournal,
@@ -16,6 +18,11 @@ import type {
 export const OPERATION_RESULT_REFERENCE_SCHEMA =
   "butler.operation-result-reference.v1" as const;
 const TRUE_FLAG_VALUES = new Set(["1", "true", "on", "yes"]);
+const BOUNDED_RESULT_READER_TOOLS = new Set([
+  "read_operation_results",
+  "read_tool_output_artifact",
+  "read_tool_evidence_artifact",
+]);
 
 export function operationResultReplayEnabled(
   env: Record<string, string | undefined> = process.env,
@@ -36,6 +43,8 @@ export type OperationResultReplay = {
   accepted(roundId: string, response: ModelRoundResult): void;
   failed(roundId: string): void;
   referenceFor(record: GuidedToolJournalRecord): OperationResultReference;
+  referenceForCall(callId: string): OperationResultReference | null;
+  previewReferenceForCall(callId: string): ToolResultExactReadReference | null;
   readExact(input: ExactReadArguments): unknown;
 };
 
@@ -166,6 +175,29 @@ export function createOperationResultReplay(input: {
       input.journal.releaseResultDeliveries({ turnId: input.turnId, roundId });
     },
     referenceFor,
+    referenceForCall(callId) {
+      const record = input.journal.findForTurn(input.turnId, callId);
+      return record && hasDurableReplayResult(record) ? referenceFor(record) : null;
+    },
+    previewReferenceForCall(callId) {
+      if (!input.exactReadCapability) return null;
+      const record = input.journal.findForTurn(input.turnId, callId);
+      if (!record || !hasDurableReplayResult(record)) return null;
+      const reference = referenceFor(record);
+      const totalBytes = Buffer.byteLength(JSON.stringify(record.result), "utf8");
+      return {
+        capability: "read_operation_results",
+        arguments: {
+          result_ref: reference.identity.result_ref,
+          sha256: reference.integrity.sha256,
+          revision: reference.integrity.revision,
+          work_id: reference.identity.work_id ?? null,
+          offset: 0,
+          length: Math.min(OPERATION_RESULT_EXACT_READ_MAX_BYTES, totalBytes),
+        },
+        total_bytes: totalBytes,
+      };
+    },
     readExact(read) {
       if (!input.exactReadCapability) {
         throw new Error("operation_result_exact_read_unavailable");
@@ -260,7 +292,7 @@ function hasDurableReplayResult(record: GuidedToolJournalRecord): boolean {
   if (record.status !== "completed" || record.result === undefined || !record.resultSha256) {
     return false;
   }
-  return true;
+  return !BOUNDED_RESULT_READER_TOOLS.has(record.toolName);
 }
 
 function referenceSavesProviderMessageBytes(

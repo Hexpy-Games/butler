@@ -133,13 +133,15 @@ export async function runLegacyFunctionToolPromptText(
       providerCallId: call.id,
       signal: call.signal,
     }),
-    finalTextFromToolResult: options.finalTextFromToolResult
+    outcomeFromToolResult: options.finalTextFromToolResult
       ? ({ toolCall, toolResult }) => toolResult.ok
-        ? options.finalTextFromToolResult!({
+        ? Promise.resolve(options.finalTextFromToolResult!({
             name: toolCall.name,
             args: toolCall.arguments,
             output: toolResult.output,
-          })
+          })).then((text) => text?.trim()
+            ? { kind: "reply" as const, text }
+            : null)
         : null
       : undefined,
     reviewFinalCandidate: options.reviewFinalCandidate

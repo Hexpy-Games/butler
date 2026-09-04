@@ -53,8 +53,10 @@ export function createSubsessionControlService(
       if (direction.instruction_id !== instructionId || direction.instruction !== instruction) {
         throw new Error("steward_direction_identity_conflict");
       }
-      const childTurn = await input.parentTurns.findTurn(active.child_turn_id);
-      if (childTurn && childTurn.semanticState !== "admitted") {
+      const childTurn = await input.parentTurns.findLatestTurnForSession(
+        active.relation.child_session_id,
+      ) ?? await input.parentTurns.findTurn(active.child_turn_id);
+      if (childTurn && (childTurn.semanticState !== "admitted" || childTurn.suspension)) {
         await enqueueDirectionContinuation(input, childQueue, active.relation, direction);
       }
       return direction;

@@ -38,6 +38,7 @@ function uncertainStoredExecution(
   receipt?: AuthorityOutcomeReceipt,
 ): AuthorityStoredExecution {
   return {
+    category: "command",
     requestRef: REQUEST_REF,
     sourceSessionId: "source-session-outcome-contract",
     sourceTurnId: TURN_ID,
@@ -75,6 +76,21 @@ function projectionFor(receipt?: AuthorityOutcomeReceipt) {
     requestRef: REQUEST_REF,
   });
 }
+
+test("known approval outcomes preserve the Work report rather than the operation receipt", () => {
+  const report = "## 작업 결과\n\n파일 수정은 끝났지만 검증에서 남은 문제를 발견했습니다.\n추가 수정이 필요합니다.";
+  for (const outcome of ["applied", "failed"] as const) {
+    const guided = createGuidedAuthorityProjection({
+      accessMode: "ask_first",
+      activity: inertActivity(),
+      authority: fakeAuthority({ ...uncertainStoredExecution(), outcome }),
+      ownerSessionId: OWNER_SESSION_ID,
+      turnId: TURN_ID,
+      requestRef: REQUEST_REF,
+    });
+    expect(guided.project(report)).toBe(report);
+  }
+});
 
 test("stored uncertain outcome projects terminally with its bounded evidence ref", () => {
   const guided = projectionFor({

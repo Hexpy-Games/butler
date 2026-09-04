@@ -58,6 +58,7 @@ export type TurnRecord = {
   context: ButlerContextInput;
   progressDestination?: BtccProgressDestination;
   semanticState: TurnSemanticState;
+  suspension?: "authority_pending" | "waiting_for_worker";
   checkpoint?: TurnCheckpoint;
   route?: "direct" | "assisted" | "managed";
   finalPayload?: {
@@ -65,6 +66,7 @@ export type TurnRecord = {
     content: string;
     contentSha256: string;
     workStatus?: "completed" | "blocked";
+    acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
     executionOutcome?: "waiting_for_worker";
     artifacts?: BtccFinalArtifact[];
     changedFiles?: ChangedFileDetail[];
@@ -105,6 +107,11 @@ export type StateExecutionClaim = {
 };
 
 export type AcceptedTurnTransition =
+  | {
+      kind: "suspend";
+      successor: "admitted";
+      reason: "authority_pending" | "waiting_for_worker";
+    }
   | {
       kind: "accept_guided_final";
       successor: "delivery_committed";
@@ -226,6 +233,7 @@ export type StopPersistenceOutcome =
       messageId: string;
       content: string;
       workStatus?: "completed" | "blocked";
+      acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
       executionOutcome?: "waiting_for_worker";
       artifacts?: BtccFinalArtifact[];
       changedFiles?: ChangedFileDetail[];

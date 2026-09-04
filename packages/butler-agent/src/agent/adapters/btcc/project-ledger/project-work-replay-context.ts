@@ -59,6 +59,7 @@ function planReplayContext(
     stableJson(plan.checks) !== stableJson(raw.checks) ||
     stableJson(plan.governingRefs ?? []) !==
       stableJson(raw.governingRefs ?? []) ||
+    plan.executionMode !== raw.executionMode ||
     plan.originTurnId !== raw.turnId
   )
     invalid();

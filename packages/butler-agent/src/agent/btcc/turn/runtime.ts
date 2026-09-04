@@ -36,6 +36,7 @@ import { isPhaseScopedMemoryProjectionError } from
   "../../context/context-projection.ts";
 import { operationalFailureMessage } from "./turn-runtime-failure.ts";
 import { guidedFinalTransition } from "./guided-final-transition.ts";
+import { commitTurnSuspension } from "./commit-turn-suspension.ts";
 import {
   createNoopRuntimeMemoryAttributionPort,
   type RuntimeMemoryAttributionPort,
@@ -115,11 +116,22 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
       await this.publishTerminal(progress, turn);
       return projectTerminalOutcome(turn);
     }
+    if (turn.suspension) {
+      return { kind: "suspended", turnId: turn.turnId, reason: turn.suspension };
+    }
     if (turn.semanticState === "admitted") {
       await publishState(progress, turn);
     }
     if (turn.semanticState !== "delivery_committed") {
-      turn = await this.runAgentAndCommit(turn, progress, command.recoveryAttempt);
+      const agentOutcome = await this.runAgentAndCommit(
+        turn,
+        progress,
+        command.recoveryAttempt,
+      );
+      if ("kind" in agentOutcome) {
+        return agentOutcome;
+      }
+      turn = agentOutcome;
     }
     if (turn.semanticState === "cancelled") {
       await this.publishTerminal(progress, turn);
@@ -133,7 +145,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
     turn: TurnRecord,
     progress: BtccTurnProgressObserver | undefined,
     recoveryAttempt?: number,
-  ): Promise<TurnRecord> {
+  ): Promise<TurnRecord | Extract<BtccTurnOutcome, { kind: "suspended" }>> {
     const permit = this.supervisor.enter({
       turnId: turn.turnId,
       executionFence: turn.executionFence,
@@ -187,9 +199,18 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
         result = {
           route: "assisted",
           content: operationalFailureMessage(turn.originalMessage, error),
+          acceptedWorkResult: { status: "failed" },
         };
       }
       permit.assertActive();
+      if (result.suspension) {
+        return await commitTurnSuspension({
+          turns: this.dependencies.turns,
+          turn,
+          claim,
+          reason: result.suspension,
+        });
+      }
       const transition = guidedFinalTransition(turn, result);
       while (true) {
         try {

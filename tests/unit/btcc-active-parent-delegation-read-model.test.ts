@@ -162,19 +162,17 @@ test("delivery-committed child stays active until its terminal result exists", a
   expect(names.has("read_file")).toBe(true);
 });
 
-test("control schemas resolve one owned target and expose exact multiple selectors", async () => {
+test("control schemas stay stable as owned targets change", async () => {
   const active = [delegationFact("first", "plan", "review")];
   const resolve = surfaceResolver({
     durableWork: { boundWorkForTurn: async () => null, loadContext: async () => null } as unknown as DurableWorkService,
     active: async () => active,
   });
   const sole = (await resolve()).tools.find((tool) => tool.name === "cancel_steward")!;
-  expect(sole.parameters.properties).not.toHaveProperty("relation_id");
-  expect(sole.parameters.properties).not.toHaveProperty("safe_title");
+  const stableParameters = sole.parameters;
   active.push(delegationFact("second", "plan", "review"));
   const multiple = (await resolve()).tools.find((tool) => tool.name === "cancel_steward")!;
-  expect(multiple.parameters.properties).toMatchObject({ relation_id: { enum: ["relation-first", "relation-second"] } });
-  expect(multiple.parameters.required).toContain("relation_id");
+  expect(multiple.parameters).toEqual(stableParameters);
 });
 
 test("an exact reviewed Work is selected among unrelated active siblings", async () => {
@@ -199,10 +197,10 @@ test("an exact reviewed Work is selected among unrelated active siblings", async
   expect(names.has("start_work")).toBe(true);
   expect(names.has("steer_steward")).toBe(true);
   expect(names.has("cancel_steward")).toBe(true);
-  for (const forbidden of [
+  for (const guardedAtExecution of [
     "continue_work", "replace_work_plan", "record_work_review",
     "record_work_disposition", "delegate_to_steward", "write_file", "tool_call",
-  ]) expect(names.has(forbidden)).toBe(false);
+  ]) expect(names.has(guardedAtExecution)).toBe(true);
 });
 
 test("execution fallback rejects forbidden active calls and still executes start_work", async () => {
@@ -338,6 +336,50 @@ test("delivered child receives direction on a fresh continuation Turn", async ()
   }
 });
 
+test("suspended child receives direction on a fresh continuation Turn", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-suspended-direction-"));
+  const fixture = delegationFixture();
+  fixture.childTurn.suspension = "authority_pending";
+  let pending: StewardDirection | null = null;
+  fixture.store.createDirection = (input) => {
+    pending = { ...input, revision: 1, status: "pending", applied_at: null,
+      applied_child_turn_id: null };
+    return pending;
+  };
+  fixture.store.rootWorkIdByRelationId = () => "task-active";
+  fixture.dependencies.sessionBindings = {
+    getBySessionId: () => ({
+      sessionId: fixture.relation.child_session_id,
+      role: "steward",
+      workspacePath: "/tmp/workspace",
+      modelProviderId: "openai",
+      modelRef: "openai/gpt-5.5",
+      runtimeAdapterId: "btcc-turn-runtime",
+      transportBindings: [],
+      metadata: { reasoning_effort: "low" },
+    }),
+  } as unknown as SubsessionDelegationDependencies["sessionBindings"];
+  fixture.dependencies.durableWork = {
+    bindOpenWork: async () => reviewedWork("task-active", "plan-active", "review-active"),
+  } as unknown as DurableWorkService;
+  const controls = createSubsessionControlService(
+    fixture.dependencies,
+    new NativeInboundQueue(root),
+  );
+  try {
+    await controls.steerSteward({
+      parentSessionId: fixture.relation.parent_session_id,
+      sourceParentTurnId: "control-turn",
+      sourceMessageId: "control-message",
+      instruction: "Continue after the suspended authority wait.",
+    });
+    expect(readdirSync(join(root, "runtime", "inbound-events", "pending")))
+      .toHaveLength(1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function surfaceResolver(input: {
   durableWork: DurableWorkService;
   active: SubsessionDelegationService["activeParentDelegations"];
@@ -430,6 +472,7 @@ function delegationFixture() {
     sessionId: relation.child_session_id,
     semanticState: "admitted" as
       "admitted" | "delivery_committed" | "delivered" | "cancelled",
+    suspension: undefined as "authority_pending" | "waiting_for_worker" | undefined,
   };
   let childTurn: typeof admittedChildTurn | null = admittedChildTurn;
   let result: StewardResultEnvelope | null = null;

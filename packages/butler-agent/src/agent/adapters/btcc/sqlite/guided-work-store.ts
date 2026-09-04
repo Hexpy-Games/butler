@@ -1,8 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { AttachToolResultInput, ClaimWorkCloseoutCorrectionInput, ContinueWorkCommand, DurableWorkContext, DurableWorkStore, DurableWorkView, LegacyOpenWorkImportResult, LegacyProjectWorkSource, RecordWorkCheckpointCommand, RecordWorkDispositionCommand, RecordWorkReviewCommand, ReplaceWorkPlanCommand, StartWorkCommand, WorkTurnScope } from
   "../../../btcc/work/index.ts";
-import type { AuthorityAbandonedWorkCloseCapability } from
-  "../../../btcc/authority/index.ts";
+import type { AuthorityAbandonedWorkCloseCapability } from "../../../btcc/authority/index.ts";
 import { stableJson } from "./identity.ts";
 import {
   GuidedWorkMutationJournal,
@@ -152,14 +151,15 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
       this.db.query(`
         INSERT INTO btcc_guided_work_plan_revisions (
           plan_revision_id, work_id, revision, objective, governing_refs_json,
-          actions_json, checks_json, origin_turn_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          execution_mode, actions_json, checks_json, origin_turn_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         planRevisionId,
         work.work_id,
         revision,
         input.objective,
         stableJson(input.governingRefs),
+        input.executionMode ?? null,
         stableJson(input.actions),
         stableJson(input.checks),
         input.turnId,

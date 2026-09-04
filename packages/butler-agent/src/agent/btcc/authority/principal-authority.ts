@@ -11,18 +11,14 @@ import type {
   PrincipalAuthority,
   PrincipalAuthorityRepository,
 } from "./contracts.ts";
-import {
-  admissionResult,
-  authorityProjection,
-} from "./admission-projection.ts";
+import { authorityProjection } from "./admission-projection.ts";
+import { admitAuthorityRequest } from "./authority-request-admission.ts";
+import { AuthorityRequestError } from "./authority-request-error.ts";
 import { parseAuthorityOutcomeReceipt } from "./outcome-receipt.ts";
 import {
   canonicalJson,
-  deterministicClientMessageId,
-  digest,
 } from "./request-identity.ts";
 
-const ALLOW_SCHEDULE_INPUT_TEXT = "Continue the approved operation exactly once.";
 const MAX_ALTERNATIVE_INPUT_BYTES = 16 * 1024;
 
 export function createPrincipalAuthority(
@@ -30,71 +26,7 @@ export function createPrincipalAuthority(
 ): PrincipalAuthority {
   return {
     admit(input) {
-      const identitySha256 = digest(canonicalJson({
-        version: 1,
-        ownerSessionId: input.ownerSessionId, sourceSessionId: input.sourceSessionId,
-        sourceTurnId: input.sourceTurnId, sourceWorkId: input.sourceWorkId,
-        workspacePath: input.workspacePath, planRevisionId: input.planRevisionId,
-        actionKey: input.actionKey, authorityGeneration: input.authorityGeneration,
-        capability: input.capability, target: input.target,
-        normalizedInput: input.normalizedInput,
-      }));
-      const existing = repository.findByIdentity(identitySha256);
-      if (existing) {
-        assertNotOperationallyClosed(existing);
-        return admissionResult(existing);
-      }
-      const slot = repository.findBySlot({
-        sourceWorkId: input.sourceWorkId, planRevisionId: input.planRevisionId,
-        actionKey: input.actionKey, capability: input.capability,
-        authorityGeneration: input.authorityGeneration,
-      });
-      if (slot) {
-        throw new AuthorityRequestError("authority_slot_identity_mismatch");
-      }
-      const now = new Date().toISOString();
-      const requestId = `authority-${crypto.randomUUID()}`;
-      const requestRef = `authority-ref-${digest(`${requestId}\0${identitySha256}`).slice(0, 32)}`;
-      const record: AuthorityRecord = {
-        requestId,
-        requestRef,
-        identitySha256,
-        ownerSessionId: required(input.ownerSessionId, "owner session"),
-        sourceSessionId: required(input.sourceSessionId, "source session"),
-        sourceTurnId: required(input.sourceTurnId, "source Turn"),
-        sourceWorkId: required(input.sourceWorkId, "source Work"),
-        workspacePath: required(input.workspacePath, "workspace"),
-        planRevisionId: required(input.planRevisionId, "Plan revision"),
-        actionKey: required(input.actionKey, "action"),
-        authorityGeneration: input.authorityGeneration,
-        capability: required(input.capability, "capability"),
-        normalizedTarget: required(input.target, "target"),
-        normalizedInputJson: canonicalJson(input.normalizedInput),
-        modelRef: required(input.modelRef, "model"),
-        reasoningEffort: required(input.reasoningEffort, "reasoning effort"),
-        category: "command",
-        reason: "Run one reviewed command",
-        executable: firstExecutable(input.normalizedInput.command),
-        commandCount: 1,
-        decision: "pending",
-        scheduleClientMessageId: deterministicClientMessageId(requestId),
-        scheduleInputText: ALLOW_SCHEDULE_INPUT_TEXT,
-        privateAlternativeInput: null,
-        outcome: "pending",
-        outcomeReceiptJson: null,
-        closeReason: null,
-        closeScope: null,
-        closedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      repository.insert(record);
-      const stored = repository.findByIdentity(identitySha256);
-      if (!stored || stored.identitySha256 !== identitySha256) {
-        throw new AuthorityRequestError("authority_request_insert_conflict");
-      }
-      assertNotOperationallyClosed(stored);
-      return admissionResult(stored);
+      return admitAuthorityRequest(repository, input);
     },
 
     list(input): AuthorityRequestProjection[] {
@@ -188,6 +120,7 @@ export function createPrincipalAuthority(
         authorityGeneration: record.authorityGeneration,
         capability: record.capability,
         normalizedTarget: record.normalizedTarget,
+        category: record.category,
         normalizedInput,
         decision: record.decision,
         ...(record.privateAlternativeInput
@@ -239,75 +172,6 @@ export function createPrincipalAuthority(
       return { scope: "work", reason: input.reason, closedCount };
     },
   };
-}
-
-export class AuthorityRequestError extends Error {
-  constructor(readonly code: string) {
-    super(code);
-    this.name = "AuthorityRequestError";
-  }
-}
-
-function assertNotOperationallyClosed(record: AuthorityRecord): void {
-  if (record.decision === "pending" && record.closeReason !== null) {
-    throw new AuthorityRequestError("authority_request_operationally_closed");
-  }
-}
-
-function firstExecutable(command: string): string {
-  const tokens = shellWords(command);
-  if (!tokens) return "command";
-  let index = 0;
-  while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(tokens[index]!)) index += 1;
-  const token = tokens[index];
-  if (!token || !/^[A-Za-z0-9_./-]+$/u.test(token) || token.startsWith("$") || token.startsWith("-")) return "command";
-  const executable = token.split(/[\\/]/u).at(-1)?.trim() ?? "";
-  return executable.slice(0, 96) || "command";
-}
-
-function shellWords(input: string): string[] | null {
-  const words: string[] = [];
-  let word = "";
-  let quote: "'" | '"' | null = null;
-  let escaped = false;
-  let started = false;
-  for (const character of input.trim()) {
-    if (escaped) {
-      word += character;
-      escaped = false;
-      started = true;
-      continue;
-    }
-    if (character === "\\" && quote !== "'") {
-      escaped = true;
-      started = true;
-      continue;
-    }
-    if (quote) {
-      if (character === quote) quote = null;
-      else word += character;
-      started = true;
-      continue;
-    }
-    if (character === "'" || character === '"') {
-      quote = character;
-      started = true;
-      continue;
-    }
-    if (/\s/u.test(character)) {
-      if (started) {
-        words.push(word);
-        word = "";
-        started = false;
-      }
-      continue;
-    }
-    word += character;
-    started = true;
-  }
-  if (escaped || quote) return null;
-  if (started) words.push(word);
-  return words;
 }
 
 function decisionResult(record: AuthorityRecord): AuthorityDecisionResult {

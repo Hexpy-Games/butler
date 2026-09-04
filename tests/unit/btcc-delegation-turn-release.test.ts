@@ -96,6 +96,7 @@ test("failed Steward delegation retains ordinary batch and closeout behavior", a
     }),
     toolCall("later-plan", "replace_work_plan", {
       objective: "Continue after a failed delegation",
+      execution_mode: "direct",
       actions: [{ action_key: "continue" }],
     }),
     toolCall("later-disposition", "record_work_disposition", {

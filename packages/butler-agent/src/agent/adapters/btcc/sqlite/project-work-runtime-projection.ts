@@ -46,17 +46,20 @@ export function createSqliteProjectWorkRuntimeProjection(
     },
     loadResultFacts(workId) {
       const rows = db.query<{
+        result_ref: string;
         tool_name: string;
         status: "completed" | "failed" | "cancelled";
         result_json: string | null;
         error_code: string | null;
       }, [string]>(`
-        SELECT call.tool_name, call.status, call.result_json, call.error_code
+        SELECT result.result_ref, call.tool_name, call.status,
+          call.result_json, call.error_code
         FROM btcc_guided_work_results result
         JOIN btcc_guided_tool_calls call ON call.call_id = result.tool_call_id
         WHERE result.work_id = ? ORDER BY result.sequence
       `).all(workId).slice(-50);
       return Promise.resolve(rows.map((row) => ({
+        resultRef: row.result_ref,
         toolName: row.tool_name,
         status: row.status,
         ...(row.result_json ? { resultJson: JSON.parse(row.result_json) } : {}),

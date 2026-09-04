@@ -100,6 +100,37 @@ test("BTCC returns a text-only model response", async () => {
   ]);
 });
 
+test("BTCC executes a restored approved call before the first model round", async () => {
+  let dispatches = 0;
+  const restored = call("approved-echo", "echo", { message: "stored input" });
+  const { port, requests } = scriptedModelRound([
+    (request) => {
+      expect(dispatches).toBe(1);
+      expect(toolMessages(request)).toHaveLength(1);
+      expect(toolMessages(request)[0]?.toolCallId).toBe(restored.id);
+      expect(toolMessages(request)[0]?.content).toContain("stored input");
+      return response({ text: "Observed the completed operation." });
+    },
+  ]);
+  const result = await runBtccAgentLoop({
+    prompt: "Continue the approved operation exactly once.",
+    tools: [echoTool],
+    resumedToolCall: restored,
+    modelRound: port,
+    executeTool: async (operation) => {
+      dispatches += 1;
+      expect(operation.arguments).toEqual({ message: "stored input" });
+      return { ok: true, text: operation.arguments.message };
+    },
+  });
+  expect(dispatches).toBe(1);
+  expect(requests).toHaveLength(1);
+  expect(result.events.map((event) => event.type)).toEqual([
+    "tool_call", "tool_result", "model_call", "model_response",
+  ]);
+  expect(result.finalText).toBe("Observed the completed operation.");
+});
+
 test("BTCC awaits one round tool snapshot and uses it for provider and execution", async () => {
   const secondTool: BtccAgentLoopToolDefinition = {
     ...echoTool,
@@ -428,7 +459,7 @@ test("BTCC preserves the exact structured successful result for the next round",
 
   expect(JSON.parse(observed)).toEqual({
     ok: true,
-    output: { text: "RAW_EXACT_RESULT", nested: { count: 7 } },
+    output: { tool_name: "echo", text: "RAW_EXACT_RESULT", nested: { count: 7 } },
   });
   expect(observed).not.toContain("completed-tool-evidence");
   expect(observed).not.toContain("evidence_packet");
@@ -660,7 +691,7 @@ test("BTCC classifies logical failures without discarding their recovery context
       code: "invalid_work_stage_transition",
       message: "Result review is required before completion review.",
     },
-    output: rawFailure,
+    output: { tool_name: "echo", ...rawFailure },
   });
 });
 
@@ -856,8 +887,9 @@ test("BTCC records every completed parallel result before terminal finalization"
     tools: safeTools,
     modelRound: port,
     executeTool: async (toolCall) => ({ tool: toolCall.name }),
-    finalTextFromToolResult: ({ toolCall }) =>
-      toolCall.name === "terminal" ? "Terminal result is enough." : null,
+    outcomeFromToolResult: ({ toolCall }) => toolCall.name === "terminal"
+      ? { kind: "reply", text: "Terminal result is enough." }
+      : null,
   });
 
   expect(result.finalText).toBe("Terminal result is enough.");
@@ -1090,9 +1122,9 @@ test("BTCC can stop immediately after a terminal tool result", async () => {
     tools: [echoTool],
     modelRound: port,
     executeTool: async () => ({ report: "Published report." }),
-    finalTextFromToolResult: ({ toolResult }) => {
+    outcomeFromToolResult: ({ toolResult }) => {
       const output = toolResult.output as { report?: string };
-      return output.report ?? null;
+      return output.report ? { kind: "reply", text: output.report } : null;
     },
   });
 
@@ -1104,4 +1136,29 @@ test("BTCC can stop immediately after a terminal tool result", async () => {
     "tool_call",
     "tool_result",
   ]);
+});
+
+test("BTCC returns an explicit suspension for an authority-pending tool result", async () => {
+  const { port } = scriptedModelRound([
+    response({ toolCalls: [call("call-pending", "echo", { message: "effect" })] }),
+  ]);
+
+  const result = await runBtccAgentLoop({
+    prompt: "run the approved effect",
+    model: "test/model",
+    tools: [echoTool],
+    modelRound: port,
+    executeTool: async () => ({ authority_pending: true }),
+    outcomeFromToolResult: ({ toolResult }) => {
+      const output = toolResult.output as { authority_pending?: boolean };
+      return output.authority_pending
+        ? { kind: "suspend", reason: "authority_pending" }
+        : null;
+    },
+  });
+
+  expect(result).toMatchObject({
+    finalText: "",
+    suspension: "authority_pending",
+  });
 });

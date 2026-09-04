@@ -32,9 +32,24 @@ export async function completeWorkerResultForDependencies(
 ): Promise<CompleteStewardResultOutcome> {
   const relation = input.store.relationByChildSessionId(resultInput.childSessionId);
   if (!relation) throw new Error("worker_relation_missing");
-  const childTurnId = input.store.childTurnIdByRelationId(relation.relation_id);
-  if (!childTurnId || childTurnId !== resultInput.childTurnId) {
-    throw new Error("worker_turn_identity_mismatch");
+  const initialChildTurnId = input.store.childTurnIdByRelationId(relation.relation_id);
+  if (!initialChildTurnId) throw new Error("worker_turn_identity_missing");
+  const childTurnId = resultInput.childTurnId;
+  if (resultInput.status !== "cancelled" || childTurnId !== initialChildTurnId) {
+    const childTurn = await input.parentTurns.findTurn(childTurnId);
+    const terminalState = childTurn?.semanticState === "delivered" ||
+      (resultInput.status === "cancelled" && childTurn?.semanticState === "cancelled");
+    if (!childTurn || childTurn.sessionId !== relation.child_session_id ||
+      !terminalState) {
+      throw new Error("worker_turn_identity_mismatch");
+    }
+    const expectedRootWorkId = input.store.rootWorkIdByRelationId(relation.relation_id);
+    const sourceWork = await input.durableWork.boundWorkForTurn(childTurnId);
+    if (!expectedRootWorkId || !sourceWork ||
+      sourceWork.workId !== expectedRootWorkId ||
+      sourceWork.sessionId !== relation.child_session_id) {
+      throw new Error("worker_root_work_identity_mismatch");
+    }
   }
   const expectedResultId = subsessionResultId(relation.child_session_id, childTurnId);
   if (resultInput.resultId !== expectedResultId) throw new Error("worker_result_identity_mismatch");

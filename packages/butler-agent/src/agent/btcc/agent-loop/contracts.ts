@@ -40,9 +40,10 @@ export type BtccAgentLoopToolCall = ModelRoundToolCall;
 export type BtccAgentLoopResult = {
   content: string;
   terminalOutcome?: "no_visible";
-  executionOutcome?: "waiting_for_worker";
+  suspension?: BtccTurnSuspension;
   route: "direct" | "assisted" | "managed";
   workStatus?: "completed" | "blocked";
+  acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
   artifacts?: BtccFinalArtifact[];
   changedFiles?: ChangedFileDetail[];
   plan?: ProjectLedgerPlan;
@@ -52,6 +53,12 @@ export type BtccAgentLoopResult = {
     providerReportedModelRef?: string;
   };
 };
+
+export type BtccTurnSuspension = "authority_pending" | "waiting_for_worker";
+
+export type BtccToolResultOutcome =
+  | { kind: "reply"; text: string }
+  | { kind: "suspend"; reason: BtccTurnSuspension };
 
 export interface BtccAgentLoop {
   run(input: {
@@ -176,6 +183,8 @@ export interface BtccAgentLoopInput {
   progress?: BtccTurnProgressObserver;
   toolChoice?: "auto" | "required";
   tools: readonly BtccAgentLoopToolDefinition[];
+  /** A previously requested operation restored from the approved durable input. */
+  resumedToolCall?: BtccAgentLoopToolCall;
   resolveTools?: () => BtccRoundToolSurfaceSnapshot | Promise<BtccRoundToolSurfaceSnapshot>;
   resolveToolChoice?: () => "auto" | "required" | undefined;
   modelRound: ModelRoundPort;
@@ -216,10 +225,11 @@ export interface BtccAgentLoopInput {
     text: string;
     iteration: number;
   }) => Promise<BtccTextToolCallDisposition> | BtccTextToolCallDisposition;
-  finalTextFromToolResult?: (input: {
+  outcomeFromToolResult?: (input: {
     toolCall: BtccAgentLoopToolCall;
     toolResult: BtccAgentLoopToolResult;
-  }) => Promise<string | null | undefined> | string | null | undefined;
+  }) => Promise<BtccToolResultOutcome | null | undefined> |
+    BtccToolResultOutcome | null | undefined;
   reviewFinalCandidate?: (input: {
     text: string;
     iteration: number;
@@ -251,7 +261,7 @@ export interface BtccAgentLoopEvent {
 
 export interface BtccAgentLoopOutput {
   finalText: string;
-  executionOutcome?: "waiting_for_worker";
+  suspension?: BtccTurnSuspension;
   messages: BtccAgentLoopMessage[];
   events: BtccAgentLoopEvent[];
 }

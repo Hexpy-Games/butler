@@ -67,6 +67,7 @@ function requiresRewrite(db: Database, definition: string): boolean {
     !hasColumn(db, "btcc_authority_requests", "close_reason") ||
     !hasColumn(db, "btcc_authority_requests", "close_scope") ||
     !hasColumn(db, "btcc_authority_requests", "closed_at") ||
+    !definition.includes("'reviewed_effect'") ||
     !definition.includes("'session_cancelled'") ||
     !definition.includes("'work_abandoned'");
 }

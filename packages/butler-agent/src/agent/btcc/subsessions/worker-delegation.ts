@@ -13,6 +13,7 @@ import type {
   DelegationPacket,
   ReviewedWorkerDelegationRequest,
   SessionRelation,
+  SubsessionDispatchIntent,
   SubsessionDelegationDependencies,
 } from "./contracts.ts";
 
@@ -32,6 +33,13 @@ export async function delegateReviewedWorker(
     parentTurnId: request.parent_turn_id,
   });
   const planAction = selectedPlanAction(reviewed, request.action_key);
+  const active = findActiveWorkerAssignment(
+    input.store,
+    request.parent_session_id,
+    reviewed.parent_work_ref.work_id,
+    request.action_key,
+  );
+  if (active) return existingWorker(input, queue, active);
   const { projectContext, inheritedProject, recentFeedbackRefs } = await snapshotChildProjectContext({
     parentSessionId: request.parent_session_id,
     parentTurnId: request.parent_turn_id,
@@ -52,7 +60,7 @@ export async function delegateReviewedWorker(
   });
   const delegationId = `delegation-${digest(`btcc.worker.delegation.v1\0${identity}`)}`;
   const existing = input.store.relationByDelegationId(delegationId);
-  if (existing) return existingWorker(input, existing);
+  if (existing) return existingWorker(input, queue, existing);
   const relationId = `relation-${digest(`btcc.worker.relation.v1\0${delegationId}`).slice(0, 40)}`;
   const taskId = `worker-task-${digest(`btcc.worker.task.v1\0${delegationId}`).slice(0, 40)}`;
   const childSessionId = `worker-${digest(`btcc.worker.session.v1\0${relationId}`).slice(0, 32)}`;
@@ -120,7 +128,7 @@ export async function delegateReviewedWorker(
     model_ref: profile.model,
     reasoning_effort: profile.reasoning_effort,
   };
-  input.sessionBindings.upsert({
+  const childBinding: SubsessionDispatchIntent["childBinding"] = {
     sessionId: childSessionId,
     role: "worker",
     ...(inheritedProject?.sessionBinding ?? {}),
@@ -154,9 +162,8 @@ export async function delegateReviewedWorker(
         authority_source: "parent_session",
       },
     },
-  });
-  input.store.create({ relation, packet, childTurnId, rootWorkId });
-  queue.enqueueIdempotent({
+  };
+  const envelope: SubsessionDispatchIntent["envelope"] = {
     eventId: `worker:${delegationId}`,
     transport: "app",
     accountId: "local",
@@ -177,7 +184,23 @@ export async function delegateReviewedWorker(
       reasoningEffort: profile.reasoning_effort,
     },
     raw: { source: "btcc-worker-delegation" },
-  });
+  };
+  const dispatchIntent: SubsessionDispatchIntent = {
+    childBinding,
+    envelope,
+    metadata: { source: "btcc-worker-delegation" },
+  };
+  const assignedRelation = input.store.createWorkerAssignment?.({
+    relation,
+    packet,
+    childTurnId,
+    rootWorkId,
+    dispatchIntent,
+  }) ?? (input.store.create({ relation, packet, childTurnId, rootWorkId, dispatchIntent }), relation);
+  if (assignedRelation.relation_id !== relation.relation_id) {
+    return existingWorker(input, queue, assignedRelation);
+  }
+  replayDispatchIntent(input, queue, relation.relation_id, dispatchIntent);
   return {
     relation,
     packet,
@@ -209,13 +232,17 @@ function selectedPlanAction(
 
 function existingWorker(
   input: SubsessionDelegationDependencies,
+  queue: NativeInboundQueue,
   relation: SessionRelation,
 ): CreatedDelegation {
   const packet = input.store.packetByRelationId(relation.relation_id);
   const childTurnId = input.store.childTurnIdByRelationId(relation.relation_id);
   const rootWorkId = input.store.rootWorkIdByRelationId(relation.relation_id);
+  if (!packet || !childTurnId || !rootWorkId) throw new Error("worker_existing_identity_incomplete");
+  const dispatchIntent = input.store.dispatchIntentByRelationId?.(relation.relation_id);
+  if (dispatchIntent) replayDispatchIntent(input, queue, relation.relation_id, dispatchIntent);
   const child = input.sessionBindings.getBySessionId(relation.child_session_id);
-  if (!packet || !childTurnId || !rootWorkId || !child) throw new Error("worker_existing_identity_incomplete");
+  if (!child) throw new Error("worker_existing_identity_incomplete");
   return {
     relation,
     packet,
@@ -223,4 +250,36 @@ function existingWorker(
     root_work_id: rootWorkId,
     child_workspace_path: child.workspacePath,
   };
+}
+
+export function findActiveWorkerAssignment(
+  store: SubsessionDelegationDependencies["store"],
+  parentSessionId: string,
+  parentWorkId: string,
+  actionKey: string,
+): SessionRelation | undefined {
+  return store.relationsByParentSessionId(parentSessionId).find((relation) => {
+    if (store.resultByRelationId(relation.relation_id)) return false;
+    const packet = store.packetByRelationId(relation.relation_id);
+    return packet?.parent_work_ref.work_id === parentWorkId &&
+      packet.plan_action?.action_key === actionKey;
+  });
+}
+
+export function replayDispatchIntent(
+  input: Pick<SubsessionDelegationDependencies, "sessionBindings" | "store">,
+  queue: NativeInboundQueue,
+  relationId: string,
+  intent: SubsessionDispatchIntent,
+): void {
+  const existing = input.sessionBindings.getBySessionId(intent.childBinding.sessionId);
+  if (!existing) {
+    input.sessionBindings.upsert(intent.childBinding);
+  } else if (existing.role !== intent.childBinding.role ||
+    existing.workspacePath !== intent.childBinding.workspacePath ||
+    existing.modelRef !== intent.childBinding.modelRef) {
+    throw new Error("subsession_dispatch_binding_mismatch");
+  }
+  queue.enqueueIdempotent(intent.envelope, intent.metadata);
+  input.store.markDispatchEnqueued?.(relationId);
 }

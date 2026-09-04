@@ -157,6 +157,7 @@ test("real non-project App work uses Session Ledger across restart and closeout"
     modelRound: scriptedModelRound([
       () => toolResponse("session-plan", "replace_work_plan", {
         objective: "Read and review source.txt across Turns",
+        execution_mode: "direct",
         actions: [{
           action_key: "read_source",
           description: "Read source.txt and verify its fact",

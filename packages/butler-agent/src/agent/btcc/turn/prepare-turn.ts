@@ -231,11 +231,7 @@ export function snapshotTurnContext(input: {
     ...snapshot,
     executionPolicy: {
       role: input.binding.role,
-      accessMode: input.turnAccessMode ?? accessMode(
-        input.binding.metadata?.runtimePolicy && record(input.binding.metadata.runtimePolicy).accessMode
-          ? record(input.binding.metadata.runtimePolicy).accessMode
-          : input.binding.metadata?.accessMode,
-      ),
+      accessMode: input.turnAccessMode ?? bindingAccessMode(input.binding),
       trackingMode: trackingMode(input.binding),
       requiredNativeToolProfiles: uniqueStrings([
         ...stringArray(input.binding.metadata?.requiredNativeToolProfiles),
@@ -297,7 +293,7 @@ function admitModel(
         catalogGeneration: controls.catalog_generation,
       }
     : {
-        accessMode: String(binding.metadata?.accessMode ?? "full_access"),
+        accessMode: bindingAccessMode(binding),
         planMode: Boolean(binding.metadata?.plan_mode),
         source: "stored_session_binding",
       };
@@ -329,6 +325,10 @@ function admittedContextWindow(binding: StoredSessionBinding, modelRef: string):
 function accessMode(value: unknown): TurnAccessMode {
   if (value === "full_access" || value === "ask_first" || value === "read_only") return value;
   return "read_only";
+}
+function bindingAccessMode(binding: StoredSessionBinding): TurnAccessMode {
+  const runtime = record(binding.metadata?.runtimePolicy);
+  return accessMode(runtime.accessMode ?? binding.metadata?.accessMode);
 }
 function trackingMode(binding: StoredSessionBinding): "ledger" | "local" | "none" {
   const value = record(binding.metadata?.runtimePolicy).trackingMode ??

@@ -31,12 +31,50 @@ export class SqliteGuidedTransitionWriter {
       this.assertCurrentClaim(turn, claim);
       this.consumeClaim(claim);
       const nextRevision = turn.revision + 1;
+      if (transition.kind === "suspend") {
+        this.suspend(turn, nextRevision, transition);
+        return;
+      }
       if (transition.kind === "accept_guided_final") {
         this.acceptGuidedFinal(turn, nextRevision, transition);
         return;
       }
       this.observeDelivery(turn, nextRevision, transition);
     })();
+  }
+
+  private suspend(
+    turn: TurnRecord,
+    nextRevision: number,
+    transition: Extract<GuidedTurnTransition, { kind: "suspend" }>,
+  ): void {
+    if (turn.semanticState !== "admitted" || transition.successor !== "admitted") {
+      throw new Error("BTCC suspension can only commit from admitted");
+    }
+    const updated = this.db.query<{ turn_id: string }, [
+      string,
+      number,
+      string,
+      number,
+      string,
+      number,
+    ]>(`
+      UPDATE btcc_turns SET suspension_reason = ?, active_checkpoint_id = NULL,
+        revision = ?
+      WHERE turn_id = ? AND revision = ? AND semantic_state = 'admitted'
+        AND active_checkpoint_id = ? AND execution_fence = ?
+      RETURNING turn_id
+    `).get(
+      transition.reason,
+      nextRevision,
+      turn.turnId,
+      turn.revision,
+      turn.checkpoint?.checkpointId ?? "",
+      turn.executionFence,
+    );
+    if (updated?.turn_id !== turn.turnId) {
+      throw new Error("BTCC suspension commit lost Turn CAS");
+    }
   }
 
   private acceptGuidedFinal(

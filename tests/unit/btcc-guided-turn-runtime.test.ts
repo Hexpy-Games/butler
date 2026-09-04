@@ -96,6 +96,58 @@ test("Guided Turn answers directly through only durable admission and delivery s
   }
 });
 
+test("a suspended Turn does not commit closeout or canonical delivery", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-suspended-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-suspended",
+    storageProfile: "ephemeral",
+  });
+  let agentCalls = 0;
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns: stores.turns,
+    messages: stores.messages,
+    agent: {
+      async run() {
+        agentCalls += 1;
+        return {
+          route: "assisted",
+          content: "",
+          suspension: "authority_pending",
+        };
+      },
+    },
+  });
+  const command = runCommand("guided-suspended-turn");
+  try {
+    const suspended = {
+      kind: "suspended",
+      turnId: command.turnId,
+      reason: "authority_pending",
+    } as const;
+    expect(await runtime.runTurn(command)).toEqual(suspended);
+    expect(await runtime.runTurn(command)).toEqual(suspended);
+    expect(agentCalls).toBe(1);
+    const stored = await stores.turns.findTurn(command.turnId);
+    expect(stored?.semanticState).toBe("admitted");
+    expect(stored?.finalPayload).toBeUndefined();
+    expect(stored?.deliveryOutbox).toBeUndefined();
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, []>(
+        "SELECT COUNT(*) AS count FROM btcc_messages WHERE role = 'assistant'",
+      ).get()?.count).toBe(0);
+    } finally {
+      db.close();
+    }
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("Guided Turn persists final artifacts and returns them unchanged on replay", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-artifact-replay-"));
   const dbPath = join(root, "btcc.sqlite");

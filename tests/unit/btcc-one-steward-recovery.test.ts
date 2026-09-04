@@ -375,6 +375,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
         if (blockedRound === 1) {
           return { toolCalls: [toolCall("blocked-plan", "replace_work_plan", {
             objective: "Apply the verified partial file before the external input blocks completion.",
+            execution_mode: "direct",
             actions: [{
               action_key: "write-partial-file",
               description: "Write the verified partial artifact.",
@@ -962,6 +963,7 @@ function recoveryRound(input: {
         })] };
         if (round === 2) return { toolCalls: [toolCall("plan-parent-work", "replace_work_plan", {
           objective: "Create and verify one bounded recovery result file.",
+          execution_mode: "direct",
           governing_refs: [],
           actions: [{ action_key: "delegate-reviewed-recovery-work" }],
           checks: ["recovery-result.txt contains the expected mutation"],
@@ -998,6 +1000,7 @@ function recoveryRound(input: {
       childRounds.set(childKey, round);
       if (round === 1) return { toolCalls: [toolCall("plan", "replace_work_plan", {
         objective: "Create and verify one bounded recovery result file.",
+        execution_mode: "direct",
         actions: [{ action_key: "write-recovery-result", description: "Write the recovery result file.", dependency_keys: [], effect: { capability: "write_file", target: "recovery-result.txt" } }, {
           action_key: "verify-recovery-result", description: "Verify the recovery result file.", dependency_keys: ["write-recovery-result"],
         }],

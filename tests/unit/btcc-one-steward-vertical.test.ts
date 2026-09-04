@@ -1614,6 +1614,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
           }
           if (round === 2) return { toolCalls: [toolCall("plan-parent-work", "replace_work_plan", {
             objective: "Inspect, correct, and validate two bounded Steward fixture files.",
+            execution_mode: "direct",
             governing_refs: [],
             actions: [{
               action_key: "delegate-reviewed-fixture-work",
@@ -1661,6 +1662,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
         return {
           toolCalls: [toolCall("plan", "replace_work_plan", {
             objective: "Inspect and edit two bounded Steward fixture files in one batch.",
+            execution_mode: "direct",
             actions: [
               {
                 action_key: "inspect-fixtures",
@@ -1758,6 +1760,7 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
         return {
           toolCalls: [toolCall("replan-correction", "replace_work_plan", {
             objective: "Correct and validate the two bounded Steward fixture files.",
+            execution_mode: "direct",
             actions: [
               {
                 action_key: "inspect-failed-validation",
@@ -1966,6 +1969,7 @@ function readOnlyStewardRound(
           })] };
           if (round === 2) return { toolCalls: [toolCall(`plan-${key}`, "replace_work_plan", {
             objective,
+            execution_mode: "direct",
             governing_refs: ["W-SANDY-RELATIONSHIP-AUDIT-001"],
             actions: [{
               action_key: "delegate-reviewed-read-only-inspection",
@@ -2038,6 +2042,7 @@ function readOnlyStewardRound(
             objective: exactModelResearch
               ? delegatedObjective
               : "Inspect the repository layout and source marker, then summarize the findings.",
+            execution_mode: "direct",
             actions: [{
               action_key: "inspect-repository-evidence",
               description: "Inspect the repository layout and source marker.",

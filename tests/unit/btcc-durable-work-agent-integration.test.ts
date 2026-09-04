@@ -54,6 +54,7 @@ test("R3 Work Ledger maps managed Work across restart and fresh Turn lineage", a
           ]));
           return toolResponse([toolCall("work-plan-1", "replace_work_plan", {
             objective: "Create and verify report.md",
+            execution_mode: "direct",
             actions: [{
               action_key: "write_report",
               description: "Write the requested report",
@@ -333,6 +334,7 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
       modelRound: scriptedModelRound([
         () => toolResponse([toolCall("stop-plan-1", "replace_work_plan", {
           objective: "Prepare a resumable report",
+          execution_mode: "direct",
           actions: [{
             action_key: "prepare",
             description: "Prepare and verify the report",
@@ -467,6 +469,7 @@ test("ordinary tools stay Turn-local until explicit Work relation and backfill",
       modelRound: scriptedModelRound([
         () => toolResponse([toolCall("late-bind-plan-1", "replace_work_plan", {
           objective: "Read source.txt and report the observed fact",
+          execution_mode: "direct",
           actions: [{
             action_key: "read_source",
             description: "Read the source file",
@@ -704,6 +707,7 @@ test("a model final echo of the model-only Work id is replaced before delivery",
       modelRound: scriptedModelRound([
         () => toolResponse([toolCall("id-echo-plan", "replace_work_plan", {
           objective: "내부 ID를 사용자에게 노출하지 않는 작업",
+          execution_mode: "direct",
           actions: [{
             action_key: "prepare",
             description: "결과를 준비합니다",
@@ -757,6 +761,7 @@ test("an action-key summary without optional description cannot trap the model l
       modelRound: scriptedModelRound([
         () => toolResponse([toolCall("nonblocking-plan-summary", "replace_work_plan", {
           objective: "Create answer.txt",
+          execution_mode: "direct",
           actions: [{
             action_key: "요청한 답변 파일 작성",
             dependency_keys: [],
@@ -846,6 +851,7 @@ test("a rejected stage transition is not projected as accepted progress", async 
         () => {
           const planArgs = {
             objective: "Prepare the requested answer",
+            execution_mode: "direct",
             actions: [{
               action_key: "prepare-answer",
               description: "Prepare the answer",
@@ -1050,6 +1056,7 @@ test("R3 projects Plan, tool, Review, disposition, and final events", async () =
           modelCalls += 1;
           const planArgs = {
             objective: "Read and report the requested source",
+            execution_mode: "direct",
             actions: [{
               action_key: "read_source",
               description: "Read source.txt",
@@ -1194,6 +1201,7 @@ test("R3 activity projection failure cannot veto its tool result or final delive
           modelCalls += 1;
           const planArgs = {
             objective: "Preserve the requested result despite a UI projection failure",
+            execution_mode: "direct",
             actions: [{
               action_key: "report_result",
               description: "Return the requested result",

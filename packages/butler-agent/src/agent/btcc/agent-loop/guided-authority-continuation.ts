@@ -1,16 +1,75 @@
 import type { ButlerToolCall } from "../../tools/butler-tools.ts";
 import {
   AUTHORITY_DENIAL_TEXT,
+  AUTHORITY_EFFECT_DENIAL_TEXT,
   type PrincipalAuthority,
 } from "../authority/index.ts";
 import type { DurableWorkView } from "../work/index.ts";
-import type { GuidedToolJournal } from "../ports/guided-tool-journal.ts";
+import type { GuidedToolJournal, GuidedToolJournalRecord } from "../ports/guided-tool-journal.ts";
 import { ordinaryGuidedEffectError } from "./guided-persistent-effect-resolution.ts";
+import { digest } from "../identity/index.ts";
+import type { BtccAgentLoopToolCall } from "./contracts.ts";
+import { normalizeGuidedToolCall } from "../../tools/tool-call-normalization.ts";
 
 type AuthorityExecution = Awaited<ReturnType<PrincipalAuthority["execution"]>>;
 
+export function restoredAuthorityToolCall(input: {
+  authority?: PrincipalAuthority;
+  toolJournal: GuidedToolJournal;
+  ownerSessionId: string;
+  sourceSessionId: string;
+  requestRef?: string;
+  turnId: string;
+  clientMessageId?: string;
+}): BtccAgentLoopToolCall | undefined {
+  if (!input.requestRef) return undefined;
+  if (!input.authority || !input.clientMessageId) {
+    throw new Error("authority_context_missing");
+  }
+  const execution = input.authority.execution({
+    ownerSessionId: input.ownerSessionId,
+    sourceSessionId: input.sourceSessionId,
+    requestRef: input.requestRef,
+    turnId: input.turnId,
+    clientMessageId: input.clientMessageId,
+  });
+  // Modify must first go through the existing replan path, not execute the
+  // operation that the user asked to change.
+  if (execution.decision === "modified") return undefined;
+  const original = originalAuthorityToolCall(input.toolJournal, execution);
+  if (!original) throw new Error("authority_source_call_missing");
+  const rawArguments = JSON.parse(original.rawArguments) as Record<string, unknown>;
+  const progressive = normalizeGuidedToolCall({ toolName: "tool_call", args: rawArguments }).name === original.toolName;
+  const name = progressive ? "tool_call" : original.toolName;
+  const arguments_ = progressive ? rawArguments : original.arguments;
+  return {
+    id: `authority-resume-${digest(`${input.turnId}\0${input.requestRef}`).slice(0, 24)}`,
+    name,
+    arguments: arguments_,
+    rawArguments: JSON.stringify(arguments_),
+  };
+}
+
+function originalAuthorityToolCall(
+  journal: GuidedToolJournal | undefined,
+  execution: AuthorityExecution,
+): GuidedToolJournalRecord | undefined {
+  const name = execution.capability === "run_command_remote_observation"
+    ? "run_command" : execution.capability;
+  // The loop suspends at the first pending operation. Its source Turn journal
+  // retains the original public invocation, separately from normalized effect input.
+  const calls = journal?.list(execution.sourceTurnId).filter((call) => {
+    const result = call.result;
+    return call.toolName === name && (call.status === "started" ||
+      (call.status === "completed" && result !== null && typeof result === "object" &&
+        "authority_pending" in result && result.authority_pending === true));
+  }) ?? [];
+  return calls.length === 1 ? calls[0] : undefined;
+}
+
 export function resolveGuidedAuthorityContinuation(input: {
   authority?: PrincipalAuthority;
+  toolJournal?: GuidedToolJournal;
   requestRef: string;
   ownerSessionId?: string;
   sourceSessionId?: string;
@@ -21,7 +80,11 @@ export function resolveGuidedAuthorityContinuation(input: {
   call: ButlerToolCall;
 }):
   | { ok: true; execution: AuthorityExecution; effectiveCall: ButlerToolCall }
-  | { ok: false; result: Record<string, unknown> } {
+  | {
+      ok: false;
+      consumesRequest: boolean;
+      result: Record<string, unknown>;
+    } {
   if (!input.authority) {
     return failedContinuation("authority_context_missing", "The approved command authority is unavailable.");
   }
@@ -65,9 +128,12 @@ export function resolveGuidedAuthorityContinuation(input: {
   if (execution.decision === "denied") {
     return {
       ok: false,
+      consumesRequest: true,
       result: ordinaryGuidedEffectError(
         "authority_request_denied",
-        AUTHORITY_DENIAL_TEXT,
+        execution.category === "reviewed_effect"
+          ? AUTHORITY_EFFECT_DENIAL_TEXT
+          : AUTHORITY_DENIAL_TEXT,
         { next_action: "Report the denial or choose a non-effectful alternative." },
       ),
     };
@@ -87,13 +153,17 @@ export function resolveGuidedAuthorityContinuation(input: {
       "The approved command already has a durable outcome.",
     );
   }
+  const original = originalAuthorityToolCall(input.toolJournal, execution);
+  if (!original) {
+    return failedContinuation("authority_source_call_missing", "The original approved operation is unavailable.");
+  }
   return {
     ok: true,
     execution,
     effectiveCall: {
       ...input.call,
-      args: execution.normalizedInput,
-      rawArguments: JSON.stringify(execution.normalizedInput),
+      args: original.arguments,
+      rawArguments: JSON.stringify(original.arguments),
     },
   };
 }
@@ -174,6 +244,13 @@ export function renderPrivateModifyContinuationInput(value: string | undefined):
   ].join("\n\n");
 }
 
-function failedContinuation(code: string, message: string): { ok: false; result: Record<string, unknown> } {
-  return { ok: false, result: ordinaryGuidedEffectError(code, message) };
+function failedContinuation(
+  code: string,
+  message: string,
+): { ok: false; consumesRequest: false; result: Record<string, unknown> } {
+  return {
+    ok: false,
+    consumesRequest: false,
+    result: ordinaryGuidedEffectError(code, message),
+  };
 }

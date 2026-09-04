@@ -3,6 +3,7 @@ import type {
   DurableWorkActionUpdate,
   DurableWorkDispositionStatus,
   DurableWorkPlanAction,
+  DurableWorkExecutionMode,
   DurableWorkService,
   DurableWorkView,
   WorkTurnScope,
@@ -110,6 +111,7 @@ function decodePlan(input: WorkToolInput) {
     startNew: booleanValue(input.args.start_new, false, "start_new"),
     objective: stringValue(input.args.objective, "objective"),
     governingRefs: optionalStringArray(input.args.governing_refs, "governing_refs"),
+    executionMode: executionModeValue(input.args.execution_mode),
     actions,
     checks: optionalStringArray(input.args.checks, "checks"),
     ...backfillInput(input),
@@ -121,6 +123,13 @@ function backfillInput(input: WorkToolInput):
   return input.priorToolCallIds && input.priorToolCallIds.length > 0
     ? { backfillToolCallIds: [...input.priorToolCallIds] }
     : {};
+}
+
+function executionModeValue(value: unknown): DurableWorkExecutionMode {
+  if (value !== "direct" && value !== "workers") {
+    throw new Error("Work Plan requires execution_mode to be direct or workers");
+  }
+  return value;
 }
 
 function decodeCheckpoint(input: WorkToolInput) {
@@ -240,6 +249,7 @@ function workToolView(work: DurableWorkView): Record<string, unknown> {
     work_id: work.workId,
     status: work.status,
     current_stage: work.currentStage ?? null,
+    execution_mode: work.currentPlan?.executionMode ?? null,
     actions: work.currentPlan?.actions.map((action) => {
       const progress = work.actionProgress.find((item) =>
         item.actionKey === action.actionKey);

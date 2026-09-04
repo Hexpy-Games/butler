@@ -4,6 +4,14 @@ const MAX_MATCH_PREVIEWS = 12;
 const MAX_MATCH_TEXT_CHARS = 240;
 const MAX_FILE_CONTENT_CHARS = 4_800;
 const WORK_BLOCK_TOOL_NAME = "run_work_block";
+const WORK_RESULT_TOOL_NAMES = new Set([
+  "start_work",
+  "continue_work",
+  "replace_work_plan",
+  "record_work_checkpoint",
+  "record_work_review",
+  "record_work_disposition",
+]);
 
 export interface ToolResultModelPreviewContext {
   seenPublicWebEvidenceItemIds: Set<string>;
@@ -14,7 +22,35 @@ export interface ToolResultModelPreviewContext {
   };
 }
 
+export type StructuredToolResultModelProjection = {
+  preview: Record<string, unknown> | null;
+  partial: boolean;
+};
+
 export function structuredToolResultModelPreview(input: {
+  toolName: string;
+  output: unknown;
+  seenPublicWebEvidenceItemIds?: Set<string>;
+  context?: ToolResultModelPreviewContext;
+}): Record<string, unknown> | null {
+  return structuredToolResultModelProjection(input).preview;
+}
+
+/** Reports semantic projection loss separately from the provider-facing payload. */
+export function structuredToolResultModelProjection(input: {
+  toolName: string;
+  output: unknown;
+  seenPublicWebEvidenceItemIds?: Set<string>;
+  context?: ToolResultModelPreviewContext;
+}): StructuredToolResultModelProjection {
+  const preview = buildStructuredToolResultModelPreview(input);
+  return {
+    preview,
+    partial: preview !== null && !previewPreservesOriginalContent(input.output, preview),
+  };
+}
+
+function buildStructuredToolResultModelPreview(input: {
   toolName: string;
   output: unknown;
   seenPublicWebEvidenceItemIds?: Set<string>;
@@ -23,6 +59,10 @@ export function structuredToolResultModelPreview(input: {
   if (input.toolName === WORK_BLOCK_TOOL_NAME) {
     const output = toolPayload(input.output, ["results"]);
     return output ? workBlockPreview(output, input.context) : null;
+  }
+  if (WORK_RESULT_TOOL_NAMES.has(input.toolName)) {
+    const output = toolPayload(input.output, ["work", "error"]);
+    return output ? workResultPreview(input.toolName, output) : null;
   }
   if (input.toolName === "grep_files") {
     const output = toolPayload(input.output, ["matches", "pattern"]);
@@ -44,6 +84,12 @@ export function structuredToolResultModelPreview(input: {
     const output = toolPayload(input.output, ["text", "artifact"]);
     return output ? artifactResultPreview(input.toolName, output) : null;
   }
+  if (input.toolName === "read_operation_results") {
+    const output = toolPayload(input.output, ["encoding", "data", "offset"]);
+    return output && typeof output.data === "string"
+      ? operationResultPagePreview(output)
+      : genericToolPreview(input.toolName, input.output);
+  }
   if (input.toolName === "run_command") {
     const output = toolPayload(input.output, ["model_visible_content", "exit_code"]);
     return output ? runCommandPreview(output) : null;
@@ -61,6 +107,29 @@ export function structuredToolResultModelPreview(input: {
       : null;
   }
   return genericToolPreview(input.toolName, input.output);
+}
+
+function previewPreservesOriginalContent(original: unknown, preview: unknown): boolean {
+  if (original === undefined) return true;
+  if (original === null || typeof original === "boolean" ||
+    typeof original === "number" || typeof original === "string") {
+    if (Object.is(original, preview)) return true;
+    const previewRecord = record(preview);
+    return previewRecord
+      ? Object.values(previewRecord).some((value) => Object.is(original, value))
+      : false;
+  }
+  if (Array.isArray(original)) {
+    return Array.isArray(preview) && preview.length >= original.length &&
+      original.every((value, index) => previewPreservesOriginalContent(value, preview[index]));
+  }
+  const originalRecord = record(original);
+  const previewRecord = record(preview);
+  if (!originalRecord || !previewRecord) return false;
+  return Object.entries(originalRecord).every(([key, value]) =>
+    Object.hasOwn(previewRecord, key) &&
+    previewPreservesOriginalContent(value, previewRecord[key]),
+  );
 }
 
 function publicWebEvidencePreview(
@@ -236,6 +305,108 @@ function runCommandPreview(output: Record<string, unknown>): Record<string, unkn
         })
       : undefined,
     output_presentation: record(output.output_presentation) ?? undefined,
+  });
+}
+
+function workResultPreview(
+  toolName: string,
+  output: Record<string, unknown>,
+): Record<string, unknown> {
+  const work = record(output.work);
+  const error = record(output.error);
+  return compactUndefined({
+    tool_name: toolName,
+    ok: typeof output.ok === "boolean" ? output.ok : undefined,
+    status: text(output.status),
+    authority_pending: typeof output.authority_pending === "boolean"
+      ? output.authority_pending
+      : undefined,
+    executed: typeof output.executed === "boolean" ? output.executed : undefined,
+    not_executed: typeof output.not_executed === "boolean"
+      ? output.not_executed
+      : undefined,
+    pending: typeof output.pending === "boolean" ? output.pending : undefined,
+    queued: typeof output.queued === "boolean" ? output.queued : undefined,
+    exit_code: finiteNumber(output.exit_code) ?? undefined,
+    timed_out: typeof output.timed_out === "boolean" ? output.timed_out : undefined,
+    error: error
+      ? compactUndefined({
+          code: text(error.code),
+          message: boundedHeadTailText(error.message, 1_200),
+          current_stage: text(error.current_stage),
+          requested_action: text(error.requested_action),
+          unmet_guard: text(error.unmet_guard),
+          next_action: text(error.next_action),
+        })
+      : boundedHeadTailText(output.error, 1_200),
+    work: work
+      ? compactUndefined({
+          work_id: text(work.work_id),
+          status: text(work.status),
+          current_stage: work.current_stage === null
+            ? null
+            : text(work.current_stage),
+          execution_mode: work.execution_mode === null
+            ? null
+            : text(work.execution_mode),
+          allowed_next_stages: boundedStringArray(
+            work.allowed_next_stages,
+            Number.MAX_SAFE_INTEGER,
+            120,
+          ) ?? [],
+          actions: workActions(work.actions),
+          unresolved_action_keys: boundedStringArray(
+            work.unresolved_action_keys,
+            Number.MAX_SAFE_INTEGER,
+            256,
+          ) ?? [],
+          completion_blockers: boundedStringArray(
+            work.completion_blockers,
+            Number.MAX_SAFE_INTEGER,
+            160,
+          ) ?? [],
+          latest_plan_review: work.latest_plan_review === null
+            ? null
+            : text(work.latest_plan_review),
+          latest_result_review: work.latest_result_review === null
+            ? null
+            : text(work.latest_result_review),
+          latest_completion_validation:
+            work.latest_completion_validation === null
+              ? null
+              : text(work.latest_completion_validation),
+          latest_disposition: workDisposition(work.latest_disposition),
+        })
+      : undefined,
+  });
+}
+
+function workActions(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const action = record(entry);
+    const actionKey = text(action?.action_key);
+    const status = text(action?.status);
+    return actionKey && status
+      ? [{ action_key: actionKey, status }]
+      : [];
+  });
+}
+
+function workDisposition(value: unknown): Record<string, unknown> | undefined {
+  const disposition = record(value);
+  if (!disposition) return undefined;
+  return compactUndefined({
+    disposition: text(disposition.disposition),
+    summary: boundedHeadTailText(disposition.summary, 480),
+    remaining_actions: boundedStringArray(
+      disposition.remaining_actions,
+      12,
+      320,
+    ) ?? [],
+    next_condition: disposition.next_condition === null
+      ? null
+      : boundedText(disposition.next_condition, 320),
   });
 }
 
@@ -472,7 +643,10 @@ function toolPayload(
   return valueRecord;
 }
 
-import { artifactResultPreview } from "./artifact-result-preview.ts";
+import {
+  artifactResultPreview,
+  operationResultPagePreview,
+} from "./artifact-result-preview.ts";
 import {
   boundedHeadTailText,
   boundedText,

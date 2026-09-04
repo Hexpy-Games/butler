@@ -21,6 +21,7 @@ export function captureMaterialPlan(
     revision: plan.revision,
     objective: plan.objective,
     governingRefs: plan.governingRefs ?? [],
+    ...(plan.executionMode ? { executionMode: plan.executionMode } : {}),
     actions: plan.actions,
     checks: plan.checks,
     originTurnId: plan.originTurnId,
@@ -41,11 +42,15 @@ export function validateMaterialPlan(
     "checks",
     "originTurnId",
     "createdAt",
-  ]);
+  ], ["executionMode"]);
   textRequired(plan.planRevisionId);
   positiveRevision(plan.revision);
   textRequired(plan.objective);
   stringArray(plan.governingRefs);
+  if (plan.executionMode !== undefined &&
+      plan.executionMode !== "direct" && plan.executionMode !== "workers") {
+    throw new Error("project_work_managed_record_invalid");
+  }
   boundedArray(plan.actions).forEach((value) => {
     const action = object(value);
     exactKeys(

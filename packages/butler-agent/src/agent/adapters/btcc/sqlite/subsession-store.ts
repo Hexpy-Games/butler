@@ -9,6 +9,7 @@ import type {
   StewardDirection,
   CreateStewardDirectionInput,
   SubsessionDelegationStore,
+  SubsessionDispatchIntent,
 } from "../../../btcc/subsessions/index.ts";
 import {
   markParentInputDelivered as markOutboxInputDelivered,
@@ -24,8 +25,14 @@ import {
   safeStewardSummary,
 } from "./subsession-result-record.ts";
 import { createStewardDirection, consumePendingStewardDirection } from "./subsession-direction-store.ts";
+import {
+  createSubsessionDispatchRecord,
+  createWorkerDispatchAssignment,
+  listPendingSubsessionDispatchIntents,
+  markSubsessionDispatchEnqueued,
+  readSubsessionDispatchIntent,
+} from "./subsession-dispatch-store.ts";
 
-type RelationRow = SessionRelation;
 type DelegationRow = {
   delegation_id: string;
   relation_id: string;
@@ -43,45 +50,23 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     packet: DelegationPacket;
     childTurnId: string;
     rootWorkId: string;
+    dispatchIntent?: SubsessionDispatchIntent;
   }): void {
-    const tx = this.db.transaction(() => {
-      const existing = this.relationByDelegationId(input.packet.delegation_id);
-      if (existing) return;
-      this.db.query(`
-        INSERT INTO btcc_session_relations (
-          relation_id, parent_session_id, parent_turn_id, child_session_id,
-          anchor_message_id, ordinal, safe_title, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        input.relation.relation_id,
-        input.relation.parent_session_id,
-        input.relation.parent_turn_id,
-        input.relation.child_session_id,
-        input.relation.anchor_message_id,
-        input.relation.ordinal,
-        input.relation.safe_title,
-        input.relation.created_at,
-      );
-      this.db.query(`
-        INSERT INTO btcc_subsession_delegations (
-          delegation_id, relation_id, task_id, child_turn_id, root_work_id,
-          packet_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        input.packet.delegation_id,
-        input.relation.relation_id,
-        input.packet.task_id,
-        input.childTurnId,
-        input.rootWorkId,
-        stableJson(input.packet),
-        input.relation.created_at,
-      );
-    });
-    tx.immediate();
+    createSubsessionDispatchRecord(this.db, input);
+  }
+
+  createWorkerAssignment(input: {
+    relation: SessionRelation;
+    packet: DelegationPacket;
+    childTurnId: string;
+    rootWorkId: string;
+    dispatchIntent: SubsessionDispatchIntent;
+  }): SessionRelation {
+    return createWorkerDispatchAssignment(this.db, input);
   }
 
   relationById(relationId: string): SessionRelation | null {
-    const row = this.db.query<RelationRow, [string]>(`
+    const row = this.db.query<SessionRelation, [string]>(`
       SELECT relation_id, parent_session_id, parent_turn_id, child_session_id,
         anchor_message_id, ordinal, safe_title, created_at
       FROM btcc_session_relations WHERE relation_id = ?
@@ -90,7 +75,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
   }
 
   relationByDelegationId(delegationId: string): SessionRelation | null {
-    const row = this.db.query<RelationRow, [string]>(`
+    const row = this.db.query<SessionRelation, [string]>(`
       SELECT relation_id, parent_session_id, parent_turn_id, child_session_id,
         anchor_message_id, ordinal, safe_title, created_at
       FROM btcc_session_relations
@@ -102,7 +87,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
   }
 
   relationsByParentSessionId(parentSessionId: string): SessionRelation[] {
-    return this.db.query<RelationRow, [string]>(`
+    return this.db.query<SessionRelation, [string]>(`
       SELECT relation_id, parent_session_id, parent_turn_id, child_session_id,
         anchor_message_id, ordinal, safe_title, created_at
       FROM btcc_session_relations WHERE parent_session_id = ?
@@ -111,7 +96,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
   }
 
   relationByChildSessionId(childSessionId: string): SessionRelation | null {
-    const row = this.db.query<RelationRow, [string]>(`
+    const row = this.db.query<SessionRelation, [string]>(`
       SELECT relation_id, parent_session_id, parent_turn_id, child_session_id,
         anchor_message_id, ordinal, safe_title, created_at
       FROM btcc_session_relations WHERE child_session_id = ?
@@ -153,6 +138,21 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     return this.db.query<{ child_turn_id: string }, [string]>(`
       SELECT child_turn_id FROM btcc_subsession_delegations WHERE relation_id = ?
     `).get(relationId)?.child_turn_id ?? null;
+  }
+
+  dispatchIntentByRelationId(relationId: string): SubsessionDispatchIntent | null {
+    return readSubsessionDispatchIntent(this.db, relationId);
+  }
+
+  pendingDispatchIntents(): Array<{
+    relationId: string;
+    intent: SubsessionDispatchIntent;
+  }> {
+    return listPendingSubsessionDispatchIntents(this.db);
+  }
+
+  markDispatchEnqueued(relationId: string): void {
+    markSubsessionDispatchEnqueued(this.db, relationId);
   }
 
   createDirection(direction: CreateStewardDirectionInput): StewardDirection {

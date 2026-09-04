@@ -22,6 +22,7 @@ export type TurnRow = {
   context_json: string;
   progress_destination_json: string | null;
   semantic_state: string;
+  suspension_reason: string | null;
   active_checkpoint_id: string | null;
   route: string | null;
   final_payload_json: string | null;
@@ -224,7 +225,7 @@ export function hydrateFinalDisposition(
 }
 
 export function assertGuidedTurnRecord(turn: TurnRecord): void {
-  const nonterminal = turn.semanticState === "admitted" ||
+  const nonterminal = (turn.semanticState === "admitted" && !turn.suspension) ||
     turn.semanticState === "delivery_committed";
   if (nonterminal !== Boolean(turn.checkpoint)) {
     throw new Error("BTCC R3 Turn checkpoint does not match lifecycle state");

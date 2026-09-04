@@ -101,6 +101,7 @@ export function createGuidedToolExecutionBoundary(
   input: GuidedToolExecutionBoundaryInput | LegacyGuidedToolExecutionBoundaryInput,
 ): ButlerToolExecutionBoundary {
   const authority = "authority" in input ? input.authority : undefined;
+  let authorityContinuationAvailable = Boolean(input.authorityRequestRef);
   const executePersistentEffect = async (
     call: ButlerToolCall,
     execute: (prepared?: {
@@ -126,10 +127,14 @@ export function createGuidedToolExecutionBoundary(
     }
     let authorityExecution: Awaited<ReturnType<PrincipalAuthority["execution"]>> | undefined;
     let effectiveCall = call;
-    if (input.authorityRequestRef) {
+    const authorityRequestRef = authorityContinuationAvailable
+      ? input.authorityRequestRef
+      : undefined;
+    if (authorityRequestRef) {
       const continuation = resolveGuidedAuthorityContinuation({
         authority,
-        requestRef: input.authorityRequestRef,
+        toolJournal: input.toolJournal,
+        requestRef: authorityRequestRef,
         ownerSessionId: input.ownerSessionId,
         sourceSessionId: input.sourceSessionId,
         sourceTurnId: input.sourceTurnId,
@@ -138,7 +143,10 @@ export function createGuidedToolExecutionBoundary(
         sourceWorkId: work.workId,
         call,
       });
-      if (!continuation.ok) return continuation.result;
+      if (!continuation.ok) {
+        if (continuation.consumesRequest) authorityContinuationAvailable = false;
+        return continuation.result;
+      }
       authorityExecution = continuation.execution;
       effectiveCall = continuation.effectiveCall;
     }
@@ -186,7 +194,20 @@ export function createGuidedToolExecutionBoundary(
       }
       const normalizedInput = resolution.adapter.normalizeInput(
         resolution.input,
-      ) as AuthorityCommandInput;
+      );
+      if (effectiveCall.name !== "run_command" && !occurrenceId?.trim()) {
+        return ordinaryGuidedEffectError(
+          "authority_operation_occurrence_missing",
+          "The reviewed operation occurrence is unavailable.",
+        );
+      }
+      const authorityOperation = effectiveCall.name === "run_command"
+        ? { normalizedInput: normalizedInput as AuthorityCommandInput }
+        : {
+            category: "reviewed_effect" as const,
+            operationOccurrenceId: occurrenceId!,
+            normalizedInput: reviewedEffectAuthorityInput(normalizedInput),
+          };
       const planRevisionId = work.currentPlan?.planRevisionId;
       if (!planRevisionId) {
         return ordinaryGuidedEffectError(
@@ -196,7 +217,7 @@ export function createGuidedToolExecutionBoundary(
       }
       const actionKey = acceptedGuidedPlanActionKey(
         work,
-        resolution.adapter.capability,
+        resolution.adapter,
         resolution.target,
       );
       if (!actionKey.ok) {
@@ -230,7 +251,7 @@ export function createGuidedToolExecutionBoundary(
           authorityGeneration,
           capability: resolution.adapter.capability,
           target: resolution.target,
-          normalizedInput,
+          ...authorityOperation,
           modelRef: input.modelRef,
           reasoningEffort: input.reasoningEffort,
         });
@@ -253,11 +274,14 @@ export function createGuidedToolExecutionBoundary(
           "The command authority identity could not be admitted.",
         );
       }
+      if (authorityExecution?.decision === "modified") {
+        authorityContinuationAvailable = false;
+      }
       return deferredGuidedAuthorityResult();
     } else if (approvedAuthorityExecution) {
       const actionKey = acceptedGuidedPlanActionKey(
         work,
-        resolution.adapter.capability,
+        resolution.adapter,
         resolution.target,
       );
       if (!actionKey.ok) {
@@ -286,7 +310,7 @@ export function createGuidedToolExecutionBoundary(
       const settled = settleNonAppliedAuthorityOutcome(
         authority!,
         {
-          requestRef: input.authorityRequestRef!,
+          requestRef: authorityRequestRef!,
           ownerSessionId: input.ownerSessionId!,
           sourceWorkId: work.workId,
         },
@@ -298,6 +322,7 @@ export function createGuidedToolExecutionBoundary(
           "The uncertain command outcome could not be recorded.",
         );
       }
+      authorityContinuationAvailable = false;
     }
     if (approvedAuthorityExecution && outcome.ok) {
       const appliedReceipt = deriveAppliedAuthorityOutcomeReceipt(
@@ -310,12 +335,13 @@ export function createGuidedToolExecutionBoundary(
         );
       }
       authority!.recordOutcome({
-        requestRef: input.authorityRequestRef!,
+        requestRef: authorityRequestRef!,
         ownerSessionId: input.ownerSessionId!,
         sourceWorkId: work.workId,
         status: "applied",
         receipt: appliedReceipt,
       });
+      authorityContinuationAvailable = false;
     }
     if (!outcome.ok) {
       return ordinaryGuidedEffectError(outcome.error.code, outcome.error.message, {
@@ -355,4 +381,11 @@ export function createGuidedToolExecutionBoundary(
     }
     return executePersistentEffect(call, execute, context.effectOccurrenceId);
   };
+}
+
+function reviewedEffectAuthorityInput(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("authority_reviewed_effect_input_invalid");
+  }
+  return value as Record<string, unknown>;
 }

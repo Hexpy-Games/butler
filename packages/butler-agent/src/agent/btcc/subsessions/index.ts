@@ -33,6 +33,7 @@ export type {
   StewardResultStatus,
   StewardDirection,
   SubsessionDelegationDependencies,
+  SubsessionDispatchIntent,
   SubsessionDelegationService,
   SubsessionDelegationStore,
 } from "./contracts.ts";

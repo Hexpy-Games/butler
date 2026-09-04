@@ -19,7 +19,7 @@ import {
 } from "./durable-work-tools.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import { GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES } from
-  "./guided-project-ledger-effect.ts";
+  "./guided-project-ledger-effect-input.ts";
 import { guidedToolDefinition } from "./guided-tool-definition.ts";
 import { safeCommandActionLabel } from "../../output/progress/arguments.ts";
 import { currentModelRouteCandidate } from "../model-route/index.ts";

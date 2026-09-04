@@ -1571,7 +1571,7 @@ export type AuthorityRequestRef = string;
  */
 export interface AuthorityApprovalCard {
   requestRef: AuthorityRequestRef;
-  category: "command";
+  category: "command" | "reviewed_effect";
   reason: string;
   executable: string;
   commandCount: number;

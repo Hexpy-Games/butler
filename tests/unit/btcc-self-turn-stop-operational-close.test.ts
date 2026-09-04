@@ -58,6 +58,7 @@ test(
             toolCall("plan", "replace_work_plan", {
               start_new: true,
               objective: "Run one reviewed command",
+              execution_mode: "direct",
               actions: [{
                 action_key: "run-reviewed-command",
                 description: "Run the reviewed command only after approval",

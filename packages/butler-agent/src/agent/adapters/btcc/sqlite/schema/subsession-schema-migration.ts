@@ -7,6 +7,7 @@ import { BTCC_SUBSESSION_SCHEMA } from "./subsession-schema.ts";
  * authoritative and keep their identities.
  */
 export function migrateSubsessionResultSchema(db: Database): void {
+  ensureDelegationDispatchIntent(db);
   const definition = db.query<{ sql: string | null }, []>(`
     SELECT sql FROM sqlite_schema
     WHERE type = 'table' AND name = 'btcc_steward_results'
@@ -53,6 +54,25 @@ export function migrateSubsessionResultSchema(db: Database): void {
   `);
   db.exec(`DROP TABLE ${legacyTable}`);
   addDetailedResultColumns(db);
+}
+
+function ensureDelegationDispatchIntent(db: Database): void {
+  const table = "btcc_subsession_delegations";
+  const exists = db.query<{ present: number }, [string]>(`
+    SELECT 1 AS present FROM sqlite_schema WHERE type = 'table' AND name = ?
+  `).get(table);
+  if (!exists) return;
+  const columns = db.query<{ name: string }, []>(
+    `PRAGMA table_info(${table})`,
+  ).all();
+  const names = new Set(columns.map(({ name }) => name));
+  if (!names.has("dispatch_intent_json")) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN dispatch_intent_json TEXT`);
+  }
+  if (!names.has("dispatch_state")) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN dispatch_state TEXT
+      CHECK (dispatch_state IS NULL OR dispatch_state IN ('pending', 'enqueued'))`);
+  }
 }
 
 function sourceColumn(

@@ -651,7 +651,7 @@ test("Steward no-tool answers cannot finalize active Workers; failed assignment 
       }));
       const result = await agent.run({ turn, signal: new AbortController().signal });
       expect(result.content).toBe(active ? "" : "normal answer");
-      expect(result.executionOutcome).toBe(active ? "waiting_for_worker" : undefined);
+      expect(result.suspension).toBe(active ? "waiting_for_worker" : undefined);
       expect(rounds).toBe(active ? 1 : 3);
     }
   } finally { fixture.close(); }

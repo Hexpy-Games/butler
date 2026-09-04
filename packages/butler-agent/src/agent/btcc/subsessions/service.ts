@@ -24,7 +24,7 @@ import {
   stewardRootWorkScope,
 } from "./runtime-policy.ts";
 import { createSubsessionControlService } from "./control.ts";
-import { delegateReviewedWorker } from "./worker-delegation.ts";
+import { delegateReviewedWorker, replayDispatchIntent } from "./worker-delegation.ts";
 import { completeWorkerResultForDependencies, hasQueuedWorkerResult } from "./worker-result.ts";
 import type {
   CreatedDelegation, DelegationPacket, DelegationRequest, ParentInputSink,
@@ -37,6 +37,9 @@ export function createSubsessionDelegationService(
   input: SubsessionDelegationDependencies,
 ): SubsessionDelegationService {
   const childQueue = new NativeInboundQueue(input.butlerData);
+  for (const { relationId, intent } of input.store.pendingDispatchIntents?.() ?? []) {
+    replayDispatchIntent(input, childQueue, relationId, intent);
+  }
   const parentInputSink: ParentInputSink = input.parentInputSink;
   const completeResult = (resultInput: Parameters<SubsessionDelegationService["completeStewardResult"]>[0]) =>
     completeStewardResultForDependencies(input, parentInputSink, resultInput);
@@ -157,7 +160,7 @@ export function createSubsessionDelegationService(
       });
       assertDelegationParentWorkRef(normalizedRequest, reviewed);
       const delegationId = subsessionDelegationId(normalizedRequest);
-      const existing = input.store.relationByDelegationId(delegationId); if (existing) return recoverExistingDelegation(input, existing);
+      const existing = input.store.relationByDelegationId(delegationId); if (existing) return recoverExistingDelegation(input, childQueue, existing);
       const relationId = `relation-${digest(`btcc.subsession.relation.v1\0${delegationId}`).slice(0, 40)}`;
       // Persisted task_id is the managerial assignment, never a Worker Task.
       const managerialAssignmentId = `task-${digest(`btcc.subsession.task.v1\0${delegationId}`).slice(0, 40)}`;
@@ -189,15 +192,31 @@ export function createSubsessionDelegationService(
         parentTurnId: normalizedRequest.parent_turn_id,
         modelRef: normalizedRequest.model_ref,
       });
-      registerChildSession(input, parent, normalizedRequest, packet, childSessionId, inheritedProject, recentFeedbackRefs);
       const childWorkspacePath = parent.workspacePath;
+      const childBinding = childSessionBinding(
+        parent,
+        normalizedRequest,
+        packet,
+        childSessionId,
+        inheritedProject,
+        recentFeedbackRefs,
+      );
+      const dispatchIntent = childDispatchIntent(
+        packet,
+        normalizedRequest.parent_session_id,
+        childSessionId,
+        childTurnId,
+        childWorkspacePath,
+        now,
+        parentConversationContext,
+        childBinding,
+      );
+      input.store.create({ relation, packet, childTurnId, rootWorkId, dispatchIntent });
+      replayDispatchIntent(input, childQueue, relation.relation_id, dispatchIntent);
       const storedChild = input.sessionBindings.getBySessionId(childSessionId);
       if (!storedChild || storedChild.workspacePath !== parent.workspacePath) {
         throw new Error("steward_inherited_workspace_missing");
       }
-      input.store.create({ relation, packet, childTurnId, rootWorkId });
-      enqueueChild(childQueue, packet, normalizedRequest.parent_session_id, childSessionId,
-        childTurnId, childWorkspacePath, now, parentConversationContext);
       return { relation, packet, child_turn_id: childTurnId, root_work_id: rootWorkId,
         child_workspace_path: childWorkspacePath } satisfies CreatedDelegation;
     },
@@ -232,9 +251,12 @@ export function createSubsessionDelegationService(
 
 function recoverExistingDelegation(
   input: SubsessionDelegationDependencies,
+  childQueue: NativeInboundQueue,
   relation: SessionRelation,
 ): CreatedDelegation {
   const packet = input.store.packetByRelationId(relation.relation_id);
+  const dispatchIntent = input.store.dispatchIntentByRelationId?.(relation.relation_id);
+  if (dispatchIntent) replayDispatchIntent(input, childQueue, relation.relation_id, dispatchIntent);
   const child = input.sessionBindings.getBySessionId(relation.child_session_id);
   if (!packet || !child) throw new Error("subsession_existing_identity_incomplete");
   return {
@@ -292,16 +314,15 @@ function createPacket(
     reasoning_effort: request.reasoning_effort,
   };
 }
-function registerChildSession(
-  input: SubsessionDelegationDependencies,
+function childSessionBinding(
   parent: StoredSessionBinding,
   request: DelegationRequest,
   packet: DelegationPacket,
   childSessionId: string,
   inheritedProject: ReturnType<typeof childProjectContextBinding>,
   recentFeedbackRefs: string[],
-): void {
-  input.sessionBindings.upsert({
+) {
+  return {
     sessionId: childSessionId,
     role: "steward",
     ...(inheritedProject?.sessionBinding ?? {}),
@@ -326,11 +347,10 @@ function registerChildSession(
       runtimePolicy: inheritedStewardRuntimePolicy(parent, request.parent_access_mode),
       reasoning_effort: packet.reasoning_effort,
     },
-  });
+  } satisfies Parameters<SubsessionDelegationDependencies["sessionBindings"]["upsert"]>[0];
 }
 
-function enqueueChild(
-  childQueue: NativeInboundQueue,
+function childDispatchIntent(
   packet: DelegationPacket,
   parentSessionId: string,
   childSessionId: string,
@@ -338,28 +358,33 @@ function enqueueChild(
   workspacePath: string,
   timestamp: string,
   parentConversationContext: string,
-): void {
-  childQueue.enqueueIdempotent({
-    eventId: `steward:${packet.delegation_id}`,
-    transport: "app",
-    accountId: "local",
-    peer: { kind: "dm", id: childSessionId, parentId: parentSessionId },
-    sender: { id: "butler-steward-dispatch", displayName: "Butler Steward" },
-    message: {
-      id: `steward-message:${packet.delegation_id}`,
-      text: renderStewardInput(packet, parentConversationContext),
-      timestamp,
+  childBinding: Parameters<SubsessionDelegationDependencies["sessionBindings"]["upsert"]>[0],
+) {
+  return {
+    childBinding,
+    envelope: {
+      eventId: `steward:${packet.delegation_id}`,
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: childSessionId, parentId: parentSessionId },
+      sender: { id: "butler-steward-dispatch", displayName: "Butler Steward" },
+      message: {
+        id: `steward-message:${packet.delegation_id}`,
+        text: renderStewardInput(packet, parentConversationContext),
+        timestamp,
+      },
+      routingHints: { stewardId: childSessionId, turnId: childTurnId },
+      nativeStewardContext: {
+        version: 1,
+        projectName: packet.project_context?.project_id ?? "",
+        workspacePath,
+        modelRef: packet.model_ref as `${string}/${string}`,
+        reasoningEffort: packet.reasoning_effort,
+      },
+      raw: { source: "btcc-subsession-delegation" },
     },
-    routingHints: { stewardId: childSessionId, turnId: childTurnId },
-    nativeStewardContext: {
-      version: 1,
-      projectName: packet.project_context?.project_id ?? "",
-      workspacePath,
-      modelRef: packet.model_ref as `${string}/${string}`,
-      reasoningEffort: packet.reasoning_effort,
-    },
-    raw: { source: "btcc-subsession-delegation" },
-  });
+    metadata: { source: "btcc-subsession-delegation" },
+  } satisfies import("./contracts.ts").SubsessionDispatchIntent;
 }
 function nextOrdinal(input: SubsessionDelegationDependencies, parentSessionId: string): number {
   return (input.store.relationsByParentSessionId(parentSessionId).at(-1)?.ordinal ?? 0) + 1;

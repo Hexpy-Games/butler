@@ -5,7 +5,12 @@ import type {
   DurableWorkView,
   WorkTurnScope,
 } from "../work/index.ts";
-import { acceptedPlanEffectId } from "../effects/index.ts";
+import {
+  acceptedPlanEffectId,
+  resolveReviewedEffectActionKey,
+  stableEffectJson,
+  type EffectAdapter,
+} from "../effects/index.ts";
 import type { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { ensureActiveProjectLedger } from
@@ -221,34 +226,35 @@ export function createGuidedPersistentEffectResolver(input: {
 }
 
 export function sameGuidedEffectJson(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return stableEffectJson(left) === stableEffectJson(right);
 }
 
 export function acceptedGuidedPlanActionKey(
   work: DurableWorkView,
-  capability: string,
+  adapter: EffectAdapter,
   target: string,
 ):
   | { ok: true; value: string }
   | { ok: false; code: string; message: string } {
-  const actions = work.currentPlan?.actions.filter((action) =>
-    action.effect?.capability === capability && action.effect.target === target,
-  ) ?? [];
-  if (actions.length === 0) {
+  try {
+    const result = resolveReviewedEffectActionKey({
+      actions: work.currentPlan?.actions ?? [],
+      adapter,
+      normalizedTarget: adapter.normalizeTarget(target),
+    });
+    if (result.ok) return result;
     return {
       ok: false,
-      code: "effect_action_not_found",
-      message: "No accepted Plan action matches this effect capability and target.",
+      code: result.error.code,
+      message: result.error.message,
     };
-  }
-  if (actions.length !== 1) {
+  } catch (error) {
     return {
       ok: false,
-      code: "effect_action_ambiguous",
-      message: "More than one accepted Plan action matches this effect.",
+      code: "effect_request_invalid",
+      message: error instanceof Error ? error.message : "The effect request is invalid.",
     };
   }
-  return { ok: true, value: actions[0]!.actionKey };
 }
 
 export async function loadGuidedEffectWork(
@@ -285,7 +291,7 @@ export function deferredGuidedAuthorityResult(): Record<string, unknown> {
     ok: true,
     authority_pending: true,
     status: "awaiting_allow",
-    message: "This reviewed command is waiting for Allow before dispatch.",
+    message: "This reviewed operation is waiting for Allow before dispatch.",
   };
 }
 

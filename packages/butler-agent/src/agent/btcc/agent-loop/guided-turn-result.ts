@@ -6,8 +6,9 @@ import type { ProjectLedgerPlan } from "../project-plan.ts";
 export function guidedTurnResult(input: {
   content: string;
   terminalOutcome?: BtccAgentLoopResult["terminalOutcome"];
-  executionOutcome?: BtccAgentLoopResult["executionOutcome"];
+  suspension?: BtccAgentLoopResult["suspension"];
   workStatus?: BtccAgentLoopResult["workStatus"];
+  acceptedWorkResult?: BtccAgentLoopResult["acceptedWorkResult"];
   artifacts?: BtccAgentLoopResult["artifacts"];
   changedFiles?: BtccAgentLoopResult["changedFiles"];
   plan?: ProjectLedgerPlan;
@@ -18,8 +19,9 @@ export function guidedTurnResult(input: {
   return {
     content: input.content,
     ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
-    ...(input.executionOutcome ? { executionOutcome: input.executionOutcome } : {}),
+    ...(input.suspension ? { suspension: input.suspension } : {}),
     ...(input.workStatus ? { workStatus: input.workStatus } : {}),
+    ...(input.acceptedWorkResult ? { acceptedWorkResult: input.acceptedWorkResult } : {}),
     ...(input.artifacts?.length ? { artifacts: input.artifacts } : {}),
     ...(input.changedFiles?.length ? { changedFiles: input.changedFiles } : {}),
     ...(input.plan ? { plan: input.plan } : {}),
