@@ -82,7 +82,7 @@ export function createProductionGuidedTurnAgent(
       const terminalParentSynthesis = Boolean(subsessionResultEvidence) && !workerResultIntegration;
       const askFirstTurn = policy.accessMode === "ask_first";
       const progressCapture = createGuidedOperationalProgressCapture(
-        askFirstTurn
+        askFirstTurn && !planMode
           ? createGuidedAskFirstProgress(progress)
           : progress,
       );
