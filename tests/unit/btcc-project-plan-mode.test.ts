@@ -5,7 +5,7 @@ import { projectLedgerPlanFromToolRecords } from
   "../../packages/butler-agent/src/agent/btcc/project-plan.ts";
 import { renderAcceptedProjectPlanContext } from
   "../../packages/butler-agent/src/agent/btcc/project-plan.ts";
-import { isAllowedProjectPlanMutation, projectPlanModeTools } from
+import { createProjectPlanModeExecution, isAllowedProjectPlanMutation, projectPlanModeTools } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-project-plan-mode.ts";
 import { guidedNativeToolDefinitions } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
@@ -99,13 +99,20 @@ test("a bound Plan keeps its exact update tool under non-mutation access", () =>
   const readOnlySurface = guidedNativeToolDefinitions(false).filter(
     (tool) => tool.effectBoundary === "none",
   );
-  expect(
-    projectPlanModeTools({
-      tools: readOnlySurface,
-      exactResultRead: false,
-      planId: "PLAN-1",
-    }).map((tool) => tool.name),
-  ).toContain("project_ledger_update");
+  const tools = projectPlanModeTools({
+    tools: readOnlySurface,
+    exactResultRead: false,
+    planId: "PLAN-1",
+  });
+  expect(tools.map((tool) => tool.name)).toContain("project_ledger_update");
+  const update = tools.find((tool) => tool.name === "project_ledger_update");
+  const properties = update?.parameters.properties as Record<string, unknown>;
+  expect(Object.keys(properties).sort()).toEqual([
+    "acceptance", "body", "id", "kind", "status", "title",
+  ]);
+  expect(properties).not.toHaveProperty("project_ref");
+  expect(properties).not.toHaveProperty("code_commit");
+  expect(properties).not.toHaveProperty("code_commits");
 });
 
 test("Plan mode admits only a draft create or the exact bound Plan update", () => {
@@ -132,6 +139,39 @@ test("Plan mode admits only a draft create or the exact bound Plan update", () =
     id: "native:project_ledger_update",
     arguments: { kind: "plan", id: "PLAN-1", status: "active" },
   }), "PLAN-1")).toBe(true);
+});
+
+test("Plan mode supplies only bound Plan fields to execution", async () => {
+  let received: Record<string, unknown> | undefined;
+  const execution = createProjectPlanModeExecution({
+    enabled: true,
+    planId: "PLAN-1",
+    executeTool: async (call) => {
+      received = call.args;
+      return { ok: true };
+    },
+  });
+
+  await execution.executeTool({
+    name: "project_ledger_update",
+    args: {
+      kind: "plan",
+      id: "PLAN-1",
+      status: "draft",
+      body: "# Revised plan",
+      project_ref: "/guessed/project",
+      code_commit: "auto",
+    },
+    rawArguments: "provider input",
+  });
+
+  expect(received).toEqual({
+    kind: "plan",
+    id: "PLAN-1",
+    status: "draft",
+    body: "# Revised plan",
+  });
+  expect(execution.completed()).toBe(true);
 });
 
 test("accepted Plan context carries the exact identity and body into execution", () => {
