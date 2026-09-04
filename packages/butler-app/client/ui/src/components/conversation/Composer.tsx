@@ -16,8 +16,7 @@ import { useComposerFileDrop } from "./hooks/useComposerFileDrop";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
 import { ComposerNotices } from "./ComposerNotices.tsx";
-import { ComposerAttachmentDrawer } from "./ComposerAttachmentDrawer";
-
+import { useComposerPlanDecision } from "./useComposerPlanDecision";
 interface ComposerProps {
   onReserveChange: (height: number) => void;
   onOpenContext: () => void;
@@ -33,7 +32,6 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
   const text = useComposerStore((store) => store.text);
   const setText = useComposerStore((store) => store.setText);
   const submit = useComposerStore((store) => store.submit);
-  const featureDrawerOpen = useComposerStore((store) => store.featureDrawerOpen);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -97,6 +95,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     summary: session.summary,
     textAreaRef,
   });
+  const planDecision = useComposerPlanDecision();
 
   useReserveHeight(wrapRef, onReserveChange);
   useComposerStoreBridge({
@@ -122,8 +121,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
   const presentation = useComposerPresentation({
     activeChatId: session.activeChatId,
     containerRef: wrapRef,
-    protectedExpanded:
-      modelMenuOpen || accessMenuOpen || contextPopoverOpen || featureDrawerOpen,
+    protectedExpanded: modelMenuOpen || accessMenuOpen || contextPopoverOpen,
   });
 
   return (
@@ -132,7 +130,6 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
       large={large}
       expanded={presentation.expanded}
       floating
-      drawer={featureDrawerOpen ? <ComposerAttachmentDrawer /> : undefined}
       notice={<ComposerNotices summary={session.summary} />}
       adjunct={
         showAdjunct ? (
@@ -151,9 +148,13 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
       onPointerDownCapture={presentation.onPointerDownCapture}
       onFocusCapture={presentation.onFocusCapture}
       onBlurCapture={presentation.onBlurCapture}
-      onSubmit={submit}
+      onSubmit={planDecision?.onSubmitInstruction ?? submit}
     >
-      <ComposerInputSurface fileInputRef={fileInputRef} onFiles={(nextFiles) => void files.addFiles(nextFiles)} />
+      <ComposerInputSurface
+        fileInputRef={fileInputRef}
+        onFiles={(nextFiles) => void files.addFiles(nextFiles)}
+        planDecision={planDecision}
+      />
     </ComposerCard>
   );
 }

@@ -793,6 +793,7 @@ export interface QueuedMessageRecord {
   id: string;
   chat_id: string;
   text: string;
+  plan_id?: string;
   attachments?: MessageFileRef[];
   controls: {
     model: string;

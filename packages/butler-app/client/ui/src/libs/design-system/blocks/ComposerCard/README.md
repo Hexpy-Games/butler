@@ -32,9 +32,8 @@ Product containers provide draft state, submit handlers, attachment actions,
 and menu controls. Compose `ComposerCardTextarea`, `ComposerCardToolbar`,
 `ComposerPlanToggle`, and `ComposerSendButton`.
 
-Use `ComposerPlanDecisionForm` in the `notice` slot when server-projected Plan
-state requires a decision. The product container owns the Plan record and API
-transition; the design-system form owns only layout and accessible controls.
+Plan decisions reuse the product Composer textarea and toolbar. Do not add a
+second input card or nest another form inside `ComposerCard`.
 
 Set `dropActive` while a file drag is over the card. Product containers own the
 drag event handling and upload action; the card only provides visual drop
@@ -43,10 +42,6 @@ feedback.
 Use the optional `notice` slot for a non-blocking dependency or capability
 notice that must stay visible while the form itself is compact. The slot sits
 outside the collapsible form and participates in the floating composer height.
-
-Use the optional `drawer` slot for flat secondary controls opened from the
-composer toolbar. The drawer is rendered inline after the form and participates
-in the same measured composer height; it is not a floating popover.
 
 ## Who can use this component
 

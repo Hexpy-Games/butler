@@ -17,7 +17,6 @@ export interface ComposerCardProps extends FormHTMLAttributes<HTMLFormElement> {
   dropActive?: boolean;
   adjunct?: ReactNode;
   notice?: ReactNode;
-  drawer?: ReactNode;
   children: ReactNode;
   containerRef?: Ref<HTMLDivElement>;
   expanded?: boolean;
@@ -29,7 +28,6 @@ export function ComposerCard({
   dropActive = false,
   adjunct,
   notice,
-  drawer,
   children,
   className,
   containerRef,
@@ -62,11 +60,6 @@ export function ComposerCard({
         ) : null}
         {children}
       </form>
-      {drawer ? (
-        <div className={styles.drawer} data-test-class="composer-drawer-slot">
-          {drawer}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -122,7 +115,13 @@ export function ComposerCardCompactPreview({
 }
 
 export function ComposerCardToolbarSpacer() {
-  return <span className={styles.spacer} aria-hidden="true" />;
+  return (
+    <span
+      className={styles.spacer}
+      aria-hidden="true"
+      data-test-class="composer-toolbar-spacer"
+    />
+  );
 }
 
 export interface ComposerSendButtonProps

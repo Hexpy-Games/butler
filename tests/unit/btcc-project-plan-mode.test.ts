@@ -5,8 +5,10 @@ import { projectLedgerPlanFromToolRecords } from
   "../../packages/butler-agent/src/agent/btcc/project-plan.ts";
 import { renderAcceptedProjectPlanContext } from
   "../../packages/butler-agent/src/agent/btcc/project-plan.ts";
-import { isAllowedProjectPlanMutation } from
+import { isAllowedProjectPlanMutation, projectPlanModeTools } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-project-plan-mode.ts";
+import { guidedNativeToolDefinitions } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
 import { messageFromRow } from
   "../../packages/butler-agent/src/gateways/app/domain/sessions/message-read-model.ts";
 
@@ -88,6 +90,22 @@ test("a direct instruction stays bound to the same Ledger Plan", () => {
   expect(continuation).toContain("id=PLAN-1");
   expect(continuation).toContain("status=draft for a revision");
   expect(continuation).toContain("status=active only when the user's instruction clearly accepts execution");
+  expect(continuation).toContain("project_ledger_update");
+  expect(continuation).toContain("Spec is created or updated");
+  expect(continuation).toContain("review it against that intent");
+});
+
+test("a bound Plan keeps its exact update tool under non-mutation access", () => {
+  const readOnlySurface = guidedNativeToolDefinitions(false).filter(
+    (tool) => tool.effectBoundary === "none",
+  );
+  expect(
+    projectPlanModeTools({
+      tools: readOnlySurface,
+      exactResultRead: false,
+      planId: "PLAN-1",
+    }).map((tool) => tool.name),
+  ).toContain("project_ledger_update");
 });
 
 test("Plan mode admits only a draft create or the exact bound Plan update", () => {

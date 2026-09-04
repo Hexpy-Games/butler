@@ -49,12 +49,6 @@ export interface ComposerStore {
   setAccessMenuOpen: (open: boolean) => void;
   contextPopoverOpen: boolean;
   setContextPopoverOpen: (open: boolean) => void;
-  featureDrawerOpen: boolean;
-  setFeatureDrawerOpen: (open: boolean) => void;
-  attachmentTriggerRef: RefObject<HTMLButtonElement | null> | null;
-  setAttachmentTriggerRef: (
-    ref: RefObject<HTMLButtonElement | null> | null,
-  ) => void;
   accessMode: AccessMode;
   planMode: boolean;
   model: string;

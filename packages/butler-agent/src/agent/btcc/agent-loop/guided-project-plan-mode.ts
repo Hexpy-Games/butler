@@ -19,12 +19,20 @@ export function projectPlanModeTools(input: {
   planId?: string;
 }): FunctionToolDefinition[] {
   const mutationName = input.planId ? "project_ledger_update" : "project_ledger_create";
+  const nativeTools = guidedNativeToolDefinitions(input.exactResultRead);
   const visible = new Set(
-    guidedNativeToolDefinitions(input.exactResultRead)
+    nativeTools
       .filter((tool) => tool.effectBoundary === "none" || tool.name === mutationName)
       .map((tool) => tool.name),
   );
-  return input.tools.filter((tool) => visible.has(tool.name));
+  const tools = new Map(
+    input.tools
+      .filter((tool) => visible.has(tool.name))
+      .map((tool) => [tool.name, tool]),
+  );
+  const mutation = nativeTools.find((tool) => tool.name === mutationName);
+  if (mutation) tools.set(mutation.name, mutation);
+  return [...tools.values()];
 }
 
 export function createProjectPlanModeExecution(input: {

@@ -31,7 +31,7 @@ function resizeComposerTextArea(element: HTMLTextAreaElement) {
   element.style.overflowY = element.scrollHeight > maxHeight ? "auto" : "hidden";
 }
 
-export function ComposerTextArea() {
+export function ComposerTextArea({ placeholder }: { placeholder?: string }) {
   const text = useComposerStore((store) => store.text);
   const setText = useComposerStore((store) => store.setText);
   const setIsComposing = useComposerStore((store) => store.setIsComposing);
@@ -70,9 +70,10 @@ export function ComposerTextArea() {
       onCompositionEnd={() => setIsComposing(false)}
       onKeyDown={handleKeyDown}
       placeholder={
-        large
+        placeholder ??
+        (large
           ? appCopy.composer.placeholder
-          : appCopy.composer.placeholderFollowUp
+          : appCopy.composer.placeholderFollowUp)
       }
       rows={minRows}
     />
