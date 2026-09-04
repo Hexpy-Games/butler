@@ -19,18 +19,40 @@
 }
 
 .title {
+  display: -webkit-box;
   min-width: 0;
   overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
   font-size: var(--font-size-2);
   font-weight: var(--font-weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: var(--line-height-compact);
+  text-align: left;
+  cursor: pointer;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.title:hover {
+  color: var(--text-secondary);
+}
+
+.title:focus-visible {
+  border-radius: var(--radius-control);
+  box-shadow: 0 0 0 3px var(--ring);
+  outline: none;
 }
 
 .actions {
   display: flex;
   min-width: 0;
   align-items: center;
-  border-top: 1px solid var(--composer-glass-divider);
+  justify-content: flex-end;
   padding: var(--space-2);
+}
+
+.decisionButton {
+  border-radius: var(--adaptive-composer-radius);
 }

@@ -12,12 +12,20 @@ export function ComposerPlanDecisionSurface({
     <div className={styles.surface} data-test-class="composer-plan-decision">
       <div className={styles.plan}>
         <ListChecks aria-hidden="true" size={18} />
-        <span className={styles.title}>{decision.planTitle}</span>
+        <button
+          aria-label={decision.planTitle}
+          className={styles.title}
+          onClick={decision.onOpenPlan}
+          type="button"
+        >
+          {decision.planTitle}
+        </button>
       </div>
       <div className={styles.actions}>
         <ButtonContainer size="sm">
           <Button
             disabled={decision.pending}
+            className={styles.decisionButton}
             onClick={decision.onAccept}
             size="sm"
             type="button"
@@ -26,6 +34,7 @@ export function ComposerPlanDecisionSurface({
           </Button>
           <Button
             disabled={decision.pending}
+            className={styles.decisionButton}
             onClick={decision.onReject}
             size="sm"
             type="button"
@@ -35,6 +44,7 @@ export function ComposerPlanDecisionSurface({
           </Button>
           <Button
             disabled={decision.pending}
+            className={styles.decisionButton}
             onClick={decision.onOpenInstruction}
             size="sm"
             type="button"

@@ -10,6 +10,7 @@ export function PlanDocumentMessage({ plan }: { plan: PlanDocumentRecord }) {
       className={styles.plan}
       data-test-class="plan-document-message"
       elevation="none"
+      id={planDocumentElementId(plan.id)}
       role="region"
     >
       <header className={styles.header}>
@@ -22,4 +23,8 @@ export function PlanDocumentMessage({ plan }: { plan: PlanDocumentRecord }) {
       <ProjectDocumentMarkdownContent markdown={plan.markdown} />
     </SurfacePanel>
   );
+}
+
+export function planDocumentElementId(planId: string): string {
+  return `plan-document-${encodeURIComponent(planId)}`;
 }
