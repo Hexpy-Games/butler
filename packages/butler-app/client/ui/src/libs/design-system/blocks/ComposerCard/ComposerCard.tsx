@@ -7,7 +7,6 @@ import type {
 } from "react";
 import { forwardRef } from "react";
 import { SendHorizontal, Square } from "../../components/Icons";
-import { Switch } from "../../components/Switch";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
 import styles from "./ComposerCard.module.css";
@@ -18,6 +17,7 @@ export interface ComposerCardProps extends FormHTMLAttributes<HTMLFormElement> {
   dropActive?: boolean;
   adjunct?: ReactNode;
   notice?: ReactNode;
+  drawer?: ReactNode;
   children: ReactNode;
   containerRef?: Ref<HTMLDivElement>;
   expanded?: boolean;
@@ -29,6 +29,7 @@ export function ComposerCard({
   dropActive = false,
   adjunct,
   notice,
+  drawer,
   children,
   className,
   containerRef,
@@ -61,6 +62,11 @@ export function ComposerCard({
         ) : null}
         {children}
       </form>
+      {drawer ? (
+        <div className={styles.drawer} data-test-class="composer-drawer-slot">
+          {drawer}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -117,23 +123,6 @@ export function ComposerCardCompactPreview({
 
 export function ComposerCardToolbarSpacer() {
   return <span className={styles.spacer} aria-hidden="true" />;
-}
-
-export function ComposerPlanToggle({
-  checked,
-  label,
-  onCheckedChange,
-}: {
-  checked: boolean;
-  label: ReactNode;
-  onCheckedChange: (checked: boolean) => void;
-}) {
-  return (
-    <label className={styles.planToggle} data-test-class="plan-switch">
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
-      <span>{label}</span>
-    </label>
-  );
 }
 
 export interface ComposerSendButtonProps

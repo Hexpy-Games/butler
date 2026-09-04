@@ -45,6 +45,7 @@ afterEach(async () => {
 test("plus opens grouped attachment and response mode options", async () => {
   const dom = installDom();
   const { ComposerAttachmentMenu } = await import("./ComposerAttachmentMenu.tsx");
+  const { ComposerAttachmentDrawer } = await import("./ComposerAttachmentDrawer.tsx");
   useButlerStore.setState({
     activeChatId: "draft:project:project-sandy",
     navigation: EMPTY_NAVIGATION,
@@ -65,7 +66,12 @@ test("plus opens grouped attachment and response mode options", async () => {
     throw new Error("Missing test root.");
   }
   root = createRoot(container);
-  await act(async () => root?.render(<ComposerAttachmentMenu />));
+  await act(async () => root?.render(
+    <>
+      <ComposerAttachmentMenu />
+      <ComposerAttachmentDrawer />
+    </>,
+  ));
 
   const trigger = container.querySelector(
     '[data-test-class="attachment-button"]',
@@ -116,12 +122,15 @@ test("plus opens grouped attachment and response mode options", async () => {
   });
   expect(modeChanges).toEqual([true]);
   expect(dom.window.document.querySelector('[data-slot="popover-content"]')).toBeNull();
+  expect(dom.window.document.querySelector('[data-test-class="composer-feature-drawer"]')).toBeNull();
 
   await act(async () => {
     trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 50));
   });
-  const content = dom.window.document.querySelector('[data-slot="popover-content"]');
+  const content = dom.window.document.querySelector(
+    '[data-test-class="composer-feature-drawer"]',
+  );
   if (!(content instanceof dom.window.HTMLElement)) {
     throw new Error("Missing feature drawer.");
   }
@@ -131,12 +140,14 @@ test("plus opens grouped attachment and response mode options", async () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  expect(dom.window.document.querySelector('[data-slot="popover-content"]')).toBeNull();
+  expect(dom.window.document.querySelector('[data-test-class="composer-feature-drawer"]')).toBeNull();
+  expect(dom.window.document.activeElement).toBe(trigger);
 });
 
 test("file attachment remains a direct drawer action and closes the drawer", async () => {
   const dom = installDom();
   const { ComposerAttachmentMenu } = await import("./ComposerAttachmentMenu.tsx");
+  const { ComposerAttachmentDrawer } = await import("./ComposerAttachmentDrawer.tsx");
   useButlerStore.setState({
     activeChatId: "draft:chat",
     navigation: EMPTY_NAVIGATION,
@@ -156,7 +167,12 @@ test("file attachment remains a direct drawer action and closes the drawer", asy
     throw new Error("Missing test root.");
   }
   root = createRoot(container);
-  await act(async () => root?.render(<ComposerAttachmentMenu />));
+  await act(async () => root?.render(
+    <>
+      <ComposerAttachmentMenu />
+      <ComposerAttachmentDrawer />
+    </>,
+  ));
   const trigger = container.querySelector(
     '[data-test-class="attachment-button"]',
   );
@@ -174,11 +190,15 @@ test("file attachment remains a direct drawer action and closes the drawer", asy
   if (!(file instanceof dom.window.HTMLButtonElement)) {
     throw new Error("Missing file attachment option.");
   }
+  expect(
+    Array.from(dom.window.document.querySelectorAll('[data-slot="option-menu-item"]'))
+      .some((element) => element.textContent?.includes(appCopy.composer.plan)),
+  ).toBe(false);
   await act(async () => {
     file.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
   });
   expect(pickerCalls).toBe(1);
-  expect(dom.window.document.querySelector('[data-slot="popover-content"]')).toBeNull();
+  expect(dom.window.document.querySelector('[data-test-class="composer-feature-drawer"]')).toBeNull();
 });
 
 function installDom() {

@@ -7,6 +7,7 @@ import type { VisualImageAdmissionResult } from "../image-attachment/contracts.t
 import type { BtccTurnProgressObserver } from
   "./projection/progress-observer-contract.ts";
 import type { ChangedFileDetail } from "../tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "./project-plan.ts";
 export type { ChangedFileDetail } from "../tools/file-tools/shared/changed-file-detail.ts";
 export type {
   BtccTurnProgressObserver,
@@ -40,6 +41,8 @@ export type ButlerContextInput = {
   authorityRequestRef?: string;
   /** Durable App queue identity paired with the stored authority request. */
   authorityClientMessageId?: string;
+  /** Internal Project Ledger Plan binding for a Plan-mode continuation. */
+  planId?: string;
 };
 
 export type ButlerExecutionPolicy = {
@@ -159,6 +162,7 @@ export type BtccTurnOutcome = (
       executionOutcome?: "waiting_for_worker";
       artifacts?: BtccFinalArtifact[];
       changedFiles?: ChangedFileDetail[];
+      plan?: ProjectLedgerPlan;
       modelIdentity?: {
         requestedModelRef: string;
         effectiveModelRef: string;

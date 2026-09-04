@@ -186,6 +186,10 @@ export function snapshotTurnContext(input: {
   ];
   const userRef = subsession ? "steward-role" : principalRef(input.binding);
   const projectRef = subsession?.projectContext?.projectId ?? input.binding.projectId;
+  const planId = typeof input.binding.metadata?.plan_id === "string" &&
+      input.binding.metadata.plan_id.trim()
+    ? input.binding.metadata.plan_id.trim()
+    : undefined;
   const documentSnapshot = snapshotContextDocuments({
       userRef,
       sessionId: input.binding.sessionId,
@@ -247,6 +251,7 @@ export function snapshotTurnContext(input: {
     },
     ...(input.authorityRequestRef ? { authorityRequestRef: input.authorityRequestRef } : {}),
     ...(input.authorityClientMessageId ? { authorityClientMessageId: input.authorityClientMessageId } : {}),
+    ...(planId ? { planId } : {}),
     ...(input.attachments?.length
       ? { attachments: input.attachments.map((attachment) => ({
           id: attachment.id,

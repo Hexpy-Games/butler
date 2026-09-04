@@ -62,6 +62,7 @@ export interface AppStoreKernelTurnLifecycleHost {
     queueClaimId?: string;
     queueReplay?: boolean;
     visualAdmission?: VisualImageAdmissionResult;
+    planId?: string;
   }): TurnRecord;
   runSystemResponderTurn(
     chatId: string,

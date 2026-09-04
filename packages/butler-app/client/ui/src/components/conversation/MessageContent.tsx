@@ -17,6 +17,7 @@ import { MessageArtifacts } from "./MessageArtifacts";
 import { MessageChangedFiles } from "./MessageChangedFiles";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageMarkdown } from "./MessageMarkdown";
+import { PlanDocumentMessage } from "./PlanDocumentMessage";
 import { UserMessageText } from "./UserMessageText";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
 import { StewardParentProgress } from "./StewardParentProgress";
@@ -72,6 +73,9 @@ function MessageContentComponent({
               text={message.text}
             />
           )}
+          {message.plan_document ? (
+            <PlanDocumentMessage plan={message.plan_document} />
+          ) : null}
           {message.status === "cancelled" && (
             <div role="status">
               <Tag ariaLabel={appCopy.conversation.stoppedStatus}>

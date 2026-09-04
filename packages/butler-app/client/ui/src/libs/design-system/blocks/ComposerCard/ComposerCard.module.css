@@ -52,6 +52,17 @@
     var(--adaptive-panel-easing);
 }
 
+.drawer {
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--composer-glass-divider);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  backdrop-filter: var(--tinted-glass-filter);
+  pointer-events: auto;
+}
+
 .card[data-drop-active="true"] {
   border-color: var(--color-border-interactive);
   box-shadow:
@@ -123,6 +134,10 @@
   padding: var(--space-2);
 }
 
+.toolbar button {
+  flex-shrink: 0;
+}
+
 .compactPreview {
   display: none;
   min-width: 0;
@@ -174,6 +189,7 @@
 
 .sendButton {
   display: inline-grid;
+  flex: 0 0 auto;
   width: 30px;
   height: 30px;
   place-items: center;

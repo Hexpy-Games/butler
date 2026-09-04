@@ -2,9 +2,10 @@ import { createGuidedEffectService } from "../effects/index.ts";
 import type { BtccAgentLoop, BtccAgentLoopInput, BtccAgentLoopResult } from "./contracts.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
 import { ActiveProjectLedgerResolver } from "../../../integrations/project-ledger/active-project-ledger-reference.ts";
+import { runProjectLedgerTool } from "../../../integrations/project-ledger/client.ts";
 import { createProviderModelRoundPort } from "../../../integrations/providers/runtime.ts";
 import { createGuidedToolBatchTransition } from "./guided-tool-batch-transition.ts";
-import { providerImageAttachments, renderGuidedResponseLanguage } from "./guided-turn-prompt.ts";
+import { guidedPlanModeInstructions, providerImageAttachments, renderGuidedResponseLanguage } from "./guided-turn-prompt.ts";
 import { directSynthesisToolDefinitions, GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES, guidedNativeToolDefinitions, hiddenNativeToolNamesForGuidedTurn } from "./guided-turn-policy.ts";
 import { selectGuidedTurnPhasePolicy } from "./guided-phase-policy.ts";
 import { createGuidedToolExecutionBoundary } from "./guided-tool-execution-boundary.ts";
@@ -38,6 +39,16 @@ import { ensureSubsessionChildRootWork, subsessionDirectionSafeBoundary, subsess
 import { withWorkerProfileChoices } from "../../tools/subsession/index.ts";
 import { withStewardDirection } from "./guided-steward-direction.ts";
 import { digest } from "../identity/index.ts";
+import {
+  projectLedgerPlanFromRecordResult,
+  projectLedgerPlanFromToolRecords,
+  renderAcceptedProjectPlanContext,
+} from "../project-plan.ts";
+import {
+  createProjectPlanModeExecution,
+  isAllowedProjectPlanMutation,
+  projectPlanModeTools,
+} from "./guided-project-plan-mode.ts";
 type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
 export function createProductionGuidedTurnAgent(input: ProductionGuidedTurnAgentInput): BtccAgentLoop;
 export function createProductionGuidedTurnAgent(input: TestGuidedTurnAgentInput): BtccAgentLoop;
@@ -63,6 +74,9 @@ export function createProductionGuidedTurnAgent(
       const subsessionResultEvidence = await input.subsessionDelegation?.resolveParentResultEvidence({ parentSessionId: turn.sessionId, parentInputText: turn.originalMessage });
       const phasePolicy = selectGuidedTurnPhasePolicy(turn);
       const policy = phasePolicy.executionPolicy;
+      const projectId = policy.projectId ?? turn.context.projectRef;
+      const planMode = turn.modelSelection.controls.planMode === true &&
+        policy.trackingMode === "ledger" && Boolean(projectId);
       const workerResultIntegration = policy.role === "steward" &&
         turn.turnId.startsWith("steward-worker-result-");
       const terminalParentSynthesis = Boolean(subsessionResultEvidence) && !workerResultIntegration;
@@ -82,6 +96,19 @@ export function createProductionGuidedTurnAgent(
         throw new Error("operation_result_route_acceptance_dependency_missing");
       }
       const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
+      const acceptedPlan = !planMode && turn.context.planId && projectId
+        ? readAcceptedProjectPlan({
+            resolver: projectLedgerResolver,
+            butlerHome: input.butlerHome,
+            butlerData: input.butlerData,
+            appProjectId: projectId,
+            workspacePath: workspaceReference.get(),
+            planId: turn.context.planId,
+          })
+        : undefined;
+      if (!planMode && turn.context.planId && !acceptedPlan) {
+        throw new Error("accepted_project_plan_unavailable");
+      }
       const workScope = workScopeForTurn(turn, policy.trackingMode);
       if ((policy.role === "steward" || policy.role === "worker") &&
         input.subsessionDelegation) {
@@ -130,9 +157,22 @@ export function createProductionGuidedTurnAgent(
         sessionId: turn.sessionId,
         projectRef: policy.projectId ?? turn.context.projectRef,
       });
-      const authorizedTools = terminalParentSynthesis ? directSynthesisToolDefinitions(phasePolicy.authorizedTools) : phasePolicy.authorizedTools;
+      const phaseAuthorizedTools = terminalParentSynthesis
+        ? directSynthesisToolDefinitions(phasePolicy.authorizedTools)
+        : phasePolicy.authorizedTools;
+      const authorizedTools = planMode
+        ? projectPlanModeTools({
+            tools: phaseAuthorizedTools,
+            exactResultRead: phasePolicy.exactResultReplay.exactReadCapability,
+            planId: turn.context.planId,
+          })
+        : phaseAuthorizedTools;
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
-      const baseVisibleTools = terminalParentSynthesis ? directSynthesisToolDefinitions(phasePolicy.providerTools) : phasePolicy.providerTools;
+      const baseVisibleTools = planMode
+        ? authorizedTools
+        : terminalParentSynthesis
+        ? directSynthesisToolDefinitions(phasePolicy.providerTools)
+        : phasePolicy.providerTools;
       const workerProfiles = policy.role === "steward" &&
           baseVisibleTools.some((tool) => tool.name === "delegate_to_worker")
         ? await input.subsessionDelegation?.enabledWorkerProfiles?.() ?? []
@@ -219,6 +259,12 @@ export function createProductionGuidedTurnAgent(
             originalRequest: turn.originalMessage,
             memoryAttribution,
           }),
+          ...(planMode
+            ? {
+                allowDirectPersistentEffects: (call) =>
+                  isAllowedProjectPlanMutation(call, turn.context.planId),
+              }
+            : {}),
         }),
       });
       let progressSourceRevision = 0;
@@ -279,6 +325,9 @@ export function createProductionGuidedTurnAgent(
         responseLanguage,
         promptInput: {
           ...input, workContext: renderDurableWorkContext(initialWork), effectContext,
+          ...(acceptedPlan
+            ? { acceptedPlanContext: renderAcceptedProjectPlanContext(acceptedPlan) }
+            : {}),
           ...(subsessionResultEvidence
             ? { subsessionResultEvidence: subsessionResultEvidence.synthesisEvidence }
             : {}),
@@ -328,11 +377,19 @@ export function createProductionGuidedTurnAgent(
           shouldWaitForWorker,
         }),
       });
+      const planExecution = createProjectPlanModeExecution({
+        enabled: planMode,
+        planId: turn.context.planId,
+        executeTool: toolCalls.executeTool,
+      });
       const loopOptions: BtccAgentLoopInput = {
         prompt: requestAttribution.prompt,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
         turnId: turn.turnId,
-        instructions: requestAttribution.instructions,
+        instructions: [
+          requestAttribution.instructions,
+          ...(planMode ? [guidedPlanModeInstructions(turn.context.planId)] : []),
+        ].join("\n"),
         recoveryAttempt,
         progress: observedProgress,
         model: resolveActiveModelRef(),
@@ -353,7 +410,10 @@ export function createProductionGuidedTurnAgent(
         verifiedImagePayloadPort: createFileStoreVerifiedImagePayloadPort(input.butlerData),
         onProviderResponseIdentity,
         onEvent: (event) => recordRuntimeMemoryEvent(memoryAttribution, event),
-        afterToolBatch: directionAware.afterToolBatch,
+        afterToolBatch: async (batch) => {
+          const disposition = await directionAware.afterToolBatch(batch);
+          return planMode && planExecution.completed() ? "final_report" : disposition;
+        },
         tools: visibleTools,
         resolveTools: resolveGuidedTools,
         modelRound: directionAware.modelRound,
@@ -363,7 +423,7 @@ export function createProductionGuidedTurnAgent(
         resolveOperationResultCallId: toolCalls.journalCallIdForProviderCall,
         ...authorityProjection.loopCallbacks,
         reviewFinalCandidate: directionAware.reviewFinalCandidate,
-        executeTool: activeDelegationAdmission.execute(toolCalls.executeTool),
+        executeTool: activeDelegationAdmission.execute(planExecution.executeTool),
       };
       let waitingForWorker = false;
       const candidate = await runGuidedAgentLoopWithOperationalReport({
@@ -406,12 +466,37 @@ export function createProductionGuidedTurnAgent(
           : {}),
         artifacts,
         changedFiles,
+        ...(planMode
+          ? { plan: projectLedgerPlanFromToolRecords(finalToolRecords, { expectedId: turn.context.planId }) }
+          : {}),
         modelIdentity: acceptedModelIdentity(),
         usedTools: toolCalls.usedTools,
         hasFinalWork: Boolean(finalWork),
       });
     },
   };
+}
+
+function readAcceptedProjectPlan(input: {
+  resolver: ActiveProjectLedgerResolver;
+  butlerHome: string;
+  butlerData: string;
+  appProjectId: string;
+  workspacePath: string;
+  planId: string;
+}) {
+  input.resolver.clear();
+  const reference = input.resolver.resolve({
+    butlerData: input.butlerData,
+    appProjectId: input.appProjectId,
+    workspacePath: input.workspacePath,
+  });
+  const result = runProjectLedgerTool(
+    { butlerHome: input.butlerHome, butlerData: input.butlerData },
+    ["record", "show", "--project", reference.ledger_root, "--kind", "plan", "--id", input.planId, "--body"],
+  );
+  const plan = projectLedgerPlanFromRecordResult(result, input.planId);
+  return plan?.status === "active" ? plan : undefined;
 }
 function projectionAuthority(authority: PrincipalAuthority | undefined, sourceSessionId: string, clientMessageId: string | undefined): PrincipalAuthority | undefined {
   if (!authority || !clientMessageId) return authority;

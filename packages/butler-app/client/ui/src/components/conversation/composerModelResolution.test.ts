@@ -14,6 +14,7 @@ describe("composer model truth", () => {
         controls: null,
         controlsState: "loading",
         settings: EMPTY_SETTINGS,
+        planModeAvailable: false,
       }),
     ).toMatchObject({ state: "loading", model: "" });
   });
@@ -37,6 +38,7 @@ describe("composer model truth", () => {
         controls,
         controlsState: "ready",
         settings: EMPTY_SETTINGS,
+        planModeAvailable: false,
       }),
     ).toMatchObject({
       state: "ready",
@@ -51,6 +53,7 @@ describe("composer model truth", () => {
         controls: { ...controls, catalog_generation: "new-generation" },
         controlsState: "ready",
         settings: EMPTY_SETTINGS,
+        planModeAvailable: false,
       }),
     ).toMatchObject({
       state: "loading",
@@ -76,12 +79,25 @@ describe("composer model truth", () => {
       },
       controlsState: "ready",
       settings: EMPTY_SETTINGS,
+      planModeAvailable: false,
     });
     expect(result).toMatchObject({
       state: "unavailable",
       model: "openai/removed-model",
     });
     expect(result.metadata).toBeUndefined();
+  });
+
+  test("never enables Plan mode without a project session", () => {
+    const result = resolveComposerModelTruth({
+      catalog: HARNESS_MODEL_CATALOG,
+      catalogState: "ready",
+      controls: null,
+      controlsState: "ready",
+      settings: { ...EMPTY_SETTINGS, plan_mode_default: true },
+      planModeAvailable: false,
+    });
+    expect(result.planMode).toBe(false);
   });
 
 });

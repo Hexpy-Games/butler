@@ -2,6 +2,10 @@ import type {
   GatewayDispatchResult,
 } from "../../../gateways/core/contracts.ts";
 import type { ChangedFileDetail } from "../../../agent/btcc/index.ts";
+import {
+  projectLedgerPlanFromUnknown,
+  type ProjectLedgerPlan,
+} from "../../../agent/btcc/project-plan.ts";
 import type {
   ClaimedInboundEvent,
   NativeInboundQueue,
@@ -291,8 +295,9 @@ function finalActions(
   const text = result.handlerResult.metadata?.text;
   const artifacts = artifactRefs(result.handlerResult.metadata?.artifacts);
   const changedFiles = changedFilePaths(result.handlerResult.metadata?.changedFiles);
+  const plan = projectLedgerPlanFromUnknown(result.handlerResult.metadata?.plan);
   const noVisibleReply = typeof text !== "string" ||
-    (!text.trim() && artifacts.length === 0 && changedFiles.length === 0);
+    (!text.trim() && artifacts.length === 0 && changedFiles.length === 0 && !plan);
   const finalTargets = noVisibleReply
     ? claimedAppTerminalTargets(item, targets)
     : targets;
@@ -306,6 +311,7 @@ function finalActions(
     text: typeof text === "string" ? text : "",
     artifacts,
     changedFiles,
+    plan,
     generatedSessionTitle,
     executionModel: result.handlerResult.metadata?.executionModel,
     canonicalMessageId: optionalText(result.handlerResult.metadata?.canonicalMessageId),
@@ -335,6 +341,7 @@ function finalAction(input: {
   text: string;
   artifacts: ArtifactRef[];
   changedFiles?: ChangedFileDetail[];
+  plan?: ProjectLedgerPlan;
   generatedSessionTitle?: string;
   canonicalMessageId?: string;
   turnId?: string;
@@ -377,6 +384,7 @@ function finalAction(input: {
       canonicalMessageId: input.canonicalMessageId,
       generatedSessionTitle: input.generatedSessionTitle,
       ...(input.executionModel ? { executionModel: input.executionModel } : {}),
+      ...(input.plan ? { plan: input.plan } : {}),
     },
   };
 }

@@ -25,3 +25,16 @@ test("composer card exposes token-backed file drop feedback", () => {
 
   expect(html).toContain('data-drop-active="true"');
 });
+
+test("composer drawer is an inline sibling after the form", () => {
+  const html = renderToStaticMarkup(
+    <ComposerCard drawer={<span>Drawer content</span>}>
+      <span>Composer content</span>
+    </ComposerCard>,
+  );
+
+  const formEnd = html.indexOf("</form>");
+  const drawer = html.indexOf('data-test-class="composer-drawer-slot"');
+  expect(formEnd).toBeGreaterThan(-1);
+  expect(drawer).toBeGreaterThan(formEnd);
+});

@@ -503,6 +503,18 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       controls: parseBody(options.body),
     });
   }
+  const planDecisionMatch = url.pathname.match(
+    /^\/sessions\/([^/]+)\/plan-decisions\/([^/]+)$/u,
+  );
+  if (method === "POST" && planDecisionMatch) {
+    const body = parseBody(options.body);
+    return await callBridge<T>(bridge, "decideSessionPlan", {
+      sessionId: decodeURIComponent(planDecisionMatch[1]!),
+      planId: decodeURIComponent(planDecisionMatch[2]!),
+      action: body.action,
+      instruction: body.instruction,
+    });
+  }
   if (method === "GET" && url.pathname === "/project-sessions") {
     return await callBridge<T>(bridge, "listProjectSessions", {
       projectId: url.searchParams.get("project_id") ?? undefined,

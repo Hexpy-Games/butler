@@ -2,6 +2,7 @@ import {
   apiEnvelope,
   isCreateProjectRequest,
   isCreateSessionRequest,
+  isPlanDecisionRequest,
   isSessionControlUpdateRequest,
   isUpdateSessionRequest,
   type ArchiveListView,
@@ -11,6 +12,7 @@ import {
   type NewChatBriefingView,
   type ProjectActionResult,
   type ProjectDashboardView,
+  type PlanDecisionResult,
   type ProjectListView,
   type ProjectSessionListView,
   type SessionActionResult,
@@ -228,6 +230,28 @@ export async function handleProjectSessionRoutes(
     }
     input.store.publishSessionCreated(created.session.id);
     return json(apiEnvelope<CreateSessionResult>(created), 201);
+  }
+  const planDecisionMatch = input.request.method === "POST"
+    ? url.pathname.match(/^\/sessions\/([^/]+)\/plan-decisions\/([^/]+)$/u)
+    : null;
+  if (planDecisionMatch) {
+    const body = await parseJson(input.request);
+    if (!isPlanDecisionRequest(body)) {
+      throw new RequestError(
+        400,
+        "invalid_plan_decision",
+        "Plan decision action is required.",
+      );
+    }
+    return json(
+      apiEnvelope<PlanDecisionResult>(
+        await input.store.decideSessionPlan(
+          decodeURIComponent(planDecisionMatch[1]!),
+          decodeURIComponent(planDecisionMatch[2]!),
+          body,
+        ),
+      ),
+    );
   }
   const sessionMatch = url.pathname.match(/^\/sessions\/([^/]+)$/u);
   if (input.request.method === "PATCH" && sessionMatch) {

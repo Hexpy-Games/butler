@@ -134,6 +134,12 @@ export interface AppCopy {
     attachmentCount: CountFormatter;
     permission: string;
     plan: string;
+    planDecision: string;
+    planAccept: string;
+    planReject: string;
+    planInstruction: string;
+    planInstructionPlaceholder: string;
+    planInstructionSubmit: string;
     model: string;
     modelSearch: string;
     modelSearchClear: string;
@@ -926,6 +932,12 @@ const koKrCopy: AppCopy = {
     attachmentCount: (count) => `첨부 ${count}개`,
     permission: "권한",
     plan: "계획",
+    planDecision: "계획 결정",
+    planAccept: "수락",
+    planReject: "거절",
+    planInstruction: "계획 수정 지시",
+    planInstructionPlaceholder: "수정할 내용을 직접 입력하세요",
+    planInstructionSubmit: "전달",
     model: "모델",
     modelSearch: "Search models...",
     modelSearchClear: "Clear search",
@@ -1810,6 +1822,12 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     attachmentCount: (count) => `${count} attachments`,
     permission: "Permission",
     plan: "Plan",
+    planDecision: "Plan decision",
+    planAccept: "Accept",
+    planReject: "Reject",
+    planInstruction: "Plan revision instruction",
+    planInstructionPlaceholder: "Describe the change you want",
+    planInstructionSubmit: "Send",
     model: "Model",
     modelSearch: "Search models...",
     modelSearchClear: "Clear search",

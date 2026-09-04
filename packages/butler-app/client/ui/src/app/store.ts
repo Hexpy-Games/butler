@@ -60,6 +60,8 @@ import type {
   ModelCatalogView,
   ModelCatalogState,
   NavigationView,
+  PlanDecisionAction,
+  PlanDecisionResultView,
   ProjectDashboardDocument,
   ProjectSummary,
   QueuedMessageRecord,
@@ -216,6 +218,12 @@ interface ButlerStore {
   resumeObservedSteward: (relationId: string) => Promise<boolean>;
   reloadMessages: (chatId?: string) => Promise<void>;
   refreshSessionSummary: (chatId?: string) => Promise<void>;
+  submitPlanDecision: (
+    sessionId: string,
+    planId: string,
+    action: PlanDecisionAction,
+    instruction?: string,
+  ) => Promise<PlanDecisionResultView | null>;
   sendMessage: (text: string, controls?: ComposerControls) => Promise<void>;
   refreshSessionQueue: (chatId?: string) => Promise<void>;
   refreshAuthorityApprovals: (sessionId?: string) => Promise<boolean>;
@@ -1371,6 +1379,57 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     } catch {
       // Preserve the visible turn summary on transient refresh failures.
       // The live event stream is authoritative enough to keep the UI stable.
+    }
+  },
+
+  submitPlanDecision: async (sessionId, planId, action, instruction) => {
+    const normalizedInstruction = instruction?.trim();
+    if (
+      !isServerBackedSessionId(sessionId) ||
+      !planId.trim() ||
+      (action === "instruct" && !normalizedInstruction)
+    ) {
+      return null;
+    }
+    try {
+      const data = await api<PlanDecisionResultView>(
+        `/sessions/${encodeURIComponent(sessionId)}/plan-decisions/${encodeURIComponent(planId)}`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action,
+            ...(normalizedInstruction
+              ? { instruction: normalizedInstruction }
+              : {}),
+          }),
+        },
+      );
+      if (get().activeChatId === sessionId) {
+        const planDocument = {
+          id: data.plan_document.id,
+          title: data.plan_document.title,
+          status: data.plan_document.status ?? "",
+          markdown: data.plan_document.markdown,
+        };
+        set((state) => ({
+          messages: state.messages.map((message) =>
+            message.plan_document?.id === planId
+              ? { ...message, plan_document: planDocument }
+              : message,
+          ),
+          sessionQueue:
+            data.queued?.session_id === sessionId
+              ? data.queued.queued_messages
+              : state.sessionQueue,
+        }));
+        void get().refreshSessionView(sessionId);
+      }
+      return data;
+    } catch (error) {
+      notifyError(error, "Plan decision failed", {
+        id: `plan-decision-${sessionId}-${planId}`,
+      });
+      return null;
     }
   },
 

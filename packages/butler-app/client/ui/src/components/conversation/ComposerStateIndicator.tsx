@@ -1,6 +1,11 @@
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { ComposerCardExpandedControls, Stack, Typo } from "@/butler-ds";
+import {
+  ComposerCardExpandedControls,
+  ListChecks,
+  Stack,
+  Typo,
+} from "@/butler-ds";
 import { useComposerStore } from "./composerStore";
 
 const indicatorStyle = {
@@ -44,7 +49,7 @@ export function ComposerStateIndicator() {
   const multilineSendBehavior = useButlerStore(
     (store) => store.settings.multiline_send_behavior,
   );
-  const modeLabel = planMode ? appCopy.composer.plan : appCopy.composer.normal;
+  const modeLabel = planMode ? appCopy.composer.plan : null;
   const attachmentLabel =
     attachmentCount > 0
       ? appCopy.composer.attachmentCount(attachmentCount)
@@ -67,22 +72,22 @@ export function ComposerStateIndicator() {
       role="status"
       style={indicatorStyle}
     >
-      <Typo.Caption
-        as="span"
-        data-slot="composer-state-mode"
-        style={modeStyle}
-      >
-        {modeLabel}
-      </Typo.Caption>
+      {planMode ? (
+        <span
+          aria-label={appCopy.composer.plan}
+          data-slot="composer-state-mode"
+          style={modeStyle}
+        >
+          <ListChecks aria-hidden="true" size={14} />
+        </span>
+      ) : null}
       {attachmentLabel ? (
         <>
-          <Typo.Caption
-            as="span"
-            aria-hidden="true"
-            style={separatorStyle}
-          >
-            ·
-          </Typo.Caption>
+          {planMode ? (
+            <Typo.Caption as="span" aria-hidden="true" style={separatorStyle}>
+              ·
+            </Typo.Caption>
+          ) : null}
           <Typo.Caption
             as="span"
             data-slot="composer-state-attachments"
@@ -93,13 +98,11 @@ export function ComposerStateIndicator() {
         </>
       ) : null}
       <ComposerCardExpandedControls>
-        <Typo.Caption
-          as="span"
-          aria-hidden="true"
-          style={separatorStyle}
-        >
-          ·
-        </Typo.Caption>
+        {planMode || attachmentLabel ? (
+          <Typo.Caption as="span" aria-hidden="true" style={separatorStyle}>
+            ·
+          </Typo.Caption>
+        ) : null}
         <Typo.Caption
           as="span"
           data-slot="composer-state-shortcut"

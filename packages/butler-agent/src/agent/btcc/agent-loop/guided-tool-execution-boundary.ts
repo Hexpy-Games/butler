@@ -63,7 +63,7 @@ type GuidedToolExecutionBoundaryInput = {
   authorityClientMessageId?: string;
   toolJournal?: GuidedToolJournal;
   accessMode: GuidedEffectAccessMode;
-  allowDirectPersistentEffects?: boolean;
+  allowDirectPersistentEffects?: boolean | ((call: ButlerToolCall) => boolean);
   signal: AbortSignal;
   executeCommand(
     call: ButlerToolCall,
@@ -108,9 +108,16 @@ export function createGuidedToolExecutionBoundary(
     }) => Promise<unknown>,
     occurrenceId?: string,
   ): Promise<unknown> => {
+    const allowDirect = typeof input.allowDirectPersistentEffects === "function"
+      ? input.allowDirectPersistentEffects(call)
+      : input.allowDirectPersistentEffects;
+    // Planning mode has one intentionally narrow exception to the normal
+    // accepted-Durable-Work-Plan gate: its single top-level Ledger Plan
+    // mutation is the planning artifact itself. The caller must bind this
+    // predicate to kind=plan; all other effects stay on the ordinary path.
+    if (allowDirect) return await execute();
     const work = await loadGuidedEffectWork(input.durableWork, input.workScope);
     if (!work) {
-      if (input.allowDirectPersistentEffects) return await execute();
       return ordinaryGuidedEffectError(
         "effect_work_required",
         "Create concise Work, record its Plan Review, then retry this persistent effect.",

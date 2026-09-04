@@ -31,6 +31,7 @@ import type { BtccFinalArtifact } from "../contracts.ts";
 import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 import type { RuntimeMemoryAttributionPort } from
   "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
+import type { ProjectLedgerPlan } from "../project-plan.ts";
 
 export type BtccAgentLoopMessage = ModelRoundMessage;
 export type BtccAgentLoopToolDefinition = ModelRoundTool;
@@ -44,6 +45,7 @@ export type BtccAgentLoopResult = {
   workStatus?: "completed" | "blocked";
   artifacts?: BtccFinalArtifact[];
   changedFiles?: ChangedFileDetail[];
+  plan?: ProjectLedgerPlan;
   modelIdentity?: {
     requestedModelRef: string;
     effectiveModelRef: string;

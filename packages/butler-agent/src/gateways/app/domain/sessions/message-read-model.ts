@@ -5,6 +5,7 @@ import type {
   MessageRole,
   MessageStatus,
   SessionArtifactSummary,
+  ProjectDashboardDocument,
   TurnRecord,
   TurnState,
 } from "../../interface/protocol/app-protocol.ts";
@@ -13,6 +14,10 @@ import {
   type TurnExecutionControlsV1,
 } from "../../../core/turn-execution-controls.ts";
 import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
+import {
+  projectLedgerPlanFromUnknown,
+  type ProjectLedgerPlan,
+} from "../../../../agent/btcc/project-plan.ts";
 
 export interface MessageReadModelRow {
   rowid: number;
@@ -29,6 +34,7 @@ export interface MessageReadModelRow {
   retryable: number;
   created_at: string;
   updated_at: string;
+  plan_json?: string | null;
 }
 
 export interface MessageFileReadModelRow {
@@ -94,11 +100,39 @@ export function messageFromRow(
     retryable: row.retryable === 1,
     cursor: row.rowid,
   };
+  const plan = projectPlanFromJson(row.plan_json);
+  if (plan) message.plan_document = planDocument(plan, row.updated_at);
   if (attachments.length > 0) message.attachments = attachments;
   const artifacts = artifactSummariesFromMessage(row, attachments);
   if (artifacts.length > 0) message.artifacts = artifacts;
   if (changedFiles.length > 0) message.changed_files = changedFiles;
   return message;
+}
+
+function projectPlanFromJson(value: string | null | undefined): ProjectLedgerPlan | undefined {
+  if (!value) return undefined;
+  try {
+    return projectLedgerPlanFromUnknown(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function planDocument(
+  plan: ProjectLedgerPlan,
+  updatedAt: string,
+): ProjectDashboardDocument {
+  const safeId = plan.id.replace(/[^a-z0-9._/-]+/giu, "-");
+  return {
+    id: plan.id,
+    kind: "plan",
+    document_type: "plan",
+    title: plan.title,
+    status: plan.status,
+    safe_path_label: `plans/${safeId}.md`,
+    markdown: plan.body,
+    updated_at: updatedAt,
+  };
 }
 
 export function messageFileRefFromRow(

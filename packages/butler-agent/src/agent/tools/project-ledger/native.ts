@@ -316,32 +316,61 @@ function runProjectLedgerNativeToolInternal(
     finalCliArgs: cliArgs,
   });
   const result = plannedResult ?? withRecoverableProjectLedgerError(runProjectLedgerTool(input, cliArgs));
-  if (needsProjectLedgerLifecycleCloseout(toolName, result)) {
+  const resultWithPlanBody = toolName === "project_ledger_create" ||
+      toolName === "project_ledger_update"
+    ? withPlanBody(input, normalizedArgs, result, projectPath)
+    : result;
+  if (needsProjectLedgerLifecycleCloseout(toolName, resultWithPlanBody)) {
     return applyProjectLedgerLifecycleCloseout(
-      result,
+      resultWithPlanBody,
       runProjectLedgerLifecycleCloseout({
         executor: input,
         projectPath,
-        refreshedIndex: refreshedProjectLedgerIndexResult(result),
+        refreshedIndex: refreshedProjectLedgerIndexResult(resultWithPlanBody),
       }),
     );
   }
   if (toolName === "project_ledger_render") {
     return {
-      ...result,
+      ...resultWithPlanBody,
       ...projectLedgerRenderedViewEvidence({
         projectPath,
-        result,
+        result: resultWithPlanBody,
         view: stringArg(normalizedArgs, "view"),
         write: normalizedArgs.write === true,
       }),
     };
   }
   if (toolName === "project_ledger_list") {
-    return applyListBounds(result, normalizedArgs);
+    return applyListBounds(resultWithPlanBody, normalizedArgs);
   }
-  if (toolName === "project_ledger_show") return withCanonicalRecordEvidence(result);
-  return result;
+  if (toolName === "project_ledger_show") return withCanonicalRecordEvidence(resultWithPlanBody);
+  return resultWithPlanBody;
+}
+
+function withPlanBody(
+  input: ProjectLedgerExecutorInput,
+  args: Record<string, unknown>,
+  result: Record<string, unknown>,
+  projectPath: string,
+): Record<string, unknown> {
+  if (result.ok !== true || args.kind !== "plan") return result;
+  const data = recordValue(result.data);
+  if (typeof data.body === "string" && data.body.trim()) return result;
+  const bodyFromArgs = typeof args.body === "string" && args.body.trim()
+    ? args.body
+    : undefined;
+  const id = stringArg(data, "id") || stringArg(args, "id");
+  if (bodyFromArgs) return { ...result, data: { ...data, body: bodyFromArgs } };
+  if (!id) return result;
+  const shown = runProjectLedgerTool(input, [
+    "record", "show", "--project", projectPath,
+    "--kind", "plan", "--id", id, "--body",
+  ]);
+  const shownBody = stringArg(recordValue(shown.data), "body");
+  return shownBody
+    ? { ...result, data: { ...data, body: shownBody } }
+    : result;
 }
 
 function gitEvidenceFailureResult(

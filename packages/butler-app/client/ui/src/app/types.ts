@@ -657,6 +657,14 @@ export interface SessionControlsView {
   catalog_generation: string;
 }
 
+export type PlanDecisionAction = "accept" | "reject" | "instruct";
+
+export interface PlanDecisionResultView {
+  plan_document: ProjectDashboardDocument;
+  controls: SessionControlsView;
+  queued?: SessionQueueView;
+}
+
 export type ModelCatalogState =
   | "loading"
   | "ready"
@@ -745,6 +753,13 @@ export interface ChangedFileDetail {
   lines: ChangedFileLine[];
 }
 
+export interface PlanDocumentRecord {
+  id: string;
+  title: string;
+  status: string;
+  markdown: string;
+}
+
 export interface MessageRecord {
   id: string;
   chat_id?: string;
@@ -757,6 +772,7 @@ export interface MessageRecord {
     | "tool_summary"
     | "automation";
   text: string;
+  plan_document?: PlanDocumentRecord;
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
   changed_files?: ChangedFileDetail[];

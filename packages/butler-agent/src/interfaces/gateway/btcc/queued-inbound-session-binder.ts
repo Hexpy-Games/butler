@@ -54,6 +54,7 @@ function bindAppTurn(envelope: InboundEnvelope, store: SessionBindingStore): voi
       accessMode: controls.access_mode,
       reasoning_effort: controls.reasoning_effort,
       plan_mode: controls.plan_mode,
+      ...(context.planId ? { plan_id: context.planId } : {}),
       turnExecutionControls: controls,
       runtimePolicy: runtimePolicy(context.session.kind, Boolean(context.project), controls.access_mode),
     },

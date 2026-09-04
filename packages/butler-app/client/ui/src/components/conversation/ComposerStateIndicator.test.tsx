@@ -31,7 +31,7 @@ afterEach(async () => {
     .IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("reflects response mode, attachments, and the configured shortcut", async () => {
+test("normal mode has no label and plan mode uses only an accessible icon", async () => {
   const dom = installDom();
   useButlerStore.setState({
     settings: {
@@ -49,7 +49,8 @@ test("reflects response mode, attachments, and the configured shortcut", async (
   await act(async () => root?.render(<ComposerStateIndicator />));
 
   const normalHtml = container.innerHTML;
-  expect(normalHtml).toContain(`>${appCopy.composer.normal}</span>`);
+  expect(normalHtml).not.toContain("composer-state-mode");
+  expect(container.textContent).not.toContain(appCopy.composer.normal);
   expect(normalHtml).toContain(
     appCopy.settings.options.modifierEnterSendEnterNewline,
   );
@@ -69,7 +70,13 @@ test("reflects response mode, attachments, and the configured shortcut", async (
   });
 
   const planHtml = container.innerHTML;
-  expect(planHtml).toContain(`>${appCopy.composer.plan}</span>`);
+  expect(planHtml).toContain('data-slot="composer-state-mode"');
+  expect(
+    container
+      .querySelector('[data-slot="composer-state-mode"]')
+      ?.getAttribute("aria-label"),
+  ).toBe(appCopy.composer.plan);
+  expect(container.textContent).not.toContain(appCopy.composer.plan);
   expect(planHtml).toContain(appCopy.composer.attachmentCount(2));
   expect(planHtml).toContain(
     appCopy.settings.options.enterSendShiftEnterNewline,

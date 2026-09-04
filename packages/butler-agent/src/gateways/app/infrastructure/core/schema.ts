@@ -56,7 +56,8 @@ export function migrateAppStoreSchema(
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       safe_error_code TEXT,
-      retryable INTEGER NOT NULL DEFAULT 0
+      retryable INTEGER NOT NULL DEFAULT 0,
+      plan_json TEXT
     );
 
     CREATE TABLE IF NOT EXISTS message_files (
@@ -313,6 +314,7 @@ export function migrateAppStoreSchema(
   ensureColumn(db, "messages", "updated_at", "TEXT");
   ensureColumn(db, "messages", "safe_error_code", "TEXT");
   ensureColumn(db, "messages", "retryable", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "messages", "plan_json", "TEXT");
   ensureColumn(db, "message_changed_files", "detail_json", "TEXT");
   ensureColumn(db, "projects", "ledger_project_id", "TEXT");
   ensureColumn(db, "turns", "execution_controls_json", "TEXT");

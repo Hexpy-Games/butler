@@ -101,6 +101,8 @@ export interface InboundEnvelope {
     authorityRequestRef?: string;
     /** Durable App queue identity paired with the stored authority request. */
     authorityClientMessageId?: string;
+    /** Internal Project Ledger Plan binding for a Plan-mode continuation. */
+    planId?: string;
   };
   nativeStewardContext?: {
     version: 1;

@@ -4,6 +4,7 @@ import type {
   ChangedFileDetail,
 } from "../../../agent/btcc/index.ts";
 import { projectBtccFinalReport } from "../../../agent/btcc/index.ts";
+import type { ProjectLedgerPlan } from "../../../agent/btcc/project-plan.ts";
 
 export function projectTurnOutcome(
   outcome: BtccTurnOutcome,
@@ -13,6 +14,7 @@ export function projectTurnOutcome(
   changedFiles: ChangedFileDetail[];
   workStatus?: "completed" | "blocked";
   executionOutcome?: "waiting_for_worker";
+  plan?: ProjectLedgerPlan;
 } {
   if (outcome.kind === "delivered" || outcome.kind === "already_delivered") {
     return {
@@ -21,6 +23,7 @@ export function projectTurnOutcome(
       artifacts: outcome.artifacts ?? [],
       changedFiles: outcome.changedFiles ?? [],
       ...(outcome.workStatus ? { workStatus: outcome.workStatus } : {}),
+      ...( "plan" in outcome && outcome.plan ? { plan: outcome.plan } : {}),
     };
   }
   if (outcome.kind === "cancelled" || outcome.kind === "already_cancelled") {

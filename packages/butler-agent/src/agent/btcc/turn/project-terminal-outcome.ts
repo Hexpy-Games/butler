@@ -23,6 +23,7 @@ export function projectTerminalOutcome(turn: TurnRecord): BtccTurnOutcome {
     ...(turn.finalPayload.changedFiles?.length
       ? { changedFiles: turn.finalPayload.changedFiles }
       : {}),
+    ...(turn.finalPayload.plan ? { plan: turn.finalPayload.plan } : {}),
     ...(turn.finalPayload.modelIdentity
       ? { modelIdentity: turn.finalPayload.modelIdentity }
       : {}),

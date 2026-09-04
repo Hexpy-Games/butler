@@ -105,6 +105,7 @@ export function createBtccGatewayHandlers(
         ...(result.executionOutcome ? { executionOutcome: result.executionOutcome } : {}),
         artifacts: result.artifacts,
         changedFiles: result.changedFiles,
+        ...(result.plan ? { plan: result.plan } : {}),
         generatedSessionTitle,
         loadedSkillNames: [],
         ...("modelIdentity" in outcome && outcome.modelIdentity

@@ -1,85 +1,11 @@
 import type {
-  Dispatch,
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
-  PointerEvent as ReactPointerEvent,
-  RefObject,
-  SetStateAction,
 } from "react";
 import { create } from "zustand";
-import type {
-  AccessMode,
-  AppModelSummary,
-  ComposerModelState,
-  ContextDetailsView,
-  ReasoningEffort,
-  ProjectDashboardDocument,
-  WorkerActivitySummary,
-} from "@/app/types.ts";
 import type { KeyboardEventLike } from "./hooks/composerEventTypes";
-import type { ComposerAttachment } from "./hooks/useFileAttachments";
 import { writeCachedComposerDraft } from "@/app/composerDraftCache.ts";
-
-type AttachmentSetter = Dispatch<SetStateAction<ComposerAttachment[]>>;
-
-interface ComposerStore {
-  draftRevision: number;
-  draftSessionId: string;
-  activateDraftSession: (sessionId: string, text: string) => number;
-  restoreDraftSession: (input: {
-    revision: number;
-    sessionId: string;
-    text: string;
-  }) => boolean;
-  engaged: boolean;
-  setEngaged: (engaged: boolean) => void;
-  text: string;
-  setText: (text: string) => void;
-  setIsComposing: (value: boolean) => void;
-  large: boolean;
-  textAreaRef: RefObject<HTMLTextAreaElement | null> | null;
-  fileInputRef: RefObject<HTMLInputElement | null> | null;
-  attachments: ComposerAttachment[];
-  setAttachments: AttachmentSetter;
-  removeAttachment: (id: string) => void;
-  uploadingCount: number;
-  addFiles: (files: FileList | null) => void;
-  addProjectDocument: (document: ProjectDashboardDocument) => Promise<void>;
-  modelMenuOpen: boolean;
-  setModelMenuOpen: (open: boolean) => void;
-  accessMenuOpen: boolean;
-  setAccessMenuOpen: (open: boolean) => void;
-  contextPopoverOpen: boolean;
-  setContextPopoverOpen: (open: boolean) => void;
-  accessMode: AccessMode;
-  planMode: boolean;
-  model: string;
-  modelState: ComposerModelState;
-  reasoning: ReasoningEffort;
-  context: ContextDetailsView | null | undefined;
-  models: AppModelSummary[];
-  activeModel: AppModelSummary | null;
-  availableReasoning: string[];
-  popoverThemeClass: string;
-  isSending: boolean;
-  activeTurn: boolean;
-  canStop: boolean;
-  canSend: boolean;
-  workers: WorkerActivitySummary[];
-  submit: (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => void;
-  handleKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
-  focusDraftFromComposerChrome: (
-    event: ReactPointerEvent<HTMLFormElement>,
-  ) => void;
-  handleAccessModeChange: (mode: AccessMode) => void;
-  handlePlanModeChange: (checked: boolean) => void;
-  handleModelChoice: (model: AppModelSummary) => void;
-  handleReasoningChange: (effort: ReasoningEffort) => void;
-  onStop: () => void;
-  onOpenContext: () => void;
-  openAttachmentPicker: () => void;
-  setSnapshot: (snapshot: Partial<ComposerStore>) => void;
-}
+import type { ComposerStore } from "./composerStoreContract";
 
 const noop = () => {};
 const noopAsync = async () => {};
@@ -131,6 +57,10 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
   setAccessMenuOpen: (accessMenuOpen) => set({ accessMenuOpen }),
   contextPopoverOpen: false,
   setContextPopoverOpen: (contextPopoverOpen) => set({ contextPopoverOpen }),
+  featureDrawerOpen: false,
+  setFeatureDrawerOpen: (featureDrawerOpen) => set({ featureDrawerOpen }),
+  attachmentTriggerRef: null,
+  setAttachmentTriggerRef: (attachmentTriggerRef) => set({ attachmentTriggerRef }),
   accessMode: "full_access",
   planMode: false,
   model: "",
@@ -151,6 +81,7 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
   focusDraftFromComposerChrome: noop,
   handleAccessModeChange: noop,
   handlePlanModeChange: noop,
+  applyServerPlanMode: noop,
   handleModelChoice: noop,
   handleReasoningChange: noop,
   onStop: noop,

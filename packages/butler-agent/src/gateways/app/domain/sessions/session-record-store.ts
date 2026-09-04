@@ -27,6 +27,7 @@ import type {
   UpdateSessionRequest,
 } from "../../interface/protocol/app-protocol.ts";
 import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "../../../../agent/btcc/project-plan.ts";
 import { visibleMessageSqlPredicate } from "../sessions/visible-message-sql.ts";
 import { AppSessionMessageRecordStore } from "./session-message-record-store.ts";
 import type {
@@ -323,6 +324,7 @@ export class AppSessionRecordStore {
       safeErrorCode?: string;
       retryable?: boolean;
       attachments?: MessageFileRow[];
+      plan?: ProjectLedgerPlan;
       conversationSessionId?: string | null;
       conversationTurnId?: string | null;
       conversationMessageId?: string | null;
@@ -338,6 +340,7 @@ export class AppSessionRecordStore {
       status?: MessageStatus;
       safeErrorCode?: string | null;
       retryable?: boolean;
+      plan?: ProjectLedgerPlan | null;
     },
   ): MessageRecord {
     return this.messages.updateMessage(messageId, input);
