@@ -52,6 +52,7 @@ test("plan badge is removable and ordinary mode has no mode marker", async () =>
   expect(cancel?.getAttribute("aria-label")).toBe(
     `${appCopy.composer.plan} ${appCopy.common.cancel}`,
   );
+  expect(cancel?.getAttribute("data-variant")).toBe("inline");
   await act(async () => cancel?.click());
   expect(changes).toEqual([false]);
   expect(container.textContent).toBe("");
