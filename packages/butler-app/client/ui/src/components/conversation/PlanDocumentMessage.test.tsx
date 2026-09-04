@@ -22,6 +22,7 @@ test("renders the projected Plan in the shared Ledger markdown document box", ()
   );
 
   expect(html).toContain('data-test-class="plan-document-message"');
+  expect(html).toContain('id="plan-document-plan-1"');
   expect(html).toContain("Ship composer Plan mode");
   expect(html).toContain("Objective");
   expect(html).toContain("<strong>one</strong>");

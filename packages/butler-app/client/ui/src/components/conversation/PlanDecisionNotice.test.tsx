@@ -94,6 +94,7 @@ test("Plan decisions replace the Composer input with the exact target", () => {
         planTitle: "Snake game implementation",
         onAccept: () => undefined,
         onOpenInstruction: () => undefined,
+        onOpenPlan: () => undefined,
         onReject: () => undefined,
         onSubmitInstruction: () => undefined,
       }}

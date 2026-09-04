@@ -10,6 +10,7 @@ import type {
   PlanDecisionResultView,
 } from "@/app/types.ts";
 import { useComposerStore } from "./composerStore";
+import { planDocumentElementId } from "./PlanDocumentMessage";
 
 const PENDING_PLAN_STATUS = /(?:draft|pending|awaiting)/iu;
 
@@ -58,6 +59,7 @@ export interface ComposerPlanDecision {
   planTitle: string;
   onAccept: () => void;
   onOpenInstruction: () => void;
+  onOpenPlan: () => void;
   onReject: () => void;
   onSubmitInstruction: (event: FormEvent<HTMLFormElement>) => void;
 }
@@ -123,6 +125,12 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
       setInstructionPlanId(plan.id);
       setEngaged(true);
       window.requestAnimationFrame(() => textAreaRef?.current?.focus({ preventScroll: true }));
+    },
+    onOpenPlan: () => {
+      document.getElementById(planDocumentElementId(plan.id))?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
     },
     onReject: () => void decide("reject"),
     onSubmitInstruction: (event) => {
