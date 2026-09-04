@@ -55,6 +55,7 @@ type GuidedToolExecutionBoundaryInput = {
   effectService: GuidedEffectService;
   authority: PrincipalAuthority;
   ownerSessionId?: string;
+  sourceSessionId?: string;
   sourceTurnId?: string;
   modelRef?: string;
   reasoningEffort?: string;
@@ -130,6 +131,7 @@ export function createGuidedToolExecutionBoundary(
         authority,
         requestRef: input.authorityRequestRef,
         ownerSessionId: input.ownerSessionId,
+        sourceSessionId: input.sourceSessionId,
         sourceTurnId: input.sourceTurnId,
         clientMessageId: input.authorityClientMessageId,
         workspacePath: input.workspacePath,
@@ -174,7 +176,8 @@ export function createGuidedToolExecutionBoundary(
           "The command authority context is unavailable.",
         );
       }
-      if (!input.ownerSessionId || !input.sourceTurnId || !input.modelRef ||
+      if (!input.ownerSessionId || !input.sourceSessionId ||
+          !input.sourceTurnId || !input.modelRef ||
           !input.reasoningEffort || !input.workspacePath) {
         return ordinaryGuidedEffectError(
           "authority_context_missing",
@@ -218,7 +221,7 @@ export function createGuidedToolExecutionBoundary(
       try {
         const admission = authority.admit({
           ownerSessionId: input.ownerSessionId,
-          sourceSessionId: input.ownerSessionId,
+          sourceSessionId: input.sourceSessionId,
           sourceTurnId: input.sourceTurnId,
           sourceWorkId: work.workId,
           workspacePath: input.workspacePath,

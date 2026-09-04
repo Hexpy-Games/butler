@@ -33,9 +33,10 @@ export async function handleAuthorityRoutes(
     handoff = await decideAndAdmitAuthority({
       authority: input.authority,
       store: input.store,
+      butlerData: input.butlerData,
+      stewardObserver: input.stewardObserver,
       ownerSessionId,
       requestRef,
-      sourceSessionId: ownerSessionId,
       action: decisionAction,
       ...(decisionAction === "modify"
         ? { alternativeInput: await modifyInput(input.request) }

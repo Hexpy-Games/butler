@@ -32,6 +32,7 @@ import type {
   SubsessionDelegationService,
 } from "./contracts.ts";
 import type { StoredSessionBinding } from "../../../test-support/harness/contracts.ts";
+import { resolveSubsessionAuthorityOwner } from "./authority-owner.ts";
 export function createSubsessionDelegationService(
   input: SubsessionDelegationDependencies,
 ): SubsessionDelegationService {
@@ -97,6 +98,20 @@ export function createSubsessionDelegationService(
     return work.workId;
   };
   const service: SubsessionDelegationService = {
+    authorityOwnerSessionId({ sourceSessionId }) {
+      const source = input.sessionBindings.getBySessionId(sourceSessionId);
+      if (!source) throw new Error("subsession_authority_source_missing");
+      const ownerSessionId = resolveSubsessionAuthorityOwner({
+        sourceSessionId,
+        relationForChild: (sessionId) =>
+          input.store.relationByChildSessionId(sessionId),
+      });
+      const owner = input.sessionBindings.getBySessionId(ownerSessionId);
+      if (!owner || owner.role !== "butler") {
+        throw new Error("subsession_authority_owner_missing");
+      }
+      return ownerSessionId;
+    },
     async shouldWaitForWorker(parentInput) {
       return (await service.activeParentDelegations(parentInput)).length > 0 ||
         hasQueuedWorkerResult(input.store, childQueue, parentInput);

@@ -296,7 +296,7 @@ export interface PrincipalAuthority {
   decide(input: {
     ownerSessionId: string;
     requestRef: string;
-    sourceSessionId: string;
+    sourceSessionId?: string;
     action: AuthorityDecisionAction;
     alternativeInput?: string;
   }): AuthorityDecisionResult;

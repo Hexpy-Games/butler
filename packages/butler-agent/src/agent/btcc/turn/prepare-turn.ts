@@ -117,8 +117,10 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
       documents: this.dependencies.contextDocuments,
       attachments: request.message.attachments,
       imageAdmission: request.message.imageAdmission,
-      authorityRequestRef: request.appTurnContext?.authorityRequestRef,
-      authorityClientMessageId: request.appTurnContext?.authorityClientMessageId,
+      authorityRequestRef: request.appTurnContext?.authorityRequestRef ??
+        request.authorityRequestRef,
+      authorityClientMessageId: request.appTurnContext?.authorityClientMessageId ??
+        request.authorityClientMessageId,
       turnAccessMode: controls?.access_mode,
     });
     const modelSelection = admitModel(binding, controls);
