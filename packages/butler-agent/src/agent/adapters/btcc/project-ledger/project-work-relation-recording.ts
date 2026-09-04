@@ -52,16 +52,22 @@ export async function bindOpenProjectWork(
       kind: "reference",
       schema: "butler.btcc-project-work-binding.v1",
     });
+    const receiptIdentity = binding.operationIdentity.kind === "mutation_call"
+      ? binding.operationIdentity
+      : callerIdentity;
     await requireObservedProjectWorkReceipt({
       context,
-      identity: callerIdentity,
+      identity: receiptIdentity,
       expectedTarget: {
         id: bindingRef.bindingRevisionId,
         kind: "reference",
         parentId: current.view.workId,
       },
     });
-    if (
+    if (binding.operationIdentity.kind === "mutation_call") {
+      if (expectedWorkId && expectedWorkId !== current.view.workId)
+        invalid("project_work_binding_identity_mismatch");
+    } else if (
       binding.operationIdentity.kind !== callerIdentity.kind ||
       binding.operationIdentity.id !== callerIdentity.id ||
       binding.operationIdentity.requestSha256 !== callerIdentity.requestSha256

@@ -49,6 +49,7 @@ test("public service maps Work, Plan, checkpoint, Reviews, and completed disposi
     objective: "Ship the exact adapter",
   });
   expect(started.status).toBe("open");
+  expect((await service.bindOpenWork(scope))?.workId).toBe(started.workId);
 
   const planned = await service.replacePlan({
     ...scope,

@@ -6,7 +6,7 @@ import type {
 } from "../../packages/butler-agent/src/agent/btcc/authority/contracts.ts";
 import type { GuidedActivityProjection } from
   "../../packages/butler-agent/src/agent/btcc/projection/index.ts";
-import { createGuidedAuthorityProjection } from
+import { createGuidedAskFirstProgress, createGuidedAuthorityProjection } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-progress.ts";
 import {
   deriveUncertainAuthorityOutcomeReceipt,
@@ -154,4 +154,45 @@ test("missing or unsafe evidence refs project only the bare uncertain text", () 
     expect(projected).toBe("확인 필요");
     if (receipt) expect(projected).not.toContain(receipt.evidenceRef);
   }
+});
+
+test("ask-first preserves safe Work progress while hiding operation details", async () => {
+  const forwarded: string[] = [];
+  const progress = createGuidedAskFirstProgress({
+    stateChanged: () => { forwarded.push("state"); },
+    workProgressChanged: () => { forwarded.push("work"); },
+    phaseActivityChanged: () => { forwarded.push("phase"); },
+    operationChanged: () => { forwarded.push("operation"); },
+  });
+
+  await progress?.stateChanged({
+    turnId: TURN_ID,
+    turnRevision: 1,
+    semanticState: "running",
+  });
+  await progress?.workProgressChanged?.({
+    turnId: TURN_ID,
+    turnRevision: 1,
+    programId: "work",
+    tasks: [],
+  });
+  await progress?.phaseActivityChanged?.({
+    turnId: TURN_ID,
+    semanticState: "running",
+    activityId: "phase",
+    title: "Planning",
+    summary: "Planning",
+    nextStep: "Execute",
+  });
+  await progress?.operationChanged?.({
+    turnId: TURN_ID,
+    semanticState: "running",
+    activityId: "operation",
+    requestId: "private-request",
+    publicTitle: "Run command",
+    capabilityRef: "command",
+    status: "started",
+  });
+
+  expect(forwarded).toEqual(["state", "work", "phase"]);
 });
