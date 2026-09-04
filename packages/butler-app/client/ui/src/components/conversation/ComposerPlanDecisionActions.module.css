@@ -1,0 +1,13 @@
+.actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+@container composer (width <= 520px) {
+  .actions button {
+    min-width: auto;
+    padding-inline: var(--space-2);
+  }
+}

@@ -213,10 +213,11 @@ export function guidedPlanModeInstructions(planId?: string): string {
     "Plan mode is active for this canonically project-bound session.",
     ...(boundPlan ? [`This continuation is bound to the exact existing Project Ledger Plan id=${planId!.trim()}; revise or activate only that Plan.`] : []),
     boundPlan
-      ? "Inspect the bound Plan and current project context, then update exactly that top-level Project Ledger record with kind=plan. Keep status=draft for a revision; set status=active only when the user's instruction clearly accepts execution."
+      ? "Read the bound Plan, treat the user's direct instruction as authoritative revision feedback, and update exactly that top-level Project Ledger record with project_ledger_update, kind=plan, and the bound id. That update tool is available now; do not search for a replacement capability. Keep status=draft for a revision; set status=active only when the user's instruction clearly accepts execution."
       : "You may inspect and read current project context, then create exactly one top-level Project Ledger record with kind=plan and status=draft.",
-    "The Plan mutation must have a complete body with objective/intent, concrete tasks or phases, completion conditions, relevant scope, and risks.",
-    "Do not create Work, Task, Spec, or any other Ledger record. Do not execute the Plan or perform workspace or external mutations.",
+    "Before the single Plan mutation, complete one concise internal cycle: understand the user's intent and constraints, author the full Plan, review it against that intent, and correct the draft. Do not stop after describing a possible change; persist the reviewed Plan.",
+    "The final Plan body must include the objective and context, the chosen approach, an explicit Ledger record map naming which Spec is created or updated, which Work owns the outcome, and how concrete Tasks divide that Work, followed by execution phases, completion conditions, relevant risks, and the result of the Plan review.",
+    "Describe the future Spec, Work, and Tasks in the Plan, but do not create those records in Plan mode. Do not execute the Plan or perform workspace or external mutations.",
     "After the first successful project_ledger_create or project_ledger_update for kind=plan, stop using tools and report the resulting Plan briefly.",
   ].join(" ");
 }

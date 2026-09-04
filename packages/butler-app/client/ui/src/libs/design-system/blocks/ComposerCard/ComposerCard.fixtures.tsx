@@ -9,7 +9,6 @@ import {
   ComposerCardToolbar,
   ComposerSendButton,
 } from "./ComposerCard";
-import { ComposerPlanDecisionForm } from "./ComposerPlanDecisionForm";
 import { ComposerPlanToggle } from "./ComposerPlanToggle";
 
 export function ComposerCardFixture() {
@@ -22,7 +21,6 @@ export function ComposerCardFixture() {
         notice={
           <Notice message="Optional capability guidance" tone="warning" />
         }
-        drawer={<div>Attachment and response mode actions</div>}
         onSubmit={(event) => event.preventDefault()}
       >
         <ComposerCardExpandedBody>
@@ -46,19 +44,6 @@ export function ComposerCardFixture() {
           <ComposerSendButton aria-label="Send" />
         </ComposerCardToolbar>
       </ComposerCard>
-      <ComposerPlanDecisionForm
-        acceptLabel="Accept"
-        ariaLabel="Plan decision"
-        instruction=""
-        instructionLabel="Plan instruction"
-        instructionPlaceholder="Request a change"
-        rejectLabel="Reject"
-        submitLabel="Send"
-        onAccept={() => undefined}
-        onInstructionChange={() => undefined}
-        onReject={() => undefined}
-        onSubmitInstruction={() => undefined}
-      />
     </>
   );
 }

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import type { FormEvent } from "react";
+import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type {
@@ -6,7 +8,6 @@ import type {
   PlanDecisionAction,
   PlanDecisionResultView,
 } from "@/app/types.ts";
-import { ComposerPlanDecisionForm } from "@/butler-ds";
 import { useComposerStore } from "./composerStore";
 
 const PENDING_PLAN_STATUS = /(?:draft|pending|awaiting)/iu;
@@ -47,46 +48,69 @@ export async function submitProjectedPlanDecision(input: {
   return true;
 }
 
-export function PlanDecisionNotice() {
+export interface ComposerPlanDecision {
+  canSubmitInstruction: boolean;
+  instructionPlaceholder: string;
+  pending: boolean;
+  onAccept: () => void;
+  onReject: () => void;
+  onSubmitInstruction: (event: FormEvent<HTMLFormElement>) => void;
+}
+
+export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const plan = useButlerStore((state) => latestPendingPlan(state.messages));
+  const planQueued = useButlerStore((state) =>
+    Boolean(
+      plan &&
+      state.sessionQueue.some(
+        (message) =>
+          message.plan_id === plan.id &&
+          (message.state === "queued" || message.state === "dispatching"),
+      ),
+    ),
+  );
+  const activeTurn = useButlerStore((state) =>
+    Boolean(
+      state.summary?.turn_state &&
+      ACTIVE_TURN_STATES.has(state.summary.turn_state),
+    ),
+  );
   const submitDecision = useButlerStore((state) => state.submitPlanDecision);
+  const planMode = useComposerStore((state) => state.planMode);
+  const text = useComposerStore((state) => state.text);
+  const setText = useComposerStore((state) => state.setText);
   const applyServerPlanMode = useComposerStore(
     (state) => state.applyServerPlanMode,
   );
-  const [instruction, setInstruction] = useState("");
   const [pending, setPending] = useState(false);
 
-  if (!plan) return null;
+  if (!planMode || !plan || pending || planQueued || activeTurn) return undefined;
+
   const decide = async (action: PlanDecisionAction) => {
-    if (pending || (action === "instruct" && !instruction.trim())) return;
+    if (action === "instruct" && !text.trim()) return;
     setPending(true);
     const applied = await submitProjectedPlanDecision({
       action,
       activeChatId,
       applyPlanMode: applyServerPlanMode,
-      instruction,
+      instruction: text,
       planId: plan.id,
       submit: submitDecision,
     });
+    if (applied && action === "instruct") setText("");
     setPending(false);
-    if (applied && action === "instruct") setInstruction("");
   };
 
-  return (
-    <ComposerPlanDecisionForm
-      acceptLabel={appCopy.composer.planAccept}
-      ariaLabel={appCopy.composer.planDecision}
-      instruction={instruction}
-      instructionLabel={appCopy.composer.planInstruction}
-      instructionPlaceholder={appCopy.composer.planInstructionPlaceholder}
-      pending={pending}
-      rejectLabel={appCopy.composer.planReject}
-      submitLabel={appCopy.composer.planInstructionSubmit}
-      onAccept={() => void decide("accept")}
-      onInstructionChange={setInstruction}
-      onReject={() => void decide("reject")}
-      onSubmitInstruction={() => void decide("instruct")}
-    />
-  );
+  return {
+    canSubmitInstruction: Boolean(text.trim()),
+    instructionPlaceholder: appCopy.composer.planInstructionPlaceholder,
+    pending,
+    onAccept: () => void decide("accept"),
+    onReject: () => void decide("reject"),
+    onSubmitInstruction: (event) => {
+      event.preventDefault();
+      void decide("instruct");
+    },
+  };
 }

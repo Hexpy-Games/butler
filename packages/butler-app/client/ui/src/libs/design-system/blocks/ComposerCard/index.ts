@@ -12,6 +12,4 @@ export type {
   ComposerCardProps,
   ComposerSendButtonProps,
 } from "./ComposerCard";
-export { ComposerPlanDecisionForm } from "./ComposerPlanDecisionForm";
-export type { ComposerPlanDecisionFormProps } from "./ComposerPlanDecisionForm";
 export { ComposerPlanToggle } from "./ComposerPlanToggle";

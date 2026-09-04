@@ -52,17 +52,6 @@
     var(--adaptive-panel-easing);
 }
 
-.drawer {
-  width: 100%;
-  margin-top: var(--space-2);
-  padding: var(--space-2);
-  border: 1px solid var(--composer-glass-divider);
-  border-radius: var(--radius-panel);
-  background: color-mix(in srgb, var(--surface) 76%, transparent);
-  backdrop-filter: var(--tinted-glass-filter);
-  pointer-events: auto;
-}
-
 .card[data-drop-active="true"] {
   border-color: var(--color-border-interactive);
   box-shadow:
