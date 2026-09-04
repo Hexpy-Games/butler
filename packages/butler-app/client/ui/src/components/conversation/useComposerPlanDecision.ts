@@ -5,6 +5,7 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type {
   MessageRecord,
+  PlanDocumentRecord,
   PlanDecisionAction,
   PlanDecisionResultView,
 } from "@/app/types.ts";
@@ -12,10 +13,12 @@ import { useComposerStore } from "./composerStore";
 
 const PENDING_PLAN_STATUS = /(?:draft|pending|awaiting)/iu;
 
-export function latestPendingPlan(messages: MessageRecord[]) {
+export function latestActionablePlan(messages: MessageRecord[]): PlanDocumentRecord | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const plan = messages[index]?.plan_document;
-    if (plan) return PENDING_PLAN_STATUS.test(plan.status) ? plan : null;
+    const message = messages[index];
+    if (!message || message.role !== "assistant") continue;
+    const plan = message.plan_document;
+    return plan && PENDING_PLAN_STATUS.test(plan.status) ? plan : null;
   }
   return null;
 }
@@ -49,17 +52,18 @@ export async function submitProjectedPlanDecision(input: {
 }
 
 export interface ComposerPlanDecision {
-  canSubmitInstruction: boolean;
   instructionPlaceholder: string;
   pending: boolean;
+  planTitle: string;
   onAccept: () => void;
+  onFocusInstruction: () => void;
   onReject: () => void;
   onSubmitInstruction: (event: FormEvent<HTMLFormElement>) => void;
 }
 
 export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
   const activeChatId = useButlerStore((state) => state.activeChatId);
-  const plan = useButlerStore((state) => latestPendingPlan(state.messages));
+  const plan = useButlerStore((state) => latestActionablePlan(state.messages));
   const planQueued = useButlerStore((state) =>
     Boolean(
       plan &&
@@ -80,6 +84,8 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
   const planMode = useComposerStore((state) => state.planMode);
   const text = useComposerStore((state) => state.text);
   const setText = useComposerStore((state) => state.setText);
+  const setEngaged = useComposerStore((state) => state.setEngaged);
+  const textAreaRef = useComposerStore((state) => state.textAreaRef);
   const applyServerPlanMode = useComposerStore(
     (state) => state.applyServerPlanMode,
   );
@@ -103,10 +109,14 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
   };
 
   return {
-    canSubmitInstruction: Boolean(text.trim()),
     instructionPlaceholder: appCopy.composer.planInstructionPlaceholder,
     pending,
+    planTitle: plan.title,
     onAccept: () => void decide("accept"),
+    onFocusInstruction: () => {
+      setEngaged(true);
+      window.requestAnimationFrame(() => textAreaRef?.current?.focus({ preventScroll: true }));
+    },
     onReject: () => void decide("reject"),
     onSubmitInstruction: (event) => {
       event.preventDefault();

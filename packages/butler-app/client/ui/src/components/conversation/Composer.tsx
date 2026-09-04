@@ -130,7 +130,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
       large={large}
       expanded={presentation.expanded}
       floating
-      notice={<ComposerNotices summary={session.summary} />}
+      notice={<ComposerNotices planDecision={planDecision} summary={session.summary} />}
       adjunct={
         showAdjunct ? (
           <ComposerAdjunctPanels
