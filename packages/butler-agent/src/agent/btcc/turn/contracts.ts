@@ -16,6 +16,7 @@ import type {
   TurnContinuationBudgetState,
 } from "./continuation-budget.ts";
 import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "../project-plan.ts";
 
 export type TurnSemanticState =
   | "admitted"
@@ -67,6 +68,7 @@ export type TurnRecord = {
     executionOutcome?: "waiting_for_worker";
     artifacts?: BtccFinalArtifact[];
     changedFiles?: ChangedFileDetail[];
+    plan?: ProjectLedgerPlan;
     modelIdentity?: {
       requestedModelRef: string;
       effectiveModelRef: string;

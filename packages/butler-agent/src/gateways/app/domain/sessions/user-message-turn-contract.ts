@@ -138,6 +138,7 @@ export interface UserMessageTurnStoreInput {
     queueReplay?: boolean;
     visualAdmission?: VisualImageAdmissionResult;
     authorityRequestRef?: string;
+    planId?: string;
   }) => TurnRecord;
   appendProgressSummaryEvent: (
     chatId: string,

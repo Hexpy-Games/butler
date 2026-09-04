@@ -202,6 +202,7 @@ export class AppUserMessageTurnStore {
         ...(input.controls.authority_request_ref
           ? { authorityRequestRef: input.controls.authority_request_ref }
           : {}),
+        ...(input.controls.plan_id ? { planId: input.controls.plan_id } : {}),
         ...(input.visualAdmission ? { visualAdmission: input.visualAdmission } : {}),
       });
       assertQueuedClaim(this.input, input.queued, claimId);
@@ -293,6 +294,7 @@ export class AppUserMessageTurnStore {
         ...(input.controls.authority_request_ref
           ? { authorityRequestRef: input.controls.authority_request_ref }
           : {}),
+        ...(input.controls.plan_id ? { planId: input.controls.plan_id } : {}),
         ...(input.visualAdmission ? { visualAdmission: input.visualAdmission } : {}),
       });
       assertQueuedClaim(this.input, input.queued, claimId);

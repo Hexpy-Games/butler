@@ -16,6 +16,7 @@ import { useComposerFileDrop } from "./hooks/useComposerFileDrop";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
 import { ComposerNotices } from "./ComposerNotices.tsx";
+import { ComposerAttachmentDrawer } from "./ComposerAttachmentDrawer";
 
 interface ComposerProps {
   onReserveChange: (height: number) => void;
@@ -32,6 +33,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
   const text = useComposerStore((store) => store.text);
   const setText = useComposerStore((store) => store.setText);
   const submit = useComposerStore((store) => store.submit);
+  const featureDrawerOpen = useComposerStore((store) => store.featureDrawerOpen);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -120,7 +122,8 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
   const presentation = useComposerPresentation({
     activeChatId: session.activeChatId,
     containerRef: wrapRef,
-    protectedExpanded: modelMenuOpen || accessMenuOpen || contextPopoverOpen,
+    protectedExpanded:
+      modelMenuOpen || accessMenuOpen || contextPopoverOpen || featureDrawerOpen,
   });
 
   return (
@@ -129,9 +132,8 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
       large={large}
       expanded={presentation.expanded}
       floating
-      notice={<ComposerNotices
-        summary={session.summary}
-      />}
+      drawer={featureDrawerOpen ? <ComposerAttachmentDrawer /> : undefined}
+      notice={<ComposerNotices summary={session.summary} />}
       adjunct={
         showAdjunct ? (
           <ComposerAdjunctPanels
@@ -151,10 +153,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
       onBlurCapture={presentation.onBlurCapture}
       onSubmit={submit}
     >
-      <ComposerInputSurface
-        fileInputRef={fileInputRef}
-        onFiles={(nextFiles) => void files.addFiles(nextFiles)}
-      />
+      <ComposerInputSurface fileInputRef={fileInputRef} onFiles={(nextFiles) => void files.addFiles(nextFiles)} />
     </ComposerCard>
   );
 }

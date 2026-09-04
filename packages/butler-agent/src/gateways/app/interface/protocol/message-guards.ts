@@ -1,4 +1,18 @@
-import type { MessageSendRequest, QueueMessageRequest } from "./messaging-contract.ts";
+import type {
+  MessageSendRequest,
+  PlanDecisionRequest,
+  QueueMessageRequest,
+} from "./messaging-contract.ts";
+
+export function isPlanDecisionRequest(
+  value: unknown,
+): value is PlanDecisionRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const input = value as Partial<PlanDecisionRequest>;
+  return (input.action === "accept" || input.action === "reject" ||
+      input.action === "instruct") &&
+    (input.instruction === undefined || typeof input.instruction === "string");
+}
 
 export function isMessageSendRequest(
   value: unknown,

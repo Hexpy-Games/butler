@@ -21,6 +21,7 @@ import type {
   TurnState,
 } from "../../interface/protocol/app-protocol.ts";
 import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "../../../../agent/btcc/project-plan.ts";
 
 export type AppQueuedTurnClaimStatus =
   | "unlinked"
@@ -39,6 +40,17 @@ export interface AppTransportProjectionStoreOptions {
   getTurnRow: (turnId: string) => TurnRow | null;
   getMessageRow: (messageId: string) => MessageRow | null;
   getLatestAssistantMessageForTurn: (turnId: string) => MessageRow | null;
+  /** Synchronizes session Plan-mode state after a Plan continuation activates its bound Plan. */
+  updateSessionControlsView?: (
+    sessionId: string,
+    input: { plan_mode?: boolean },
+  ) => unknown;
+  createAcceptedPlanContinuation?: (input: {
+    sessionId: string;
+    sourceTurnId: string;
+    planId: string;
+    planTitle: string;
+  }) => void;
   insertMessage: (
     chatId: string,
     role: MessageRole,
@@ -58,6 +70,7 @@ export interface AppTransportProjectionStoreOptions {
     texts: string[],
     files?: MessageFileRow[],
     changedFiles?: ChangedFileDetail[],
+    plan?: ProjectLedgerPlan,
   ) => MessageRecord[];
   updateTurnState: (
     turnId: string,

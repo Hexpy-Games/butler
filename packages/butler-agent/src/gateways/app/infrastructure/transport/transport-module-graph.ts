@@ -61,6 +61,21 @@ export function createAppTransportModuleGraph(input: {
     getMessageRow: (messageId) => host.getMessageRow(messageId),
     getLatestAssistantMessageForTurn: (turnId) =>
       host.getLatestAssistantMessageForTurn(turnId),
+    updateSessionControlsView: (sessionId, controls) =>
+      host.updateSessionControlsView(sessionId, controls),
+    createAcceptedPlanContinuation: ({
+      sessionId,
+      sourceTurnId,
+      planId,
+      planTitle,
+    }) => {
+      host.sessionQueue.createPlanContinuation({
+        chatId: sessionId,
+        clientMessageId: `client-plan-activated-${sourceTurnId}`,
+        planId,
+        text: `Proceed with the accepted plan "${planTitle}".`,
+      });
+    },
     insertMessage: (chatId, role, text, status, options) =>
       host.insertMessage(chatId, role, text, status, options),
     insertOrReplaceAssistantReplies: (
@@ -69,12 +84,14 @@ export function createAppTransportModuleGraph(input: {
       texts,
       files,
       changedFiles,
+      plan,
     ) => host.insertOrReplaceAssistantReplies(
       chatId,
       turnId,
       texts,
       files,
       changedFiles,
+      plan,
     ),
     updateTurnState: (turnId, state, options) =>
       host.updateTurnState(turnId, state, options),

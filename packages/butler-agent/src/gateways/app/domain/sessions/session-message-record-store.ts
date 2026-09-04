@@ -25,6 +25,7 @@ import {
   type SessionMessagePageOptions,
 } from "./session-message-page.ts";
 import type { ChangedFileDetail, ChangedFileLine } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "../../../../agent/btcc/project-plan.ts";
 
 export class AppSessionMessageRecordStore {
   constructor(
@@ -57,7 +58,7 @@ export class AppSessionMessageRecordStore {
     const query = beforeCursor !== undefined
       ? `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE chat_id = ?
         AND rowid < ?
@@ -68,7 +69,7 @@ export class AppSessionMessageRecordStore {
       : afterCursor !== undefined
         ? `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE chat_id = ?
         AND rowid > ?
@@ -78,7 +79,7 @@ export class AppSessionMessageRecordStore {
     `
         : `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE chat_id = ?
         AND ${visibleMessageSqlPredicate()}
@@ -214,7 +215,7 @@ export class AppSessionMessageRecordStore {
         .query<MessageRow, [string]>(
           `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE id = ?
     `,
@@ -245,7 +246,7 @@ export class AppSessionMessageRecordStore {
         .query<MessageRow, [string]>(
           `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE turn_id = ? AND role = 'assistant'
       ORDER BY rowid DESC
@@ -267,6 +268,7 @@ export class AppSessionMessageRecordStore {
       safeErrorCode?: string;
       retryable?: boolean;
       attachments?: MessageFileRow[];
+      plan?: ProjectLedgerPlan;
       conversationSessionId?: string | null;
       conversationTurnId?: string | null;
       conversationMessageId?: string | null;
@@ -286,9 +288,9 @@ export class AppSessionMessageRecordStore {
       INSERT INTO messages (
         id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
         conversation_message_id, role, text, status, created_at, updated_at,
-        safe_error_code, retryable
+        safe_error_code, retryable, plan_json
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .run(
@@ -305,6 +307,7 @@ export class AppSessionMessageRecordStore {
         createdAt,
         options.safeErrorCode ?? null,
         options.retryable ? 1 : 0,
+        options.plan ? JSON.stringify(options.plan) : null,
       );
     if (options.attachments?.length) {
       this.messageFiles.attachToMessage(chatId, id, options.attachments);
@@ -321,6 +324,7 @@ export class AppSessionMessageRecordStore {
       status?: MessageStatus;
       safeErrorCode?: string | null;
       retryable?: boolean;
+      plan?: ProjectLedgerPlan | null;
     },
   ): MessageRecord {
     const current = this.getMessageRow(messageId);
@@ -336,7 +340,7 @@ export class AppSessionMessageRecordStore {
       .query(
         `
       UPDATE messages
-      SET text = ?, status = ?, updated_at = ?, safe_error_code = ?, retryable = ?
+      SET text = ?, status = ?, updated_at = ?, safe_error_code = ?, retryable = ?, plan_json = ?
       WHERE id = ?
     `,
       )
@@ -352,6 +356,11 @@ export class AppSessionMessageRecordStore {
           : input.retryable
             ? 1
             : 0,
+        input.plan === undefined
+          ? current.plan_json ?? null
+          : input.plan === null
+            ? null
+            : JSON.stringify(input.plan),
         messageId,
       );
     const row = this.getMessageRow(messageId);

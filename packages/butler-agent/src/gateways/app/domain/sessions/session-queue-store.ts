@@ -188,6 +188,7 @@ export class AppSessionQueueStore {
           ...(input.subsession_result
             ? { subsession_result: input.subsession_result }
             : {}),
+          ...(input.plan_id ? { plan_id: input.plan_id.trim() } : {}),
         };
         const now = new Date().toISOString();
         const queuedId = `queued-${crypto.randomUUID()}`;
@@ -284,6 +285,69 @@ export class AppSessionQueueStore {
     return this.listSessionQueue(chatId);
   }
 
+  createPlanContinuation(input: {
+    chatId: string;
+    clientMessageId: string;
+    planId: string;
+    text: string;
+  }): SessionQueueView {
+    const request: QueueMessageRequest = {
+      chat_id: input.chatId,
+      client_message_id: input.clientMessageId,
+      plan_id: input.planId,
+      text: input.text,
+      plan_mode: false,
+    };
+    this.ensureChat(input.chatId);
+    const text = input.text.trim();
+    const clientMessageId = stableClientMessageId(input.clientMessageId);
+    const inputIdentityDigest = queuedInputIdentityDigest(request, text, []);
+    const existing = this.getQueuedMessageByClientId(input.chatId, clientMessageId);
+    if (existing) {
+      if (existing.input_identity_digest !== inputIdentityDigest) {
+        throw new AppStoreOperationError(
+          409,
+          "queued_message_identity_conflict",
+          "This Plan continuation was already accepted with different input.",
+        );
+      }
+      return this.listSessionQueue(input.chatId);
+    }
+    const controls = this.controlsForMessageSend(input.chatId, request);
+    const controlResolution: TurnControlResolution = {
+      ...controls,
+      plan_id: input.planId,
+    };
+    const queuedId = `queued-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+    this.db.query(`
+      INSERT INTO session_queued_messages (
+        id, chat_id, text, client_message_id, input_identity_digest, control_resolution_json,
+        controls_json, attachments_json, state, safe_error_code, dispatched_message_id,
+        turn_id, claim_id, claim_owner, claimed_at, lease_expires_at,
+        terminal_result_message_id, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, '[]', 'queued', NULL, NULL, NULL, NULL, NULL, NULL,
+        NULL, NULL, ?, ?)
+    `).run(
+      queuedId,
+      input.chatId,
+      text,
+      clientMessageId,
+      inputIdentityDigest,
+      JSON.stringify(controlResolution),
+      JSON.stringify(controlResolution.controls),
+      now,
+      now,
+    );
+    this.appendEvent("session_queue.changed", {
+      session_id: input.chatId,
+      queued_message_id: queuedId,
+      action: "created",
+    });
+    return this.listSessionQueue(input.chatId);
+  }
+
   async updateQueuedMessage(
     queuedMessageId: string,
     input: UpdateQueuedMessageRequest,
@@ -333,6 +397,10 @@ export class AppSessionQueueStore {
       current.chat_id,
       { ...controls, ...input },
     );
+    if (input.plan_id || this.controlResolutionFromRow(current)?.plan_id) {
+      controlResolution.plan_id = input.plan_id?.trim() ||
+        this.controlResolutionFromRow(current)?.plan_id;
+    }
     const visualAdmission = await this.admitVisualAttachments(
       attachableFiles,
       controlResolution.controls.model,
@@ -825,6 +893,8 @@ export class AppSessionQueueStore {
       record.dispatched_message_id = row.dispatched_message_id;
     }
     if (row.turn_id) record.turn_id = row.turn_id;
+    const planId = this.controlResolutionFromRow(row)?.plan_id;
+    if (planId) record.plan_id = planId;
     if (row.terminal_result_message_id) {
       record.terminal_result_message_id = row.terminal_result_message_id;
     }
@@ -859,6 +929,7 @@ function queuedInputIdentityDigest(
       reasoning_effort: input.reasoning_effort ?? null,
       access_mode: input.access_mode ?? null,
       plan_mode: input.plan_mode ?? null,
+      plan_id: input.plan_id ?? null,
       authority_request_ref: input.authority_request_ref ?? null,
       ...(options.includeSubsessionResult !== false && input.subsession_result
         ? { subsession_result: input.subsession_result }

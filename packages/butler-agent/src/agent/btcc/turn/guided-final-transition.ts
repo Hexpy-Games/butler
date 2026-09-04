@@ -20,6 +20,7 @@ export function guidedFinalTransition(
     ...(result.workStatus ? { workStatus: result.workStatus } : {}),
     ...(result.artifacts?.length ? { artifacts: result.artifacts } : {}),
     ...(result.changedFiles?.length ? { changedFiles: result.changedFiles } : {}),
+    ...(result.plan ? { plan: result.plan } : {}),
     ...(result.modelIdentity ? { modelIdentity: result.modelIdentity } : {}),
   };
   const finalPayload = {

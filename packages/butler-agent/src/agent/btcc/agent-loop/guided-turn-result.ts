@@ -1,6 +1,7 @@
 import type { BtccAgentLoopResult } from "./contracts.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import { routeForUsedTools } from "./guided-turn-policy.ts";
+import type { ProjectLedgerPlan } from "../project-plan.ts";
 
 export function guidedTurnResult(input: {
   content: string;
@@ -9,6 +10,7 @@ export function guidedTurnResult(input: {
   workStatus?: BtccAgentLoopResult["workStatus"];
   artifacts?: BtccAgentLoopResult["artifacts"];
   changedFiles?: BtccAgentLoopResult["changedFiles"];
+  plan?: ProjectLedgerPlan;
   modelIdentity?: BtccAgentLoopResult["modelIdentity"];
   usedTools: readonly string[];
   hasFinalWork: boolean;
@@ -20,6 +22,7 @@ export function guidedTurnResult(input: {
     ...(input.workStatus ? { workStatus: input.workStatus } : {}),
     ...(input.artifacts?.length ? { artifacts: input.artifacts } : {}),
     ...(input.changedFiles?.length ? { changedFiles: input.changedFiles } : {}),
+    ...(input.plan ? { plan: input.plan } : {}),
     ...(input.modelIdentity ? { modelIdentity: input.modelIdentity } : {}),
     route: routeForUsedTools(
       input.usedTools,

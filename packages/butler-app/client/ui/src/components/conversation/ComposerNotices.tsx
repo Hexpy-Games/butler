@@ -4,6 +4,7 @@ import { isClientTurnId } from "@/app/utils.ts";
 import { AuthorityApprovalStack } from "./AuthorityApprovalStack";
 import { GitDependencyNotice } from "./GitDependencyNotice";
 import { StewardComposerCapsules } from "./StewardComposerCapsules.tsx";
+import { PlanDecisionNotice } from "./PlanDecisionNotice";
 
 export function ComposerNotices({
   summary,
@@ -14,6 +15,7 @@ export function ComposerNotices({
   const pendingClientTurn = isClientTurnId(parentTurnId);
   return (
     <>
+      <PlanDecisionNotice />
       <AuthorityApprovalStack />
       <StewardComposerCapsules
         children={summary?.steward_children ?? []}

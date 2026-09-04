@@ -44,6 +44,7 @@ type GuidedPromptInput = {
   effectContext?: string | null;
   privateContinuationInput?: string;
   subsessionResultEvidence?: string;
+  acceptedPlanContext?: string;
 };
 
 export function renderGuidedTurnRequestAttribution(
@@ -116,6 +117,7 @@ export function renderGuidedPromptAttribution(
         : "other_typed_context" },
     { text: renderCurrentWork(input.workContext), kind: "project_ledger_and_work_authority" },
     { text: renderCurrentEffects(input.effectContext), kind: "phase_continuity" },
+    { text: input.acceptedPlanContext ?? "", kind: "project_ledger_and_work_authority" },
     { text: renderPrivateModifyContinuationInput(input.privateContinuationInput), kind: "phase_continuity" },
     { text: input.subsessionResultEvidence ?? "", kind: "source_reference" },
     { text: context, kind: "memory_recall_context" },
@@ -203,6 +205,20 @@ export function guidedInstructions(
         ]
       : []),
   ].join("\n");
+}
+
+export function guidedPlanModeInstructions(planId?: string): string {
+  const boundPlan = Boolean(planId?.trim());
+  return [
+    "Plan mode is active for this canonically project-bound session.",
+    ...(boundPlan ? [`This continuation is bound to the exact existing Project Ledger Plan id=${planId!.trim()}; revise or activate only that Plan.`] : []),
+    boundPlan
+      ? "Inspect the bound Plan and current project context, then update exactly that top-level Project Ledger record with kind=plan. Keep status=draft for a revision; set status=active only when the user's instruction clearly accepts execution."
+      : "You may inspect and read current project context, then create exactly one top-level Project Ledger record with kind=plan and status=draft.",
+    "The Plan mutation must have a complete body with objective/intent, concrete tasks or phases, completion conditions, relevant scope, and risks.",
+    "Do not create Work, Task, Spec, or any other Ledger record. Do not execute the Plan or perform workspace or external mutations.",
+    "After the first successful project_ledger_create or project_ledger_update for kind=plan, stop using tools and report the resulting Plan briefly.",
+  ].join(" ");
 }
 
 export function renderGuidedResponseLanguage(

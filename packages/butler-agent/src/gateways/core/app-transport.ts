@@ -117,6 +117,7 @@ function verifyAppTurnContext(
     context.conversation.turnId,
     context.project?.id,
     context.project?.ledgerProjectId,
+    context.planId,
   ]) {
     if (value !== undefined && (!value.trim() || value.length > 512)) {
       throw new Error("app_turn_context_value_invalid");

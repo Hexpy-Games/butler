@@ -78,6 +78,7 @@ export class AppTransportQueueStore {
     queueReplay?: boolean;
     visualAdmission?: VisualImageAdmissionResult;
     authorityRequestRef?: string;
+    planId?: string;
   }): TurnRecord {
     let transportInput: Parameters<ButlerServiceClient["enqueueAppTurn"]>[0];
     let turnBeforeEnqueue: TurnRecord;
@@ -145,6 +146,7 @@ export class AppTransportQueueStore {
           ...(input.authorityRequestRef
             ? { authorityClientMessageId: input.message.id }
             : {}),
+          ...(input.planId ? { planId: input.planId } : {}),
         },
         attachments: this.messageFiles.attachmentsForTransport(
           input.message.id,

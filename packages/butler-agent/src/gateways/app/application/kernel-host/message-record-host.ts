@@ -20,6 +20,7 @@ import type {
   SessionControlState,
 } from "../../interface/protocol/app-protocol.ts";
 import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "../../../../agent/btcc/project-plan.ts";
 import type { AppEventEnvelope } from "../../interface/protocol/app-protocol.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
 
@@ -39,6 +40,7 @@ export interface AppStoreKernelMessageRecordHost {
       safeErrorCode?: string;
       retryable?: boolean;
       attachments?: MessageFileRow[];
+      plan?: ProjectLedgerPlan;
       conversationSessionId?: string | null;
       conversationTurnId?: string | null;
       conversationMessageId?: string | null;
@@ -50,6 +52,7 @@ export interface AppStoreKernelMessageRecordHost {
     texts: string[],
     files?: MessageFileRow[],
     changedFiles?: ChangedFileDetail[],
+    plan?: ProjectLedgerPlan,
   ): MessageRecord[];
   insertOrReplaceAssistantReplies(
     chatId: string,
@@ -57,6 +60,7 @@ export interface AppStoreKernelMessageRecordHost {
     texts: string[],
     files?: MessageFileRow[],
     changedFiles?: ChangedFileDetail[],
+    plan?: ProjectLedgerPlan,
   ): MessageRecord[];
   replaceMessageChangedFiles(
     messageId: string,
@@ -95,6 +99,7 @@ export interface AppStoreKernelMessageRecordHost {
       status?: MessageStatus;
       safeErrorCode?: string | null;
       retryable?: boolean;
+      plan?: ProjectLedgerPlan | null;
     },
   ): MessageRecord;
   runResponder(
@@ -156,13 +161,14 @@ export function createMessageRecordHost(
         options,
       );
     },
-    insertAssistantReplies(chatId, turnId, texts, files = [], changedFiles = []) {
+    insertAssistantReplies(chatId, turnId, texts, files = [], changedFiles = [], plan) {
       return kernel.assistantMessages.insertReplies(
         chatId,
         turnId,
         texts,
         files,
         changedFiles,
+        plan,
       );
     },
     insertOrReplaceAssistantReplies(
@@ -171,6 +177,7 @@ export function createMessageRecordHost(
       texts,
       files = [],
       changedFiles = [],
+      plan,
     ) {
       return kernel.assistantMessages.insertOrReplaceReplies(
         chatId,
@@ -178,6 +185,7 @@ export function createMessageRecordHost(
         texts,
         files,
         changedFiles,
+        plan,
       );
     },
     replaceMessageChangedFiles(messageId, details) {

@@ -634,6 +634,13 @@ const butlerApp = Object.freeze({
     method: "PATCH",
     body: JSON.stringify(controls ?? {}),
   }),
+  decideSessionPlan: ({ sessionId, planId, action, instruction } = {}) => requestJson(
+    `/sessions/${encodeURIComponent(sessionId ?? "")}/plan-decisions/${encodeURIComponent(planId ?? "")}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ action, ...(instruction ? { instruction } : {}) }),
+    },
+  ),
   listProjectSessions: ({ projectId } = {}) => {
     const params = new URLSearchParams();
     if (projectId) params.set("project_id", projectId);

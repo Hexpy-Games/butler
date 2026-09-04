@@ -63,6 +63,7 @@ export interface MessageRow {
   updated_at: string;
   safe_error_code: string | null;
   retryable: number;
+  plan_json?: string | null;
 }
 
 export interface QueuedMessageRow {
