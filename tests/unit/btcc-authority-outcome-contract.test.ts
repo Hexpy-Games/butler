@@ -196,3 +196,49 @@ test("ask-first preserves safe Work progress while hiding operation details", as
 
   expect(forwarded).toEqual(["state", "work", "phase"]);
 });
+
+test("ask-first does not claim approval while ordinary tools are still running", () => {
+  const observed: Array<{
+    text: string;
+    toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
+  }> = [];
+  const activity: GuidedActivityProjection = {
+    observeToolBatch: (batch) => { observed.push(batch); },
+    observeTool: () =>
+      Promise.resolve({ activityId: "ordinary-activity", deferredUntilAccepted: false }),
+    markManaged: () => Promise.resolve(),
+    publishAccepted: () => Promise.resolve(),
+  };
+  const guided = createGuidedAuthorityProjection({
+    accessMode: "ask_first",
+    activity,
+    ownerSessionId: OWNER_SESSION_ID,
+    turnId: TURN_ID,
+  });
+
+  guided.publicActivity.observeToolBatch({
+    text: "현재 구현을 확인하고 있습니다.",
+    toolCalls: [{ name: "read_file", args: { path: "/private/workspace/file.ts" } }],
+  });
+  guided.loopCallbacks.onAssistantTextBeforeTools?.({
+    text: "관련 파일을 계속 살펴보고 있습니다.",
+    toolCalls: [{
+      id: "read-call",
+      name: "read_file",
+      arguments: { path: "/private/workspace/other.ts" },
+      rawArguments: "{}",
+    }],
+    iteration: 1,
+  });
+
+  expect(observed).toEqual([
+    {
+      text: "현재 구현을 확인하고 있습니다.",
+      toolCalls: [{ name: "read_file", args: {} }],
+    },
+    {
+      text: "관련 파일을 계속 살펴보고 있습니다.",
+      toolCalls: [{ name: "read_file", args: {} }],
+    },
+  ]);
+});

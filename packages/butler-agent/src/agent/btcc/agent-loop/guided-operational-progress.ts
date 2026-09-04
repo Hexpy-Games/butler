@@ -139,14 +139,14 @@ function createGuidedPublicActivity(input: {
   authorityDecision?: "allowed" | "denied" | "modified";
 }): GuidedActivityProjection {
   if (input.accessMode !== "ask_first") return input.activity;
-  const pendingText = input.authorityDecision === "denied"
+  const decisionText = input.authorityDecision === "denied"
     ? AUTHORITY_DENIAL_TEXT
     : input.authorityDecision === "modified"
       ? "Replacement command is waiting for Allow."
-    : "Reviewed command pending Allow.";
+      : undefined;
   return {
     observeToolBatch: (batch) => input.activity.observeToolBatch({
-      text: pendingText,
+      text: decisionText ?? batch.text,
       toolCalls: batch.toolCalls.map((call) => ({ name: call.name, args: {} })),
     }),
     observeTool: (call) => input.activity.observeTool({ ...call, args: {} }),
@@ -162,13 +162,11 @@ function createGuidedPublicLoopCallbacks(input: {
 }): Pick<BtccAgentLoopInput, "onAssistantTextBeforeTools" | "finalTextFromToolResult"> {
   return {
     onAssistantTextBeforeTools: ({ text, toolCalls }) => input.activity.observeToolBatch({
-      text: input.accessMode !== "ask_first"
-        ? text
-        : input.authorityDecision === "denied"
-          ? AUTHORITY_DENIAL_TEXT
-          : input.authorityDecision === "modified"
-            ? "Replacement command is waiting for Allow."
-          : "Reviewed command pending Allow.",
+      text: input.authorityDecision === "denied"
+        ? AUTHORITY_DENIAL_TEXT
+        : input.authorityDecision === "modified"
+          ? "Replacement command is waiting for Allow."
+          : text,
       toolCalls: toolCalls.map((call) => ({
         name: call.name,
         args: input.accessMode === "ask_first" ? {} : call.arguments,
