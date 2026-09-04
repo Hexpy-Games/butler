@@ -67,7 +67,11 @@ export function createGuidedAskFirstProgress(
   progress: BtccTurnProgressObserver | undefined,
 ): BtccTurnProgressObserver | undefined {
   if (!progress) return undefined;
-  return { stateChanged: (update) => progress.stateChanged(update) };
+  return {
+    stateChanged: (update) => progress.stateChanged(update),
+    workProgressChanged: (update) => progress.workProgressChanged?.(update),
+    phaseActivityChanged: (update) => progress.phaseActivityChanged?.(update),
+  };
 }
 
 export function createGuidedAuthorityProjection(input: {
