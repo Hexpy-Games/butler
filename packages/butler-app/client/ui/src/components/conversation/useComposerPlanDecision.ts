@@ -61,6 +61,7 @@ export interface ComposerPlanDecision {
   onAccept: () => void;
   onOpenInstruction: () => void;
   onOpenPlan: () => void;
+  onShowDecision: () => void;
   onReject: () => void;
   onSubmitInstruction: (event: FormEvent<HTMLFormElement>) => void;
 }
@@ -134,6 +135,7 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
         block: "start",
       });
     },
+    onShowDecision: () => setInstructionPlanId(null),
     onReject: () => void decide("reject"),
     onSubmitInstruction: (event) => {
       event.preventDefault();

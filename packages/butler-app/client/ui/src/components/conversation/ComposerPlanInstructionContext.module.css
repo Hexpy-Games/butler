@@ -14,6 +14,18 @@
   border-radius: var(--radius-pill);
   background: var(--composer-glass-control-bg, var(--surface-raised));
   color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.document:hover {
+  border-color: var(--color-border-interactive);
+}
+
+.document:focus-visible {
+  box-shadow: 0 0 0 3px var(--ring);
+  outline: none;
 }
 
 .document > svg {

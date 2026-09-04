@@ -98,6 +98,7 @@ test("Plan decisions replace the Composer input with the exact target", () => {
         onOpenInstruction: () => undefined,
         onOpenPlan: () => undefined,
         onReject: () => undefined,
+        onShowDecision: () => undefined,
         onSubmitInstruction: () => undefined,
       }}
     />,
@@ -125,6 +126,7 @@ test("direct Plan feedback keeps a non-removable Plan document context", () => {
         onOpenInstruction: () => undefined,
         onOpenPlan: () => undefined,
         onReject: () => undefined,
+        onShowDecision: () => undefined,
         onSubmitInstruction: () => undefined,
       }}
     />,
@@ -132,5 +134,6 @@ test("direct Plan feedback keeps a non-removable Plan document context", () => {
 
   expect(html).toContain("Snake game implementation");
   expect(html).toContain(appCopy.composer.planInstructionActive);
+  expect(html).toContain("<button");
   expect(html).not.toContain("Remove");
 });
