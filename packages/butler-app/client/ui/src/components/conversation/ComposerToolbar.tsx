@@ -12,14 +12,8 @@ import { ComposerContextControl } from "./ComposerContextControl";
 import { ModelMenu } from "./ModelMenu";
 import { ComposerCompactPreview } from "./ComposerCompactPreview";
 import { ComposerPlanModeBadge } from "./ComposerPlanModeBadge";
-import { ComposerPlanDecisionActions } from "./ComposerPlanDecisionActions";
-import type { ComposerPlanDecision } from "./useComposerPlanDecision";
 
-export function ComposerToolbar({
-  planDecision,
-}: {
-  planDecision?: ComposerPlanDecision;
-}) {
+export function ComposerToolbar() {
   const isSending = useComposerStore((store) => store.isSending);
   const activeTurn = useComposerStore((store) => store.activeTurn);
   const canSend = useComposerStore((store) => store.canSend);
@@ -33,9 +27,6 @@ export function ComposerToolbar({
       <ComposerCardExpandedControls>
         <AccessModeMenu />
         <ComposerPlanModeBadge />
-        {planDecision ? (
-          <ComposerPlanDecisionActions decision={planDecision} />
-        ) : null}
         <ComposerCardToolbarSpacer />
         <ComposerContextControl />
         <ModelMenu />
@@ -50,9 +41,7 @@ export function ComposerToolbar({
         <ComposerCardExpandedControls>
           <ComposerSendButton
             aria-label={appCopy.composer.send}
-            disabled={
-              planDecision ? !planDecision.canSubmitInstruction : !canSend
-            }
+            disabled={!canSend}
           />
         </ComposerCardExpandedControls>
       )}

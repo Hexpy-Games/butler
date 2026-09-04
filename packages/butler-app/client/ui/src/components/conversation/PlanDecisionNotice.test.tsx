@@ -1,8 +1,12 @@
 /// <reference types="bun" />
 
 import { expect, test } from "bun:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { appCopy } from "@/app/copy.ts";
+import { ComposerPlanDecisionNotice } from "./ComposerPlanDecisionNotice";
 import {
-  latestPendingPlan,
+  latestActionablePlan,
   submitProjectedPlanDecision,
 } from "./useComposerPlanDecision";
 
@@ -54,31 +58,52 @@ test("direct instructions use the instruct action and returned Plan mode", async
   expect(projectedModes).toEqual([true]);
 });
 
-test("an active newest Plan suppresses an older draft decision form", () => {
+test("only a draft on the newest Butler response is actionable", () => {
+  const draft = {
+    id: "draft-message",
+    role: "assistant" as const,
+    text: "Draft",
+    plan_document: {
+      id: "plan-1",
+      title: "Plan",
+      status: "draft",
+      markdown: "# Draft",
+    },
+  };
+
+  expect(latestActionablePlan([draft])?.id).toBe("plan-1");
   expect(
-    latestPendingPlan([
+    latestActionablePlan([
+      draft,
       {
-        id: "draft-message",
+        id: "later-message",
         role: "assistant",
-        text: "Draft",
-        plan_document: {
-          id: "plan-1",
-          title: "Plan",
-          status: "draft",
-          markdown: "# Draft",
-        },
-      },
-      {
-        id: "active-message",
-        role: "assistant",
-        text: "Accepted",
-        plan_document: {
-          id: "plan-1",
-          title: "Plan",
-          status: "active",
-          markdown: "# Active",
-        },
+        text: "A later ordinary response",
       },
     ]),
   ).toBeNull();
+});
+
+test("Plan decisions identify the target in a Composer notice", () => {
+  const html = renderToStaticMarkup(
+    <ComposerPlanDecisionNotice
+      decision={{
+        instructionPlaceholder: "Revise the Plan",
+        pending: false,
+        planTitle: "Snake game implementation",
+        onAccept: () => undefined,
+        onFocusInstruction: () => undefined,
+        onReject: () => undefined,
+        onSubmitInstruction: () => undefined,
+      }}
+    />,
+  );
+
+  expect(html).toContain(appCopy.composer.planDecision);
+  expect(html).toContain("Snake game implementation");
+  expect(html).toContain(appCopy.composer.planAccept);
+  expect(html).toContain(appCopy.composer.planReject);
+  expect(html).toContain(appCopy.composer.planInstruction);
+  expect(html).not.toContain("<input");
+  expect(html).not.toContain("<form");
 });

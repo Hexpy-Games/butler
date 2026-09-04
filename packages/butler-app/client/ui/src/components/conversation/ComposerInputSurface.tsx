@@ -21,7 +21,7 @@ export function ComposerInputSurface({
         <ComposerTextArea placeholder={planDecision?.instructionPlaceholder} />
         <ComposerAttachments />
       </ComposerCardExpandedBody>
-      <ComposerToolbar planDecision={planDecision} />
+      <ComposerToolbar />
       <ComposerFileInput inputRef={fileInputRef} onFiles={onFiles} />
     </>
   );
