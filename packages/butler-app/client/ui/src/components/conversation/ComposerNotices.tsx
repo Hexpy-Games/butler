@@ -4,21 +4,16 @@ import { isClientTurnId } from "@/app/utils.ts";
 import { AuthorityApprovalStack } from "./AuthorityApprovalStack";
 import { GitDependencyNotice } from "./GitDependencyNotice";
 import { StewardComposerCapsules } from "./StewardComposerCapsules.tsx";
-import { ComposerPlanDecisionNotice } from "./ComposerPlanDecisionNotice";
-import type { ComposerPlanDecision } from "./useComposerPlanDecision";
 
 export function ComposerNotices({
-  planDecision,
   summary,
 }: {
-  planDecision?: ComposerPlanDecision;
   summary?: SessionSummaryView | null;
 }) {
   const parentTurnId = summary?.latest_progress?.turn_id;
   const pendingClientTurn = isClientTurnId(parentTurnId);
   return (
     <>
-      {planDecision ? <ComposerPlanDecisionNotice decision={planDecision} /> : null}
       <AuthorityApprovalStack />
       <StewardComposerCapsules
         children={summary?.steward_children ?? []}

@@ -52,11 +52,12 @@ export async function submitProjectedPlanDecision(input: {
 }
 
 export interface ComposerPlanDecision {
+  editingInstruction: boolean;
   instructionPlaceholder: string;
   pending: boolean;
   planTitle: string;
   onAccept: () => void;
-  onFocusInstruction: () => void;
+  onOpenInstruction: () => void;
   onReject: () => void;
   onSubmitInstruction: (event: FormEvent<HTMLFormElement>) => void;
 }
@@ -90,8 +91,9 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
     (state) => state.applyServerPlanMode,
   );
   const [pending, setPending] = useState(false);
+  const [instructionPlanId, setInstructionPlanId] = useState<string | null>(null);
 
-  if (!planMode || !plan || pending || planQueued || activeTurn) return undefined;
+  if (!planMode || !plan || planQueued || activeTurn) return undefined;
 
   const decide = async (action: PlanDecisionAction) => {
     if (action === "instruct" && !text.trim()) return;
@@ -104,16 +106,21 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
       planId: plan.id,
       submit: submitDecision,
     });
-    if (applied && action === "instruct") setText("");
+    if (applied && action === "instruct") {
+      setText("");
+      setInstructionPlanId(null);
+    }
     setPending(false);
   };
 
   return {
+    editingInstruction: instructionPlanId === plan.id,
     instructionPlaceholder: appCopy.composer.planInstructionPlaceholder,
     pending,
     planTitle: plan.title,
     onAccept: () => void decide("accept"),
-    onFocusInstruction: () => {
+    onOpenInstruction: () => {
+      setInstructionPlanId(plan.id);
       setEngaged(true);
       window.requestAnimationFrame(() => textAreaRef?.current?.focus({ preventScroll: true }));
     },

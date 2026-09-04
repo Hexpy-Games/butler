@@ -128,9 +128,9 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     <ComposerCard
       {...fileDrop}
       large={large}
-      expanded={presentation.expanded}
+      expanded={Boolean(planDecision) || presentation.expanded}
       floating
-      notice={<ComposerNotices planDecision={planDecision} summary={session.summary} />}
+      notice={<ComposerNotices summary={session.summary} />}
       adjunct={
         showAdjunct ? (
           <ComposerAdjunctPanels

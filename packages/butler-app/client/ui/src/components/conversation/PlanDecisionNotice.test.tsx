@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { appCopy } from "@/app/copy.ts";
-import { ComposerPlanDecisionNotice } from "./ComposerPlanDecisionNotice";
+import { ComposerPlanDecisionSurface } from "./ComposerPlanDecisionSurface";
 import {
   latestActionablePlan,
   submitProjectedPlanDecision,
@@ -84,26 +84,27 @@ test("only a draft on the newest Butler response is actionable", () => {
   ).toBeNull();
 });
 
-test("Plan decisions identify the target in a Composer notice", () => {
+test("Plan decisions replace the Composer input with the exact target", () => {
   const html = renderToStaticMarkup(
-    <ComposerPlanDecisionNotice
+    <ComposerPlanDecisionSurface
       decision={{
+        editingInstruction: false,
         instructionPlaceholder: "Revise the Plan",
         pending: false,
         planTitle: "Snake game implementation",
         onAccept: () => undefined,
-        onFocusInstruction: () => undefined,
+        onOpenInstruction: () => undefined,
         onReject: () => undefined,
         onSubmitInstruction: () => undefined,
       }}
     />,
   );
 
-  expect(html).toContain(appCopy.composer.planDecision);
+  expect(html).toContain('data-test-class="composer-plan-decision"');
   expect(html).toContain("Snake game implementation");
   expect(html).toContain(appCopy.composer.planAccept);
   expect(html).toContain(appCopy.composer.planReject);
   expect(html).toContain(appCopy.composer.planInstruction);
   expect(html).not.toContain("<input");
-  expect(html).not.toContain("<form");
+  expect(html).not.toContain("<textarea");
 });
