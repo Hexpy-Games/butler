@@ -21,6 +21,32 @@ export type BoundedTurnContext = {
 
 const DEFAULT_MODEL_CONTEXT_BYTES = 192 * 1024;
 
+/** Bytes that the next model request can still spend on this tool-result batch. */
+export function toolResultBatchModelFacingBudget(input: {
+  messages: readonly ModelRoundMessage[];
+  instructions?: string;
+  tools: readonly ModelRoundTool[];
+  toolChoice?: "auto" | "required";
+  maxModelFacingBytes?: number;
+  budgetMaxModelFacingBytes?: number;
+  resultCount: number;
+  perResultMaxBytes: number;
+}): number {
+  const requestLimit = input.budgetMaxModelFacingBytes ??
+    input.maxModelFacingBytes ?? DEFAULT_MODEL_CONTEXT_BYTES;
+  const occupied = serializedBytes({
+    instructions: input.instructions,
+    tools: input.tools,
+    toolChoice: input.toolChoice,
+    messages: input.messages,
+  });
+  const desired = input.resultCount * input.perResultMaxBytes;
+  return Math.max(
+    input.resultCount * 512,
+    Math.min(desired, Math.max(0, requestLimit - occupied)),
+  );
+}
+
 export async function prepareBoundedModelContext(input: {
   messages: readonly ModelRoundMessage[];
   instructions?: string;
@@ -81,6 +107,10 @@ export async function prepareBoundedModelContext(input: {
   const projected = projectPhaseContinuity({
     messages: input.messages,
     digester: input.phaseContinuityPrivateDigester!,
+    maxProjectionBytes: Math.min(64 * 1024, Math.max(
+      PHASE_CONTINUITY_MIN_BYTES,
+      Math.floor(messageLimit / 4),
+    )),
     serializedBytes: (messages) =>
       input.statelessMessageBytes!(messages, input.butlerData),
   });
@@ -102,6 +132,8 @@ export async function prepareBoundedModelContext(input: {
     contextProjection,
   );
 }
+
+const PHASE_CONTINUITY_MIN_BYTES = 16 * 1024;
 
 function finalizeBoundedModelContext(
   input: Parameters<typeof prepareBoundedModelContext>[0],

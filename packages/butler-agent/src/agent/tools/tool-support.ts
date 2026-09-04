@@ -13,7 +13,9 @@ export type {
 } from "./tool-support-contracts.ts";
 
 export {
+  beginToolResultModelPreviewBatch,
   createToolResultModelPreviewContext,
+  MAX_PROVIDER_TOOL_RESULT_BYTES,
   serializeToolResultPayloadForProvider,
   toolResultPayloadForProvider,
 } from "./tool-result-serialization.ts";

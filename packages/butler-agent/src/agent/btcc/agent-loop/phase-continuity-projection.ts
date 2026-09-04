@@ -14,6 +14,7 @@ import {
   isPhaseContinuityProjectionError,
   PhaseContinuityProjectionError,
 } from "../ports/model-round.ts";
+import { phaseWorkingContext } from "./phase-working-context.ts";
 
 export const PHASE_CONTINUITY_PROJECTION_SCHEMA =
   "butler.phase-continuity-projection.v1" as const;
@@ -38,6 +39,7 @@ type DetailedEntry = {
     argument_keyed_digest: string;
     terminal_success: boolean;
     result_reference: OperationResultReferenceCarrier;
+    working_context: Record<string, unknown>;
   }>;
 };
 
@@ -45,7 +47,8 @@ type ReferenceEntry = {
   kind: "reference";
   source_ordinal: number;
   unit_keyed_digest: string;
-  calls: Array<{ tool_name: string; result_ref: string; result_sha256: string }>;
+  calls: Array<{ tool_name: string; result_ref: string; result_sha256: string;
+    working_context: Record<string, unknown> }>;
 };
 
 type ProjectionEntry = DetailedEntry | ReferenceEntry;
@@ -55,6 +58,7 @@ export function projectPhaseContinuity(input: {
   messages: readonly ModelRoundMessage[];
   digester: PhaseContinuityPrivateDigester;
   serializedBytes(messages: readonly ModelRoundMessage[]): number;
+  maxProjectionBytes?: number;
 }): {
   messages: readonly ModelRoundMessage[];
   identity?: ContextProjectionRebaseIdentity;
@@ -74,13 +78,19 @@ function projectPhaseContinuityInternal(input: {
   messages: readonly ModelRoundMessage[];
   digester: PhaseContinuityPrivateDigester;
   serializedBytes(messages: readonly ModelRoundMessage[]): number;
+  maxProjectionBytes?: number;
 }): {
   messages: readonly ModelRoundMessage[];
   identity?: ContextProjectionRebaseIdentity;
 } {
   const ranges = eligibleRanges(input.messages, input.digester);
   if (ranges.length === 0) return { messages: input.messages };
-  downgradeToBound(ranges, input.digester, input.serializedBytes);
+  downgradeToBound(
+    ranges,
+    input.digester,
+    input.serializedBytes,
+    input.maxProjectionBytes ?? PHASE_CONTINUITY_PROJECTION_MAX_BYTES,
+  );
 
   const replacements = new Map<number, { through: number; message: ModelRoundMessage }>();
   for (const range of ranges) {
@@ -235,12 +245,14 @@ function detailedCall(
   digester: PhaseContinuityPrivateDigester,
 ): DetailedEntry["calls"][number] {
   const reference = unit.results.get(call.id)!.operationResultReference!;
+  const result = unit.results.get(call.id)!;
   return {
     call_id: call.id,
     tool_name: call.name,
     argument_keyed_digest: keyedDigest(digester, "tool_arguments", call.rawArguments),
     terminal_success: reference.outcome.success,
     result_reference: reference,
+    working_context: phaseWorkingContext(call, result),
   };
 }
 
@@ -256,6 +268,7 @@ function referenceEntry(
       tool_name: call.tool_name,
       result_ref: call.result_reference.identity.result_ref,
       result_sha256: call.result_reference.integrity.sha256,
+      working_context: call.working_context,
     })),
   };
 }
@@ -264,16 +277,17 @@ function downgradeToBound(
   ranges: ProjectionRange[],
   digester: PhaseContinuityPrivateDigester,
   serializedBytes: (messages: readonly ModelRoundMessage[]) => number,
+  maxProjectionBytes: number,
 ): void {
   const ordered = ranges.flatMap((range) => range.entries.map((_, index) => ({ range, index })));
   let cursor = 0;
-  while (projectionBytes(ranges, serializedBytes) > PHASE_CONTINUITY_PROJECTION_MAX_BYTES &&
+  while (projectionBytes(ranges, serializedBytes) > maxProjectionBytes &&
       cursor < ordered.length) {
     const { range, index } = ordered[cursor++]!;
     const entry = range.entries[index]!;
     if (entry.kind === "detailed") range.entries[index] = referenceEntry(entry, digester);
   }
-  if (projectionBytes(ranges, serializedBytes) > PHASE_CONTINUITY_PROJECTION_MAX_BYTES) {
+  if (projectionBytes(ranges, serializedBytes) > maxProjectionBytes) {
     throw new PhaseContinuityProjectionError("phase_continuity_projection_too_large");
   }
 }

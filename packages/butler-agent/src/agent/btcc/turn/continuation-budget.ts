@@ -108,6 +108,26 @@ export function selectTurnContinuationBudget(
   return validateTurnContinuationLimits(limits);
 }
 
+/**
+ * The byte envelope is an early memory guard. Provider token admission remains
+ * authoritative, so scale this guard with the admitted model instead of using
+ * one small fixed window for every model.
+ */
+export function continuationLimitsForModel(
+  limits: TurnContinuationBudgetLimits,
+  contextWindowTokens: number | undefined,
+): TurnContinuationBudgetLimits {
+  if (!contextWindowTokens || !Number.isFinite(contextWindowTokens) ||
+      limits.maxModelFacingBytes !== DEFAULT_LIMITS.maxModelFacingBytes) return limits;
+  return {
+    ...limits,
+    maxModelFacingBytes: Math.min(
+      HARD_CEILINGS.maxModelFacingBytes,
+      Math.max(limits.maxModelFacingBytes, Math.trunc(contextWindowTokens) * 2),
+    ),
+  };
+}
+
 export function validateTurnContinuationLimits(
   limits: TurnContinuationBudgetLimits,
 ): TurnContinuationBudgetLimits {

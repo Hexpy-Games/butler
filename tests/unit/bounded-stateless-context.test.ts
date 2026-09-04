@@ -15,6 +15,7 @@ import { OPENAI_MODELS } from
 import { buildBoundedTurnContext } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/bounded-turn-context.ts";
 import {
+  continuationLimitsForModel,
   createTurnContinuationBudgetState,
   selectTurnContinuationBudget,
   transitionTurnContinuationBudget,
@@ -319,6 +320,23 @@ test("default-off selection preserves legacy and enabled config rejects unsafe c
     BUTLER_BOUNDED_STATELESS_CONTEXT: "on",
     BUTLER_CONTINUATION_MAX_MODEL_REQUESTS: "201",
   })).toThrow("unsafe_turn_continuation_limit:maxModelRequests");
+});
+
+test("default context bytes scale with the admitted model while an explicit override remains exact", () => {
+  const defaults = selectTurnContinuationBudget({
+    BUTLER_BOUNDED_STATELESS_CONTEXT: "on",
+  })!;
+  expect(continuationLimitsForModel(defaults, 200_000).maxModelFacingBytes)
+    .toBe(400_000);
+  expect(continuationLimitsForModel(defaults, 1_000_000).maxModelFacingBytes)
+    .toBe(2_000_000);
+
+  const explicit = selectTurnContinuationBudget({
+    BUTLER_BOUNDED_STATELESS_CONTEXT: "on",
+    BUTLER_CONTINUATION_MAX_MODEL_FACING_BYTES: "180000",
+  })!;
+  expect(continuationLimitsForModel(explicit, 1_000_000).maxModelFacingBytes)
+    .toBe(180_000);
 });
 
 test("production composition reaches the official serializer with bounded multi-round bodies", async () => {

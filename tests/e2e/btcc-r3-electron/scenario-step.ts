@@ -224,6 +224,8 @@ export async function runScenarioStep(
   const providerReportedModel =
     terminal.view.latest_turn?.execution_model?.provider_reported_model_ref ??
     null;
+  const requestedModelRef =
+    terminal.view.latest_turn?.execution_model?.requested_model_ref ?? null;
   const screenshotDir = join(run.runRoot, "screenshots");
   mkdirSync(screenshotDir, { recursive: true });
   const finalScreenshot = join(
@@ -239,6 +241,7 @@ export async function runScenarioStep(
     finalText,
     rendererFinalText: renderedFinal,
     rendererActivities,
+    requestedModelRef,
     providerReportedModel,
     progressMessages: terminal.progressMessages,
     work,
