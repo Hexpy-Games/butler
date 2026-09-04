@@ -59,23 +59,34 @@ export function createBtccGatewayHandlers(
     if (outcome.kind === "already_finalizing" || outcome.kind === "fenced_pending_persistence") {
       throw new Error(`BTCC turn remains recoverable: ${outcome.kind}`);
     }
+    if (outcome.kind === "suspended") {
+      return {
+        ok: true,
+        handledBy: "btcc/turn-suspended",
+        metadata: {
+          kind: "turn_suspended",
+          suspension: outcome.reason,
+          text: "",
+          turnId: outcome.turnId,
+          appQueueClaimId: envelope.routingHints?.appQueueClaimId,
+        },
+      };
+    }
     const result = projectTurnOutcome(outcome);
     if (options.subsessionDelegation &&
       (outcome.kind === "delivered" || outcome.kind === "already_delivered")) {
       const childReport = projectChildTerminalReport(result);
-      if (route.role === "worker") {
-        const workCompleted = result.workStatus === "completed";
+      if (route.role === "worker" && result.acceptedWorkResult) {
         await options.subsessionDelegation.completeWorkerResult({
           childSessionId: route.sessionId,
           childTurnId: outcome.turnId,
           resultId: subsessionResultId(route.sessionId, outcome.turnId),
           summary: childReport.summary,
-          status: workCompleted ? "success" : "blocked",
-          ...(!workCompleted ? { code: "worker_work_incomplete" as const } : {}),
+          status: result.acceptedWorkResult.status,
           changedArtifacts: childReport.changedArtifacts,
           changedFiles: childReport.changedFiles,
         });
-      } else if (route.role === "steward" && result.executionOutcome !== "waiting_for_worker") {
+      } else if (route.role === "steward" && result.acceptedWorkResult) {
         const activeChildren = await options.subsessionDelegation.activeParentDelegations({
           parentSessionId: route.sessionId,
         });
@@ -87,7 +98,7 @@ export function createBtccGatewayHandlers(
             summary: childReport.summary,
             changedArtifacts: childReport.changedArtifacts,
             changedFiles: childReport.changedFiles,
-            status: childTerminalStatus(result.workStatus),
+            status: result.acceptedWorkResult.status,
           });
         }
       }
@@ -102,7 +113,6 @@ export function createBtccGatewayHandlers(
         : "btcc/turn",
       metadata: {
         text: result.text,
-        ...(result.executionOutcome ? { executionOutcome: result.executionOutcome } : {}),
         artifacts: result.artifacts,
         changedFiles: result.changedFiles,
         ...(result.plan ? { plan: result.plan } : {}),
@@ -165,14 +175,6 @@ async function cancelOwnedDelegation(
     return { outcome, settledDelegation: Boolean(owned) };
   };
   return stopOwned(route, requestedTurnId);
-}
-
-function childTerminalStatus(
-  workStatus: "completed" | "blocked" | undefined,
-): "success" | "blocked" | "failed" {
-  if (workStatus === "completed") return "success";
-  if (workStatus === "blocked") return "blocked";
-  return "failed";
 }
 
 async function completeChildTerminalResult(

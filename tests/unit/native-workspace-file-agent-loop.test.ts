@@ -441,6 +441,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
           return toolResponse(toolCall("plan", "replace_work_plan", {
             start_new: true,
             objective: "Review and apply the requested two-file workspace edit.",
+            execution_mode: "direct",
             actions: [{
               action_key: "edit-native-files",
               description: "Apply the reviewed exact edit to both discovered files.",

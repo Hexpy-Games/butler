@@ -3,6 +3,7 @@ import type {
   SessionRelation,
   SubsessionDelegationDependencies,
 } from "./contracts.ts";
+import { subsessionResultId } from "./identities.ts";
 
 type ActiveParentDelegation = {
   relation: SessionRelation;
@@ -34,7 +35,21 @@ export async function activeParentDelegations(
     );
     if (!childTurnId) throw new Error("active_parent_delegation_child_turn_missing");
     const result = dependencies.store.resultByRelationId(relation.relation_id);
-    if (result) continue;
+    if (result) {
+      const expectedResultId = subsessionResultId(
+        relation.child_session_id,
+        result.child_turn_id,
+      );
+      if (result.relation_id !== relation.relation_id ||
+        result.task_id !== packet.task_id ||
+        result.child_session_id !== relation.child_session_id ||
+        result.result_id !== expectedResultId ||
+        dependencies.store.resultIdForRelation(relation.relation_id) !==
+          result.result_id) {
+        throw new Error("active_parent_delegation_result_mismatch");
+      }
+      continue;
+    }
     const childTurn = await dependencies.parentTurns.findTurn(childTurnId);
     if (childTurn && (childTurn.turnId !== childTurnId ||
       childTurn.sessionId !== relation.child_session_id)) {

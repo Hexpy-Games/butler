@@ -643,6 +643,7 @@ function supersedeAfterPendingRound(): ModelRoundPort {
             toolCall("plan", "replace_work_plan", {
               start_new: true,
               objective: "Run one reviewed command",
+              execution_mode: "direct",
               actions: [{
                 action_key: "run-reviewed-command",
                 description: "Run the reviewed command once",
@@ -681,6 +682,7 @@ function reviewedCommandRound(): ModelRoundPort {
             toolCall("plan", "replace_work_plan", {
               start_new: true,
               objective: "Run one reviewed command",
+              execution_mode: "direct",
               actions: [{
                 action_key: "run-reviewed-command",
                 description: "Run the reviewed command once",
@@ -755,6 +757,7 @@ function abandonAfterAuthorityRound(): ModelRoundPort {
             toolCall("plan-stale", "replace_work_plan", {
               start_new: true,
               objective: "Run one reviewed command",
+              execution_mode: "direct",
               actions: [{
                 action_key: "run-reviewed-command",
                 description: "Run the reviewed command once",

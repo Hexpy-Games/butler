@@ -13,16 +13,18 @@ export function projectTurnOutcome(
   artifacts: BtccFinalArtifact[];
   changedFiles: ChangedFileDetail[];
   workStatus?: "completed" | "blocked";
-  executionOutcome?: "waiting_for_worker";
+  acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
   plan?: ProjectLedgerPlan;
 } {
   if (outcome.kind === "delivered" || outcome.kind === "already_delivered") {
     return {
       text: outcome.content,
-      ...(outcome.executionOutcome ? { executionOutcome: outcome.executionOutcome } : {}),
       artifacts: outcome.artifacts ?? [],
       changedFiles: outcome.changedFiles ?? [],
       ...(outcome.workStatus ? { workStatus: outcome.workStatus } : {}),
+      ...("acceptedWorkResult" in outcome && outcome.acceptedWorkResult
+        ? { acceptedWorkResult: outcome.acceptedWorkResult }
+        : {}),
       ...( "plan" in outcome && outcome.plan ? { plan: outcome.plan } : {}),
     };
   }

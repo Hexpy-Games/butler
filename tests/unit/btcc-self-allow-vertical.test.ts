@@ -172,7 +172,7 @@ test("real App ask_first command creates one safe pending authority request with
     const messagesBody = await messagesResponse.json() as { data: { messages: Array<{ role: string; turn_id?: string; text: string }> } };
     const finalMessages = messagesBody.data.messages.filter((message) => message.role === "assistant" && message.turn_id === resumedTurnId);
     expect(finalMessages).toHaveLength(1);
-    expect(finalMessages[0]?.text).toBe("Approved command completed once.");
+    expect(finalMessages[0]?.text).toBe("요청한 파일 작성을 완료했습니다.\n\n내용도 확인했습니다.");
     expect(JSON.stringify(finalMessages)).not.toContain("secret-value");
 
     const finalDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), {
@@ -830,6 +830,7 @@ function knownNotAppliedCommandRound(): ModelRoundPort {
         const plan = {
           start_new: true,
           objective: "Run one reviewed command",
+          execution_mode: "direct",
           actions: [{
             action_key: "run-known-not-applied-command",
             description: "Run the reviewed command once",
@@ -858,20 +859,12 @@ function knownNotAppliedCommandRound(): ModelRoundPort {
         };
       }
       if (round === 2) {
-        const run = {
-          command,
-          cwd: ".",
-          state_effect: "mutation",
-          summary: "Resume approved command",
-        };
-        return { toolCalls: [toolCall("run-resume", "run_command", run)] };
-      }
-      if (round === 3) {
+        expect(request.messages.some((message) => message.role === "tool" && message.name === "run_command")).toBe(true);
         const workId = request.messages.map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1]).find(Boolean);
         if (!workId) throw new Error(JSON.stringify(request.messages.filter((message) => message.role === "tool")));
-        return { toolCalls: [toolCall("complete", "record_work_disposition", { work_id: workId, disposition: "blocked", summary: "The approved command failed to complete.", action_updates: [{ action_key: "run-known-not-applied-command", status: "blocked" }] })] };
+        return { toolCalls: [toolCall("complete", "record_work_disposition", { work_id: workId, disposition: "blocked", summary: "The approved command failed to complete.", action_updates: [{ action_key: "run-known-not-applied-command", status: "blocked" }], remaining_actions: ["Restore the intended workspace before requesting the command again."], next_condition: "The original workspace is restored." })] };
       }
-      if (round === 4) return { text: "Approved command failed to complete.", toolCalls: [] };
+      if (round === 3) return { text: "Approved command failed to complete.", toolCalls: [] };
       return { text: "Waiting for Allow.", toolCalls: [] };
     },
   };
@@ -887,6 +880,7 @@ function uncertainCommandRound(): ModelRoundPort {
         const plan = {
           start_new: true,
           objective: "Run one reviewed command",
+          execution_mode: "direct",
           actions: [{
             action_key: "run-uncertain-command",
             description: "Run the reviewed command once",
@@ -914,22 +908,21 @@ function uncertainCommandRound(): ModelRoundPort {
           ],
         };
       }
-      if (round >= 2 && round <= 4) {
-        const callIds = ["run-resume-first", "run-resume-second", "run-resume-third"];
-        const run = {
+      if (round === 2) {
+        expect(request.messages.some((message) => message.role === "tool" && message.name === "run_command")).toBe(true);
+        return { toolCalls: [toolCall("run-reconcile", "run_command", {
           command,
           cwd: ".",
           state_effect: "mutation",
-          summary: "Resume approved command",
-        };
-        return { toolCalls: [toolCall(callIds[round - 2]!, "run_command", run)] };
+          summary: "Reconcile approved command",
+        })] };
       }
-      if (round === 5) {
+      if (round === 3) {
         const workId = request.messages.map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1]).find(Boolean);
         if (!workId) throw new Error(JSON.stringify(request.messages.filter((message) => message.role === "tool")));
-        return { toolCalls: [toolCall("complete", "record_work_disposition", { work_id: workId, disposition: "blocked", summary: "The approved command may have run.", action_updates: [{ action_key: "run-uncertain-command", status: "blocked" }] })] };
+        return { toolCalls: [toolCall("complete", "record_work_disposition", { work_id: workId, disposition: "blocked", summary: "The approved command may have run.", action_updates: [{ action_key: "run-uncertain-command", status: "blocked" }], remaining_actions: ["Inspect the uncertain command outcome before taking further action."], next_condition: "The prior command outcome is known." })] };
       }
-      if (round === 6) return { text: "Approved command needs reconciliation.", toolCalls: [] };
+      if (round === 4) return { text: "Approved command needs reconciliation.", toolCalls: [] };
       return { text: "Waiting for Allow.", toolCalls: [] };
     },
   };
@@ -945,6 +938,7 @@ function reviewedCommandRound(): ModelRoundPort {
         const plan = {
           start_new: true,
           objective: "Run one reviewed command",
+          execution_mode: "direct",
           actions: [{
             action_key: "run-approved-command",
             description: "Run the reviewed command once",
@@ -973,24 +967,12 @@ function reviewedCommandRound(): ModelRoundPort {
         };
       }
       if (round === 2) {
-        const tampered = {
-          command: "printf tampered > wrong-target.txt",
-          cwd: ".",
-          state_effect: "mutation",
-          summary: "Resume approved command",
-        };
-        return {
-          toolCalls: [
-            toolCall("run-resume", "run_command", tampered),
-          ],
-        };
-      }
-      if (round === 3) {
+        expect(request.messages.some((message) => message.role === "tool" && message.name === "run_command")).toBe(true);
         const workId = request.messages.map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1]).find(Boolean);
         if (!workId) throw new Error(JSON.stringify(request.messages.filter((message) => message.role === "tool")));
         return { toolCalls: [toolCall("complete", "record_work_disposition", { work_id: workId, disposition: "completed", summary: "The approved command completed once.", action_updates: [{ action_key: "run-approved-command", status: "done" }] })] };
       }
-      if (round === 4) return { text: "Approved command completed once.", toolCalls: [] };
+      if (round === 3) return { text: "요청한 파일 작성을 완료했습니다.\n\n내용도 확인했습니다.", toolCalls: [] };
       return { text: "Waiting for Allow.", toolCalls: [] };
     },
   };

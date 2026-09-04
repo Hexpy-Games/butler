@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS btcc_authority_requests (
   normalized_input_json TEXT NOT NULL,
   model_ref TEXT NOT NULL,
   reasoning_effort TEXT NOT NULL,
-  category TEXT NOT NULL CHECK (category = 'command'),
+  category TEXT NOT NULL CHECK (category IN ('command', 'reviewed_effect')),
   reason TEXT NOT NULL,
   executable TEXT NOT NULL,
   command_count INTEGER NOT NULL CHECK (command_count >= 1),

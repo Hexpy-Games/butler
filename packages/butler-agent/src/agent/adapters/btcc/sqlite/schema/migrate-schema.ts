@@ -25,12 +25,18 @@ export function migrateBtccSchema(db: Database): void {
     ensureTurnProgressDestination(db);
     ensureTurnRouteState(db);
     ensureTurnContinuationBudget(db);
+    ensureTurnSuspensionReason(db);
     ensureModelRoundAcceptanceCheckpoint(db);
     ensureModelRouteFailureDisposition(db);
     ensureGuidedToolResultDeliveryColumns(db);
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
+}
+
+function ensureTurnSuspensionReason(db: Database): void {
+  if (!tableExists(db, "btcc_turns")) return;
+  ensureColumn(db, "btcc_turns", "suspension_reason", "TEXT");
 }
 
 function ensureProjectWorkProjectionColumns(db: Database): void {
@@ -270,6 +276,12 @@ function ensureGuidedWorkProgressColumns(db: Database): void {
       "btcc_guided_work_plan_revisions",
       "governing_refs_json",
       "TEXT NOT NULL DEFAULT '[]'",
+    );
+    ensureColumn(
+      db,
+      "btcc_guided_work_plan_revisions",
+      "execution_mode",
+      "TEXT CHECK (execution_mode IN ('direct', 'workers'))",
     );
   }
   if (!tableExists(db, "btcc_guided_work_checkpoint_revisions")) return;

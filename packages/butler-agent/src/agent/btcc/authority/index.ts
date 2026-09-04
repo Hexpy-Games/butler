@@ -1,8 +1,11 @@
-export { AuthorityRequestError, createPrincipalAuthority } from "./principal-authority.ts";
+export { createPrincipalAuthority } from "./principal-authority.ts";
+export { AuthorityRequestError } from "./authority-request-error.ts";
 export type {
   AuthorityAbandonedWorkCloseCapability,
   AuthorityAbandonedWorkCloseInput,
   AuthorityCommandInput,
+  AuthorityOperationInput,
+  AuthorityReviewedEffectInput,
   AuthorityDecisionAction,
   AuthorityDecisionResult,
   AuthorityOperationalCloseInput,
@@ -15,6 +18,7 @@ export type {
   PrincipalAuthorityRepository,
 } from "./contracts.ts";
 export { AUTHORITY_DENIAL_TEXT } from "./contracts.ts";
+export { AUTHORITY_EFFECT_DENIAL_TEXT } from "./contracts.ts";
 export {
   deriveAppliedAuthorityOutcomeReceipt,
   deriveUncertainAuthorityOutcomeReceipt,

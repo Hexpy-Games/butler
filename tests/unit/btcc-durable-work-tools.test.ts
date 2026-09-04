@@ -136,6 +136,7 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
     name: "replace_work_plan",
     args: {
       objective: "Create the requested report",
+      execution_mode: "direct",
       actions: [{
         action_key: "research",
         description: "Collect current evidence",
@@ -156,6 +157,7 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
       work_id: "work-1",
       status: "open",
       current_stage: "planning",
+      execution_mode: null,
       actions: [{ action_key: "research", status: "pending" }],
       unresolved_action_keys: ["research"],
       completion_blockers: [
@@ -171,6 +173,7 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
     sessionId: "session-1",
     mutationCallId: "call-1",
     startNew: false,
+    executionMode: "direct",
     actions: [{ actionKey: "research" }, { actionKey: "write" }],
   });
 
@@ -203,6 +206,7 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
     name: "replace_work_plan",
     args: {
       objective: "Create the requested report",
+      execution_mode: "workers",
       actions: [{ action_key: "Research the requested sources" }],
     },
   });
@@ -341,6 +345,7 @@ test("R3 Work tool results do not repeat anchored Plan detail", async () => {
     name: "replace_work_plan",
     args: {
       objective: "Create the requested report",
+      execution_mode: "direct",
       actions: [{
         action_key: "research",
         description: "Research the requested evidence",
@@ -354,6 +359,7 @@ test("R3 Work tool results do not repeat anchored Plan detail", async () => {
       work_id: "work-1",
       status: "open",
       current_stage: "planning",
+      execution_mode: null,
       actions: [{ action_key: "research", status: "active" }],
       unresolved_action_keys: ["research"],
       completion_blockers: [
@@ -458,6 +464,7 @@ test("R3 generic Work rejection returns the current guardrail view", async () =>
     args: {
       start_new: true,
       objective: "Start unrelated Work",
+      execution_mode: "direct",
       actions: [{
         action_key: "restart",
         description: "Start the unrelated Work",
@@ -508,6 +515,16 @@ test("R3 continuation context stays concise and semantic", () => {
         originTurnId: "turn-origin",
         createdAt: "2026-07-31T00:00:00.000Z",
       },
+      resultRefs: [{
+        resultRef: "result-write-1",
+        revision: 3,
+        toolCallId: "call-write-1",
+        toolName: "write_file",
+        status: "completed",
+        resultSha256: "a".repeat(64),
+        originTurnId: "turn-origin",
+        attachedAt: "2026-07-31T00:00:00.000Z",
+      }],
     },
     originalRequest: {
       turnId: "turn-origin",
@@ -515,6 +532,7 @@ test("R3 continuation context stays concise and semantic", () => {
       content: "Research the market and create report.md",
     },
     resultFacts: [{
+      resultRef: "result-write-1",
       toolName: "write_file",
       status: "completed",
       resultJson: { ok: true, path: "report.md" },
@@ -524,11 +542,18 @@ test("R3 continuation context stays concise and semantic", () => {
   const rendered = renderDurableWorkContext(context) ?? "";
   expect(rendered).toContain("Original request (highest priority): Research the market");
   expect(rendered).toContain("Current stage: planning");
-  expect(rendered).not.toContain("Allowed next stages");
+  expect(rendered).toContain("Allowed next stages: review");
+  expect(rendered).toContain("Available review subjects: plan");
   expect(rendered).toContain("Governing references: SPEC-REPORT");
-  expect(rendered).toContain("- [pending] research: Collect evidence");
-  expect(rendered).toContain("Current plan details:");
-  expect(rendered).toContain("Result (write_file, completed)");
+  expect(rendered).toContain("- [pending, executable] research: Collect evidence");
+  expect(rendered).toContain("Current executable plan details:");
+  expect(rendered).toContain("Result reference (write_file, completed)");
+  expect(rendered).toContain(
+    '"result_ref":"result-write-1","sha256":"' + "a".repeat(64) +
+      '","revision":3,"work_id":"work-1","offset":0,"length":',
+  );
+  expect(rendered).toContain("Result fact (write_file, completed)");
+  expect(rendered).toContain('"path":"report.md"');
   expect(rendered).toContain(
     "Explicit relation Work id (model-only; never report to user): work-1",
   );
@@ -543,13 +568,26 @@ test("R3 continuation context reuses the bounded web model projection", () => {
     " source ending".repeat(80)
   }`;
   const context: DurableWorkContext = {
-    work: workView(),
+    work: {
+      ...workView(),
+      resultRefs: [{
+        resultRef: "result-web-1",
+        revision: 1,
+        toolCallId: "call-web-1",
+        toolName: "web_read",
+        status: "completed",
+        resultSha256: "b".repeat(64),
+        originTurnId: "turn-origin",
+        attachedAt: "2026-07-31T00:00:00.000Z",
+      }],
+    },
     originalRequest: {
       turnId: "turn-origin",
       messageId: "message-origin",
       content: "Research the source and continue later",
     },
     resultFacts: [{
+      resultRef: "result-web-1",
       toolName: "web_read",
       status: "completed",
       resultJson: {
@@ -570,9 +608,10 @@ test("R3 continuation context reuses the bounded web model projection", () => {
   };
 
   const rendered = renderDurableWorkContext(context) ?? "";
+  expect(rendered).toContain('"result_ref":"result-web-1"');
+  expect(rendered).toContain('"capability":"read_operation_results"');
   expect(rendered).toContain("LATE_SOURCE_FACT");
   expect(rendered).not.toContain("RAW_CHUNK_MUST_NOT_REPLAY");
-  expect(rendered.match(/LATE_SOURCE_FACT/g)?.length).toBe(1);
   expect(rendered.length).toBeLessThanOrEqual(8_000);
 });
 
@@ -622,7 +661,7 @@ test("R3 context keeps every normal-sized unresolved action ahead of verbose det
     expect(rendered).toContain(`action-${index}=pending`);
   }
   expect(rendered).toContain("Unresolved prior effect (publish -> remote:report)");
-  expect(rendered).toContain("Guardrail: choose the next useful unresolved action");
+  expect(rendered).toContain("Guardrail: follow the current Work policy");
   expect(rendered.length).toBeLessThanOrEqual(8_000);
 });
 

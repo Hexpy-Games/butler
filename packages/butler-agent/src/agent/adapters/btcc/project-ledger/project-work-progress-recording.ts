@@ -231,6 +231,7 @@ async function preparePlanUpdates(
     revision: planRevision,
     objective: command.objective,
     governingRefs: command.governingRefs,
+    ...(command.executionMode ? { executionMode: command.executionMode } : {}),
     actions: command.actions,
     checks: command.checks,
     originTurnId: command.turnId,

@@ -27,6 +27,19 @@ export async function completeStewardResultForDependencies(
        childTurn.semanticState !== "delivered")) {
     throw new Error("subsession_child_turn_missing");
   }
+  if (resultInput.status !== "cancelled") {
+    const expectedRootWorkId = input.store.rootWorkIdByRelationId(
+      relation.relation_id,
+    );
+    const sourceWork = await input.durableWork.boundWorkForTurn(
+      resultInput.childTurnId,
+    );
+    if (!expectedRootWorkId || !sourceWork ||
+      sourceWork.workId !== expectedRootWorkId ||
+      sourceWork.sessionId !== relation.child_session_id) {
+      throw new Error("subsession_root_work_identity_mismatch");
+    }
+  }
   const expectedResultId = subsessionResultId(
     relation.child_session_id,
     resultInput.childTurnId,

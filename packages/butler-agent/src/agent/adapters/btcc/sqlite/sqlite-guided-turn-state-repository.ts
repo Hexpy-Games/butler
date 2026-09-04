@@ -66,7 +66,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
         original_message, model_selection_json, context_json,
         route_state_json,
         continuation_budget_json,
-        progress_destination_json, semantic_state,
+        progress_destination_json, semantic_state, suspension_reason,
         active_checkpoint_id, route, final_payload_json, delivery_outbox_id,
         canonical_assistant_message_id, revision, execution_fence,
         final_disposition
@@ -81,6 +81,10 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     const route = hydrateRoute(row.route);
     const finalDisposition = hydrateFinalDisposition(row.final_disposition);
     const wakeIdentity = this.hydration.loadWakeIdentity(row.turn_id);
+    if (row.suspension_reason && row.suspension_reason !== "authority_pending" &&
+      row.suspension_reason !== "waiting_for_worker") {
+      throw new Error("BTCC suspension reason is invalid");
+    }
     const turn: TurnRecord = {
       turnId: row.turn_id,
       sessionId: row.session_id,
@@ -101,6 +105,10 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
         ? { progressDestination: hydrateProgressDestination(row.progress_destination_json) }
         : {}),
       semanticState: state,
+      ...(row.suspension_reason === "authority_pending" ||
+          row.suspension_reason === "waiting_for_worker"
+        ? { suspension: row.suspension_reason }
+        : {}),
       ...(checkpoint ? { checkpoint } : {}),
       ...(route ? { route } : {}),
       ...(finalPayload ? { finalPayload } : {}),
@@ -127,6 +135,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
   ): Promise<StateExecutionClaim> {
     assertGuidedTurnSemanticState(turn.semanticState);
     if (
+      turn.suspension ||
       turn.semanticState === "delivered" ||
       turn.semanticState === "cancelled"
     ) {

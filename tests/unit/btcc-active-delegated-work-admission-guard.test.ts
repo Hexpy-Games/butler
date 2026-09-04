@@ -230,6 +230,7 @@ function admissionGuardRounds(): ModelRoundPort & {
     });
     if (round === 2) return response("w1-plan", "replace_work_plan", {
       objective: "Execute the first long-running reviewed objective.",
+      execution_mode: "direct",
       governing_refs: [],
       actions: [{ action_key: "delegate-first", dependency_keys: [] }],
       checks: ["The first Steward remains active."],
@@ -262,7 +263,7 @@ function admissionGuardRounds(): ModelRoundPort & {
         toolCalls: [
           call("forbidden-continue", "continue_work", { work_id: w1WorkId }),
           call("forbidden-plan", "replace_work_plan", {
-            objective: "Illegally replan W1.", actions: [], checks: [],
+            objective: "Illegally replan W1.", execution_mode: "direct", actions: [], checks: [],
           }),
           call("forbidden-effect", "write_file", {
             path: "forbidden.txt", content: "forbidden", overwrite: false,
@@ -288,6 +289,7 @@ function admissionGuardRounds(): ModelRoundPort & {
       expect(names).toContain("replace_work_plan");
       const args = {
         objective: "Execute a distinct second reviewed objective.",
+        execution_mode: "direct",
         governing_refs: [],
         actions: [{ action_key: "delegate-second", dependency_keys: [] }],
         checks: ["The second Steward relation is distinct."],

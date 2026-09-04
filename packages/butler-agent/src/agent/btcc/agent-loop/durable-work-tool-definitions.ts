@@ -52,6 +52,7 @@ const REPLACE_WORK_PLAN: FunctionToolDefinition = {
     "Use start_new only as a compatibility translation when older callers cannot use start_work.",
     "Ordinary tools never select Work; choose start_work or continue_work before this Plan operation.",
     "Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints.",
+    "Choose execution_mode during planning: direct means this role executes its Plan actions; workers is only for a Steward Plan whose actions are Worker-executed while Steward retains integration, review, validation, and reporting.",
     "Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup.",
     "Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
   ].join(" "),
@@ -77,6 +78,11 @@ const REPLACE_WORK_PLAN: FunctionToolDefinition = {
           "A small list of existing governing specification or document references.",
           "Use workspace-relative paths or stable document ids; do not invent references.",
         ].join(" "),
+      },
+      execution_mode: {
+        type: "string",
+        enum: ["direct", "workers"],
+        description: "Who executes Plan actions. Worker and Butler Plans use direct; only Steward may choose workers. Planning, integration, review, validation, and reporting stay with the current role.",
       },
       actions: {
         type: "array",
@@ -132,7 +138,7 @@ const REPLACE_WORK_PLAN: FunctionToolDefinition = {
         default: [],
       },
     },
-    required: ["objective", "actions"],
+    required: ["objective", "execution_mode", "actions"],
   },
 };
 

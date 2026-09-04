@@ -50,6 +50,80 @@ test("enabled replay fails composition when its exact journal dependency is inco
   })).toThrow("operation_result_replay_dependency_missing");
 });
 
+test("durable preview references are directly callable by the existing exact reader", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-result-preview-reference-"));
+  const stores = openBtccSqliteStores({
+    dbPath: join(root, "btcc.sqlite"),
+    ownerId: "preview-reference",
+  });
+  try {
+    const result = {
+      ok: false,
+      error: { code: "validation_failed", message: "one check failed" },
+      output: "failure detail ".repeat(1_000),
+    };
+    stores.guidedToolJournal.start({
+      turnId: "turn",
+      callId: "call",
+      toolName: "run_command",
+      rawArguments: "{}",
+      arguments: {},
+    });
+    stores.guidedToolJournal.finish({
+      callId: "call",
+      status: "completed",
+      result,
+      errorCode: "validation_failed",
+    });
+    const replay = createOperationResultReplay({
+      turnId: "turn",
+      turnRevision: 1,
+      journal: stores.guidedToolJournal,
+      exactReader: stores.guidedOperationResultReader,
+      exactReadCapability: true,
+    });
+
+    const reference = replay.previewReferenceForCall("call");
+    expect(reference).toMatchObject({
+      capability: "read_operation_results",
+      arguments: {
+        result_ref: "call",
+        revision: null,
+        work_id: null,
+        offset: 0,
+        length: 4_096,
+      },
+    });
+    expect(reference?.total_bytes).toBe(
+      Buffer.byteLength(JSON.stringify(result), "utf8"),
+    );
+    expect(replay.readExact(reference!.arguments)).toMatchObject({
+      offset: 0,
+      length: 4_096,
+      totalBytes: reference!.total_bytes,
+      nextOffset: 4_096,
+      complete: false,
+    });
+    stores.guidedToolJournal.start({
+      turnId: "turn",
+      callId: "reader-page",
+      toolName: "read_operation_results",
+      rawArguments: "{}",
+      arguments: {},
+    });
+    stores.guidedToolJournal.finish({
+      callId: "reader-page",
+      status: "completed",
+      result: { encoding: "base64", data: "e30=", offset: 0, length: 2 },
+    });
+    expect(replay.previewReferenceForCall("reader-page")).toBeNull();
+    expect(replay.referenceForCall("reader-page")).toBeNull();
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("accepted durable large result is raw once then a bounded reference in the actual Codex serializer", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-exact-replay-"));
   const stores = openBtccSqliteStores({ dbPath: join(root, "btcc.sqlite"), ownerId: "test" });
@@ -332,11 +406,24 @@ test("every durable delivery state resumes exactly across SQLite close and reope
   }
 });
 
-test("enabled replay stays raw through routed retry, acknowledges once, and resumes route checkpoints", async () => {
+test("enabled replay keeps the readable preview through routed retry, acknowledges once, and resumes route checkpoints", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-exact-replay-route-"));
   const dbPath = join(root, "btcc.sqlite");
   const stores = openBtccSqliteStores({ dbPath, ownerId: "route-writer" });
-  const large = { content: "Q".repeat(12_000) };
+  const large = {
+    ok: true,
+    files_requested: 1,
+    files_read: 1,
+    truncated: false,
+    files: [{
+      ok: true,
+      path: "large.txt",
+      start_line: 1,
+      end_line: 1,
+      truncated: false,
+      content: "Q".repeat(12_000),
+    }],
+  };
   stores.guidedToolJournal.start({
     turnId: "turn", callId: "journal-large", toolName: "read_file",
     rawArguments: "{}", arguments: {},
@@ -421,6 +508,19 @@ test("enabled replay stays raw through routed retry, acknowledges once, and resu
     expect(stores.guidedToolJournal.list("turn")).toHaveLength(1);
     expect(physicalMessages[1]).toContain("Q".repeat(1024));
     expect(physicalMessages[2]).toContain("Q".repeat(1024));
+    for (const physical of physicalMessages.slice(1, 3)) {
+      const messages = JSON.parse(physical) as Array<{
+        role: string;
+        content: string;
+      }>;
+      const delivered = JSON.parse(
+        messages.find((message) => message.role === "tool")!.content,
+      ) as Record<string, any>;
+      expect(delivered.model_preview?.exact_read).toMatchObject({
+        capability: "read_operation_results",
+        arguments: { result_ref: "journal-large", offset: 0, length: 4_096 },
+      });
+    }
     expect(physicalMessages[3]).not.toContain("Q".repeat(1024));
     expect(physicalMessages[3]).toContain("private-analysis-");
     expect(physicalMessages[3]).toContain("butler.operation-result-reference.v1");

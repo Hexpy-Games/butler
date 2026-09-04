@@ -17,6 +17,9 @@ export function projectTerminalOutcome(turn: TurnRecord): BtccTurnOutcome {
     ...(turn.finalPayload.workStatus
       ? { workStatus: turn.finalPayload.workStatus }
       : {}),
+    ...(turn.finalPayload.acceptedWorkResult
+      ? { acceptedWorkResult: turn.finalPayload.acceptedWorkResult }
+      : {}),
     ...(turn.finalPayload.artifacts?.length
       ? { artifacts: turn.finalPayload.artifacts }
       : {}),

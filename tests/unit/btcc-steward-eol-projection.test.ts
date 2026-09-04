@@ -81,6 +81,10 @@ test("Steward shares system context without Butler personalization", () => {
 test("Steward Turn admission snapshots EOL while replay retains its durable ref", async () => {
   const fixture = createFixture();
   try {
+    fixture.binding.metadata = {
+      ...fixture.binding.metadata,
+      runtimePolicy: { accessMode: "ask_first" },
+    };
     const documents = new ImmutableContextDocuments();
     const admittedTurns = new Map<string, TurnRecord>();
     const preparation = new DefaultBtccTurnPreparation({
@@ -98,6 +102,8 @@ test("Steward Turn admission snapshots EOL while replay retains its durable ref"
     const firstRequest = requestFor(fixture.binding, "turn-steward-eol-1");
     const first = await preparation.prepare(firstRequest);
     if (first.command.kind !== "run") throw new Error("fresh Steward command missing");
+    expect(first.command.modelSelection.controls.accessMode).toBe("ask_first");
+    expect(first.command.context.executionPolicy?.accessMode).toBe("ask_first");
     const firstEolRef = first.command.context.profileRefs.find((ref) => documents.resolve(ref).includes("DATA_EOL_V1"));
     if (!firstEolRef) throw new Error("admitted Steward EOL ref missing");
 

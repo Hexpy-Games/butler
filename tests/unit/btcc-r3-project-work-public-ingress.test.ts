@@ -105,6 +105,7 @@ test("real App message ingress preserves differing App and Ledger project identi
       modelRound: scriptedModelRound([
         toolResponse("public-ingress-plan", "replace_work_plan", {
           objective: "Prove exact public ingress Project Work selection",
+          execution_mode: "direct",
           actions: [{
             action_key: "verify_public_ingress",
             description: "Verify the exact Ledger identity from App ingress",

@@ -119,6 +119,7 @@ export function createDurableWorkService(
           startNew,
           objective: input.objective,
           governingRefs: input.governingRefs ?? [],
+          ...(input.executionMode ? { executionMode: input.executionMode } : {}),
           actions: input.actions,
           checks: input.checks,
         }),

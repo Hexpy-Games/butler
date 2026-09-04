@@ -73,6 +73,9 @@ export class SqliteGuidedStopController {
         ...(finalPayload.workStatus
           ? { workStatus: finalPayload.workStatus }
           : {}),
+        ...(finalPayload.acceptedWorkResult
+          ? { acceptedWorkResult: finalPayload.acceptedWorkResult }
+          : {}),
         ...(finalPayload.artifacts?.length
           ? { artifacts: finalPayload.artifacts }
           : {}),
@@ -105,7 +108,7 @@ export class SqliteGuidedStopController {
       number,
     ]>(`
       UPDATE btcc_turns SET semantic_state = 'cancelled',
-        active_checkpoint_id = NULL, revision = ?,
+        active_checkpoint_id = NULL, suspension_reason = NULL, revision = ?,
         execution_fence = execution_fence + 1,
         final_disposition = 'cancelled'
       WHERE turn_id = ? AND revision = ? AND semantic_state = 'admitted'

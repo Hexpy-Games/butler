@@ -351,6 +351,22 @@ export class AppTransportProjectionStore {
       return projected;
     }
 
+    if (metadata.kind === "turn_suspended") {
+      return projectAppFinalResult({
+        options: this.options,
+        markProjectedTransportEvent: (id, eventId, targetChatId) =>
+          this.markProjectedTransportEvent(id, eventId, targetChatId),
+        chatId,
+        turnId,
+        actionId,
+        event,
+        message,
+        metadata,
+        terminalRecoverableCorrection: false,
+        queuedFinalProjection: "accept",
+        deleteStagedOutbound: () => this.stagedOutbounds.delete(actionId),
+      });
+    }
     if (metadata.kind !== "final_result") return false;
     const queuedFinalProjection = queuedFinalProjectionDisposition({
       butlerData: this.options.butlerData,

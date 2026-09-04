@@ -38,6 +38,7 @@ test("a real native Result replays once, repairs its thin projection, and surviv
         workId = workIdFrom(request, "start_work");
         return tool("result-plan", "replace_work_plan", {
           objective: "Recover one exact Result",
+          execution_mode: "direct",
           actions: [{ action_key: "read", dependency_keys: [] }],
           checks: ["The exact Result remains singular"],
         });
@@ -122,6 +123,7 @@ test("a late real native Result reopens completed Project Work and invalidates s
         workId = workIdFrom(request, "start_work");
         return tool("late-plan", "replace_work_plan", {
           objective: "Invalidate stale completion",
+          execution_mode: "direct",
           actions: [{ action_key: "late", dependency_keys: [] }],
           checks: ["Late evidence reopens Work"],
         });
@@ -197,6 +199,7 @@ test("managed Project record corruption fails closed on the next real App ingres
         workId = workIdFrom(request, "start_work");
         return tool("corrupt-plan", "replace_work_plan", {
           objective: "Reject corruption",
+          execution_mode: "direct",
           actions: [{ action_key: "guard", dependency_keys: [] }],
           checks: ["Corruption fails closed"],
         });
@@ -263,6 +266,7 @@ test("SQLite Result body tamper is rejected by an exact public Result read", asy
         workId = workIdFrom(request, "start_work");
         return tool("sqlite-plan", "replace_work_plan", {
           objective: "Reject SQLite tamper",
+          execution_mode: "direct",
           actions: [{ action_key: "read", dependency_keys: [] }],
           checks: ["Exact read rejects body tamper"],
         });

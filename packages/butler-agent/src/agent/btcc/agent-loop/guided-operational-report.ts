@@ -1,5 +1,6 @@
 import { runBtccAgentLoop } from "./agent-loop.ts";
 import type { BtccAgentLoopInput } from "./contracts.ts";
+import type { BtccTurnSuspension } from "./contracts.ts";
 import type { BtccEmptyResponsePolicy } from "../contracts.ts";
 import { ModelProviderRequestError } from
   "../../../integrations/providers/provider-errors.ts";
@@ -20,7 +21,7 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
   originalRequest: string;
   emptyResponsePolicy?: BtccEmptyResponsePolicy;
   loadFacts: () => Promise<Omit<OperationalFacts, "originalRequest">>;
-  onExecutionWait?: () => void;
+  onSuspension?: (reason: BtccTurnSuspension) => void;
 }): Promise<string> {
   try {
     const result = await runBtccAgentLoop({
@@ -28,8 +29,8 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
       signal: input.parentSignal,
     });
     const candidate = result.finalText.trim();
-    if (result.executionOutcome === "waiting_for_worker") {
-      input.onExecutionWait?.();
+    if (result.suspension) {
+      input.onSuspension?.(result.suspension);
       return "";
     }
     // An empty result is a genuine terminal no-visible outcome.

@@ -54,13 +54,17 @@ function validatePlan(child: Record<string, unknown>): void {
       "originTurnId",
       "createdAt",
     ],
-    ["governingRefs"],
+    ["governingRefs", "executionMode"],
   );
   positiveRevision(child.revision);
   textRequired(child.objective);
   textRequired(child.originTurnId);
   isoRequired(child.createdAt);
   stringArray(child.governingRefs ?? []);
+  if (child.executionMode !== undefined &&
+      child.executionMode !== "direct" && child.executionMode !== "workers") {
+    invalid();
+  }
   stringArray(child.checks);
   boundedArray(child.actions).forEach((entry) => {
     const action = object(entry);

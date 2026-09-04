@@ -50,6 +50,40 @@ export function projectAppFinalResult(input: {
     return false;
   }
 
+  if (metadata.kind === "turn_suspended") {
+    let settledForDrain = false;
+    const projected = projectClaimedOutbound(
+      options,
+      { chatId, turnId, metadata },
+      () => {
+        input.deleteStagedOutbound();
+        // The durable BTCC Turn remains explicitly suspended and resumable.
+        // Its App ingress Turn is settled silently so the composer and the
+        // per-session queue are not held by an execution claim that no longer
+        // owns runtime execution.
+        const waitingTurn = options.updateTurnState(turnId, "delivered", {
+          safeStatusLabel: "",
+          retryable: false,
+          cancellable: false,
+          safeErrorCode: null,
+        });
+        options.appendEvent("turn.state_changed", { turn: waitingTurn });
+        const settled = settleQueuedTurn(options, chatId, turnId, metadata);
+        if (!settled && queuedSettlementRequired(options, chatId, turnId, metadata)) {
+          return false;
+        }
+        markProjectedTransportEvent(actionId, event.eventId, chatId);
+        options.touchChat(chatId);
+        settledForDrain = settled;
+        return true;
+      },
+    );
+    if (projected && settledForDrain) {
+      void options.drainQueuedSessionMessages(chatId).catch(() => undefined);
+    }
+    return projected;
+  }
+
   const text = sanitizeAppTransportFinalText(message.text);
   const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
   const changedFiles = changedFilePathsFromOutbound(message.changedFiles);

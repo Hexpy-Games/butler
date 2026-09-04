@@ -57,6 +57,7 @@ export function proveProjectWorkPlanOutcome(input: {
   if (
     plan.planRevisionId !== projectWorkRecordId("plan", identity.id) ||
     plan.objective !== input.command.objective ||
+    plan.executionMode !== input.command.executionMode ||
     canonicalJson(plan.governingRefs ?? []) !==
       canonicalJson(input.command.governingRefs) ||
     canonicalJson(plan.actions) !== canonicalJson(input.command.actions) ||

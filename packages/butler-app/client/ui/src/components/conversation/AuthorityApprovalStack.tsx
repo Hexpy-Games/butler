@@ -49,6 +49,7 @@ function AuthorityApprovalCardActions({
   approval: AuthorityApprovalCard;
   sessionId: string;
 }) {
+  const reviewedEffect = approval.category === "reviewed_effect";
   const allow = useButlerStore((state) => state.allowAuthorityRequest);
   const deny = useButlerStore((state) => state.denyAuthorityRequest);
   const modify = useButlerStore((state) => state.modifyAuthorityRequest);
@@ -83,10 +84,11 @@ function AuthorityApprovalCardActions({
       allowLabel={copy.allowOnce}
       denyLabel={copy.deny}
       error={failed ? copy.decisionFailed : undefined}
-      meta={`${copy.categoryCommand} · ${copy.commandSummary(
-        approval.executable,
-        approval.commandCount,
-      )}`}
+      meta={`${reviewedEffect ? copy.categoryEffect : copy.categoryCommand} · ${
+        reviewedEffect
+          ? copy.effectSummary(approval.executable)
+          : copy.commandSummary(approval.executable, approval.commandCount)
+      }`}
       modifyInvalid={
         modifyOpen && modifyValue.length > 0 && !normalizedAlternative
           ? copy.modifyInvalid
@@ -118,8 +120,8 @@ function AuthorityApprovalCardActions({
         );
       }}
       pending={pending}
-      reason={approval.reason}
-      title={copy.title}
+      reason={reviewedEffect ? copy.effectReason : approval.reason}
+      title={reviewedEffect ? copy.titleEffect : copy.title}
     />
   );
 }

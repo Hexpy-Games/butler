@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { structuredToolResultModelPreview } from "../../packages/butler-agent/src/agent/tools/tool-support.ts";
+import {
+  beginToolResultModelPreviewBatch,
+  createToolResultModelPreviewContext,
+  structuredToolResultModelPreview,
+  toolResultPayloadForProvider,
+} from "../../packages/butler-agent/src/agent/tools/tool-support.ts";
 
 test("grep model preview preserves bounded candidate paths and actionable matches", () => {
   const preview = structuredToolResultModelPreview({
@@ -189,14 +194,22 @@ test("tool output artifact previews preserve the rehydrated error text", () => {
     toolName: "read_tool_output_artifact",
     output: {
       ok: true,
-      artifact: { id: "tool-output-1", command: "bun test", raw_tokens: 2_400 },
+      artifact: {
+        id: "tool-output-1",
+        path: "/private/butler/tool-output-1.json",
+        command: "bun test",
+        raw_tokens: 2_400,
+      },
       stdout: {
         text: "13 pass\n1 fail",
         start_line: 0,
+        start_char: 0,
+        next_offset_chars: 14,
         returned_lines: 2,
         total_lines: 2,
         truncated_by_lines: false,
         truncated_by_tokens: false,
+        search: { query: "fail", found: true, match_char: 8 },
       },
       stderr: {
         text: "Expected: angle brackets\nReceived: opening brackets",
@@ -211,11 +224,247 @@ test("tool output artifact previews preserve the rehydrated error text", () => {
 
   expect(preview).toMatchObject({
     tool_name: "read_tool_output_artifact",
-    artifact: { id: "tool-output-1", command: "bun test" },
-    stdout: { text: "13 pass\n1 fail" },
+    artifact: {
+      id: "tool-output-1",
+      path: "/private/butler/tool-output-1.json",
+      command: "bun test",
+    },
+    stdout: {
+      text: "13 pass\n1 fail",
+      start_char: 0,
+      next_offset_chars: 14,
+      search: { query: "fail", found: true, match_char: 8 },
+    },
     stderr: { text: "Expected: angle brackets\nReceived: opening brackets" },
   });
 });
+
+test("large Work results keep current stage and every action status before generic fitting", () => {
+  const actions = Array.from({ length: 20 }, (_, index) => ({
+    action_key: `action-${index + 1}`,
+    status: index === 19 ? "active" : "done",
+    ignored_description: "not part of the current control projection".repeat(100),
+  }));
+  const preview = structuredToolResultModelPreview({
+    toolName: "record_work_checkpoint",
+    output: {
+      ok: true,
+      work: {
+        work_id: "work-current",
+        status: "open",
+        current_stage: "execution",
+        execution_mode: "workers",
+        allowed_next_stages: ["review"],
+        actions,
+        unresolved_action_keys: ["action-20"],
+        completion_blockers: ["unresolved_actions"],
+      },
+    },
+  });
+
+  expect(preview).toMatchObject({
+    tool_name: "record_work_checkpoint",
+    ok: true,
+    work: {
+      work_id: "work-current",
+      status: "open",
+      current_stage: "execution",
+      execution_mode: "workers",
+      unresolved_action_keys: ["action-20"],
+    },
+  });
+  expect((preview?.work as { actions: unknown[] }).actions).toHaveLength(20);
+  expect((preview?.work as { actions: unknown[] }).actions.at(-1)).toEqual({
+    action_key: "action-20",
+    status: "active",
+  });
+});
+
+test("a fitted failure preview keeps truthful Work facts and callable exact-read arguments", () => {
+  const context = createToolResultModelPreviewContext();
+  beginToolResultModelPreviewBatch(context, { maxBytes: 1_800, resultCount: 1 });
+  const exactReadReference = {
+    capability: "read_operation_results" as const,
+    arguments: {
+      result_ref: "result-current",
+      sha256: "a".repeat(64),
+      revision: 7,
+      work_id: "work-current",
+      offset: 0,
+      length: 4_096,
+    },
+    total_bytes: 90_000,
+  };
+  const projected = toolResultPayloadForProvider({
+    ok: false,
+    error: "Tool execution failed after durable completion details were recorded.",
+    output: {
+      ok: false,
+      status: "awaiting_allow",
+      authority_pending: true,
+      executed: false,
+      error: {
+        code: "completion_gate_failed",
+        message: `The completion review still requires one action. ${"M".repeat(10_000)}`,
+        current_stage: "validation",
+        requested_action: "record_work_disposition",
+        unmet_guard: "unresolved_actions",
+        next_action: "record_work_checkpoint",
+      },
+      work: {
+        work_id: "work-current",
+        status: "open",
+        current_stage: "validation",
+        execution_mode: "workers",
+        actions: [
+          { action_key: "implement", status: "done" },
+          { action_key: "validate", status: "active" },
+        ],
+        unresolved_action_keys: ["validate"],
+        completion_blockers: ["unresolved_actions"],
+        large_detail: "D".repeat(80_000),
+      },
+    },
+  }, {
+    toolName: "record_work_disposition",
+    context,
+    exactReadReference,
+  });
+
+  expect(Buffer.byteLength(JSON.stringify(projected))).toBeLessThanOrEqual(1_800);
+  expect(projected).toMatchObject({
+    ok: false,
+    output: {
+      ok: false,
+      status: "awaiting_allow",
+      authority_pending: true,
+      executed: false,
+      error: {
+        code: "completion_gate_failed",
+        current_stage: "validation",
+        requested_action: "record_work_disposition",
+        unmet_guard: "unresolved_actions",
+        next_action: "record_work_checkpoint",
+      },
+      work: {
+        work_id: "work-current",
+        status: "open",
+        current_stage: "validation",
+        execution_mode: "workers",
+        actions: [
+          { action_key: "implement", status: "done" },
+          { action_key: "validate", status: "active" },
+        ],
+      },
+    },
+    model_preview: {
+      truncated: true,
+      completeness: "partial",
+      exact_read: exactReadReference,
+    },
+  });
+  expect(JSON.stringify(projected)).not.toContain("Use the result's cursor");
+});
+
+test("generic semantic array omission retains the actual exact-read reference", () => {
+  const exactReadReference = exactReadReferenceFor("generic-result");
+  const projected = toolResultPayloadForProvider({
+    ok: true,
+    output: { items: Array.from({ length: 13 }, (_, index) => ({ index })) },
+  }, { toolName: "unknown_tool", exactReadReference });
+
+  expect((projected.output as { items: unknown[] }).items).toHaveLength(12);
+  expect(projected).toMatchObject({
+    model_preview: {
+      truncated: true,
+      completeness: "partial",
+      exact_read: exactReadReference,
+    },
+  });
+});
+
+test("specialized list and text omission retains the actual exact-read reference", () => {
+  const exactReadReference = exactReadReferenceFor("grep-result");
+  const projected = toolResultPayloadForProvider({
+    ok: true,
+    output: {
+      pattern: "needle",
+      matches: Array.from({ length: 13 }, (_, index) => ({
+        path: `file-${index}.ts`,
+        line: index + 1,
+        text: `needle-${index}-${"detail".repeat(80)}`,
+      })),
+    },
+  }, { toolName: "grep_files", exactReadReference });
+
+  expect((projected.output as { matches: unknown[] }).matches).toHaveLength(12);
+  expect(projected).toMatchObject({
+    model_preview: { exact_read: exactReadReference },
+  });
+});
+
+test("semantic omission never invents an exact-read reference", () => {
+  const projected = toolResultPayloadForProvider({
+    ok: true,
+    output: { items: Array.from({ length: 13 }, (_, index) => ({ index })) },
+  }, { toolName: "unknown_tool" });
+
+  expect((projected.output as { items: unknown[] }).items).toHaveLength(12);
+  expect(projected.model_preview).toBeUndefined();
+});
+
+test("an exact operation-result page fits by advancing the original byte cursor", () => {
+  const context = createToolResultModelPreviewContext();
+  beginToolResultModelPreviewBatch(context, { maxBytes: 512, resultCount: 1 });
+  const data = Buffer.from("R".repeat(4_096)).toString("base64");
+  const projected = toolResultPayloadForProvider({
+    ok: true,
+    output: {
+      encoding: "base64",
+      data,
+      offset: 0,
+      length: 4_096,
+      totalBytes: 8_192,
+      nextOffset: 4_096,
+      resultSha256: "b".repeat(64),
+      complete: false,
+    },
+  }, { toolName: "read_operation_results", context });
+
+  const output = projected.output as {
+    data: string;
+    offset: number;
+    length: number;
+    requested_length: number;
+    nextOffset: number;
+  };
+  expect(Buffer.byteLength(JSON.stringify(projected))).toBeLessThanOrEqual(512);
+  expect(output.data.length).toBeLessThan(data.length);
+  expect(output.offset).toBe(0);
+  expect(output.requested_length).toBe(4_096);
+  expect(output.length).toBeGreaterThan(0);
+  expect(output.length).toBe(Buffer.from(output.data, "base64").byteLength);
+  expect(output.nextOffset).toBe(output.length);
+  expect(projected).toMatchObject({
+    model_preview: { truncated: true, completeness: "partial" },
+  });
+  expect(JSON.stringify(projected)).not.toContain("exact_read");
+});
+
+function exactReadReferenceFor(resultRef: string) {
+  return {
+    capability: "read_operation_results" as const,
+    arguments: {
+      result_ref: resultRef,
+      sha256: "c".repeat(64),
+      revision: 1,
+      work_id: null,
+      offset: 0,
+      length: 4_096,
+    },
+    total_bytes: 8_192,
+  };
+}
 
 test("tool evidence artifact previews preserve the requested bounded text slice", () => {
   const preview = structuredToolResultModelPreview({

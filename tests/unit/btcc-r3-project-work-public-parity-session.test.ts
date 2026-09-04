@@ -35,6 +35,7 @@ test("the real general Session adapter survives production-composition restart w
         workId = workIdFrom(request, "start_work");
         return tool("session-plan", "replace_work_plan", {
           objective: "Session restart parity",
+          execution_mode: "direct",
           actions: [{ action_key: "resume", dependency_keys: [] }],
           checks: ["The Session Work resumes after composition restart"],
         });

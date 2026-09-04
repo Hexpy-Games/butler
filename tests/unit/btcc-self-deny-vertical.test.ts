@@ -472,8 +472,7 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
     const resumedMessages = messagesBody.data.messages.filter(
       (message) => message.role === "assistant" && message.turn_id === resumedTurnId,
     );
-    expect(resumedMessages).toHaveLength(1);
-    expect(resumedMessages[0]?.text).toBe("Replacement command is waiting for Allow.");
+    expect(resumedMessages).toHaveLength(0);
     const serializedMessages = JSON.stringify(messagesBody.data.messages);
     expect(serializedMessages).not.toContain(PRIVATE_MODIFY_INPUT);
     expect(serializedMessages).not.toContain(PRIVATE_MODIFY_PROVIDER_TEXT);
@@ -527,7 +526,7 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
         authority_generation: 2,
         source_turn_id: resumedTurnId,
         source_work_id: oldAuthority?.source_work_id,
-        action_key: "run-replacement-modify-command",
+        action_key: "accepted-plan",
       });
       expect(replacementAuthority?.plan_revision_id).not.toBe(oldAuthority?.plan_revision_id);
 
@@ -796,6 +795,7 @@ function deniedCommandRound(): ModelRoundPort {
         const plan = {
           start_new: true,
           objective: "Run one reviewed command",
+          execution_mode: "direct",
           actions: [{
             action_key: "run-denied-command",
             description: "Run the reviewed command only after approval",
@@ -823,16 +823,6 @@ function deniedCommandRound(): ModelRoundPort {
         };
       }
       if (round === 2) {
-        return {
-          toolCalls: [toolCall("run-resume", "run_command", {
-            command: "printf tampered > wrong-deny-target.txt",
-            cwd: ".",
-            state_effect: "mutation",
-            summary: "Resume reviewed command",
-          })],
-        };
-      }
-      if (round === 3) {
         assertDenialDeliveredToProvider(request);
         const workId = request.messages
           .map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1])
@@ -865,6 +855,7 @@ function modifyingCommandRound(): ModelRoundPort {
         const plan = {
           start_new: true,
           objective: "Run one command with a possible replacement",
+          execution_mode: "direct",
           actions: [{
             action_key: "run-old-modify-command",
             description: "Run the original command only after approval",
@@ -903,6 +894,7 @@ function modifyingCommandRound(): ModelRoundPort {
         const replacementPlan = {
           start_new: false,
           objective: "Run one command with a possible replacement",
+          execution_mode: "direct",
           actions: [{
             action_key: "run-replacement-modify-command",
             description: "Run the replacement command only after approval",

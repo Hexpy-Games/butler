@@ -1,5 +1,6 @@
 import {
   AUTHORITY_DENIAL_TEXT,
+  AUTHORITY_EFFECT_DENIAL_TEXT,
   type AuthorityAdmissionResult,
   type AuthorityRecord,
   type AuthorityRequestProjection,
@@ -19,7 +20,9 @@ export function admissionResult(record: AuthorityRecord): AuthorityAdmissionResu
     return {
       status: "denied",
       requestRef: record.requestRef,
-      denialText: AUTHORITY_DENIAL_TEXT,
+      denialText: record.category === "reviewed_effect"
+        ? AUTHORITY_EFFECT_DENIAL_TEXT
+        : AUTHORITY_DENIAL_TEXT,
     };
   }
   if (record.decision === "modified") {

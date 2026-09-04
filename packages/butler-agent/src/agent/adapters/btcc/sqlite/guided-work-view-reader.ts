@@ -37,7 +37,7 @@ const MAX_CONTEXT_RESULT_FACTS = 50;
 
 type GuidedWorkContextResultRow = Pick<
   GuidedWorkResultRow,
-  "tool_name" | "status" | "result_json" | "error_code"
+  "result_ref" | "tool_name" | "status" | "result_json" | "error_code"
 >;
 
 export class GuidedWorkViewReader {
@@ -134,6 +134,7 @@ export class GuidedWorkViewReader {
         content: origin.original_message,
       },
       resultFacts: contextResults.map((result) => ({
+        resultRef: result.result_ref,
         toolName: result.tool_name,
         status: result.status,
         ...(result.result_json !== null
@@ -331,7 +332,8 @@ export class GuidedWorkViewReader {
 
   private contextResults(workId: string): GuidedWorkContextResultRow[] {
     const rows = this.db.query<GuidedWorkContextResultRow, [string]>(`
-      SELECT call.tool_name, call.status, call.result_json, call.error_code
+      SELECT result.result_ref, call.tool_name, call.status,
+        call.result_json, call.error_code
       FROM btcc_guided_work_results result
       JOIN btcc_guided_tool_calls call ON call.call_id = result.tool_call_id
       WHERE result.work_id = ?

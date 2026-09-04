@@ -51,6 +51,7 @@ test("real differing-ID App path initializes only the exact Ledger root and expo
         workId = workIdFrom(request, "start_work");
         return tool("b1-plan", "replace_work_plan", {
           objective: "Prove every B1 operation through the real App path",
+          execution_mode: "direct",
           actions: [{
             action_key: "verify_public_fact",
             description: "Read and validate the public path fact",
@@ -259,6 +260,7 @@ test("one real App Turn physically replays one canonical occurrence and rejects 
         firstWorkId = workIdFrom(request, "start_work");
         return tool("replay-plan", "replace_work_plan", {
           objective: "First replayable Work",
+          execution_mode: "direct",
           actions: [{ action_key: "one", dependency_keys: [] }],
           checks: ["one"],
         });
@@ -289,6 +291,7 @@ test("one real App Turn physically replays one canonical occurrence and rejects 
         ledgerBeforeReplay = readLedger(harness.ledgerRoot(project.ledgerProjectId));
         return tool("replay-plan", "replace_work_plan", {
           objective: "First replayable Work",
+          execution_mode: "direct",
           actions: [{ action_key: "one", dependency_keys: [] }],
           checks: ["one"],
         });
@@ -306,6 +309,7 @@ test("one real App Turn physically replays one canonical occurrence and rejects 
         expect(harness.forgetGuidedToolCall(turnId, "replace_work_plan")).toBe(planCallId);
         return tool("replay-plan", "replace_work_plan", {
           objective: "First replayable Work",
+          execution_mode: "direct",
           actions: [{ action_key: "one", dependency_keys: [] }],
           checks: ["one"],
         });
@@ -379,6 +383,7 @@ test("a later real App Work atomically abandons the prior Project semantic autho
         priorId = workIdFrom(request, "start_work");
         return tool("prior-plan", "replace_work_plan", {
           objective: "Prior Work",
+          execution_mode: "direct",
           actions: [{ action_key: "prior", dependency_keys: [] }],
           checks: ["prior"],
         });
@@ -397,6 +402,7 @@ test("a later real App Work atomically abandons the prior Project semantic autho
         replacementId = workIdFrom(request, "start_work");
         return tool("replacement-plan", "replace_work_plan", {
           objective: "Replacement Work",
+          execution_mode: "direct",
           actions: [{ action_key: "replacement", dependency_keys: [] }],
           checks: ["replacement"],
         });

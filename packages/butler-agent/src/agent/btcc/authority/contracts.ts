@@ -1,6 +1,6 @@
 import type { GuidedEffectError } from "../effects/index.ts";
 
-export type AuthorityCategory = "command";
+export type AuthorityCategory = "command" | "reviewed_effect";
 export type AuthorityDecision = "pending" | "allowed" | "denied" | "modified";
 export type AuthorityOutcome = "pending" | "applied" | "failed" | "uncertain";
 export type AuthorityDecisionAction = "allow" | "deny" | "modify";
@@ -21,6 +21,8 @@ export type AuthorityOperationalCloseScope = "self_session" | "work";
 /** Fixed safe projection for a terminal self-session Deny decision. */
 export const AUTHORITY_DENIAL_TEXT =
   "Reviewed command denied. No command was run." as const;
+export const AUTHORITY_EFFECT_DENIAL_TEXT =
+  "Reviewed operation denied. No change was applied." as const;
 
 export type AuthorityCommandInput = {
   command: string;
@@ -32,7 +34,12 @@ export type AuthorityCommandInput = {
   output_mode?: "auto" | "silent_on_success" | "full";
 };
 
-export type AuthorityAdmissionInput = {
+export type AuthorityReviewedEffectInput = Record<string, unknown>;
+export type AuthorityOperationInput =
+  | AuthorityCommandInput
+  | AuthorityReviewedEffectInput;
+
+type AuthorityAdmissionIdentity = {
   ownerSessionId: string;
   sourceSessionId: string;
   sourceTurnId: string;
@@ -43,10 +50,18 @@ export type AuthorityAdmissionInput = {
   authorityGeneration: number;
   capability: string;
   target: string;
-  normalizedInput: AuthorityCommandInput;
   modelRef: string;
   reasoningEffort: string;
 };
+
+export type AuthorityAdmissionInput = AuthorityAdmissionIdentity & (
+  | { category?: "command"; normalizedInput: AuthorityCommandInput }
+  | {
+      category: "reviewed_effect";
+      operationOccurrenceId: string;
+      normalizedInput: AuthorityReviewedEffectInput;
+    }
+);
 
 export type AuthorityRequestProjection = {
   request_ref: string;
@@ -67,12 +82,12 @@ export type AuthorityAdmissionResult =
       requestRef: string;
       sourceWorkId: string;
       normalizedTarget: string;
-      normalizedInput: AuthorityCommandInput;
+      normalizedInput: AuthorityOperationInput;
     }
   | {
       status: "denied";
       requestRef: string;
-      denialText: typeof AUTHORITY_DENIAL_TEXT;
+      denialText: typeof AUTHORITY_DENIAL_TEXT | typeof AUTHORITY_EFFECT_DENIAL_TEXT;
     }
   | {
       status: "modified";
@@ -123,7 +138,8 @@ export type AuthorityStoredExecution = {
   authorityGeneration: number;
   capability: string;
   normalizedTarget: string;
-  normalizedInput: AuthorityCommandInput;
+  category: AuthorityCategory;
+  normalizedInput: AuthorityOperationInput;
   decision: "allowed" | "denied" | "modified";
   alternativeInput?: string;
   outcome: AuthorityOutcome;

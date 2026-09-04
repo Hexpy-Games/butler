@@ -12,7 +12,8 @@ import { createGuidedToolExecutionBoundary } from "./guided-tool-execution-bound
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
 import { renderGuidedEffectContext } from "./guided-effect-context.ts";
 import { renderDurableWorkContext } from "./durable-work-tools.ts";
-import { loadGuidedTurnWork, safeBindOpenWork, safeBoundWork, workScopeForTurn } from "./guided-work-runtime.ts";
+import { createGuidedWorkContextRefresh } from "./guided-work-context-refresh.ts";
+import { loadGuidedTurnWork, safeBindOpenWork, safeBoundWork, safeLoadWorkContext, workScopeForTurn } from "./guided-work-runtime.ts";
 import { createGuidedToolCallExecutor } from "./guided-tool-call-execution.ts";
 import { runGuidedAgentLoopWithOperationalReport } from "./guided-operational-report.ts";
 import { createGuidedActivityProjection } from "../projection/index.ts";
@@ -33,7 +34,7 @@ import { loadGuidedOperationalFacts } from "./guided-operational-facts.ts";
 import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
 import { collectGuidedChangedFiles } from "./guided-changed-files.ts";
 import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
-import { privateModifyContinuationPromptInput } from "./guided-authority-continuation.ts";
+import { privateModifyContinuationPromptInput, restoredAuthorityToolCall } from "./guided-authority-continuation.ts";
 import type { PrincipalAuthority } from "../authority/index.ts";
 import { ensureSubsessionChildRootWork, subsessionDirectionSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
 import { withWorkerProfileChoices } from "../../tools/subsession/index.ts";
@@ -78,7 +79,8 @@ export function createProductionGuidedTurnAgent(
       const planMode = turn.modelSelection.controls.planMode === true &&
         policy.trackingMode === "ledger" && Boolean(projectId);
       const workerResultIntegration = policy.role === "steward" &&
-        turn.turnId.startsWith("steward-worker-result-");
+        turn.turnId.startsWith("steward-worker-result-") &&
+        Boolean(subsessionResultEvidence);
       const terminalParentSynthesis = Boolean(subsessionResultEvidence) && !workerResultIntegration;
       const askFirstTurn = policy.accessMode === "ask_first";
       const authorityOwnerSessionId = askFirstTurn &&
@@ -191,12 +193,38 @@ export function createProductionGuidedTurnAgent(
         withWorkerProfileChoices(tool, workerProfiles),
       );
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
+      const resumedToolCall = restoredAuthorityToolCall({
+        authority,
+        toolJournal: input.toolJournal,
+        ownerSessionId: authorityOwnerSessionId,
+        sourceSessionId: turn.sessionId,
+        requestRef: turn.context.authorityRequestRef,
+        turnId: turn.turnId,
+        clientMessageId: turn.context.authorityClientMessageId,
+      });
       const describedToolIds = new Set<string>();
+      // An admitted progressive invocation already completed discovery in its
+      // source Turn. Restore that fact; the bridge still validates current schema
+      // and availability before the approved operation reaches its effect boundary.
+      if (resumedToolCall?.name === "tool_call" && typeof resumedToolCall.arguments.id === "string") {
+        describedToolIds.add(resumedToolCall.arguments.id);
+      }
       const shouldWaitForWorker = async () => policy.role === "steward" &&
         Boolean(await input.subsessionDelegation?.shouldWaitForWorker({
           parentSessionId: turn.sessionId, parentTurnId: turn.turnId,
         }));
-      const activeDelegationAdmission = createActiveDelegationAdmissionGuard(shouldWaitForWorker);
+      const activeDelegationAdmission = createActiveDelegationAdmissionGuard(
+        shouldWaitForWorker,
+        {
+          role: policy.role === "steward"
+            ? "steward"
+            : policy.role === "worker" ? "worker" : "butler",
+          turnId: turn.turnId,
+          durableWork: input.durableWork,
+          workScope,
+          workerResultIntegration,
+        },
+      );
       const effectService = createGuidedEffectService(input.effectJournal, input.guidedEffectFaultHook ? { faultHook: input.guidedEffectFaultHook } : {});
       const execute = createButlerToolExecutor({
         butlerHome: input.butlerHome,
@@ -351,6 +379,12 @@ export function createProductionGuidedTurnAgent(
         initialRequestBytes: modelRound.initialRequestBytes,
         butlerData: input.butlerData,
       });
+      const refreshWorkContext = createGuidedWorkContextRefresh({
+        initial: initialWork,
+        load: async () => policy.trackingMode === "none"
+          ? null
+          : await safeLoadWorkContext(input.durableWork, workScope),
+      });
       const closeout = createGuidedTurnCloseout({
         durableWork: input.durableWork, workScope,
         turnId: turn.turnId, originalRequest: turn.originalMessage,
@@ -396,6 +430,7 @@ export function createProductionGuidedTurnAgent(
       });
       const loopOptions: BtccAgentLoopInput = {
         prompt: requestAttribution.prompt,
+        resumedToolCall,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
         turnId: turn.turnId,
         instructions: [
@@ -429,7 +464,14 @@ export function createProductionGuidedTurnAgent(
         tools: visibleTools,
         resolveTools: resolveGuidedTools,
         modelRound: directionAware.modelRound,
-        beforeModelRound: directionAware.beforeModelRound,
+        beforeModelRound: async () => {
+          const observations = [
+            ...(await directionAware.beforeModelRound?.() ?? []),
+          ];
+          const workContext = await refreshWorkContext();
+          if (workContext) observations.push(workContext);
+          return observations.length > 0 ? [observations.join("\n\n")] : [];
+        },
         operationResultReplay: operationResults.replay,
         ...(continuationBudget ? { continuationBudget } : {}),
         resolveOperationResultCallId: toolCalls.journalCallIdForProviderCall,
@@ -437,9 +479,9 @@ export function createProductionGuidedTurnAgent(
         reviewFinalCandidate: directionAware.reviewFinalCandidate,
         executeTool: activeDelegationAdmission.execute(planExecution.executeTool),
       };
-      let waitingForWorker = false;
+      let suspension: BtccAgentLoopResult["suspension"];
       const candidate = await runGuidedAgentLoopWithOperationalReport({
-        onExecutionWait: () => { waitingForWorker = true; },
+        onSuspension: (reason) => { suspension = reason; },
         options: loopOptions,
         parentSignal: signal,
         originalRequest: turn.originalMessage,
@@ -453,10 +495,10 @@ export function createProductionGuidedTurnAgent(
           responseLanguage,
         }),
       });
-      const text = waitingForWorker ? "" : await delegationRelease.reconcileAfterLoop(candidate);
-      const publicText = authorityProjection.project(text);
-      const terminalOutcome = (waitingForWorker || turn.context.emptyResponsePolicy === "typed_terminal") &&
-        !text.trim()
+      const text = suspension ? "" : await delegationRelease.reconcileAfterLoop(candidate);
+      const publicText = suspension ? "" : authorityProjection.project(text);
+      const terminalOutcome = !suspension && turn.context.emptyResponsePolicy === "typed_terminal" &&
+        !publicText.trim()
         ? "no_visible" as const
         : undefined;
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
@@ -471,11 +513,16 @@ export function createProductionGuidedTurnAgent(
       );
       return guidedTurnResult({
         content: publicText,
-        ...(waitingForWorker ? { executionOutcome: "waiting_for_worker" as const } : {}),
-        ...(terminalOutcome && !authorityProjection.continuation ? { terminalOutcome } : {}),
+        ...(suspension ? { suspension } : {}),
+        ...(terminalOutcome ? { terminalOutcome } : {}),
         ...(finalWork?.status === "completed" || finalWork?.status === "blocked"
           ? { workStatus: finalWork.status }
           : {}),
+        ...(finalWork?.status === "completed"
+          ? { acceptedWorkResult: { status: "success" as const } }
+          : finalWork?.status === "blocked"
+            ? { acceptedWorkResult: { status: "blocked" as const } }
+            : {}),
         artifacts,
         changedFiles,
         ...(planMode

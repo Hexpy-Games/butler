@@ -291,7 +291,19 @@ function finalActions(
     return actions;
   }
   if (actions.length > 0) return actions;
-  if (result.handlerResult.metadata?.executionOutcome === "waiting_for_worker") return actions;
+  if (terminalKind === "turn_suspended") {
+    const suspendedTargets = claimedAppTerminalTargets(item, targets);
+    return suspendedTargets.map((target) => finalAction({
+      item,
+      target,
+      text: "",
+      artifacts: [],
+      turnId: optionalText(result.handlerResult.metadata?.turnId) ??
+        item.envelope.routingHints?.turnId,
+      terminalKind,
+      noVisibleReply: true,
+    }));
+  }
   const text = result.handlerResult.metadata?.text;
   const artifacts = artifactRefs(result.handlerResult.metadata?.artifacts);
   const changedFiles = changedFilePaths(result.handlerResult.metadata?.changedFiles);
