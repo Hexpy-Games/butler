@@ -1,20 +1,20 @@
 import { appCopy } from "@/app/copy.ts";
-import {
-  Button,
-  ButtonContainer,
-  ListChecks,
-  Notice,
-} from "@/butler-ds";
+import { Button, ButtonContainer, ListChecks } from "@/butler-ds";
 import type { ComposerPlanDecision } from "./useComposerPlanDecision";
+import styles from "./ComposerPlanDecisionSurface.module.css";
 
-export function ComposerPlanDecisionNotice({
+export function ComposerPlanDecisionSurface({
   decision,
 }: {
   decision: ComposerPlanDecision;
 }) {
   return (
-    <Notice
-      action={
+    <div className={styles.surface} data-test-class="composer-plan-decision">
+      <div className={styles.plan}>
+        <ListChecks aria-hidden="true" size={18} />
+        <span className={styles.title}>{decision.planTitle}</span>
+      </div>
+      <div className={styles.actions}>
         <ButtonContainer size="sm">
           <Button
             disabled={decision.pending}
@@ -35,7 +35,7 @@ export function ComposerPlanDecisionNotice({
           </Button>
           <Button
             disabled={decision.pending}
-            onClick={decision.onFocusInstruction}
+            onClick={decision.onOpenInstruction}
             size="sm"
             type="button"
             variant="outline"
@@ -43,11 +43,7 @@ export function ComposerPlanDecisionNotice({
             {appCopy.composer.planInstruction}
           </Button>
         </ButtonContainer>
-      }
-      icon={<ListChecks size={18} />}
-      message={decision.planTitle}
-      title={appCopy.composer.planDecision}
-      tone="info"
-    />
+      </div>
+    </div>
   );
 }
