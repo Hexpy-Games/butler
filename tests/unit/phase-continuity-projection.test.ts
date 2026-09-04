@@ -104,6 +104,10 @@ function completedUnit(index: number, contentBytes = 1_000): ModelRoundMessage[]
 
 test("folds only acknowledged completed history and preserves user incomplete and newest units", () => {
   const first = completedUnit(0);
+  first[0]!.toolCalls![0]!.rawArguments = JSON.stringify({ path: "src/current.ts" });
+  first[1]!.content = JSON.stringify({ ok: true, output: {
+    path: "src/current.ts", status: "read", next_start_line: 41,
+  } });
   const second = completedUnit(1);
   const newest = completedUnit(2);
   const messages: ModelRoundMessage[] = [
@@ -132,6 +136,8 @@ test("folds only acknowledged completed history and preserves user incomplete an
     requestSegmentKind: "phase_continuity",
     continuationItemId: "turn-item-2",
   });
+  expect(projected.messages[1]!.content).toContain("src/current.ts");
+  expect(projected.messages[1]!.content).toContain("next_start_line");
   expect(projected.messages[3]).toMatchObject({
     role: "user",
     requestSegmentKind: "phase_continuity",
@@ -785,9 +791,11 @@ test("production Turn preserves typed projection failure instead of delivering a
   const previous = {
     bounded: process.env.BUTLER_BOUNDED_STATELESS_CONTEXT,
     replay: process.env.BUTLER_OPERATION_RESULT_REPLAY,
+    maxModelFacingBytes: process.env.BUTLER_CONTINUATION_MAX_MODEL_FACING_BYTES,
   };
   process.env.BUTLER_BOUNDED_STATELESS_CONTEXT = "on";
   process.env.BUTLER_OPERATION_RESULT_REPLAY = "on";
+  process.env.BUTLER_CONTINUATION_MAX_MODEL_FACING_BYTES = "180000";
   mkdirSync(join(root, "metrics"), { recursive: true });
   writeFileSync(join(root, "metrics", ".private-installation.key"), "invalid-key");
   writeFileSync(join(root, "large.txt"), "L".repeat(12_000));
@@ -854,6 +862,10 @@ test("production Turn preserves typed projection failure instead of delivering a
     bindings.close();
     restore("BUTLER_BOUNDED_STATELESS_CONTEXT", previous.bounded);
     restore("BUTLER_OPERATION_RESULT_REPLAY", previous.replay);
+    restore(
+      "BUTLER_CONTINUATION_MAX_MODEL_FACING_BYTES",
+      previous.maxModelFacingBytes,
+    );
     rmSync(root, { recursive: true, force: true });
   }
 }, 30_000);

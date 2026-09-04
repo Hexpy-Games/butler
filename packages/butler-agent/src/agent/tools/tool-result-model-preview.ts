@@ -8,6 +8,10 @@ const WORK_BLOCK_TOOL_NAME = "run_work_block";
 export interface ToolResultModelPreviewContext {
   seenPublicWebEvidenceItemIds: Set<string>;
   seenProviderOverviews: Set<string>;
+  resultBatchBudget?: {
+    remainingBytes: number;
+    remainingResults: number;
+  };
 }
 
 export function structuredToolResultModelPreview(input: {
@@ -212,6 +216,7 @@ function boundedStringArray(
 }
 
 function runCommandPreview(output: Record<string, unknown>): Record<string, unknown> {
+  const artifact = record(output.butler_tool_artifact);
   return compactUndefined({
     tool_name: "run_command",
     ok: typeof output.ok === "boolean" ? output.ok : undefined,
@@ -221,6 +226,16 @@ function runCommandPreview(output: Record<string, unknown>): Record<string, unkn
     model_visible_content: boundedHeadTailText(output.model_visible_content, 2_000),
     stderr: boundedHeadTailText(output.stderr, 1_600),
     stdout: boundedHeadTailText(output.stdout, 1_200),
+    butler_tool_artifact: artifact
+      ? compactUndefined({
+          id: text(artifact.id),
+          path: text(artifact.path),
+          command: boundedText(artifact.command, 320),
+          raw_tokens: finiteNumber(artifact.raw_tokens) ?? undefined,
+          compact_tokens: finiteNumber(artifact.compact_tokens) ?? undefined,
+        })
+      : undefined,
+    output_presentation: record(output.output_presentation) ?? undefined,
   });
 }
 
@@ -262,6 +277,15 @@ function unseenProviderOverview(
 }
 
 function genericToolPreview(toolName: string, value: unknown): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    return {
+      tool_name: toolName,
+      text: boundedHeadTailText(value, MAX_FILE_CONTENT_CHARS),
+    };
+  }
+  if (value === null || typeof value === "boolean" || typeof value === "number") {
+    return { tool_name: toolName, value };
+  }
   const payload = toolPayload(value, []);
   if (!payload) return null;
   const projected = projectGenericRecord(payload, 0);
@@ -270,20 +294,19 @@ function genericToolPreview(toolName: string, value: unknown): Record<string, un
     : { tool_name: toolName };
 }
 
-const GENERIC_SAFE_KEYS = new Set([
-  "ok", "id", "kind", "title", "status", "state", "path", "command", "action", "view",
-  "issueCount", "issue_count", "staleViews", "created", "updated", "ignored", "reason",
-  "list_id", "todo_list_id", "workstream_id", "work_stream_id", "project_id", "record_generation",
-  "generation", "count", "counts", "progress", "results", "records", "nextActions", "next_actions",
-  "items", "issues", "work_stream", "work_streams", "data", "error", "code", "message",
-  "stage", "gated", "ledgerDiscoveryObserved", "ledgerDiscoveryCandidateCount", "requiredLedgerKinds", "observedLedgerKinds", "ledgerCheckPassed",
+const GENERIC_HIDDEN_KEYS = new Set([
+  "stack",
+  "providerData",
+  "provider_data",
+  "raw_prompt",
+  "rawPrompt",
 ]);
 
 function projectGenericRecord(value: Record<string, unknown>, depth: number): Record<string, unknown> {
   if (depth > 3) return {};
   const result: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
-    if (!GENERIC_SAFE_KEYS.has(key)) continue;
+    if (GENERIC_HIDDEN_KEYS.has(key)) continue;
     const projected = projectGenericValue(item, key, depth + 1);
     if (projected !== undefined) result[key] = projected;
   }
@@ -294,7 +317,7 @@ function projectGenericValue(value: unknown, key: string, depth: number): unknow
   if (value === null || typeof value === "boolean" || typeof value === "number") return value;
   if (typeof value === "string") {
     if (key === "path") return boundedText(value, 240);
-    return boundedText(value, 320);
+    return boundedHeadTailText(value, MAX_FILE_CONTENT_CHARS);
   }
   if (Array.isArray(value)) {
     return value.slice(0, 12).map((item) => {

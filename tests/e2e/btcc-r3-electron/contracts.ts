@@ -225,6 +225,7 @@ export interface StepObservation {
   finalText: string;
   rendererFinalText: string;
   rendererActivities: RendererVisibleActivity[];
+  requestedModelRef: string | null;
   providerReportedModel: string | null;
   providerAgentModels: string[];
   progressMessages: string[];

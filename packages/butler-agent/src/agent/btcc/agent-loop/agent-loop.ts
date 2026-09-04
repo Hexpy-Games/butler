@@ -1,4 +1,8 @@
-import { createToolResultModelPreviewContext } from "../../tools/tool-result-serialization.ts";
+import {
+  beginToolResultModelPreviewBatch,
+  createToolResultModelPreviewContext,
+  MAX_PROVIDER_TOOL_RESULT_BYTES,
+} from "../../tools/tool-result-serialization.ts";
 import { emptyResponseRecoveryObservation } from "./empty-response-recovery.ts";
 import type { BtccAgentLoopInput, BtccAgentLoopEvent, BtccAgentLoopOutput, BtccAgentLoopToolCall, BtccAgentLoopToolResult } from "./contracts.ts";
 import { emitAgentLoopEvent as emit } from "./agent-loop-events.ts";
@@ -7,10 +11,15 @@ import { executePreparedBtccToolCall, prepareBtccToolCall } from "./tool-executi
 import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
 import { publishModelRoundWaiting } from "./guided-tool-progress.ts";
 import { toolResultToMessage } from "./tool-result-message.ts";
-import { modelRoundOutputBytes, prepareBoundedModelContext } from "./bounded-turn-context.ts";
+import {
+  modelRoundOutputBytes,
+  prepareBoundedModelContext,
+  toolResultBatchModelFacingBudget,
+} from "./bounded-turn-context.ts";
 import { appendAssistantResponse } from "./assistant-response.ts";
 import { createTurnContinuationItems } from "./continuation-item-identity.ts";
 import { finalRoundToolSurface, resolveRoundToolSurface } from "./round-tool-surface.ts";
+import { continuationForContextProjection } from "../model-route/context-projection-rebase.ts";
 export async function runBtccAgentLoop(
   input: BtccAgentLoopInput,
 ): Promise<BtccAgentLoopOutput> {
@@ -20,7 +29,6 @@ export async function runBtccAgentLoop(
   const toolResults: BtccAgentLoopToolResult[] = [];
   const modelPreviewContext = createToolResultModelPreviewContext();
   let continuation: unknown;
-  let historyRebased = false;
   let emptyResponseRecoveryUsed = false;
   let consecutiveEmptyResponses = 0, modelRoundIndex = 0;
   let iteration = 0;
@@ -72,7 +80,10 @@ export async function runBtccAgentLoop(
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
         statelessMessageBytes: input.modelRound.statelessMessageBytes, butlerData: input.butlerData,
       });
-      historyRebased ||= bounded.requiresRebase;
+      const roundContinuation = continuationForContextProjection({
+        boundedContinuation: bounded.envelope,
+        continuation,
+      });
       const response = await input.modelRound.runRound({
         roundId: requestId,
         model: resolveModelRef(),
@@ -95,7 +106,7 @@ export async function runBtccAgentLoop(
         cacheScope: input.cacheScope,
         stableProviderCachePrefix: input.stableProviderCachePrefix,
         providerRetryAttempts: input.providerRetryAttempts,
-        continuation: historyRebased ? undefined : continuation,
+        continuation: roundContinuation,
         ...(bounded.envelope
           ? { boundedContinuation: bounded.envelope }
           : {}),
@@ -257,6 +268,21 @@ export async function runBtccAgentLoop(
     }
 
     const preparedCalls = calls.map((call) => prepareBtccToolCall({ tools }, call));
+    beginToolResultModelPreviewBatch(modelPreviewContext, {
+      resultCount: preparedCalls.length,
+      maxBytes: toolResultBatchModelFacingBudget({
+        messages,
+        instructions: input.instructions,
+        tools,
+        toolChoice: finalReportRound
+          ? undefined
+          : input.resolveToolChoice?.() ?? input.toolChoice,
+        maxModelFacingBytes: input.maxModelFacingBytes,
+        budgetMaxModelFacingBytes: input.continuationBudget?.state.limits.maxModelFacingBytes,
+        resultCount: preparedCalls.length,
+        perResultMaxBytes: MAX_PROVIDER_TOOL_RESULT_BYTES,
+      }),
+    });
     await input.onAssistantTextBeforeTools?.({
       text,
       toolCalls: preparedCalls.map((prepared) => prepared.call),

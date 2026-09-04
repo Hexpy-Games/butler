@@ -11,6 +11,7 @@ import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
 import { SqliteAdmissionConstructionClaims } from "./admission-construction-claims.ts";
 import type { RuntimeOwnerAuthority } from "./runtime-owner/index.ts";
 import {
+  continuationLimitsForModel,
   createTurnContinuationBudgetState,
   type TurnContinuationBudgetLimits,
 } from "../../../btcc/turn/index.ts";
@@ -153,7 +154,10 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       this.continuationLimits
         ? JSON.stringify(createTurnContinuationBudgetState({
             turnId: command.turnId,
-            limits: this.continuationLimits,
+            limits: continuationLimitsForModel(
+              this.continuationLimits,
+              command.modelSelection.contextWindowTokens,
+            ),
             nowMs: Date.now(),
           }))
         : null,

@@ -32,6 +32,7 @@ export {
   continuationRequestDigest,
   parseTurnContinuationBudgetState,
   selectTurnContinuationBudget,
+  continuationLimitsForModel,
   transitionTurnContinuationBudget,
   TurnContinuationBudgetExhaustedError,
   TURN_CONTINUATION_EXHAUSTED_CODE,
