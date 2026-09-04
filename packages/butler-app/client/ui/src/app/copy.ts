@@ -140,6 +140,7 @@ export interface AppCopy {
     planInstruction: string;
     planInstructionPlaceholder: string;
     planInstructionSubmit: string;
+    planInstructionActive: string;
     model: string;
     modelSearch: string;
     modelSearchClear: string;
@@ -938,6 +939,7 @@ const koKrCopy: AppCopy = {
     planInstruction: "직접 입력",
     planInstructionPlaceholder: "수정할 내용을 직접 입력하세요",
     planInstructionSubmit: "전달",
+    planInstructionActive: "계획 수정 중",
     model: "모델",
     modelSearch: "Search models...",
     modelSearchClear: "Clear search",
@@ -1828,6 +1830,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     planInstruction: "Write feedback",
     planInstructionPlaceholder: "Describe the change you want",
     planInstructionSubmit: "Send",
+    planInstructionActive: "Revising plan",
     model: "Model",
     modelSearch: "Search models...",
     modelSearchClear: "Clear search",

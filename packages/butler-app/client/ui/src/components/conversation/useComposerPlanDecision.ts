@@ -56,6 +56,7 @@ export interface ComposerPlanDecision {
   editingInstruction: boolean;
   instructionPlaceholder: string;
   pending: boolean;
+  planId: string;
   planTitle: string;
   onAccept: () => void;
   onOpenInstruction: () => void;
@@ -119,6 +120,7 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
     editingInstruction: instructionPlanId === plan.id,
     instructionPlaceholder: appCopy.composer.planInstructionPlaceholder,
     pending,
+    planId: plan.id,
     planTitle: plan.title,
     onAccept: () => void decide("accept"),
     onOpenInstruction: () => {
@@ -129,7 +131,7 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
     onOpenPlan: () => {
       document.getElementById(planDocumentElementId(plan.id))?.scrollIntoView({
         behavior: "smooth",
-        block: "center",
+        block: "start",
       });
     },
     onReject: () => void decide("reject"),

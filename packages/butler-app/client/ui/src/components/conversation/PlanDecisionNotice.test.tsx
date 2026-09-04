@@ -5,6 +5,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { appCopy } from "@/app/copy.ts";
 import { ComposerPlanDecisionSurface } from "./ComposerPlanDecisionSurface";
+import { ComposerPlanInstructionContext } from "./ComposerPlanInstructionContext";
 import {
   latestActionablePlan,
   submitProjectedPlanDecision,
@@ -91,6 +92,7 @@ test("Plan decisions replace the Composer input with the exact target", () => {
         editingInstruction: false,
         instructionPlaceholder: "Revise the Plan",
         pending: false,
+        planId: "plan-1",
         planTitle: "Snake game implementation",
         onAccept: () => undefined,
         onOpenInstruction: () => undefined,
@@ -108,4 +110,27 @@ test("Plan decisions replace the Composer input with the exact target", () => {
   expect(html).toContain(appCopy.composer.planInstruction);
   expect(html).not.toContain("<input");
   expect(html).not.toContain("<textarea");
+});
+
+test("direct Plan feedback keeps a non-removable Plan document context", () => {
+  const html = renderToStaticMarkup(
+    <ComposerPlanInstructionContext
+      decision={{
+        editingInstruction: true,
+        instructionPlaceholder: "Revise the Plan",
+        pending: false,
+        planId: "plan-1",
+        planTitle: "Snake game implementation",
+        onAccept: () => undefined,
+        onOpenInstruction: () => undefined,
+        onOpenPlan: () => undefined,
+        onReject: () => undefined,
+        onSubmitInstruction: () => undefined,
+      }}
+    />,
+  );
+
+  expect(html).toContain("Snake game implementation");
+  expect(html).toContain(appCopy.composer.planInstructionActive);
+  expect(html).not.toContain("Remove");
 });
