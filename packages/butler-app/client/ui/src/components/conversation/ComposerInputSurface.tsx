@@ -6,6 +6,7 @@ import { ComposerTextArea } from "./ComposerTextArea";
 import { ComposerToolbar } from "./ComposerToolbar";
 import type { ComposerPlanDecision } from "./useComposerPlanDecision";
 import { ComposerPlanDecisionSurface } from "./ComposerPlanDecisionSurface";
+import { ComposerPlanInstructionContext } from "./ComposerPlanInstructionContext";
 
 export function ComposerInputSurface({
   fileInputRef,
@@ -22,6 +23,9 @@ export function ComposerInputSurface({
   return (
     <>
       <ComposerCardExpandedBody>
+        {planDecision?.editingInstruction ? (
+          <ComposerPlanInstructionContext decision={planDecision} />
+        ) : null}
         <ComposerTextArea placeholder={planDecision?.instructionPlaceholder} />
         <ComposerAttachments />
       </ComposerCardExpandedBody>

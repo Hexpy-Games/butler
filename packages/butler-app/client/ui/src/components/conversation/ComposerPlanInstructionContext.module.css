@@ -1,0 +1,36 @@
+.wrap {
+  padding: var(--space-xs) var(--space-4) 0;
+}
+
+.document {
+  display: inline-grid;
+  max-width: 100%;
+  min-height: 24px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 2px var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--composer-glass-control-bg, var(--surface-raised));
+  color: var(--text-secondary);
+}
+
+.document > svg {
+  color: var(--text-tertiary);
+}
+
+.title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-1);
+  white-space: nowrap;
+}

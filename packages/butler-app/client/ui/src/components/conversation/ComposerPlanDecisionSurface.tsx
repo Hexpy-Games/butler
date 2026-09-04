@@ -26,11 +26,12 @@ export function ComposerPlanDecisionSurface({
           <Button
             disabled={decision.pending}
             className={styles.decisionButton}
-            onClick={decision.onAccept}
+            onClick={decision.onOpenInstruction}
             size="sm"
             type="button"
+            variant="outline"
           >
-            {appCopy.composer.planAccept}
+            {appCopy.composer.planInstruction}
           </Button>
           <Button
             disabled={decision.pending}
@@ -45,12 +46,11 @@ export function ComposerPlanDecisionSurface({
           <Button
             disabled={decision.pending}
             className={styles.decisionButton}
-            onClick={decision.onOpenInstruction}
+            onClick={decision.onAccept}
             size="sm"
             type="button"
-            variant="outline"
           >
-            {appCopy.composer.planInstruction}
+            {appCopy.composer.planAccept}
           </Button>
         </ButtonContainer>
       </div>
