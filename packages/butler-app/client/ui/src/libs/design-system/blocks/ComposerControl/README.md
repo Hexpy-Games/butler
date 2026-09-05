@@ -20,6 +20,9 @@ Product UI containers and design-system blocks.
 
 ## Best practice
 Keep labels short and move domain formatting into the caller.
+In a narrow composer, `compact="icon"` keeps a square touch target and centers
+the icon on both axes. Hide the whole text slot from layout while retaining its
+accessible label; no empty text gap or icon-plus-text padding should remain.
 
 ## Wrong use cases
 Do not use it for destructive or page-level actions. Use `Button` instead.

@@ -3,6 +3,11 @@
   max-width: min(100%, 220px);
 }
 
+.fixture {
+  container-name: composer;
+  container-type: inline-size;
+}
+
 .control [data-slot="button-icon"] {
   color: var(--composer-control-icon-color, currentColor);
 }
@@ -63,7 +68,12 @@
     padding-inline: var(--space-sm);
   }
 
-  .control[data-compact="icon"] .content,
+  .control[data-compact="icon"][data-slot="button"] {
+    width: var(--control-hit-target);
+    padding-inline: 0;
+  }
+
+  .control[data-compact="icon"] > [data-slot="button-text"],
   .detail {
     position: absolute;
     width: 1px;

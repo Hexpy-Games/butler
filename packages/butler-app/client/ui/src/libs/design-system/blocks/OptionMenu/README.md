@@ -45,6 +45,8 @@ Section titles must share the same horizontal inset as items and must not
 introduce nested indentation.
 Explanatory descriptions should sit below the label so they do not stretch the
 popover horizontally.
+Center the icon vertically against the full label-and-description block, including
+two-line explanatory items. Keep text left-aligned without positional offsets.
 
 ## Wrong Use Cases
 
