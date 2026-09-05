@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
+import { confirmAction } from "@/app/confirmation.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { ArchiveListView } from "@/app/types.ts";
 import { Button, Stack, Typo } from "@/butler-ds";
@@ -56,7 +57,9 @@ export function ArchivesSettings() {
   };
 
   const remove = async (item: ArchiveItem) => {
-    if (!window.confirm(`"${item.title}" 항목을 삭제할까요?`)) return;
+    if (!await confirmAction(`"${item.title}" 항목을 삭제할까요?`, {
+      title: appCopy.common.delete, confirmLabel: appCopy.common.delete, destructive: true,
+    })) return;
     setBusyId(item.id);
     try {
       await api(

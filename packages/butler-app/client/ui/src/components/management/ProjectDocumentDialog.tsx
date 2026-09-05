@@ -12,7 +12,6 @@ import type { ProjectDashboardDocument } from "@/app/types.ts";
 import { ProjectDocumentMarkdownContent } from "./ProjectDocumentMarkdownContent.tsx";
 
 const DIALOG_STYLE = {
-  minWidth: "min(680px, calc(100vw - 32px))",
   width: "min(880px, calc(100vw - 32px))",
 };
 

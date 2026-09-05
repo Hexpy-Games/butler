@@ -2111,8 +2111,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         });
       } else if (action === "delete") {
         if (
-          !window.confirm(
+          !await confirmAction(
             appCopy.sidebar.projectDeleteConfirm(project.display_name),
+            { title: appCopy.common.delete, confirmLabel: appCopy.common.delete, destructive: true },
           )
         )
           return;
@@ -2324,3 +2325,4 @@ export const selectActiveAuthorityApprovals = (state: ButlerStore) =>
   state.authorityApprovals?.sessionId === state.activeChatId
     ? state.authorityApprovals.cards
     : EMPTY_AUTHORITY_APPROVAL_CARDS;
+import { confirmAction } from "./confirmation.ts";

@@ -20,6 +20,9 @@ Any presentational or container component that displays rendered markdown.
 
 ## Best practice
 Keep data fetching and markdown parsing outside this component.
+Major headings following content have section spacing. Only the document's
+first heading is flush with the container; nested first-child headings must
+not accidentally lose their section margin.
 
 ## Wrong use cases
 Do not use it for chat message chrome or editable rich text. Use MessageRow or an editor-specific block instead.

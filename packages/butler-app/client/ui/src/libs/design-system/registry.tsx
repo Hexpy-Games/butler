@@ -30,7 +30,6 @@ import {
   Input,
   Label,
   NativeSelect,
-  PillButton,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -56,6 +55,7 @@ import {
 import { AdaptiveShellFixture } from "./blocks/AdaptiveShell/AdaptiveShell.fixtures";
 import { NavRowFixture } from "./blocks/NavRow/NavRow.fixtures";
 import { ButtonContainerFixture } from "./components/ButtonContainer/ButtonContainer.fixtures";
+import { PillButtonFixture } from "./components/PillButton/PillButton.fixtures";
 import { NavSectionFixture } from "./blocks/NavSection/NavSection.fixtures";
 import { CollapsibleNavGroupFixture } from "./blocks/CollapsibleNavGroup/CollapsibleNavGroup.fixtures";
 import { RowActionClusterFixture } from "./blocks/RowActionCluster/RowActionCluster.fixtures";
@@ -546,7 +546,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     name: "PillButton",
     path: "components/PillButton",
     tags: ["action", "composer", "pill"],
-    fixture: () => <PillButton icon={<Search size={16} />}>Model</PillButton>,
+    fixture: PillButtonFixture,
   },
   {
     name: "Clickable",

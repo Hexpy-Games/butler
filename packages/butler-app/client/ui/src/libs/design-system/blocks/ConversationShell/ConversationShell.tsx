@@ -107,6 +107,7 @@ export function ConversationScrollToBottomButton({
     <PillButton
       aria-label={ariaLabel}
       className={styles.scrollToBottomButton}
+      surface="glass"
       data-test-class="scroll-to-bottom-button"
       data-unread-messages={hasUnreadMessages ? "true" : "false"}
       icon={<ChevronDownIcon size={16} />}

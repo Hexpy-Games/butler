@@ -3816,7 +3816,10 @@ describe("app-client design system foundation", () => {
     expect(dialogStyles).toContain("scrollbar-width: thin");
     expect(dialogStyles).toContain("var(--titlebar-safe-area-top)");
     expect(dialogStyles).toContain(".content::-webkit-scrollbar-thumb");
-    expect(commandPanelStyles).toContain("var(--titlebar-safe-area-top)");
+    expect(read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/CommandPanel/CommandPanel.tsx",
+    )).toContain("<DialogContent");
+    expect(commandPanelStyles).not.toContain("position: fixed");
     expect(conversationShellStyles).toContain("scrollbar-width: thin");
     expect(conversationShellStyles).toContain(
       ".scroll::-webkit-scrollbar-thumb",

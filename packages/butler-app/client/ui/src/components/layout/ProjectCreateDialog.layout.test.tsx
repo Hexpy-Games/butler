@@ -72,13 +72,13 @@ test("project create dialog renders DS form regions without overlap-prone compos
   await act(async () => rendered.root.unmount());
 });
 
-test("generic DS dialogs keep the panel glass radius by default", async () => {
+test("generic DS dialogs share the Composer glass radius by default", async () => {
   const rendered = await renderDefaultDialog();
   const content = rendered.container.querySelector(
     '[data-slot="dialog-content"]',
   );
   if (!(content instanceof HTMLElement)) throw new Error("Missing dialog.");
-  expect(content.getAttribute("data-radius")).toBe("panel");
+  expect(content.getAttribute("data-radius")).toBe("composer");
   await act(async () => rendered.root.unmount());
 });
 

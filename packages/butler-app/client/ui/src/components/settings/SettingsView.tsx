@@ -57,7 +57,7 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") closeView();
+      if (event.key === "Escape" && !event.defaultPrevented) closeView();
     }
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
@@ -73,9 +73,9 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
   const activeDescriptor = sections.find((item) => item.id === activeSection);
   const title = activeDescriptor?.label ?? settingsCopy.title;
 
-  const changeSection = (section: SettingsSectionId) => {
+  const changeSection = async (section: SettingsSectionId) => {
     setLocalMessage(null);
-    if (!setActiveSection(section)) return;
+    if (!await setActiveSection(section)) return;
     setCompactPane("detail");
     if (storeView.kind === "settings") {
       setView({ kind: "settings", section });
@@ -84,10 +84,11 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
 
   useEffect(() => {
     if (activeSection !== "logs" || developerModeEnabled) return;
-    setActiveSection("about");
-    if (storeView.kind === "settings") {
-      setView({ kind: "settings", section: "about" });
-    }
+    void setActiveSection("about").then((changed) => {
+      if (changed && storeView.kind === "settings") {
+        setView({ kind: "settings", section: "about" });
+      }
+    });
   }, [
     activeSection,
     developerModeEnabled,
