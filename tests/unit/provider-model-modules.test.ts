@@ -25,6 +25,7 @@ import {
   providerCapabilitiesForModel,
   resolveProviderAdapterDefinition,
 } from "../../packages/butler-agent/src/integrations/providers/registry.ts";
+import { VALID_MODELS } from "../../packages/butler-agent/src/interfaces/mcp-server/model.ts";
 
 const providerModules: Array<{
   providerId: Exclude<ModelProviderId, "local">;
@@ -129,21 +130,27 @@ test("provider registry binds capabilities and catalogs to one concrete model pr
   );
 });
 
-test("OpenAI catalog exposes GPT-5.6 family as the latest supported model set", () => {
+test("OpenAI catalog exposes GPT-6 Astra as the latest supported model", () => {
   const refs = OPENAI_MODELS.map((model) => model.model_ref);
-  expect(refs.slice(0, 3)).toEqual([
+  expect(refs.slice(0, 4)).toEqual([
+    "openai/gpt-6-astra",
     "openai/gpt-5.6-sol",
     "openai/gpt-5.6-terra",
     "openai/gpt-5.6-luna",
   ]);
   expect(OPENAI_MODELS[0]).toMatchObject({
-    model_ref: "openai/gpt-5.6-sol",
+    model_ref: "openai/gpt-6-astra",
     status: "latest",
     context_window_tokens: 1_050_000,
     max_output_tokens: 128_000,
     default_reasoning_effort: "xhigh",
-    reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+    reasoning_efforts: ["low", "medium", "high", "xhigh", "max"],
   });
+  expect(
+    modelCatalogView().providers.find((provider) => provider.provider_id === "openai")
+      ?.latest_model_ref,
+  ).toBe("openai/gpt-6-astra");
+  expect(VALID_MODELS).toContain("gpt-6-astra");
 });
 
 test("frozen hosted provider matrix exposes only current runtime-supported refs", () => {

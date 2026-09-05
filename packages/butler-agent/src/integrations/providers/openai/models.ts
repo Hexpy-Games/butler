@@ -7,6 +7,7 @@ export const DEFAULT_CODEX_MODEL = "gpt-5.5-codex";
 export const DEFAULT_CODEX_MODEL_REF = `openai/${DEFAULT_CODEX_MODEL}` as const;
 export const FALLBACK_OPENAI_MODELS = [
   DEFAULT_CODEX_MODEL,
+  "gpt-6-astra",
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
@@ -38,6 +39,7 @@ function versionScore(model: string): number[] {
 }
 
 function modelTierScore(model: string): number {
+  if (/-astra$/i.test(model)) return 100;
   if (/-(?:sol)$/i.test(model) || /^gpt-\d+(?:\.\d+)?$/i.test(model)) return 90;
   if (/-codex(?:$|-)/i.test(model)) return 80;
   if (/-terra$/i.test(model)) return 60;
@@ -47,7 +49,7 @@ function modelTierScore(model: string): number {
 
 function isAutoSelectableCodexModel(model: string): boolean {
   if (/^gpt-\d+(?:\.\d+)?-codex(?:$|-)/i.test(model)) return true;
-  if (/^gpt-\d+(?:\.\d+)?-(?:sol|terra|luna)$/i.test(model)) return true;
+  if (/^gpt-\d+(?:\.\d+)?-(?:astra|sol|terra|luna)$/i.test(model)) return true;
   return /^gpt-5\.6$/i.test(model);
 }
 

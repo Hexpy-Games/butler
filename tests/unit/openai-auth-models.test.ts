@@ -255,6 +255,7 @@ test("auth resolution prefers API key, then Codex subscription profile", async (
 
 test("latest Codex model picker prefers newest non-mini Codex-family model", () => {
   expect(pickLatestCodexModel([
+    "gpt-6-astra",
     "gpt-5.6-luna",
     "gpt-5.6-terra",
     "gpt-5.6-sol",
@@ -262,7 +263,7 @@ test("latest Codex model picker prefers newest non-mini Codex-family model", () 
     "gpt-5-codex",
     "gpt-5.5-codex",
     "gpt-5.4-codex-mini",
-  ])).toBe("gpt-5.6-sol");
+  ])).toBe("gpt-6-astra");
   expect(() => pickLatestCodexModel(["gpt-5.4", "gpt-5.5"])).toThrow(/No Codex-capable OpenAI model/u);
 });
 
@@ -270,13 +271,14 @@ test("auto Codex latest resolves through /v1/models and fails closed offline", a
   process.env.OPENAI_API_KEY = "token";
   globalThis.fetch = (async () => new Response(JSON.stringify({
     data: [
+      { id: "gpt-6-astra" },
       { id: "gpt-5.6-terra" },
       { id: "gpt-5.6-sol" },
       { id: "gpt-5.5-codex" },
     ],
   }), { status: 200 })) as unknown as typeof fetch;
 
-  expect(await resolveDynamicOpenAIModel(AUTO_CODEX_LATEST)).toBe("gpt-5.6-sol");
+  expect(await resolveDynamicOpenAIModel(AUTO_CODEX_LATEST)).toBe("gpt-6-astra");
   expect(await resolveDynamicOpenAIModel("gpt-5.4")).toBe("gpt-5.4");
 
   globalThis.fetch = (async () => new Response("nope", { status: 500 })) as unknown as typeof fetch;
