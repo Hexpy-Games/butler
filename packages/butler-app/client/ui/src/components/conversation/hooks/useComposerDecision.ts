@@ -15,9 +15,7 @@ export function useComposerDecision(isComposing: boolean) {
   const plan = useComposerPlanDecision();
   let onSubmit: ComposerSubmit = plan?.onSubmitInstruction ?? submit;
   if (authority) {
-    onSubmit = authority.composingMessage ? submit
-      : authority.editingInstruction ? authority.onSubmitInstruction
-        : (event) => event.preventDefault();
+    onSubmit = authority.composingMessage ? submit : (event) => event.preventDefault();
   }
   const onKeyDown = useComposerKeyboard({ isComposing, multilineSendBehavior,
     setModelMenuOpen, setAccessMenuOpen, submit: onSubmit });

@@ -1,4 +1,4 @@
-import type { RefObject, KeyboardEventHandler } from "react";
+import type { RefObject } from "react";
 import { ComposerCardExpandedBody } from "@/butler-ds";
 import { ComposerAttachments } from "./ComposerAttachments";
 import { ComposerFileInput } from "./ComposerFileInput";
@@ -16,16 +16,13 @@ export function ComposerInputSurface({
   onFiles,
   planDecision,
   authorityDecision,
-  onAuthorityKeyDown,
 }: {
   fileInputRef: RefObject<HTMLInputElement | null>;
   onFiles: (files: FileList | null) => void;
   planDecision?: ComposerPlanDecision;
   authorityDecision?: ComposerAuthorityDecision;
-  onAuthorityKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
 }) {
-  const instruction = authorityDecision?.editingInstruction ? authorityDecision : undefined;
-  if (authorityDecision && !instruction && !authorityDecision.composingMessage) {
+  if (authorityDecision && !authorityDecision.composingMessage) {
     return <ComposerAuthorityDecisionSurface decision={authorityDecision} />;
   }
   if (!authorityDecision && planDecision && !planDecision.editingInstruction) {
@@ -35,15 +32,14 @@ export function ComposerInputSurface({
     <>
       <ComposerCardExpandedBody>
         {authorityDecision ? (
-          <ComposerDecisionAttachment title={authorityDecision.title} label={instruction ? "요청 수정 중" : `허용 대기 ${authorityDecision.pendingCount}개`} onShowDecision={authorityDecision.onShowDecision} />
+          <ComposerDecisionAttachment title={authorityDecision.title} label={`허용 대기 ${authorityDecision.pendingCount}개`} onShowDecision={authorityDecision.onShowDecision} />
         ) : planDecision?.editingInstruction ? (
           <ComposerPlanInstructionContext decision={planDecision} />
         ) : null}
-        <ComposerTextArea placeholder={instruction ? "변경할 내용을 입력해 주세요" : authorityDecision ? undefined : planDecision?.instructionPlaceholder}
-          input={instruction ? { value: instruction.instruction, onChange: instruction.setInstruction, onKeyDown: onAuthorityKeyDown } : undefined} />
-        {!instruction ? <ComposerAttachments /> : null}
+        <ComposerTextArea placeholder={authorityDecision ? undefined : planDecision?.instructionPlaceholder} />
+        <ComposerAttachments />
       </ComposerCardExpandedBody>
-      <ComposerToolbar decisionInput={instruction ? { canSend: Boolean(instruction.instruction.trim()) && !instruction.pending } : undefined} />
+      <ComposerToolbar />
       <ComposerFileInput inputRef={fileInputRef} onFiles={onFiles} />
     </>
   );
