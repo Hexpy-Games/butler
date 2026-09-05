@@ -58,7 +58,7 @@
   min-height: 28px;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-1);
-  align-items: start;
+  align-items: center;
   padding: 3px var(--space-2);
   border: 0;
   border-radius: var(--radius-control);
@@ -70,10 +70,6 @@
   transition:
     background-color 120ms ease,
     color 120ms ease;
-}
-
-.item[data-description-placement="inline"] {
-  align-items: center;
 }
 
 .item:not([data-has-icon="true"]) {
