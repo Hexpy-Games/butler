@@ -72,6 +72,7 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
   constructor(
     private readonly db: Database,
     private readonly processLiveness: ProcessLiveness = new LocalProcessLiveness(),
+    private readonly butlerData?: string,
   ) {}
 
   workStatus(): WorkStatusView {
@@ -191,7 +192,7 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       .all(sessionId)
       .flatMap((row) => this.parseProgress(row));
     const result = this.resultForRelation(relation.relation_id);
-    const plan = readStewardObserverPlan(this.db, sessionId);
+    const plan = readStewardObserverPlan(this.db, sessionId, this.butlerData);
     const waitingForChildren = Boolean(this.db.query<{ present: number }, [string]>(`
       SELECT 1 AS present
       FROM btcc_session_relations AS child

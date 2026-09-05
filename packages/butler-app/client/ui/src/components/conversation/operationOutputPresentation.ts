@@ -1,7 +1,12 @@
+import { presentReadOperation } from "./operationReadOutputPresentation";
+
+export type OperationOutputSection = { title: string; content?: string; message?: string };
+
 export type OperationOutputPresentation =
   | { kind: "code"; content: string }
   | { kind: "summary"; content: string }
-  | { kind: "command"; summary: string; content?: string };
+  | { kind: "command"; summary: string; content?: string }
+  | { kind: "sections"; summary: string; sections: OperationOutputSection[] };
 
 export function presentOperationOutput(
   toolName: string | undefined,
@@ -17,11 +22,13 @@ export function presentOperationOutput(
   const value = operationResultRecord(content);
   if (!value) return { kind: "code", content };
   if (toolName === "run_command") return commandOutput(value);
+  const readOutput = presentReadOperation(toolName, value);
+  if (readOutput) return readOutput;
   if (isBasicFileTool(toolName)) return basicFileOutput(toolName, value);
   if (typeof value.ok === "boolean") {
     return {
       kind: "summary",
-      content: value.ok ? "작업을 완료했습니다." : "작업을 완료하지 못했습니다.",
+      content: value.ok ? "도구 실행은 완료됐지만 상세 결과 표시를 지원하지 않습니다." : "작업을 완료하지 못했습니다.",
     };
   }
   return { kind: "summary", content: "도구 결과를 확인했습니다." };

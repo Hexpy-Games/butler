@@ -14,6 +14,7 @@ export {
 } from "./external-effect-mutation.ts";
 export { observeProjectLedgerHead } from "./observe-project-ledger.ts";
 export { createProjectWorkStore } from "./project-work-store.ts";
+export { readProjectWorkPlan } from "./project-work-plan-reader.ts";
 export { createExactProjectWorkResultAuthority } from "./project-work-result-reader.ts";
 export type {
   ExactProjectWorkResultAuthority,

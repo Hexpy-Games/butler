@@ -147,7 +147,7 @@ function openStores(input: {
     durableWork,
     subsessionStore,
     authority,
-    stewardObserver: new SqliteStewardObserverStore(db, processLiveness),
+    stewardObserver: new SqliteStewardObserverStore(db, processLiveness, input.workSelection?.butlerData),
     legacyCutover,
     committedSuccessorReadiness: sqliteWriteReadiness,
     close: () => {
@@ -193,7 +193,7 @@ export function openBtccAuthorityStore(input: { butlerData: string }) {
   const authority = createPrincipalAuthority(
     new SqlitePrincipalAuthorityRepository(db),
   );
-  const observer = new SqliteStewardObserverStore(db);
+  const observer = new SqliteStewardObserverStore(db, undefined, input.butlerData);
   let closed = false;
   return {
     authority,

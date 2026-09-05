@@ -22,7 +22,7 @@ export const readFileToolDefinition: ButlerToolDefinition = {
               description: "File path inside the active workspace. Prefer a workspace-relative path; a contained absolute path shown by a tool is also accepted.",
             },
             start_line: { type: "integer", minimum: 1 },
-            limit_lines: { type: "integer", minimum: 1, maximum: 10000 },
+            limit_lines: { type: "integer", minimum: 1, maximum: 10000, description: "Total requested line range, including cursor continuations. Later file lines are outside this request." },
             max_bytes: { type: "integer", minimum: 1, maximum: 1048576 },
           },
           required: ["path"],

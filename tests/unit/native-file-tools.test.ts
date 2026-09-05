@@ -102,7 +102,7 @@ describe("read_file", () => {
     expect(res.metrics.output_bytes).toBe(3);
     await writeFile(join(root, "lines.txt"), "one\ntwo\nthree\nfour");
     const lineRes = await executeReadFileTool(call({ workspace_root: root, requests: [{ path: "lines.txt", start_line: 2, limit_lines: 2 }] })) as any;
-    expect(lineRes.files[0].content).toBe("two\nthree"); expect(lineRes.files[0].start_line).toBe(2); expect(lineRes.files[0].end_line).toBe(3); expect(lineRes.truncated).toBe(true);
+    expect(lineRes.files[0].content).toBe("two\nthree"); expect(lineRes.files[0].start_line).toBe(2); expect(lineRes.files[0].end_line).toBe(3); expect(lineRes.truncated).toBe(false);
     await writeFile(join(root, "bin.dat"), Buffer.from([1, 0, 2]));
     expect(((await executeReadFileTool(call({ workspace_root: root, requests: [{ path: "bin.dat" }] }))) as any).files[0].error).toBe("binary_file_not_supported");
     expect(((await executeReadFileTool(call({ workspace_root: root, requests: [{ path: join(root, "a.txt") }] }))) as any).files[0].content).toBe("abcdef");
@@ -165,7 +165,26 @@ describe("read_file", () => {
     expect(stale.error).toBe("cursor_stale");
   });
 
-  test("keeps the requested line offset across aggregate and line continuations", async () => {
+  test("completes every requested line range without treating later lines as a byte limit", async () => {
+    await writeFile(join(root, "one.txt"), "one\ntwo\nthree\nfour", "utf8");
+    await writeFile(join(root, "two.txt"), "alpha\nbeta\ngamma", "utf8");
+    const result = await executeReadFileTool(call({
+      workspace_root: root,
+      requests: [
+        { path: "one.txt", start_line: 2, limit_lines: 2 },
+        { path: "two.txt", start_line: 1, limit_lines: 1 },
+      ],
+      max_total_bytes: 800_000,
+    })) as any;
+    expect(result.files.map((file: any) => file.content)).toEqual(["two\nthree", "alpha"]);
+    expect(result.files.every((file: any) => file.ok && !file.truncated)).toBe(true);
+    expect(result.files_read).toBe(2);
+    expect(result.truncated).toBe(false);
+    expect(result.next_cursor).toBeUndefined();
+    expect(result.stopped_by).toBeUndefined();
+  });
+
+  test("keeps the original requested range across aggregate continuations", async () => {
     await writeFile(join(root, "offset.txt"), "one\ntwo\nthree\n", "utf8");
     const readArgs = { requests: [{ path: "offset.txt", start_line: 2, limit_lines: 1 }], max_total_bytes: 2 };
     const first = await executeReadFileTool(call({ workspace_root: root, ...readArgs })) as any;
@@ -175,10 +194,26 @@ describe("read_file", () => {
     const second = await executeReadFileTool(call({ workspace_root: root, ...readArgs, cursor: first.next_cursor })) as any;
     expect(second.files[0].content).toBe("o");
     expect(second.files[0].start_line).toBe(2);
-    const third = await executeReadFileTool(call({ workspace_root: root, ...readArgs, cursor: second.next_cursor })) as any;
-    expect(third.files[0].content).toBe("th");
-    expect(third.files[0].start_line).toBe(3);
-    expect(third.files[0].content).not.toBe("\n");
+    expect(second.truncated).toBe(false);
+    expect(second.next_cursor).toBeUndefined();
+  });
+
+  test("distinguishes per-file paging from aggregate exhaustion and resumes later requests", async () => {
+    await writeFile(join(root, "one.txt"), "abcdef\nnot requested", "utf8");
+    await writeFile(join(root, "two.txt"), "second", "utf8");
+    const readArgs = {
+      requests: [{ path: "one.txt", limit_lines: 1, max_bytes: 3 }, { path: "two.txt" }],
+      max_total_bytes: 800_000,
+    };
+    const first = await executeReadFileTool(call({ workspace_root: root, ...readArgs })) as any;
+    expect(first.stopped_by).toBe("max_bytes");
+    expect(first.files[0].content).toBe("abc");
+    expect(first.files[1]).toMatchObject({ ok: true, skipped: true, pending: true });
+    expect(first.files[1].error).toBeUndefined();
+    const second = await executeReadFileTool(call({ workspace_root: root, ...readArgs, cursor: first.next_cursor })) as any;
+    expect(second.files.map((file: any) => file.content)).toEqual(["def", "second"]);
+    expect(second.truncated).toBe(false);
+    expect(second.next_cursor).toBeUndefined();
   });
 
   test("preserves UTF-8 boundaries while continuing from a non-first line", async () => {
