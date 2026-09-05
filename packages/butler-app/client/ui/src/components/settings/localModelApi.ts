@@ -76,8 +76,9 @@ export async function deleteLocalModel(
   model: AppModelSummary,
 ): Promise<LocalModelDeletionResult> {
   const copy = appCopy.settings.localModels;
-  const confirmed = window.confirm(
+  const confirmed = await confirmAction(
     copy.deleteConfirm(modelDisplayName(model)),
+    { title: appCopy.common.delete, confirmLabel: appCopy.common.delete, destructive: true },
   );
   if (!confirmed) throw new Error("Deletion cancelled");
 
@@ -87,3 +88,4 @@ export async function deleteLocalModel(
   );
   return result;
 }
+import { confirmAction } from "@/app/confirmation.ts";

@@ -25,6 +25,12 @@ Prefer token-backed spacing and responsive composition. Validate the fixture in 
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 
 ## Best practice
+- All modals use Composer-radius TintedGlass by default, including confirmation
+  alerts and command dialogs. Popovers retain their separate surface contract.
+- Placement belongs to DialogContent: centered in the viewport at every width,
+  with safe-area bounds. Do not add mobile sheet offsets or per-dialog transforms.
+- Use ScrollArea for independently scrolling bodies. Do not mask the entire
+  modal surface, which would also fade its border, header and shadow.
 - Compose it with other `@/butler-ds` components before adding bespoke CSS.
 - Keep layout fluid; do not assume a fixed desktop width.
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.

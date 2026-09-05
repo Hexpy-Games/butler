@@ -1,7 +1,7 @@
 import type { StewardSessionSummaryView } from "@/app/types.ts";
 import type { ReactNode } from "react";
 import { useButlerStore } from "@/app/store.ts";
-import { Button, Stack } from "@/butler-ds";
+import { PillButton, Stack } from "@/butler-ds";
 import { ButlerThinkingMark } from "@/components/common/ButlerThinkingMark.tsx";
 import {
   activeStewardChildren,
@@ -53,21 +53,20 @@ export function StewardComposerCapsules({
       wrap
     >
       {synthesis ? (
-        <Button
+        <PillButton
           aria-label={`${synthesis.safe_title} 보고 준비 상태`}
           className={styles.capsule}
           data-truncation="ellipsis"
           data-test-class="steward-synthesis-capsule"
           disabled={!synthesisChild}
-          iconStart={mark}
+          icon={mark}
           onClick={() => synthesisChild && openSessionObserver(synthesisChild.session_id)}
-          shape="pill"
-          size="xs"
-          text={`${synthesis.safe_title} 작업에 대한 보고 준비 중`}
           title={synthesis.safe_title}
           type="button"
-          variant="outline"
-        />
+          surface="glass"
+        >
+          {`${synthesis.safe_title} 작업에 대한 보고 준비 중`}
+        </PillButton>
       ) : null}
       {activeChildren.map((child) => (
         <StewardProgressCapsule
@@ -94,15 +93,16 @@ function StewardProgressCapsule({
   const activityTitle = stewardCurrentActivityTitle(child);
   const progress = stewardPlanProgress(child);
   return (
-    <Button
+    <PillButton
       aria-label={`${taskTitle}, ${activityTitle}${progress ? `, 진행도 ${progress}` : ""}, 진행 상세 보기`}
       className={styles.capsule}
       data-test-class="steward-progress-capsule"
-      iconStart={mark}
+      icon={mark}
       onClick={onOpen}
-      shape="pill"
-      size="xs"
-      text={(
+      title={taskTitle}
+      type="button"
+      surface="glass"
+    >
         <span className={styles.content}>
           <span className={styles.taskTitle} data-test-class="steward-capsule-task">
             {taskTitle}
@@ -120,10 +120,6 @@ function StewardProgressCapsule({
             </>
           ) : null}
         </span>
-      )}
-      title={taskTitle}
-      type="button"
-      variant="outline"
-    />
+    </PillButton>
   );
 }

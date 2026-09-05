@@ -5,6 +5,7 @@ import { X } from "../../components/Icons";
 import { Input } from "../../components/Input";
 import { Stack } from "../../components/Stack";
 import { SurfacePanel } from "../SurfacePanel";
+import { Dialog, DialogContent, DialogTitle } from "../../components/Dialog";
 import styles from "./CommandPanel.module.css";
 
 export interface CommandPanelProps {
@@ -72,13 +73,14 @@ export function CommandPalettePanel({
   }
 
   return (
-    <div className={styles.overlay} role="presentation" onMouseDown={onClose}>
-      <div
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
         className={styles.palette}
-        role="dialog"
         aria-label={label}
-        onMouseDown={(event) => event.stopPropagation()}
+        aria-describedby={undefined}
+        showCloseButton={false}
       >
+        <DialogTitle className="sr-only">{label}</DialogTitle>
         <div className={styles.inputRow}>
           <Search size={18} aria-hidden="true" />
           <input
@@ -101,7 +103,7 @@ export function CommandPalettePanel({
             </button>
           ))}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
