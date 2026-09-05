@@ -548,6 +548,7 @@ test("production Agent tool loop discovers, continues, reviews, edits, rereads, 
       contextDocuments: stores.contextDocuments,
       toolJournal: stores.guidedToolJournal,
       effectJournal: stores.guidedEffectJournal,
+      operationResultReader: stores.guidedOperationResultReader,
       durableWork: stores.durableWork,
       modelRound,
     });

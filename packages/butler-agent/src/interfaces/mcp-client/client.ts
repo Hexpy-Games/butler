@@ -37,6 +37,8 @@ export interface McpCapabilitiesView {
 }
 
 export interface McpCallToolResultView {
+  ok: boolean;
+  error?: { code: "mcp_tool_failed"; message: string };
   server_id: string;
   tool_name: string;
   result: unknown;
@@ -105,6 +107,12 @@ export async function callMcpTool(input: {
     ),
   );
   return {
+    ok: result.isError !== true,
+    ...(result.isError === true ? { error: { code: "mcp_tool_failed" as const,
+      message: Array.isArray(result.content) ? result.content.flatMap((item) =>
+        item.type === "text" && typeof item.text === "string" ? [item.text] : [],
+      ).join("\n") || "The MCP tool reported a failure." : "The MCP tool reported a failure.",
+    } } : {}),
     server_id: server.id,
     tool_name: toolName,
     result,

@@ -1,0 +1,494 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "tool-contract-real-client",
+  "accessMode": "full_access",
+  "modelFallback": {
+    "enabled": false,
+    "models": []
+  },
+  "session": {
+    "id": "tool-contract-real-client",
+    "title": "도구 결과 전달 실제 확인"
+  },
+  "fixtures": [
+    {
+      "path": "input.txt",
+      "text": "  mode=original\n\n  preserved-000: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-001: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-002: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-003: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-004: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-005: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-006: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-007: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-008: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-009: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-010: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-011: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-012: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-013: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-014: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-015: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-016: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-017: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-018: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-019: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-020: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-021: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-022: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-023: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-024: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-025: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-026: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-027: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-028: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-029: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-030: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-031: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-032: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-033: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-034: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-035: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-036: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-037: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-038: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-039: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-040: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-041: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-042: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-043: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-044: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-045: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-046: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-047: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-048: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-049: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-050: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-051: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-052: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-053: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-054: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-055: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-056: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-057: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-058: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-059: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-060: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-061: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-062: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-063: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-064: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-065: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-066: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-067: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-068: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-069: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-070: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-071: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-072: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-073: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-074: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-075: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-076: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-077: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-078: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-079: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-080: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-081: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-082: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-083: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-084: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-085: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-086: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-087: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-088: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  preserved-089: 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 본문을 보존합니다 \n  FILE_END_902\n"
+    },
+    {
+      "path": "inventory/item-001.txt",
+      "text": "item 1\n"
+    },
+    {
+      "path": "inventory/item-002.txt",
+      "text": "item 2\n"
+    },
+    {
+      "path": "inventory/item-003.txt",
+      "text": "item 3\n"
+    },
+    {
+      "path": "inventory/item-004.txt",
+      "text": "item 4\n"
+    },
+    {
+      "path": "inventory/item-005.txt",
+      "text": "item 5\n"
+    },
+    {
+      "path": "inventory/item-006.txt",
+      "text": "item 6\n"
+    },
+    {
+      "path": "inventory/item-007.txt",
+      "text": "item 7\n"
+    },
+    {
+      "path": "inventory/item-008.txt",
+      "text": "item 8\n"
+    },
+    {
+      "path": "inventory/item-009.txt",
+      "text": "item 9\n"
+    },
+    {
+      "path": "inventory/item-010.txt",
+      "text": "item 10\n"
+    },
+    {
+      "path": "inventory/item-011.txt",
+      "text": "item 11\n"
+    },
+    {
+      "path": "inventory/item-012.txt",
+      "text": "item 12\n"
+    },
+    {
+      "path": "inventory/item-013.txt",
+      "text": "item 13\n"
+    },
+    {
+      "path": "inventory/item-014.txt",
+      "text": "item 14\n"
+    },
+    {
+      "path": "inventory/item-015.txt",
+      "text": "item 15\n"
+    },
+    {
+      "path": "inventory/item-016.txt",
+      "text": "item 16\n"
+    },
+    {
+      "path": "inventory/item-017.txt",
+      "text": "item 17\n"
+    },
+    {
+      "path": "inventory/item-018.txt",
+      "text": "item 18\n"
+    },
+    {
+      "path": "inventory/item-019.txt",
+      "text": "item 19\n"
+    },
+    {
+      "path": "inventory/item-020.txt",
+      "text": "item 20\n"
+    },
+    {
+      "path": "inventory/item-021.txt",
+      "text": "item 21\n"
+    },
+    {
+      "path": "inventory/item-022.txt",
+      "text": "item 22\n"
+    },
+    {
+      "path": "inventory/item-023.txt",
+      "text": "item 23\n"
+    },
+    {
+      "path": "inventory/item-024.txt",
+      "text": "item 24\n"
+    },
+    {
+      "path": "inventory/item-025.txt",
+      "text": "item 25\n"
+    },
+    {
+      "path": "inventory/item-026.txt",
+      "text": "item 26\n"
+    },
+    {
+      "path": "inventory/item-027.txt",
+      "text": "item 27\n"
+    },
+    {
+      "path": "inventory/item-028.txt",
+      "text": "item 28\n"
+    },
+    {
+      "path": "inventory/item-029.txt",
+      "text": "item 29\n"
+    },
+    {
+      "path": "inventory/item-030.txt",
+      "text": "item 30\n"
+    },
+    {
+      "path": "inventory/item-031.txt",
+      "text": "item 31\n"
+    },
+    {
+      "path": "inventory/item-032.txt",
+      "text": "item 32\n"
+    },
+    {
+      "path": "inventory/item-033.txt",
+      "text": "item 33\n"
+    },
+    {
+      "path": "inventory/item-034.txt",
+      "text": "item 34\n"
+    },
+    {
+      "path": "inventory/item-035.txt",
+      "text": "item 35\n"
+    },
+    {
+      "path": "inventory/item-036.txt",
+      "text": "item 36\n"
+    },
+    {
+      "path": "inventory/item-037.txt",
+      "text": "item 37\n"
+    },
+    {
+      "path": "inventory/item-038.txt",
+      "text": "item 38\n"
+    },
+    {
+      "path": "inventory/item-039.txt",
+      "text": "item 39\n"
+    },
+    {
+      "path": "inventory/item-040.txt",
+      "text": "item 40\n"
+    },
+    {
+      "path": "inventory/item-041.txt",
+      "text": "item 41\n"
+    },
+    {
+      "path": "inventory/item-042.txt",
+      "text": "item 42\n"
+    },
+    {
+      "path": "inventory/item-043.txt",
+      "text": "item 43\n"
+    },
+    {
+      "path": "inventory/item-044.txt",
+      "text": "item 44\n"
+    },
+    {
+      "path": "inventory/item-045.txt",
+      "text": "item 45\n"
+    },
+    {
+      "path": "inventory/item-046.txt",
+      "text": "item 46\n"
+    },
+    {
+      "path": "inventory/item-047.txt",
+      "text": "item 47\n"
+    },
+    {
+      "path": "inventory/item-048.txt",
+      "text": "item 48\n"
+    },
+    {
+      "path": "inventory/item-049.txt",
+      "text": "item 49\n"
+    },
+    {
+      "path": "inventory/item-050.txt",
+      "text": "item 50\n"
+    },
+    {
+      "path": "inventory/item-051.txt",
+      "text": "item 51\n"
+    },
+    {
+      "path": "inventory/item-052.txt",
+      "text": "item 52\n"
+    },
+    {
+      "path": "inventory/item-053.txt",
+      "text": "item 53\n"
+    },
+    {
+      "path": "inventory/item-054.txt",
+      "text": "item 54\n"
+    },
+    {
+      "path": "inventory/item-055.txt",
+      "text": "item 55\n"
+    },
+    {
+      "path": "inventory/item-056.txt",
+      "text": "item 56\n"
+    },
+    {
+      "path": "inventory/item-057.txt",
+      "text": "item 57\n"
+    },
+    {
+      "path": "inventory/item-058.txt",
+      "text": "item 58\n"
+    },
+    {
+      "path": "inventory/item-059.txt",
+      "text": "item 59\n"
+    },
+    {
+      "path": "inventory/item-060.txt",
+      "text": "item 60\n"
+    },
+    {
+      "path": "inventory/item-061.txt",
+      "text": "item 61\n"
+    },
+    {
+      "path": "inventory/item-062.txt",
+      "text": "item 62\n"
+    },
+    {
+      "path": "inventory/item-063.txt",
+      "text": "item 63\n"
+    },
+    {
+      "path": "inventory/item-064.txt",
+      "text": "item 64\n"
+    },
+    {
+      "path": "inventory/item-065.txt",
+      "text": "item 65\n"
+    },
+    {
+      "path": "inventory/item-066.txt",
+      "text": "item 66\n"
+    },
+    {
+      "path": "inventory/item-067.txt",
+      "text": "item 67\n"
+    },
+    {
+      "path": "inventory/item-068.txt",
+      "text": "item 68\n"
+    },
+    {
+      "path": "inventory/item-069.txt",
+      "text": "item 69\n"
+    },
+    {
+      "path": "inventory/item-070.txt",
+      "text": "item 70\n"
+    },
+    {
+      "path": "inventory/item-071.txt",
+      "text": "item 71\n"
+    },
+    {
+      "path": "inventory/item-072.txt",
+      "text": "item 72\n"
+    },
+    {
+      "path": "inventory/item-073.txt",
+      "text": "item 73\n"
+    },
+    {
+      "path": "inventory/item-074.txt",
+      "text": "item 74\n"
+    },
+    {
+      "path": "inventory/item-075.txt",
+      "text": "item 75\n"
+    },
+    {
+      "path": "inventory/item-076.txt",
+      "text": "item 76\n"
+    },
+    {
+      "path": "inventory/item-077.txt",
+      "text": "item 77\n"
+    },
+    {
+      "path": "inventory/item-078.txt",
+      "text": "item 78\n"
+    },
+    {
+      "path": "inventory/item-079.txt",
+      "text": "item 79\n"
+    },
+    {
+      "path": "inventory/item-080.txt",
+      "text": "item 80\n"
+    },
+    {
+      "path": "inventory/item-081.txt",
+      "text": "item 81\n"
+    },
+    {
+      "path": "inventory/item-082.txt",
+      "text": "item 82\n"
+    },
+    {
+      "path": "inventory/item-083.txt",
+      "text": "item 83\n"
+    },
+    {
+      "path": "inventory/item-084.txt",
+      "text": "item 84\n"
+    },
+    {
+      "path": "inventory/item-085.txt",
+      "text": "item 85\n"
+    },
+    {
+      "path": "inventory/item-086.txt",
+      "text": "item 86\n"
+    },
+    {
+      "path": "inventory/item-087.txt",
+      "text": "item 87\n"
+    },
+    {
+      "path": "inventory/item-088.txt",
+      "text": "item 88\n"
+    },
+    {
+      "path": "inventory/item-089.txt",
+      "text": "item 89\n"
+    },
+    {
+      "path": "inventory/item-090.txt",
+      "text": "item 90\n"
+    },
+    {
+      "path": "inventory/item-091.txt",
+      "text": "item 91\n"
+    },
+    {
+      "path": "inventory/item-092.txt",
+      "text": "item 92\n"
+    },
+    {
+      "path": "inventory/item-093.txt",
+      "text": "item 93\n"
+    },
+    {
+      "path": "inventory/item-094.txt",
+      "text": "item 94\n"
+    },
+    {
+      "path": "inventory/item-095.txt",
+      "text": "item 95\n"
+    },
+    {
+      "path": "inventory/item-096.txt",
+      "text": "item 96\n"
+    },
+    {
+      "path": "inventory/item-097.txt",
+      "text": "item 97\n"
+    },
+    {
+      "path": "inventory/item-098.txt",
+      "text": "item 98\n"
+    },
+    {
+      "path": "inventory/item-099.txt",
+      "text": "item 99\n"
+    },
+    {
+      "path": "inventory/item-100.txt",
+      "text": "item 100\n"
+    },
+    {
+      "path": "inventory/item-101.txt",
+      "text": "item 101\n"
+    },
+    {
+      "path": "inventory/item-102.txt",
+      "text": "item 102\n"
+    },
+    {
+      "path": "inventory/item-103.txt",
+      "text": "item 103\n"
+    },
+    {
+      "path": "inventory/item-104.txt",
+      "text": "item 104\n"
+    },
+    {
+      "path": "inventory/item-105.txt",
+      "text": "item 105\n"
+    },
+    {
+      "path": "inventory/item-106.txt",
+      "text": "item 106\n"
+    },
+    {
+      "path": "inventory/item-107.txt",
+      "text": "item 107\n"
+    },
+    {
+      "path": "inventory/item-108.txt",
+      "text": "item 108\n"
+    },
+    {
+      "path": "inventory/item-109.txt",
+      "text": "item 109\n"
+    },
+    {
+      "path": "inventory/item-110.txt",
+      "text": "item 110\n"
+    }
+  ],
+  "steps": [
+    {
+      "id": "read-change-list-report",
+      "timeoutMs": 600000,
+      "reloadAfter": true,
+      "prompt": "위임 없이 직접 처리해 주세요. input.txt를 read_file로 읽고 첫 줄의 mode=original만 mode=updated로 바꾸세요. write_file로 저장하고, 나머지 본문·들여쓰기·빈 줄은 그대로 보존하세요. inventory 폴더는 목록 도구로 전체 파일 개수와 마지막 파일명을 확인해 주세요. 수정 파일을 다시 읽어 확인한 후, audit-result.md에 확인한 파일 개수, 마지막 파일명, input.txt 마지막 줄을 적고 작업을 완료해 주세요. 이 세 파일 정보 확인이면 충분하며 관계없는 저장소나 환경 조사, 별도 위임은 필요 없습니다.",
+      "expect": {
+        "terminalState": "delivered",
+        "rendererActivityStagesInclude": ["conception", "planning", "review", "execution"],
+        "files": [
+          {
+            "path": "input.txt",
+            "contains": [
+              "  mode=updated",
+              "\n\n",
+              "  preserved-089:",
+              "  FILE_END_902\n"
+            ]
+          },
+          {
+            "path": "audit-result.md",
+            "contains": [
+              "110",
+              "item-110.txt",
+              "FILE_END_902"
+            ]
+          }
+        ],
+        "work": {
+          "exists": true,
+          "status": "completed"
+        }
+      }
+    }
+  ]
+}

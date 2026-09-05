@@ -5,7 +5,7 @@ export const OPERATION_RESULT_EXACT_READ_MAX_BYTES = 4 * 1024;
 export const readOperationResultsToolDefinition = {
   type: "function",
   name: "read_operation_results",
-  description: "Read one bounded byte range from an exact durable operation result.",
+  description: "Read up to length bytes from an exact stored result. Decode data from base64; continue at nextOffset until it is null. The last page may be shorter.",
   parameters: {
     type: "object",
     additionalProperties: false,

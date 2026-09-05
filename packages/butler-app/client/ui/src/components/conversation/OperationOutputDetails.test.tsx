@@ -53,6 +53,25 @@ test("unknown structured tool results never expose raw JSON", () => {
   });
 });
 
+test("public text in catalog, memory, web, image and MCP results is not replaced by completion fallback", () => {
+  const cases = [
+    ["tool_describe", { ok: true, descriptions: [{ name: "read_file", description: "Read selected source files", schema: { properties: { requests: { type: "array" } } } }] }, "Read selected source files"],
+    ["query_memory", { ok: true, results: [{ title: "Deployment", content: "Use the project deployment script." }] }, "Use the project deployment script."],
+    ["read_mcp_resource", { ok: true, result: { contents: [{ text: "Resource body from MCP", mimeType: "text/plain" }] } }, "Resource body from MCP"],
+    ["transform_public_data_table", { ok: true, title: "표", csv_preview: "name,value\nfirst,3", row_count: 60, columns: ["name", "value"], artifact_label: "data.csv" }, "60행 · 2열 · data.csv"],
+    ["read_tool_output_artifact", { ok: true, stdout: { text: "Detailed command output" }, stderr: { text: "" } }, "Detailed command output"],
+    ["web_read", { ok: true, title: "Source", markdown: "The complete source text." }, "The complete source text."],
+    ["analyze_attached_image", { ok: true, analysis: "The chart rises in June." }, "The chart rises in June."],
+    ["call_mcp_tool", { ok: false, error: { code: "mcp_tool_failed", message: "Choose an existing table." }, result: { isError: true, content: [{ type: "text", text: "Choose an existing table." }] } }, "Choose an existing table."],
+  ] as const;
+  for (const [tool, value, expected] of cases) {
+    const result = JSON.stringify(presentOperationOutput(tool, JSON.stringify(value), true));
+    expect(result).toContain(expected);
+    expect(result).not.toContain("상세 결과 표시를 지원하지 않습니다");
+  }
+  expect(JSON.stringify(presentOperationOutput("custom_tool", JSON.stringify({ ok: true, pending: true }), true))).not.toContain("완료");
+});
+
 test("canonical batch reads show file bodies and individual failures without raw receipts", () => {
   expect(presentOperationOutput("read_file", JSON.stringify({
     ok: true,

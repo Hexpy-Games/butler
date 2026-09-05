@@ -18,7 +18,7 @@ export type ProductionGuidedTurnAgentInput = {
   phaseContinuityPrivateDigester: PhaseContinuityPrivateDigester;
   contextDocuments: ContextDocumentReader;
   toolJournal: GuidedToolJournal;
-  operationResultReader?: GuidedOperationResultReader;
+  operationResultReader: GuidedOperationResultReader;
   effectJournal: SqliteGuidedEffectJournal;
   authority: PrincipalAuthority;
   durableWork: DurableWorkService;

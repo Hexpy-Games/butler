@@ -169,6 +169,7 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
       butlerData: fixture.root,
       contextDocuments: fixture.stores.contextDocuments,
       toolJournal: fixture.stores.guidedToolJournal,
+      operationResultReader: fixture.stores.guidedOperationResultReader,
       effectJournal: fixture.stores.guidedEffectJournal,
       durableWork: fixture.stores.durableWork,
       modelRound,
@@ -508,6 +509,7 @@ test.each(["ordinary", "direction", "fast-result"])("Steward executes directly b
       butlerHome: fixture.root, butlerData: fixture.root,
       contextDocuments: fixture.stores.contextDocuments,
       toolJournal: fixture.stores.guidedToolJournal,
+      operationResultReader: fixture.stores.guidedOperationResultReader,
       effectJournal: fixture.stores.guidedEffectJournal,
       durableWork: fixture.stores.durableWork,
       subsessionDelegation: service,
@@ -619,6 +621,7 @@ test("Steward no-tool answers cannot finalize active Workers; failed assignment 
         phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
         butlerHome: fixture.root, butlerData: fixture.root,
         contextDocuments: fixture.stores.contextDocuments, toolJournal: fixture.stores.guidedToolJournal,
+        operationResultReader: fixture.stores.guidedOperationResultReader,
         effectJournal: fixture.stores.guidedEffectJournal, durableWork: fixture.stores.durableWork,
         subsessionDelegation: {
           async resolveParentResultEvidence() { return null; },
@@ -3294,21 +3297,26 @@ test("flag-on Guided capability list exposes the canonical exact reader as calla
   }
 });
 
-test("flag-off required exact capability fails before Guided provider dispatch", async () => {
+test("exact result reader remains callable when optional replay compression is off", async () => {
   const fixture = createFixture("guided-exact-replay-off-required");
   const previous = process.env.BUTLER_OPERATION_RESULT_REPLAY;
   delete process.env.BUTLER_OPERATION_RESULT_REPLAY;
   let calls = 0;
   try {
-    const agent = fixture.agent({ async runRound() {
+    const agent = fixture.agent({ async runRound(request) {
       calls += 1;
-      return { text: "must not dispatch", toolCalls: [] };
+      expect(request.tools.some((tool) => tool.name === "read_operation_results")).toBe(true);
+      return { text: "reader available", toolCalls: [] };
     } });
-    const turn = turnRecord(fixture.root, { accessMode: "full_access" });
-    turn.context.executionPolicy!.requiredNativeTools = ["read_operation_results"];
-    await expect(agent.run({ turn, signal: new AbortController().signal }))
-      .rejects.toThrow("required tool is unavailable while exact replay is disabled");
-    expect(calls).toBe(0);
+    const command = localRunCommand(fixture.root, "exact-reader-flag-off");
+    command.context.executionPolicy!.requiredNativeTools = ["read_operation_results"];
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission, turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness, agent,
+    });
+    await runtime.runTurn(command);
+    expect(calls).toBeGreaterThan(0);
   } finally {
     if (previous === undefined) delete process.env.BUTLER_OPERATION_RESULT_REPLAY;
     else process.env.BUTLER_OPERATION_RESULT_REPLAY = previous;
@@ -5655,6 +5663,7 @@ test("whole-goal sequence preserves explicit relation across restart and exhaust
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
       contextDocuments: currentStores.contextDocuments,
       toolJournal: currentStores.guidedToolJournal,
+      operationResultReader: currentStores.guidedOperationResultReader,
       effectJournal: currentStores.guidedEffectJournal,
       durableWork: currentStores.durableWork,
       modelRound,

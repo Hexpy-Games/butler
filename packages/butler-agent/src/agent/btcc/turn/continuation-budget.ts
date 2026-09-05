@@ -121,11 +121,16 @@ export function continuationLimitsForModel(
       limits.maxModelFacingBytes !== DEFAULT_LIMITS.maxModelFacingBytes) return limits;
   return {
     ...limits,
-    maxModelFacingBytes: Math.min(
-      HARD_CEILINGS.maxModelFacingBytes,
-      Math.max(limits.maxModelFacingBytes, Math.trunc(contextWindowTokens) * 2),
-    ),
+    maxModelFacingBytes: modelContextByteLimit(contextWindowTokens),
   };
+}
+
+/** Shared request sizing also applies when cumulative-budget accounting is off. */
+export function modelContextByteLimit(contextWindowTokens?: number): number {
+  return contextWindowTokens && Number.isFinite(contextWindowTokens)
+    ? Math.min(HARD_CEILINGS.maxModelFacingBytes,
+      Math.max(DEFAULT_LIMITS.maxModelFacingBytes, Math.trunc(contextWindowTokens) * 2))
+    : DEFAULT_LIMITS.maxModelFacingBytes;
 }
 
 export function validateTurnContinuationLimits(

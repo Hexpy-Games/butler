@@ -214,6 +214,7 @@ test("malformed typed memory identity fails before the provider and is not downg
       contextDocuments: fixture.stores.contextDocuments,
       toolJournal: fixture.stores.guidedToolJournal,
       effectJournal: fixture.stores.guidedEffectJournal,
+      operationResultReader: fixture.stores.guidedOperationResultReader,
       durableWork: fixture.stores.durableWork,
       modelRound: {
         initialRequestBytes: openAIInitialRequestSerializedBytes,
@@ -250,6 +251,7 @@ test("phase memory projection requires the production serializer before dispatch
       contextDocuments: fixture.stores.contextDocuments,
       toolJournal: fixture.stores.guidedToolJournal,
       effectJournal: fixture.stores.guidedEffectJournal,
+      operationResultReader: fixture.stores.guidedOperationResultReader,
       durableWork: fixture.stores.durableWork,
       modelRound: {
         async runRound() {
@@ -368,6 +370,7 @@ test("actual Turn runtime preserves every typed memory projection failure", asyn
           butlerData: fixture.root,
           contextDocuments: configured.contextDocuments,
           toolJournal: fixture.stores.guidedToolJournal,
+          operationResultReader: fixture.stores.guidedOperationResultReader,
           effectJournal: fixture.stores.guidedEffectJournal,
           durableWork: fixture.stores.durableWork,
           modelRound: {
@@ -577,6 +580,7 @@ async function runCaptured(
     contextDocuments,
     toolJournal: fixture.stores.guidedToolJournal,
     effectJournal: fixture.stores.guidedEffectJournal,
+    operationResultReader: fixture.stores.guidedOperationResultReader,
     durableWork: fixture.stores.durableWork,
     modelRound: {
       initialRequestBytes: openAIInitialRequestSerializedBytes,

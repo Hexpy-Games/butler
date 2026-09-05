@@ -177,6 +177,7 @@ test("real child preparation carries own environment and admitted project/feedba
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
       butlerHome: fixture.butlerHome, butlerData: fixture.butlerData,
       contextDocuments: stores.contextDocuments, toolJournal: stores.guidedToolJournal,
+      operationResultReader: stores.guidedOperationResultReader,
       effectJournal: stores.guidedEffectJournal, durableWork: stores.durableWork,
       modelRound: { async runRound(request) { captured.push(request); return { text: "done", toolCalls: [] }; } },
     });

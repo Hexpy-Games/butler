@@ -3,6 +3,10 @@ import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { createButlerToolExecutor } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { withTimeout } from "../../packages/butler-agent/src/interfaces/mcp-client/session.ts";
+import { executePreparedBtccToolCall, prepareBtccToolCall } from "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-execution.ts";
+import { toolResultToMessage } from "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-result-message.ts";
+import { createToolResultModelPreviewContext } from "../../packages/butler-agent/src/agent/tools/tool-result-serialization.ts";
+import { BUTLER_TOOLS } from "../../packages/butler-agent/src/agent/tools/registry.ts";
 import {
   getMcpServer,
   listMcpServers,
@@ -46,12 +50,29 @@ function fixtureServerEval(): string {
     server.tool("echo", "Echo text", { text: z.string() }, async ({ text }) => ({
       content: [{ type: "text", text: "echo:" + text + ":" + (process.env.MCP_FIXTURE_TOKEN ?? "") }],
     }));
+    server.tool("failed", "Reported failure", {}, async () => ({
+      isError: true, content: [{ type: "text", text: "The requested table does not exist; choose an existing table." }],
+    }));
     server.resource("greeting", "butler://greeting", async (uri) => ({
       contents: [{ uri: uri.href, mimeType: "text/plain", text: "hello from fixture" }],
     }));
     await server.connect(new StdioServerTransport());
   `;
 }
+
+test("a real MCP isError result reaches the shared executor and model as a failure", async () => {
+  upsertMcpServer(tempDir, { id: "failure", display_name: "Failure fixture", enabled: true,
+    transport: "stdio", command: process.execPath, args: ["--eval", fixtureServerEval()], cwd: root });
+  const execute = createButlerToolExecutor({ butlerHome: root, butlerData: tempDir });
+  const result = await executePreparedBtccToolCall({ executeTool: (call) => execute({ ...call, args: call.arguments }) }, prepareBtccToolCall({ tools: BUTLER_TOOLS }, {
+    id: "mcp-failure", name: "call_mcp_tool", arguments: {
+    server_id: "failure", tool_name: "failed", arguments: {},
+  }, rawArguments: JSON.stringify({ server_id: "failure", tool_name: "failed", arguments: {} }) }));
+  const message = toolResultToMessage({ result, modelPreviewContext: createToolResultModelPreviewContext() });
+  expect(JSON.parse(message.content)).toMatchObject({ ok: false, error: { code: "mcp_tool_failed" } });
+  expect(result.output).toMatchObject({ ok: false, error: { code: "mcp_tool_failed",
+    message: "The requested table does not exist; choose an existing table." }, result: { isError: true } });
+});
 
 test("MCP registry redacts raw values while runtime can call tools and read resources", async () => {
   upsertMcpServer(tempDir, {
@@ -96,7 +117,8 @@ test("MCP registry redacts raw values while runtime can call tools and read reso
   expect(capabilities.servers[0]).toMatchObject({
     id: "fixture",
     ok: true,
-    tools: [expect.objectContaining({ name: "echo", qualified_name: "fixture/echo" })],
+    tools: [expect.objectContaining({ name: "echo", qualified_name: "fixture/echo" }),
+      expect.objectContaining({ name: "failed", qualified_name: "fixture/failed" })],
     resources: [expect.objectContaining({ uri: "butler://greeting" })],
   });
 

@@ -219,14 +219,12 @@ function exactRange(
   const bytes = Buffer.from(row.result_json, "utf8");
   if (input.offset >= bytes.length)
     throw new Error("operation_result_range_out_of_bounds");
-  const end = input.offset + input.length;
-  if (end > bytes.length)
-    throw new Error("operation_result_range_out_of_bounds");
+  const end = Math.min(input.offset + input.length, bytes.length);
   return {
     encoding: "base64" as const,
     data: bytes.subarray(input.offset, end).toString("base64"),
     offset: input.offset,
-    length: input.length,
+    length: end - input.offset,
     totalBytes: bytes.length,
     nextOffset: end < bytes.length ? end : null,
     resultSha256: row.result_sha256,

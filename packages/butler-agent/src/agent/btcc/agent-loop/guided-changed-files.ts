@@ -51,7 +51,9 @@ export function collectGuidedChangedFiles(
 
 export function changedFileDetailsFromToolResult(
   value: unknown,
+  toolName: string,
 ): ChangedFileDetail[] {
+  if (toolName !== "write_file" && toolName !== "edit_file") return [];
   const result = object(value);
   if (!result) return [];
   if (Array.isArray(result.changed_files)) {

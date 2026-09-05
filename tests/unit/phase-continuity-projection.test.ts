@@ -102,6 +102,30 @@ function completedUnit(index: number, contentBytes = 1_000): ModelRoundMessage[]
   }];
 }
 
+test("unflagged context eviction keeps callable continuity even when loss is smaller", async () => {
+  const old = completedUnit(0, 30_000);
+  const call = old[0]!.toolCalls![0]!;
+  call.name = "tool_call";
+  call.rawArguments = JSON.stringify({ id: "native:read_file", arguments: {
+    requests: [{ path: "src/target.ts", start_line: 1, end_line: 80 }],
+  } });
+  const newest = completedUnit(1, 3_000);
+  const prepared = await prepareBoundedModelContext({
+    messages: [{ role: "user", content: "finish this edit", continuationItemId: "turn-item-0" }, ...old, ...newest],
+    tools: [], maxModelFacingBytes: 20_000, roundId: "round", responseItemId: "response",
+    phaseContinuityPrivateDigester: digester,
+    statelessMessageBytes: (messages) => Buffer.byteLength(JSON.stringify(messages)),
+  });
+  const continuity = prepared.messages.find((message) => message.requestSegmentKind === "phase_continuity");
+  expect(continuity).toBeDefined();
+  expect(continuity!.content).toContain("src/target.ts");
+  expect(continuity!.content).toContain('"capability":"read_operation_results"');
+  expect(continuity!.content).toContain('"work_id":null');
+  expect(continuity!.content).toContain('"revision":null');
+  expect(continuity!.content).toContain('"offset":0');
+  expect(prepared.messages.slice(-2)).toEqual(newest);
+});
+
 test("folds only acknowledged completed history and preserves user incomplete and newest units", () => {
   const first = completedUnit(0);
   first[0]!.toolCalls![0]!.rawArguments = JSON.stringify({ path: "src/current.ts" });
@@ -222,7 +246,25 @@ test("16 KiB ceiling measures all separated synthetic ranges in one final serial
   );
   expect(synthetic).toHaveLength(4);
   expect(openAIBoundedConversationSerializedBytes(synthetic)).toBeLessThanOrEqual(16 * 1024);
-  expect(JSON.parse(synthetic[0]!.content).entries[0].kind).toBe("reference");
+  expect(JSON.parse(synthetic[0]!.content).entries[0].calls[0].exact_read.arguments.length).toBe(4096);
+});
+
+test("history projection keeps accepted current Plan and Work controls exact", () => {
+  const plan = completedUnit(0, 12_000);
+  plan[0]!.toolCalls![0]!.name = "tool_call";
+  plan[0]!.toolCalls![0]!.rawArguments = JSON.stringify({ id: "native:replace_work_plan", arguments: {
+    objective: "Keep the source contract", actions: [{ description: "Fix the assigned target", check: "Run its focused check" }],
+  } });
+  plan[1]!.content = JSON.stringify({ ok: true, output: { ok: true } });
+  const work = completedUnit(1, 12_000);
+  work[0]!.toolCalls![0]!.name = "record_work_checkpoint";
+  work[1]!.content = JSON.stringify({ ok: true, output: { ok: true } });
+  const projected = projectPhaseContinuity({ messages: [
+    { role: "user", content: "finish", continuationItemId: "turn-item-0" },
+    ...plan, ...work, ...completedUnit(2, 12_000), ...completedUnit(3),
+  ], digester, serializedBytes: openAIBoundedConversationSerializedBytes });
+  for (const message of [...plan, ...work]) expect(projected.messages).toContain(message);
+  expect(projected.identity).toBeDefined();
 });
 
 test("does not fold when exact provider stateless serialization is not smaller", () => {

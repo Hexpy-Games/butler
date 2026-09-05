@@ -15,7 +15,7 @@ export function selectExactResultReplayPhase(
   const enabled = operationResultReplayEnabled(env);
   return {
     mode: enabled ? "available" : "disabled",
-    exactReadCapability: enabled,
+    exactReadCapability: true,
   };
 }
 

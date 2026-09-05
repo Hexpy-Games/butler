@@ -1,4 +1,5 @@
 import type { ModelRoundMessage, ModelRoundToolCall } from "../ports/model-round.ts";
+import { normalizeGuidedToolCall } from "../../tools/tool-call-normalization.ts";
 
 const TARGET_KEYS = new Set([
   "path", "paths", "pattern", "query", "command", "url", "start_line",
@@ -16,8 +17,10 @@ export function phaseWorkingContext(
   call: ModelRoundToolCall,
   result: ModelRoundMessage,
 ): Record<string, unknown> {
+  const normalized = normalizeGuidedToolCall({ toolName: call.name,
+    args: parseRecord(call.rawArguments) ?? {} });
   return {
-    target: select(parseRecord(call.rawArguments), TARGET_KEYS, 0),
+    target: select(normalized.args, TARGET_KEYS, 0),
     outcome: select(parseRecord(result.content), RESULT_KEYS, 0),
   };
 }

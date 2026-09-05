@@ -1359,6 +1359,7 @@ function createRuntime(input: {
       butlerData: input.root,
       contextDocuments: input.stores.contextDocuments,
       toolJournal: input.stores.guidedToolJournal,
+      operationResultReader: input.stores.guidedOperationResultReader,
       effectJournal: input.stores.guidedEffectJournal,
       durableWork: input.stores.durableWork,
       modelRound: input.modelRound,

@@ -42,6 +42,37 @@ function exactPage(
   return { result_ref, sha256, revision, work_id, offset: 0, length: 32 };
 }
 
+test("acknowledged replay preserves the current bridged Plan and Review before windowing", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-work-anchor-replay-"));
+  const stores = openBtccSqliteStores({ dbPath: join(root, "btcc.sqlite"), ownerId: "anchors" });
+  try {
+    const messages = ["replace_work_plan", "record_work_review", "read_file"].flatMap((name, index) => {
+      const id = `anchor-${index}`;
+      const args = { id: `native:${name}`, arguments: { actions: [{ action_key: "implement", checks: ["preserve exact plan"] }] } };
+      const result = { ok: true, output: { content: "accepted-detail ".repeat(2_000) } };
+      stores.guidedToolJournal.start({ turnId: "turn", callId: id, toolName: name,
+        rawArguments: JSON.stringify(args), arguments: args });
+      stores.guidedToolJournal.finish({ callId: id, status: "completed", result });
+      return [
+        { role: "assistant" as const, content: "", toolCalls: [{ id, name: "tool_call", arguments: args, rawArguments: JSON.stringify(args) }] },
+        { role: "tool" as const, name: "tool_call", toolCallId: id, content: JSON.stringify(result) },
+      ];
+    });
+    const replay = createOperationResultReplay({ turnId: "turn", turnRevision: 1,
+      journal: stores.guidedToolJournal, exactReader: stores.guidedOperationResultReader,
+      exactReadCapability: true });
+    replay.prepareMessages(messages, "first");
+    replay.accepted("first", routeAccepted("first", "continue"));
+    const projected = replay.prepareMessages(messages, "next");
+    expect(projected.slice(0, 4)).toEqual(messages.slice(0, 4));
+    expect(projected[5]?.content).not.toBe(messages[5]?.content);
+    expect(JSON.parse(projected[5]!.content).availability.capability).toBe("read_operation_results");
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("enabled replay fails composition when its exact journal dependency is incomplete", () => {
   expect(() => createOperationResultReplay({
     turnId: "turn", turnRevision: 1, exactReadCapability: true,
@@ -421,7 +452,7 @@ test("enabled replay keeps the readable preview through routed retry, acknowledg
       start_line: 1,
       end_line: 1,
       truncated: false,
-      content: "Q".repeat(12_000),
+      content: "Q".repeat(70_000),
     }],
   };
   stores.guidedToolJournal.start({
