@@ -78,6 +78,14 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
     return readWorkStatus(this.db);
   }
 
+  retainsApprovalClaim(turnId: string): boolean {
+    return Boolean(this.db.query(`
+      SELECT 1 FROM btcc_turns WHERE turn_id = ?
+        AND semantic_state IN ('admitted', 'delivery_committed')
+        AND authority_continuation_json IS NOT NULL
+    `).get(turnId));
+  }
+
   relationsForParent(sessionId: string): StewardObserverRelation[] {
     return this.db
       .query<RelationRow, [string]>(`
@@ -139,8 +147,8 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
     if (!relation) return null;
     const messages = readStewardObserverMessages(this.db, relation);
     const turns = this.db
-      .query<StewardRecoveryTurnRow, [string, string]>(`
-        SELECT t.turn_id, t.semantic_state, t.trigger_key, t.original_message_id,
+      .query<StewardRecoveryTurnRow & { suspension_reason: string | null }, [string, string]>(`
+        SELECT t.turn_id, t.semantic_state, t.suspension_reason, t.trigger_key, t.original_message_id,
           t.original_message, COALESCE(
           (SELECT created_at FROM btcc_progress_events p
             WHERE p.turn_id = t.turn_id ORDER BY p.turn_sequence ASC LIMIT 1),
@@ -165,10 +173,10 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       .all(relation.created_at, sessionId)
       .map<StewardObserverTurn>((turn) => ({
         id: turn.turn_id,
-        state: turn.semantic_state,
+        state: turn.suspension_reason === "authority_pending" ? "waiting_for_form" : turn.semantic_state,
         created_at: turn.created_at,
         updated_at: turn.created_at,
-        ...(turn.semantic_state === "admitted"
+        ...(turn.semantic_state === "admitted" && !turn.suspension_reason
           ? { recovery: projectStewardTurnRecovery(turn, this.processLiveness) }
           : {}),
       }));

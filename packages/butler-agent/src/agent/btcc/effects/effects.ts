@@ -105,7 +105,16 @@ export function createGuidedEffectService(
         });
         if (blockerOutcome) return blockerOutcome;
       }
-      return continueEffect(context);
+      try {
+        return await continueEffect(context);
+      } catch (error) {
+        // Execution may have started. Resolve that same journal occurrence
+        // before the tool is closed; never turn it into a fresh dispatch.
+        const current = await journal.find(identity.effectId);
+        if (current?.status === "applied") return replayAppliedEffect<TResult>(current);
+        if (current?.status !== "dispatching" || current.dispatchAttempts === 0) throw error;
+        return await reconcileEffect(context, current);
+      }
     },
   };
 }

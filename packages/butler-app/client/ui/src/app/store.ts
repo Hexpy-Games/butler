@@ -134,6 +134,7 @@ interface ButlerStore {
   sessionView: SessionView | null;
   sessionViews: Record<string, SessionView>;
   observerSessionId: string | null;
+  observerTargetTurnId: string | null;
   messageLoadPending: boolean;
   optimisticSessionStart: OptimisticSessionStart | null;
   pendingProjectDocumentAttachment: {
@@ -181,7 +182,7 @@ interface ButlerStore {
   setMessages: (messages: Updater<MessageRecord[]>) => void;
   setMessageListView: (view: MessageListView) => void;
   setSessionView: (view: SessionView) => void;
-  openSessionObserver: (sessionId: string) => void;
+  openSessionObserver: (sessionId: string, targetTurnId?: string) => void;
   closeSessionObserver: () => void;
   setSummary: (summary: Updater<SessionSummaryView | null>) => void;
   setTurnProgress: (
@@ -230,7 +231,9 @@ interface ButlerStore {
   allowAuthorityRequest: (
     requestRef: string,
     sessionId?: string,
+    scope?: "once" | "conversation",
   ) => Promise<boolean>;
+  revokeConversationPermission: (grantRef: string, sessionId?: string) => Promise<boolean>;
   denyAuthorityRequest: (
     requestRef: string,
     sessionId?: string,
@@ -726,6 +729,12 @@ function normalizeAuthorityApprovalCard(
     reason: record.reason,
     executable: record.executable,
     commandCount: record.command_count,
+    ...(record.scope && typeof record.scope === "object" && "title" in record.scope && "description" in record.scope &&
+      typeof record.scope.title === "string" && typeof record.scope.description === "string"
+      ? { scope: { title: record.scope.title, description: record.scope.description } } : {}),
+    ...(typeof record.source_turn_id === "string" ? { sourceTurnId: record.source_turn_id } : {}),
+    ...(typeof record.source_call_id === "string" ? { sourceCallId: record.source_call_id } : {}),
+    ...(typeof record.source_session_id === "string" ? { sourceSessionId: record.source_session_id } : {}),
   };
 }
 
@@ -745,12 +754,12 @@ function isAcceptedAuthorityDecisionResponse(
 }
 
 function normalizedAuthorityAlternative(value: string): string | null {
-  const normalized = value.trim();
-  return normalized || null;
+  return value.trim() ? value : null;
 }
 
 async function submitAuthorityDecision(input: {
   action: AuthorityDecisionAction;
+  scope?: "once" | "conversation";
   alternative?: string;
   decision: AuthorityDecisionKind;
   requestRef: string;
@@ -760,6 +769,7 @@ async function submitAuthorityDecision(input: {
     `/authority-requests/${encodeURIComponent(input.requestRef)}/${input.action}?session_id=${encodeURIComponent(input.sessionId)}`,
     {
       method: "POST",
+      ...(input.action === "allow" ? { body: JSON.stringify({ scope: input.scope ?? "once" }) } : {}),
       ...(input.action === "modify"
         ? { body: JSON.stringify({ alternative: input.alternative }) }
         : {}),
@@ -900,6 +910,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   sessionView: null,
   sessionViews: {},
   observerSessionId: null,
+  observerTargetTurnId: null,
   messageLoadPending: false,
   optimisticSessionStart: null,
   pendingProjectDocumentAttachment: null,
@@ -1060,10 +1071,10 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setMessageListView: (view) =>
     set((state) => applyMessageListView(state, view)),
   setSessionView: (view) => set((state) => applySessionView(state, view)),
-  openSessionObserver: (sessionId) => {
-    set({ observerSessionId: sessionId });
+  openSessionObserver: (sessionId, targetTurnId) => {
+    set({ observerSessionId: sessionId, observerTargetTurnId: targetTurnId ?? null });
   },
-  closeSessionObserver: () => set({ observerSessionId: null }),
+  closeSessionObserver: () => set({ observerSessionId: null, observerTargetTurnId: null }),
   setSummary: (summary) =>
     set((state) => {
       const resolvedSummary = resolveUpdate(summary, state.summary);
@@ -1454,7 +1465,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     const requestToken = ++nextAuthorityApprovalRefreshToken;
     latestAuthorityApprovalRefreshBySession.set(sessionId, requestToken);
     try {
-      const data = await api<AuthorityRequestsTransportView>(
+      const data = await api<AuthorityRequestsTransportView & { permissions?: import("./types.ts").ConversationPermissionView[] }>(
         `/authority-requests?session_id=${encodeURIComponent(sessionId)}`,
       );
       if (data.session_id !== sessionId) return false;
@@ -1466,7 +1477,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       ) {
         return false;
       }
-      const next: AuthorityApprovalProjection = { sessionId, cards };
+      const next: AuthorityApprovalProjection = { sessionId, cards, permissions: data.permissions ?? [] };
       // A transient fetch failure keeps the previous same-session projection.
       if (structurallyEqual(get().authorityApprovals, next)) return true;
       set({ authorityApprovals: next });
@@ -1479,11 +1490,13 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   allowAuthorityRequest: async (
     requestRef,
     sessionId = get().activeChatId,
+    scope = "once",
   ) => {
     if (!isServerBackedSessionId(sessionId) || !requestRef.trim()) return false;
     try {
       if (!await submitAuthorityDecision({
         action: "allow",
+        scope,
         decision: "allowed",
         requestRef,
         sessionId,
@@ -1492,6 +1505,13 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     } catch {
       return false;
     }
+  },
+
+  revokeConversationPermission: async (grantRef, sessionId = get().activeChatId) => {
+    try {
+      await api(`/authority-permissions/${encodeURIComponent(grantRef)}?session_id=${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+      return await get().refreshAuthorityApprovals(sessionId);
+    } catch { return false; }
   },
 
   denyAuthorityRequest: async (

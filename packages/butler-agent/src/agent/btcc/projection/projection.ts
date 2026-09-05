@@ -37,9 +37,22 @@ type PendingTool = {
   group: ActivityGroup;
 };
 
+export type GuidedActivitySnapshot = {
+  groups: Array<Omit<ActivityGroup, "precedingGroups" | "followingGroups"> & {
+    precedingIds?: string[];
+    followingIds?: string[];
+  }>;
+  pendingTools: Array<{ name: string; claimed: boolean; groupId: string }>;
+  toolBindings: Array<[string, GuidedActivityBinding]>;
+  managed: boolean;
+  currentActivityId?: string;
+  fallbackActivityId?: string;
+  pendingExecutionTitle?: string;
+};
+
 export interface GuidedActivityProjection {
   observeToolBatch(input: { text: string; toolCalls: ToolCall[] }): void;
-  observeTool(input: ToolCall & { effectiveToolName: string }): Promise<GuidedActivityBinding>;
+  observeTool(input: ToolCall & { effectiveToolName: string; callId?: string }): Promise<GuidedActivityBinding>;
   markManaged(binding?: GuidedActivityBinding): Promise<void>;
   publishAccepted(binding: GuidedActivityBinding): Promise<void>;
 }
@@ -55,22 +68,58 @@ export function createGuidedActivityProjection(input: {
   managedInitially?: boolean;
   /** Canonical monotonic revision shared by all public Turn activity emitters. */
   nextSourceRevision?: () => number;
-}): GuidedActivityProjection {
+  restored?: GuidedActivitySnapshot;
+}): GuidedActivityProjection & { snapshot(): GuidedActivitySnapshot } {
   let pendingTools: PendingTool[] = [];
   let managed = input.managedInitially === true;
   let localSourceRevision = 0;
   const nextSourceRevision = input.nextSourceRevision ?? (() => ++localSourceRevision);
   const groupsById = new Map<string, ActivityGroup>();
+  const toolBindings = new Map(input.restored?.toolBindings ?? []);
   let currentActivity: ActivityGroup | undefined;
   let fallbackOrdinaryActivity: ActivityGroup | undefined;
   let pendingExecutionTitle: string | undefined;
+  if (input.restored) {
+    const restored = input.restored;
+    managed = restored.managed;
+    for (const { precedingIds: _before, followingIds: _after, ...group } of restored.groups) {
+      groupsById.set(group.activityId, { ...group });
+    }
+    for (const group of restored.groups) {
+      const target = groupsById.get(group.activityId)!;
+      target.precedingGroups = group.precedingIds?.map((id) => groupsById.get(id)!);
+      target.followingGroups = group.followingIds?.map((id) => groupsById.get(id)!);
+    }
+    pendingTools = restored.pendingTools.map(({ groupId, ...tool }) => ({
+      ...tool, group: groupsById.get(groupId)!,
+    }));
+    currentActivity = groupsById.get(restored.currentActivityId ?? "");
+    fallbackOrdinaryActivity = groupsById.get(restored.fallbackActivityId ?? "");
+    pendingExecutionTitle = restored.pendingExecutionTitle;
+  }
 
   return {
+    snapshot() {
+      return {
+        managed, pendingExecutionTitle,
+        toolBindings: [...toolBindings],
+        currentActivityId: currentActivity?.activityId,
+        fallbackActivityId: fallbackOrdinaryActivity?.activityId,
+        groups: [...groupsById.values()].map(({ precedingGroups, followingGroups, ...group }) => ({
+          ...group,
+          precedingIds: precedingGroups?.map((item) => item.activityId),
+          followingIds: followingGroups?.map((item) => item.activityId),
+        })),
+        pendingTools: pendingTools.map(({ group, ...tool }) => ({ ...tool, groupId: group.activityId })),
+      };
+    },
     observeToolBatch(batch) {
       pendingTools = pendingBatchTools(batch);
     },
 
     async observeTool(call) {
+      const existing = call.callId ? toolBindings.get(call.callId) : undefined;
+      if (existing) return existing;
       const normalized = normalizeGuidedToolCall({
         toolName: call.name,
         args: call.args,
@@ -107,7 +156,9 @@ export function createGuidedActivityProjection(input: {
       if ((managed || batchHasManagedTool) && !group.deferredUntilAccepted) {
         await publishGroup({ ...input, nextSourceRevision }, group);
       }
-      return bindingFromGroup(group);
+      const binding = bindingFromGroup(group);
+      if (call.callId) toolBindings.set(call.callId, binding);
+      return binding;
     },
 
     async markManaged(binding) {

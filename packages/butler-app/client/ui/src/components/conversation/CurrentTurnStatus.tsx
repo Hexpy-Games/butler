@@ -14,12 +14,14 @@ export function CurrentTurnStatus({
   publicActivity,
   phaseLabel,
   startedAt,
+  state,
 }: {
   operation?: ProgressRow;
   modelRoundWait?: ProgressRow;
   publicActivity?: ProgressRow;
   phaseLabel?: string;
   startedAt?: string;
+  state?: string;
 }) {
   const markTheme = useButlerMarkTheme();
   const elapsed = useElapsedTime(startedAt);
@@ -28,7 +30,8 @@ export function CurrentTurnStatus({
     : undefined;
   const providerRecovery = publicActivity?.bridge_phase ===
     "operational_recovery" ? publicActivity : undefined;
-  const fullLabel = operationLabel ?? providerRecovery?.safe_label ??
+  const waitingForApproval = state === "waiting_for_form";
+  const fullLabel = waitingForApproval ? "허용 여부를 기다리고 있습니다." : operationLabel ?? providerRecovery?.safe_label ??
     modelRoundWait?.safe_label ?? publicActivity?.safe_label ??
     phaseLabel ??
     "응답 생성 중";
@@ -44,7 +47,7 @@ export function CurrentTurnStatus({
         state="active"
       >
         <div data-test-class="turn-current-status-content">
-          {operation ? (
+          {waitingForApproval ? <Typo.Body as="p">{fullLabel}</Typo.Body> : operation ? (
             <CurrentPhaseActivity row={{ ...operation, safe_label: operationLabel! }} />
           ) : providerRecovery ? (
             <CurrentPhaseActivity row={providerRecovery} />

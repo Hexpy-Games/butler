@@ -23,6 +23,7 @@ export type TurnRow = {
   progress_destination_json: string | null;
   semantic_state: string;
   suspension_reason: string | null;
+  authority_continuation_json: string | null;
   active_checkpoint_id: string | null;
   route: string | null;
   final_payload_json: string | null;

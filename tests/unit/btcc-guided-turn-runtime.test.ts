@@ -115,7 +115,7 @@ test("a suspended Turn does not commit closeout or canonical delivery", async ()
         return {
           route: "assisted",
           content: "",
-          suspension: "authority_pending",
+          suspension: "waiting_for_worker",
         };
       },
     },
@@ -125,7 +125,7 @@ test("a suspended Turn does not commit closeout or canonical delivery", async ()
     const suspended = {
       kind: "suspended",
       turnId: command.turnId,
-      reason: "authority_pending",
+      reason: "waiting_for_worker",
     } as const;
     expect(await runtime.runTurn(command)).toEqual(suspended);
     expect(await runtime.runTurn(command)).toEqual(suspended);
@@ -491,6 +491,7 @@ test("Guided Turn preserves an admitted Turn when route durability fails before 
   });
   const turns: TurnStateRepository = {
     findTurn: (turnId) => stores.turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => stores.turns.resumeAuthorityContinuation(turnId),
     activateCommittedSuccessor: (turnId) => stores.turns.activateCommittedSuccessor(turnId),
     acquireStateExecutionClaim: (turn) => stores.turns.acquireStateExecutionClaim(turn),
     commitTransition: (input) => stores.turns.commitTransition(input),
@@ -770,6 +771,7 @@ test("Guided Turn preserves an admitted Turn for acceptance and history faults b
     });
     const turns: TurnStateRepository = {
       findTurn: (turnId) => stores.turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => stores.turns.resumeAuthorityContinuation(turnId),
       activateCommittedSuccessor: (turnId) => stores.turns.activateCommittedSuccessor(turnId),
       acquireStateExecutionClaim: (turn) => stores.turns.acquireStateExecutionClaim(turn),
       commitTransition: (input) => stores.turns.commitTransition(input),
@@ -851,6 +853,7 @@ test("Guided Turn reclaims a route-durability interruption and dispatches exactl
   });
   const firstTurns: TurnStateRepository = {
     findTurn: (turnId) => firstStores.turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => firstStores.turns.resumeAuthorityContinuation(turnId),
     activateCommittedSuccessor: (turnId) => firstStores.turns.activateCommittedSuccessor(turnId),
     acquireStateExecutionClaim: (turn) => firstStores.turns.acquireStateExecutionClaim(turn),
     commitTransition: (input) => firstStores.turns.commitTransition(input),
@@ -1204,6 +1207,7 @@ function overrideTransitionCommit(
 ): TurnStateRepository {
   return {
     findTurn: (turnId) => turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => turns.resumeAuthorityContinuation(turnId),
     activateCommittedSuccessor: (turnId) => turns.activateCommittedSuccessor(turnId),
     acquireStateExecutionClaim: (turn) => turns.acquireStateExecutionClaim(turn),
     commitTransition,
@@ -1217,6 +1221,7 @@ function overrideModelRouteEvent(
 ): TurnStateRepository {
   return {
     findTurn: (turnId) => turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => turns.resumeAuthorityContinuation(turnId),
     activateCommittedSuccessor: (turnId) => turns.activateCommittedSuccessor(turnId),
     acquireStateExecutionClaim: (turn) => turns.acquireStateExecutionClaim(turn),
     commitTransition: (input) => turns.commitTransition(input),
@@ -1231,6 +1236,7 @@ function overrideModelRoundAcceptance(
 ): TurnStateRepository {
   return {
     findTurn: (turnId) => turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => turns.resumeAuthorityContinuation(turnId),
     activateCommittedSuccessor: (turnId) => turns.activateCommittedSuccessor(turnId),
     acquireStateExecutionClaim: (turn) => turns.acquireStateExecutionClaim(turn),
     commitTransition: (input) => turns.commitTransition(input),

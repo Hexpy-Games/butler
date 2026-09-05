@@ -368,7 +368,7 @@ export async function openSession(
   await page.clickNamedElement(sessionSelector, run.sessionTitle);
   await page.waitForNamedElementCurrent(sessionSelector, run.sessionTitle);
   await page.waitFor(
-    `document.querySelector(${JSON.stringify("[data-test-class=\"composer-card\"] textarea")}) !== null`,
+    `document.querySelector(${JSON.stringify("[data-test-class=\"composer-card\"]")}) !== null`,
     "composer",
   );
   const view = await bridgeCall<AppSessionView>(page, "getSessionView", {

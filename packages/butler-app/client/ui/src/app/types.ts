@@ -1575,12 +1575,21 @@ export interface AuthorityApprovalCard {
   reason: string;
   executable: string;
   commandCount: number;
+  scope?: { title: string; description: string };
+  sourceTurnId?: string;
+  sourceCallId?: string;
+  sourceSessionId?: string;
+}
+
+export interface ConversationPermissionView {
+  grant_ref: string; title: string; description: string;
 }
 
 /** Server-backed projection bound to the session id it was fetched for. */
 export interface AuthorityApprovalProjection {
   sessionId: string;
   cards: AuthorityApprovalCard[];
+  permissions?: ConversationPermissionView[];
 }
 
 export type IconElement = ReactElement<{ size?: number }>;

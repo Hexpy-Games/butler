@@ -75,6 +75,11 @@ test("Steward and Worker ask-first decisions return to their source Sessions", a
     mutationCallId: "start-worker-authority-work",
     objective: "Run the Worker operation after approval",
   });
+  for (const [turnId, callId] of [["steward-authority-origin", "steward-call"], ["worker-authority-origin", "worker-call"]]) {
+    stores.guidedToolJournal.start({ turnId, callId, toolName: "run_command",
+      arguments: { command: "true", cwd: ".", state_effect: "mutation" },
+      rawArguments: JSON.stringify({ command: "true", cwd: ".", state_effect: "mutation" }) });
+  }
   stores.close();
 
   const seeded = openBtccAuthorityStore({ butlerData: root });
@@ -96,6 +101,7 @@ test("Steward and Worker ask-first decisions return to their source Sessions", a
     },
     modelRef: "openai/gpt-5.5",
     reasoningEffort: "low",
+    operationOccurrenceId: "steward-call",
   });
   const workerRequest = seeded.authority.admit({
     ownerSessionId,
@@ -115,11 +121,26 @@ test("Steward and Worker ask-first decisions return to their source Sessions", a
     },
     modelRef: "openai/gpt-5.5",
     reasoningEffort: "low",
+    operationOccurrenceId: "worker-call",
   });
   seeded.close();
   if (stewardRequest.status !== "pending" || workerRequest.status !== "pending") {
     throw new Error("descendant authority request was not pending");
   }
+  // This routing test starts from committed waits; runtime persistence is covered
+  // by btcc-authority-continuation-runtime.test.ts.
+  const waitingDb = new Database(dbPath);
+  for (const [request, source, callId, parent] of [
+    [stewardRequest, stewardSessionId, "steward-call", ownerSessionId],
+    [workerRequest, workerSessionId, "worker-call", stewardSessionId],
+  ] as const) {
+    waitingDb.query(`UPDATE btcc_turns SET suspension_reason = 'authority_pending',
+      authority_continuation_json = ?, progress_destination_json = ? WHERE session_id = ?`)
+      .run(JSON.stringify({ requestRef: request.requestRef, callId }), JSON.stringify({
+        transport: "app", accountId: "local", peer: { kind: "dm", id: source, parentId: parent },
+      }), source);
+  }
+  waitingDb.close();
 
   const server = createAppServer({
     dbPath: join(root, "app.sqlite"),
@@ -157,7 +178,7 @@ test("Steward and Worker ask-first decisions return to their source Sessions", a
         },
       });
       const queued = new NativeInboundQueue(root).findIdempotent({
-        eventId: `authority-continuation:${expected.requestRef}`,
+        eventId: `app:resume:${expected.requestRef}`,
         transport: "app",
         accountId: "local",
         peer: { kind: "dm", id: expected.sourceSessionId },
@@ -171,10 +192,12 @@ test("Steward and Worker ask-first decisions return to their source Sessions", a
       });
       expect(queued?.envelope.routingHints).toMatchObject({
         sessionId: expected.sourceSessionId,
-        authorityRequestRef: expected.requestRef,
       });
+      expect(queued?.envelope.control).toMatchObject({ kind: "resume_turn", requestId: expected.requestRef });
+      expect(queued?.envelope.routingHints?.turnId).toBe(expected.sourceSessionId === stewardSessionId
+        ? "steward-authority-origin" : "worker-authority-origin");
       expect(queued?.envelope.message.text)
-        .toBe("Continue the approved operation exactly once.");
+        .toBe("approve this operation");
     }
   } finally {
     server.stop();

@@ -1,4 +1,5 @@
 export { createPrincipalAuthority } from "./principal-authority.ts";
+export type { ConversationPermission } from "./conversation-permission.ts";
 export { AuthorityRequestError } from "./authority-request-error.ts";
 export type {
   AuthorityAbandonedWorkCloseCapability,

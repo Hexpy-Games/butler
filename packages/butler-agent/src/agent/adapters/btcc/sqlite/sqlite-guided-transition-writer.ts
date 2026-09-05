@@ -43,6 +43,34 @@ export class SqliteGuidedTransitionWriter {
     })();
   }
 
+  resumeAuthority(turnId: string): void {
+    this.db.transaction(() => {
+      const ready = this.db.query<{
+        revision: number; context_json: string; request_ref: string; schedule_client_message_id: string;
+      }, [string]>(`
+        SELECT turn.revision, turn.context_json, request.request_ref, request.schedule_client_message_id
+        FROM btcc_turns turn JOIN btcc_authority_requests request
+          ON request.request_ref = json_extract(turn.authority_continuation_json, '$.requestRef')
+          AND request.source_turn_id = turn.turn_id
+          AND request.source_call_id = json_extract(turn.authority_continuation_json, '$.callId')
+        WHERE turn.turn_id = ? AND turn.semantic_state = 'admitted'
+          AND turn.suspension_reason = 'authority_pending'
+          AND request.decision IN ('allowed', 'denied', 'modified') AND request.close_reason IS NULL
+      `).get(turnId);
+      if (!ready) return;
+      const revision = ready.revision + 1;
+      const checkpoint = checkpointFor(turnId, revision, "admitted");
+      this.db.query(`
+        UPDATE btcc_turns SET suspension_reason = NULL, revision = ?, active_checkpoint_id = ?, context_json = ?
+        WHERE turn_id = ? AND revision = ? AND suspension_reason = 'authority_pending'
+      `).run(revision, checkpoint.checkpointId, JSON.stringify({
+        ...JSON.parse(ready.context_json), authorityRequestRef: ready.request_ref,
+        authorityClientMessageId: ready.schedule_client_message_id,
+      }), turnId, ready.revision);
+      this.insertCheckpoint(turnId, revision, checkpoint);
+    }).immediate();
+  }
+
   private suspend(
     turn: TurnRecord,
     nextRevision: number,
@@ -51,21 +79,38 @@ export class SqliteGuidedTransitionWriter {
     if (turn.semanticState !== "admitted" || transition.successor !== "admitted") {
       throw new Error("BTCC suspension can only commit from admitted");
     }
+    const continuation = transition.authorityContinuation;
+    if (transition.reason === "authority_pending") {
+      if (!continuation) throw new Error("authority_continuation_missing");
+      const bound = this.db.query(`
+        UPDATE btcc_authority_requests SET source_call_id = ?
+        WHERE request_ref = ? AND source_turn_id = ? AND decision = 'pending'
+          AND close_reason IS NULL AND (source_call_id IS NULL OR source_call_id = ?)
+      `).run(continuation.callId, continuation.requestRef, turn.turnId, continuation.callId);
+      if (bound.changes !== 1) throw new Error("authority_source_call_mismatch");
+      const pending = this.db.query(`
+        UPDATE btcc_guided_tool_calls SET status = 'awaiting_authority'
+        WHERE call_id = ? AND turn_id = ? AND status IN ('started', 'awaiting_authority')
+      `).run(continuation.callId, turn.turnId);
+      if (pending.changes !== 1) throw new Error("authority_source_call_not_pending");
+    }
     const updated = this.db.query<{ turn_id: string }, [
       string,
+      string | null,
       number,
       string,
       number,
       string,
       number,
     ]>(`
-      UPDATE btcc_turns SET suspension_reason = ?, active_checkpoint_id = NULL,
+      UPDATE btcc_turns SET suspension_reason = ?, authority_continuation_json = ?, active_checkpoint_id = NULL,
         revision = ?
       WHERE turn_id = ? AND revision = ? AND semantic_state = 'admitted'
         AND active_checkpoint_id = ? AND execution_fence = ?
       RETURNING turn_id
     `).get(
       transition.reason,
+      continuation ? JSON.stringify(continuation) : null,
       nextRevision,
       turn.turnId,
       turn.revision,

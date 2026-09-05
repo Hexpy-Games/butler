@@ -2,23 +2,20 @@
   display: grid;
   min-width: 0;
 }
-
-.plan {
+.subject {
   display: flex;
   min-width: 0;
-  min-height: 58px;
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-3) var(--space-4);
   color: var(--text-primary);
 }
-
-.plan > svg {
-  flex: 0 0 auto;
+.subject > svg {
+  flex: none;
   color: var(--text-secondary);
 }
-
 .title {
+  flex: 1;
   display: -webkit-box;
   min-width: 0;
   overflow: hidden;
@@ -31,28 +28,29 @@
   line-height: var(--line-height-compact);
   text-align: left;
   cursor: pointer;
+  overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
-
 .title:hover {
   color: var(--text-secondary);
 }
-
 .title:focus-visible {
-  border-radius: var(--radius-control);
-  box-shadow: 0 0 0 3px var(--ring);
-  outline: none;
+  outline: auto;
+  outline-color: var(--ring);
 }
-
 .actions {
   display: flex;
   min-width: 0;
-  align-items: center;
   justify-content: flex-end;
   padding: var(--space-2);
 }
-
-.decisionButton {
+.actions button {
+  flex-shrink: 0;
   border-radius: var(--adaptive-composer-radius);
+}
+.error {
+  color: var(--text-secondary);
+  padding-inline: var(--space-4);
+  font-size: var(--font-size-1);
 }

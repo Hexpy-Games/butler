@@ -11,6 +11,7 @@ export async function commitTurnSuspension(input: {
   turn: TurnRecord;
   claim: StateExecutionClaim;
   reason: NonNullable<TurnRecord["suspension"]>;
+  authorityContinuation?: TurnRecord["authorityContinuation"];
 }): Promise<Extract<BtccTurnOutcome, { kind: "suspended" }>> {
   await input.turns.commitTransition({
     turn: input.turn,
@@ -19,6 +20,7 @@ export async function commitTurnSuspension(input: {
       kind: "suspend",
       successor: "admitted",
       reason: input.reason,
+      authorityContinuation: input.authorityContinuation,
     },
   });
   const suspended = await input.turns.activateCommittedSuccessor(input.turn.turnId);

@@ -14,6 +14,7 @@ import type {
 import { authorityProjection } from "./admission-projection.ts";
 import { admitAuthorityRequest } from "./authority-request-admission.ts";
 import { AuthorityRequestError } from "./authority-request-error.ts";
+import { permissionForRecord } from "./conversation-permission.ts";
 import { parseAuthorityOutcomeReceipt } from "./outcome-receipt.ts";
 import {
   canonicalJson,
@@ -25,6 +26,10 @@ export function createPrincipalAuthority(
   repository: PrincipalAuthorityRepository,
 ): PrincipalAuthority {
   return {
+    resumeSource: (requestRef) => repository.resumeSource(requestRef),
+    waitingSourceSessions: () => repository.waitingSourceSessions(),
+    listPermissions: (owner) => repository.listConversationPermissions(owner),
+    revokePermission: (owner, grant) => repository.revokeConversationPermission(owner, grant),
     admit(input) {
       return admitAuthorityRequest(repository, input);
     },
@@ -40,15 +45,11 @@ export function createPrincipalAuthority(
       const current = repository.findByPublicRef(input.requestRef);
       if (!current || current.ownerSessionId !== input.ownerSessionId ||
           (input.sourceSessionId !== undefined &&
-            current.sourceSessionId !== input.sourceSessionId) ||
-          !repository.isSourceWorkEligible({
-            sourceSessionId: current.sourceSessionId,
-            sourceWorkId: current.sourceWorkId,
-          })) {
+            current.sourceSessionId !== input.sourceSessionId)) {
         throw new AuthorityRequestError("authority_request_not_found");
       }
       if (current.decision !== "pending") {
-        if (sameDecision(current, input.action, alternativeInput)) {
+        if (sameDecision(current, input.action, alternativeInput, input.allowScope)) {
           return decisionResult(current);
         }
         throw new AuthorityRequestError(
@@ -57,17 +58,26 @@ export function createPrincipalAuthority(
             : "authority_decision_conflict",
         );
       }
+      if (!repository.isSourceWorkEligible({
+        sourceSessionId: current.sourceSessionId,
+        sourceWorkId: current.sourceWorkId,
+      })) {
+        throw new AuthorityRequestError("authority_request_not_found");
+      }
       const decided = repository.decide({
         requestRef: input.requestRef,
         ownerSessionId: input.ownerSessionId,
         sourceSessionId: current.sourceSessionId,
         action: input.action,
+        ...(input.action === "allow" && input.allowScope === "conversation"
+          ? { permission: { ...permissionForRecord(current), createdAt: new Date().toISOString() } }
+          : {}),
         ...(alternativeInput ? { alternativeInput } : {}),
         now: new Date().toISOString(),
       });
       if (!decided) {
         const raced = repository.findByPublicRef(input.requestRef);
-        if (raced && sameDecision(raced, input.action, alternativeInput)) {
+        if (raced && sameDecision(raced, input.action, alternativeInput, input.allowScope)) {
           return decisionResult(raced);
         }
         throw new AuthorityRequestError("authority_decision_conflict");
@@ -82,16 +92,15 @@ export function createPrincipalAuthority(
     execution(input): AuthorityStoredExecution {
       const record = repository.findByPublicRef(input.requestRef);
       if (!record || record.ownerSessionId !== input.ownerSessionId ||
-          !input.sourceSessionId || !input.clientMessageId ||
-          record.sourceSessionId !== input.sourceSessionId ||
-          record.scheduleClientMessageId !== input.clientMessageId) {
+          (input.sourceSessionId !== undefined && record.sourceSessionId !== input.sourceSessionId) ||
+          (input.clientMessageId !== undefined && record.scheduleClientMessageId !== input.clientMessageId)) {
         throw new AuthorityRequestError("authority_request_not_found");
       }
       if (record.decision !== "allowed" && record.decision !== "denied" &&
           record.decision !== "modified") {
         throw new AuthorityRequestError("authority_request_not_allowed");
       }
-      if (record.sourceTurnId === input.turnId) {
+      if (record.sourceTurnId !== input.turnId) {
         throw new AuthorityRequestError("authority_schedule_turn_mismatch");
       }
       if (record.decision === "modified" &&
@@ -113,6 +122,7 @@ export function createPrincipalAuthority(
         requestRef: record.requestRef,
         sourceSessionId: record.sourceSessionId,
         sourceTurnId: record.sourceTurnId,
+        ...(record.sourceCallId ? { sourceCallId: record.sourceCallId } : {}),
         sourceWorkId: record.sourceWorkId,
         workspacePath: record.workspacePath,
         planRevisionId: record.planRevisionId,
@@ -181,6 +191,7 @@ function decisionResult(record: AuthorityRecord): AuthorityDecisionResult {
   return {
     requestRef: record.requestRef,
     sourceSessionId: record.sourceSessionId,
+    sourceTurnId: record.sourceTurnId,
     sourceWorkId: record.sourceWorkId,
     scheduleClientMessageId: record.scheduleClientMessageId,
     scheduleInputText: record.scheduleInputText,
@@ -194,9 +205,11 @@ function sameDecision(
   record: AuthorityRecord,
   action: AuthorityDecisionAction,
   alternativeInput: string | undefined,
+  allowScope: "once" | "conversation" = "once",
 ): boolean {
   const expected = action === "allow" ? "allowed" : action === "deny" ? "denied" : "modified";
   return record.decision === expected &&
+    (action !== "allow" || (record.allowScope ?? "once") === allowScope) &&
     (action !== "modify" || record.privateAlternativeInput === alternativeInput);
 }
 

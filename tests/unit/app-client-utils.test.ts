@@ -54,6 +54,20 @@ import type {
 
 const originalCrypto = globalThis.crypto;
 
+test("approval waiting and resuming replace the same Turn state without losing its activities", () => {
+  const rows = [{ id: "operation", state: "running", kind: "tool", safe_label: "파일 작성" }];
+  const current = { source: { turn_id: "source", state: "running", safe_progress_rows: rows } };
+  const waiting = mergeTurnProgressSnapshotMap(current, {
+    source: { turn_id: "source", state: "waiting_for_form", safe_progress_rows: [] },
+  });
+  expect(waiting.source?.state).toBe("waiting_for_form");
+  expect(waiting.source?.safe_progress_rows).toEqual(rows);
+  const resumed = mergeTurnProgressSnapshotMap(waiting, {
+    source: { turn_id: "source", state: "running", safe_progress_rows: [] },
+  });
+  expect(resumed.source?.state).toBe("running");
+});
+
 function withCrypto<T>(crypto: Partial<Crypto> | undefined, run: () => T): T {
   Object.defineProperty(globalThis, "crypto", {
     configurable: true,

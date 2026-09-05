@@ -20,20 +20,26 @@ import { appendAssistantResponse } from "./assistant-response.ts";
 import { createTurnContinuationItems } from "./continuation-item-identity.ts";
 import { finalRoundToolSurface, resolveRoundToolSurface } from "./round-tool-surface.ts";
 import { continuationForContextProjection } from "../model-route/context-projection-rebase.ts";
+import { pendingAuthority, unexecutedAuthorityCall } from "./loop-continuation.ts";
 export async function runBtccAgentLoop(
   input: BtccAgentLoopInput,
 ): Promise<BtccAgentLoopOutput> {
-  const continuationItems = createTurnContinuationItems(input.prompt);
+  const restored = input.authorityContinuation;
+  if (restored && !input.authorityDecision) throw new Error("authority_decision_missing");
+  const continuationItems = createTurnContinuationItems(input.prompt, restored);
   const { messages } = continuationItems;
   const events: BtccAgentLoopEvent[] = [];
-  const toolResults: BtccAgentLoopToolResult[] = [];
+  const toolResults: BtccAgentLoopToolResult[] = [...restored?.toolResults ?? []];
   const modelPreviewContext = createToolResultModelPreviewContext();
-  let continuation: unknown;
-  let emptyResponseRecoveryUsed = false;
-  let consecutiveEmptyResponses = 0, modelRoundIndex = 0;
-  let iteration = 0;
+  let continuation: unknown = restored?.providerContinuation;
+  let emptyResponseRecoveryUsed = restored?.emptyResponseRecoveryUsed ?? false;
+  let consecutiveEmptyResponses = 0, modelRoundIndex = restored?.modelRoundIndex ?? 0;
+  let iteration = restored?.iteration ?? 0;
   let finalReportRound = false;
   let resumedToolCall = input.resumedToolCall;
+  let resumedBatch = restored?.batch;
+  if (restored) input = { ...input, instructions: restored.instructions,
+    stableProviderCachePrefix: restored.stableProviderCachePrefix };
   const runModelRound = async (request: {
     tools: readonly BtccAgentLoopInput["tools"][number][]; toolSurfaceDigest?: string;
     instructions?: string;
@@ -144,6 +150,9 @@ export async function runBtccAgentLoop(
     iteration: number;
     evaluateStop?: boolean;
   }): Promise<BtccToolResultOutcome | null> => {
+    // The accepted call remains unanswered until the user decides. Never send
+    // a fake successful tool result to the provider or the activity transcript.
+    if (pendingAuthority(record.result.output)) return { kind: "suspend", reason: "authority_pending" };
     toolResults.push(record.result);
     const operationResultCallId = input.resolveOperationResultCallId?.(record.call.id);
     const attachExactReference = record.call.name !== "read_operation_results" &&
@@ -176,13 +185,20 @@ export async function runBtccAgentLoop(
     throwIfAgentLoopAborted(input.signal);
     const currentIteration = iteration;
     iteration += 1;
-    const { tools, ...toolSurfaceIdentity } = finalReportRound
+    const batchToResume = resumedBatch;
+    resumedBatch = undefined;
+    const { tools, ...toolSurfaceIdentity } = batchToResume
+      ? { tools: batchToResume.tools }
+      : finalReportRound
       ? finalRoundToolSurface([], Boolean(input.resolveTools))
       : await resolveRoundToolSurface(input.resolveTools, input.tools);
     let response: ModelRoundResult | undefined;
     let text: string;
     let calls: BtccAgentLoopToolCall[];
-    if (resumedToolCall) {
+    if (batchToResume) {
+      calls = batchToResume.calls;
+      text = "";
+    } else if (resumedToolCall) {
       // This call was already chosen and approved. Restore it into the same
       // tool batch path, then let the model reason from its actual result.
       calls = [resumedToolCall];
@@ -286,7 +302,7 @@ export async function runBtccAgentLoop(
       return { finalText: text, messages, events };
     }
 
-    if (input.continuationBudget) {
+    if (input.continuationBudget && !batchToResume) {
       await input.continuationBudget.recordToolRound({ roundId: `btcc-tool-round-${currentIteration}` });
     }
 
@@ -306,12 +322,12 @@ export async function runBtccAgentLoop(
         perResultMaxBytes: MAX_PROVIDER_TOOL_RESULT_BYTES,
       }),
     });
-    await input.onAssistantTextBeforeTools?.({
+    if (!batchToResume) await input.onAssistantTextBeforeTools?.({
       text,
       toolCalls: preparedCalls.map((prepared) => prepared.call),
       iteration: currentIteration,
     });
-    const canRunBatchConcurrently = preparedCalls.length > 1 && preparedCalls.every((prepared) =>
+    const canRunBatchConcurrently = !batchToResume && preparedCalls.length > 1 && preparedCalls.every((prepared) =>
       prepared.validationError === null && prepared.tool?.concurrencySafe === true,
     );
 
@@ -359,14 +375,33 @@ export async function runBtccAgentLoop(
       continue;
     }
 
-    const batchResults: BtccAgentLoopToolResult[] = [];
-    for (const prepared of preparedCalls) {
+    const batchResults: BtccAgentLoopToolResult[] = [...batchToResume?.results ?? []];
+    const decision = batchToResume ? input.authorityDecision : undefined;
+    for (let callIndex = batchToResume?.nextCallIndex ?? 0; callIndex < preparedCalls.length; callIndex++) {
+      const prepared = preparedCalls[callIndex]!;
       emit(events, input.onEvent, {
         type: "tool_call",
         iteration: currentIteration,
         toolCall: prepared.call,
       });
-      const result = await executePreparedBtccToolCall(input, prepared, input.signal);
+      const result = decision && decision.action !== "allow"
+        ? unexecutedAuthorityCall(prepared.call, decision, callIndex === batchToResume!.nextCallIndex)
+        : await executePreparedBtccToolCall(input, prepared, input.signal);
+      if (decision && decision.action !== "allow") await input.onUnexecutedToolCall?.(prepared.call, result);
+      const pending = pendingAuthority(result.output);
+      if (pending) {
+        const callId = input.resolveOperationResultCallId?.(prepared.call.id);
+        if (!callId) throw new Error("authority_source_call_missing");
+        return { finalText: "", suspension: "authority_pending", messages, events,
+          authorityContinuation: {
+            requestRef: pending.requestRef, callId, messages,
+            nextItemOrdinal: continuationItems.ordinal(), providerContinuation: continuation,
+            instructions: input.instructions, stableProviderCachePrefix: input.stableProviderCachePrefix,
+            modelRoundIndex, iteration: currentIteration, emptyResponseRecoveryUsed, toolResults,
+            batch: { tools, calls, nextCallIndex: callIndex, results: batchResults },
+          },
+        };
+      }
       batchResults.push(result);
       const finalOutcome = await recordToolResult({
         call: prepared.call,
@@ -381,6 +416,9 @@ export async function runBtccAgentLoop(
       if (finalOutcome?.kind === "suspend") {
         return { finalText: "", suspension: finalOutcome.reason, messages, events };
       }
+    }
+    if (decision?.action === "modify") {
+      continuationItems.push({ role: "user", content: decision.input, requestSegmentKind: "current_user_request" });
     }
     if (finalReportRound) return { finalText: text, messages, events };
     const disposition = await nextTurnAfterToolBatch(

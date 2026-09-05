@@ -3,6 +3,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { Database } from "bun:sqlite";
+import { bindPendingAuthorityFixture } from "./support/authority-pending-fixture.ts";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -1970,6 +1971,7 @@ function insertAuthorityRequest(dbPath: string, config: SeededRequestConfig): vo
       "2026-08-23T09:00:00.000Z",
       "2026-08-23T09:00:00.000Z",
     );
+    bindPendingAuthorityFixture(db, config.requestRef);
   } finally {
     db.close();
   }

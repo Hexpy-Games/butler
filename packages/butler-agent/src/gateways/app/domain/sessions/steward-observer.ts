@@ -92,6 +92,7 @@ export interface StewardObserverDelegationPresentation {
 }
 
 export interface StewardObserverReader {
+  retainsApprovalClaim(turnId: string): boolean;
   workStatus(): WorkStatusView;
   relationsForParent(sessionId: string): StewardObserverRelation[];
   relationById(relationId: string): StewardObserverRelation | null;
@@ -202,9 +203,10 @@ function projectStewardTurn(
       updated_at: activityUpdatedAt,
     };
   }
-  const state = active ? "thinking" : observerTurnState(turn.state);
+  const state = turn.state === "waiting_for_form" ? "waiting_for_form"
+    : active ? "thinking" : observerTurnState(turn.state);
   const terminal = ["delivered", "failed", "cancelled"].includes(state);
-  const progressState = terminal ? state : state === "accepted" ? "accepted" : "thinking";
+  const progressState = terminal || state === "waiting_for_form" ? state : state === "accepted" ? "accepted" : "thinking";
   return {
     id: turn.id,
     state,
@@ -214,7 +216,7 @@ function projectStewardTurn(
     cancellable: !terminal,
     retryable: state === "failed",
     progress: {
-      summary: waitingForChildren && !active
+      summary: state === "waiting_for_form" ? stewardStateLabel(state) : waitingForChildren && !active
         ? "Worker 결과를 기다리는 중입니다."
         : currentStewardActivityLabel(activityRows) ?? stewardStateLabel(turn.state),
       updated_at: activityUpdatedAt,
@@ -371,6 +373,7 @@ function isActiveObserverTurn(state: string): boolean {
 }
 
 function observerTurnState(state: string): SessionViewTurn["state"] {
+  if (state === "waiting_for_form") return "waiting_for_form";
   if (state === "delivered") return "delivered";
   if (state === "cancelled") return "cancelled";
   if (state === "failed") return "failed";
@@ -397,6 +400,7 @@ function observerDeliveryState(
 }
 
 function stewardProgressState(state: string): string {
+  if (state === "waiting_for_form") return "waiting_for_form";
   if (state === "delivered") return "delivered";
   if (state === "cancelled") return "cancelled";
   if (state === "failed") return "failed";
@@ -404,6 +408,7 @@ function stewardProgressState(state: string): string {
 }
 
 function stewardStateLabel(state: string): string {
+  if (state === "waiting_for_form") return "허용 여부를 기다리고 있습니다.";
   if (state === "delivered") return "작업을 완료했습니다.";
   if (state === "cancelled") return "작업이 중단되었습니다.";
   if (state === "failed") return "작업을 완료하지 못했습니다.";

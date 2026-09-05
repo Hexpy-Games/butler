@@ -210,7 +210,7 @@ test("ask-first preserves safe Work progress while hiding operation details", as
     status: "started",
   });
 
-  expect(forwarded).toEqual(["state", "work", "phase"]);
+  expect(forwarded).toEqual(["state", "work", "phase", "operation"]);
 });
 
 test("ask-first does not claim approval while ordinary tools are still running", () => {

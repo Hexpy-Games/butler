@@ -66,7 +66,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
         original_message, model_selection_json, context_json,
         route_state_json,
         continuation_budget_json,
-        progress_destination_json, semantic_state, suspension_reason,
+        progress_destination_json, semantic_state, suspension_reason, authority_continuation_json,
         active_checkpoint_id, route, final_payload_json, delivery_outbox_id,
         canonical_assistant_message_id, revision, execution_fence,
         final_disposition
@@ -105,6 +105,9 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
         ? { progressDestination: hydrateProgressDestination(row.progress_destination_json) }
         : {}),
       semanticState: state,
+      ...(row.authority_continuation_json
+        ? { authorityContinuation: JSON.parse(row.authority_continuation_json) }
+        : {}),
       ...(row.suspension_reason === "authority_pending" ||
           row.suspension_reason === "waiting_for_worker"
         ? { suspension: row.suspension_reason }
@@ -128,6 +131,11 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     const turn = await this.findTurn(turnId);
     if (!turn) throw new Error(`BTCC R3 Turn disappeared after commit: ${turnId}`);
     return turn;
+  }
+
+  async resumeAuthorityContinuation(turnId: string): Promise<TurnRecord | null> {
+    this.transitions.resumeAuthority(turnId);
+    return this.findTurn(turnId);
   }
 
   async acquireStateExecutionClaim(

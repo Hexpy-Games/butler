@@ -59,6 +59,7 @@ export type TurnRecord = {
   progressDestination?: BtccProgressDestination;
   semanticState: TurnSemanticState;
   suspension?: "authority_pending" | "waiting_for_worker";
+  authorityContinuation?: import("../agent-loop/loop-continuation.ts").AuthorityLoopContinuation;
   checkpoint?: TurnCheckpoint;
   route?: "direct" | "assisted" | "managed";
   finalPayload?: {
@@ -111,6 +112,7 @@ export type AcceptedTurnTransition =
       kind: "suspend";
       successor: "admitted";
       reason: "authority_pending" | "waiting_for_worker";
+      authorityContinuation?: import("../agent-loop/loop-continuation.ts").AuthorityLoopContinuation;
     }
   | {
       kind: "accept_guided_final";
@@ -152,6 +154,7 @@ export interface BtccWakeAuthorizationReader {
 
 export interface TurnStateRepository {
   findTurn(turnId: string): Promise<TurnRecord | null>;
+  resumeAuthorityContinuation(turnId: string): Promise<TurnRecord | null>;
   activateCommittedSuccessor(turnId: string): Promise<TurnRecord>;
   acquireStateExecutionClaim(turn: TurnRecord): Promise<StateExecutionClaim>;
   commitTransition(input: {

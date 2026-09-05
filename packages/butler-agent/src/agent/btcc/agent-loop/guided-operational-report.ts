@@ -21,7 +21,7 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
   originalRequest: string;
   emptyResponsePolicy?: BtccEmptyResponsePolicy;
   loadFacts: () => Promise<Omit<OperationalFacts, "originalRequest">>;
-  onSuspension?: (reason: BtccTurnSuspension) => void;
+  onSuspension?: (reason: BtccTurnSuspension, continuation?: BtccAgentLoopInput["authorityContinuation"]) => void;
 }): Promise<string> {
   try {
     const result = await runBtccAgentLoop({
@@ -30,7 +30,7 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
     });
     const candidate = result.finalText.trim();
     if (result.suspension) {
-      input.onSuspension?.(result.suspension);
+      input.onSuspension?.(result.suspension, result.authorityContinuation);
       return "";
     }
     // An empty result is a genuine terminal no-visible outcome.

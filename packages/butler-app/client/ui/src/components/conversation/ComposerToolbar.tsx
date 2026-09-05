@@ -13,7 +13,7 @@ import { ModelMenu } from "./ModelMenu";
 import { ComposerCompactPreview } from "./ComposerCompactPreview";
 import { ComposerPlanModeBadge } from "./ComposerPlanModeBadge";
 
-export function ComposerToolbar() {
+export function ComposerToolbar({ decisionInput }: { decisionInput?: { canSend: boolean } } = {}) {
   const isSending = useComposerStore((store) => store.isSending);
   const activeTurn = useComposerStore((store) => store.activeTurn);
   const canSend = useComposerStore((store) => store.canSend);
@@ -22,7 +22,7 @@ export function ComposerToolbar() {
 
   return (
     <ComposerCardToolbar>
-      <ComposerAttachmentMenu />
+      {!decisionInput ? <ComposerAttachmentMenu /> : null}
       <ComposerCompactPreview />
       <ComposerCardExpandedControls>
         <AccessModeMenu />
@@ -31,7 +31,7 @@ export function ComposerToolbar() {
         <ComposerContextControl />
         <ModelMenu />
       </ComposerCardExpandedControls>
-      {(isSending || activeTurn) && canStop && !canSend ? (
+      {!decisionInput && (isSending || activeTurn) && canStop && !canSend ? (
         <ComposerSendButton
           mode="stop"
           aria-label={appCopy.composer.stop}
@@ -41,7 +41,7 @@ export function ComposerToolbar() {
         <ComposerCardExpandedControls>
           <ComposerSendButton
             aria-label={appCopy.composer.send}
-            disabled={!canSend}
+            disabled={!(decisionInput?.canSend ?? canSend)}
           />
         </ComposerCardExpandedControls>
       )}

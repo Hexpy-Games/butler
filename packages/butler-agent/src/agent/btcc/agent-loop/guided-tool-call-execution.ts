@@ -50,6 +50,8 @@ import {
 } from "./guided-recorded-tool-replay.ts";
 import { changedFileDetailsFromToolResult } from "./guided-changed-files.ts";
 import { withoutChangedFileDetails } from "./tool-result-message.ts";
+import { pendingAuthority } from "./loop-continuation.ts";
+import type { BtccAgentLoopInput } from "./contracts.ts";
 
 export type GuidedToolCallExecutionInput = {
   turn: TurnRecord;
@@ -73,6 +75,7 @@ export function createGuidedToolCallExecutor(
 ): {
   executeTool: ButlerToolExecutor;
   usedTools: string[];
+  recordUnexecuted: NonNullable<BtccAgentLoopInput["onUnexecutedToolCall"]>;
   journalCallIdForProviderCall(providerCallId: string): string | undefined;
 } {
   let callIndex = 0;
@@ -161,6 +164,7 @@ export function createGuidedToolCallExecutor(
       return invalidSummary;
     }
     const activity = await activityProjection.observeTool({
+      callId,
       name: effectiveToolName,
       effectiveToolName,
       args: presentationArgs,
@@ -224,6 +228,8 @@ export function createGuidedToolCallExecutor(
           : undefined,
       );
       rememberDescribedTools(call.name, result, input.describedToolIds);
+      // Suspension commits the wait and this call together. No result exists yet.
+      if (pendingAuthority(result)) return result;
       const changedFiles = changedFileDetailsFromToolResult(result);
       const replayableResult = withoutChangedFileDetails(result);
       input.toolJournal.finish({
@@ -271,6 +277,20 @@ export function createGuidedToolCallExecutor(
   return {
     executeTool,
     usedTools,
+    async recordUnexecuted(call, result) {
+      const { callId } = guidedToolOccurrence({ turnId: input.turn.turnId, callIndex: callIndex++,
+        providerCallId: call.id, name: call.name, args: call.arguments });
+      const normalized = normalizeGuidedToolCall({ toolName: effectiveToolNameForCall(call.name, call.arguments), args: call.arguments });
+      input.toolJournal.start({ turnId: input.turn.turnId, callId, toolName: normalized.name,
+        rawArguments: call.rawArguments, arguments: normalized.args });
+      input.toolJournal.finish({ callId, status: "cancelled", result });
+      journalCallIds.set(call.id, callId);
+      const activity = await activityProjection.observeTool({ callId, name: normalized.name,
+        effectiveToolName: normalized.name, args: normalized.args });
+      await publishOperation(input.progress, { turnId: input.turn.turnId,
+        activityId: activity.activityId, requestId: callId, toolName: normalized.name,
+        args: normalized.args, status: "cancelled", resultJson: safeJson(result) });
+    },
     journalCallIdForProviderCall: (providerCallId) => journalCallIds.get(providerCallId),
   };
 }

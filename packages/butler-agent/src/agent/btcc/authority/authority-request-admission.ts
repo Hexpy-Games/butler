@@ -6,6 +6,7 @@ import type {
 } from "./contracts.ts";
 import { admissionResult } from "./admission-projection.ts";
 import { AuthorityRequestError } from "./authority-request-error.ts";
+import { permissionForAdmission } from "./conversation-permission.ts";
 import {
   canonicalJson,
   deterministicClientMessageId,
@@ -27,6 +28,7 @@ export function admitAuthorityRequest(
       assertNotOperationallyClosed(existing);
       return admissionResult(existing);
     }
+    if (repository.hasConversationPermission(permissionForAdmission(input).grantRef)) return { status: "granted" };
     const slot = repository.findBySlot({
       sourceWorkId: input.sourceWorkId,
       planRevisionId: input.planRevisionId,
@@ -54,6 +56,7 @@ export function admitAuthorityRequest(
     ownerSessionId: required(input.ownerSessionId, "owner session"),
     sourceSessionId: required(input.sourceSessionId, "source session"),
     sourceTurnId: required(input.sourceTurnId, "source Turn"),
+    ...(input.operationOccurrenceId ? { sourceCallId: input.operationOccurrenceId } : {}),
     sourceWorkId: required(input.sourceWorkId, "source Work"),
     workspacePath: required(input.workspacePath, "workspace"),
     planRevisionId: required(input.planRevisionId, "Plan revision"),
@@ -65,7 +68,7 @@ export function admitAuthorityRequest(
     modelRef: required(input.modelRef, "model"),
     reasoningEffort: required(input.reasoningEffort, "reasoning effort"),
     category,
-    reason: reviewedEffect ? "Apply one reviewed effect" : "Run one reviewed command",
+    reason: input.publicActionTitle || (reviewedEffect ? "Apply one reviewed effect" : "Run one reviewed command"),
     executable: reviewedEffect
       ? required(input.capability, "capability").slice(0, 96)
       : firstExecutable(input.normalizedInput.command),
@@ -108,6 +111,7 @@ function authorityIdentity(
     capability: input.capability,
     target: input.target,
     normalizedInput: input.normalizedInput,
+    ...(input.operationOccurrenceId ? { operationOccurrenceId: input.operationOccurrenceId } : {}),
   };
   return digest(canonicalJson(reviewedEffectIdentity(input, commonIdentity)));
 }
@@ -129,7 +133,7 @@ function reviewedEffectIdentity(
 }
 
 function authoritySlotIsTerminal(record: AuthorityRecord): boolean {
-  return record.closeReason !== null || record.decision === "denied" ||
+  return record.closeReason !== null || record.decision === "denied" || record.decision === "modified" ||
     record.outcome !== "pending";
 }
 

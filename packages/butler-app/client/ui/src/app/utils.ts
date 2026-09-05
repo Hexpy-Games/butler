@@ -1531,6 +1531,8 @@ function progressMergeState(current: string, incoming: string): string {
   if (shouldResetProgressForRetry(current, incoming)) return incoming;
   if (shouldReviveProgressForRetry(current, incoming)) return incoming;
   if (isTerminalProgressState(current)) return current;
+  // Waiting is a resumable Turn state, not lower-priority progress.
+  if (incoming === "waiting_for_form" || current === "waiting_for_form") return incoming;
   return progressStateRank(incoming) >= progressStateRank(current)
     ? incoming
     : current;

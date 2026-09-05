@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS btcc_turns (
   semantic_state TEXT NOT NULL CHECK (
     semantic_state IN ('admitted', 'delivery_committed', 'delivered', 'cancelled')
   ),
+  authority_continuation_json TEXT,
   suspension_reason TEXT CHECK (
     suspension_reason IS NULL OR
     suspension_reason IN ('authority_pending', 'waiting_for_worker')

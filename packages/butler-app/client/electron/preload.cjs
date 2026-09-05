@@ -707,12 +707,16 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId ?? "general" });
     return requestJson(`/authority-requests?${params.toString()}`);
   },
-  allowAuthorityRequest: ({ sessionId, requestRef } = {}) => {
+  allowAuthorityRequest: ({ sessionId, requestRef, scope = "once" } = {}) => {
     const params = new URLSearchParams({ session_id: sessionId ?? "general" });
     return requestJson(
       `/authority-requests/${encodeURIComponent(requestRef ?? "")}/allow?${params.toString()}`,
-      { method: "POST" },
+      { method: "POST", body: JSON.stringify({ scope }) },
     );
+  },
+  revokeConversationPermission: ({ sessionId, grantRef } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(`/authority-permissions/${encodeURIComponent(grantRef ?? "")}?${params.toString()}`, { method: "DELETE" });
   },
   denyAuthorityRequest: ({ sessionId, requestRef } = {}) => {
     const params = new URLSearchParams({ session_id: sessionId ?? "general" });

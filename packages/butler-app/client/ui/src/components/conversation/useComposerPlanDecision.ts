@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { ComposerSubmit } from "./hooks/composerEventTypes";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -63,7 +63,7 @@ export interface ComposerPlanDecision {
   onOpenPlan: () => void;
   onShowDecision: () => void;
   onReject: () => void;
-  onSubmitInstruction: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmitInstruction: ComposerSubmit;
 }
 
 export function useComposerPlanDecision(): ComposerPlanDecision | undefined {

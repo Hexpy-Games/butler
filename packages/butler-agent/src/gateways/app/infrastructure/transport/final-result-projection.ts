@@ -57,6 +57,15 @@ export function projectAppFinalResult(input: {
       { chatId, turnId, metadata },
       () => {
         input.deleteStagedOutbound();
+        if (metadata.suspension === "authority_pending") {
+          const waitingTurn = options.updateTurnState(turnId, "waiting_for_form", {
+            safeStatusLabel: "Waiting for approval", retryable: false, cancellable: true, safeErrorCode: null,
+          });
+          options.appendEvent("turn.state_changed", { turn: waitingTurn });
+          markProjectedTransportEvent(actionId, event.eventId, chatId);
+          options.touchChat(chatId);
+          return true;
+        }
         // The durable BTCC Turn remains explicitly suspended and resumable.
         // Its App ingress Turn is settled silently so the composer and the
         // per-session queue are not held by an execution claim that no longer

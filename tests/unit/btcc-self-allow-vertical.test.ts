@@ -92,7 +92,7 @@ test("real App ask_first command creates one safe pending authority request with
     expect(summary.claimed).toBe(1);
     expect(summary.failed).toBe(0);
     expect(summary.interrupted).toBe(0);
-    await waitForQueueState(appDbPath, clientMessageId, "dispatched");
+    await waitForQueueState(appDbPath, clientMessageId, "dispatching");
     expect(() => Bun.file(join(root, "approved-once.txt"))).not.toThrow();
     expect(await Bun.file(join(root, "approved-once.txt")).exists()).toBe(false);
 
@@ -146,9 +146,9 @@ test("real App ask_first command creates one safe pending authority request with
         SELECT client_message_id, turn_id FROM session_queued_messages
         WHERE chat_id = 'general' ORDER BY rowid ASC
       `).all();
-      expect(rows).toHaveLength(2);
-      scheduledClientMessageId = rows[1]!.client_message_id;
-      resumedTurnId = rows[1]!.turn_id;
+      expect(rows).toHaveLength(1);
+      scheduledClientMessageId = rows[0]!.client_message_id;
+      resumedTurnId = rows[0]!.turn_id;
     } finally {
       scheduled.close();
     }
@@ -267,7 +267,7 @@ test("real App ask_first command creates one safe pending authority request with
       }
       expect(finalDb.query<{ count: number }, []>(
         "SELECT COUNT(*) AS count FROM btcc_guided_turn_work_bindings",
-      ).get()?.count).toBe(2);
+      ).get()?.count).toBe(1);
     } finally {
       finalDb.close();
     }
@@ -381,7 +381,7 @@ test("real App ask_first known not_applied command records one failed authority 
     expect(summary.claimed).toBe(1);
     expect(summary.failed).toBe(0);
     expect(summary.interrupted).toBe(0);
-    await waitForQueueState(appDbPath, clientMessageId, "dispatched");
+    await waitForQueueState(appDbPath, clientMessageId, "dispatching");
 
     const pendingDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), {
       readonly: true,
@@ -437,9 +437,9 @@ test("real App ask_first known not_applied command records one failed authority 
         SELECT client_message_id, turn_id FROM session_queued_messages
         WHERE chat_id = 'general' ORDER BY rowid ASC
       `).all();
-      expect(rows).toHaveLength(2);
-      scheduledClientMessageId = rows[1]!.client_message_id;
-      resumedTurnId = rows[1]!.turn_id;
+      expect(rows).toHaveLength(1);
+      scheduledClientMessageId = rows[0]!.client_message_id;
+      resumedTurnId = rows[0]!.turn_id;
     } finally {
       scheduled.close();
     }
@@ -524,7 +524,7 @@ test("real App ask_first known not_applied command records one failed authority 
     try {
       expect(replayDb.query<{ client_message_id: string }, []>(
         "SELECT client_message_id FROM session_queued_messages WHERE chat_id = 'general' ORDER BY rowid ASC",
-      ).all()).toHaveLength(2);
+      ).all()).toHaveLength(1);
     } finally {
       replayDb.close();
     }
@@ -622,7 +622,7 @@ test("real App ask_first possible-started uncertain command records one terminal
     expect(summary.claimed).toBe(1);
     expect(summary.failed).toBe(0);
     expect(summary.interrupted).toBe(0);
-    await waitForQueueState(appDbPath, clientMessageId, "dispatched");
+    await waitForQueueState(appDbPath, clientMessageId, "dispatching");
 
     const pendingDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), {
       readonly: true,
@@ -674,9 +674,9 @@ test("real App ask_first possible-started uncertain command records one terminal
         SELECT client_message_id, turn_id FROM session_queued_messages
         WHERE chat_id = 'general' ORDER BY rowid ASC
       `).all();
-      expect(rows).toHaveLength(2);
-      scheduledClientMessageId = rows[1]!.client_message_id;
-      resumedTurnId = rows[1]!.turn_id;
+      expect(rows).toHaveLength(1);
+      scheduledClientMessageId = rows[0]!.client_message_id;
+      resumedTurnId = rows[0]!.turn_id;
     } finally {
       scheduled.close();
     }
@@ -697,7 +697,6 @@ test("real App ask_first possible-started uncertain command records one terminal
     expect(await Bun.file(join(root, outputName)).text()).toBe("secret-value\n");
     expect(await Bun.file(join(root, "wrong-target.txt")).exists()).toBe(false);
 
-    let evidenceRef = "";
     let receiptJsonText = "";
     const finalDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), {
       readonly: true,
@@ -739,7 +738,6 @@ test("real App ask_first possible-started uncertain command records one terminal
         typeof parsedReceipt.evidenceRef === "string" &&
           /^authority-evidence-[a-f0-9]{64}$/.test(parsedReceipt.evidenceRef),
       ).toBe(true);
-      evidenceRef = String(parsedReceipt.evidenceRef);
       const journalEffectId = parsedReceipt.journalEffectId;
       const dispatchAttempt = parsedReceipt.dispatchAttempt;
       if (typeof journalEffectId !== "string") {
@@ -769,7 +767,7 @@ test("real App ask_first possible-started uncertain command records one terminal
     try {
       expect(replayDb.query<{ client_message_id: string }, []>(
         "SELECT client_message_id FROM session_queued_messages WHERE chat_id = 'general' ORDER BY rowid ASC",
-      ).all()).toHaveLength(2);
+      ).all()).toHaveLength(1);
     } finally {
       replayDb.close();
     }
@@ -793,7 +791,7 @@ test("real App ask_first possible-started uncertain command records one terminal
     const messagesBody = await messagesResponse.json() as { data: { messages: Array<{ role: string; turn_id?: string; text: string }> } };
     const finalMessages = messagesBody.data.messages.filter((message) => message.role === "assistant" && message.turn_id === resumedTurnId);
     expect(finalMessages).toHaveLength(1);
-    expect(finalMessages[0]?.text).toBe(`확인 필요 · ${evidenceRef}`);
+    expect(finalMessages[0]?.text).toBe("Approved command needs reconciliation.");
     const publicFinalProjection = JSON.stringify(finalMessages);
     for (const forbidden of [
       "secret-value",
@@ -860,7 +858,8 @@ function knownNotAppliedCommandRound(): ModelRoundPort {
       }
       if (round === 2) {
         expect(request.messages.some((message) => message.role === "tool" && message.name === "run_command")).toBe(true);
-        const workId = request.messages.map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1]).find(Boolean);
+        const workId = request.messages.filter((message) => message.role === "tool")
+          .map((message) => JSON.parse(message.content)?.output?.work?.work_id).find(Boolean);
         if (!workId) throw new Error(JSON.stringify(request.messages.filter((message) => message.role === "tool")));
         return { toolCalls: [toolCall("complete", "record_work_disposition", { work_id: workId, disposition: "blocked", summary: "The approved command failed to complete.", action_updates: [{ action_key: "run-known-not-applied-command", status: "blocked" }], remaining_actions: ["Restore the intended workspace before requesting the command again."], next_condition: "The original workspace is restored." })] };
       }
@@ -910,19 +909,13 @@ function uncertainCommandRound(): ModelRoundPort {
       }
       if (round === 2) {
         expect(request.messages.some((message) => message.role === "tool" && message.name === "run_command")).toBe(true);
-        return { toolCalls: [toolCall("run-reconcile", "run_command", {
-          command,
-          cwd: ".",
-          state_effect: "mutation",
-          summary: "Reconcile approved command",
-        })] };
-      }
-      if (round === 3) {
-        const workId = request.messages.map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1]).find(Boolean);
+        expect(request.messages.find((message) => message.role === "tool" && message.name === "run_command")?.content).toContain("uncertain");
+        const workId = request.messages.filter((message) => message.role === "tool")
+          .map((message) => JSON.parse(message.content)?.output?.work?.work_id).find(Boolean);
         if (!workId) throw new Error(JSON.stringify(request.messages.filter((message) => message.role === "tool")));
         return { toolCalls: [toolCall("complete", "record_work_disposition", { work_id: workId, disposition: "blocked", summary: "The approved command may have run.", action_updates: [{ action_key: "run-uncertain-command", status: "blocked" }], remaining_actions: ["Inspect the uncertain command outcome before taking further action."], next_condition: "The prior command outcome is known." })] };
       }
-      if (round === 4) return { text: "Approved command needs reconciliation.", toolCalls: [] };
+      if (round === 3) return { text: "Approved command needs reconciliation.", toolCalls: [] };
       return { text: "Waiting for Allow.", toolCalls: [] };
     },
   };
@@ -968,7 +961,8 @@ function reviewedCommandRound(): ModelRoundPort {
       }
       if (round === 2) {
         expect(request.messages.some((message) => message.role === "tool" && message.name === "run_command")).toBe(true);
-        const workId = request.messages.map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1]).find(Boolean);
+        const workId = request.messages.filter((message) => message.role === "tool")
+          .map((message) => JSON.parse(message.content)?.output?.work?.work_id).find(Boolean);
         if (!workId) throw new Error(JSON.stringify(request.messages.filter((message) => message.role === "tool")));
         return { toolCalls: [toolCall("complete", "record_work_disposition", { work_id: workId, disposition: "completed", summary: "The approved command completed once.", action_updates: [{ action_key: "run-approved-command", status: "done" }] })] };
       }

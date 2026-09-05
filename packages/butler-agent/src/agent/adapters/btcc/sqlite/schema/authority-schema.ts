@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS btcc_authority_requests (
   owner_session_id TEXT NOT NULL,
   source_session_id TEXT NOT NULL,
   source_turn_id TEXT NOT NULL,
+  source_call_id TEXT,
   source_work_id TEXT NOT NULL,
   workspace_path TEXT NOT NULL,
   plan_revision_id TEXT NOT NULL,
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS btcc_authority_requests (
   executable TEXT NOT NULL,
   command_count INTEGER NOT NULL CHECK (command_count >= 1),
   decision TEXT NOT NULL CHECK (decision IN ('pending', 'allowed', 'denied', 'modified')),
+  allow_scope TEXT NOT NULL DEFAULT 'once' CHECK (allow_scope IN ('once', 'conversation')),
   schedule_client_message_id TEXT NOT NULL UNIQUE,
   schedule_input_text TEXT NOT NULL,
   private_alternative_input TEXT,
@@ -53,4 +55,12 @@ ON btcc_authority_requests(owner_session_id, decision, created_at);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_btcc_authority_requests_slot_action
 ON btcc_authority_requests(source_work_id, plan_revision_id, action_key, capability, authority_generation);
+
+CREATE TABLE IF NOT EXISTS btcc_conversation_permissions (
+  grant_ref TEXT PRIMARY KEY, owner_session_id TEXT NOT NULL, workspace_path TEXT NOT NULL,
+  scope_key TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL,
+  created_at TEXT NOT NULL, revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_btcc_conversation_permissions_owner
+ON btcc_conversation_permissions(owner_session_id, revoked_at);
 `;

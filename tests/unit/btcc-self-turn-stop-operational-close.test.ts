@@ -2,6 +2,7 @@
 
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { bindPendingAuthorityFixture } from "./support/authority-pending-fixture.ts";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -40,17 +41,12 @@ test(
   const islandOwner = "butler/app-island";
   seedIslandRows(btccDbPath);
 
-  let releaseSecondTurnStarted!: () => void;
-  const secondTurnStarted = new Promise<void>((resolve) => {
-    releaseSecondTurnStarted = resolve;
-  });
-  let observedAbort = false;
   let mainRequestRef!: string;
   let round = 0;
   const reviewedCommand =
     "printf 'stop-private-value\\n' --stop-private-flag > stopped-command.txt";
   const modelRound: ModelRoundPort = {
-    async runRound(request) {
+    async runRound() {
       round += 1;
       if (round === 1) {
         return {
@@ -81,20 +77,7 @@ test(
           ],
         };
       }
-      releaseSecondTurnStarted();
-      const abortSignal = request.signal;
-      if (!abortSignal) {
-        throw new Error(
-          "model round missing abort signal; failing closed instead of waiting forever",
-        );
-      }
-      await new Promise<never>((_resolve, reject) => {
-        abortSignal.addEventListener("abort", () => {
-          observedAbort = true;
-          reject(new Error("aborted"));
-        }, { once: true });
-      });
-      return { text: "", toolCalls: [] };
+      throw new Error("A cancelled pending call must not invoke the model again.");
     },
   };
 
@@ -162,7 +145,7 @@ test(
     expect(firstResponse.status).toBe(202);
     expect(inbound.poll(drainOptions).claimed).toBe(1);
     await inbound.waitForIdle();
-    await waitForQueueState(appDbPath, firstMessageId, "dispatched");
+    await waitForQueueState(appDbPath, firstMessageId, "dispatching");
 
     const cardsBefore = await fetch(
       `${server.url}authority-requests?session_id=general`,
@@ -185,26 +168,11 @@ test(
     const sourceWorkId = readBoundWorkId(btccDbPath);
     expect(sourceWorkId).toBeTruthy();
 
-    const secondMessageId = "client-22222222-2222-4222-8222-222222222222";
-    const secondResponse = await fetch(`${server.url}messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chat_id: "general",
-        text: "Continue with something else meanwhile.",
-        model: "openai/gpt-5.5",
-        reasoning_effort: "low",
-        access_mode: "ask_first",
-        client_message_id: secondMessageId,
-      }),
-    });
-    expect(secondResponse.status).toBe(202);
-    const secondBody = await secondResponse.json() as {
-      data: { turn: { id: string } };
-    };
-    const cancelledTurnId = String(secondBody.data.turn.id);
-    expect(inbound.poll(drainOptions).claimed).toBe(1);
-    await secondTurnStarted;
+    const sourceDb = new Database(btccDbPath, { readonly: true });
+    const cancelledTurnId = sourceDb.query<{ source_turn_id: string }, [string]>(
+      "SELECT source_turn_id FROM btcc_authority_requests WHERE request_ref=?",
+    ).get(requestRef)!.source_turn_id;
+    sourceDb.close();
 
     const admittedTurn = readTurnRow(btccDbPath, cancelledTurnId);
     expect(admittedTurn).toMatchObject({
@@ -227,7 +195,7 @@ test(
     await inbound.waitForIdle();
     await waitForCancellationTerminal(appDbPath, cancelledTurnId);
 
-    expect(observedAbort).toBe(true);
+    expect(round).toBe(1);
     expect(readTurnRow(btccDbPath, cancelledTurnId)).toMatchObject({
       semantic_state: "cancelled",
       final_disposition: "cancelled",
@@ -1128,6 +1096,7 @@ function insertAuthorityRequest(dbPath: string, config: SeededRequestConfig): vo
       "2026-08-23T09:00:00.000Z",
       "2026-08-23T09:00:00.000Z",
     );
+    bindPendingAuthorityFixture(db, config.requestRef);
   } finally {
     db.close();
   }

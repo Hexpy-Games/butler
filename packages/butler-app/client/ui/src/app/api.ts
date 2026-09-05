@@ -62,6 +62,7 @@ interface ButlerAppBridge {
   getWorkStatus?: () => Promise<WorkStatusView>;
   getAuthorityRequests?: (input?: unknown) => Promise<unknown>;
   allowAuthorityRequest?: (input?: unknown) => Promise<unknown>;
+  revokeConversationPermission?: (input?: unknown) => Promise<unknown>;
   denyAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   modifyAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   openNativeNotificationSettings?: () => Promise<unknown>;
@@ -543,6 +544,14 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return await callBridge<T>(bridge, "allowAuthorityRequest", {
       sessionId: url.searchParams.get("session_id") ?? undefined,
       requestRef: decodeURIComponent(authorityAllowMatch[1] ?? ""),
+      scope: parseBody(options.body).scope,
+    });
+  }
+  const authorityRevokeMatch = url.pathname.match(/^\/authority-permissions\/([^/]+)$/u);
+  if (method === "DELETE" && authorityRevokeMatch) {
+    return await callBridge<T>(bridge, "revokeConversationPermission", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+      grantRef: decodeURIComponent(authorityRevokeMatch[1] ?? ""),
     });
   }
   const authorityDenyMatch = url.pathname.match(

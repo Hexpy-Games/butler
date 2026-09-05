@@ -116,6 +116,9 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
       await this.publishTerminal(progress, turn);
       return projectTerminalOutcome(turn);
     }
+    if (turn.suspension === "authority_pending") {
+      turn = await this.dependencies.turns.resumeAuthorityContinuation(turn.turnId) ?? turn;
+    }
     if (turn.suspension) {
       return { kind: "suspended", turnId: turn.turnId, reason: turn.suspension };
     }
@@ -209,6 +212,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
           turn,
           claim,
           reason: result.suspension,
+          authorityContinuation: result.authorityContinuation,
         });
       }
       const transition = guidedFinalTransition(turn, result);
