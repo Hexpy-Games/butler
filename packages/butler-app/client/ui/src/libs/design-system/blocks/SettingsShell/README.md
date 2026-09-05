@@ -15,6 +15,12 @@ It centralizes responsive settings geometry and prevents product CSS from owning
 ## How to use this component
 Pass already-rendered sidebar and detail nodes. The product container decides active section and data.
 
+The sidebar slot is bounded by the available shell height on desktop and mobile.
+Keep back navigation and search fixed above a filling `ScrollArea` for category
+navigation. Use `NavSection` headings for search and category groups so their
+indentation and typography stay consistent. The scrolling list must be outside
+Electron drag regions and keep its last item reachable in short windows.
+
 ## Who can use this component
 Butler client settings containers and design-system fixtures.
 

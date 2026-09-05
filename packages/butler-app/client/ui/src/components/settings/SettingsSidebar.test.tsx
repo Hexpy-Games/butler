@@ -74,6 +74,15 @@ test("settings sidebar renders each group through the existing settings nav", ()
   );
 
   const document = new JSDOM(markup).window.document;
+  const navigationScroll = document.querySelector(
+    '[data-test-class="settings-navigation-scroll"]',
+  );
+  const searchInput = document.querySelector('input[type="search"]');
+  expect(navigationScroll).not.toBeNull();
+  expect(navigationScroll?.querySelectorAll("nav").length).toBe(3);
+  expect(navigationScroll?.contains(searchInput)).toBe(false);
+  expect(navigationScroll?.textContent).not.toContain("Back");
+  expect(searchInput?.getAttribute("aria-label")).toBeTruthy();
   expect(
     Array.from(document.querySelectorAll("nav")).map((nav) =>
       nav.getAttribute("aria-label"),
