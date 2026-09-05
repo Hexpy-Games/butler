@@ -4,6 +4,7 @@ import { basename, join, resolve } from "node:path";
 import { withDurableFileLock, writeJsonFileAtomic } from "../../../persistence/atomic-json-store.ts";
 import type { ExactLedgerTargetPrecondition } from "./canonical-ledger-reader.ts";
 import type { ProjectLedgerHead } from "./runtime-types.ts";
+import { parseHeadRecordPaths } from "./observe-project-ledger.ts";
 
 export type ProjectLedgerLogicalOperationKind =
   | "mutation_call" | "binding_revision" | "closeout_diagnostic" | "abandonment" | "legacy_import";
@@ -280,7 +281,8 @@ function parseHead(value: unknown, ledgerRoot: string): ProjectLedgerHead {
     !finiteCount(head.sourceFileCount) || !finiteCount(head.storageEntryCount)) invalid();
   return { schema: head.schema, projectRoot: ledgerRoot, sourceSha256: sha(head.sourceSha256),
     sourceFileCount: head.sourceFileCount, storageSha256: sha(head.storageSha256),
-    storageEntryCount: head.storageEntryCount };
+    storageEntryCount: head.storageEntryCount,
+    ...(head.recordPaths === undefined ? {} : { recordPaths: parseHeadRecordPaths(head.recordPaths) }) };
 }
 function deterministicOccurrenceId(scope: OccurrenceScope): string {
   return digestJson({ ledgerProjectId: scope.ledgerProjectId,
@@ -298,7 +300,7 @@ function deterministicPublicationId(
 const OCCURRENCE_KEYS = ["schema", "ledgerProjectId", "ledgerRoot", "operationIdentity", "occurrenceId", "status", "attempts"];
 const ATTEMPT_KEYS = ["number", "status", "requestSha256", "publicationId", "expectedBase", "targetPreconditions"];
 const PRECONDITION_KEYS = ["id", "kind", "path", "parentId", "state", "rawRecordSha256"];
-const HEAD_KEYS = ["schema", "projectRoot", "sourceSha256", "sourceFileCount", "storageSha256", "storageEntryCount"];
+const HEAD_KEYS = ["schema", "projectRoot", "sourceSha256", "sourceFileCount", "storageSha256", "storageEntryCount", "recordPaths"];
 function parseIdentity(value: unknown): ProjectLedgerLogicalOperationIdentity {
   const identity = record(value);
   exactKeys(identity, ["kind", "id"]);

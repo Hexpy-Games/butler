@@ -20,7 +20,8 @@ export async function validateProjectWorkOfficialMetadata(
   const core = await loadProjectLedgerCore();
   const publishedRecords: ProjectWorkPublishedRecord[] = [];
   for (const target of snapshot.targetPreconditions) {
-    const data = core.readRecordData(
+    const record = requiredRecord(snapshot.records, target.id);
+    const data = record.metadata ?? core.readRecordData(
       core.projectPath(scope.ledgerRoot, target.path),
     );
     if (
@@ -41,7 +42,6 @@ export async function validateProjectWorkOfficialMetadata(
       hasUnsupportedCompletionMetadata(data)
     )
       invalid();
-    const record = requiredRecord(snapshot.records, target.id);
     publishedRecords.push({
       id: target.id,
       kind: target.kind as ProjectWorkPublishedRecord["kind"],

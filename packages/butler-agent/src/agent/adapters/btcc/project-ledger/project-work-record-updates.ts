@@ -1,7 +1,6 @@
 import type { DurableWorkView } from "../../../btcc/work/index.ts";
-import { readStableExactProjectLedgerSnapshot } from "./canonical-ledger-reader.ts";
+import { readExactProjectLedgerSnapshot } from "./canonical-ledger-reader.ts";
 import type { ProjectLedgerRecordUpdate } from "./external-effect-record-update.ts";
-import { loadProjectLedgerCore } from "./project-ledger-core.ts";
 import {
   canonicalProjectWorkChildBody,
   decodeChild,
@@ -30,19 +29,16 @@ export async function immutableChildUpdate(input: {
 }): Promise<ProjectLedgerRecordUpdate | null> {
   const path = childPath(input.scope.ledgerProjectId, input.kind, input.id);
   const target = { id: input.id, kind: input.kind, path, parentId: input.workId };
-  const snapshot = await readStableExactProjectLedgerSnapshot({
+  const otherKind = input.kind === "plan" ? "reference" : "plan";
+  const snapshot = await readExactProjectLedgerSnapshot({
     projectRoot: input.scope.ledgerRoot,
-    targets: [target],
+    targets: [target, { ...target, kind: otherKind,
+      path: childPath(input.scope.ledgerProjectId, otherKind, input.id) }],
   });
+  if (snapshot.records.some((record) => record.kind === otherKind))
+    throw new Error("project_work_immutable_identity_ambiguous");
   const body = canonicalProjectWorkChildBody(input.child);
   if (!snapshot.records[0]) {
-    const core = await loadProjectLedgerCore();
-    if (
-      core
-        .buildIndex(input.scope.ledgerRoot)
-        .records.some((record) => record.id === input.id)
-    )
-      throw new Error("project_work_immutable_identity_ambiguous");
     return {
       operation: "create",
       kind: input.kind,
@@ -54,8 +50,7 @@ export async function immutableChildUpdate(input: {
       body,
     };
   }
-  const core = await loadProjectLedgerCore();
-  const data = core.readRecordData(core.projectPath(input.scope.ledgerRoot, path));
+  const data = snapshot.records[0].metadata;
   if (
     !data ||
     data.spec !== PROJECT_WORK_SPEC ||

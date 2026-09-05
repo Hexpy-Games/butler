@@ -30,6 +30,7 @@ import { canonicalProjectWorkChildBody } from "../../packages/butler-agent/src/a
 import { captureMaterialSnapshot } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-work-material-snapshot.ts";
 import { projectWorkRecordId } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-work-json.ts";
 import { publishProjectWorkRecords } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-work-publication.ts";
+import { requireCurrentProjectWork } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-work-snapshot.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -927,8 +928,19 @@ test("durable targets recover projection after promotion and old start replay ca
     second.workId,
   ]);
 
-  const oldReplay = await service.startWork(firstInput);
-  expect(oldReplay.status).toBe("abandoned");
+  const pendingJournal = join(fixture.butlerData, "runtime", "test-later-publication.json");
+  const pending = fixture.core.prepareProjectLedgerPublication({
+    publicationId: "test-later-publication", canonicalRoot: fixture.projectRoot,
+    candidateRoot: join(fixture.butlerData, "runtime", "test-later-candidate"),
+    journalPath: pendingJournal,
+    expectedBase: fixture.core.observeProjectLedgerRecordHead(fixture.projectRoot, []),
+    materialize() {},
+  });
+  try {
+    const oldReplay = await service.startWork(firstInput);
+    expect(oldReplay.status).toBe("abandoned");
+    expect(existsSync(JSON.parse(readFileSync(pendingJournal, "utf8")).claimPath)).toBe(true);
+  } finally { fixture.core.abortProjectLedgerPublication(pending); }
   expect(fixture.runtime.heads.get("session-1")).toBe(second.workId);
   expect(fixture.runtime.observations.at(-1)).toEqual([
     first.workId,
@@ -1399,7 +1411,7 @@ test("two fresh writers use predecessor CAS and the loser writes no Work", async
   ).toHaveLength(1);
 });
 
-test("ready publication recovery resumes through the public adapter and returns current view", async () => {
+test("Work publication skips derived rendering and replays the current view", async () => {
   const fixture = await createFixture();
   const service = createDurableWorkService(
     createProjectWorkStore(fixture.adapterInput),
@@ -1419,8 +1431,9 @@ test("ready publication recovery resumes through the public adapter and returns 
     mutationCallId: "ready-recovery",
     objective: "Recover ready",
   };
-  await expect(service.startWork(input)).rejects.toThrow();
-  fixture.core.render = render;
+  try { await service.startWork(input); }
+  finally { fixture.core.render = render; }
+  expect(faulted).toBe(false);
   const recovered = await service.startWork(input);
   expect(recovered.objective).toBe("Recover ready");
   const events = readFileSync(
@@ -1537,7 +1550,7 @@ test("legacy empty reconcile is uncertain before a missing occurrence is classif
   expect(occurrenceCount(fixture.butlerData)).toBe(0);
 });
 
-test("related unknown-schema child fails closed without a write", async () => {
+test("unreferenced unknown child is ignored by current reads and rejected by explicit history reads", async () => {
   const fixture = await createFixture();
   const service = createDurableWorkService(
     createProjectWorkStore(fixture.adapterInput),
@@ -1563,7 +1576,11 @@ test("related unknown-schema child fails closed without a write", async () => {
   });
   fixture.core.writeIndex(fixture.projectRoot);
   const events = ledgerText(fixture.projectRoot);
-  await expect(service.loadContext(scope)).rejects.toThrow(
+  expect((await service.loadContext(scope))?.work.workId).toBe(started.workId);
+  await expect(requireCurrentProjectWork({
+    butlerData: fixture.butlerData, scope: fixture.adapterInput.scope,
+    workId: started.workId, includeHistory: true,
+  })).rejects.toThrow(
     "project_work_managed_record_invalid",
   );
   expect(ledgerText(fixture.projectRoot)).toBe(events);
@@ -1595,7 +1612,7 @@ test("managed body corruption and immutable identity conflict fail closed", asyn
   );
 });
 
-test("strict snapshot authenticates every managed child identity and bound origin", async () => {
+test("explicit history snapshot authenticates every managed child identity and bound origin", async () => {
   const fixture = await createFixture();
   const service = createDurableWorkService(
     createProjectWorkStore(fixture.adapterInput),
@@ -1653,7 +1670,10 @@ test("strict snapshot authenticates every managed child identity and bound origi
     });
     fixture.core.writeIndex(fixture.projectRoot);
     const events = ledgerText(fixture.projectRoot);
-    await expect(service.loadContext(scope)).rejects.toThrow(
+    await expect(requireCurrentProjectWork({
+      butlerData: fixture.butlerData, scope: fixture.adapterInput.scope,
+      workId: started.workId, includeHistory: true,
+    })).rejects.toThrow(
       "project_work_managed_record_invalid",
     );
     expect(ledgerText(fixture.projectRoot)).toBe(events);
@@ -1741,7 +1761,10 @@ test("strict snapshot authenticates every managed child identity and bound origi
     spec: "SPEC-WRONG",
   });
   fixture.core.writeIndex(fixture.projectRoot);
-  await expect(service.loadContext(scope)).rejects.toThrow(
+  await expect(requireCurrentProjectWork({
+    butlerData: fixture.butlerData, scope: fixture.adapterInput.scope,
+    workId: started.workId, includeHistory: true,
+  })).rejects.toThrow(
     "project_work_managed_record_invalid",
   );
   fixture.core.updateRecord(fixture.projectRoot, {
@@ -1759,7 +1782,10 @@ test("strict snapshot authenticates every managed child identity and bound origi
     }),
   });
   fixture.core.writeIndex(fixture.projectRoot);
-  await expect(service.loadContext(scope)).rejects.toThrow(
+  await expect(requireCurrentProjectWork({
+    butlerData: fixture.butlerData, scope: fixture.adapterInput.scope,
+    workId: started.workId, includeHistory: true,
+  })).rejects.toThrow(
     "project_work_managed_record_invalid",
   );
   fixture.core.updateRecord(fixture.projectRoot, {
@@ -1777,9 +1803,10 @@ test("strict snapshot authenticates every managed child identity and bound origi
     }),
   });
   fixture.core.writeIndex(fixture.projectRoot);
-  await expect(
-    service.claimCloseoutCorrection({ ...scope, workId: started.workId }),
-  ).rejects.toThrow("project_work_managed_record_invalid");
+  await expect(requireCurrentProjectWork({
+    butlerData: fixture.butlerData, scope: fixture.adapterInput.scope,
+    workId: started.workId, includeHistory: true,
+  })).rejects.toThrow("project_work_managed_record_invalid");
   fixture.core.updateRecord(fixture.projectRoot, {
     id: diagnostic.id,
     kind: "reference",
@@ -1793,9 +1820,10 @@ test("strict snapshot authenticates every managed child identity and bound origi
   });
   fixture.core.writeIndex(fixture.projectRoot);
   const wrongParentEvents = ledgerText(fixture.projectRoot);
-  await expect(service.loadContext(scope)).rejects.toMatchObject({
-    code: "project_ledger_effect_uncertain",
-  });
+  await expect(requireCurrentProjectWork({
+    butlerData: fixture.butlerData, scope: fixture.adapterInput.scope,
+    workId: started.workId, includeHistory: true,
+  })).rejects.toThrow();
   expect(ledgerText(fixture.projectRoot)).toBe(wrongParentEvents);
   fixture.core.updateRecord(fixture.projectRoot, {
     id: diagnostic.id,
@@ -2292,9 +2320,8 @@ test("strict snapshot proves checkpoint windows and historical Review dependenci
     });
     fixture.core.writeIndex(fixture.projectRoot);
     const reviewEvents = ledgerText(fixture.projectRoot);
-    await expect(service.loadContext(scope)).rejects.toThrow(
-      "project_work_managed_record_invalid",
-    );
+    // Current reads reject either the invalid relation or its changed immutable publication.
+    await expect(service.loadContext(scope)).rejects.toThrow();
     expect(ledgerText(fixture.projectRoot)).toBe(reviewEvents);
   }
   fixture.core.updateRecord(fixture.projectRoot, {

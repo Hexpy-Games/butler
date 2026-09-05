@@ -11,6 +11,7 @@ import { ensureDir, ledgerRoot, listFiles, projectRelative, safeReadJson } from 
 import { frontmatterBody, markdownWithFrontmatter, parseFrontmatter } from "./frontmatter.js";
 import { completionGateIssues } from "./state-machine.js";
 import { isNonAuthoritativeProjectLedgerStorage } from "./storage-authority.js";
+import { readCommittedProjectLedgerRecords } from "./transactions/record-snapshot.js";
 
 export function issue(code, severity, message, path, record = null) {
   return {
@@ -60,12 +61,18 @@ export function readRecordData(filePath) {
   return null;
 }
 
-export function readRecord(project, filePath) {
+export function readRecord(project, filePath, committedText = undefined) {
+  if (!filePath.endsWith(".md") && !filePath.endsWith(".json")) return null;
   const relPath = projectRelative(project, filePath);
   if (relPath.endsWith("ledger.jsonl")) return null;
   if (isNonAuthoritativeProjectLedgerStorage(filePath)) return null;
+  const root = ledgerRoot(project);
+  const source = committedText === undefined
+    ? readCommittedProjectLedgerRecords(root, [relative(root, filePath)])[0].raw
+    : committedText;
+  if (source === null) return null;
   const stats = statSync(filePath);
-  const data = readRecordData(filePath);
+  const data = filePath.endsWith(".json") ? JSON.parse(source) : (parseFrontmatter(source) ?? {});
   if (!data) return null;
 
   const semanticPath = relative(ledgerRoot(project), filePath).split("\\").join("/");
@@ -113,6 +120,13 @@ export function recordFiles(project) {
       .filter((file) => file !== projectFile && !file.endsWith("ledger.jsonl") &&
         !isNonAuthoritativeProjectLedgerStorage(file)),
   ].filter((file) => existsSync(file));
+}
+
+export function committedRecordSources(project) {
+  const root = ledgerRoot(project);
+  return readCommittedProjectLedgerRecords(root, () =>
+    recordFiles(project).map((file) => relative(root, file)))
+    .map(({ path, raw }) => ({ filePath: join(root, path), raw }));
 }
 
 export function sourceMaxMtimeMs(project) {

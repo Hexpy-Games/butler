@@ -63,6 +63,8 @@ export async function probeProjectWorkServiceReplay(input: {
     butlerData: input.butlerData,
     scope: input.scope,
     workId,
+    // An actual historical replay needs its predecessor, not just the latest pointers.
+    includeHistory: true,
   });
   return projectWorkReplayContext(
     current,

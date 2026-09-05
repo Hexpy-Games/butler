@@ -1,4 +1,5 @@
 import { rmSync } from "node:fs";
+import { prepareRecordPublication } from "./record-publication.js";
 import { copyDirectory } from "../fs.js";
 import {
   acquirePublicationClaim,
@@ -14,6 +15,7 @@ import {
 } from "./transaction-journal.js";
 
 export function prepareProjectLedgerPublication(input) {
+  if (input.expectedBase.recordPaths) return prepareRecordPublication(input);
   assertHead(input.expectedBase, observeProjectLedgerSourceHead(input.canonicalRoot));
   const expected = transactionIdentity(input);
   const existing = loadTransactionJournal(input.journalPath);
@@ -65,6 +67,7 @@ export function abortProjectLedgerPublication(publication) {
     throw new Error(`Project Ledger publication cannot abort from ${journal.status}`);
   }
   rmSync(publication.candidateRoot, { recursive: true, force: true });
+  if (journal.base.recordPaths) rmSync(`${publication.candidateRoot}.before`, { recursive: true, force: true });
   rmSync(publication.journalPath, { force: true });
   releasePublicationClaim(publication.claimPath, publication);
 }

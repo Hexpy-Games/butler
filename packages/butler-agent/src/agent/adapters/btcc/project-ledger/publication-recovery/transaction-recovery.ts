@@ -36,7 +36,7 @@ type PublicationInput = {
 };
 
 type PublicationAttemptInput = PublicationInput & {
-  observeHead(projectRoot: string): Promise<ProjectLedgerHead>;
+  observeHead(projectRoot: string, recordPaths?: string[]): Promise<ProjectLedgerHead>;
   materialize(candidateRoot: string): void;
   runPhase<T>(phase: "prepare" | "promote" | "observe_promotion", run: () => T): T;
 };
@@ -46,12 +46,16 @@ const SAFE_UNCERTAIN_MESSAGE =
 
 export async function reconcileProjectLedgerPublication(
   input: PublicationInput & {
-    observeHead(projectRoot: string): Promise<ProjectLedgerHead>;
+    observeHead(projectRoot: string, recordPaths?: string[]): Promise<ProjectLedgerHead>;
   },
 ): Promise<ProjectLedgerPublicationState> {
   const paths = pathsFor(input);
   const receipt = readPublicationReceipt(paths.receiptPath, input);
   if (receipt) {
+    if (receipt.status === "observed" && input.attempt.expectedBase.recordPaths) {
+      const journal = readPublicationJournal(paths.journalPath, input, paths, false);
+      if (journal) cleanupApplied(input, paths, journal);
+    }
     return receipt.status === "not_applied"
       ? { status: "not_applied" }
       : { status: "applied", evidence: appliedEvidence(receipt) };
@@ -70,7 +74,8 @@ export async function reconcileProjectLedgerPublication(
   if (journal.status === "promoted" || journal.status === "observed") {
     return recordAppliedRecovery(input, paths, journal);
   }
-  const active = await input.observeHead(input.ledgerRoot);
+  if (input.attempt.expectedBase.recordPaths && journal.status === "committing") return { status: "ready" };
+  const active = await input.observeHead(input.ledgerRoot, input.attempt.expectedBase.recordPaths);
   const baseActive = sameLogicalHead(active, input.attempt.expectedBase);
   const candidateActive = sameHead(active, journal.candidateHead);
   if (candidateActive) return recordAppliedRecovery(input, paths, journal);
@@ -87,8 +92,13 @@ export async function applyProjectLedgerPublicationAttempt(
   input: PublicationAttemptInput,
 ): Promise<ProjectLedgerAttemptOutcome> {
   try {
+    const resumed = input.attempt.expectedBase.recordPaths &&
+      readPublicationJournal(pathsFor(input).journalPath, input, pathsFor(input))?.status === "committing";
+    if (resumed) return {
+      status: "applied", evidence: input.runPhase("prepare", () => publishProjectLedgerPublication(input)),
+    };
     await revalidateExactLedgerPreconditions(input.ledgerRoot, input.attempt.targetPreconditions);
-    const active = await input.observeHead(input.ledgerRoot);
+    const active = await input.observeHead(input.ledgerRoot, input.attempt.expectedBase.recordPaths);
     if (!sameLogicalHead(active, input.attempt.expectedBase)) {
       recordProjectLedgerPublicationNotApplied(input);
       return { status: "not_applied" };
@@ -100,6 +110,8 @@ export async function applyProjectLedgerPublicationAttempt(
   } catch {
     const recovered = await reconcileProjectLedgerPublication(input);
     if (recovered.status !== "ready") return recovered;
+    if (input.attempt.expectedBase.recordPaths &&
+      readPublicationJournal(pathsFor(input).journalPath, input, pathsFor(input))?.status === "committing") return uncertain();
     recordProjectLedgerPublicationNotApplied(input);
     return { status: "not_applied" };
   }
@@ -123,11 +135,14 @@ function publishProjectLedgerPublication(input: PublicationAttemptInput): Applie
       }) as ProjectLedgerCorePublication;
   input.runPhase("promote", () =>
     input.core.promoteProjectLedgerPublication(prepared, exchangeCompleteRoots));
-  input.runPhase("observe_promotion", () => input.core.observeProjectLedgerPromotion(prepared));
+  input.runPhase("observe_promotion", () => input.core.observeProjectLedgerPromotion(prepared, () => {
+    const journal = readPublicationJournal(paths.journalPath, input, paths);
+    if (!journal) throw new Error("project_ledger_publication_evidence_invalid");
+    writeObservedReceipt(paths.receiptPath, createObservedReceipt(input, journal));
+  }));
   const journal = readPublicationJournal(paths.journalPath, input, paths);
   if (!journal) throw new Error("project_ledger_publication_evidence_invalid");
   const receipt = createObservedReceipt(input, journal);
-  writeObservedReceipt(paths.receiptPath, receipt);
   return appliedEvidence(receipt);
 }
 
@@ -146,6 +161,7 @@ function cleanupPreExchange(
   journal: PublicationJournal,
 ): void {
   rmSync(paths.candidateRoot, { recursive: true, force: true });
+  if (journal.base.recordPaths) rmSync(`${paths.candidateRoot}.before`, { recursive: true, force: true });
   input.core.reconcilePublicationClaim(journal.claimPath, journal, false);
   rmSync(paths.journalPath, { force: true });
 }
@@ -155,8 +171,9 @@ function cleanupApplied(
   paths: PublicationPaths,
   journal: PublicationJournal,
 ): void {
-  rmSync(paths.candidateRoot, { recursive: true, force: true });
   input.core.reconcilePublicationClaim(journal.claimPath, journal, false);
+  rmSync(paths.candidateRoot, { recursive: true, force: true });
+  if (journal.base.recordPaths) rmSync(`${paths.candidateRoot}.before`, { recursive: true, force: true });
 }
 
 function recordAppliedRecovery(
@@ -165,8 +182,8 @@ function recordAppliedRecovery(
   journal: PublicationJournal,
 ): Extract<ProjectLedgerPublicationState, { status: "applied" }> {
   const observed = createObservedReceipt(input, journal);
-  cleanupApplied(input, paths, journal);
   writeObservedReceipt(paths.receiptPath, observed);
+  cleanupApplied(input, paths, journal);
   return { status: "applied", evidence: appliedEvidence(observed) };
 }
 
@@ -177,6 +194,6 @@ function pathsFor(input: Pick<PublicationInput, "butlerData" | "attempt">): Publ
   });
 }
 
-function uncertain(): ProjectLedgerPublicationState {
+function uncertain(): Extract<ProjectLedgerPublicationState, { status: "uncertain" }> {
   return { status: "uncertain", message: SAFE_UNCERTAIN_MESSAGE };
 }

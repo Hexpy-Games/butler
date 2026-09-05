@@ -1,7 +1,7 @@
 import type { DurableWorkView } from "../../../btcc/work/index.ts";
 import {
   readExactProjectLedgerSnapshot,
-  readStableExactProjectLedgerSnapshot,
+  revalidateExactLedgerPreconditions,
   type ExactLedgerRecord,
   type ExactLedgerReadSnapshot,
   type ExactLedgerTarget,
@@ -13,7 +13,7 @@ import {
   type ProjectWorkManifest,
 } from "./project-work-codec.ts";
 import { childPath, workPath } from "./project-work-json.ts";
-import { validateManagedProjectWorkChildren } from "./project-work-managed-children.ts";
+import { decodeCurrentProjectWorkChildren, validateManagedProjectWorkChildren } from "./project-work-managed-children.ts";
 import { managedProjectWorkTargets } from "./project-work-managed-targets.ts";
 import { validateProjectWorkOccurrenceProofs } from "./project-work-occurrence-proof.ts";
 import type { ProjectWorkPublishedRecord } from "./project-work-publication-proof.ts";
@@ -31,6 +31,7 @@ export async function readCurrentProjectWork(input: {
   butlerData: string;
   scope: ResolvedProjectWorkScope;
   workId: string;
+  includeHistory?: boolean;
 }): Promise<CurrentProjectWorkSnapshot | null> {
   return readCurrentProjectWorkAttempt(input, 1, readStableSnapshot);
 }
@@ -50,6 +51,7 @@ async function readCurrentProjectWorkAttempt(
     butlerData: string;
     scope: ResolvedProjectWorkScope;
     workId: string;
+    includeHistory?: boolean;
   },
   attempt: number,
   readSnapshot: (input: {
@@ -66,11 +68,9 @@ async function readCurrentProjectWorkAttempt(
   if (!record) return null;
   const manifest = decodeManifest(record.body, input);
   await validateProjectWorkOfficialMetadata(input.scope, initial, manifest);
-  const childTargets = await managedProjectWorkTargets(
-    input.scope,
-    manifest,
-    targetsForManifest(input.scope, manifest),
-  );
+  const required = targetsForManifest(input.scope, manifest);
+  const childTargets = input.includeHistory
+    ? await managedProjectWorkTargets(input.scope, manifest, required) : required;
   const stable = await readSnapshot({
     projectRoot: input.scope.ledgerRoot,
     targets: [workTarget, ...childTargets],
@@ -85,7 +85,7 @@ async function readCurrentProjectWorkAttempt(
     stable,
     currentManifest,
   );
-  if (pointerSignature(currentManifest) !== pointerSignature(manifest)) {
+  if (JSON.stringify(currentManifest) !== JSON.stringify(manifest)) {
     if (attempt >= 3) throw new Error("project_work_snapshot_unstable");
     return readCurrentProjectWorkAttempt(input, attempt + 1, readSnapshot);
   }
@@ -116,7 +116,7 @@ async function readCurrentProjectWorkAttempt(
     completeManifest,
   );
   if (
-    pointerSignature(completeManifest) !== pointerSignature(currentManifest)
+    JSON.stringify(completeManifest) !== JSON.stringify(currentManifest)
   ) {
     if (attempt >= 3) throw new Error("project_work_snapshot_unstable");
     return readCurrentProjectWorkAttempt(input, attempt + 1, readSnapshot);
@@ -124,11 +124,13 @@ async function readCurrentProjectWorkAttempt(
   return hydrate(input, completeManifest, complete.records, completeMetadata);
 }
 
-function readStableSnapshot(input: {
+async function readStableSnapshot(input: {
   projectRoot: string;
   targets: ExactLedgerTarget[];
 }): Promise<ExactLedgerReadSnapshot> {
-  return readStableExactProjectLedgerSnapshot(input);
+  const snapshot = await readExactProjectLedgerSnapshot(input);
+  await revalidateExactLedgerPreconditions(input.projectRoot, snapshot.targetPreconditions);
+  return snapshot;
 }
 
 function readExactSnapshot(input: {
@@ -142,6 +144,7 @@ export async function requireCurrentProjectWork(input: {
   butlerData: string;
   scope: ResolvedProjectWorkScope;
   workId: string;
+  includeHistory?: boolean;
 }): Promise<CurrentProjectWorkSnapshot> {
   const current = await readCurrentProjectWork(input);
   if (!current) throw new Error("project_work_record_missing");
@@ -188,12 +191,14 @@ export async function readManagedProjectWorkChild<
 }
 
 function hydrate(
-  input: { butlerData: string; scope: ResolvedProjectWorkScope },
+  input: { butlerData: string; scope: ResolvedProjectWorkScope; includeHistory?: boolean },
   manifest: ProjectWorkManifest,
   records: ExactLedgerRecord[],
   publishedRecords: ProjectWorkPublishedRecord[],
 ): CurrentProjectWorkSnapshot {
-  const children = validateManagedProjectWorkChildren(manifest, records);
+  const children = input.includeHistory
+    ? validateManagedProjectWorkChildren(manifest, records)
+    : decodeCurrentProjectWorkChildren(manifest, records);
   validateProjectWorkOccurrenceProofs({
     ...input,
     manifest,
@@ -301,18 +306,6 @@ function requiredRecord(
   const matches = records.filter((record) => record.id === id);
   if (matches.length !== 1) return invalid();
   return matches[0]!;
-}
-function pointerSignature(manifest: ProjectWorkManifest): string {
-  return JSON.stringify({
-    plan: manifest.currentPlanRevisionId ?? null,
-    checkpoint: manifest.latestCheckpointRevisionId ?? null,
-    planReview: manifest.latestPlanReviewRevisionId ?? null,
-    resultReview: manifest.latestResultReviewRevisionId ?? null,
-    completion: manifest.latestCompletionValidationRevisionId ?? null,
-    disposition: manifest.latestDispositionRevisionId ?? null,
-    bindings: manifest.bindingRefs,
-    results: manifest.resultRefs,
-  });
 }
 function invalid(): never {
   throw new Error("project_work_managed_record_invalid");

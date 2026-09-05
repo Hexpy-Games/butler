@@ -17,6 +17,47 @@ import { dedupeProgressRows } from
   "../../packages/butler-agent/src/gateways/app/domain/progress-summary/progress-row-merge.ts";
 import { projectTurnActivity } from
   "../../packages/butler-app/client/ui/src/app/conversation-progress/activity.ts";
+import { createGuidedAuthorityProjection } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-progress.ts";
+
+test("ask-first keeps authored Work activity and its plan review subject through both callbacks", async () => {
+  const updates: Array<{ title: string; summary: string }> = [];
+  const guided = createGuidedAuthorityProjection({
+    accessMode: "ask_first",
+    ownerSessionId: "activity-session",
+    turnId: "activity-turn",
+    activity: createGuidedActivityProjection({
+      turnId: "activity-turn",
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged(update) { updates.push(update); },
+      },
+    }),
+  });
+  const calls = [
+    { name: "replace_work_plan", args: { objective: "Sandy README를 읽고 핵심 내용을 정리합니다.", actions: [] } },
+    { name: "record_work_review", args: { subject: "plan", verdict: "accept", summary: "요청한 README 요약과 보고서 작성이 계획에 포함되어 있습니다." } },
+  ];
+  for (const [iteration, call] of calls.entries()) {
+    guided.loopCallbacks.onAssistantTextBeforeTools?.({
+      text: "",
+      iteration,
+      toolCalls: [{ id: `activity-call-${iteration}`, name: call.name, arguments: call.args, rawArguments: JSON.stringify(call.args) }],
+    });
+    const before = updates.length;
+    const binding = await guided.publicActivity.observeTool({ ...call, effectiveToolName: call.name });
+    expect(updates).toHaveLength(before);
+    await guided.publicActivity.publishAccepted(binding);
+  }
+  expect(updates).toContainEqual(expect.objectContaining({
+    title: "실행 계획 수립", summary: calls[0]!.args.objective,
+  }));
+  expect(updates).toContainEqual(expect.objectContaining({
+    title: "계획 검토", summary: calls[1]!.args.summary,
+  }));
+  expect(updates.some((update) => update.title === "결과 검토")).toBe(false);
+  expect(updates.some((update) => update.summary === "작업에 필요한 정보를 확인하고 있습니다.")).toBe(false);
+});
 
 test("gateway projection keeps display stage separate and groups its completed tool", async () => {
   const events: SharedTurnEvent[] = [];
