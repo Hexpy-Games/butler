@@ -79,7 +79,11 @@ test("no-budget real loop sends bounded OpenAI bodies retaining Plan, checkpoint
     ...direction,
     executeTool: async (call) => call.name === "run_command"
       ? saved
-      : { ok: true, checkpoint: call.name === "record_work_checkpoint" ? "CURRENT_WORK_CHECKPOINT" : "plan accepted" },
+      : { ok: true, work: {
+          work_id: "current-work", status: "open", current_stage: "execution",
+          actions: [{ action_key: call.name === "record_work_checkpoint"
+            ? "CURRENT_WORK_CHECKPOINT" : "ACCEPTED_PLAN_ACTION", status: "completed" }],
+        } },
   });
   expect(result.finalText).toBe("model chose to finish");
   expect(bodies).toHaveLength(9);

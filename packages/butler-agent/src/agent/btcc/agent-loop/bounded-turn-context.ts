@@ -21,7 +21,7 @@ export type BoundedTurnContext = {
 
 const DEFAULT_MODEL_CONTEXT_BYTES = 192 * 1024;
 
-/** Bytes that the next model request can still spend on this tool-result batch. */
+/** Reserve fresh results before selecting older history for the next request. */
 export function toolResultBatchModelFacingBudget(input: {
   messages: readonly ModelRoundMessage[];
   instructions?: string;
@@ -34,16 +34,19 @@ export function toolResultBatchModelFacingBudget(input: {
 }): number {
   const requestLimit = input.budgetMaxModelFacingBytes ??
     input.maxModelFacingBytes ?? DEFAULT_MODEL_CONTEXT_BYTES;
-  const occupied = serializedBytes({
+  const overhead = serializedBytes({
     instructions: input.instructions,
     tools: input.tools,
     toolChoice: input.toolChoice,
-    messages: input.messages,
+    messages: [],
   });
   const desired = input.resultCount * input.perResultMaxBytes;
-  return Math.max(
-    input.resultCount * 512,
-    Math.min(desired, Math.max(0, requestLimit - occupied)),
+  const required = atomicUnits(input.messages).flatMap((unit) =>
+    unit.mandatory ? unit.messages : [],
+  );
+  return Math.min(
+    desired,
+    Math.max(0, requestLimit - overhead - serializedBytes(required)),
   );
 }
 
@@ -239,6 +242,7 @@ export function buildBoundedTurnContext(
 
 function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
   const units: AtomicUnit[] = [{ messages: [messages[0]!], mandatory: true }];
+  let hasOpenToolCalls = false;
   let index = 1;
   while (index < messages.length) {
     const message = messages[index]!;
@@ -264,6 +268,7 @@ function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
       resultIds.add(result.toolCallId);
     }
     const mandatory = [...callIds].some((id) => !resultIds.has(id));
+    hasOpenToolCalls ||= mandatory;
     units.push({ messages: unitMessages, mandatory });
     index = cursor;
   }
@@ -271,7 +276,9 @@ function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
   const newestToolUnit = units.findLastIndex((unit) =>
     unit.messages.some((message) => message.role === "tool"),
   );
-  if (newestToolUnit >= 0) units[newestToolUnit]!.mandatory = true;
+  // Pending calls are the next result batch. Its reservation may replace the
+  // previous completed batch; Work/Plan anchors below remain mandatory.
+  if (newestToolUnit >= 0 && !hasOpenToolCalls) units[newestToolUnit]!.mandatory = true;
   const latestUser = units.findLastIndex((unit) => unit.messages.some((message) => message.role === "user"));
   if (latestUser >= 0) units[latestUser]!.mandatory = true;
   const latestDirection = units.findLastIndex((unit) => unit.messages.some((message) =>

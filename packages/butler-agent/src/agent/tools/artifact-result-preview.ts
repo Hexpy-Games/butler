@@ -74,7 +74,10 @@ export function fitExactOperationResultPage(
       high = middle - 1;
     }
   }
-  return exactPage(base, data.slice(0, low * 4), offset);
+  // A requested page is already bounded. If its identity alone consumes the
+  // smaller preview allowance, let whole-request selection make room for it;
+  // returning no data and the same cursor would make the reader unusable.
+  return low === 0 ? payload : exactPage(base, data.slice(0, low * 4), offset);
 }
 
 function exactPage(
@@ -193,7 +196,7 @@ export function fitToolArtifactPage(
     if (serializedBytes(page(middle)) <= maxBytes) low = middle;
     else high = middle - 1;
   }
-  return page(low);
+  return low === 0 ? payload : page(low);
 }
 
 function artifactSearch(value: unknown): Record<string, unknown> | undefined {
