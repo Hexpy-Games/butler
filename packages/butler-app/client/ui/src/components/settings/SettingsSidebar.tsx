@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
-import { ArrowLeft, Input, NavRow, SettingsNav, Stack, Typo } from "@/butler-ds";
+import {
+  ArrowLeft, Input, NavRow, NavSection, ScrollArea, SettingsNav, Stack, Typo,
+} from "@/butler-ds";
 import type { SettingsSectionId } from "@/app/types.ts";
 import { filterSettingsSectionGroups } from "./settingsSections";
 import type { SettingsSectionGroupDescriptor } from "./settingsTypes";
@@ -55,7 +57,7 @@ export function SettingsSidebar({
   }, [activeSection, onSectionChange, searchQuery, soleMatchingSectionId]);
 
   return (
-    <Stack gap="md" data-active={isActive ? "true" : undefined}>
+    <Stack fill gap="md" data-active={isActive ? "true" : undefined}>
       <Stack
         as="header"
         align="row"
@@ -71,10 +73,7 @@ export function SettingsSidebar({
           onClick={onClose}
         />
       </Stack>
-      <Stack gap="sm">
-        <Typo.Label htmlFor="settings-navigation-search">
-          {settingsCopy.searchLabel}
-        </Typo.Label>
+      <NavSection title={settingsCopy.searchLabel}>
         <Input
           id="settings-navigation-search"
           type="search"
@@ -84,7 +83,7 @@ export function SettingsSidebar({
           onChange={(event) => setSearchQuery(event.currentTarget.value)}
           data-test-class="settings-navigation-search"
         />
-      </Stack>
+      </NavSection>
       {searchQuery.trim() && filteredGroups.length === 0 ? (
         <Typo.Caption
           role="status"
@@ -94,21 +93,27 @@ export function SettingsSidebar({
           {settingsCopy.searchEmpty(searchQuery.trim())}
         </Typo.Caption>
       ) : null}
-      <Stack gap="lg">
-        {filteredGroups.map((group) => (
-          <SettingsNav
-            key={group.id}
-            title={group.label}
-            items={group.sections.map((item) => ({
-              id: item.id,
-              label: item.label,
-              icon: item.icon,
-              active: activeSection === item.id,
-              onSelect: () => onSectionChange(item.id),
-            }))}
-          />
-        ))}
-      </Stack>
+      <ScrollArea
+        fill
+        className="no-drag"
+        dataTestClass="settings-navigation-scroll"
+      >
+        <Stack gap="lg">
+          {filteredGroups.map((group) => (
+            <SettingsNav
+              key={group.id}
+              title={group.label}
+              items={group.sections.map((item) => ({
+                id: item.id,
+                label: item.label,
+                icon: item.icon,
+                active: activeSection === item.id,
+                onSelect: () => onSectionChange(item.id),
+              }))}
+            />
+          ))}
+        </Stack>
+      </ScrollArea>
     </Stack>
   );
 }
