@@ -3,7 +3,7 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const readToolEvidenceArtifactToolDefinition = {
   type: "function",
   name: "read_tool_evidence_artifact",
-  description: "Read a bounded slice from a Butler tool-evidence artifact.",
+  description: "Read original saved tool evidence. Continue exactly by passing next_offset_chars as offset_chars; whitespace and line endings are preserved.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -16,6 +16,12 @@ export const readToolEvidenceArtifactToolDefinition = {
       },
       offset_lines: {
         type: "integer",
+        description: "Zero-based starting line; ignored when offset_chars is supplied.",
+      },
+      offset_chars: {
+        type: "integer",
+        minimum: 0,
+        description: "Exact UTF-16 character offset from next_offset_chars, including within a long line.",
       },
       limit_lines: {
         type: "integer",

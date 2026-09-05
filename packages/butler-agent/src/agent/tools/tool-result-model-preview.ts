@@ -290,11 +290,14 @@ function runCommandPreview(output: Record<string, unknown>): Record<string, unkn
     tool_name: "run_command",
     ok: typeof output.ok === "boolean" ? output.ok : undefined,
     exit_code: finiteNumber(output.exit_code) ?? undefined,
+    timed_out: typeof output.timed_out === "boolean" ? output.timed_out : undefined,
     observation_kind: text(output.observation_kind),
     summary: boundedText(output.summary, 480),
-    model_visible_content: boundedHeadTailText(output.model_visible_content, 2_000),
-    stderr: boundedHeadTailText(output.stderr, 1_600),
-    stdout: boundedHeadTailText(output.stdout, 1_200),
+    // The executor applies the requested output policy; the serializer owns the
+    // model-request budget. Formatting must not silently cut either result again.
+    model_visible_content: typeof output.model_visible_content === "string" ? output.model_visible_content : undefined,
+    stderr: typeof output.stderr === "string" ? output.stderr : undefined,
+    stdout: typeof output.stdout === "string" ? output.stdout : undefined,
     butler_tool_artifact: artifact
       ? compactUndefined({
           id: text(artifact.id),

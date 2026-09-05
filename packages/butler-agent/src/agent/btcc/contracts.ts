@@ -15,6 +15,8 @@ export type {
 } from "./projection/progress-observer-contract.ts";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 export type BtccEmptyResponsePolicy = "safe_fallback" | "typed_terminal";
+/** Execution failure, independent of message delivery and accepted Work completion. */
+export type BtccRuntimeFailure = { code: string; retryable: boolean };
 
 export type AdmittedModelSelection = {
   provider: string;
@@ -160,6 +162,7 @@ export type BtccTurnOutcome = (
       content: string;
       workStatus?: "completed" | "blocked";
       acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
+      runtimeFailure?: BtccRuntimeFailure;
       executionOutcome?: "waiting_for_worker";
       artifacts?: BtccFinalArtifact[];
       changedFiles?: ChangedFileDetail[];

@@ -22,7 +22,7 @@ export function createBtccGatewayHandlers(
       }
       const cancellation = await cancelOwnedDelegation(options, route, turnId);
       const { outcome } = cancellation;
-      const alreadyDelivered = outcome.kind === "already_delivered" && !cancellation.settledDelegation;
+      const alreadyDelivered = outcome.kind === "already_delivered" && !cancellation.cancelledDelegation;
       return {
         ok: true,
         handledBy: "btcc/turn-stop",
@@ -75,31 +75,26 @@ export function createBtccGatewayHandlers(
     const result = projectTurnOutcome(outcome);
     if (options.subsessionDelegation &&
       (outcome.kind === "delivered" || outcome.kind === "already_delivered")) {
-      const childReport = projectChildTerminalReport(result);
       if (route.role === "worker" && result.acceptedWorkResult) {
-        await options.subsessionDelegation.completeWorkerResult({
-          childSessionId: route.sessionId,
-          childTurnId: outcome.turnId,
-          resultId: subsessionResultId(route.sessionId, outcome.turnId),
-          summary: childReport.summary,
-          status: result.acceptedWorkResult.status,
-          changedArtifacts: childReport.changedArtifacts,
-          changedFiles: childReport.changedFiles,
-        });
+        await completeAcceptedChildResult(options, route, outcome.turnId, result);
       } else if (route.role === "steward" && result.acceptedWorkResult) {
         const activeChildren = await options.subsessionDelegation.activeParentDelegations({
           parentSessionId: route.sessionId,
         });
-        if (activeChildren.length === 0) {
-          await options.subsessionDelegation.completeStewardResult({
-            childSessionId: route.sessionId,
-            childTurnId: outcome.turnId,
-            resultId: subsessionResultId(route.sessionId, outcome.turnId),
-            summary: childReport.summary,
-            changedArtifacts: childReport.changedArtifacts,
-            changedFiles: childReport.changedFiles,
-            status: result.acceptedWorkResult.status,
-          });
+        if (activeChildren.length === 0 || result.runtimeFailure) {
+          // Record the manager outcome first. Existing Worker outbox delivery
+          // then consumes cleanup results without waking this terminal manager.
+          await completeAcceptedChildResult(options, route, outcome.turnId, result);
+        }
+        if (result.runtimeFailure) {
+          // A failed manager execution must not leave owned Workers running with
+          // nobody to consume their results. Stop children, never cancel the
+          // already accepted failed Steward outcome or abandon its saved Work.
+          for (const child of activeChildren) {
+            await cancelOwnedDelegation(options, {
+              ...route, role: "worker", sessionId: child.relation.child_session_id,
+            }, child.child_turn_id);
+          }
         }
       }
     }
@@ -115,6 +110,10 @@ export function createBtccGatewayHandlers(
         text: result.text,
         artifacts: result.artifacts,
         changedFiles: result.changedFiles,
+        ...(result.runtimeFailure ? {
+          kind: "turn_failed",
+          safeErrorCode: result.runtimeFailure.code,
+        } : {}),
         ...(result.plan ? { plan: result.plan } : {}),
         generatedSessionTitle,
         loadedSkillNames: [],
@@ -145,7 +144,7 @@ async function cancelOwnedDelegation(
   const service = options.subsessionDelegation;
   const stopOwned = async (current: GatewayRoute, requested: string): Promise<{
     outcome: Awaited<ReturnType<BtccGatewayHandlerOptions["btcc"]["stopTurn"]>>;
-    settledDelegation: boolean;
+    cancelledDelegation: boolean;
   }> => {
     const owned = service && current.role !== "butler"
       ? await service.activeChildCancellationTarget(current.sessionId)
@@ -158,7 +157,9 @@ async function cancelOwnedDelegation(
     }
     // Close parent waiting before aborting descendants: an in-flight Worker can
     // concurrently publish its normal cancelled result as soon as stop is installed.
-    if (owned || outcome.kind !== "already_delivered") {
+    if (outcome.kind === "already_delivered" && outcome.acceptedWorkResult) {
+      await completeAcceptedChildResult(options, current, turnId, projectTurnOutcome(outcome));
+    } else if (owned || outcome.kind !== "already_delivered") {
       await completeChildTerminalResult(options, current, turnId);
     }
     const children = service ? await service.activeParentDelegations({
@@ -172,9 +173,31 @@ async function cancelOwnedDelegation(
         role: current.role === "butler" ? "steward" : "worker",
       }, child.child_turn_id);
     }
-    return { outcome, settledDelegation: Boolean(owned) };
+    return { outcome, cancelledDelegation: Boolean(owned) &&
+      !(outcome.kind === "already_delivered" && outcome.acceptedWorkResult) };
   };
   return stopOwned(route, requestedTurnId);
+}
+
+async function completeAcceptedChildResult(
+  options: BtccGatewayHandlerOptions,
+  route: GatewayRoute,
+  childTurnId: string,
+  result: ReturnType<typeof projectTurnOutcome>,
+): Promise<void> {
+  if (!options.subsessionDelegation || !result.acceptedWorkResult) return;
+  const report = projectChildTerminalReport(result);
+  const input = {
+    childSessionId: route.sessionId,
+    childTurnId,
+    resultId: subsessionResultId(route.sessionId, childTurnId),
+    summary: report.summary,
+    status: result.acceptedWorkResult.status,
+    changedArtifacts: report.changedArtifacts,
+    changedFiles: report.changedFiles,
+  };
+  if (route.role === "worker") await options.subsessionDelegation.completeWorkerResult(input);
+  else if (route.role === "steward") await options.subsessionDelegation.completeStewardResult(input);
 }
 
 async function completeChildTerminalResult(

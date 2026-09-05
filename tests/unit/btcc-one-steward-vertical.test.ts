@@ -17,6 +17,7 @@ import { createAppTransportAdapter } from "../../packages/butler-agent/src/inter
 import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
 import { sessionHintForRow } from "../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
 import type { ModelRoundPort, ModelRoundRequest } from "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
+import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { subsessionResultClientMessageId } from "../../packages/butler-agent/src/gateways/app/interface/protocol/internal-result-contract.ts";
 import { createFileToolHandlers } from "../../packages/butler-agent/src/agent/tools/file-tools/index.ts";
 import { normalizeSubsessionAllowedToolsAndEffects } from
@@ -1442,6 +1443,94 @@ test("reviewed Butler delegation preserves the exact model name through Steward 
     await composition.host.close();
     bindings.close();
     clearNativeReadiness(root);
+  }
+});
+
+test("App child provider exhaustion delivers one failed result and releases parent waiting", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-child-provider-failure-"));
+  roots.push(root);
+  initializeGitWorkspace(root);
+  publishNativeReadiness(root);
+  const authToken = "failure-local-auth-token-012345678901234567890123";
+  const bindings = new SessionBindingStore(join(root, "runtime", "session-store.sqlite"), "ephemeral");
+  const parentSessionId = sessionHintForRow("general");
+  bindings.upsert({ sessionId: parentSessionId, role: "butler", workspacePath: root,
+    runtimeAdapterId: "btcc-turn-runtime", modelProviderId: "openai", modelRef: "openai/gpt-5.5",
+    transportBindings: [{ transport: "app", accountId: "local", peerId: "general" }] });
+  const app = createAppServer({ dbPath: join(root, "app.sqlite"), butlerHome: root,
+    butlerData: root, port: 0, localAuth: { required: true, token: authToken } });
+  let parentRound = 0;
+  let childRound = 0;
+  let parentReports = 0;
+  const modelRound: ModelRoundPort = { async runRound(request) {
+    if (request.instructions?.includes("Steward role")) {
+      childRound += 1;
+      if (childRound === 1) return { toolCalls: [toolCall("child-plan", "replace_work_plan", {
+        objective: "Read README and summarize it.", execution_mode: "direct",
+        actions: [{ action_key: "read", description: "Read README", dependency_keys: [] }], checks: ["README summarized"],
+      })] };
+      if (childRound === 2) return { toolCalls: [toolCall("child-review", "record_work_review", {
+        subject: "plan", verdict: "accept", summary: "Read and summarize the requested file.",
+        action_updates: [{ action_key: "read", status: "active" }],
+      })] };
+      if (childRound === 3) return { toolCalls: [toolCall("child-read", "read_file", { requests: [{ path: "README.md" }] })] };
+      throw new ModelProviderRequestError({ code: "provider_rate_limited", provider: "openai",
+        message: "PRIVATE_PROVIDER_PAYLOAD", retryable: true });
+    }
+    if (request.messages.some((message) => message.content.includes("Canonical child result synthesis") ||
+      message.content.includes("Subsession result"))) {
+      parentReports += 1;
+      expect(JSON.stringify(request.messages)).toContain("rate limit");
+      return { text: "The model provider rate limit stopped the delegated work. Its progress is saved.", toolCalls: [] };
+    }
+    parentRound += 1;
+    if (parentRound === 1) return { toolCalls: [toolCall("parent-start", "start_work", { objective: "Read README and summarize it." })] };
+    if (parentRound === 2) return { toolCalls: [toolCall("parent-plan", "replace_work_plan", {
+      objective: "Read README and summarize it.", execution_mode: "direct",
+      actions: [{ action_key: "delegate", description: "Delegate README reading to Steward", dependency_keys: [] }], checks: ["README summarized"],
+    })] };
+    if (parentRound === 3) return { toolCalls: [toolCall("parent-review", "record_work_review", {
+      subject: "plan", verdict: "accept", summary: "The read-only task is ready to delegate.",
+      action_updates: [{ action_key: "delegate", status: "active" }],
+    })] };
+    if (parentRound === 4) return { toolCalls: [toolCall("delegate", "delegate_to_steward", {
+      request: "Read README.md and summarize it. Do not use Workers.", safe_title: "README inspection",
+    })] };
+    return { text: "The delegated inspection has started.", toolCalls: [] };
+  } };
+  const composition = createProductionBtccComposition({ butlerHome: root, butlerData: root,
+    ownerId: "child-provider-failure", sessionBindings: bindings, appServerUrl: app.url,
+    appLocalAuth: { required: true, token: authToken }, modelRound });
+  const queue = new NativeInboundQueue(root);
+  const inbound = new BtccInboundDispatcher();
+  const gateway = createStewardGateway(composition, bindings, root);
+  const deliveryGuard = new DeliveryGuard({ adapters: [createAppTransportAdapter()], butlerData: root });
+  try {
+    expect((await postAppMessage(app.url, authToken, { chat_id: "general", text: "Delegate README reading.",
+      model: "openai/gpt-5.5", reasoning_effort: "low", access_mode: "full_access",
+      client_message_id: "client-failure-aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" })).status).toBe(202);
+    await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
+    const db = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
+    try {
+      const result = db.query<{ status: string; summary: string; child_turn_id: string }, []>(
+        "SELECT status, summary, child_turn_id FROM btcc_steward_results").all();
+      expect(result).toHaveLength(1);
+      expect(result[0]?.status).toBe("failed");
+      expect(result[0]?.summary).toContain("rate limit");
+      expect(result[0]?.summary).not.toContain("PRIVATE_PROVIDER_PAYLOAD");
+      const turn = db.query<{ final_payload_json: string }, [string]>(
+        "SELECT final_payload_json FROM btcc_turns WHERE turn_id = ?").get(result[0]!.child_turn_id);
+      const payload = JSON.parse(turn!.final_payload_json);
+      expect(payload.runtimeFailure).toEqual({ code: "provider_rate_limited", retryable: true });
+      expect(payload.acceptedWorkResult).toEqual({ status: "failed" });
+      const work = db.query<{ status: string }, []>(
+        "SELECT w.status FROM btcc_guided_works w JOIN btcc_subsession_delegations d ON d.root_work_id = w.work_id").get();
+      expect(work?.status).toBe("open");
+    } finally { db.close(); }
+    expect(await composition.subsessions!.activeParentDelegations({ parentSessionId })).toHaveLength(0);
+    expect(parentReports).toBe(1);
+  } finally {
+    await composition.host.close(); bindings.close(); app.stop();
   }
 });
 

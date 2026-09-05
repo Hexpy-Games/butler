@@ -13,6 +13,7 @@ export function projectTerminalOutcome(turn: TurnRecord): BtccTurnOutcome {
     turnId: turn.turnId,
     messageId: turn.canonicalAssistantMessageId,
     content: turn.finalPayload.content,
+    ...(turn.finalPayload.runtimeFailure ? { runtimeFailure: turn.finalPayload.runtimeFailure } : {}),
     ...(turn.finalPayload.executionOutcome ? { executionOutcome: turn.finalPayload.executionOutcome } : {}),
     ...(turn.finalPayload.workStatus
       ? { workStatus: turn.finalPayload.workStatus }

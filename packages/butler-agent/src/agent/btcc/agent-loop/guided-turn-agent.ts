@@ -471,7 +471,7 @@ export function createProductionGuidedTurnAgent(
       };
       let suspension: BtccAgentLoopResult["suspension"];
       let authorityContinuation: BtccAgentLoopResult["authorityContinuation"];
-      const candidate = await runGuidedAgentLoopWithOperationalReport({
+      const loopResult = await runGuidedAgentLoopWithOperationalReport({
         onSuspension: (reason, continuation) => {
           suspension = reason;
           authorityContinuation = continuation && { ...continuation,
@@ -490,9 +490,11 @@ export function createProductionGuidedTurnAgent(
           responseLanguage,
         }),
       });
-      const text = suspension ? "" : await delegationRelease.reconcileAfterLoop(candidate);
-      const publicText = suspension ? "" : authorityProjection.project(text);
-      const terminalOutcome = !suspension && turn.context.emptyResponsePolicy === "typed_terminal" &&
+      const runtimeFailure = typeof loopResult === "string" ? undefined : loopResult.failure;
+      const candidate = typeof loopResult === "string" ? loopResult : "";
+      const text = suspension || runtimeFailure ? "" : await delegationRelease.reconcileAfterLoop(candidate);
+      const publicText = suspension || runtimeFailure ? "" : authorityProjection.project(text);
+      const terminalOutcome = !suspension && !runtimeFailure && turn.context.emptyResponsePolicy === "typed_terminal" &&
         !publicText.trim()
         ? "no_visible" as const
         : undefined;
@@ -511,6 +513,7 @@ export function createProductionGuidedTurnAgent(
         ...(suspension ? { suspension } : {}),
         ...(authorityContinuation ? { authorityContinuation } : {}),
         ...(terminalOutcome ? { terminalOutcome } : {}),
+        ...(runtimeFailure ? { runtimeFailure } : {}),
         ...(finalWork?.status === "completed" || finalWork?.status === "blocked"
           ? { workStatus: finalWork.status }
           : {}),

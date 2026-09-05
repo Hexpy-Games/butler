@@ -21,6 +21,7 @@ export function guidedFinalTransition(
     content,
     ...(result.workStatus ? { workStatus: result.workStatus } : {}),
     ...(result.acceptedWorkResult ? { acceptedWorkResult: result.acceptedWorkResult } : {}),
+    ...(result.runtimeFailure ? { runtimeFailure: result.runtimeFailure } : {}),
     ...(result.artifacts?.length ? { artifacts: result.artifacts } : {}),
     ...(result.changedFiles?.length ? { changedFiles: result.changedFiles } : {}),
     ...(result.plan ? { plan: result.plan } : {}),

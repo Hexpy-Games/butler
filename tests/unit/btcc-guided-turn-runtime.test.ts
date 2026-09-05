@@ -22,6 +22,8 @@ import { buildModelRoute } from
   "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { ModelProviderRequestError } from
   "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { projectChildTerminalReport, projectTurnOutcome } from
+  "../../packages/butler-agent/src/interfaces/gateway/btcc/project-turn-outcome.ts";
 
 const echoTool = {
   name: "echo",
@@ -404,7 +406,7 @@ test("Guided Turn does not retry a non-contention final commit failure", async (
   }
 });
 
-test("Guided Turn surfaces exhausted provider recovery as a retryable runtime fault", async () => {
+test("Guided Turn delivers exhausted provider failure without parking an unfinished execution", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-provider-failure-"));
   const stores = openBtccSqliteStores({
     dbPath: join(root, "btcc.sqlite"),
@@ -432,14 +434,15 @@ test("Guided Turn surfaces exhausted provider recovery as a retryable runtime fa
     },
   });
   try {
-    await expect(runtime.runTurn(runCommand("guided-provider-failure-turn")))
-      .rejects.toMatchObject({ code: "provider_network_error" });
-    expect(faults).toHaveLength(1);
-    expect(faults[0]).toMatchObject({
-      kind: "provider_transport_exhausted",
-      retryable: true,
-      safeErrorCode: "provider_network_error",
+    const result = await runtime.runTurn(runCommand("guided-provider-failure-turn"));
+    expect(result).toMatchObject({
+      kind: "delivered",
+      runtimeFailure: { code: "provider_network_error", retryable: true },
+      acceptedWorkResult: { status: "failed" },
+      content: "모델과의 연결이 끊겨 작업을 더 진행하지 못했습니다. 진행한 내용은 저장되어 있습니다.",
     });
+    expect(faults).toHaveLength(0);
+    expect(await runtime.runTurn(runCommand("guided-provider-failure-turn"))).toEqual(result);
   } finally {
     stores.close();
     rmSync(root, { recursive: true, force: true });
@@ -472,13 +475,38 @@ test("Guided Turn reports a permanent provider failure without a retry request",
     const result = await runtime.runTurn(runCommand("guided-provider-permanent-turn"));
     expect(result).toMatchObject({
       kind: "delivered",
-      content: "모델 제공자 설정 또는 요청이 승인되지 않아 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.",
+      content: "모델 제공자 인증에 실패해 작업을 더 진행하지 못했습니다. 진행한 내용은 저장되어 있습니다.",
+      runtimeFailure: { code: "provider_auth_error", retryable: false },
     });
-    expect(JSON.stringify(result)).not.toMatch(/다시 요청|이어|retry|continue/iu);
+    if (result.kind === "delivered") {
+      expect(result.content).not.toMatch(/다시 요청|이어|retry|continue/iu);
+    }
   } finally {
     stores.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("final model failure preserves accepted Work success and artifacts through parent projection", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-completed-report-failure-"));
+  const stores = openBtccSqliteStores({ dbPath: join(root, "btcc.sqlite"),
+    ownerId: "completed-report-failure", storageProfile: "ephemeral" });
+  const artifact = { id: "report", kind: "document" as const, title: "Report", safePathLabel: "reports/result.pdf" };
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission, turns: stores.turns, messages: stores.messages,
+    agent: { async run() { return { route: "managed", content: "", workStatus: "completed",
+      acceptedWorkResult: { status: "success" }, artifacts: [artifact],
+      runtimeFailure: { code: "provider_rate_limited", retryable: true } }; } },
+  });
+  try {
+    const result = await runtime.runTurn(runCommand("completed-report-failure"));
+    expect(result).toMatchObject({ kind: "delivered", workStatus: "completed",
+      acceptedWorkResult: { status: "success" }, artifacts: [artifact] });
+    const projected = projectTurnOutcome(result);
+    expect(projected.text).toContain("작업은 완료했지만");
+    expect(projectChildTerminalReport(projected).changedArtifacts).toEqual(["reports/result.pdf"]);
+    expect(projectChildTerminalReport(projected).summary).not.toContain("현재 진행 내용");
+  } finally { stores.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 test("Guided Turn preserves an admitted Turn when route durability fails before dispatch", async () => {
