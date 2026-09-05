@@ -3502,6 +3502,7 @@ test("settings, command palette, and project actions are route-backed and privac
       (model: { model_ref: string }) => model.model_ref,
     );
     expect(modelRefs).toContain("xai/grok-4.5");
+    expect(modelRefs).toContain("openai/gpt-6-astra");
     expect(modelRefs).toContain("openai/gpt-5.6-sol");
     expect(modelRefs).toContain("openai/gpt-5.6-terra");
     expect(modelRefs).toContain("openai/gpt-5.6-luna");
@@ -3557,11 +3558,11 @@ test("settings, command palette, and project actions are route-backed and privac
     ).toBe(true);
     expect(
       catalog.data.models.find(
-        (model: { model_ref: string }) => model.model_ref === "openai/gpt-5.6-sol",
+        (model: { model_ref: string }) => model.model_ref === "openai/gpt-6-astra",
       ),
     ).toMatchObject({
       context_window_tokens: 1_050_000,
-      reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+      reasoning_efforts: ["low", "medium", "high", "xhigh", "max"],
       runtime_supported: true,
     });
     expect(
@@ -4031,18 +4032,18 @@ test("Backup models settings sanitize through the canonical config and survive r
   }
 });
 
-test("settings accepts GPT-5.6 max reasoning effort", async () => {
+test("settings accepts GPT-6 Astra max reasoning effort", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
   });
   try {
     const maxReasoning = await patchJson(`${server.url}settings`, {
-      model: "openai/gpt-5.6-sol",
+      model: "openai/gpt-6-astra",
       reasoning_effort: "max",
       consolidation_reasoning_effort: "max",
     });
-    expect(maxReasoning.data.model).toBe("openai/gpt-5.6-sol");
+    expect(maxReasoning.data.model).toBe("openai/gpt-6-astra");
     expect(maxReasoning.data.reasoning_effort).toBe("max");
     expect(maxReasoning.data.consolidation_reasoning_effort).toBe("max");
   } finally {

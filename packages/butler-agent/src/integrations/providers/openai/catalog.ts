@@ -23,6 +23,7 @@ const OPENAI_IMAGE_INPUT = {
 };
 
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = "xhigh";
+const GPT_6_REASONING_EFFORTS: ReasoningEffort[] = ["low", "medium", "high", "xhigh", "max"];
 const GPT_56_REASONING_EFFORTS: ReasoningEffort[] = ["none", "low", "medium", "high", "xhigh", "max"];
 const GPT_55_REASONING_EFFORTS: ReasoningEffort[] = ["none", "low", "medium", "high", "xhigh"];
 
@@ -30,14 +31,30 @@ export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
   {
     provider_id: "openai",
     provider_label: "OpenAI",
-    model_id: "gpt-5.6-sol",
-    model_ref: "openai/gpt-5.6-sol",
+    model_id: "gpt-6-astra",
+    model_ref: "openai/gpt-6-astra",
     // `auto:codex-latest` is a declared dynamic Codex carrier, not a
     // user-entered unknown model. Keep it tied to the catalog's current
     // Codex entry while preserving strict handling for all other missing refs.
     aliases: [AUTO_CODEX_LATEST, `openai/${AUTO_CODEX_LATEST}`],
-    display_name: "GPT-5.6 Sol",
+    display_name: "GPT-6 Astra",
     status: "latest",
+    context_window_tokens: 1_050_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: DEFAULT_REASONING_EFFORT,
+    reasoning_efforts: GPT_6_REASONING_EFFORTS,
+    token_estimator: "openai_tiktoken_o200k",
+    source_url: "https://developers.openai.com/api/docs/models/gpt-6-astra",
+    runtime_supported: true,
+    ...OPENAI_IMAGE_INPUT,
+  },
+  {
+    provider_id: "openai",
+    provider_label: "OpenAI",
+    model_id: "gpt-5.6-sol",
+    model_ref: "openai/gpt-5.6-sol",
+    display_name: "GPT-5.6 Sol",
+    status: "available",
     context_window_tokens: 1_050_000,
     max_output_tokens: 128_000,
     default_reasoning_effort: DEFAULT_REASONING_EFFORT,
