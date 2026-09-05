@@ -1,4 +1,4 @@
-import type { WorkStage } from "../work/index.ts";
+import type { DurableWorkView, WorkStage } from "../work/index.ts";
 import { sanitizePublicText } from "../../events/turn-events.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import {
@@ -64,7 +64,7 @@ export function activityContent(
   if (first?.name === "start_work" || first?.name === "continue_work") {
     const continuing = first.name === "continue_work";
     return {
-      displayStage: "conception",
+      ...(continuing ? {} : { displayStage: "conception" as const }),
       title: continuing ? "진행 내용 확인" : "요청 내용 확인",
       summary: continuing
         ? "이전에 진행하던 내용과 현재 상태를 확인하고 있습니다."
@@ -115,6 +115,23 @@ export function activityContent(
     summary: commandLabel && !authoredSummary
       ? summary
       : distinctSummary(title, summary, toolSummary),
+  };
+}
+
+/** Presentation of the selected Work, never a new lifecycle transition. */
+export function resumedWorkActivity(work: DurableWorkView): {
+  displayStage?: WorkStage; title: string; summary: string;
+} {
+  const activeKey = work.actionProgress.find((action) => action.status === "active")?.actionKey;
+  const activeAction = work.currentPlan?.actions.find((action) => action.actionKey === activeKey);
+  const title = activeAction
+    ? publicWorkActionDisplay(activeAction, activeAction.description || "진행 내용 확인")
+    : "진행 내용 확인";
+  return {
+    displayStage: work.currentStage,
+    title: boundedTitle(title),
+    summary: publicText(work.latestCheckpoint?.publicSummary) ||
+      publicText(activeAction?.description) || publicText(work.objective),
   };
 }
 

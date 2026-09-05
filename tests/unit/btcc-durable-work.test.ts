@@ -61,6 +61,50 @@ test("first Plan opens scoped Work without making Direct or Assisted Turns pay f
   }
 });
 
+test("resumed execution can revise ownership without a result review or losing completed work", async () => {
+  const fixture = durableWorkFixture();
+  try {
+    const scope = fixture.turn("owner-revision", "owner-session", "Finish the report through a Steward");
+    const input = { ...planInput(scope, "direct-plan"), executionMode: "direct" as const };
+    const opened = await fixture.service.replacePlan(input);
+    await fixture.service.recordReview({
+      ...scope, mutationCallId: "accept-direct", subject: "plan", verdict: "accept",
+      summary: "The initial file change is small.", corrections: [],
+    });
+    fixture.tool(scope.turnId, "written-report", "write_file", { ok: true });
+    await fixture.service.attachToolResult({ ...scope, mutationCallId: "attach-report", toolCallId: "written-report" });
+    const before = await fixture.service.recordCheckpoint({
+      ...scope, mutationCallId: "written-checkpoint",
+      actionUpdates: [{ actionKey: "write-report", status: "done" }],
+    });
+    expect(before.currentStage).toBe("execution");
+    const revised = await fixture.service.replacePlan({
+      ...input, mutationCallId: "steward-plan", executionMode: "steward",
+      actions: [...input.actions, {
+        actionKey: "compare", description: "Compare the supplied sources", dependencyKeys: ["write-report"],
+      }],
+    });
+    expect(revised.workId).toBe(opened.workId);
+    expect(revised.currentPlan).toMatchObject({ revision: 2, executionMode: "steward" });
+    expect(revised.currentStage).toBe("planning");
+    expect(revised.actionProgress).toEqual([
+      { actionKey: "write-report", status: "done" },
+      { actionKey: "compare", status: "pending" },
+    ]);
+    expect(revised.resultRefs).toEqual(before.resultRefs);
+    expect(revised.latestResultReview).toBeUndefined();
+
+    await fixture.service.recordDisposition({
+      ...scope, mutationCallId: "completed", workId: opened.workId,
+      disposition: "completed", summary: "All requested work is complete.", remainingActions: [],
+      actionUpdates: [{ actionKey: "compare", status: "done" }],
+    });
+    await expect(fixture.service.replacePlan({
+      ...input, mutationCallId: "do-not-reopen",
+    })).rejects.toThrow("terminal Work");
+  } finally { fixture.close(); }
+});
+
 test("invalid semantic Reviews leave the current stage and action progress unchanged", async () => {
   const fixture = durableWorkFixture();
   try {

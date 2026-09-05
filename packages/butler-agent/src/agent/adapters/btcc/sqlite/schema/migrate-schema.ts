@@ -3,6 +3,7 @@ import {
   BTCC_GUIDED_WORK_CHECKPOINT_TABLE_SCHEMA,
   BTCC_GUIDED_WORK_DISPOSITION_TABLE_SCHEMA,
   BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA,
+  BTCC_GUIDED_WORK_PLAN_TABLE_SCHEMA,
 } from "./guided-work-schema.ts";
 import { BTCC_GUIDED_EFFECT_RECOVERY_PAYLOAD_TABLE_SCHEMA } from "./guided-effect-schema.ts";
 import { migrateAuthoritySchema } from "./authority-schema-migration.ts";
@@ -22,6 +23,7 @@ export function migrateBtccSchema(db: Database): void {
     ensureGuidedEffectRecoveryPayloadTable(db);
     ensureGuidedWorkDispositionSchema(db);
     ensureGuidedWorkProgressColumns(db);
+    migrateGuidedWorkExecutionOwnership(db);
     ensureTurnProgressDestination(db);
     ensureTurnRouteState(db);
     ensureTurnContinuationBudget(db);
@@ -284,7 +286,7 @@ function ensureGuidedWorkProgressColumns(db: Database): void {
       db,
       "btcc_guided_work_plan_revisions",
       "execution_mode",
-      "TEXT CHECK (execution_mode IN ('direct', 'workers'))",
+      "TEXT CHECK (execution_mode IN ('direct', 'steward', 'workers'))",
     );
   }
   if (!tableExists(db, "btcc_guided_work_checkpoint_revisions")) return;
@@ -300,6 +302,19 @@ function ensureGuidedWorkProgressColumns(db: Database): void {
     "action_states_json",
     "TEXT NOT NULL DEFAULT '[]'",
   );
+}
+
+function migrateGuidedWorkExecutionOwnership(db: Database): void {
+  const table = "btcc_guided_work_plan_revisions";
+  const definition = tableDefinition(db, table);
+  if (!definition || definition.includes("'steward'")) return;
+  const previous = "btcc_guided_work_plan_revisions_before_steward_ownership";
+  db.exec(`ALTER TABLE ${table} RENAME TO ${previous}`);
+  db.exec(BTCC_GUIDED_WORK_PLAN_TABLE_SCHEMA);
+  // Preserve every accepted revision and its identity; only widen the enum.
+  const columns = "plan_revision_id, work_id, revision, objective, governing_refs_json, execution_mode, actions_json, checks_json, origin_turn_id, created_at";
+  db.exec(`INSERT INTO ${table} (${columns}) SELECT ${columns} FROM ${previous}`);
+  db.exec(`DROP TABLE ${previous}`);
 }
 
 function restoreStableWorkObjectives(db: Database): void {

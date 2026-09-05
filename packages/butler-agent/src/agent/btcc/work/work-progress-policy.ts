@@ -129,20 +129,6 @@ export function availableWorkReviewSubjects(
   );
 }
 
-export function assertWorkPlanReplacementStage(currentStage: WorkStage): void {
-  try {
-    assertWorkStageTransition(currentStage, "planning");
-  } catch (error) {
-    if (!(error instanceof WorkStageTransitionError)) throw error;
-    throw new WorkTransitionGuardError(
-      currentStage,
-      "replace_work_plan",
-      reviewGuard(currentStage),
-      reviewNextAction(currentStage),
-    );
-  }
-}
-
 function reviewEntryStages(subject: WorkReviewSubject): WorkStage[] {
   if (subject === "plan") return ["planning", "execution", "review"];
   if (subject === "result") return ["execution", "review"];

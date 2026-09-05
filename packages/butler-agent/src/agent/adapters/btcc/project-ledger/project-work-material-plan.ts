@@ -48,7 +48,7 @@ export function validateMaterialPlan(
   textRequired(plan.objective);
   stringArray(plan.governingRefs);
   if (plan.executionMode !== undefined &&
-      plan.executionMode !== "direct" && plan.executionMode !== "workers") {
+      plan.executionMode !== "direct" && plan.executionMode !== "steward" && plan.executionMode !== "workers") {
     throw new Error("project_work_managed_record_invalid");
   }
   boundedArray(plan.actions).forEach((value) => {

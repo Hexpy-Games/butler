@@ -26,7 +26,7 @@ export type DurableWorkPlanAction = {
   };
 };
 
-export type DurableWorkExecutionMode = "direct" | "workers";
+export type DurableWorkExecutionMode = "direct" | "steward" | "workers";
 
 export type DurableWorkActionStatus =
   | "pending"

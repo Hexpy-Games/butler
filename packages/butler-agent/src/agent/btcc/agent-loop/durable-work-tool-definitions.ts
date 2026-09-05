@@ -49,10 +49,11 @@ const REPLACE_WORK_PLAN: FunctionToolDefinition = {
   name: "replace_work_plan",
   description: [
     "Open or revise the Plan for the Work explicitly selected by start_work or continue_work.",
+    "Revision starts planning from any current stage without a prior result review; retain completed action keys and results.",
     "Use start_new only as a compatibility translation when older callers cannot use start_work.",
     "Ordinary tools never select Work; choose start_work or continue_work before this Plan operation.",
     "Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints.",
-    "Choose execution_mode during planning: direct means this role executes its Plan actions; workers is only for a Steward Plan whose actions are Worker-executed while Steward retains integration, review, validation, and reporting.",
+    "Choose execution_mode during planning: Butler uses steward for substantial execution or direct for a genuinely small direct action; Steward uses direct or workers; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role.",
     "Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup.",
     "Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
   ].join(" "),
@@ -81,8 +82,8 @@ const REPLACE_WORK_PLAN: FunctionToolDefinition = {
       },
       execution_mode: {
         type: "string",
-        enum: ["direct", "workers"],
-        description: "Who executes Plan actions. Worker and Butler Plans use direct; only Steward may choose workers. Planning, integration, review, validation, and reporting stay with the current role.",
+        enum: ["direct", "steward", "workers"],
+        description: "Who executes Plan actions: direct = this role, steward = Butler delegates to Steward, workers = Steward delegates to Workers. Preserve completed action keys when revising ownership on an existing Plan.",
       },
       actions: {
         type: "array",

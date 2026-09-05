@@ -53,7 +53,6 @@ export {
   acceptedCurrentResultReview,
   allowedNextWorkStages,
   applyWorkActionUpdates,
-  assertWorkPlanReplacementStage,
   assertWorkStageTransition,
   progressForReplacementPlan,
   resolveWorkReviewTransition,

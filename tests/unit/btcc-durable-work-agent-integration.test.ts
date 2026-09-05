@@ -1327,9 +1327,87 @@ test("R3 keeps Direct and single read-only Turns free of staged Work activity", 
   }
 });
 
+test("resumed Work edits use its saved execution activity through the production runtime", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-resume-activity-"));
+  const dbPath = join(root, "butler.sqlite");
+  const stores = openBtccSqliteStores({ dbPath, ownerId: "resume-activity", storageProfile: "ephemeral" });
+  const activities = new Map<string, string | undefined>();
+  const editStages: Array<string | undefined> = [];
+  const setup = { root, dbPath, stores, butlerHome: join(root, "program") };
+  try {
+    const first = createRuntime({
+      ...setup,
+      modelRound: scriptedModelRound([
+        toolResponse([toolCall("resume-start", "start_work", { objective: "Edit the report in two user Turns" })]),
+        toolResponse([toolCall("resume-plan", "replace_work_plan", {
+          objective: "Edit the report in two user Turns", execution_mode: "direct",
+          actions: [{
+            action_key: "edit-report", description: "보고서 내용 수정", dependency_keys: [],
+            effect: { capability: "workspace mutation", target: "workspace:report.txt" },
+          }], checks: [],
+        })]),
+        toolResponse([toolCall("resume-review", "record_work_review", {
+          subject: "plan", verdict: "accept", summary: "A small direct edit.", corrections: [],
+        })]),
+        toolResponse([toolCall("resume-write", "write_file", { path: "report.txt", content: "Before\n" })]),
+        (request) => {
+          expect(lastToolOutput(request, "write_file")).toMatchObject({ ok: true });
+          const selected = lastToolOutput(request, "replace_work_plan") as { work: { work_id: string } };
+          return toolResponse([toolCall("resume-open", "record_work_disposition", {
+            work_id: selected.work.work_id, disposition: "open", summary: "The report is ready for the next requested edit.", remaining_actions: ["Apply the user's next edit"],
+          })]);
+        },
+        { text: "초안을 작성했습니다.", toolCalls: [] },
+      ]),
+    });
+    const firstOutcome = await first.runTurn(command(root, "resume-first", "초안을 작성하고 다음 수정을 기다리세요."));
+    expect(stores.guidedToolJournal.list("resume-first").map((call) => ({ tool: call.toolName, result: call.result })))
+      .toEqual(expect.arrayContaining([{ tool: "write_file", result: expect.objectContaining({ ok: true }) }]));
+    expect(firstOutcome).toMatchObject({ kind: "delivered", content: "초안을 작성했습니다." });
+    const work = await stores.durableWork.boundWorkForTurn("resume-first");
+    expect(work?.currentStage).toBe("execution");
+    const second = createRuntime({
+      ...setup,
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged(update) { activities.set(update.activityId, update.displayStage); },
+        operationChanged(update) {
+          if (update.capabilityRef === "edit_file" && update.status === "started") {
+            editStages.push(activities.get(update.activityId ?? ""));
+          }
+        },
+      },
+      modelRound: scriptedModelRound([
+        toolResponse([
+          toolCall("resume-select", "continue_work", { work_id: work!.workId }),
+          toolCall("resume-edit", "edit_file", { path: "report.txt", old_text: "Before", new_text: "After" }),
+        ]),
+        (request) => {
+          expect(lastToolOutput(request, "edit_file")).toMatchObject({ ok: true });
+          expect(editStages).toEqual(["execution"]);
+          return toolResponse([toolCall("resume-complete", "record_work_disposition", {
+            work_id: work!.workId, disposition: "completed", summary: "The requested edit is complete.", remaining_actions: [],
+            action_updates: [{ action_key: "edit-report", status: "done" }],
+          })]);
+        },
+        { text: "요청하신 수정을 완료했습니다.", toolCalls: [] },
+      ]),
+    });
+    expect(await second.runTurn(command(root, "resume-second", "같은 보고서의 Before를 After로 바꾸세요.")))
+      .toMatchObject({ kind: "delivered" });
+    expect(readFileSync(join(root, "report.txt"), "utf8")).toBe("After\n");
+    expect(await stores.durableWork.boundWorkForTurn("resume-second"))
+      .toMatchObject({ workId: work!.workId, status: "completed" });
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function createRuntime(input: {
   root: string;
   dbPath: string;
+  butlerHome?: string;
   stores: ReturnType<typeof openBtccSqliteStores>;
   modelRound: ModelRoundPort;
   progress?: BtccTurnProgressObserver;
@@ -1355,7 +1433,7 @@ function createRuntime(input: {
     ...(input.progress ? { progress: input.progress } : {}),
     agent: createProductionGuidedTurnAgent({
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
-      butlerHome: input.root,
+      butlerHome: input.butlerHome ?? input.root,
       butlerData: input.root,
       contextDocuments: input.stores.contextDocuments,
       toolJournal: input.stores.guidedToolJournal,

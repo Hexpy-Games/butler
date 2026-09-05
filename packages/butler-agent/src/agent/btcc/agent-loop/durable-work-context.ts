@@ -25,6 +25,9 @@ export function renderDurableWorkContext(
     `Stable Work objective: ${singleLine(work.objective)}`,
     `Explicit relation Work id (model-only; never report to user): ${work.workId}`,
   ];
+  if (plan?.executionMode === "steward") {
+    rows.push("Execution next step: delegate_to_steward after Plan Review; Butler manages this Work and synthesizes the returned result, without executing the assigned actions itself.");
+  }
   if (work.currentStage) {
     if (work.currentStage === "review") {
       rows.push(

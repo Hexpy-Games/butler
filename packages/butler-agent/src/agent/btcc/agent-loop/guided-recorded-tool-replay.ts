@@ -85,7 +85,8 @@ export async function replayRecordedGuidedToolCall(
       status: "started",
     });
     if (isDurableWorkTool(input.call.name) && toolResultSucceeded(record.result)) {
-      await input.activityProjection.publishAccepted(input.activity);
+      await input.activityProjection.publishAccepted(input.activity,
+        await input.execution.durableWork.boundWorkForTurn(input.execution.turn.turnId));
       await publishWorkProgress(
         input.execution.progress,
         input.execution.turn.turnId,

@@ -83,6 +83,7 @@ export interface ElectronScenarioStep {
     rendererActivityStagesInclude?: ElectronWorkStage[];
     files?: ElectronExpectedFile[];
     terminalState?: TerminalState;
+    stewardDelivered?: boolean;
     work?: ElectronWorkExpectation;
   };
 }
@@ -222,6 +223,7 @@ export interface StepObservation {
   promptSha256: string;
   turnId: string;
   terminalState: string;
+  stewardDelivered?: boolean;
   finalText: string;
   rendererFinalText: string;
   rendererActivities: RendererVisibleActivity[];
