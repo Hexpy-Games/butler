@@ -3,7 +3,7 @@ import {
   structuredToolResultModelProjection,
   type ToolResultModelPreviewContext,
 } from "./tool-result-model-preview.ts";
-import { fitExactOperationResultPage } from "./artifact-result-preview.ts";
+import { fitExactOperationResultPage, fitToolArtifactPage } from "./artifact-result-preview.ts";
 
 export const MAX_PROVIDER_TOOL_RESULT_BYTES = 50 * 1024;
 const MAX_PROVIDER_TOOL_RESULT_LINES = 2_000;
@@ -73,6 +73,9 @@ export function toolResultPayloadForProvider(
   if (toolName === "read_operation_results") {
     return fitExactOperationResultPage(projectedWithReference, budget);
   }
+  if (toolName === "read_tool_output_artifact" || toolName === "read_tool_evidence_artifact") {
+    return fitToolArtifactPage(projectedWithReference, budget);
+  }
   return fitProviderPayload(projectedWithReference, budget, {
     toolName,
     exactReadReference,
@@ -120,6 +123,14 @@ function fitProviderPayload(
     originalBytes,
     options?.exactReadReference,
   );
+  const output = record(payload.output);
+  const artifact = record(output?.butler_tool_artifact);
+  if (artifact && typeof artifact.path === "string") {
+    modelPreview.artifact_read = {
+      capability: "read_tool_output_artifact",
+      arguments: { path: artifact.path, offset_chars: 0, stream: "both" },
+    };
+  }
   for (const limits of [
     { stringChars: 4_800, arrayItems: 16 },
     { stringChars: 2_400, arrayItems: 8 },
@@ -204,6 +215,10 @@ function structuralOutcome(
             ok: typeof output?.ok === "boolean" ? output.ok : undefined,
             error: errorIdentity(output?.error),
             ...controlFacts(output),
+            ...(output.butler_tool_artifact ? {
+              butler_tool_artifact: output.butler_tool_artifact,
+              output_presentation: { ...record(output.output_presentation), truncated: true },
+            } : {}),
             ...(work ? { work } : {}),
           }),
         }

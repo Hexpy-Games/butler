@@ -3,6 +3,7 @@ import type {
   ButlerContextInput,
   BtccProgressDestination,
   BtccFinalArtifact,
+  BtccRuntimeFailure,
   FreshBtccTurnCommand,
 } from "../contracts.ts";
 import type {
@@ -68,6 +69,7 @@ export type TurnRecord = {
     contentSha256: string;
     workStatus?: "completed" | "blocked";
     acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
+    runtimeFailure?: BtccRuntimeFailure;
     executionOutcome?: "waiting_for_worker";
     artifacts?: BtccFinalArtifact[];
     changedFiles?: ChangedFileDetail[];
@@ -237,6 +239,7 @@ export type StopPersistenceOutcome =
       content: string;
       workStatus?: "completed" | "blocked";
       acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
+      runtimeFailure?: BtccRuntimeFailure;
       executionOutcome?: "waiting_for_worker";
       artifacts?: BtccFinalArtifact[];
       changedFiles?: ChangedFileDetail[];

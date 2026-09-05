@@ -76,6 +76,7 @@ export class SqliteGuidedStopController {
         ...(finalPayload.acceptedWorkResult
           ? { acceptedWorkResult: finalPayload.acceptedWorkResult }
           : {}),
+        ...(finalPayload.runtimeFailure ? { runtimeFailure: finalPayload.runtimeFailure } : {}),
         ...(finalPayload.artifacts?.length
           ? { artifacts: finalPayload.artifacts }
           : {}),

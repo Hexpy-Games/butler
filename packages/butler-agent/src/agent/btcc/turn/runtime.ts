@@ -28,13 +28,11 @@ import {
 } from "../ports/model-round.ts";
 import {
   isModelRouteDurabilityError,
-  ModelRouteRecoveredFailureError,
 } from "../model-route/index.ts";
-import { ModelProviderRequestError, safeRuntimeFailure } from "../../../integrations/providers/provider-errors.ts";
 import { createModelRouteRuntimeHooks } from "./model-route-runtime-hooks.ts";
 import { isPhaseScopedMemoryProjectionError } from
   "../../context/context-projection.ts";
-import { operationalFailureMessage } from "./turn-runtime-failure.ts";
+import { runtimeFailureFromError, runtimeFailureMessage } from "./turn-runtime-failure.ts";
 import { guidedFinalTransition } from "./guided-final-transition.ts";
 import { commitTurnSuspension } from "./commit-turn-suspension.ts";
 import {
@@ -180,32 +178,24 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
             isPhaseScopedMemoryProjectionError(error) ||
             isRoundToolSurfaceError(error) ||
             isGuidedWorkCloseoutError(error)) throw error;
-        if (isRetryableProviderExhaustion(error)) {
-          const failure = safeRuntimeFailure(error);
-          const failureCode = error instanceof ModelRouteRecoveredFailureError
-            ? error.failureCode
-            : failure.code;
-          await progress?.runtimeFaulted?.({
-            turnId: turn.turnId,
-            sessionId: turn.sessionId,
-            faultId: `${turn.turnId}:provider-transport-exhausted`,
-            kind: "provider_transport_exhausted",
-            retryable: true,
-            publicSummary: operationalFailureMessage(turn.originalMessage, error),
-            operatorSummary: `Provider recovery exhausted (${failureCode}).`,
-            safeErrorCode: failureCode,
-            createdAt: new Date().toISOString(),
-          });
-          throw error;
-        }
         permit.assertActive();
         result = {
           route: "assisted",
-          content: operationalFailureMessage(turn.originalMessage, error),
-          acceptedWorkResult: { status: "failed" },
+          content: "",
+          runtimeFailure: runtimeFailureFromError(error),
         };
       }
       permit.assertActive();
+      if (result.runtimeFailure) {
+        // Delivery is terminal for this execution interval, not a claim that the
+        // Work completed. Preserve accepted Work outcomes and any produced files.
+        result = {
+          ...result,
+          content: runtimeFailureMessage(turn.originalMessage, result.runtimeFailure,
+            result.acceptedWorkResult?.status === "success"),
+          acceptedWorkResult: result.acceptedWorkResult ?? { status: "failed" },
+        };
+      }
       if (result.suspension) {
         return await commitTurnSuspension({
           turns: this.dependencies.turns,
@@ -313,12 +303,6 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
     );
     await publishState(progress, turn);
   }
-}
-
-function isRetryableProviderExhaustion(error: unknown): boolean {
-  if (error instanceof ModelProviderRequestError) return error.retryable;
-  return error instanceof ModelRouteRecoveredFailureError &&
-    error.disposition === "retry";
 }
 
 export function createTurnRuntime(dependencies: TurnRuntimeDependencies): BtccTurnRuntime {

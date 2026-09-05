@@ -5505,7 +5505,7 @@ test("run_command rejects a sanitizer-empty public summary before journal or dis
   }
 });
 
-test("Guided agent turns provider failure into one fact-based final report", async () => {
+test("Guided agent preserves provider failure without fabricating a final progress report", async () => {
   const fixture = createFixture("guided-fallback");
   try {
     writeFileSync(join(fixture.root, "settings.json"), '{"enabled":true}\n');
@@ -5523,12 +5523,14 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       },
     ]));
     const outcome = await fallbackAgent.run({
-      turn: turnRecord(fixture.root),
+      turn: await admitTurn(localRunCommand(fixture.root, "guided-agent-turn"),
+        fixture.stores.admission, fixture.stores.turns),
       signal: new AbortController().signal,
     });
-    expect(outcome).toEqual({
+    expect(outcome).toMatchObject({
       route: "assisted",
-      content: "현재 요청을 처리했지만 답변 생성을 마치지 못했습니다.\n현재 Turn에서 확인된 내용: 검증된 소스 근거를 확인했습니다.\n완료되지 않은 작업을 완료로 처리하지 않았습니다.",
+      content: "",
+      runtimeFailure: { code: "provider_api_error", retryable: true },
     });
     expect(calls).toBe(2);
 
@@ -5541,7 +5543,8 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       { text: "폴더를 확인했습니다.", toolCalls: [] },
     ]));
     expect((await commandAgent.run({
-      turn: turnRecord(fixture.root, { turnId: "turn-command" }),
+      turn: await admitTurn(localRunCommand(fixture.root, "turn-command"),
+        fixture.stores.admission, fixture.stores.turns),
       signal: new AbortController().signal,
     })).route).toBe("assisted");
   } finally {
@@ -5695,6 +5698,7 @@ test("whole-goal sequence preserves explicit relation across restart and exhaust
             monitoringWorkId = output.work?.work_id ?? "";
             return toolResponse([toolCall("monitor-plan", "replace_work_plan", {
               objective: "안전한 모니터링 기준선을 확인합니다",
+              execution_mode: "direct",
               actions: [{
                 action_key: "monitor-baseline",
                 description: "안전한 기준선을 확인합니다",
@@ -5705,7 +5709,6 @@ test("whole-goal sequence preserves explicit relation across restart and exhaust
           }
           if (monitoringCalls === 3) {
             return toolResponse([toolCall("monitor-checkpoint", "record_work_checkpoint", {
-              next_stage: "execution",
               action_updates: [{ action_key: "monitor-baseline", status: "active" }],
               public_summary: "기준선 확인을 진행합니다.",
               next_step: "기준선 확인을 마칩니다.",
@@ -5811,7 +5814,8 @@ test("whole-goal sequence preserves explicit relation across restart and exhaust
     if (exhaustedCapture.kind === "delivered") {
       expect(exhaustedCapture.content).not.toContain("안전한 모니터링 기준선");
       expect(exhaustedCapture.content).not.toContain(monitoringWorkId);
-      expect(exhaustedCapture.content).toContain("현재 요청을 처리했지만 답변 생성을 마치지 못했습니다.");
+      expect(exhaustedCapture.runtimeFailure).toEqual({ code: "provider_api_error", retryable: true });
+      expect(exhaustedCapture.acceptedWorkResult).toEqual({ status: "failed" });
     }
     captureWorkId = (await currentStores.durableWork.boundWorkForTurn(
       "whole-goal-capture-start",
@@ -5834,6 +5838,7 @@ test("whole-goal sequence preserves explicit relation across restart and exhaust
           if (captureContinuationCalls === 2) {
             return toolResponse([toolCall("capture-plan", "replace_work_plan", {
               objective: "캡처 하드닝 근거를 정리합니다",
+              execution_mode: "direct",
               actions: [{
                 action_key: "capture-hardening",
                 description: "캡처 하드닝 근거를 정리합니다",
@@ -5844,7 +5849,6 @@ test("whole-goal sequence preserves explicit relation across restart and exhaust
           }
           if (captureContinuationCalls === 3) {
             return toolResponse([toolCall("capture-checkpoint", "record_work_checkpoint", {
-              next_stage: "execution",
               action_updates: [{ action_key: "capture-hardening", status: "active" }],
               public_summary: "캡처 하드닝 근거를 정리하는 중입니다.",
               next_step: "현재 변경 근거를 확인합니다.",
@@ -5966,7 +5970,7 @@ test("continue_work does not republish an old Plan into fallback progress", asyn
     if (outcome.kind === "delivered") {
       expect(outcome.content).not.toContain("오래된 Plan");
       expect(outcome.content).not.toContain(workId);
-      expect(outcome.content).toContain("현재 요청을 완료하지 못했고 답변 생성을 마치지 못했습니다.");
+      expect(outcome.runtimeFailure).toEqual({ code: "provider_api_error", retryable: true });
     }
   } finally {
     fixture.close();
@@ -6514,7 +6518,7 @@ test("Guided operational fallback follows configured response language", () => {
   expect(fallback).not.toContain("답변 생성을");
 });
 
-test("Guided operational fallback is captured without a second report model call", async () => {
+test("Guided provider failure is returned without a second report model call", async () => {
   const toolCall = {
     callId: "guided-fallback-precomputed-call",
     toolName: "read_file",
@@ -6549,12 +6553,10 @@ test("Guided operational fallback is captured without a second report model call
   });
 
   expect(calls).toBe(1);
-  expect(answer).toContain("답변 생성을 마치지 못했습니다");
-  expect(answer).not.toContain("Tool read_file");
-  expect(answer).not.toContain("captured-before-report-model");
+  expect(answer).toEqual({ failure: { code: "provider_api_error", retryable: true } });
 });
 
-test("Guided operational fallback never exposes a model budget or retry request", async () => {
+test("Guided provider failure retains only typed failure identity", async () => {
   let calls = 0;
   const modelRound = scriptedModelRound([
     () => {
@@ -6579,14 +6581,11 @@ test("Guided operational fallback never exposes a model budget or retry request"
     }),
   });
 
-  expect(answer).toContain("답변 생성을 마치지 못했습니다");
-  expect(answer).not.toContain("available tool budget");
-  expect(answer).not.toContain("another turn");
-  expect(answer).not.toMatch(/retry|다시 요청/iu);
+  expect(answer).toEqual({ failure: { code: "provider_api_error", retryable: true } });
   expect(calls).toBe(1);
 });
 
-test("Guided operational fallback is deterministic instead of a persona model call", async () => {
+test("Guided provider failure does not invoke another persona model call", async () => {
   let calls = 0;
   const modelRound = scriptedModelRound([
     () => {
@@ -6607,7 +6606,7 @@ test("Guided operational fallback is deterministic instead of a persona model ca
     loadFacts: async () => ({ work: null, toolCalls: [], effects: [] }),
   });
 
-  expect(answer).toContain("답변 생성을 마치지 못했습니다");
+  expect(answer).toEqual({ failure: { code: "provider_api_error", retryable: true } });
   expect(calls).toBe(1);
 });
 
@@ -6701,7 +6700,7 @@ test("Guided permanent provider failure does not start an operational report req
       factLoads += 1;
       return { work: null, toolCalls: [], effects: [] };
     },
-  })).rejects.toBe(permanent);
+  })).resolves.toEqual({ failure: { code: "provider_auth_error", retryable: false } });
 
   expect(calls).toBe(1);
   expect(factLoads).toBe(0);

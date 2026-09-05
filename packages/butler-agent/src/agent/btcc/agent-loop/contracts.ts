@@ -16,7 +16,7 @@ import type {
   VerifiedImagePayloadPort,
   VisualAdmittedManifest,
 } from "../../image-attachment/index.ts";
-import type { BtccTurnProgressObserver } from "../contracts.ts";
+import type { BtccTurnProgressObserver, BtccRuntimeFailure } from "../contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
 import type {
   PromptUsageAttribution,
@@ -45,6 +45,7 @@ export type BtccAgentLoopResult = {
   route: "direct" | "assisted" | "managed";
   workStatus?: "completed" | "blocked";
   acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
+  runtimeFailure?: BtccRuntimeFailure;
   artifacts?: BtccFinalArtifact[];
   changedFiles?: ChangedFileDetail[];
   plan?: ProjectLedgerPlan;

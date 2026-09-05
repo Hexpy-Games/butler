@@ -14,6 +14,7 @@ export function projectTurnOutcome(
   changedFiles: ChangedFileDetail[];
   workStatus?: "completed" | "blocked";
   acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
+  runtimeFailure?: { code: string; retryable: boolean };
   plan?: ProjectLedgerPlan;
 } {
   if (outcome.kind === "delivered" || outcome.kind === "already_delivered") {
@@ -22,6 +23,7 @@ export function projectTurnOutcome(
       artifacts: outcome.artifacts ?? [],
       changedFiles: outcome.changedFiles ?? [],
       ...(outcome.workStatus ? { workStatus: outcome.workStatus } : {}),
+      ...(outcome.runtimeFailure ? { runtimeFailure: outcome.runtimeFailure } : {}),
       ...("acceptedWorkResult" in outcome && outcome.acceptedWorkResult
         ? { acceptedWorkResult: outcome.acceptedWorkResult }
         : {}),
@@ -43,7 +45,10 @@ export function projectChildTerminalReport(
   );
   return {
     summary: structuredReport(result.text) ? projected.summary : result.text.trim(),
-    changedArtifacts: projected.changedArtifacts,
+    changedArtifacts: [...new Set([
+      ...projected.changedArtifacts,
+      ...result.artifacts.map((artifact) => artifact.safePathLabel),
+    ])],
     changedFiles: result.changedFiles,
   };
 }

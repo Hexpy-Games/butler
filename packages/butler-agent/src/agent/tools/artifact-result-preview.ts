@@ -1,6 +1,5 @@
 /** Shared tool support owns bounded provider result projections. */
 import {
-  boundedHeadTailText,
   boundedText,
   compactUndefined,
   finiteNumber,
@@ -105,15 +104,15 @@ export function artifactResultPreview(
         tool_name: toolName,
         ok: typeof output.ok === "boolean" ? output.ok : undefined,
         artifact: artifactIdentity(output.artifact),
-        stdout: artifactSlice(output.stdout, 3_600),
-        stderr: artifactSlice(output.stderr, 3_600),
+        stdout: artifactSlice(output.stdout),
+        stderr: artifactSlice(output.stderr),
         error: boundedText(output.error, 320),
       })
     : compactUndefined({
         tool_name: toolName,
         ok: typeof output.ok === "boolean" ? output.ok : undefined,
         artifact: artifactIdentity(output.artifact),
-        text: artifactSlice(output.text, 4_800),
+        text: artifactSlice(output.text),
         error: boundedText(output.error, 320),
       });
 }
@@ -132,12 +131,11 @@ function artifactIdentity(value: unknown): Record<string, unknown> | undefined {
 
 function artifactSlice(
   value: unknown,
-  maxChars: number,
 ): Record<string, unknown> | undefined {
   const slice = record(value);
   if (!slice) return undefined;
   return compactUndefined({
-    text: boundedHeadTailText(slice.text, maxChars),
+    text: typeof slice.text === "string" ? slice.text : undefined,
     start_line: finiteNumber(slice.start_line) ?? undefined,
     start_char: finiteNumber(slice.start_char) ?? undefined,
     next_offset_chars: slice.next_offset_chars === null
@@ -145,6 +143,7 @@ function artifactSlice(
       : finiteNumber(slice.next_offset_chars) ?? undefined,
     returned_lines: finiteNumber(slice.returned_lines) ?? undefined,
     total_lines: finiteNumber(slice.total_lines) ?? undefined,
+    total_chars: finiteNumber(slice.total_chars) ?? undefined,
     truncated_by_lines: typeof slice.truncated_by_lines === "boolean"
       ? slice.truncated_by_lines
       : undefined,
@@ -153,6 +152,48 @@ function artifactSlice(
       : undefined,
     search: artifactSearch(slice.search),
   });
+}
+
+/** A reader cursor must describe the delivered prefix, never an omitted middle. */
+export function fitToolArtifactPage(
+  payload: Record<string, unknown>,
+  maxBytes: number,
+): Record<string, unknown> {
+  if (serializedBytes(payload) <= maxBytes) return payload;
+  const output = record(payload.output);
+  if (!output) return payload;
+  const streamKeys = ["stdout", "stderr", "text"].filter((key) =>
+    typeof record(output[key])?.text === "string",
+  );
+  const length = Math.max(0, ...streamKeys.map((key) => String(record(output[key])!.text).length));
+  const page = (limit: number) => ({
+    ...payload,
+    output: {
+      ...output,
+      ...Object.fromEntries(streamKeys.map((key) => {
+        const slice = record(output[key])!;
+        const original = String(slice.text);
+        if (original.length <= limit) return [key, slice];
+        const visible = original.slice(0, limit);
+        return [key, {
+          ...slice,
+          text: visible,
+          next_offset_chars: Number(slice.start_char ?? 0) + visible.length,
+          returned_lines: visible ? visible.split("\n").length - (visible.endsWith("\n") ? 1 : 0) : 0,
+          truncated_by_tokens: true,
+        }];
+      })),
+    },
+    model_preview: { truncated: true, completeness: "partial" },
+  });
+  let low = 0;
+  let high = length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (serializedBytes(page(middle)) <= maxBytes) low = middle;
+    else high = middle - 1;
+  }
+  return page(low);
 }
 
 function artifactSearch(value: unknown): Record<string, unknown> | undefined {

@@ -10,6 +10,7 @@ export function guidedTurnResult(input: {
   authorityContinuation?: BtccAgentLoopResult["authorityContinuation"];
   workStatus?: BtccAgentLoopResult["workStatus"];
   acceptedWorkResult?: BtccAgentLoopResult["acceptedWorkResult"];
+  runtimeFailure?: BtccAgentLoopResult["runtimeFailure"];
   artifacts?: BtccAgentLoopResult["artifacts"];
   changedFiles?: BtccAgentLoopResult["changedFiles"];
   plan?: ProjectLedgerPlan;
@@ -24,6 +25,7 @@ export function guidedTurnResult(input: {
     ...(input.authorityContinuation ? { authorityContinuation: input.authorityContinuation } : {}),
     ...(input.workStatus ? { workStatus: input.workStatus } : {}),
     ...(input.acceptedWorkResult ? { acceptedWorkResult: input.acceptedWorkResult } : {}),
+    ...(input.runtimeFailure ? { runtimeFailure: input.runtimeFailure } : {}),
     ...(input.artifacts?.length ? { artifacts: input.artifacts } : {}),
     ...(input.changedFiles?.length ? { changedFiles: input.changedFiles } : {}),
     ...(input.plan ? { plan: input.plan } : {}),

@@ -89,7 +89,7 @@ test("typed cancellation invokes only BTCC stop and returns a durable ack", asyn
   });
 });
 
-test("cancelling an already delivered Turn completes the control request", async () => {
+test.each(["butler", "worker"] as const)("cancelling an already delivered %s Turn completes the control request without repainting success", async (role) => {
   const btcc: Btcc = {
     runTurn: async () => {
       throw new Error("cancellation must not enter runTurn");
@@ -99,13 +99,21 @@ test("cancelling an already delivered Turn completes the control request", async
       turnId,
       messageId: "assistant-delivered",
       content: "already complete",
+      acceptedWorkResult: { status: "success" },
     }),
   };
 
-  const result = await createBtccGatewayHandlers({ btcc }).butler!({
+  const completed: string[] = [];
+  const result = await createBtccGatewayHandlers({ btcc,
+    subsessionDelegation: {
+      activeParentDelegations: async () => [],
+      activeChildCancellationTarget: async () => ({ child_turn_id: "turn-already-delivered" }),
+      completeWorkerResult: async (input: { status: string }) => { completed.push(input.status); },
+    } as unknown as SubsessionDelegationService,
+  })[role]!({
     route: {
       sessionId: "butler/app-cancel-delivered",
-      role: "butler",
+      role,
       reason: "session-hint",
       workspacePath: process.cwd(),
     },
@@ -129,6 +137,7 @@ test("cancelling an already delivered Turn completes the control request", async
       outcome: "already_delivered",
     },
   });
+  expect(completed).toEqual(role === "worker" ? ["success"] : []);
 });
 
 test("typed resume re-enters the exact admitted BTCC request identity", async () => {
@@ -286,6 +295,64 @@ test("explicit Steward wait is non-terminal even when the Worker has already ret
     suspension: "waiting_for_worker",
     text: "",
   });
+});
+
+test.each(["cancelled", "success", "blocked"] as const)("a failed Steward settles before its owned Worker (%s) without changing accepted results", async (workerStatus) => {
+  const events: string[] = [];
+  const reports: Array<{ status?: string; summary?: string }> = [];
+  const child = { child_turn_id: "worker-owned-turn", relation: {
+    child_session_id: "worker/owned", parent_turn_id: "steward-failed-turn",
+  } };
+  const handlers = createBtccGatewayHandlers({
+    btcc: {
+      runTurn: async () => ({
+        kind: "delivered", turnId: "steward-failed-turn", messageId: "failed-message",
+        content: "모델 제공자의 요청 한도에 걸려 작업을 더 진행하지 못했습니다.",
+        runtimeFailure: { code: "provider_rate_limited", retryable: true },
+        acceptedWorkResult: { status: "failed" },
+      }),
+      stopTurn: async ({ turnId }) => {
+        events.push(`stop:${turnId}`);
+        if (workerStatus !== "cancelled") return {
+          kind: "already_delivered", turnId, messageId: "worker-delivered-message",
+          content: "Worker's accepted report", acceptedWorkResult: { status: workerStatus },
+          artifacts: [{ id: "worker-report", title: "Worker report", safePathLabel: "reports/result.md", kind: "document" }],
+        };
+        return { kind: "cancelled", turnId };
+      },
+    },
+    subsessionDelegation: {
+      activeParentDelegations: async ({ parentSessionId }: { parentSessionId: string }) =>
+        parentSessionId === "steward/failed-manager" ? [child] : [],
+      activeChildCancellationTarget: async (sessionId: string) => {
+        expect(sessionId).toBe("worker/owned");
+        return child;
+      },
+      completeWorkerResult: async (input: { status: string; childSessionId: string; changedArtifacts?: string[] }) => {
+        expect(input.childSessionId).toBe("worker/owned");
+        // The manager Result must already exist so the existing outbox does not
+        // enqueue another integration Turn for this cleanup result.
+        expect(reports).toHaveLength(1);
+        if (workerStatus !== "cancelled") expect(input.changedArtifacts).toEqual(["reports/result.md"]);
+        events.push(`worker:${input.status}`);
+      },
+      completeStewardResult: async (input: { status?: string; summary?: string }) => {
+        events.push(`steward:${input.status}`);
+        reports.push(input);
+      },
+    } as unknown as SubsessionDelegationService,
+  });
+  const result = await handlers.steward!({
+    route: { sessionId: "steward/failed-manager", role: "steward", reason: "steward-hint",
+      workspacePath: process.cwd() },
+    envelope: envelope("steward-failed-turn", "steward-failed-input", "위임 작업을 진행해 주세요."),
+  });
+
+  expect(events).toEqual(["steward:failed", "stop:worker-owned-turn", `worker:${workerStatus}`]);
+  expect(reports).toEqual([expect.objectContaining({
+    status: "failed", summary: "모델 제공자의 요청 한도에 걸려 작업을 더 진행하지 못했습니다.",
+  })]);
+  expect(result.metadata).toMatchObject({ kind: "turn_failed", safeErrorCode: "provider_rate_limited" });
 });
 
 test("Worker without a completed Micro Work is reported to its Steward as blocked", async () => {

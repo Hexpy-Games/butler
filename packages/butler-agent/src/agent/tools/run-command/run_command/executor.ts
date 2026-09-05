@@ -651,6 +651,7 @@ export async function runCommandTool(input: {
   const success = raw.exit_code === 0 && raw.timed_out === false;
   const budgeted = budgetToolOutput({
     result: raw,
+    retainOriginal: true,
     butlerData: input.butlerData,
     command,
     cwd,

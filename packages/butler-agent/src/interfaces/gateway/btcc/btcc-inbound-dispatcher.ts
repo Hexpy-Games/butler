@@ -335,7 +335,9 @@ function finalActions(
     turnId: optionalText(result.handlerResult.metadata?.turnId) ??
       item.envelope.routingHints?.turnId,
     noVisibleReply,
-    safeErrorCode: noVisibleReply ? "no_visible_result" : undefined,
+    ...(terminalKind === "turn_failed" ? { terminalKind } : {}),
+    safeErrorCode: optionalText(result.handlerResult.metadata?.safeErrorCode) ??
+      (noVisibleReply ? "no_visible_result" : undefined),
   }));
 }
 

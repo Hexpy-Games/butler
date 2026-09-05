@@ -14,6 +14,7 @@ import { homedir } from "os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "path";
 import { estimateContextTokens } from "./budget.ts";
 import { TOOL_EVIDENCE_REHYDRATION_SCHEMA } from "./tool-evidence-retention.ts";
+import { sliceToolArtifactText, type ToolArtifactTextSlice } from "./tool-artifact-slice.ts";
 
 export interface ShellCommandResult {
   stdout: string;
@@ -42,20 +43,7 @@ export interface BudgetedToolOutput extends ShellCommandResult {
   };
 }
 
-export interface ToolOutputArtifactSlice {
-  text: string;
-  start_line: number;
-  returned_lines: number;
-  total_lines: number;
-  estimated_tokens: number;
-  truncated_by_lines: boolean;
-  truncated_by_tokens: boolean;
-  start_char: number;
-  next_offset_chars: number | null;
-  total_chars: number;
-  applied_max_tokens: number;
-  search?: { query: string; found: boolean; match_char: number | null };
-}
+export type ToolOutputArtifactSlice = ToolArtifactTextSlice;
 
 export interface FocusedToolOutputArtifactRead {
   schema_version?: typeof TOOL_EVIDENCE_REHYDRATION_SCHEMA;
@@ -134,6 +122,8 @@ export function budgetToolOutput(input: {
   maxModelTokens?: number;
   outputMode?: unknown;
   validationSuite?: unknown;
+  /** Keep the original available if a later model-request budget reduces the preview. */
+  retainOriginal?: boolean;
   now?: Date;
 }): BudgetedToolOutput {
   const requestedTokens = typeof input.maxModelTokens === "number" && Number.isFinite(input.maxModelTokens)
@@ -158,7 +148,7 @@ export function budgetToolOutput(input: {
   };
   const rawText = outputText(input.result);
   const rawTokens = estimateContextTokens(rawText);
-  if (rawTokens <= maxModelTokens && !presentation.truncated) {
+  if (rawTokens <= maxModelTokens && !presentation.truncated && !input.retainOriginal) {
     return input.outputMode === undefined ? input.result : { ...input.result, output_presentation: presentation };
   }
 
@@ -190,7 +180,7 @@ export function budgetToolOutput(input: {
     ...(previewNeedsBudget ? fitOutputPreview(preview, notice, maxModelTokens) : preview),
     exit_code: input.result.exit_code,
     timed_out: input.result.timed_out,
-    output_presentation: { ...presentation, truncated: true },
+    output_presentation: { ...presentation, truncated: presentation.truncated || previewNeedsBudget },
   };
   const compactTokens = estimateContextTokens(outputText(compact));
   compact.butler_tool_artifact = {
@@ -326,48 +316,6 @@ function resolveArtifactReference(input: {
   return { ok: false, error: "artifact_reference_required", root };
 }
 
-function sliceStreamText(input: {
-  text: string;
-  offsetLines: number;
-  offsetChars?: number;
-  search?: string;
-  limitLines: number;
-  maxTokens: number;
-}): ToolOutputArtifactSlice {
-  // Character offsets refer to the original UTF-16 string, including CRLF and whitespace.
-  // A partial line is never skipped: the exclusive end is the next exact cursor.
-  let start = Math.min(input.text.length, input.offsetChars ?? 0);
-  if (input.offsetChars === undefined) {
-    for (let line = 0; line < input.offsetLines && start < input.text.length; line += 1) {
-      const newline = input.text.indexOf("\n", start);
-      start = newline < 0 ? input.text.length : newline + 1;
-    }
-  }
-  const match = input.search ? input.text.indexOf(input.search, start) : null;
-  if (match !== null) start = match < 0 ? input.text.length : match;
-  let lineEnd = start;
-  for (let line = 0; line < input.limitLines && lineEnd < input.text.length; line += 1) {
-    const newline = input.text.indexOf("\n", lineEnd);
-    lineEnd = newline < 0 ? input.text.length : newline + 1;
-  }
-  const low = start + prefixLengthWithinBudget(input.text.slice(start, lineEnd), input.maxTokens);
-  const text = input.text.slice(start, low);
-  return {
-    text,
-    start_line: input.text.slice(0, start).split("\n").length - 1,
-    returned_lines: text ? text.split("\n").length - (text.endsWith("\n") ? 1 : 0) : 0,
-    total_lines: input.text.split("\n").length,
-    estimated_tokens: estimateContextTokens(text),
-    truncated_by_lines: lineEnd < input.text.length,
-    truncated_by_tokens: low < lineEnd,
-    start_char: start,
-    next_offset_chars: low < input.text.length ? low : null,
-    total_chars: input.text.length,
-    applied_max_tokens: input.maxTokens,
-    ...(input.search ? { search: { query: input.search, found: match !== -1, match_char: match === -1 ? null : match } } : {}),
-  };
-}
-
 export function readToolOutputArtifactSlice(input: {
   butlerData?: string;
   artifactId?: string;
@@ -443,7 +391,7 @@ export function readToolOutputArtifactSlice(input: {
     },
   };
   if (stream === "stdout" || stream === "both") {
-    output.stdout = sliceStreamText({
+    output.stdout = sliceToolArtifactText({
       text: result.stdout,
       offsetLines,
       offsetChars,
@@ -453,7 +401,7 @@ export function readToolOutputArtifactSlice(input: {
     });
   }
   if (stream === "stderr" || stream === "both") {
-    output.stderr = sliceStreamText({
+    output.stderr = sliceToolArtifactText({
       text: result.stderr,
       offsetLines,
       offsetChars,
