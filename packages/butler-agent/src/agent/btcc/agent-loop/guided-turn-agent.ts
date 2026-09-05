@@ -304,6 +304,7 @@ export function createProductionGuidedTurnAgent(
       let progressSourceRevision = turn.authorityContinuation?.presentation?.sourceRevision ?? 0;
       const nextSourceRevision = () => ++progressSourceRevision;
       const activity = createGuidedActivityProjection({ turnId: turn.turnId, progress: observedProgress, managedInitially: initialWorkBound, nextSourceRevision,
+        initialWork: initialWorkBound ? initialWork?.work : undefined,
         restored: turn.authorityContinuation?.presentation?.activity });
       const authorityProjection = createGuidedAuthorityProjection({
         accessMode: policy.accessMode,
@@ -393,9 +394,6 @@ export function createProductionGuidedTurnAgent(
         subsessionDelegation: input.subsessionDelegation,
         onActiveDelegationAdmission: activeDelegationAdmission.observe,
         shouldWaitForWorker,
-        ...(policy.role === "butler" && visibleTools.some((tool) => tool.name === "delegate_to_steward")
-          ? { forcedDelegationTool: "delegate_to_steward" as const }
-          : {}),
         ...(policy.role === "butler"
           ? { turnReleaseDelegationTool: "delegate_to_steward" as const }
           : {}),

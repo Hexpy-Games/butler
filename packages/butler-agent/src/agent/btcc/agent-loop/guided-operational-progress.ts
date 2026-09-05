@@ -5,10 +5,7 @@ import {
   type AuthorityOutcomeReceipt,
   type PrincipalAuthority,
 } from "../authority/index.ts";
-import type {
-  GuidedActivityBinding,
-  GuidedActivityProjection,
-} from "../projection/index.ts";
+import type { GuidedActivityProjection } from "../projection/index.ts";
 import type { BtccAgentLoopInput } from "./contracts.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import { normalizeGuidedToolCall } from "../../tools/tool-call-normalization.ts";
@@ -158,8 +155,7 @@ function createGuidedPublicActivity(input: {
       toolCalls: batch.toolCalls.map(askFirstActivityCall),
     }),
     observeTool: (call) => input.activity.observeTool({ ...call, ...askFirstActivityCall(call) }),
-    markManaged: (binding?: GuidedActivityBinding) => input.activity.markManaged(binding),
-    publishAccepted: (binding: GuidedActivityBinding) => input.activity.publishAccepted(binding),
+    publishAccepted: (binding, work) => input.activity.publishAccepted(binding, work),
   };
 }
 

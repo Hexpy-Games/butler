@@ -238,6 +238,7 @@ export async function runScenarioStep(
     promptSha256: hashText(prompt),
     turnId: terminal.turnId,
     terminalState,
+    stewardDelivered: (terminal.view.steward_children ?? []).some((child) => child.status === "delivered"),
     finalText,
     rendererFinalText: renderedFinal,
     rendererActivities,
@@ -269,6 +270,10 @@ export async function runScenarioStep(
     screenshots: [finalScreenshot],
     providerAgentModels,
   };
+  if (step.expect?.stewardDelivered && !observation.stewardDelivered) {
+    observation.expectations.passed = false;
+    observation.expectations.failures.push("steward_delivery_missing");
+  }
   if (step.reloadAfter !== false) {
     await launch.page.reload();
     observation.reload = {

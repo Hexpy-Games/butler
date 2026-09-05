@@ -126,8 +126,8 @@ function backfillInput(input: WorkToolInput):
 }
 
 function executionModeValue(value: unknown): DurableWorkExecutionMode {
-  if (value !== "direct" && value !== "workers") {
-    throw new Error("Work Plan requires execution_mode to be direct or workers");
+  if (value !== "direct" && value !== "steward" && value !== "workers") {
+    throw new Error("Work Plan requires execution_mode to be direct, steward or workers");
   }
   return value;
 }

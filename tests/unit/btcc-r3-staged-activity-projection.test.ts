@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type { DurableWorkView } from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import type { SharedTurnEvent } from
   "../../packages/butler-progress-projection/src/index.ts";
 import { progressRowFromSharedTurnEvent } from
@@ -182,7 +183,7 @@ test("completion review projects a distinct validation activity without another 
   })]);
 });
 
-test("Work continuation publishes user language before the internal operation completes", async () => {
+test("Work continuation publishes the committed stage before same-batch editing, also after restore", async () => {
   const updates: Array<{
     displayStage?: string;
     title: string;
@@ -198,17 +199,42 @@ test("Work continuation publishes user language before the internal operation co
     },
   });
   const call = { name: "continue_work", args: { work_id: "internal-work-id" } };
-  projection.observeToolBatch({ text: "", toolCalls: [call] });
+  const edit = { name: "edit_file", args: { path: "report.md" } };
+  projection.observeToolBatch({ text: "", toolCalls: [call, edit] });
 
-  await projection.observeTool({ ...call, effectiveToolName: call.name });
+  const binding = await projection.observeTool({ ...call, effectiveToolName: call.name });
+  // Selection has not succeeded yet: no fabricated Conception or resume event.
+  expect(updates).toEqual([]);
+  const selected = {
+    currentStage: "execution",
+    objective: "보고서 작성",
+    actionProgress: [{ actionKey: "a1", status: "active" }],
+    currentPlan: { actions: [{ actionKey: "a1", description: "보고서 내용 수정" }] },
+  } as DurableWorkView;
+  await projection.publishAccepted(binding, selected);
 
   expect(updates).toEqual([expect.objectContaining({
-    displayStage: "conception",
-    title: "진행 내용 확인",
-    summary: "이전에 진행하던 내용과 현재 상태를 확인하고 있습니다.",
+    displayStage: "execution",
+    title: "보고서 내용 수정",
+    summary: "보고서 내용 수정",
   })]);
+  const restored = createGuidedActivityProjection({ turnId: "turn-continue-work-activity", restored: projection.snapshot() });
+  for (const current of [projection, restored]) {
+    expect(await current.observeTool({ ...edit, effectiveToolName: edit.name })).toMatchObject({
+      activityId: binding.activityId, displayStage: "execution",
+    });
+  }
   expect(publicToolTitle("continue_work")).toBe("진행 내용 확인");
   expect(publicToolTitle("start_work")).toBe("요청 내용 확인");
+});
+
+test("a bound Work starts ordinary tools at its saved review stage without a new Conception", async () => {
+  const projection = createGuidedActivityProjection({
+    turnId: "bound-work-review", managedInitially: true,
+    initialWork: { currentStage: "validation", objective: "보고서 검증", actionProgress: [] } as unknown as DurableWorkView,
+  });
+  expect(await projection.observeTool({ name: "read_file", effectiveToolName: "read_file", args: {} }))
+    .toMatchObject({ displayStage: "validation" });
 });
 
 test("accepted completion projects the model-authored reporting direction after validation", async () => {

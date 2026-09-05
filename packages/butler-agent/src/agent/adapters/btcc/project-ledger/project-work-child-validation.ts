@@ -62,7 +62,7 @@ function validatePlan(child: Record<string, unknown>): void {
   isoRequired(child.createdAt);
   stringArray(child.governingRefs ?? []);
   if (child.executionMode !== undefined &&
-      child.executionMode !== "direct" && child.executionMode !== "workers") {
+      child.executionMode !== "direct" && child.executionMode !== "steward" && child.executionMode !== "workers") {
     invalid();
   }
   stringArray(child.checks);

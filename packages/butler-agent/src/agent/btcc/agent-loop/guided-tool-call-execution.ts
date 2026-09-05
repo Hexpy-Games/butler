@@ -242,7 +242,8 @@ export function createGuidedToolCallExecutor(
         await safeBindOpenWork(input.durableWork, input.workScope);
       }
       if (isDurableWorkTool(call.name) && toolResultSucceeded(result)) {
-        await activityProjection.publishAccepted(activity);
+        await activityProjection.publishAccepted(activity,
+          await input.durableWork.boundWorkForTurn(input.turn.turnId));
         await publishWorkProgress(
           input.progress,
           input.turn.turnId,

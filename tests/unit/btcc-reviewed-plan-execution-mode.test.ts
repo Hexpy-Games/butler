@@ -13,12 +13,15 @@ import { projectDurableWorkToolSurface } from
 import {
   createDurableWorkService,
   type DurableWorkService,
+  type DurableWorkExecutionMode,
 } from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import {
   SqliteGuidedWorkStore,
 } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
+import { migrateBtccSchema } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/migrate-schema.ts";
 import { SqlitePrincipalAuthorityRepository } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
 import { SqliteGuidedToolJournal } from
@@ -49,7 +52,7 @@ test("reviewed Plan execution ownership is a required stable model contract", as
     properties: { execution_mode: { enum: string[] } };
   };
   expect(parameters.required).toContain("execution_mode");
-  expect(parameters.properties.execution_mode.enum).toEqual(["direct", "workers"]);
+  expect(parameters.properties.execution_mode.enum).toEqual(["direct", "steward", "workers"]);
 
   const stable = JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS);
   const projected = projectDurableWorkToolSurface(
@@ -87,7 +90,7 @@ test("reviewed Plan execution ownership is a required stable model contract", as
   });
 });
 
-test("Session and Project Plan persistence round-trip execution ownership without rewriting legacy Plans", async () => {
+test.each(["direct", "steward", "workers"] as const)("Session and Project Plan persistence round-trip %s ownership without rewriting legacy Plans", async (mode) => {
   const db = new Database(":memory:");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
   const service = createDurableWorkService(new SqliteGuidedWorkStore(
@@ -117,7 +120,7 @@ test("Session and Project Plan persistence round-trip execution ownership withou
       ...scope,
       mutationCallId: "plan-persist-mode",
       objective: "Execute through Workers",
-      executionMode: "workers",
+      executionMode: mode,
       actions: [{
         actionKey: "implement",
         description: "Implement the bounded slice",
@@ -125,16 +128,16 @@ test("Session and Project Plan persistence round-trip execution ownership withou
       }],
       checks: ["Focused behavior passes"],
     });
-    expect(planned.currentPlan?.executionMode).toBe("workers");
+    expect(planned.currentPlan?.executionMode).toBe(mode);
     expect((await service.loadContext(scope))?.work.currentPlan?.executionMode)
-      .toBe("workers");
+      .toBe(mode);
     expect(renderDurableWorkContext(await service.loadContext(scope)))
-      .toContain("Plan execution ownership: workers");
+      .toContain(`Plan execution ownership: ${mode}`);
   } finally {
     db.close();
   }
 
-  const current = projectPlanChild("workers");
+  const current = projectPlanChild(mode);
   const decoded = decodeChild(
     canonicalProjectWorkChildBody(current),
     {
@@ -143,7 +146,7 @@ test("Session and Project Plan persistence round-trip execution ownership withou
       recordId: current.plan.planRevisionId,
     },
   );
-  expect(decoded.plan.executionMode).toBe("workers");
+  expect(decoded.plan.executionMode).toBe(mode);
 
   const legacy = projectPlanChild(undefined);
   const decodedLegacy = decodeChild(
@@ -155,6 +158,23 @@ test("Session and Project Plan persistence round-trip execution ownership withou
     },
   );
   expect(decodedLegacy.plan.executionMode).toBeUndefined();
+});
+
+test("existing Plan rows survive the execution ownership schema upgrade unchanged", () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA.replace("('direct', 'steward', 'workers')", "('direct', 'workers')"));
+    db.query("INSERT INTO btcc_guided_work_plan_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("old-plan", "old-work", 1, "Saved objective", "[]", "direct", "[]", "[]", "old-turn", "2026-09-05T00:00:00Z");
+    const before = db.query("SELECT * FROM btcc_guided_work_plan_revisions").all();
+    migrateBtccSchema(db);
+    expect(db.query("SELECT * FROM btcc_guided_work_plan_revisions").all()).toEqual(before);
+    db.query("INSERT INTO btcc_guided_work_plan_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("new-plan", "old-work", 2, "Saved objective", "[]", "steward", "[]", "[]", "new-turn", "2026-09-06T00:00:00Z");
+    migrateBtccSchema(db);
+    expect(db.query("SELECT execution_mode FROM btcc_guided_work_plan_revisions ORDER BY revision").all())
+      .toEqual([{ execution_mode: "direct" }, { execution_mode: "steward" }]);
+  } finally { db.close(); }
 });
 
 test("accepted Plan file effects approve exact occurrences and request a new approval for the next file", async () => {
@@ -331,7 +351,7 @@ test("accepted Plan file effects approve exact occurrences and request a new app
   }
 });
 
-function workView(executionMode: "direct" | "workers") {
+function workView(executionMode: DurableWorkExecutionMode) {
   return {
     workId: "work-mode",
     sessionId: "session-mode",
@@ -363,7 +383,7 @@ function workView(executionMode: "direct" | "workers") {
 }
 
 function projectPlanChild(
-  executionMode: "direct" | "workers" | undefined,
+  executionMode: DurableWorkExecutionMode | undefined,
 ): Extract<ProjectWorkChild, { schema: "butler.btcc-project-work-plan.v1" }> {
   return {
     schema: "butler.btcc-project-work-plan.v1",

@@ -29,7 +29,6 @@ function inertActivity(): GuidedActivityProjection {
     observeToolBatch: () => {},
     observeTool: () =>
       Promise.resolve({ activityId: "inert-activity", deferredUntilAccepted: false }),
-    markManaged: () => Promise.resolve(),
     publishAccepted: () => Promise.resolve(),
   };
 }
@@ -222,7 +221,6 @@ test("ask-first does not claim approval while ordinary tools are still running",
     observeToolBatch: (batch) => { observed.push(batch); },
     observeTool: () =>
       Promise.resolve({ activityId: "ordinary-activity", deferredUntilAccepted: false }),
-    markManaged: () => Promise.resolve(),
     publishAccepted: () => Promise.resolve(),
   };
   const guided = createGuidedAuthorityProjection({

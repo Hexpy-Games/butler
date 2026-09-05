@@ -16,8 +16,6 @@ import type {
 import {
   acceptedCurrentResultReview,
   applyWorkActionUpdates,
-  assertWorkPlanReplacementStage,
-  assertWorkStageTransition,
   progressForReplacementPlan,
   resolveWorkReviewTransition,
 } from "./work-progress-policy.ts";
@@ -98,15 +96,11 @@ export function createDurableWorkService(
       const startNew = input.startNew ?? false;
       const context = startNew ? null : await store.loadContext(input);
       const openingPlan = !context?.work.currentPlan;
-      if (context && !openingPlan) {
-        if (!context.work.currentStage) {
-          throw new Error("Durable Work Plan requires a current stage");
-        }
-        assertWorkPlanReplacementStage(context.work.currentStage);
-      } else {
-        assertWorkStageTransition(undefined, "conception");
-        assertWorkStageTransition("conception", "planning");
+      if (context && context.work.status !== "open" && context.work.status !== "blocked") {
+        throw new Error("Durable Work relation is already selected for a terminal Work; start new Work in a fresh Turn");
       }
+      // A revised Plan starts planning; it does not require a result review
+      // of the work being revised. The store retains completed action progress.
       return store.replacePlan({
         ...input,
         startNew,

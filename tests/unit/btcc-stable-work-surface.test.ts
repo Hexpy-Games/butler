@@ -113,6 +113,55 @@ test("reviewed execution ownership is enforced at each Steward tool call", async
   expect(executed).toEqual(["edit_file", "run_command"]);
 });
 
+test("Butler preserves small direct execution and follows a newly selected Steward owner in the same batch", async () => {
+  let mode = "direct";
+  let bound = true;
+  const durableWork = {
+    boundWorkForTurn: async () => bound ? ({ currentStage: "execution", currentPlan: { executionMode: mode } }) : null,
+    loadContext: async () => ({ work: { currentStage: "execution", currentPlan: { executionMode: "steward" } } }),
+  } as unknown as DurableWorkService;
+  const guard = createActiveDelegationAdmissionGuard(undefined, {
+    role: "butler", turnId: "butler-turn", durableWork,
+    workScope: { sessionId: "butler", turnId: "butler-turn" },
+  });
+  const executed: string[] = [];
+  const execute = guard.execute(async (call) => {
+    executed.push(call.name);
+    if (call.name === "continue_work") mode = "steward";
+    return { ok: true };
+  });
+  const call = (name: string, args = {}) => execute({ id: name, name, arguments: args, rawArguments: JSON.stringify(args) });
+  expect(await call("delegate_to_steward")).toMatchObject({ ok: false, error: { message: expect.stringContaining("execution_mode: steward") } });
+  expect(await call("edit_file")).toEqual({ ok: true });
+  expect(await call("continue_work")).toEqual({ ok: true });
+  for (const [name, args] of [
+    ["edit_file", {}],
+    ["run_command", { command: "implement", state_effect: "mutation" }],
+    ["tool_call", { id: "native:edit_file", arguments: { path: "report.md" } }],
+  ] as const) {
+    expect(await call(name, args)).toMatchObject({ ok: false, error: { message: expect.stringContaining("delegate_to_steward") } });
+  }
+  expect(await call("delegate_to_steward")).toEqual({ ok: true });
+  expect(executed).toEqual(["edit_file", "continue_work", "delegate_to_steward"]);
+  for (const name of ["tool_describe", "tool_search", "read_operation_results", "read_tool_output_artifact", "read_tool_evidence_artifact"]) {
+    expect(await call(name)).toEqual({ ok: true });
+  }
+  bound = false;
+  expect(await call("read_file")).toEqual({ ok: true });
+});
+
+test.each(["butler", "steward", "worker"] as const)("%s Plan accepts only its own execution choices", async (role) => {
+  const guard = createActiveDelegationAdmissionGuard(undefined, {
+    role, turnId: "turn", durableWork: { boundWorkForTurn: async () => null, loadContext: async () => null } as unknown as DurableWorkService,
+    workScope: { sessionId: role, turnId: "turn" },
+  });
+  const execute = guard.execute(async () => ({ ok: true }));
+  for (const mode of ["direct", "steward", "workers"]) {
+    expect(await execute({ id: mode, name: "replace_work_plan", arguments: { execution_mode: mode }, rawArguments: "{}" }))
+      .toMatchObject({ ok: mode === "direct" || (mode === "steward" ? role === "butler" : role === "steward") });
+  }
+});
+
 test("settled Worker result Turn admits integration while retaining Worker execution ownership", async () => {
   const durableWork = {
     boundWorkForTurn: async () => ({

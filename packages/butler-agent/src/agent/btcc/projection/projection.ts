@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { BtccTurnProgressObserver } from "../contracts.ts";
-import type { WorkStage } from "../work/index.ts";
+import type { DurableWorkView, WorkStage } from "../work/index.ts";
 import {
   activeWorkActionTitle,
   activityContent,
@@ -10,6 +10,7 @@ import {
   distinctSummary,
   type GuidedActivityToolCall as ToolCall,
   publicText,
+  resumedWorkActivity,
 } from "./guided-activity-content.ts";
 import { normalizeGuidedToolCall } from "../../tools/tool-support.ts";
 
@@ -27,6 +28,7 @@ type ActivityGroup = GuidedActivityBinding & {
   precedingGroups?: ActivityGroup[];
   followingGroups?: ActivityGroup[];
   startsExecution?: boolean;
+  resumesWork?: boolean;
   nextExecutionTitle?: string;
   published: boolean;
 };
@@ -49,13 +51,13 @@ export type GuidedActivitySnapshot = {
   fallbackActivityId?: string;
   pendingExecutionTitle?: string;
   pendingExecution?: boolean;
+  pendingStage?: WorkStage;
 };
 
 export interface GuidedActivityProjection {
   observeToolBatch(input: { text: string; toolCalls: ToolCall[] }): void;
   observeTool(input: ToolCall & { effectiveToolName: string; callId?: string }): Promise<GuidedActivityBinding>;
-  markManaged(binding?: GuidedActivityBinding): Promise<void>;
-  publishAccepted(binding: GuidedActivityBinding): Promise<void>;
+  publishAccepted(binding: GuidedActivityBinding, work?: DurableWorkView | null): Promise<void>;
 }
 
 /**
@@ -67,6 +69,7 @@ export function createGuidedActivityProjection(input: {
   turnId: string;
   progress?: BtccTurnProgressObserver;
   managedInitially?: boolean;
+  initialWork?: DurableWorkView;
   /** Canonical monotonic revision shared by all public Turn activity emitters. */
   nextSourceRevision?: () => number;
   restored?: GuidedActivitySnapshot;
@@ -79,8 +82,8 @@ export function createGuidedActivityProjection(input: {
   const toolBindings = new Map(input.restored?.toolBindings ?? []);
   let currentActivity: ActivityGroup | undefined;
   let fallbackOrdinaryActivity: ActivityGroup | undefined;
-  let pendingExecutionTitle: string | undefined;
-  let pendingExecution = false;
+  let pendingExecutionTitle = input.initialWork ? resumedWorkActivity(input.initialWork).title : undefined;
+  let pendingStage = input.initialWork?.currentStage;
   if (input.restored) {
     const restored = input.restored;
     managed = restored.managed;
@@ -98,13 +101,14 @@ export function createGuidedActivityProjection(input: {
     currentActivity = groupsById.get(restored.currentActivityId ?? "");
     fallbackOrdinaryActivity = groupsById.get(restored.fallbackActivityId ?? "");
     pendingExecutionTitle = restored.pendingExecutionTitle;
-    pendingExecution = restored.pendingExecution ?? Boolean(restored.pendingExecutionTitle);
+    pendingStage = restored.pendingStage ??
+      ((restored.pendingExecution ?? Boolean(restored.pendingExecutionTitle)) ? "execution" : undefined);
   }
 
   return {
     snapshot() {
       return {
-        managed, pendingExecutionTitle, pendingExecution,
+        managed, pendingExecutionTitle, pendingStage,
         toolBindings: [...toolBindings],
         currentActivityId: currentActivity?.activityId,
         fallbackActivityId: fallbackOrdinaryActivity?.activityId,
@@ -155,24 +159,20 @@ export function createGuidedActivityProjection(input: {
       return binding;
     },
 
-    async markManaged(binding) {
-      managed = true;
-      const group = binding && groupsById.get(binding.activityId);
-      if (group && !group.deferredUntilAccepted) {
-        await publishGroup({ ...input, nextSourceRevision }, group);
-      }
-    },
-
-    async publishAccepted(binding) {
+    async publishAccepted(binding, work) {
       managed = true;
       const group = groupsById.get(binding.activityId);
       if (group) {
+        if (group.resumesWork && work) {
+          Object.assign(group, resumedWorkActivity(work));
+          binding.displayStage = group.displayStage;
+        }
         if (group.startsExecution) {
-          pendingExecution = true;
+          pendingStage = "execution";
           pendingExecutionTitle = group.nextExecutionTitle;
           currentActivity = undefined;
         } else {
-          pendingExecution = false;
+          pendingStage = undefined;
           pendingExecutionTitle = undefined;
           currentActivity = group.followingGroups?.at(-1) ?? group;
         }
@@ -210,11 +210,11 @@ export function createGuidedActivityProjection(input: {
   }
 
   function ordinaryActivity(candidate: ActivityGroup): ActivityGroup {
-    if (pendingExecution) {
-      candidate.displayStage = "execution";
+    if (pendingStage) {
+      candidate.displayStage = pendingStage;
       if (pendingExecutionTitle) candidate.title = pendingExecutionTitle;
       currentActivity = candidate;
-      pendingExecution = false;
+      pendingStage = undefined;
       pendingExecutionTitle = undefined;
       fallbackOrdinaryActivity = undefined;
     }
@@ -239,8 +239,9 @@ export function createGuidedActivityProjection(input: {
       activityId: activityId(input.turnId),
       ...(content.displayStage ? { displayStage: content.displayStage } : {}),
       deferredUntilAccepted: first
-        ? !["ordinary", "work_selection"].includes(activityKind(first.name))
+        ? first.name === "continue_work" || !["ordinary", "work_selection"].includes(activityKind(first.name))
         : false,
+      ...(first?.name === "continue_work" ? { resumesWork: true } : {}),
       title: boundedTitle(
         groupInput.title ||
           (first?.name === "record_work_checkpoint" && activeActionTitle) ||

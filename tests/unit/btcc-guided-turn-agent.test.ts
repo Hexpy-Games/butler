@@ -4288,7 +4288,6 @@ test("delegation schema appears for the bound accepted Plan Review", async () =>
     durableWork,
     workScope: { turnId, sessionId },
     effectJournal: { listForWork: async () => [] },
-    forcedDelegationTool: "delegate_to_steward",
     turnReleaseDelegationTool: "delegate_to_steward",
   });
 
