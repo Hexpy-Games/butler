@@ -69,6 +69,17 @@ export function OperationOutputDetails({
     <Stack gap="xs">
       {output.kind === "summary" ? (
         <Typo.Caption>{output.content}</Typo.Caption>
+      ) : output.kind === "sections" ? (
+        <Stack gap="xs">
+          <Typo.Caption>{output.summary}</Typo.Caption>
+          {output.sections.map((section, index) => (
+            <Stack gap="xs" key={index}>
+              <Typo.Caption>{section.title}</Typo.Caption>
+              {section.message ? <Typo.Caption>{section.message}</Typo.Caption> : null}
+              {section.content ? <WorkActivityOutput>{section.content}</WorkActivityOutput> : null}
+            </Stack>
+          ))}
+        </Stack>
       ) : output.kind === "command" ? (
         <Stack gap="xs">
           <Typo.Caption>{output.summary}</Typo.Caption>

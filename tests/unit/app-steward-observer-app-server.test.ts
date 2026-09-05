@@ -111,6 +111,9 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
     const projectParentSessionViewResponse = await fetch(
       `${server.url}session-view?session_id=project-parent-route`,
     );
+    if (!projectParentSessionViewResponse.ok) {
+      throw new Error(await projectParentSessionViewResponse.text());
+    }
     expect(projectParentSessionViewResponse.ok).toBe(true);
     const projectParentSessionView =
       (await projectParentSessionViewResponse.json()).data;
@@ -374,7 +377,9 @@ function seedObserverDatabase(
       "route-message-key",
       "2026-08-19T00:01:00.000Z",
     );
-  db.query("INSERT INTO btcc_guided_works VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+  db.query(`INSERT INTO btcc_guided_works (work_id, session_id, scope_kind, scope_ref,
+    origin_turn_id, origin_message_id, objective, status, current_plan_revision_id,
+    created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(
       "route-work",
       childSessionId,
@@ -388,7 +393,11 @@ function seedObserverDatabase(
       "2026-08-19T00:01:00.000Z",
       "2026-08-19T00:02:00.000Z",
     );
-  db.query("INSERT INTO btcc_guided_work_plan_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+  db.query("INSERT INTO btcc_guided_turn_work_bindings VALUES (?, ?, ?, ?, 1, 1, ?)")
+    .run("route-binding", childTurnId, childSessionId, "route-work", "2026-08-19T00:01:00.000Z");
+  db.query(`INSERT INTO btcc_guided_work_plan_revisions (plan_revision_id, work_id,
+    revision, objective, governing_refs_json, actions_json, checks_json, origin_turn_id,
+    created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(
       "route-plan",
       "route-work",

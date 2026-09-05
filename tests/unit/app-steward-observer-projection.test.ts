@@ -10,6 +10,17 @@ import { sessionViewForStewardObserver } from "../../packages/butler-agent/src/g
 import { projectStewardWorkerActivity } from "../../packages/butler-agent/src/gateways/app/domain/sessions/steward-observer-worker.ts";
 import { relabelWorkerActivities } from "../../packages/butler-agent/src/gateways/app/domain/workers/worker-activity-ordering.ts";
 
+function bindPlanWork(db: Database, sessionId: string, turnId: string, workId: string) {
+  db.query(`INSERT OR IGNORE INTO btcc_turns (
+    turn_id, session_id, inbox_id, trigger_key, original_message_id, original_message,
+    admission_snapshot_ref, model_selection_json, context_json, semantic_state,
+    revision, execution_fence
+  ) VALUES (?, ?, ?, ?, ?, 'Plan', 'snapshot', '{}', '{}', 'admitted', 1, 0)`)
+    .run(turnId, sessionId, `inbox-${turnId}`, `trigger-${turnId}`, `message-${turnId}`);
+  db.query("INSERT INTO btcc_guided_turn_work_bindings VALUES (?, ?, ?, ?, 1, 1, ?)")
+    .run(`binding-${turnId}`, turnId, sessionId, workId, "2026-08-19T00:01:00.000Z");
+}
+
 describe("App Steward observer projection", () => {
   test("merges one tool call's start and completion into one activity row", () => {
     const rows = projectStewardActivityRows({
@@ -164,9 +175,14 @@ describe("App Steward observer projection", () => {
     `).run("steward-turn-1", "steward-1", "inbox-1", "trigger-1", "message-1", "Review", "snapshot-1", "{}", "{}", "admitted", 1, 0);
     db.query("INSERT INTO btcc_messages VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run("message-1", "steward-1", "steward-turn-1", "user", "Review the task", "message-key-1", "2026-08-19T00:01:00.000Z");
-    db.query("INSERT INTO btcc_guided_works VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    db.query(`INSERT INTO btcc_guided_works (work_id, session_id, scope_kind, scope_ref,
+      origin_turn_id, origin_message_id, objective, status, current_plan_revision_id,
+      created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run("work-1", "steward-1", "session", "steward-1", "steward-turn-1", "message-1", "Review", "open", "plan-1", "2026-08-19T00:01:00.000Z", "2026-08-19T00:02:00.000Z");
-    db.query("INSERT INTO btcc_guided_work_plan_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    bindPlanWork(db, "steward-1", "steward-turn-1", "work-1");
+    db.query(`INSERT INTO btcc_guided_work_plan_revisions (plan_revision_id, work_id,
+      revision, objective, governing_refs_json, actions_json, checks_json, origin_turn_id,
+      created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run("plan-1", "work-1", 3, "Review", "[]", JSON.stringify([
         { actionKey: "action-1", description: "Inspect the durable path", dependencyKeys: [] },
         { actionKey: "action-2", description: "Record the result", dependencyKeys: [] },
@@ -483,14 +499,16 @@ describe("App Steward observer projection", () => {
       "2026-08-19T00:02:00.000Z",
     );
     const snapshot = new SqliteStewardObserverStore(db).snapshot("steward-2");
-    db.query("INSERT INTO btcc_subsession_delegations VALUES (?, ?, ?, ?, ?, ?, ?)")
+    db.query(`INSERT INTO btcc_subsession_delegations (delegation_id, relation_id,
+      task_id, child_turn_id, root_work_id, packet_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`)
       .run(
         "delegation-2",
         "relation-2",
         "task-2",
         "turn-2",
+        "work-2",
         JSON.stringify({ privatePrompt: "do not expose" }),
-        "2026-08-19T00:02:30.000Z",
         "2026-08-19T00:02:30.000Z",
       );
     expect(snapshot?.progress_events).toHaveLength(1);
@@ -533,7 +551,9 @@ describe("App Steward observer projection", () => {
       }),
       "assistant-legacy", 1, 0, "completed",
     );
-    db.query("INSERT INTO btcc_guided_works VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    db.query(`INSERT INTO btcc_guided_works (work_id, session_id, scope_kind, scope_ref,
+      origin_turn_id, origin_message_id, objective, status, current_plan_revision_id,
+      created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run("work-legacy", "steward-legacy", "session", "steward-legacy", "steward-turn-legacy", "message-legacy", "Review", "completed", null, "2026-08-21T00:00:00.000Z", "2026-08-21T00:01:00.000Z");
     db.query("INSERT INTO btcc_guided_turn_work_bindings VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run("binding-legacy", "steward-turn-legacy", "steward-legacy", "work-legacy", 1, 1, "2026-08-21T00:00:00.000Z");
@@ -588,9 +608,14 @@ describe("App Steward observer projection", () => {
     db.exec(BTCC_SUCCESSOR_SCHEMA);
     db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
       .run("relation-plan", "parent-plan", "parent-turn-plan", "steward-plan", "anchor-plan", 1, "Plan child", "2026-08-19T00:00:00.000Z");
-    db.query("INSERT INTO btcc_guided_works VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    db.query(`INSERT INTO btcc_guided_works (work_id, session_id, scope_kind, scope_ref,
+      origin_turn_id, origin_message_id, objective, status, current_plan_revision_id,
+      created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run("work-plan", "steward-plan", "session", "steward-plan", "turn-plan", "message-plan", "Plan", "open", "plan-current", "2026-08-19T00:01:00.000Z", "2026-08-19T00:02:00.000Z");
-    db.query("INSERT INTO btcc_guided_work_plan_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    bindPlanWork(db, "steward-plan", "turn-plan", "work-plan");
+    db.query(`INSERT INTO btcc_guided_work_plan_revisions (plan_revision_id, work_id,
+      revision, objective, governing_refs_json, actions_json, checks_json, origin_turn_id,
+      created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run("plan-current", "work-plan", 7, "Plan", "[]", JSON.stringify([
         { actionKey: "a1", description: "First", dependencyKeys: [] },
         { actionKey: "a2", description: "Second", dependencyKeys: [] },
@@ -764,9 +789,14 @@ describe("App Steward observer projection", () => {
     db.exec(BTCC_SUCCESSOR_SCHEMA);
     db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
       .run("relation-unapproved", "parent-unapproved", "parent-turn-unapproved", "steward-unapproved", "anchor-unapproved", 1, "Unapproved child", "2026-08-19T00:00:00.000Z");
-    db.query("INSERT INTO btcc_guided_works VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    db.query(`INSERT INTO btcc_guided_works (work_id, session_id, scope_kind, scope_ref,
+      origin_turn_id, origin_message_id, objective, status, current_plan_revision_id,
+      created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run("work-unapproved", "steward-unapproved", "session", "steward-unapproved", "turn-unapproved", "message-unapproved", "Plan", "completed", "plan-unapproved", "2026-08-19T00:01:00.000Z", "2026-08-19T00:02:00.000Z");
-    db.query("INSERT INTO btcc_guided_work_plan_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    bindPlanWork(db, "steward-unapproved", "turn-unapproved", "work-unapproved");
+    db.query(`INSERT INTO btcc_guided_work_plan_revisions (plan_revision_id, work_id,
+      revision, objective, governing_refs_json, actions_json, checks_json, origin_turn_id,
+      created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run("plan-unapproved", "work-unapproved", 2, "Plan", "[]", JSON.stringify([
         { actionKey: "a1", description: "First", dependencyKeys: [] },
       ]), "[]", "turn-unapproved", "2026-08-19T00:01:00.000Z");
