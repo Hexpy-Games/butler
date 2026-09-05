@@ -37,6 +37,9 @@ export function migrateBtccSchema(db: Database): void {
 function ensureTurnSuspensionReason(db: Database): void {
   if (!tableExists(db, "btcc_turns")) return;
   ensureColumn(db, "btcc_turns", "suspension_reason", "TEXT");
+  ensureColumn(db, "btcc_turns", "authority_continuation_json", "TEXT");
+  ensureColumn(db, "btcc_authority_requests", "source_call_id", "TEXT");
+  ensureColumn(db, "btcc_authority_requests", "allow_scope", "TEXT NOT NULL DEFAULT 'once'");
 }
 
 function ensureProjectWorkProjectionColumns(db: Database): void {

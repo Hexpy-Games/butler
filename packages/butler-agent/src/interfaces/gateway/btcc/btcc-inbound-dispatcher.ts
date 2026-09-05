@@ -24,6 +24,7 @@ import {
   isMatchingClaimedAppTarget,
 } from "./control-ack-action.ts";
 import { bindQueuedInboundSession } from "./queued-inbound-session-binder.ts";
+import { GatewayRouter } from "../../../gateways/core/router.ts";
 
 type BtccInboundServer = {
   handleInbound(
@@ -40,6 +41,7 @@ export type BtccInboundDispatchSummary = {
 };
 
 export type BtccInboundDispatchOptions = {
+  waitingSourceSessions?: ReadonlySet<string>;
   queue: NativeInboundQueue;
   server: BtccInboundServer;
   store: SessionBindingStore;
@@ -84,7 +86,9 @@ export class BtccInboundDispatcher {
     const items = options.queue.claimEligible(
       Math.min(options.limit ?? DEFAULT_CONCURRENCY, capacity),
       (event) => {
-        return claimableSession(event, this.activeSessions, batchSessions);
+        const sessionKey = sessionKeyFor(event, options.store);
+        if (!event.envelope.control && options.waitingSourceSessions?.has(sessionKey)) return false;
+        return claimableSession(sessionKey, this.activeSessions, batchSessions);
       },
       options.now?.(),
       options.processingLeaseMs ?? DEFAULT_LEASE_MS,
@@ -108,7 +112,7 @@ export class BtccInboundDispatcher {
     options: BtccInboundDispatchOptions,
     aggregate: BtccInboundDispatchSummary,
   ): void {
-    const sessionKey = sessionKeyFor(item);
+    const sessionKey = sessionKeyFor(item, options.store);
     this.activeSessions.add(sessionKey);
     this.activeQueueIds.add(item.queueId);
     const task = dispatchItem(item, options)
@@ -302,6 +306,7 @@ function finalActions(
         item.envelope.routingHints?.turnId,
       terminalKind,
       noVisibleReply: true,
+      suspension: optionalText(result.handlerResult.metadata?.suspension),
     }));
   }
   const text = result.handlerResult.metadata?.text;
@@ -359,6 +364,7 @@ function finalAction(input: {
   turnId?: string;
   executionModel?: unknown;
   terminalKind?: string;
+  suspension?: string;
   noVisibleReply?: boolean;
   safeErrorCode?: string;
 }): OutboundAction {
@@ -387,6 +393,7 @@ function finalAction(input: {
     metadata: {
       source: "gateway/btcc/btcc-inbound-dispatcher.ts",
       kind: input.terminalKind ?? "final_result",
+      ...(input.suspension ? { suspension: input.suspension } : {}),
       queueId: item.queueId,
       dispatchClaimId: item.processing.claimId,
       ...appClaimBinding,
@@ -454,18 +461,19 @@ function reactivateSession(
 }
 
 function claimableSession(
-  event: QueuedInboundEvent,
+  key: string,
   active: Set<string>,
   batch: Set<string>,
 ): boolean {
-  const key = sessionKeyFor(event);
   if (active.has(key) || batch.has(key)) return false;
   batch.add(key);
   return true;
 }
 
-function sessionKeyFor(event: QueuedInboundEvent): string {
-  const base = event.envelope.routingHints?.sessionId?.trim() || [
+function sessionKeyFor(event: QueuedInboundEvent, store: SessionBindingStore): string {
+  const routed = new GatewayRouter({ store }).routeInbound(event.envelope);
+  const base = event.envelope.routingHints?.sessionId?.trim() ||
+    (routed.status === "routed" ? routed.route.sessionId : undefined) || [
     event.envelope.transport,
     event.envelope.accountId,
     event.envelope.peer.kind,

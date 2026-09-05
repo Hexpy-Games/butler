@@ -73,6 +73,14 @@ export function createGuidedAskFirstProgress(
     stateChanged: (update) => progress.stateChanged(update),
     workProgressChanged: (update) => progress.workProgressChanged?.(update),
     phaseActivityChanged: (update) => progress.phaseActivityChanged?.(update),
+    operationChanged: (update) => progress.operationChanged?.({
+      turnId: update.turnId, semanticState: update.semanticState,
+      activityId: update.activityId, requestId: update.requestId,
+      publicTitle: update.publicTitle, capabilityRef: update.capabilityRef, status: update.status,
+    }),
+    modelRoundWaitingChanged: (update) => progress.modelRoundWaitingChanged?.(update),
+    operationalNoticeChanged: (update) => progress.operationalNoticeChanged?.(update),
+    runtimeFaulted: (update) => progress.runtimeFaulted?.(update),
   };
 }
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Button,
   Dialog,
@@ -23,6 +23,7 @@ export function SessionObserverDialog() {
   const [cancelling, setCancelling] = useState(false);
   const [resuming, setResuming] = useState(false);
   const sessionId = useButlerStore((state) => state.observerSessionId);
+  const targetTurnId = useButlerStore((state) => state.observerTargetTurnId);
   const view = useButlerStore((state) =>
     sessionId ? state.sessionViews[sessionId] : undefined,
   );
@@ -32,6 +33,15 @@ export function SessionObserverDialog() {
   const resumeObservedSteward = useButlerStore((state) => state.resumeObservedSteward);
 
   useSessionViewSubscription(sessionId, refresh);
+  useEffect(() => {
+    if (!sessionId || !targetTurnId || !view) return;
+    const target = [...document.querySelectorAll<HTMLElement>('[data-test-class="steward-observer-dialog"] [data-turn-id]')]
+      .find((element) => element.dataset.turnId === targetTurnId);
+    if (!target) return;
+    target.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')?.click();
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    useButlerStore.setState({ observerTargetTurnId: null });
+  }, [sessionId, targetTurnId, view]);
 
   const title = view?.relation?.safe_title ?? sessionId ?? "";
   return (

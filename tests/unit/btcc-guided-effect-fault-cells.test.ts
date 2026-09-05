@@ -47,21 +47,27 @@ for (const faultCase of FAULT_CASES) {
     const fixture = new GuidedEffectTestFixture();
     let armed = true;
     try {
-      await expect(fixture.execute({
+      const interrupted = fixture.execute({
         faultHook(point) {
           if (armed && point === faultCase.point) {
             armed = false;
             throw new Error(`crash:${point}`);
           }
         },
-      })).rejects.toThrow(`crash:${faultCase.point}`);
-      expect(fixture.status()).toBe(faultCase.statusAfterCrash);
+      });
+      const beforeDispatch = ["before_intent", "after_intent"].includes(faultCase.point);
+      if (beforeDispatch) {
+        await expect(interrupted).rejects.toThrow(`crash:${faultCase.point}`);
+        expect(fixture.status()).toBe(faultCase.statusAfterCrash);
+      } else {
+        expect(await interrupted).toMatchObject({ ok: true, status: "applied" });
+      }
 
       const resumed = await fixture.execute();
       expect(resumed).toMatchObject({
         ok: true,
         status: "applied",
-        replayed: faultCase.replayed,
+        replayed: beforeDispatch ? faultCase.replayed : true,
       });
       expect(fixture.status()).toBe("applied");
       expect(fixture.dispatchCalls).toBe(1);
@@ -77,20 +83,16 @@ test("uncertain reconciliation returns recoverable data and never dispatches bli
   let armed = true;
   let crashedIdentity: Parameters<GuidedEffectFaultHook>[1] | undefined;
   try {
-    await expect(fixture.execute({
+    const first = await fixture.execute({
       faultHook(point, identity) {
         if (armed && point === "after_dispatch_marker") {
           armed = false;
           crashedIdentity = identity;
+          fixture.reconcileMode = "uncertain";
           throw new Error("crash after marker");
         }
       },
-    })).rejects.toThrow("crash after marker");
-    expect(fixture.status()).toBe("dispatching");
-    expect(fixture.reconcileCalls).toBe(1);
-    fixture.reconcileMode = "uncertain";
-
-    const first = await fixture.execute();
+    });
     expect(first).toEqual({
       ok: false,
       status: "uncertain",

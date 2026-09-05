@@ -64,6 +64,7 @@ export function TurnActivityPanel({
         <TurnDecisionRow decision={decisions.at(-1)!} />
       ) : null}
       <CurrentTurnStatus
+        state={state}
         modelRoundWait={modelRoundWait}
         operation={operation}
         publicActivity={publicActivity}

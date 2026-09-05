@@ -5,6 +5,12 @@ export type AuthorityDecision = "pending" | "allowed" | "denied" | "modified";
 export type AuthorityOutcome = "pending" | "applied" | "failed" | "uncertain";
 export type AuthorityDecisionAction = "allow" | "deny" | "modify";
 
+export type AuthorityResumeSource = {
+  sessionId: string; turnId: string; originalEventId: string;
+  originalMessageId: string; originalMessage: string;
+  destination?: import("../contracts.ts").BtccProgressDestination;
+};
+
 /**
  * Bounded typed reason for an operational (non-card) close of still-open
  * authority requests. Never a decision value and never a card Cancel.
@@ -40,9 +46,12 @@ export type AuthorityOperationInput =
   | AuthorityReviewedEffectInput;
 
 type AuthorityAdmissionIdentity = {
+  /** Already public activity label; display-only, not part of execution identity. */
+  publicActionTitle?: string;
   ownerSessionId: string;
   sourceSessionId: string;
   sourceTurnId: string;
+  operationOccurrenceId?: string;
   sourceWorkId: string;
   workspacePath: string;
   planRevisionId: string;
@@ -69,9 +78,14 @@ export type AuthorityRequestProjection = {
   reason: string;
   executable: string;
   command_count?: number;
+  scope?: { title: string; description: string };
+  source_turn_id?: string;
+  source_session_id?: string;
+  source_call_id?: string;
 };
 
 export type AuthorityAdmissionResult =
+  | { status: "granted" }
   | {
       status: "pending";
       requestRef: string;
@@ -98,6 +112,7 @@ export type AuthorityAdmissionResult =
 export type AuthorityDecisionResult = {
   requestRef: string;
   sourceSessionId: string;
+  sourceTurnId: string;
   sourceWorkId: string;
   scheduleClientMessageId: string;
   scheduleInputText: string;
@@ -131,6 +146,7 @@ export type AuthorityStoredExecution = {
   requestRef: string;
   sourceSessionId: string;
   sourceTurnId: string;
+  sourceCallId?: string;
   sourceWorkId: string;
   workspacePath: string;
   planRevisionId: string;
@@ -212,6 +228,11 @@ export type AuthorityAbandonedWorkCloseCapability = {
 };
 
 export interface PrincipalAuthorityRepository {
+  hasConversationPermission(scope: import("./conversation-permission.ts").ConversationPermission["grantRef"]): boolean;
+  listConversationPermissions(ownerSessionId: string): import("./conversation-permission.ts").ConversationPermission[];
+  revokeConversationPermission(ownerSessionId: string, grantRef: string): void;
+  resumeSource(requestRef: string): AuthorityResumeSource | null;
+  waitingSourceSessions(): string[];
   findByIdentity(identitySha256: string): AuthorityRecord | null;
   findBySlot(input: {
     sourceWorkId: string;
@@ -233,6 +254,7 @@ export interface PrincipalAuthorityRepository {
     ownerSessionId: string;
     sourceSessionId: string;
     action: AuthorityDecisionAction;
+    permission?: import("./conversation-permission.ts").ConversationPermission;
     alternativeInput?: string;
     now: string;
   }): AuthorityRecord | null;
@@ -279,6 +301,7 @@ export type AuthorityRecord = {
   ownerSessionId: string;
   sourceSessionId: string;
   sourceTurnId: string;
+  sourceCallId?: string | null;
   sourceWorkId: string;
   workspacePath: string;
   planRevisionId: string;
@@ -294,6 +317,7 @@ export type AuthorityRecord = {
   executable: string;
   commandCount: number;
   decision: AuthorityDecision;
+  allowScope?: "once" | "conversation";
   scheduleClientMessageId: string;
   scheduleInputText: string;
   privateAlternativeInput: string | null;
@@ -307,6 +331,10 @@ export type AuthorityRecord = {
 };
 
 export interface PrincipalAuthority {
+  listPermissions(ownerSessionId: string): import("./conversation-permission.ts").ConversationPermission[];
+  revokePermission(ownerSessionId: string, grantRef: string): void;
+  resumeSource(requestRef: string): AuthorityResumeSource | null;
+  waitingSourceSessions(): string[];
   admit(input: AuthorityAdmissionInput): AuthorityAdmissionResult;
   list(input: { ownerSessionId: string }): AuthorityRequestProjection[];
   decide(input: {
@@ -314,6 +342,7 @@ export interface PrincipalAuthority {
     requestRef: string;
     sourceSessionId?: string;
     action: AuthorityDecisionAction;
+    allowScope?: "once" | "conversation";
     alternativeInput?: string;
   }): AuthorityDecisionResult;
   listDecided(): AuthorityDecisionResult[];

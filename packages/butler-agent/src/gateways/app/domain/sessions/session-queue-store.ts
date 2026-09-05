@@ -91,6 +91,7 @@ export class AppSessionQueueStore {
       type: string,
       payload: Record<string, unknown>,
     ) => void,
+    private readonly retainsApprovalClaim: (turnId: string) => boolean,
   ) {}
 
   listSessionQueue(sessionId = DEFAULT_CHAT_ID): SessionQueueView {
@@ -558,6 +559,7 @@ export class AppSessionQueueStore {
     const uniqueRows = new Map(recoveryRows.map((row) => [row.id, row]));
     let recoveredCount = 0;
     for (const row of uniqueRows.values()) {
+      if (row.turn_id && this.retainsApprovalClaim(row.turn_id)) continue;
       const ownerIsForeign = Boolean(
         currentOwner && row.claim_owner && row.claim_owner !== currentOwner,
       );

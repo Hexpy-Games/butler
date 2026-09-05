@@ -11,7 +11,7 @@ export type GuidedToolJournalRecord = {
   toolName: string;
   rawArguments: string;
   arguments: Record<string, unknown>;
-  status: "started" | "completed" | "failed" | "cancelled";
+  status: "started" | "awaiting_authority" | "completed" | "failed" | "cancelled";
   result?: unknown;
   /** Runtime-private mutation detail; excluded from replayable tool results. */
   changedFiles?: import("../../tools/file-tools/shared/changed-file-detail.ts").ChangedFileDetail[];

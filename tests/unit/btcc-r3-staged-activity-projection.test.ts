@@ -20,6 +20,26 @@ import { projectTurnActivity } from
 import { createGuidedAuthorityProjection } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-progress.ts";
 
+test("approval resume restores the same activity binding without claiming a sibling", async () => {
+  const updates: string[] = [];
+  const input = { turnId: "approval-activity", managedInitially: true,
+    progress: { stateChanged() {}, phaseActivityChanged(update: { activityId: string }) { updates.push(update.activityId); } },
+  };
+  const activity = createGuidedActivityProjection(input);
+  const first = { name: "write_file", effectiveToolName: "write_file", args: { path: "first.md" }, callId: "first" };
+  const sibling = { name: "write_file", effectiveToolName: "write_file", args: { path: "second.md" }, callId: "second" };
+  activity.observeToolBatch({ text: "두 보고서를 작성합니다.", toolCalls: [first, sibling] });
+  const binding = await activity.observeTool(first);
+  const snapshot = JSON.parse(JSON.stringify(activity.snapshot()));
+  const restored = createGuidedActivityProjection({ ...input, restored: snapshot });
+  expect(await restored.observeTool(first)).toEqual(binding);
+  expect(restored.snapshot().pendingTools.map((tool) => tool.claimed)).toEqual([true, false]);
+  expect(updates).toEqual([binding.activityId]);
+  await restored.observeTool(sibling);
+  expect(restored.snapshot().pendingTools.map((tool) => tool.claimed)).toEqual([true, true]);
+  expect(updates).toEqual([binding.activityId]);
+});
+
 test("ask-first keeps authored Work activity and its plan review subject through both callbacks", async () => {
   const updates: Array<{ title: string; summary: string }> = [];
   const guided = createGuidedAuthorityProjection({

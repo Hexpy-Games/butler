@@ -7,6 +7,7 @@ export function guidedTurnResult(input: {
   content: string;
   terminalOutcome?: BtccAgentLoopResult["terminalOutcome"];
   suspension?: BtccAgentLoopResult["suspension"];
+  authorityContinuation?: BtccAgentLoopResult["authorityContinuation"];
   workStatus?: BtccAgentLoopResult["workStatus"];
   acceptedWorkResult?: BtccAgentLoopResult["acceptedWorkResult"];
   artifacts?: BtccAgentLoopResult["artifacts"];
@@ -20,6 +21,7 @@ export function guidedTurnResult(input: {
     content: input.content,
     ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
     ...(input.suspension ? { suspension: input.suspension } : {}),
+    ...(input.authorityContinuation ? { authorityContinuation: input.authorityContinuation } : {}),
     ...(input.workStatus ? { workStatus: input.workStatus } : {}),
     ...(input.acceptedWorkResult ? { acceptedWorkResult: input.acceptedWorkResult } : {}),
     ...(input.artifacts?.length ? { artifacts: input.artifacts } : {}),

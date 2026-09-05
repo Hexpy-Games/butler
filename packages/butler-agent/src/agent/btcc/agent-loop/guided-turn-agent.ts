@@ -34,7 +34,7 @@ import { loadGuidedOperationalFacts } from "./guided-operational-facts.ts";
 import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
 import { collectGuidedChangedFiles } from "./guided-changed-files.ts";
 import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
-import { privateModifyContinuationPromptInput, restoredAuthorityToolCall } from "./guided-authority-continuation.ts";
+import { guidedAuthorityLoopDecision } from "./guided-authority-continuation.ts";
 import type { PrincipalAuthority } from "../authority/index.ts";
 import { ensureSubsessionChildRootWork, subsessionDirectionSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
 import { withWorkerProfileChoices } from "../../tools/subsession/index.ts";
@@ -193,21 +193,15 @@ export function createProductionGuidedTurnAgent(
         withWorkerProfileChoices(tool, workerProfiles),
       );
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
-      const resumedToolCall = restoredAuthorityToolCall({
-        authority,
-        toolJournal: input.toolJournal,
-        ownerSessionId: authorityOwnerSessionId,
-        sourceSessionId: turn.sessionId,
-        requestRef: turn.context.authorityRequestRef,
-        turnId: turn.turnId,
-        clientMessageId: turn.context.authorityClientMessageId,
-      });
+      const authorityDecision = guidedAuthorityLoopDecision({ authority, turn, ownerSessionId: authorityOwnerSessionId });
       const describedToolIds = new Set<string>();
       // An admitted progressive invocation already completed discovery in its
       // source Turn. Restore that fact; the bridge still validates current schema
       // and availability before the approved operation reaches its effect boundary.
-      if (resumedToolCall?.name === "tool_call" && typeof resumedToolCall.arguments.id === "string") {
-        describedToolIds.add(resumedToolCall.arguments.id);
+      for (const message of turn.authorityContinuation?.messages ?? []) {
+        for (const call of message.toolCalls ?? []) {
+          if (call.name === "tool_call" && typeof call.arguments.id === "string") describedToolIds.add(call.arguments.id);
+        }
       }
       const shouldWaitForWorker = async () => policy.role === "steward" &&
         Boolean(await input.subsessionDelegation?.shouldWaitForWorker({
@@ -270,7 +264,7 @@ export function createProductionGuidedTurnAgent(
           modelRef: `${turn.modelSelection.provider}/${turn.modelSelection.model}`, reasoningEffort: turn.modelSelection.reasoningEffort,
           workspacePath: workspaceReference.get(),
           toolJournal: input.toolJournal,
-          ...(turn.context.authorityRequestRef
+          ...(turn.context.authorityRequestRef && authorityDecision?.action === "allow"
             ? { authorityRequestRef: turn.context.authorityRequestRef }
             : {}),
           accessMode: policy.accessMode,
@@ -306,9 +300,10 @@ export function createProductionGuidedTurnAgent(
             : {}),
         }),
       });
-      let progressSourceRevision = 0;
+      let progressSourceRevision = turn.authorityContinuation?.presentation?.sourceRevision ?? 0;
       const nextSourceRevision = () => ++progressSourceRevision;
-      const activity = createGuidedActivityProjection({ turnId: turn.turnId, progress: observedProgress, managedInitially: initialWorkBound, nextSourceRevision });
+      const activity = createGuidedActivityProjection({ turnId: turn.turnId, progress: observedProgress, managedInitially: initialWorkBound, nextSourceRevision,
+        restored: turn.authorityContinuation?.presentation?.activity });
       const authorityProjection = createGuidedAuthorityProjection({
         accessMode: policy.accessMode,
         activity,
@@ -319,9 +314,7 @@ export function createProductionGuidedTurnAgent(
         ),
         ownerSessionId: authorityOwnerSessionId,
         turnId: turn.turnId,
-        ...(turn.context.authorityRequestRef
-          ? { requestRef: turn.context.authorityRequestRef }
-          : {}),
+        // A decision resumes the ordinary loop; it is not a replacement report.
       });
       const baseModelRound = input.modelRound ?? createProviderModelRoundPort();
       const {
@@ -370,11 +363,6 @@ export function createProductionGuidedTurnAgent(
           ...(subsessionResultEvidence
             ? { subsessionResultEvidence: subsessionResultEvidence.synthesisEvidence }
             : {}),
-          ...privateModifyContinuationPromptInput(
-            authority, authorityOwnerSessionId, turn.sessionId,
-            turn.context.authorityRequestRef, turn.turnId,
-            turn.context.authorityClientMessageId,
-          ),
         },
         initialRequestBytes: modelRound.initialRequestBytes,
         butlerData: input.butlerData,
@@ -430,7 +418,9 @@ export function createProductionGuidedTurnAgent(
       });
       const loopOptions: BtccAgentLoopInput = {
         prompt: requestAttribution.prompt,
-        resumedToolCall,
+        authorityContinuation: turn.authorityContinuation,
+        authorityDecision,
+        onUnexecutedToolCall: toolCalls.recordUnexecuted,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
         turnId: turn.turnId,
         instructions: [
@@ -480,8 +470,13 @@ export function createProductionGuidedTurnAgent(
         executeTool: activeDelegationAdmission.execute(planExecution.executeTool),
       };
       let suspension: BtccAgentLoopResult["suspension"];
+      let authorityContinuation: BtccAgentLoopResult["authorityContinuation"];
       const candidate = await runGuidedAgentLoopWithOperationalReport({
-        onSuspension: (reason) => { suspension = reason; },
+        onSuspension: (reason, continuation) => {
+          suspension = reason;
+          authorityContinuation = continuation && { ...continuation,
+            presentation: { sourceRevision: progressSourceRevision, activity: activity.snapshot() } };
+        },
         options: loopOptions,
         parentSignal: signal,
         originalRequest: turn.originalMessage,
@@ -514,6 +509,7 @@ export function createProductionGuidedTurnAgent(
       return guidedTurnResult({
         content: publicText,
         ...(suspension ? { suspension } : {}),
+        ...(authorityContinuation ? { authorityContinuation } : {}),
         ...(terminalOutcome ? { terminalOutcome } : {}),
         ...(finalWork?.status === "completed" || finalWork?.status === "blocked"
           ? { workStatus: finalWork.status }

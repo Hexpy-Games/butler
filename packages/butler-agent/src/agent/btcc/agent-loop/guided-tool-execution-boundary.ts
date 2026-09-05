@@ -30,9 +30,9 @@ import {
   unavailableGuidedEffect,
 } from "./guided-persistent-effect-resolution.ts";
 import {
-  hasModifyReplanProvenance,
   resolveGuidedAuthorityContinuation,
 } from "./guided-authority-continuation.ts";
+import { safeCommandActionLabel } from "../../output/progress/arguments.ts";
 
 export type GuidedPersistentEffectRequest = {
   target: string;
@@ -101,6 +101,10 @@ export function createGuidedToolExecutionBoundary(
   input: GuidedToolExecutionBoundaryInput | LegacyGuidedToolExecutionBoundaryInput,
 ): ButlerToolExecutionBoundary {
   const authority = "authority" in input ? input.authority : undefined;
+  const authorityCallId = input.authorityRequestRef && authority
+    ? authority.execution({ requestRef: input.authorityRequestRef,
+      ownerSessionId: input.ownerSessionId!, turnId: input.sourceTurnId! }).sourceCallId
+    : undefined;
   let authorityContinuationAvailable = Boolean(input.authorityRequestRef);
   const executePersistentEffect = async (
     call: ButlerToolCall,
@@ -118,6 +122,9 @@ export function createGuidedToolExecutionBoundary(
     // mutation is the planning artifact itself. The caller must bind this
     // predicate to kind=plan; all other effects stay on the ordinary path.
     if (allowDirect) return await execute();
+    if (input.accessMode === "read_only") return ordinaryGuidedEffectError(
+      "read_only", "This Turn has read-only access; no change was applied.",
+    );
     const work = await loadGuidedEffectWork(input.durableWork, input.workScope);
     if (!work) {
       return ordinaryGuidedEffectError(
@@ -126,8 +133,9 @@ export function createGuidedToolExecutionBoundary(
       );
     }
     let authorityExecution: Awaited<ReturnType<PrincipalAuthority["execution"]>> | undefined;
+    let conversationAllowed = false;
     let effectiveCall = call;
-    const authorityRequestRef = authorityContinuationAvailable
+    const authorityRequestRef = authorityContinuationAvailable && occurrenceId === authorityCallId
       ? input.authorityRequestRef
       : undefined;
     if (authorityRequestRef) {
@@ -142,6 +150,7 @@ export function createGuidedToolExecutionBoundary(
         workspacePath: input.workspacePath,
         sourceWorkId: work.workId,
         call,
+        occurrenceId,
       });
       if (!continuation.ok) {
         if (continuation.consumesRequest) authorityContinuationAvailable = false;
@@ -150,9 +159,7 @@ export function createGuidedToolExecutionBoundary(
       authorityExecution = continuation.execution;
       effectiveCall = continuation.effectiveCall;
     }
-    const effectOccurrenceId = authorityExecution
-      ? `authority:${authorityExecution.requestRef}`
-      : occurrenceId;
+    const effectOccurrenceId = occurrenceId;
     const resolution = await input.resolvePersistentEffect(effectiveCall, execute, {
       work,
       ...(effectOccurrenceId ? { occurrenceId: effectOccurrenceId } : {}),
@@ -176,7 +183,7 @@ export function createGuidedToolExecutionBoundary(
         "The stored command identity changed before execution.",
       );
     }
-    if ((!authorityExecution || authorityExecution.decision === "modified") &&
+    if (!authorityExecution &&
         input.accessMode === "ask_first") {
       if (!authority) {
         return ordinaryGuidedEffectError(
@@ -223,24 +230,10 @@ export function createGuidedToolExecutionBoundary(
       if (!actionKey.ok) {
         return ordinaryGuidedEffectError(actionKey.code, actionKey.message);
       }
-      const authorityGeneration = authorityExecution?.decision === "modified"
-        ? authorityExecution.authorityGeneration + 1
-        : 1;
-      if (authorityExecution?.decision === "modified" &&
-          (!input.toolJournal ||
-            !hasModifyReplanProvenance({
-              toolJournal: input.toolJournal,
-              work,
-              priorPlanRevisionId: authorityExecution.planRevisionId,
-              sourceTurnId: input.sourceTurnId!,
-            }))) {
-        return ordinaryGuidedEffectError(
-          "authority_modify_replan_required",
-          "The replacement command requires a new Plan and accepted Review in this scheduled Turn.",
-        );
-      }
+      const authorityGeneration = 1;
       try {
         const admission = authority.admit({
+          ...(effectiveCall.name === "run_command" ? { publicActionTitle: safeCommandActionLabel(effectiveCall.args) } : {}),
           ownerSessionId: input.ownerSessionId,
           sourceSessionId: input.sourceSessionId,
           sourceTurnId: input.sourceTurnId,
@@ -251,6 +244,7 @@ export function createGuidedToolExecutionBoundary(
           authorityGeneration,
           capability: resolution.adapter.capability,
           target: resolution.target,
+          operationOccurrenceId: occurrenceId,
           ...authorityOperation,
           modelRef: input.modelRef,
           reasoningEffort: input.reasoningEffort,
@@ -268,16 +262,14 @@ export function createGuidedToolExecutionBoundary(
             "The reviewed command was replaced before it could run.",
           );
         }
+        if (admission.status === "granted") conversationAllowed = true;
+        else return deferredGuidedAuthorityResult(admission.requestRef);
       } catch (error) {
         return ordinaryGuidedEffectError(
           error instanceof Error ? error.message : "authority_request_identity_mismatch",
           "The command authority identity could not be admitted.",
         );
       }
-      if (authorityExecution?.decision === "modified") {
-        authorityContinuationAvailable = false;
-      }
-      return deferredGuidedAuthorityResult();
     } else if (approvedAuthorityExecution) {
       const actionKey = acceptedGuidedPlanActionKey(
         work,
@@ -297,7 +289,7 @@ export function createGuidedToolExecutionBoundary(
     }
     const outcome = await input.effectService.execute({
       work,
-      accessMode: approvedAuthorityExecution
+      accessMode: approvedAuthorityExecution || conversationAllowed
         ? "full_access"
         : input.accessMode,
       occurrenceId: effectOccurrenceId,

@@ -84,7 +84,7 @@ export class SqliteGuidedToolJournal implements GuidedToolJournal {
     const updated = this.db.query(`
       UPDATE btcc_guided_tool_calls SET status = ?, result_json = ?,
         result_sha256 = ?, changed_files_json = ?, error_code = ?, finished_at = ?
-      WHERE call_id = ? AND status = 'started'
+      WHERE call_id = ? AND status IN ('started', 'awaiting_authority')
     `).run(
       input.status,
       resultJson,

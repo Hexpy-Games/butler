@@ -41,6 +41,7 @@ export type BtccAgentLoopResult = {
   content: string;
   terminalOutcome?: "no_visible";
   suspension?: BtccTurnSuspension;
+  authorityContinuation?: import("./loop-continuation.ts").AuthorityLoopContinuation;
   route: "direct" | "assisted" | "managed";
   workStatus?: "completed" | "blocked";
   acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
@@ -156,6 +157,10 @@ export interface BtccFinalSynthesisOptions {
 
 export interface BtccAgentLoopInput {
   prompt: string;
+  authorityContinuation?: import("./loop-continuation.ts").AuthorityLoopContinuation;
+  authorityDecision?: import("./loop-continuation.ts").AuthorityLoopDecision;
+  /** Records a denied/unstarted accepted call without invoking its executor. */
+  onUnexecutedToolCall?: (call: BtccAgentLoopToolCall, result: BtccAgentLoopToolResult) => void | Promise<void>;
   phaseContinuityPrivateDigester?: PhaseContinuityPrivateDigester;
   turnId?: string;
   recoveryAttempt?: number;
@@ -262,6 +267,7 @@ export interface BtccAgentLoopEvent {
 export interface BtccAgentLoopOutput {
   finalText: string;
   suspension?: BtccTurnSuspension;
+  authorityContinuation?: import("./loop-continuation.ts").AuthorityLoopContinuation;
   messages: BtccAgentLoopMessage[];
   events: BtccAgentLoopEvent[];
 }

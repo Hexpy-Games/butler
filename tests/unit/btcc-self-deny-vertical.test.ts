@@ -33,7 +33,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-test("real App ask_first Deny schedules one same-Work Turn with typed denial and zero effect dispatch", async () => {
+test("real App Deny resumes the original Turn with a nonexecution result and zero effect dispatch", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-self-deny-vertical-"));
   roots.push(root);
   publishNativeReadiness(root);
@@ -127,7 +127,7 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
     expect(summary.claimed).toBe(1);
     expect(summary.failed).toBe(0);
     expect(summary.interrupted).toBe(0);
-    await waitForQueueState(appDbPath, clientMessageId, "dispatched");
+    await waitForQueueState(appDbPath, clientMessageId, "dispatching");
     expect(await Bun.file(join(root, "denied-command.txt")).exists()).toBe(false);
 
     const btccDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), {
@@ -182,11 +182,10 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
         SELECT client_message_id, turn_id, control_resolution_json
         FROM session_queued_messages WHERE chat_id = 'general' ORDER BY rowid ASC
       `).all();
-      expect(rows).toHaveLength(2);
-      expect(rows[1]?.control_resolution_json).toContain(String(requestRef));
-      scheduledClientMessageId = rows[1]!.client_message_id;
-      resumedTurnId = rows[1]!.turn_id;
-      expect(resumedTurnId).not.toBe(rows[0]!.turn_id);
+      expect(rows).toHaveLength(1);
+      scheduledClientMessageId = rows[0]!.client_message_id;
+      resumedTurnId = rows[0]!.turn_id;
+      expect(resumedTurnId).toBe(rows[0]!.turn_id);
     } finally {
       scheduled.close();
     }
@@ -214,7 +213,7 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
       (message) => message.role === "assistant" && message.turn_id === resumedTurnId,
     );
     expect(finalMessages).toHaveLength(1);
-    expect(finalMessages[0]?.text).toBe(AUTHORITY_DENIAL_TEXT);
+    expect(finalMessages[0]?.text).toBe("요청하신 명령은 실행하지 않았습니다.");
     expect(JSON.stringify(finalMessages)).not.toContain("private-deny-value");
     expect(JSON.stringify(finalMessages)).not.toContain("denied-command.txt");
 
@@ -231,12 +230,12 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
     expect(serializedEvents).not.toContain(PRIVATE_CONTINUATION_INPUT);
     expect(serializedEvents).not.toContain(PRIVATE_PROVIDER_TEXT);
     const denialEvents = eventsBody.data.events.filter((event) =>
-      JSON.stringify(event.payload).includes(AUTHORITY_DENIAL_TEXT),
+      JSON.stringify(event.payload).includes("요청하신 명령은 실행하지 않았습니다."),
     );
     expect(denialEvents.length).toBeGreaterThan(0);
     expect(denialEvents.every((event) => {
       const text = JSON.stringify(event.payload);
-      return text.includes(AUTHORITY_DENIAL_TEXT) &&
+      return text.includes("요청하신 명령은 실행하지 않았습니다.") &&
         !text.includes("denied-command.txt") &&
         !text.includes("private-deny-value") &&
         !text.includes("--private-deny-flag");
@@ -262,9 +261,8 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
         SELECT turn_id, work_id FROM btcc_guided_turn_work_bindings
         WHERE is_current = 1 ORDER BY rowid
       `).all();
-      expect(bindingsForWork).toHaveLength(2);
-      expect(bindingsForWork[1]?.work_id).toBe(bindingsForWork[0]?.work_id);
-      expect(bindingsForWork[1]?.turn_id).toBe(resumedTurnId);
+      expect(bindingsForWork).toHaveLength(1);
+      expect(bindingsForWork[0]?.turn_id).toBe(resumedTurnId);
       const blockedDisposition = finalDb.query<{
         disposition: string;
         summary: string;
@@ -277,7 +275,7 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
           next_condition, origin_turn_id
         FROM btcc_guided_work_disposition_revisions
         WHERE work_id = ? ORDER BY revision DESC LIMIT 1
-      `).get(bindingsForWork[1]!.work_id);
+      `).get(bindingsForWork[0]!.work_id);
       expect(blockedDisposition).toMatchObject({
         disposition: "blocked",
         summary: AUTHORITY_DENIAL_TEXT,
@@ -306,7 +304,7 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
   }
 });
 
-test("real App ask_first Modify schedules one same-Work replan Turn before a replacement authority request", async () => {
+test("real App Modify resumes the same Turn before a replacement authority request", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-self-modify-vertical-"));
   roots.push(root);
   publishNativeReadiness(root);
@@ -376,7 +374,7 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
     expect(summary.claimed).toBe(1);
     expect(summary.failed).toBe(0);
     expect(summary.interrupted).toBe(0);
-    await waitForQueueState(appDbPath, clientMessageId, "dispatched");
+    await waitForQueueState(appDbPath, clientMessageId, "dispatching");
     expect(await Bun.file(join(root, "old-modify-command.txt")).exists()).toBe(false);
     const authorityResponse = await fetch(`${server.url}authority-requests?session_id=general`);
     expect(authorityResponse.status).toBe(200);
@@ -423,13 +421,12 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
         SELECT client_message_id, turn_id, text, control_resolution_json
         FROM session_queued_messages WHERE chat_id = 'general' ORDER BY rowid ASC
       `).all();
-      expect(rows).toHaveLength(2);
-      expect(rows[1]?.control_resolution_json).toContain(String(requestRef));
-      expect(rows[1]?.text).not.toContain(PRIVATE_MODIFY_INPUT);
-      scheduledClientMessageId = rows[1]!.client_message_id;
-      resumedTurnId = rows[1]!.turn_id;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.text).not.toContain(PRIVATE_MODIFY_INPUT);
+      scheduledClientMessageId = rows[0]!.client_message_id;
+      resumedTurnId = rows[0]!.turn_id;
       sourceTurnId = rows[0]!.turn_id;
-      expect(resumedTurnId).not.toBe(sourceTurnId);
+      expect(resumedTurnId).toBe(sourceTurnId);
     } finally {
       scheduled.close();
     }
@@ -445,7 +442,7 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
     await inbound.waitForIdle();
     expect(resumedSummary.claimed).toBe(1);
     expect(resumedSummary.failed).toBe(0);
-    await waitForQueueState(appDbPath, scheduledClientMessageId, "dispatched");
+    await waitForQueueState(appDbPath, scheduledClientMessageId, "dispatching");
     expect(await Bun.file(join(root, "old-modify-command.txt")).exists()).toBe(false);
     expect(await Bun.file(join(root, "replacement-modify-command.txt")).exists()).toBe(false);
 
@@ -523,7 +520,7 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
       `).get(replacementRequestRef);
       expect(replacementAuthority).toMatchObject({
         decision: "pending",
-        authority_generation: 2,
+        authority_generation: 1,
         source_turn_id: resumedTurnId,
         source_work_id: oldAuthority?.source_work_id,
         action_key: "accepted-plan",
@@ -825,11 +822,12 @@ function deniedCommandRound(): ModelRoundPort {
       if (round === 2) {
         assertDenialDeliveredToProvider(request);
         const workId = request.messages
-          .map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1])
+          .filter((message) => message.role === "tool")
+          .map((message) => JSON.parse(message.content)?.output?.work?.work_id)
           .find(Boolean);
         if (!workId) throw new Error("same Work identity was not projected to the fresh Turn");
         return {
-          text: `${PRIVATE_CONTINUATION_INPUT} ${PRIVATE_PROVIDER_TEXT}`,
+          text: "명령을 실행하지 않고 요청을 정리합니다.",
           toolCalls: [toolCall("blocked", "record_work_disposition", {
             work_id: workId,
             disposition: "blocked",
@@ -840,7 +838,7 @@ function deniedCommandRound(): ModelRoundPort {
           })],
         };
       }
-      return { text: "No further action is required.", toolCalls: [] };
+      return { text: "요청하신 명령은 실행하지 않았습니다.", toolCalls: [] };
     },
   };
 }
@@ -888,7 +886,8 @@ function modifyingCommandRound(): ModelRoundPort {
           throw new Error(`private Modify input missing from exact scheduled Turn: ${serialized}`);
         }
         const workId = request.messages
-          .map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1])
+          .filter((message) => message.role === "tool")
+          .map((message) => JSON.parse(message.content)?.output?.work?.work_id)
           .find(Boolean);
         if (!workId) throw new Error("same Work identity was not projected to the Modify Turn");
         const replacementPlan = {
@@ -916,7 +915,7 @@ function modifyingCommandRound(): ModelRoundPort {
           }],
         };
         return {
-          text: PRIVATE_MODIFY_PROVIDER_TEXT,
+          text: "수정 요청에 맞춰 계획을 변경합니다.",
           toolCalls: [
             toolCall("modify-continue", "continue_work", { work_id: workId }),
             toolCall("modify-result-review", "record_work_review", {
@@ -952,7 +951,7 @@ function assertDenialDeliveredToProvider(request: {
   const toolMessages = request.messages.filter((message) => message.role === "tool");
   const serialized = JSON.stringify(toolMessages);
   if (!serialized.includes("authority_request_denied") ||
-      !serialized.includes(AUTHORITY_DENIAL_TEXT)) {
+      !serialized.includes("It was not executed.")) {
     throw new Error(`provider denial delivery missing: ${serialized}`);
   }
 }

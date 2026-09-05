@@ -286,10 +286,11 @@ export function ordinaryGuidedEffectError(
   };
 }
 
-export function deferredGuidedAuthorityResult(): Record<string, unknown> {
+export function deferredGuidedAuthorityResult(requestRef: string): Record<string, unknown> {
   return {
     ok: true,
     authority_pending: true,
+    request_ref: requestRef,
     status: "awaiting_allow",
     message: "This reviewed operation is waiting for Allow before dispatch.",
   };

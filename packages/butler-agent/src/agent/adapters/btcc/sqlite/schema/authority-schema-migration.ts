@@ -32,6 +32,8 @@ export function migrateAuthoritySchema(db: Database): void {
   const closedAt = hasColumn(db, legacyTable, "closed_at")
     ? "closed_at"
     : "NULL";
+  const sourceCallId = hasColumn(db, legacyTable, "source_call_id") ? "source_call_id" : "NULL";
+  const allowScope = hasColumn(db, legacyTable, "allow_scope") ? "allow_scope" : "'once'";
   db.exec(`
     INSERT INTO btcc_authority_requests (
       request_id, request_ref, identity_sha256, owner_session_id,
@@ -42,7 +44,7 @@ export function migrateAuthoritySchema(db: Database): void {
       schedule_client_message_id, schedule_input_text,
       private_alternative_input, outcome, outcome_receipt_json,
       close_reason, close_scope, closed_at,
-      created_at, updated_at
+      created_at, updated_at, source_call_id, allow_scope
     )
     SELECT request_id, request_ref, identity_sha256, owner_session_id,
       source_session_id, source_turn_id, source_work_id, workspace_path,
@@ -52,7 +54,7 @@ export function migrateAuthoritySchema(db: Database): void {
       schedule_client_message_id, schedule_input_text,
       ${privateAlternative}, outcome, outcome_receipt_json,
       ${closeReason}, ${closeScope}, ${closedAt},
-      created_at, updated_at
+      created_at, updated_at, ${sourceCallId}, ${allowScope}
     FROM ${legacyTable}
     ORDER BY rowid
   `);

@@ -131,6 +131,7 @@ export function createAppSessionInteractionModuleGraph(input: {
     (type, payload) => {
       host.appendEvent(type, payload);
     },
+    (turnId) => host.stewardObserver.retainsApprovalClaim(turnId),
   );
   const sessionQueueDispatcher = new AppSessionQueueDispatcher({
     db,

@@ -16,7 +16,7 @@ import { useComposerFileDrop } from "./hooks/useComposerFileDrop";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
 import { ComposerNotices } from "./ComposerNotices.tsx";
-import { useComposerPlanDecision } from "./useComposerPlanDecision";
+import { useComposerDecision } from "./hooks/useComposerDecision";
 interface ComposerProps {
   onReserveChange: (height: number) => void;
   onOpenContext: () => void;
@@ -31,7 +31,6 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
   const [isComposing, setIsComposing] = useState(false);
   const text = useComposerStore((store) => store.text);
   const setText = useComposerStore((store) => store.setText);
-  const submit = useComposerStore((store) => store.submit);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -95,8 +94,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     summary: session.summary,
     textAreaRef,
   });
-  const planDecision = useComposerPlanDecision();
-
+  const decision = useComposerDecision(isComposing);
   useReserveHeight(wrapRef, onReserveChange);
   useComposerStoreBridge({
     accessMenuOpen,
@@ -128,7 +126,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     <ComposerCard
       {...fileDrop}
       large={large}
-      expanded={Boolean(planDecision) || presentation.expanded}
+      expanded={Boolean(decision.plan || decision.authority) || presentation.expanded}
       floating
       notice={<ComposerNotices summary={session.summary} />}
       adjunct={
@@ -148,12 +146,14 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
       onPointerDownCapture={presentation.onPointerDownCapture}
       onFocusCapture={presentation.onFocusCapture}
       onBlurCapture={presentation.onBlurCapture}
-      onSubmit={planDecision?.onSubmitInstruction ?? submit}
+      onSubmit={decision.onSubmit}
     >
       <ComposerInputSurface
         fileInputRef={fileInputRef}
         onFiles={(nextFiles) => void files.addFiles(nextFiles)}
-        planDecision={planDecision}
+        planDecision={decision.plan}
+        authorityDecision={decision.authority}
+        onAuthorityKeyDown={decision.onKeyDown}
       />
     </ComposerCard>
   );

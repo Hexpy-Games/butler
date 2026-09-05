@@ -43,6 +43,7 @@ afterEach(async () => {
   delete (globalThis as { KeyboardEvent?: unknown }).KeyboardEvent;
   delete (globalThis as { FocusEvent?: unknown }).FocusEvent;
   delete (globalThis as { MutationObserver?: unknown }).MutationObserver;
+  delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
   delete (globalThis as { getComputedStyle?: unknown }).getComputedStyle;
   delete (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame;
   delete (globalThis as { cancelAnimationFrame?: unknown }).cancelAnimationFrame;
@@ -74,6 +75,7 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
     KeyboardEvent: window.KeyboardEvent,
     FocusEvent: window.FocusEvent,
     MutationObserver: window.MutationObserver,
+    ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: (callback: FrameRequestCallback) =>
       setTimeout(() => callback(Date.now()), 0),

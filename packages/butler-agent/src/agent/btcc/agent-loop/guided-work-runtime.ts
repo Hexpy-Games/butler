@@ -113,15 +113,11 @@ export async function loadGuidedTurnWork(input: {
   }
   if (storedAuthority) {
     if (storedAuthority.sourceSessionId !== input.scope.sessionId ||
-        storedAuthority.sourceTurnId === input.scope.turnId ||
+        storedAuthority.sourceTurnId !== input.scope.turnId ||
         storedAuthority.workspacePath !== input.workspacePath) {
       throw new Error("authority_request_identity_mismatch");
     }
-    const bound = await safeBindOpenWork(
-      input.durableWork,
-      input.scope,
-      storedAuthority.sourceWorkId,
-    );
+    const bound = await safeBoundWork(input.durableWork, input.scope.turnId);
     if (!bound || bound.workId !== storedAuthority.sourceWorkId) {
       throw new Error("authority_source_work_unavailable");
     }

@@ -18,6 +18,39 @@ import { SessionBindingStore } from
   "../../packages/butler-agent/src/test-support/harness/session-store.ts";
 import type { InboundEnvelope } from
   "../../packages/butler-agent/src/gateways/core/contracts.ts";
+import { createAppResumeEnvelope } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
+
+test("approval wait blocks canonical transport input but lets the original Turn resume", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-approval-queue-"));
+  const sessionId = "butler/app-general";
+  const queue = new NativeInboundQueue(root);
+  const store = createSessionStore(root, sessionId);
+  const dispatcher = new BtccInboundDispatcher();
+  const received: InboundEnvelope[] = [];
+  const waitingSourceSessions = new Set([sessionId]);
+  const options = { queue, store, waitingSourceSessions, deliveryGuard: new DeliveryGuard({ adapters: [] }),
+    server: { async handleInbound(envelope: InboundEnvelope) {
+      received.push(envelope); return handledResult(sessionId, root, "done");
+    } },
+  };
+  try {
+    const ordinary: InboundEnvelope = appEnvelope({ sessionId, turnId: "later-turn" });
+    delete ordinary.routingHints; // The transport binding, not a hint, identifies this source.
+    queue.enqueue(ordinary);
+    expect(dispatcher.poll(options).claimed).toBe(0);
+    queue.enqueue(createAppResumeEnvelope({ chatId: "general", sessionId, turnId: "original-turn",
+      requestId: "approval", requestedAt: new Date().toISOString(), originalEventId: "original-event",
+      originalMessageId: "original-message", originalMessage: "original request" }));
+    expect(dispatcher.poll(options).claimed).toBe(1);
+    await dispatcher.waitForIdle();
+    expect(received.map((item) => item.control?.kind)).toEqual(["resume_turn"]);
+    expect(dispatcher.poll(options).claimed).toBe(0);
+    waitingSourceSessions.clear();
+    expect(dispatcher.poll(options).claimed).toBe(1);
+    await dispatcher.waitForIdle();
+    expect(received).toHaveLength(2);
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+});
 
 test("a recovered queue item re-enters the same BTCC path without a resume marker", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-queue-reentry-"));
