@@ -30,6 +30,7 @@ export type ExactLedgerTargetPrecondition = ExactLedgerTarget & (
 export type ExactLedgerRecord = ExactLedgerTarget & {
   rawRecordSha256: string;
   body: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type ExactLedgerReadSnapshot = {
@@ -120,18 +121,20 @@ export async function revalidateExactLedgerPreconditions(
   assertUniqueTargets(preconditions);
   const scope = canonicalScope(projectRoot);
   const core = await loadProjectLedgerCore();
-  for (const precondition of preconditions) {
-    const path = exactPath(scope, precondition.path);
+  const records = core.readCommittedProjectLedgerRecords(scope.root,
+    preconditions.map((target) => relative(scope.root, exactPath(scope, target.path))));
+  for (const [index, precondition] of preconditions.entries()) {
+    const raw = records[index]!.raw;
     if (precondition.state === "absent") {
-      if (existsSync(path)) throw new Error("project_ledger_exact_absence_changed");
+      if (raw !== null) throw new Error("project_ledger_exact_absence_changed");
       continue;
     }
-    if (!existsSync(path)) throw new Error("project_ledger_exact_record_missing");
-    const raw = readFileSync(path);
-    if (sha256(raw) !== precondition.rawRecordSha256) {
+    if (raw === null) throw new Error("project_ledger_exact_record_missing");
+    if (sha256(Buffer.from(raw)) !== precondition.rawRecordSha256) {
       throw new Error("project_ledger_exact_record_hash_changed");
     }
-    const data = readOfficialRecordData(core, path);
+    const data = core.parseFrontmatter(raw);
+    if (!data) throw new Error("project_ledger_exact_frontmatter_corrupt");
     assertExactMetadata(data, precondition);
   }
 }
@@ -142,22 +145,23 @@ async function readExactSnapshot(scope: CanonicalLedgerScope, targets: ExactLedg
 }> {
   const core = await loadProjectLedgerCore();
   const paths = targets.map((target) => exactPath(scope, target.path));
+  const sources = core.readCommittedProjectLedgerRecords(scope.root,
+    paths.map((path) => relative(scope.root, path)));
   const records: ExactLedgerRecord[] = [];
   const targetPreconditions: ExactLedgerTargetPrecondition[] = [];
   for (const [targetIndex, target] of targets.entries()) {
-    const path = paths[targetIndex]!;
-    if (!existsSync(path)) {
+    const raw = sources[targetIndex]!.raw;
+    if (raw === null) {
       targetPreconditions.push({ ...target, state: "absent" });
       continue;
     }
-    if (!existsSync(path)) throw new Error("project_ledger_exact_record_missing");
-    const raw = readFileSync(path);
-    const data = readOfficialRecordData(core, path);
+    const data = core.parseFrontmatter(raw);
+    if (!data) throw new Error("project_ledger_exact_frontmatter_corrupt");
     assertExactMetadata(data, target);
-    const bodyText = core.readRecordBody(path);
+    const bodyText = core.frontmatterBody(raw);
     if (bodyText === null) throw new Error("project_ledger_exact_body_corrupt");
-    const rawRecordSha256 = sha256(raw);
-    records.push({ ...target, rawRecordSha256, body: bodyText });
+    const rawRecordSha256 = sha256(Buffer.from(raw));
+    records.push({ ...target, rawRecordSha256, body: bodyText, metadata: data });
     targetPreconditions.push({ ...target, state: "present", rawRecordSha256 });
   }
   return { records, targetPreconditions };
@@ -216,15 +220,6 @@ function safeProjectSegment(value: unknown): string {
     .replace(/[^a-z0-9._-]+/gu, "-")
     .replace(/^-+|-+$/gu, "")
     .slice(0, 96);
-}
-
-function readOfficialRecordData(
-  core: Awaited<ReturnType<typeof loadProjectLedgerCore>>,
-  path: string,
-): Record<string, unknown> {
-  const data = core.readRecordData(path);
-  if (!data) throw new Error("project_ledger_exact_frontmatter_corrupt");
-  return data;
 }
 
 function assertExactMetadata(data: Record<string, unknown>, target: ExactLedgerTarget): void {

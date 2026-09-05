@@ -1,5 +1,7 @@
 import { loadProjectLedgerCore } from "./project-ledger-core.ts";
-import { observeProjectLedgerHead } from "./observe-project-ledger.ts";
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { createHash } from "node:crypto";
 import type { ResolvedProjectWorkScope } from "./project-work-contracts.ts";
 import {
   requireExactCurrentProjectWork,
@@ -15,6 +17,7 @@ export async function requireProjectWorkSessionHead(input: {
   butlerData: string;
   scope: ResolvedProjectWorkScope;
   sessionId: string;
+  workIds?: string[];
 }): Promise<CurrentProjectWorkSnapshot> {
   const relation = await readCanonicalProjectWorkRelation(input);
   if (!relation.sessionHead)
@@ -62,9 +65,7 @@ async function readCanonicalRelationAttempt(
   },
   attempt: number,
 ): Promise<CanonicalProjectWorkRelation> {
-  const before = input.workIds
-    ? null
-    : await observeProjectLedgerHead(input.scope.ledgerRoot);
+  const before = await projectWorkSourceVersion(input.scope, input.workIds);
   const works = (input.workIds
     ? await readCanonicalProjectWorks(input.butlerData, input.scope, input.workIds)
     : await readCanonicalProjectWorksForSession(
@@ -72,17 +73,14 @@ async function readCanonicalRelationAttempt(
         input.scope,
         input.sessionId,
       )).filter((snapshot) => snapshot.view.sessionId === input.sessionId);
-  const after = before
-    ? await observeProjectLedgerHead(input.scope.ledgerRoot)
-    : null;
-  if (before && after && (
-    before.sourceSha256 !== after.sourceSha256 ||
-    before.storageSha256 !== after.storageSha256
-  )) {
+  const after = await projectWorkSourceVersion(input.scope, input.workIds);
+  if (before !== after) {
     if (attempt >= 3) throw new Error("project_work_snapshot_unstable");
     return readCanonicalRelationAttempt(input, attempt + 1);
   }
   const heads = works.filter((snapshot) => snapshot.manifest.sessionHead);
+  // SQLite is a locator only. A superseded head requires canonical rediscovery.
+  if (input.workIds && heads.length === 0) return readCanonicalRelationAttempt({ ...input, workIds: undefined }, 1);
   if (heads.length !== (works.length > 0 ? 1 : 0)) invalid();
   const bindings = input.turnId
     ? works.filter((snapshot) =>
@@ -124,22 +122,30 @@ async function locateCanonicalProjectWorkIds(
   matches: (manifest: ProjectWorkLocator) => boolean,
 ): Promise<string[]> {
   const core = await loadProjectLedgerCore();
-  const prefix = `project-ledger/projects/${scope.ledgerProjectId}/work/`;
-  return core
-    .buildIndex(scope.ledgerRoot)
-    .records.filter(
-      (record) =>
-        record.kind === "work" &&
-        record.path.startsWith(prefix) &&
-        record.path.endsWith("/work.md"),
-    )
-    .filter((record) => {
-      const body = core.readRecordBody(
-        core.projectPath(scope.ledgerRoot, record.path),
-      );
-      return body ? matches(projectWorkLocator(body)) : false;
-    })
-    .map((record) => record.id);
+  const paths = workRecordPaths(scope);
+  return core.readCommittedProjectLedgerRecords(scope.ledgerRoot, paths).flatMap(({ raw }) => {
+    if (raw === null) return [];
+    const data = core.parseFrontmatter(raw);
+    return data?.kind === "work" && typeof data.id === "string" &&
+      matches(projectWorkLocator(core.frontmatterBody(raw))) ? [data.id] : [];
+  });
+}
+
+export async function projectWorkSourceVersion(scope: ResolvedProjectWorkScope, workIds?: string[]): Promise<string> {
+  const core = await loadProjectLedgerCore();
+  const paths = workRecordPaths(scope, workIds);
+  return createHash("sha256").update(JSON.stringify([
+    workRecordPaths(scope),
+    core.readCommittedProjectLedgerRecords(scope.ledgerRoot, paths),
+  ])).digest("hex");
+}
+
+function workRecordPaths(scope: ResolvedProjectWorkScope, workIds?: string[]): string[] {
+  const directory = join(scope.ledgerRoot, "work");
+  const ids = workIds ?? (existsSync(directory)
+    ? readdirSync(directory, { withFileTypes: true }).filter((item) => item.isDirectory()).map((item) => item.name)
+    : []);
+  return [...new Set(ids)].sort().map((id) => `work/${id}/work.md`);
 }
 
 function readCanonicalProjectWorks(

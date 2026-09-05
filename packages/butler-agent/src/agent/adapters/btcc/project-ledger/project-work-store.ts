@@ -27,6 +27,7 @@ import {
   requireProjectWorkSessionHead,
   readCanonicalProjectWorkBinding,
   readCanonicalProjectWorkRelation,
+  projectWorkSourceVersion,
 } from "./project-work-relation-snapshot.ts";
 import {
   requireCurrentProjectWork,
@@ -37,7 +38,6 @@ import { assertMaterialSnapshotForView } from "./project-work-material-snapshot.
 import { probeProjectWorkServiceReplay } from "./project-work-service-replay.ts";
 import { safeProjectWorkPublicOperation } from "./project-work-errors.ts";
 import { attachProjectWorkToolResult } from "./project-work-result-attachment.ts";
-import { observeProjectLedgerHead } from "./observe-project-ledger.ts";
 import { importLegacyProjectWork } from "./project-work-legacy-import.ts";
 
 export function createProjectWorkStore(
@@ -47,8 +47,6 @@ export function createProjectWorkStore(
 }
 
 class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
-  private readonly emptyRelationCache = new Set<string>();
-
   constructor(readonly input: CreateProjectWorkStoreInput) {}
 
   loadContext(scope: WorkTurnScope) {
@@ -160,11 +158,10 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
         : {}),
     });
     if (!candidate) return null;
-    const relation = await readCanonicalProjectWorkRelation({
-      butlerData: this.input.butlerData,
-      scope: this.input.scope,
+    const relation = await this.relation({
       sessionId: candidate.view.sessionId,
       turnId,
+      projectRef: this.input.scope.appProjectId,
     });
     if (relation.binding?.view.workId !== candidate.view.workId)
       invalid("project_work_turn_binding_stale");
@@ -187,7 +184,6 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
       identity,
       prepareUpdates,
     });
-    this.emptyRelationCache.clear();
     if (!outcome.skipped && recoverProjection)
       await this.recoverPublicationProjection(outcome.targets, identity);
     return outcome;
@@ -196,7 +192,6 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
     current: CurrentProjectWorkSnapshot,
     _affected: CurrentProjectWorkSnapshot[] = [],
   ) {
-    this.emptyRelationCache.clear();
     return current.view;
   }
   private async recoverPublicationProjection(
@@ -219,7 +214,7 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
     identity: ProjectWorkOperationIdentity,
     attempt = 1,
   ): Promise<void> {
-    const before = await observeProjectLedgerHead(this.input.scope.ledgerRoot);
+    const before = await projectWorkSourceVersion(this.input.scope, workIds);
     const affected = await Promise.all(workIds.map((workId) =>
       requireCurrentProjectWork({
         butlerData: this.input.butlerData,
@@ -231,15 +226,15 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
     const heads = new Map(
       await Promise.all([...sessionIds].map(async (sessionId) => [
         sessionId,
-        await requireProjectWorkSessionHead({
+        affected.find((item) => item.view.sessionId === sessionId && item.manifest.sessionHead) ?? await requireProjectWorkSessionHead({
           butlerData: this.input.butlerData,
           scope: this.input.scope,
           sessionId,
         }),
       ] as const)),
     );
-    const after = await observeProjectLedgerHead(this.input.scope.ledgerRoot);
-    if (before.sourceSha256 !== after.sourceSha256) {
+    const after = await projectWorkSourceVersion(this.input.scope, workIds);
+    if (before !== after) {
       if (attempt >= 3) invalid("project_work_snapshot_unstable");
       return this.observeStableRuntimeProjection(workIds, identity, attempt + 1);
     }
@@ -268,7 +263,7 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
         })),
         sessionHeadWorkId: head.view.workId,
         ledgerProjectId: this.input.scope.ledgerProjectId,
-        canonicalHeadSha256: after.sourceSha256,
+        canonicalHeadSha256: after,
         ...(identity.kind === "legacy_import" && workIds.length === 1
           ? { legacyImportClaimWorkId: workIds[0] }
           : {}),
@@ -302,19 +297,14 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
       : null;
   }
   async relation(scope: WorkTurnScope) {
-    const cacheKey = `${scope.sessionId}\0${scope.turnId}`;
-    if (this.emptyRelationCache.has(cacheKey))
-      return { sessionHead: null, binding: null };
     const located = await this.input.runtimeProjection.locateCanonicalWorks({
       scope: this.input.scope,
       sessionId: scope.sessionId,
       turnId: scope.turnId,
     });
-    const workIds = located.bindingWorkId
-      ? [located.sessionHeadWorkId, located.bindingWorkId].filter(
+    const workIds = [located.sessionHeadWorkId, located.bindingWorkId].filter(
           (workId): workId is string => Boolean(workId),
-        )
-      : [];
+        );
     const relation = await readCanonicalProjectWorkRelation({
       butlerData: this.input.butlerData,
       scope: this.input.scope,
@@ -322,8 +312,6 @@ class ProjectWorkStore implements DurableWorkStore, ProjectWorkWriteContext {
       turnId: scope.turnId,
       ...(workIds.length > 0 ? { workIds } : {}),
     });
-    if (!relation.sessionHead && !relation.binding)
-      this.emptyRelationCache.add(cacheKey);
     return relation;
   }
   assertScope(scope: WorkTurnScope) {

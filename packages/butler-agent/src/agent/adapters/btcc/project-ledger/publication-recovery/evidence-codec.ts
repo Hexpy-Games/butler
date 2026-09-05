@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { writeJsonFileAtomic } from "../../../../persistence/atomic-json-store.ts";
 import type { ProjectLedgerEffectAttempt } from "../external-effect-occurrence.ts";
 import type { ProjectLedgerHead } from "../runtime-types.ts";
+import { parseHeadRecordPaths } from "../observe-project-ledger.ts";
 
 export type AppliedPublicationEvidence = {
   publicationId: string;
@@ -97,6 +98,7 @@ export function readPublicationJournal(
   path: string,
   input: EvidenceInput,
   paths: PublicationPaths,
+  validateActiveClaim = true,
 ): PublicationJournal | null {
   if (!existsSync(path)) return null;
   const value = readJson(path);
@@ -113,7 +115,7 @@ export function readPublicationJournal(
     !JOURNAL_STATUSES.includes(String(value.status))
   ) invalidEvidence();
   if (value.claimPath !== canonicalClaimPath(input.ledgerRoot)) invalidEvidence();
-  validateClaimIfPresent(input);
+  if (validateActiveClaim) validateClaimIfPresent(input);
   const base = decodeStoredHead(value.base, input.ledgerRoot, "normalized");
   if (!sameHead(base, input.attempt.expectedBase)) invalidEvidence();
   const needsCandidate = CANDIDATE_STATUSES.includes(String(value.status));
@@ -185,7 +187,7 @@ export function exactClaimExists(input: Pick<EvidenceInput, "ledgerRoot" | "atte
   const claimPath = canonicalClaimPath(input.ledgerRoot);
   if (!existsSync(claimPath)) return false;
   const value = readJson(claimPath);
-  exactKeys(value, ["schema", "claimId", "publicationId", "canonicalRoot", "baseSha256"]);
+  exactKeys(value, ["schema", "claimId", "publicationId", "canonicalRoot", "baseSha256", "journalPath"]);
   if (
     value.schema !== "project-ledger.publication-claim.v1" ||
     value.claimId !== input.attempt.publicationId ||
@@ -235,7 +237,8 @@ function decodeStoredHead(
     : "butler.btcc-project-ledger-head.v1";
   if (
     head.schema !== schema || head.projectRoot !== storedRoot ||
-    (format === "core" && head.storageAuthority !== "project-ledger-authoritative-v2") ||
+    (format === "core" && head.storageAuthority !==
+      (head.recordPaths ? "project-ledger-record-set-v1" : "project-ledger-authoritative-v2")) ||
     !isSha(head.sourceSha256) || !isSha(head.storageSha256) ||
     !finiteCount(head.sourceFileCount) || !finiteCount(head.storageEntryCount)
   ) invalidEvidence();
@@ -246,11 +249,12 @@ function decodeStoredHead(
     sourceFileCount: head.sourceFileCount,
     storageSha256: head.storageSha256,
     storageEntryCount: head.storageEntryCount,
+    ...(head.recordPaths === undefined ? {} : { recordPaths: parseHeadRecordPaths(head.recordPaths) }),
   };
 }
 
 const NORMALIZED_HEAD_KEYS = [
-  "schema", "projectRoot", "sourceSha256", "sourceFileCount", "storageSha256", "storageEntryCount",
+  "schema", "projectRoot", "sourceSha256", "sourceFileCount", "storageSha256", "storageEntryCount", "recordPaths",
 ];
 const CORE_HEAD_KEYS = ["schema", "storageAuthority", ...NORMALIZED_HEAD_KEYS.slice(1)];
 const JOURNAL_STATUSES = ["claim_pending", "preparing", "prepared", "committing", "promoted", "observed"];

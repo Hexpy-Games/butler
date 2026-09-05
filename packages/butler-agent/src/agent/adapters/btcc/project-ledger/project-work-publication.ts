@@ -14,7 +14,6 @@ import { observeProjectLedgerHead } from "./observe-project-ledger.ts";
 import { loadProjectLedgerCore, type ProjectLedgerCore } from "./project-ledger-core.ts";
 import {
   applyProjectLedgerPublicationAttempt,
-  captureExactPublicationAttempt,
   hasUnsupportedLegacyProjectLedgerOccurrence,
   publicationPaths,
   reconcileProjectLedgerPublication,
@@ -35,6 +34,8 @@ import {
   projectWorkPublicationProofUpdates,
 } from "./project-work-publication-proof.ts";
 import { validateProjectWorkPublicationCandidate } from "./project-work-candidate-validation.ts";
+import { readExactProjectLedgerSnapshot, revalidateExactLedgerPreconditions } from "./canonical-ledger-reader.ts";
+import { childPath, workPath } from "./project-work-json.ts";
 
 type PublicationInput = {
   butlerData: string;
@@ -146,6 +147,7 @@ async function publish(
     runPhase: (_phase, run) => run(),
     materialize(candidateRoot) {
       if (!updates) throw new ProjectWorkPublicationUncertainError();
+      core.deferDerivedIndex(candidateRoot, () => {
       for (const update of updates) {
         if (
           update.operation === "create" &&
@@ -154,9 +156,7 @@ async function publish(
           core.createRecord(candidateRoot, { project: candidateRoot, ...update });
         else applyProjectLedgerRecordUpdate(core, candidateRoot, update);
       }
-      for (const view of ["dashboard", "handoff", "roadmap"] as const)
-        core.render(candidateRoot, view, { write: true });
-      core.writeIndex(candidateRoot);
+      });
       validateProjectWorkPublicationCandidate({
         core,
         candidateRoot,
@@ -182,17 +182,24 @@ async function preparedUpdates(
   return updates;
 }
 
-function capture(
-  core: ProjectLedgerCore,
+async function capture(
+  _core: ProjectLedgerCore,
   scope: ResolvedProjectWorkScope,
   updates: ProjectLedgerRecordUpdate[],
 ) {
-  return captureExactPublicationAttempt({
-    core,
-    projectRoot: scope.ledgerRoot,
-    projectId: scope.ledgerProjectId,
-    updates: [...updates, ...projectWorkPublicationProofUpdates(updates)],
+  const targets = [...updates, ...projectWorkPublicationProofUpdates(updates)].map((update) => {
+    if (update.kind !== "work" && update.kind !== "plan" && update.kind !== "reference")
+      throw new ProjectWorkAdapterError("project_work_publication_kind_invalid");
+    return { id: update.id, kind: update.kind, parentId: update.parentId ?? null,
+      path: update.kind === "work" ? workPath(scope.ledgerProjectId, update.id)
+        : childPath(scope.ledgerProjectId, update.kind, update.id) };
   });
+  const snapshot = await readExactProjectLedgerSnapshot({ projectRoot: scope.ledgerRoot, targets });
+  const prefix = `project-ledger/projects/${scope.ledgerProjectId}/`;
+  const paths = ["project.json", ...targets.map((target) => target.path.slice(prefix.length))].sort();
+  const expectedBase = await observeProjectLedgerHead(scope.ledgerRoot, paths);
+  await revalidateExactLedgerPreconditions(scope.ledgerRoot, snapshot.targetPreconditions);
+  return { ...snapshot, expectedBase };
 }
 
 function exactScope(scope: ResolvedProjectWorkScope) {

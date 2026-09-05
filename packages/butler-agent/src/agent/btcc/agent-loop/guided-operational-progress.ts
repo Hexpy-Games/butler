@@ -10,6 +10,8 @@ import type {
   GuidedActivityProjection,
 } from "../projection/index.ts";
 import type { BtccAgentLoopInput } from "./contracts.ts";
+import { isDurableWorkTool } from "../work/index.ts";
+import { normalizeGuidedToolCall } from "../../tools/tool-call-normalization.ts";
 
 /**
  * Captures only user-facing progress text for operational fallback.  The
@@ -98,7 +100,6 @@ export function createGuidedAuthorityProjection(input: {
   return {
     publicActivity,
     loopCallbacks: createGuidedPublicLoopCallbacks({
-      accessMode: input.accessMode,
       activity: publicActivity,
       ...(authorityDecision ? { authorityDecision } : {}),
     }),
@@ -146,16 +147,22 @@ function createGuidedPublicActivity(input: {
   return {
     observeToolBatch: (batch) => input.activity.observeToolBatch({
       text: decisionText ?? batch.text,
-      toolCalls: batch.toolCalls.map((call) => ({ name: call.name, args: {} })),
+      toolCalls: batch.toolCalls.map(askFirstActivityCall),
     }),
-    observeTool: (call) => input.activity.observeTool({ ...call, args: {} }),
+    observeTool: (call) => input.activity.observeTool({ ...call, ...askFirstActivityCall(call) }),
     markManaged: (binding?: GuidedActivityBinding) => input.activity.markManaged(binding),
     publishAccepted: (binding: GuidedActivityBinding) => input.activity.publishAccepted(binding),
   };
 }
 
+function askFirstActivityCall(call: { name: string; args: Record<string, unknown> }) {
+  const normalized = normalizeGuidedToolCall({ toolName: call.name, args: call.args });
+  // Work descriptions are projected field by field by the activity renderer.
+  // Approval protects execution input, not the authored Plan or review subject.
+  return isDurableWorkTool(normalized.name) ? normalized : { name: call.name, args: {} };
+}
+
 function createGuidedPublicLoopCallbacks(input: {
-  accessMode: GuidedEffectAccessMode;
   activity: GuidedActivityProjection;
   authorityDecision?: "allowed" | "denied" | "modified";
 }): Pick<BtccAgentLoopInput, "onAssistantTextBeforeTools" | "outcomeFromToolResult"> {
@@ -168,7 +175,7 @@ function createGuidedPublicLoopCallbacks(input: {
           : text,
       toolCalls: toolCalls.map((call) => ({
         name: call.name,
-        args: input.accessMode === "ask_first" ? {} : call.arguments,
+        args: call.arguments,
       })),
     }),
     outcomeFromToolResult: ({ toolResult }) => {

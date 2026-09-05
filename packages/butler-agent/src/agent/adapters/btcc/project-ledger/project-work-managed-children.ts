@@ -12,20 +12,13 @@ export function validateManagedProjectWorkChildren(
   manifest: ProjectWorkManifest,
   records: ExactLedgerRecord[],
 ): ProjectWorkChild[] {
+  const children = decodeCurrentProjectWorkChildren(manifest, records);
   const plans: number[] = [];
   const checkpoints: number[] = [];
   const reviews: number[] = [];
   const dispositions: number[] = [];
   const results: number[] = [];
-  const children: ProjectWorkChild[] = [];
-  for (const record of records) {
-    if (record.parentId !== manifest.workId) continue;
-    const schema = String(parseCanonical(record.body).schema);
-    if (!schema.startsWith(PROJECT_WORK_SCHEMA_PREFIX)) continue;
-    const child = decodeKnownChild(schema, record, manifest.workId);
-    children.push(child);
-    validateIdentity(child);
-    validateOrigin(child, manifest);
+  for (const child of children) {
     if (child.schema === "butler.btcc-project-work-plan.v1")
       plans.push(child.plan.revision);
     if (child.schema === "butler.btcc-project-work-checkpoint.v1")
@@ -36,8 +29,6 @@ export function validateManagedProjectWorkChildren(
       dispositions.push(child.disposition.revision);
     if (child.schema === "butler.btcc-project-work-result-reference.v1")
       results.push(child.result.sequence);
-    if (child.schema === "butler.btcc-project-work-binding.v1")
-      validateBinding(child, manifest);
   }
   exactRevisionSeries(plans, manifest.planRevision);
   exactRevisionSeries(checkpoints, manifest.checkpointRevision);
@@ -46,6 +37,21 @@ export function validateManagedProjectWorkChildren(
   exactRevisionSeries(results, manifest.resultRefs.length);
   validateManagedProjectWorkRelations(manifest, children);
   return children;
+}
+
+/** Current Work hydration follows explicit references; historical audits are separate. */
+export function decodeCurrentProjectWorkChildren(
+  manifest: ProjectWorkManifest,
+  records: ExactLedgerRecord[],
+): ProjectWorkChild[] {
+  return records.filter((record) => record.parentId === manifest.workId).map((record) => {
+    const schema = String(parseCanonical(record.body).schema);
+    const child = decodeKnownChild(schema, record, manifest.workId);
+    validateIdentity(child);
+    validateOrigin(child, manifest);
+    if (child.schema === "butler.btcc-project-work-binding.v1") validateBinding(child, manifest);
+    return child;
+  });
 }
 
 function decodeKnownChild(
@@ -201,7 +207,6 @@ const CHECKPOINT_SUFFIXES = new Set([
   "validation-exit",
   "disposition",
 ]);
-const PROJECT_WORK_SCHEMA_PREFIX = "butler.btcc-project-work-";
 const SCHEMAS: ProjectWorkChild["schema"][] = [
   "butler.btcc-project-work-plan.v1",
   "butler.btcc-project-work-checkpoint.v1",

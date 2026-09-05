@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { COUNTED_KINDS, INDEX_PATH, LAYOUT_DIRS, VIEW_NAMES } from "./constants.js";
 import { CliError, nowIso } from "./errors.js";
@@ -14,16 +14,27 @@ import {
 } from "./fs.js";
 import {
   issue,
+  committedRecordSources,
   readRecord,
-  recordFiles,
   scanPrivacy,
   sourceMaxMtimeMs,
   validateRecord,
 } from "./records.js";
 import { queryIndex } from "./queries.js";
 import { withProjectLedgerMutation } from "./mutation-lock.js";
+import { publicationReadVersion } from "./transactions/record-snapshot.js";
 
 export { assertSupportedQueryKind, queryIndex, sortRecords } from "./queries.js";
+
+const deferredProjects = new Set();
+
+export function deferDerivedIndex(project, mutation) {
+  const root = ledgerRoot(project);
+  if (deferredProjects.has(root)) return mutation();
+  deferredProjects.add(root);
+  try { return withProjectLedgerMutation(project, mutation); }
+  finally { deferredProjects.delete(root); }
+}
 
 export function countRecords(records) {
   const counts = Object.fromEntries(COUNTED_KINDS.map((kind) => [kind, 0]));
@@ -73,9 +84,9 @@ export function buildIndex(project) {
 
   const records = [];
   const parseIssues = [];
-  for (const file of recordFiles(project)) {
+  for (const { filePath: file, raw } of committedRecordSources(project)) {
     try {
-      const record = readRecord(project, file);
+      const record = readRecord(project, file, raw);
       if (record) records.push(record);
     } catch (error) {
       parseIssues.push(issue(
@@ -135,6 +146,7 @@ function writeIndexLocked(project) {
 }
 
 export function refreshDerivedIndexAfterMutation(project, mutationResult) {
+  if (deferredProjects.has(ledgerRoot(project))) return mutationResult;
   try {
     const index = writeIndex(project);
     return {
@@ -178,11 +190,37 @@ export function refreshDerivedIndexAfterMutation(project, mutationResult) {
   }
 }
 
+/** Update compact rows once after a record publication; views remain on-demand. */
+export function refreshDerivedIndexRecords(project, paths) {
+  const indexPath = projectPath(project, INDEX_PATH);
+  if (!existsSync(indexPath)) return;
+  const previous = safeReadJson(indexPath);
+  if (!Array.isArray(previous?.records)) return;
+  const changed = paths.filter((path) => path.endsWith(".md"))
+    .map((path) => projectPath(project, path)).filter(existsSync)
+    .map((path) => readRecord(project, path, readFileSync(path, "utf8"))).filter(Boolean);
+  const changedPaths = new Set(changed.map((record) => record.path));
+  const records = [
+    ...previous.records.filter((record) => !changedPaths.has(record.path)),
+    ...changed.map(({ sourceMtimeMs: _mtime, ...record }) => record),
+  ];
+  const byId = new Map(records.map((record) => [record.id, record]));
+  const issues = (previous.issues ?? []).filter((item) => !changedPaths.has(item.path));
+  issues.push(...changed.flatMap((record) => validateRecord(record, byId)));
+  safeWriteJson(indexPath, {
+    ...previous, records, counts: countRecords(records), issues, generatedAt: nowIso(),
+    views: viewStatuses(project, Math.max(...changed.map((record) => record.sourceMtimeMs), 0)),
+    index: { ...previous.index, available: true, stale: false, generatedAt: nowIso() },
+  });
+}
+
 export function readIndex(project) {
+  if (publicationReadVersion(ledgerRoot(project))) return buildIndex(project);
   const path = projectPath(project, INDEX_PATH);
   if (!existsSync(path)) return null;
   const index = safeReadJson(path);
   const maxSourceMtimeMs = sourceMaxMtimeMs(project);
+  if (publicationReadVersion(ledgerRoot(project))) return buildIndex(project);
   return {
     ...normalizeIndexPaths(project, index),
     views: viewStatuses(project, maxSourceMtimeMs),
@@ -191,6 +229,7 @@ export function readIndex(project) {
 }
 
 export function loadIndex(project) {
+  if (publicationReadVersion(ledgerRoot(project))) return buildIndex(project);
   let index = null;
   try {
     index = readIndex(project);

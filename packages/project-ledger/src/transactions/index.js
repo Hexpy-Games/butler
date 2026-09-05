@@ -16,3 +16,4 @@ export {
   ProjectLedgerPublicationClaimConflictError,
 } from "./publication-claim.js";
 export { reconcilePublicationClaim } from "./publication-claim.js";
+export { observeProjectLedgerRecordHead, readCommittedProjectLedgerRecords, publicationReadVersion } from "./record-snapshot.js";
