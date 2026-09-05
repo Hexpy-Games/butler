@@ -23,6 +23,7 @@ import { createGuidedOperationResultRuntime } from "../operation-result-replay/i
 import type { ProductionGuidedTurnAgentInput } from "./guided-turn-agent-input.ts";
 import type { ModelRoundPort } from "../ports/model-round.ts";
 import { guidedContinuationBudget } from "./guided-continuation-budget.ts";
+import { modelContextByteLimit } from "../turn/index.ts";
 import { guidedTurnResult } from "./guided-turn-result.ts";
 import { createGuidedModelRouteRuntime } from "./guided-turn-route-events.ts";
 import { createGuidedDelegationTurnRelease, createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
@@ -417,6 +418,7 @@ export function createProductionGuidedTurnAgent(
         executeTool: toolCalls.executeTool,
       });
       const loopOptions: BtccAgentLoopInput = {
+        maxModelFacingBytes: modelContextByteLimit(turn.modelSelection.contextWindowTokens),
         prompt: requestAttribution.prompt,
         authorityContinuation: turn.authorityContinuation,
         authorityDecision,

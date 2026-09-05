@@ -38,6 +38,11 @@ test("web_read reads real HTTP PDF bytes, preserves final URL, and continues cac
     expect(next).toMatchObject({ ok: true, cache_hit: true, start_chunk: 1, next_start_chunk: 2 });
     expect(next.markdown).not.toBe(first.markdown);
     expect(requests).toBe(2);
+    const reread = await handler({ args: { url, backend: "lightweight", max_chunks: 1 } });
+    expect(reread.markdown).toBe(first.markdown);
+    expect(reread.chunks).toEqual(first.chunks);
+    expect(reread.public_web_evidence_items).toEqual(first.public_web_evidence_items);
+    expect(requests).toBe(2);
   } finally {
     server.stop(true);
   }

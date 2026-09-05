@@ -75,7 +75,7 @@ test("journal-private details drive final collection but are absent from replaya
       { type: "added", new_line: 1, content: "new" },
     ],
   }]);
-  expect(withoutChangedFileDetails({ ok: true, changed_file: detail, path: "src/app.ts" }))
+  expect(withoutChangedFileDetails({ ok: true, changed_file: detail, path: "src/app.ts" }, "edit_file"))
     .toEqual({ ok: true, path: "src/app.ts" });
 });
 

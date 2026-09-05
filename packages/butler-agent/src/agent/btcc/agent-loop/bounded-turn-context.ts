@@ -10,6 +10,7 @@ import { continuationRequestDigest } from "../turn/index.ts";
 import type { TurnContinuationBudgetState } from "../turn/index.ts";
 import { phaseContinuityProjectionIdentity, projectPhaseContinuity } from
   "./phase-continuity-projection.ts";
+import { latestWorkAnchorResults } from "../operation-result-replay/index.ts";
 
 export type BoundedTurnContext = {
   messages: readonly ModelRoundMessage[];
@@ -93,7 +94,7 @@ export async function prepareBoundedModelContext(input: {
     (input.budget?.state.limits.maxModelFacingBytes ?? input.maxModelFacingBytes ?? DEFAULT_MODEL_CONTEXT_BYTES) - overheadBytes,
   );
   const exactBounded = buildBoundedTurnContext(input.messages, messageLimit);
-  if (!input.budget || exactBounded.evictedAtomicUnits === 0) {
+  if (exactBounded.evictedAtomicUnits === 0) {
     return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
   }
   const hasReplayCarrier = input.messages.some((message) =>
@@ -118,9 +119,9 @@ export async function prepareBoundedModelContext(input: {
       input.statelessMessageBytes!(messages, input.butlerData),
   });
   const projectedBounded = buildBoundedTurnContext(projected.messages, messageLimit);
+  // Compare to the model limit, not a smaller request that already lost history.
   const projectionAdmitted = Boolean(projected.identity) &&
-      input.statelessMessageBytes!(projectedBounded.messages, input.butlerData) <
-      input.statelessMessageBytes!(exactBounded.messages, input.butlerData);
+      projectedBounded.modelFacingBytes <= messageLimit;
   if (!projectionAdmitted) {
     return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
   }
@@ -248,7 +249,7 @@ function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
     const message = messages[index]!;
     if (message.role === "tool") throw new Error("turn_tool_protocol_orphan");
     if (message.role !== "assistant" || !message.toolCalls?.length) {
-      units.push({ messages: [message], mandatory: false });
+      units.push({ messages: [message], mandatory: message.requestSegmentKind === "phase_continuity" });
       index += 1;
       continue;
     }
@@ -287,21 +288,11 @@ function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
   if (latestDirection >= 0) units[latestDirection]!.mandatory = true;
   // Plan arguments contain the current action descriptions; the result alone is
   // not an adequate anchor. Keep the entire last accepted call/result unit.
-  for (const names of [
-    new Set(["replace_work_plan"]),
-    new Set(["start_work", "continue_work", "record_work_checkpoint", "record_work_review", "record_work_disposition"]),
-    new Set(["record_work_review"]),
-  ]) {
-    const latest = units.findLastIndex((unit) => unit.messages.some((message) =>
-      message.role === "tool" && names.has(message.name ?? "") && successfulToolMessage(message),
-    ));
-    if (latest >= 0) units[latest]!.mandatory = true;
+  const anchors = latestWorkAnchorResults(messages);
+  for (const unit of units) {
+    if (unit.messages.some((message) => anchors.has(message))) unit.mandatory = true;
   }
   return units;
-}
-
-function successfulToolMessage(message: ModelRoundMessage): boolean {
-  try { return JSON.parse(message.content)?.ok === true; } catch { return false; }
 }
 
 /** Retain only existing reader handles, never invent an exact-result capability. */

@@ -1,4 +1,5 @@
 import { presentReadOperation } from "./operationReadOutputPresentation";
+import { presentStructuredOperation } from "./operationStructuredOutputPresentation";
 
 export type OperationOutputSection = { title: string; content?: string; message?: string };
 
@@ -24,7 +25,13 @@ export function presentOperationOutput(
   if (toolName === "run_command") return commandOutput(value);
   const readOutput = presentReadOperation(toolName, value);
   if (readOutput) return readOutput;
+  if (value.ok === false || value.pending === true || value.authority_pending === true) {
+    const failure = presentStructuredOperation(value);
+    if (failure) return failure;
+  }
   if (isBasicFileTool(toolName)) return basicFileOutput(toolName, value);
+  const structured = presentStructuredOperation(value);
+  if (structured) return structured;
   if (typeof value.ok === "boolean") {
     return {
       kind: "summary",

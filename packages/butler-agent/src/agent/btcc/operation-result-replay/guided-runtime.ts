@@ -23,7 +23,7 @@ export function createGuidedOperationResultRuntime(input: {
   sessionId: string;
   projectRef?: string;
 }): GuidedOperationResultRuntime {
-  if (input.mode === "disabled") {
+  if (input.mode === "disabled" && !input.exactReadCapability) {
     return {};
   }
   if (!input.exactReader) {
@@ -35,6 +35,7 @@ export function createGuidedOperationResultRuntime(input: {
     journal: input.journal,
     exactReader: input.exactReader,
     exactReadCapability: input.exactReadCapability,
+    replaceDeliveredResults: input.mode === "available",
     sessionId: input.sessionId,
     projectRef: input.projectRef,
   });

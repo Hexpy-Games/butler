@@ -100,10 +100,10 @@ test("read file model preview keeps location and bounded content", () => {
     truncated: true,
   });
   const files = preview?.files as Array<Record<string, unknown>>;
-  expect(String(files[0]?.content).length).toBeLessThan(5_000);
+  expect(files[0]?.content).toBe("x".repeat(6_000));
 });
 
-test("large read previews expose the exact next source line instead of implying the full slice was visible", () => {
+test("read formatting preserves the complete requested source slice before budget fitting", () => {
   const content = Array.from({ length: 300 }, (_, index) =>
     `line ${index + 1}: ${"x".repeat(48)}`).join("\n");
   const preview = structuredToolResultModelPreview({
@@ -125,17 +125,8 @@ test("large read previews expose the exact next source line instead of implying 
   });
 
   const file = (preview?.files as Array<Record<string, unknown>>)[0];
-  expect(file).toMatchObject({
-    preview_content_truncated: true,
-    preview_start_line: 1,
-    omitted_through_line: 300,
-  });
-  expect(file?.preview_end_line).toBeNumber();
-  expect(file?.next_start_line).toBe(Number(file?.preview_end_line) + 1);
-  expect(String(file?.content)).toContain(
-    `continue with read_file start_line=${String(file?.next_start_line)}`,
-  );
-  expect(Number(file?.preview_end_line)).toBeLessThan(300);
+  expect(file).toMatchObject({ content, start_line: 1, end_line: 300, truncated: true });
+  expect(file?.preview_content_truncated).toBeUndefined();
 });
 
 test("bounded conversation context remains a complete provider-safe observation", () => {
@@ -366,24 +357,18 @@ test("a fitted failure preview keeps truthful Work facts and callable exact-read
   expect(JSON.stringify(projected)).not.toContain("Use the result's cursor");
 });
 
-test("generic semantic array omission retains the actual exact-read reference", () => {
+test("small generic arrays are complete without requiring a re-read", () => {
   const exactReadReference = exactReadReferenceFor("generic-result");
   const projected = toolResultPayloadForProvider({
     ok: true,
     output: { items: Array.from({ length: 13 }, (_, index) => ({ index })) },
   }, { toolName: "unknown_tool", exactReadReference });
 
-  expect((projected.output as { items: unknown[] }).items).toHaveLength(12);
-  expect(projected).toMatchObject({
-    model_preview: {
-      truncated: true,
-      completeness: "partial",
-      exact_read: exactReadReference,
-    },
-  });
+  expect((projected.output as { items: unknown[] }).items).toHaveLength(13);
+  expect(projected.model_preview).toBeUndefined();
 });
 
-test("specialized list and text omission retains the actual exact-read reference", () => {
+test("small search batches retain all matches and text", () => {
   const exactReadReference = exactReadReferenceFor("grep-result");
   const projected = toolResultPayloadForProvider({
     ok: true,
@@ -397,10 +382,8 @@ test("specialized list and text omission retains the actual exact-read reference
     },
   }, { toolName: "grep_files", exactReadReference });
 
-  expect((projected.output as { matches: unknown[] }).matches).toHaveLength(12);
-  expect(projected).toMatchObject({
-    model_preview: { exact_read: exactReadReference },
-  });
+  expect((projected.output as { matches: unknown[] }).matches).toHaveLength(13);
+  expect(projected.model_preview).toBeUndefined();
 });
 
 test("semantic omission never invents an exact-read reference", () => {
@@ -409,7 +392,7 @@ test("semantic omission never invents an exact-read reference", () => {
     output: { items: Array.from({ length: 13 }, (_, index) => ({ index })) },
   }, { toolName: "unknown_tool" });
 
-  expect((projected.output as { items: unknown[] }).items).toHaveLength(12);
+  expect((projected.output as { items: unknown[] }).items).toHaveLength(13);
   expect(projected.model_preview).toBeUndefined();
 });
 
@@ -576,7 +559,7 @@ test("public web previews retain factual search coverage without prescribing the
   expect(preview?.coverage_budget).not.toHaveProperty("next_search_guidance");
 });
 
-test("public web previews mechanically omit evidence already shown in the live turn", () => {
+test("repeated public web reads return their content even after earlier context eviction", () => {
   const seenPublicWebEvidenceItemIds = new Set<string>();
   const output = {
     ok: true,
@@ -602,8 +585,7 @@ test("public web previews mechanically omit evidence already shown in the live t
   });
 
   expect(first?.evidence_item_count).toBe(1);
-  expect(repeated?.evidence_item_count).toBe(0);
-  expect(repeated?.evidence_items).toEqual([]);
+  expect(repeated).toEqual(first);
 });
 
 test("public web previews retain resolved ordinary tool errors", () => {
@@ -681,6 +663,7 @@ test("web read previews retain the default bounded page body", () => {
     source_url: "https://example.com/report",
     source_identity: "example.com",
     content_kind: "page_chunk",
+    bounded_content: pageBody.slice(0, 320),
     limitations: [],
   }]);
   expect(JSON.stringify(preview).match(/LATE_PAGE_FACT/g)?.length).toBe(1);
@@ -759,7 +742,7 @@ test("web read previews keep evidence chunks that are outside the page excerpt",
     },
   });
 
-  expect(String(preview?.page_excerpt)).not.toContain(middleFact);
+  expect(String(preview?.page_excerpt)).toContain(middleFact);
   expect(preview?.evidence_items).toEqual([{
     evidence_item_id: "public-web-middle-chunk",
     source_url: "https://example.com/long-report",

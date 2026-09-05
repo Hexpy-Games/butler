@@ -7,7 +7,6 @@ import type {
   ContextProjectionRebaseIdentity,
   ModelRoundMessage,
   ModelRoundToolCall,
-  OperationResultReferenceCarrier,
   PhaseContinuityPrivateDigester,
 } from "../ports/model-round.ts";
 import {
@@ -15,6 +14,7 @@ import {
   PhaseContinuityProjectionError,
 } from "../ports/model-round.ts";
 import { phaseWorkingContext } from "./phase-working-context.ts";
+import { latestWorkAnchorResults, type ExactReadArguments } from "../operation-result-replay/index.ts";
 
 export const PHASE_CONTINUITY_PROJECTION_SCHEMA =
   "butler.phase-continuity-projection.v1" as const;
@@ -38,7 +38,7 @@ type DetailedEntry = {
     tool_name: string;
     argument_keyed_digest: string;
     terminal_success: boolean;
-    result_reference: OperationResultReferenceCarrier;
+    exact_read: { capability: "read_operation_results"; arguments: ExactReadArguments };
     working_context: Record<string, unknown>;
   }>;
 };
@@ -47,22 +47,26 @@ type ReferenceEntry = {
   kind: "reference";
   source_ordinal: number;
   unit_keyed_digest: string;
-  calls: Array<{ tool_name: string; result_ref: string; result_sha256: string;
+  calls: Array<{ tool_name: string;
+    exact_read: DetailedEntry["calls"][number]["exact_read"];
     working_context: Record<string, unknown> }>;
 };
 
 type ProjectionEntry = DetailedEntry | ReferenceEntry;
 type ProjectionRange = { units: ProjectableUnit[]; entries: ProjectionEntry[] };
 
-export function projectPhaseContinuity(input: {
+type ProjectionInput = {
   messages: readonly ModelRoundMessage[];
   digester: PhaseContinuityPrivateDigester;
   serializedBytes(messages: readonly ModelRoundMessage[]): number;
   maxProjectionBytes?: number;
-}): {
+};
+type ProjectionResult = {
   messages: readonly ModelRoundMessage[];
   identity?: ContextProjectionRebaseIdentity;
-} {
+};
+
+export function projectPhaseContinuity(input: ProjectionInput): ProjectionResult {
   try {
     return projectPhaseContinuityInternal(input);
   } catch (error) {
@@ -74,15 +78,7 @@ export function projectPhaseContinuity(input: {
   }
 }
 
-function projectPhaseContinuityInternal(input: {
-  messages: readonly ModelRoundMessage[];
-  digester: PhaseContinuityPrivateDigester;
-  serializedBytes(messages: readonly ModelRoundMessage[]): number;
-  maxProjectionBytes?: number;
-}): {
-  messages: readonly ModelRoundMessage[];
-  identity?: ContextProjectionRebaseIdentity;
-} {
+function projectPhaseContinuityInternal(input: ProjectionInput): ProjectionResult {
   const ranges = eligibleRanges(input.messages, input.digester);
   if (ranges.length === 0) return { messages: input.messages };
   downgradeToBound(
@@ -153,6 +149,7 @@ function eligibleRanges(
   digester: PhaseContinuityPrivateDigester,
 ): ProjectionRange[] {
   const units = conversationUnits(messages);
+  const anchors = latestWorkAnchorResults(messages);
   const newestAssistantTool = units.findLastIndex((unit) =>
     unit.some((message) => message.role === "assistant" || message.role === "tool"),
   );
@@ -165,7 +162,8 @@ function eligibleRanges(
     }
   };
   units.forEach((unit, index) => {
-    const projectable = index === newestAssistantTool ? null : projectableUnit(unit);
+    const projectable = index === newestAssistantTool || unit.some((message) => anchors.has(message))
+      ? null : projectableUnit(unit);
     if (!projectable) {
       flush();
       return;
@@ -213,8 +211,7 @@ function projectableUnit(messages: readonly ModelRoundMessage[]): ProjectableUni
   if ([...results.keys()].some((id) => !assistant.toolCalls!.some((call) => call.id === id))) {
     throw new Error("turn_tool_protocol_orphan");
   }
-  // Replay attaches this carrier only after acknowledged delivery has been
-  // promoted to reference-only. Raw, pending and in-flight results have none.
+  // Only completed, durably readable results may replace an earlier tool unit.
   if ([...results.values()].some((message) => !message.operationResultReference)) return null;
   const sourceOrdinal = Math.max(...messages.map((message) =>
     turnItemOrdinal(message.continuationItemId),
@@ -251,7 +248,11 @@ function detailedCall(
     tool_name: call.name,
     argument_keyed_digest: keyedDigest(digester, "tool_arguments", call.rawArguments),
     terminal_success: reference.outcome.success,
-    result_reference: reference,
+    exact_read: { capability: "read_operation_results", arguments: {
+      result_ref: reference.identity.result_ref, sha256: reference.integrity.sha256,
+      revision: reference.integrity.revision, work_id: reference.identity.work_id ?? null,
+      offset: 0, length: 4096,
+    } },
     working_context: phaseWorkingContext(call, result),
   };
 }
@@ -266,8 +267,7 @@ function referenceEntry(
     unit_keyed_digest: keyedDigest(digester, "unit", JSON.stringify(detailed)),
     calls: detailed.calls.map((call) => ({
       tool_name: call.tool_name,
-      result_ref: call.result_reference.identity.result_ref,
-      result_sha256: call.result_reference.integrity.sha256,
+      exact_read: call.exact_read,
       working_context: call.working_context,
     })),
   };

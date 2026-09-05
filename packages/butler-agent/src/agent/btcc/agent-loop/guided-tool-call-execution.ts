@@ -230,8 +230,8 @@ export function createGuidedToolCallExecutor(
       rememberDescribedTools(call.name, result, input.describedToolIds);
       // Suspension commits the wait and this call together. No result exists yet.
       if (pendingAuthority(result)) return result;
-      const changedFiles = changedFileDetailsFromToolResult(result);
-      const replayableResult = withoutChangedFileDetails(result);
+      const changedFiles = changedFileDetailsFromToolResult(result, effectiveToolName);
+      const replayableResult = withoutChangedFileDetails(result, effectiveToolName);
       input.toolJournal.finish({
         callId,
         status: "completed",

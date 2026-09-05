@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { digest, stableJson } from "../identity/index.ts";
+import { latestWorkAnchorResults } from "./work-result-anchors.ts";
 import type {
   ModelRoundMessage,
   ModelRoundResult,
@@ -62,6 +63,7 @@ export function createOperationResultReplay(input: {
   journal: GuidedToolJournal;
   exactReader: GuidedOperationResultReader;
   exactReadCapability: boolean;
+  replaceDeliveredResults?: boolean;
   sessionId?: string;
   projectRef?: string;
 }): OperationResultReplay {
@@ -103,8 +105,10 @@ export function createOperationResultReplay(input: {
 
   return {
     prepareMessages(messages, roundId, economics) {
+      if (input.replaceDeliveredResults === false) return [...messages];
+      const anchors = latestWorkAnchorResults(messages);
       return messages.map((message) => {
-        if (message.role !== "tool" || !message.toolCallId) return message;
+        if (message.role !== "tool" || !message.toolCallId || anchors.has(message)) return message;
         let record = input.journal.findForTurn(
           input.turnId,
           message.operationResultCallId ?? message.toolCallId,
@@ -155,6 +159,7 @@ export function createOperationResultReplay(input: {
       });
     },
     accepted(roundId, response) {
+      if (input.replaceDeliveredResults === false) return;
       if (response.acceptedCheckpoint?.roundId !== roundId) {
         throw new Error("operation_result_route_acceptance_missing");
       }
@@ -172,6 +177,7 @@ export function createOperationResultReplay(input: {
       });
     },
     failed(roundId) {
+      if (input.replaceDeliveredResults === false) return;
       input.journal.releaseResultDeliveries({ turnId: input.turnId, roundId });
     },
     referenceFor,
