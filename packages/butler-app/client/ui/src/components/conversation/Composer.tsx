@@ -153,7 +153,6 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
         onFiles={(nextFiles) => void files.addFiles(nextFiles)}
         planDecision={decision.plan}
         authorityDecision={decision.authority}
-        onAuthorityKeyDown={decision.onKeyDown}
       />
     </ComposerCard>
   );

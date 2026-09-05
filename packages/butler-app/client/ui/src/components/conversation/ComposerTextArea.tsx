@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect } from "react";
-import type { ChangeEvent, KeyboardEventHandler } from "react";
+import type { ChangeEvent } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useComposerStore } from "./composerStore";
 import { ComposerCardTextarea } from "@/butler-ds";
@@ -31,13 +31,9 @@ function resizeComposerTextArea(element: HTMLTextAreaElement) {
   element.style.overflowY = element.scrollHeight > maxHeight ? "auto" : "hidden";
 }
 
-export function ComposerTextArea({ placeholder, input }: { placeholder?: string; input?: {
-  value: string; onChange: (value: string) => void; onKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
-} }) {
-  const draft = useComposerStore((store) => store.text);
-  const setDraft = useComposerStore((store) => store.setText);
-  const text = input?.value ?? draft;
-  const setText = input?.onChange ?? setDraft;
+export function ComposerTextArea({ placeholder }: { placeholder?: string }) {
+  const text = useComposerStore((store) => store.text);
+  const setText = useComposerStore((store) => store.setText);
   const setIsComposing = useComposerStore((store) => store.setIsComposing);
   const handleKeyDown = useComposerStore((store) => store.handleKeyDown);
   const large = useComposerStore((store) => store.large);
@@ -72,7 +68,7 @@ export function ComposerTextArea({ placeholder, input }: { placeholder?: string;
       onChange={handleChange}
       onCompositionStart={() => setIsComposing(true)}
       onCompositionEnd={() => setIsComposing(false)}
-      onKeyDown={input?.onKeyDown ?? handleKeyDown}
+      onKeyDown={handleKeyDown}
       placeholder={
         placeholder ??
         (large

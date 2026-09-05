@@ -20,7 +20,6 @@ export function ComposerAuthorityDecisionSurface({ decision }: { decision: Compo
     </>}
     testClass="composer-authority-decision"
     actions={<ButtonContainer size="sm" justify="end">
-      <Button type="button" size="sm" variant="outline" disabled={decision.pending} onClick={decision.onOpenInstruction}>직접 입력</Button>
       <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={decision.onDeny}>거절</Button>
       <div className={styles.split}>
         <Button type="button" size="sm" disabled={decision.pending} onClick={decision.onAllow}>이번만 허용</Button>

@@ -38,9 +38,9 @@ async function renderDecision() {
     submitCurrent = decisionOwner.onSubmit;
     if (!current) return <ComposerTextArea />;
     const decision = current;
-    return decision.editingInstruction || decision.composingMessage ? <>
-      <ComposerDecisionAttachment title={decision.title} label={decision.editingInstruction ? "요청 수정 중" : `허용 대기 ${decision.pendingCount}개`} onShowDecision={decision.onShowDecision} />
-      <ComposerTextArea input={decision.editingInstruction ? { value: decision.instruction, onChange: decision.setInstruction, onKeyDown: () => {} } : undefined} />
+    return decision.composingMessage ? <>
+      <ComposerDecisionAttachment title={decision.title} label={`허용 대기 ${decision.pendingCount}개`} onShowDecision={decision.onShowDecision} />
+      <ComposerTextArea />
     </> : <ComposerAuthorityDecisionSurface decision={decision} />;
   }
   const container = dom.window.document.getElementById("root")!;
@@ -57,7 +57,8 @@ test("only the oldest actual request replaces the Composer with ordered decision
   const { container, store } = await renderDecision();
   expect(container.textContent).not.toContain("Second request");
   expect([...container.querySelectorAll("button")].slice(2).map((button) => button.textContent))
-    .toEqual(["직접 입력", "거절", "이번만 허용", ""]);
+    .toEqual(["거절", "이번만 허용", ""]);
+  expect(container.textContent).not.toContain("직접 입력");
   expect(container.querySelector("textarea")).toBeNull();
   await act(async () => { store.setState({ authorityApprovals: { sessionId: "different", cards: store.getState().authorityApprovals!.cards } }); });
   expect(container.textContent).not.toContain("이번만 허용");
@@ -75,18 +76,15 @@ test("a pending request can be folded away without consuming the normal Composer
   expect(current?.composingMessage).toBe(false);
 });
 
-test("instruction uses the existing textarea, preserves the ordinary draft, and can reopen the decision", async () => {
-  const { container, composer } = await renderDecision();
-  await act(async () => { current!.onOpenInstruction(); });
-  expect(container.querySelectorAll("textarea")).toHaveLength(1);
-  expect(container.textContent).toContain("요청 수정 중");
-  await act(async () => { current!.setInstruction("  다른 위치에 저장해 주세요.\n"); });
-  expect(container.querySelector("textarea")?.value).toBe("  다른 위치에 저장해 주세요.\n");
+test("denial needs no instruction and preserves the ordinary draft", async () => {
+  const { container, store, composer } = await renderDecision();
+  const calls: unknown[] = [];
+  store.setState({ denyAuthorityRequest: async (...args) => { calls.push(args); return true; } });
+  const deny = [...container.querySelectorAll("button")].find((button) => button.textContent === "거절")!;
+  await act(async () => { deny.click(); });
+  expect(calls).toEqual([["request-one", "general"]]);
+  expect(container.querySelector("textarea")).toBeNull();
   expect(composer.getState().text).toBe("보존할 일반 대화 초안");
-  await act(async () => { container.querySelector<HTMLButtonElement>("button")!.click(); });
-  expect(container.textContent).toContain("이번만 허용");
-  await act(async () => { current!.onOpenInstruction(); });
-  expect(container.querySelector("textarea")?.value).toBe("  다른 위치에 저장해 주세요.\n");
 });
 
 test("once and conversation allow retain their exact scope and block duplicate submission", async () => {
@@ -106,31 +104,14 @@ test("once and conversation allow retain their exact scope and block duplicate s
   await act(async () => { finish(true); });
 });
 
-test("Modify sends the complete instruction and does not consume the normal message draft", async () => {
-  const { store, composer } = await renderDecision();
-  let sent: unknown[] = [];
-  store.setState({ modifyAuthorityRequest: async (...args) => { sent = args; return true; } });
-  await act(async () => { current!.onOpenInstruction(); current!.setInstruction("  원문 그대로\n"); });
-  await act(async () => { current!.onSubmitInstruction({ key: "Enter", preventDefault() {} }); });
-  expect(sent).toEqual(["request-one", "  원문 그대로\n", "general"]);
-  expect(composer.getState().text).toBe("보존할 일반 대화 초안");
-});
-
 test("form and keyboard submissions follow the visible decision instead of consuming the normal draft", async () => {
-  const { store, composer } = await renderDecision();
+  const { composer } = await renderDecision();
   let normalSubmissions = 0;
-  const instructions: string[] = [];
   await act(async () => {
     composer.setState({ submit: () => { normalSubmissions += 1; } });
-    store.setState({ modifyAuthorityRequest: async (_ref, text) => { instructions.push(text); return true; } });
   });
   const event = { key: "Enter", preventDefault() {} };
   await act(async () => { submitCurrent(event); });
-  expect(normalSubmissions).toBe(0);
-  expect(instructions).toEqual([]);
-  await act(async () => { current!.onOpenInstruction(); current!.setInstruction("변경 지시"); });
-  await act(async () => { submitCurrent(event); });
-  expect(instructions).toEqual(["변경 지시"]);
   expect(normalSubmissions).toBe(0);
   await act(async () => { current!.onComposeMessage(); });
   await act(async () => { submitCurrent(event); });
