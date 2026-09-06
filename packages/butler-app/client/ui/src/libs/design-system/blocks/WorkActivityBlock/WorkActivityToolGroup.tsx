@@ -35,7 +35,9 @@ export function WorkActivityToolGroup({ tools }: { tools: WorkActivityToolItem[]
           {tools.map((tool) => <WorkActivityToolRow key={tool.id} tool={tool} nested />)}
         </div>
       ) : null}
-      {tools.filter((tool) => tool.after).map((tool) => <div key={tool.id}>{tool.after}</div>)}
+      {tools.filter((tool) => tool.after).map((tool) => (
+        <div key={tool.id} className={styles.toolAttachment}>{tool.after}</div>
+      ))}
     </Stack>
   );
 }

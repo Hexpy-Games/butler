@@ -166,6 +166,10 @@
   min-width: 0;
 }
 
+.toolAttachment button {
+  color: var(--work-activity-muted-text);
+}
+
 .tool {
   display: grid;
   width: fit-content;

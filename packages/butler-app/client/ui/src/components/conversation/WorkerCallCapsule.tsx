@@ -22,6 +22,7 @@ export function WorkerCallCapsule({ turnId, callId }: { turnId: string; callId: 
     <Stack cross="start" gap="xs" data-test-class="worker-call-capsule" data-worker-id={worker.worker_id}>
       <Button
         variant="outline"
+        shape="pill"
         aria-label={`${label}, 활동 보기`}
         title={worker.current_activity_title ?? worker.objective}
         onClick={() => open(worker.session_id ?? worker.worker_id)}
