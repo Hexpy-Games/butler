@@ -3,9 +3,6 @@ import {
   Button,
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
   MessageRow,
   ScrollArea,
   Stack,
@@ -16,6 +13,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { TurnActivityPanel } from "@/components/conversation/TurnActivityPanel.tsx";
 import { TurnActivityPending } from "@/components/conversation/TurnActivityPending.tsx";
 import { SessionObserverTimeline } from "./SessionObserverTimeline.tsx";
+import { SessionObserverHeader } from "./SessionObserverHeader.tsx";
 import { useSessionViewSubscription } from "./hooks/useSessionViewSubscription.ts";
 import styles from "./SessionObserverDialog.module.css";
 
@@ -43,7 +41,6 @@ export function SessionObserverDialog() {
     useButlerStore.setState({ observerTargetTurnId: null });
   }, [sessionId, targetTurnId, view]);
 
-  const title = view?.relation?.safe_title ?? sessionId ?? "";
   return (
     <Dialog
       open={Boolean(sessionId)}
@@ -57,15 +54,7 @@ export function SessionObserverDialog() {
         data-test-class="steward-observer-dialog"
         glassRadius="composer"
       >
-        <DialogHeader
-          className={styles.header}
-          data-test-class="steward-observer-header"
-        >
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription id="steward-observer-description">
-            {appCopy.inspector.tabs.activity}
-          </DialogDescription>
-        </DialogHeader>
+        <SessionObserverHeader />
         <ScrollArea fill dataTestClass="steward-observer-transcript">
           <Stack as="section" aria-label={appCopy.inspector.tabs.activity} gap="lg">
             <SessionObserverTimeline
