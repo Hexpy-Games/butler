@@ -16,8 +16,10 @@ export async function handleStewardControlRoutes(
   const action = matched[2]!;
   const body = await parseJson(input.request);
   const parentSessionId = requiredParentSessionId(body);
+  const parentRuntimeSessionId = input.stewardObserver
+    .relationForChild(parentSessionId)?.child_session_id ?? sessionHintForRow(parentSessionId);
   const relation = input.stewardObserver.relationById(relationId);
-  if (!relation || relation.parent_session_id !== sessionHintForRow(parentSessionId)) {
+  if (!relation || relation.parent_session_id !== parentRuntimeSessionId) {
     throw new RequestError(404, "steward_relation_not_found", "Active Steward relation was not found.");
   }
   const snapshot = input.stewardObserver.snapshot(relation.child_session_id);
