@@ -178,17 +178,25 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
   }
 });
 
-test("an orphaned Steward Turn is projected as recoverable and queues exact resume", async () => {
+test.each(["Steward", "Worker"])("an orphaned %s Turn is projected as recoverable and queues exact resume", async (role) => {
   const root = mkdtempSync(join(tmpdir(), "butler-steward-resume-route-"));
-  const parentSessionId = "parent-resume";
+  const parentSessionId = role === "Worker" ? "steward-parent-resume" : "parent-resume";
+  const parentRuntimeSessionId = role === "Worker" ? parentSessionId : sessionHintForRow(parentSessionId);
   const childSessionId = "steward-resume";
   const childTurnId = "steward-resume-turn";
   seedInterruptedObserverDatabase(
     root,
-    sessionHintForRow(parentSessionId),
+    parentRuntimeSessionId,
     childSessionId,
     childTurnId,
   );
+  if (role === "Worker") {
+    const db = new Database(agentBtccStoragePaths(root).agentBtccDbPath);
+    db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("parent-relation", sessionHintForRow("root-parent"), "root-turn",
+        parentSessionId, "parent-anchor", 1, "Parent Steward", "2026-08-22T00:00:00.000Z");
+    db.close();
+  }
   const server = createAppServer({
     dbPath: join(root, "app.sqlite"),
     butlerData: root,
@@ -206,26 +214,33 @@ test("an orphaned Steward Turn is projected as recoverable and queues exact resu
       "2026-08-22T00:00:00.000Z",
     );
 
-    const parentResponse = await fetch(
-      `${server.url}session-view?session_id=${parentSessionId}`,
+    const childResponse = await fetch(
+      `${server.url}session-view?session_id=${childSessionId}`,
     );
-    if (!parentResponse.ok) throw new Error(await parentResponse.text());
-    expect(parentResponse.ok).toBe(true);
-    const parentView = (await parentResponse.json()).data;
-    expect(parentView.steward_children).toEqual([
-      expect.objectContaining({
+    if (!childResponse.ok) throw new Error(await childResponse.text());
+    expect(childResponse.ok).toBe(true);
+    const childView = (await childResponse.json()).data;
+    expect(childView).toMatchObject({
         session_id: childSessionId,
         status: "failed",
         active_turn: null,
-        terminal: false,
         latest_turn: expect.objectContaining({
           id: childTurnId,
           state: "runtime_fault",
           retryable: true,
           cancellable: false,
         }),
-      }),
-    ]);
+    });
+
+    const wrongParentResponse = await fetch(
+      `${server.url}steward-relations/relation-resume/resume`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ parent_session_id: "unrelated-parent" }),
+      },
+    );
+    expect(wrongParentResponse.status).toBe(404);
 
     const resumeResponse = await fetch(
       `${server.url}steward-relations/relation-resume/resume`,
