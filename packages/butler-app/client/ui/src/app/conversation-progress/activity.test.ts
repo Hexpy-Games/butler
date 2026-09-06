@@ -145,6 +145,44 @@ test("operation rows without a resolvable Turn identity do not invent a fallback
   ]).phaseActivities).toHaveLength(0);
 });
 
+test("same-title activities retain their own tools when acceptance precedes the activity", () => {
+  const activity = (id: string, sequence: number): ProgressRow => ({
+    id,
+    kind: "message",
+    state: "running",
+    safe_label: "oauth-implementation",
+    semantic_block_id: id,
+    work_decision_title: "oauth-implementation",
+    work_decision_summary: `Accepted ${id}`,
+    work_decision_source: "model-authored",
+    activity_stage: "execution",
+    turn_event_sequence: sequence,
+  });
+  const operation = (id: string, block: string, sequence: number) => operationRow({
+    id,
+    toolCallId: id,
+    label: "Command",
+    sequence,
+    semanticBlockId: block,
+  });
+  const projected = projectTurnActivity([
+    activity("earlier", 1),
+    operation("earlier-tool", "earlier", 2),
+    operation("acceptance-tool", "current", 3),
+    activity("current", 4),
+    operation("current-tool", "current", 5),
+    operation("unmatched-tool", "unaccepted", 6),
+  ]);
+
+  expect(projected.phaseActivities.map((item) => ({
+    id: item.id,
+    operations: item.operations.map((row) => row.id),
+  }))).toEqual([
+    { id: "earlier", operations: ["earlier-tool"] },
+    { id: "current", operations: ["acceptance-tool", "current-tool"] },
+  ]);
+});
+
 function operationRow(input: {
   id: string;
   toolCallId: string;

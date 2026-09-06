@@ -55,12 +55,13 @@ implements GuidedOperationResultReader {
     const rows = this.db.query<{
       callId: string; originTurnId: string; ordinal: number; toolName: string; status: string; startedAt: string; requestPreview: string; resultSha256: string;
     }, [string, string, number, number, string, string, string, string, string, string, number]>(`
-      SELECT call_id AS callId, turn_id AS originTurnId, c.rowid AS ordinal, tool_name AS toolName, status,
+      SELECT call_id AS callId, turn_id AS originTurnId, c.rowid AS ordinal, tool_name AS toolName,
+        ${operationOutcomeSql} AS status,
         started_at AS startedAt, substr(arguments_json, 1, 240) AS requestPreview, result_sha256 AS resultSha256
       FROM btcc_guided_tool_calls c WHERE ${scope} AND c.rowid > ? AND c.rowid <= ?
         AND result_json IS NOT NULL AND result_sha256 IS NOT NULL
         AND tool_name NOT IN ('list_operation_results', 'read_operation_results')
-        AND (? = '' OR tool_name = ?) AND (? = '' OR status = ?)
+        AND (? = '' OR tool_name = ?) AND (? = '' OR ${operationOutcomeSql} = ?)
         AND (? = '' OR instr(lower(arguments_json), lower(?)) > 0)
       ORDER BY c.rowid LIMIT ?
     `).all(input.turnId, input.workId ?? "", input.cursor, through, input.toolName ?? "", input.toolName ?? "",
@@ -208,6 +209,19 @@ implements GuidedOperationResultReader {
     `).get(turnId, callId);
   }
 }
+
+// Journal status records execution lifecycle; discovery exposes the operation's
+// outcome. Match toolResultSucceeded (strict JSON booleans and numeric exit code)
+// inside SQL so filtering happens before LIMIT, also for existing stored results.
+const operationOutcomeSql = `CASE
+  WHEN c.status IN ('cancelled', 'failed') THEN c.status
+  WHEN json_type(c.result_json) = 'object' AND (
+    json_type(c.result_json, '$.ok') = 'false'
+    OR json_type(c.result_json, '$.timed_out') = 'true'
+    OR (json_type(c.result_json, '$.exit_code') IN ('integer', 'real')
+      AND json_extract(c.result_json, '$.exit_code') != 0)
+  ) THEN 'failed'
+  ELSE c.status END`;
 
 const selectWorkResultMetadata = `SELECT call.call_id, call.tool_name,
   call.status, call.result_sha256, call.error_code, result.result_ref,

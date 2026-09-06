@@ -34,10 +34,10 @@ export const readOperationResultsToolMetadata = {
 
 export const listOperationResultsToolDefinition = {
   type: "function", name: "list_operation_results",
-  description: "Find prior tool requests/results in this Turn and its existing Work without repeating the operation. Start with cursor=0 and through=null. Search request text (path, command, query), filter tool/status, or browse chronologically. Use returned exact_read with read_operation_results. Continue with next_cursor and the returned through watermark; request previews may be shortened, originals remain readable.",
+  description: "Find prior tool requests/results in this Turn and its existing Work without repeating the operation. Start with cursor=0 and through=null. Search a literal substring of request text (not separate keywords); leave query empty to filter only by tool/status. Use returned exact_read with read_operation_results. Continue with next_cursor and the returned through watermark; request previews may be shortened, originals remain readable.",
   parameters: { type: "object", additionalProperties: false, properties: {
     query: { type: "string", maxLength: 500 }, tool_name: { type: "string" },
-    status: { anyOf: [{ type: "string", enum: ["completed", "failed", "cancelled"] }, { type: "null" }], description: "null searches all statuses." },
+    status: { anyOf: [{ type: "string", enum: ["completed", "failed", "cancelled"] }, { type: "null" }], description: "Operation outcome: completed means success, failed includes returned tool errors, nonzero exit codes and timeouts; cancelled means cancelled execution. null searches all outcomes." },
     cursor: { type: "integer", minimum: 0 },
     through: { anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }], description: "null for the first page; thereafter copy through from the previous page." },
     limit: { type: "integer", minimum: 1, maximum: 10 },

@@ -137,7 +137,7 @@ const workLifecycleCompleteFields = {
 const toolSpecs = [
   { name: "project_ledger_index", description: "Rebuild the compact Ledger index.", properties: { project_ref: recordFields.project_ref }, mutates: true },
   { name: "project_ledger_status", description: "Read Ledger summary, staleness, and next actions.", properties: { project_ref: recordFields.project_ref }, mutates: false },
-  { name: "project_ledger_list", description: "List bounded Ledger records by kind, status, or query.", required: ["kind"], properties: { project_ref: recordFields.project_ref, kind: recordFields.kind, status: recordFields.status, query: recordFields.query, limit: recordFields.limit }, mutates: false },
+  { name: "project_ledger_list", description: "List bounded Ledger records by kind, status, or query. Omitted or blank kind lists all kinds.", properties: { project_ref: recordFields.project_ref, kind: { type: "string", default: "all", description: "Query kind; all (default) includes every record kind. Omitted or blank means all." }, status: recordFields.status, query: recordFields.query, limit: recordFields.limit }, mutates: false },
   { name: "project_ledger_show", description: "Read one Ledger record, optionally with its body.", required: ["id"], properties: { project_ref: recordFields.project_ref, kind: recordFields.kind, id: recordFields.id, include_body: recordFields.include_body }, mutates: false },
   { name: "project_ledger_create", description: "Create one Ledger record. Search with project_ledger_list first. task needs work_id; attempt needs task_id; work/task needs acceptance.", required: ["kind", "id", "title"], properties: recordFields, mutates: true },
   { name: "project_ledger_update", description: "Update one exact Ledger record by kind and id.", required: ["kind", "id"], properties: recordFields, mutates: true },
@@ -283,7 +283,7 @@ function runProjectLedgerNativeToolInternal(
       normalizeProjectLedgerAcceptanceInput(args),
     );
   } catch (error) {
-    return gitEvidenceFailureResult(error, stringArg(args, "id"));
+    return gitEvidenceFailureResult(error);
   }
   let projectPath: string;
   try {
@@ -315,7 +315,10 @@ function runProjectLedgerNativeToolInternal(
     projectPath,
     finalCliArgs: cliArgs,
   });
-  const result = plannedResult ?? withRecoverableProjectLedgerError(runProjectLedgerTool(input, cliArgs));
+  const result = withRecoverableProjectLedgerError(
+    plannedResult ?? runProjectLedgerTool(input, cliArgs),
+    { toolName, args: normalizedArgs },
+  );
   const resultWithPlanBody = toolName === "project_ledger_create" ||
       toolName === "project_ledger_update"
     ? withPlanBody(input, normalizedArgs, result, projectPath)
@@ -375,7 +378,6 @@ function withPlanBody(
 
 function gitEvidenceFailureResult(
   error: unknown,
-  workId: string,
 ): Record<string, unknown> {
   const gitError = error instanceof GitEvidenceCollectionError ? error : null;
   const gitMissing = gitError?.code === "git_not_installed";
@@ -394,12 +396,8 @@ function gitEvidenceFailureResult(
       ...(gitMissing
         ? { install_url: GIT_INSTALL_URL }
         : {
-            native_next: [{
-              tool: "project_ledger_work_complete",
-              args: { id: workId, code_commit: "auto" },
-              reason:
-                "Restore a valid Git workspace and retry automatic commit evidence collection.",
-            }],
+            recovery_guidance:
+              "Restore a valid Git workspace, then retry the original completion call with its required evidence fields.",
           }),
     },
   };
@@ -549,11 +547,18 @@ function applyListBounds(result: Record<string, unknown>, args: Record<string, u
   return { ...result, data: { ...data, results: bounded, limit, returned: bounded.length } };
 }
 
-function withRecoverableProjectLedgerError(result: Record<string, unknown>): Record<string, unknown> {
+function withRecoverableProjectLedgerError(
+  result: Record<string, unknown>,
+  context: { toolName: string; args: Record<string, unknown> },
+): Record<string, unknown> {
   if (result.ok !== false || !result.error || typeof result.error !== "object" || Array.isArray(result.error)) return result;
   const error = result.error as Record<string, unknown>;
-  const nativeNext = projectLedgerNativeNextHints(error);
-  if (nativeNext.length === 0) return result;
+  const nativeNext = projectLedgerNativeNextHints(error, context);
+  if (nativeNext.length === 0) {
+    return ["invalid_input", "invalid_arguments", "invalid_state", "invalid_transition", "completion_gate_failed"].includes(String(error.code))
+      ? { ...result, recoverable: true }
+      : result;
+  }
   return {
     ...result,
     recoverable: true,
