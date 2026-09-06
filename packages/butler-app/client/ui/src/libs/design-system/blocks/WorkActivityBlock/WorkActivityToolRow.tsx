@@ -35,7 +35,6 @@ export function WorkActivityToolRow({ tool, nested = false }: { tool: WorkActivi
             {content}
           </button>
         ) : <div className={className}>{content}</div>}
-        {tool.after}
         {expanded ? (
           <Typo.Caption
             className={`${styles.toolDetails} ${styles.toolDetailText}`}

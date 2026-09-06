@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "../../components/Icons";
+import { Stack } from "../../components/Stack";
 import { WorkActivityToolRow } from "./WorkActivityToolRow";
 import styles from "./WorkActivityBlock.module.css";
 
@@ -9,26 +10,15 @@ export interface WorkActivityToolItem {
   title: ReactNode;
   details?: ReactNode;
   summaryLabel?: string;
-  /** Always-visible related content directly below this invocation. */
+  /** Always-visible footer below the containing disclosure and its expanded list. */
   after?: ReactNode;
 }
 
 export function WorkActivityToolGroup({ tools }: { tools: WorkActivityToolItem[] }) {
-  // Keep invocation attachments out of aggregate buttons, preserving tool order.
-  const groups: WorkActivityToolItem[][] = [];
-  for (const tool of tools) {
-    const last = groups.at(-1);
-    if (!tool.after && last && !last[0]?.after) last.push(tool);
-    else groups.push([tool]);
-  }
-  return <>{groups.map((group) => <ToolGroup key={group[0]!.id} tools={group} />)}</>;
-}
-
-function ToolGroup({ tools }: { tools: WorkActivityToolItem[] }) {
   const [expanded, setExpanded] = useState(false);
-  if (tools.length === 1) return <WorkActivityToolRow tool={tools[0]!} />;
+  if (tools.length === 1 && !tools[0]!.after) return <WorkActivityToolRow tool={tools[0]!} />;
   return (
-    <div className={styles.toolRow} data-test-class="turn-work-tool-row turn-work-tool-group">
+    <Stack gap="xs" className={styles.toolRow} data-test-class="turn-work-tool-row turn-work-tool-group">
       <button
         aria-expanded={expanded}
         className={styles.toolGroup}
@@ -45,7 +35,8 @@ function ToolGroup({ tools }: { tools: WorkActivityToolItem[] }) {
           {tools.map((tool) => <WorkActivityToolRow key={tool.id} tool={tool} nested />)}
         </div>
       ) : null}
-    </div>
+      {tools.filter((tool) => tool.after).map((tool) => <div key={tool.id}>{tool.after}</div>)}
+    </Stack>
   );
 }
 

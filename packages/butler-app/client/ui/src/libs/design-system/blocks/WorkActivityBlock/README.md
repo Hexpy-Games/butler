@@ -25,10 +25,10 @@ rebuild typography, spacing, or row styles per activity type.
 The product container maps domain rows into `title`, `description`, `running`,
 and `tools`. The block owns the visual structure.
 
-Tool items may supply `after` for always-visible related content immediately
-below their button. These invocations stay separate from adjacent aggregate
-groups, in chronological order; opening raw details is not required to see the
-related content. Product state is injected through this slot, never read by DS.
+Tool items may supply `after` for always-visible related content at the bottom
+of the group. Collapsed order is button then related content; expanded order is
+button, ordered operation rows, then related content, without duplication.
+Product state is injected through this slot, never read by DS.
 
 ## Who Can Use This Component
 
