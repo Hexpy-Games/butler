@@ -13,6 +13,7 @@ import type { PrincipalAuthority } from "../authority/index.ts";
 import type { SubsessionDelegationService } from "../subsessions/index.ts";
 
 export type ProductionGuidedTurnAgentInput = {
+  contextCompactions: import("../ports/context-compaction.ts").ContextCompactionStore;
   butlerHome: string;
   butlerData: string;
   phaseContinuityPrivateDigester: PhaseContinuityPrivateDigester;

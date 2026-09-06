@@ -26,7 +26,7 @@ const STEWARD_MANAGEMENT_TOOLS = new Set([
   "delegate_to_steward", "steer_steward", "cancel_steward",
 ]);
 const EXECUTION_CONTEXT_TOOLS = new Set([
-  "tool_search", "tool_describe", "read_operation_results",
+  "tool_search", "tool_describe", "read_operation_results", "list_operation_results",
   "read_tool_output_artifact", "read_tool_evidence_artifact",
 ]);
 const ACTIVE_DELEGATION_TOOLS = new Set([

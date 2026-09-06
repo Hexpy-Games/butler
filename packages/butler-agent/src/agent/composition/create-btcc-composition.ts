@@ -133,6 +133,7 @@ export function createProductionBtccComposition(input: {
         },
       },
       contextDocuments: stores.contextDocuments,
+      contextCompactions: stores.contextCompactions,
       toolJournal: stores.guidedToolJournal,
       operationResultReader: stores.guidedOperationResultReader,
       effectJournal: stores.guidedEffectJournal,

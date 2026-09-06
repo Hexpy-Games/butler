@@ -54,6 +54,10 @@ export interface GuidedToolJournal {
 
 /** Scoped exact-read authority; it never performs a generic call-id lookup. */
 export interface GuidedOperationResultReader {
+  discover?(input: { turnId: string; workId?: string; cursor: number; through?: number; query: string; toolName?: string; status?: string; limit: number }): {
+    entries: { callId: string; originTurnId?: string; ordinal: number; toolName: string; status: string; startedAt: string; requestPreview: string; resultSha256: string }[];
+    through: number; nextCursor: number | null;
+  };
   resolveResultReference(input: { turnId: string; callId: string }): {
     kind: "direct" | "work";
     resultRef: string;
@@ -73,6 +77,7 @@ export interface GuidedOperationResultReader {
     workId?: string;
     offset: number;
     length: number;
+    source?: "request" | "result";
   }): {
     encoding: "base64";
     data: string;

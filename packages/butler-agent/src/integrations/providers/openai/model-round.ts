@@ -161,6 +161,7 @@ export async function runOpenAIModelRound(
     ? modelFacingFunctionTools(request.tools)
     : undefined;
   const dynamicBody = {
+      ...(request.maxOutputTokens ? { max_output_tokens: request.maxOutputTokens } : {}),
       model,
       store: true,
       ...promptCache,

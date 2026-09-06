@@ -6,6 +6,9 @@ import { runAnthropicModelRound } from "../../packages/butler-agent/src/integrat
 import { runGeminiModelRound } from "../../packages/butler-agent/src/integrations/providers/google/model-round.ts";
 import { runLocalModelRound } from "../../packages/butler-agent/src/integrations/providers/local/model-round.ts";
 import { runOpenAIModelRound } from "../../packages/butler-agent/src/integrations/providers/openai/model-round.ts";
+import { codexRequestBody } from "../../packages/butler-agent/src/integrations/providers/openai/responses-client.ts";
+import { runHostedOpenAICompatibleModelRound } from "../../packages/butler-agent/src/integrations/providers/shared/hosted-chat-tool-runtime.ts";
+import { runHostedResponsesModelRound } from "../../packages/butler-agent/src/integrations/providers/shared/hosted-responses-client.ts";
 import { readPromptCacheMetrics } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
 import type { OpenAIAuthOverride } from "../../packages/butler-agent/src/integrations/providers/runtime-contracts.ts";
 import type { HostedRuntimeConfig } from "../../packages/butler-agent/src/integrations/providers/shared/model-routing.ts";
@@ -102,14 +105,20 @@ test("real Gemini, Anthropic, and local guided model-rounds persist normalized u
 
   for (const providerCase of cases) {
     const butlerData = temporaryButlerData();
-    globalThis.fetch = (async () =>
-      Response.json(providerCase.response)) as unknown as typeof fetch;
+    let admittedBytes = 0;
+    globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      expect(admittedBytes).toBe(Buffer.byteLength(String(init?.body), "utf8"));
+      return Response.json(providerCase.response);
+    }) as unknown as typeof fetch;
     const observations: number[] = [];
     const request = modelRoundRequest(butlerData, {
       afterModelResponseUsage: () => {
         observations.push(readPromptCacheMetrics({ butlerData }).length);
       },
     });
+    request.boundedContinuation = { schemaVersion: "butler.turn-context-envelope.v1",
+      modelFacingBytes: 0, requestDigest: "test", responseItemId: "turn-item-1",
+      admitProviderBody: async (bytes) => { admittedBytes = bytes; } };
 
     await providerCase.run(request);
 
@@ -122,6 +131,30 @@ test("real Gemini, Anthropic, and local guided model-rounds persist normalized u
       }),
     ]);
   }
+});
+
+test("hosted chat and Responses admit the final serialized body before sending", async () => {
+  for (const providerId of ["zai", "xai"] as const) {
+    const config: HostedRuntimeConfig = { providerId, modelId: providerId === "zai" ? "glm-5.2" : "grok-4.5",
+      modelRef: providerId === "zai" ? "zai/glm-5.2" : "xai/grok-4.5", authType: "api_key", apiKey: "test", apiBaseUrl: "https://example.test/v1" };
+    let admittedBytes = 0;
+    globalThis.fetch = (async (_url, init) => {
+      expect(admittedBytes).toBe(Buffer.byteLength(String(init?.body), "utf8"));
+      return Response.json(providerId === "zai" ? { choices: [{ message: { role: "assistant", content: "ready" } }] }
+        : { id: "r", output: [{ type: "message", content: [{ type: "output_text", text: "ready" }] }] });
+    }) as typeof fetch;
+    const run = providerId === "zai" ? runHostedOpenAICompatibleModelRound : runHostedResponsesModelRound;
+    await run(config, { model: config.modelRef, tools: [], messages: [{ role: "user", content: "hello" }],
+      boundedContinuation: { schemaVersion: "butler.turn-context-envelope.v1", modelFacingBytes: 0,
+        requestDigest: "test", responseItemId: "turn-item-1", admitProviderBody: async (bytes) => { admittedBytes = bytes; } } });
+    expect(admittedBytes).toBeGreaterThan(0);
+  }
+});
+
+test("Codex summary requests omit the unsupported official output limit", () => {
+  const official = { model: "gpt-5.6-luna", input: [], max_output_tokens: 16384 };
+  expect(codexRequestBody(official)).not.toHaveProperty("max_output_tokens");
+  expect(official.max_output_tokens).toBe(16384);
 });
 
 function modelRoundRequest(

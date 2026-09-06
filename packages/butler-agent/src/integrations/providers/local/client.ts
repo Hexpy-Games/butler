@@ -15,7 +15,7 @@ export async function createLocalChatCompletion(
   config: LocalModelConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
-  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
+  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number; admitProviderBody?(bytes: number): Promise<void> },
   providerRoundPolicyOrRetryAttempts?: Partial<ProviderRoundPolicy> | number,
   retryAttempts?: number,
 ): Promise<Record<string, any>> {
@@ -48,7 +48,7 @@ async function createLocalChatCompletionOnce(
   config: LocalModelConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
-  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
+  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number; admitProviderBody?(bytes: number): Promise<void> },
 ): Promise<Record<string, any>> {
   const requestBody = {
     temperature: 0,
@@ -73,6 +73,7 @@ async function createLocalChatCompletionOnce(
     usageAttribution: budgetContext?.attribution,
     roundIndex: budgetContext?.roundIndex,
   });
+  await budgetContext?.admitProviderBody?.(Buffer.byteLength(admittedRequest.serialized_request, "utf8"));
   let response: Response;
   try {
     response = await fetch(localChatUrl(config), {

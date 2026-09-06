@@ -5,6 +5,7 @@ import {
   type SqliteStorageProfile,
 } from "../../../../foundation/sqlite-writer-coordination.ts";
 import { SqliteCanonicalMessageStore } from "./canonical-message-store.ts";
+import { SqliteContextCompactionStore } from "./context-compaction-store.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from "./schema.ts";
 import { migrateBtccSchema } from "./schema/migrate-schema.ts";
 import { SqliteTurnAdmissionRepository } from "./turn-admission-repository.ts";
@@ -141,6 +142,7 @@ function openStores(input: {
     wakeAuthorizations: new SqliteBtccWakeAuthorizationRepository(db),
     messages: new SqliteCanonicalMessageStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
+    contextCompactions: new SqliteContextCompactionStore(db),
     guidedToolJournal: new SqliteGuidedToolJournal(db),
     guidedOperationResultReader: new SqliteGuidedOperationResultReader(db),
     guidedEffectJournal: new SqliteGuidedEffectJournal(db),

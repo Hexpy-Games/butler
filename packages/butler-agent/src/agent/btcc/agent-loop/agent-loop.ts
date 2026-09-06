@@ -38,6 +38,12 @@ export async function runBtccAgentLoop(
   let finalReportRound = false;
   let resumedToolCall = input.resumedToolCall;
   let resumedBatch = restored?.batch;
+  const appendObservation = (observation: string | { content: string; requestSegmentKind: "current_user_request" | "project_ledger_and_work_authority" }) => {
+    const message = typeof observation === "string"
+      ? { content: observation, requestSegmentKind: "current_user_request" as const }
+      : observation;
+    if (message.content.trim()) continuationItems.push({ role: "user", ...message });
+  };
   if (restored) input = { ...input, instructions: restored.instructions,
     stableProviderCachePrefix: restored.stableProviderCachePrefix };
   const runModelRound = async (request: {
@@ -64,29 +70,40 @@ export async function runBtccAgentLoop(
     };
     await publishWaiting("started");
     try {
-      for (const content of await input.beforeModelRound?.() ?? []) {
-        if (content.trim()) continuationItems.push({ role: "user", content, requestSegmentKind: "current_user_request" });
-      }
+      for (const observation of await input.beforeModelRound?.() ?? []) appendObservation(observation);
       // Final synthesis may append an ordinary user instruction to this same
       // history; give it the same canonical identity before provider projection.
       for (const message of messages) {
         message.continuationItemId ??= continuationItems.nextId();
       }
-      const responseItemId = continuationItems.nextId();
+      let responseItemId = continuationItems.nextId();
       const replayMessages = input.operationResultReplay
         ? input.operationResultReplay.prepareMessages(messages, requestId, { statelessMessageBytes: input.modelRound.statelessMessageBytes, butlerData: input.butlerData })
         : [...messages];
-      const bounded = await prepareBoundedModelContext({
-        messages: replayMessages,
+      const prepareContext = () => prepareBoundedModelContext({
+        // Summarize semantic history, not the transport's acknowledged handles.
+        messages: input.contextCompactor ? messages : replayMessages,
         instructions: request.instructions,
         tools: request.tools,
         toolChoice: request.toolChoice,
         budget: input.continuationBudget,
+        compactor: input.contextCompactor,
+        contextSizing: input.modelRound.contextSizing?.({ model: resolveModelRef(),
+          instructions: request.instructions, tools: request.tools, attachments: input.attachments, butlerData: input.butlerData }),
         maxModelFacingBytes: input.maxModelFacingBytes,
         roundId: requestId, responseItemId,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
         statelessMessageBytes: input.modelRound.statelessMessageBytes, butlerData: input.butlerData,
       });
+      let bounded = await prepareContext();
+      if (input.contextCompactor && bounded.requiresRebase) {
+        const directions = await input.beforeModelRound?.() ?? [];
+        for (const observation of directions) appendObservation(observation);
+        if (directions.length) {
+          responseItemId = continuationItems.nextId();
+          bounded = await prepareContext();
+        }
+      }
       const roundContinuation = continuationForContextProjection({
         boundedContinuation: bounded.envelope,
         continuation,

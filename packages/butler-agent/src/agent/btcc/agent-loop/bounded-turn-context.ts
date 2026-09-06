@@ -5,11 +5,9 @@ import type {
   ModelRoundTool,
   PhaseContinuityPrivateDigester,
 } from "../ports/model-round.ts";
-import { PhaseContinuityProjectionError } from "../ports/model-round.ts";
+import type { ContextCompactor } from "./context-compaction.ts";
 import { continuationRequestDigest } from "../turn/index.ts";
 import type { TurnContinuationBudgetState } from "../turn/index.ts";
-import { phaseContinuityProjectionIdentity, projectPhaseContinuity } from
-  "./phase-continuity-projection.ts";
 import { latestWorkAnchorResults } from "../operation-result-replay/index.ts";
 
 export type BoundedTurnContext = {
@@ -70,6 +68,8 @@ export async function prepareBoundedModelContext(input: {
     messages: readonly ModelRoundMessage[], butlerData?: string,
   ) => number;
   butlerData?: string;
+  compactor?: ContextCompactor;
+  contextSizing?: { maxMessageBytes: number; messageBytes(messages: readonly ModelRoundMessage[]): number };
 }): Promise<{
   messages: readonly ModelRoundMessage[];
   contextProjection?: ContextProjectionRebaseIdentity;
@@ -93,51 +93,30 @@ export async function prepareBoundedModelContext(input: {
     1,
     (input.budget?.state.limits.maxModelFacingBytes ?? input.maxModelFacingBytes ?? DEFAULT_MODEL_CONTEXT_BYTES) - overheadBytes,
   );
+  if (input.compactor) {
+    // Byte admission and model token capacity are separate constraints. Scale
+    // model pressure into this byte envelope; neither may hide the other.
+    const sizing = input.contextSizing;
+    const messageBytes = (messages: readonly ModelRoundMessage[]) =>
+      input.statelessMessageBytes?.(messages, input.butlerData) ?? serializedBytes(messages);
+    const measure = (messages: readonly ModelRoundMessage[]) => Math.max(
+      messageBytes(messages),
+      sizing ? sizing.messageBytes(messages) * messageLimit / sizing.maxMessageBytes : 0,
+    );
+    const projection = await input.compactor.prepare(input.messages, messageLimit, measure);
+    const bounded: BoundedTurnContext = {
+      messages: projection.messages, modelFacingBytes: messageBytes(projection.messages),
+      requestDigest: continuationRequestDigest(projection.messages),
+      evictedAtomicUnits: 0, compactedAtomicUnits: projection.identity ? 1 : 0,
+    };
+    return finalizeBoundedModelContext(input, bounded, overheadBytes, projection.identity);
+  }
   const exactBounded = buildBoundedTurnContext(input.messages, messageLimit);
   if (exactBounded.evictedAtomicUnits === 0) {
     return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
   }
-  const hasReplayCarrier = input.messages.some((message) =>
-    message.operationResultReference !== undefined,
-  );
-  if (!hasReplayCarrier) {
-    return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
-  }
-  if (!input.phaseContinuityPrivateDigester || !input.statelessMessageBytes) {
-    throw new PhaseContinuityProjectionError(
-      "phase_continuity_projection_dependency_missing",
-    );
-  }
-  const projected = projectPhaseContinuity({
-    messages: input.messages,
-    digester: input.phaseContinuityPrivateDigester!,
-    maxProjectionBytes: Math.min(64 * 1024, Math.max(
-      PHASE_CONTINUITY_MIN_BYTES,
-      Math.floor(messageLimit / 4),
-    )),
-    serializedBytes: (messages) =>
-      input.statelessMessageBytes!(messages, input.butlerData),
-  });
-  const projectedBounded = buildBoundedTurnContext(projected.messages, messageLimit);
-  // Compare to the model limit, not a smaller request that already lost history.
-  const projectionAdmitted = Boolean(projected.identity) &&
-      projectedBounded.modelFacingBytes <= messageLimit;
-  if (!projectionAdmitted) {
-    return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
-  }
-  const contextProjection = phaseContinuityProjectionIdentity(projectedBounded.messages);
-  if (!contextProjection) {
-    return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
-  }
-  return finalizeBoundedModelContext(
-    input,
-    projectedBounded,
-    overheadBytes,
-    contextProjection,
-  );
+  return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
 }
-
-const PHASE_CONTINUITY_MIN_BYTES = 16 * 1024;
 
 function finalizeBoundedModelContext(
   input: Parameters<typeof prepareBoundedModelContext>[0],
@@ -241,7 +220,7 @@ export function buildBoundedTurnContext(
   };
 }
 
-function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
+export function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
   const units: AtomicUnit[] = [{ messages: [messages[0]!], mandatory: true }];
   let hasOpenToolCalls = false;
   let index = 1;
@@ -249,7 +228,7 @@ function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
     const message = messages[index]!;
     if (message.role === "tool") throw new Error("turn_tool_protocol_orphan");
     if (message.role !== "assistant" || !message.toolCalls?.length) {
-      units.push({ messages: [message], mandatory: message.requestSegmentKind === "phase_continuity" });
+      units.push({ messages: [message], mandatory: message.requestSegmentKind === "phase_continuity" || message.requestSegmentKind === "current_user_request" });
       index += 1;
       continue;
     }
@@ -286,6 +265,9 @@ function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
     message.role === "user" && message.requestSegmentKind === "current_user_request",
   ));
   if (latestDirection >= 0) units[latestDirection]!.mandatory = true;
+  const currentWork = units.findLastIndex((unit) => unit.messages.some((message) =>
+    message.requestSegmentKind === "project_ledger_and_work_authority"));
+  if (currentWork >= 0) units[currentWork]!.mandatory = true;
   // Plan arguments contain the current action descriptions; the result alone is
   // not an adequate anchor. Keep the entire last accepted call/result unit.
   const anchors = latestWorkAnchorResults(messages);

@@ -59,6 +59,7 @@ export function createModelRoutePort(input: {
   let route = input.route;
   let generatedRoundSequence = 0;
   return {
+    ...(input.base.contextSizing ? { contextSizing: input.base.contextSizing.bind(input.base) } : {}),
     ...(input.base.initialRequestBytes
       ? { initialRequestBytes: input.base.initialRequestBytes.bind(input.base) } : {}),
     ...(input.base.statelessMessageBytes ? {

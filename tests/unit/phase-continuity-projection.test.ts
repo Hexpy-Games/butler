@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createContextCompactor } from "../../packages/butler-agent/src/agent/btcc/agent-loop/context-compaction.ts";
 import { Database } from "bun:sqlite";
 import { createHmac } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -56,6 +57,11 @@ const limits = {
   maxIdleMs: 20 * 60 * 1_000,
 };
 
+function rollingContext() {
+  return createContextCompactor({ turnId: "turn", store: { load: () => [], save: () => {} },
+    summarize: async () => "Earlier inspection of src/target.ts completed. Continue the requested edit." });
+}
+
 function reference(callId: string) {
   return {
     version: "butler.operation-result-reference.v1" as const,
@@ -102,7 +108,7 @@ function completedUnit(index: number, contentBytes = 1_000): ModelRoundMessage[]
   }];
 }
 
-test("unflagged context eviction keeps callable continuity even when loss is smaller", async () => {
+test("rolling context preserves working meaning and original-history discovery", async () => {
   const old = completedUnit(0, 30_000);
   const call = old[0]!.toolCalls![0]!;
   call.name = "tool_call";
@@ -113,16 +119,15 @@ test("unflagged context eviction keeps callable continuity even when loss is sma
   const prepared = await prepareBoundedModelContext({
     messages: [{ role: "user", content: "finish this edit", continuationItemId: "turn-item-0" }, ...old, ...newest],
     tools: [], maxModelFacingBytes: 20_000, roundId: "round", responseItemId: "response",
+    compactor: rollingContext(),
     phaseContinuityPrivateDigester: digester,
     statelessMessageBytes: (messages) => Buffer.byteLength(JSON.stringify(messages)),
   });
   const continuity = prepared.messages.find((message) => message.requestSegmentKind === "phase_continuity");
   expect(continuity).toBeDefined();
   expect(continuity!.content).toContain("src/target.ts");
-  expect(continuity!.content).toContain('"capability":"read_operation_results"');
-  expect(continuity!.content).toContain('"work_id":null');
-  expect(continuity!.content).toContain('"revision":null');
-  expect(continuity!.content).toContain('"offset":0');
+  expect(continuity!.content).toContain("list_operation_results");
+  expect(continuity!.content).toContain("read_operation_results");
   expect(prepared.messages.slice(-2)).toEqual(newest);
 });
 
@@ -596,10 +601,10 @@ test("official Responses rebases an admitted projection but preserves an absent 
   }
 });
 
-test("accepted response restart retains only bounded projection identity", () => {
+for (const projectionRevision of ["butler.phase-continuity-projection.v1", "butler.rolling-context.v1"] as const) test(`accepted response restart retains ${projectionRevision} identity`, () => {
   const identity = {
     schemaVersion: "butler.context-projection-rebase.v1" as const,
-    projectionRevision: "butler.phase-continuity-projection.v1" as const,
+    projectionRevision,
     projectionDigest: "d".repeat(64),
     projectedThroughOrdinal: 44,
   };
@@ -633,7 +638,7 @@ test("accepted response restart retains only bounded projection identity", () =>
 });
 
 for (const transport of ["official", "codex"] as const) {
-  test(`replay-projected bounded context reaches the ${transport} final serializer`, async () => {
+  test(`rolling context reaches the ${transport} final serializer`, async () => {
     const messages: ModelRoundMessage[] = [
       { role: "user", content: "current", continuationItemId: "turn-item-0" },
       ...completedUnit(0, 5_000),
@@ -645,6 +650,7 @@ for (const transport of ["official", "codex"] as const) {
       tools: [],
       roundId: "round",
       responseItemId: "turn-item-6",
+      compactor: rollingContext(),
       phaseContinuityPrivateDigester: digester,
       statelessMessageBytes: openAIBoundedConversationSerializedBytes,
       budget: {
@@ -683,7 +689,7 @@ for (const transport of ["official", "codex"] as const) {
       }, transport === "official"
         ? { mode: "api_key", authorization: "Bearer test" }
         : { mode: "codex_subscription", authorization: `Bearer ${fakeJwt()}` });
-      expect(body).toContain("butler.phase-continuity-projection.v1");
+      expect(body).toContain("Earlier inspection of src/target.ts");
       expect(body).not.toContain("assistant-0-");
       expect(body).not.toContain('"private":"PPP');
       expect(result.continuation).toMatchObject({
@@ -791,9 +797,9 @@ for (const transport of ["official", "codex"] as const) {
   });
 }
 
-test("private digest failure stops projection before serializer or provider admission", async () => {
+test("rolling context no longer depends on the retired private digest gate", async () => {
   let serialized = 0;
-  await expect(prepareBoundedModelContext({
+  const result = await prepareBoundedModelContext({
     messages: [
       { role: "user", content: "current", continuationItemId: "turn-item-0" },
       ...completedUnit(0, 4_000),
@@ -803,10 +809,11 @@ test("private digest failure stops projection before serializer or provider admi
     tools: [],
     roundId: "round",
     responseItemId: "turn-item-6",
+    compactor: rollingContext(),
     phaseContinuityPrivateDigester: {
       digest() { throw new Error("invalid_feature_attribution_key"); },
     },
-    statelessMessageBytes: () => { serialized += 1; return 1; },
+    statelessMessageBytes: (messages) => { serialized += 1; return openAIBoundedConversationSerializedBytes(messages); },
     budget: {
       state: createTurnContinuationBudgetState({
         turnId: "turn",
@@ -815,15 +822,12 @@ test("private digest failure stops projection before serializer or provider admi
       }),
       admitRequest: async () => {},
     },
-  })).rejects.toMatchObject({
-    name: "PhaseContinuityProjectionError",
-    code: "phase_continuity_projection_private_digest_failed",
-    cause: expect.objectContaining({ message: "invalid_feature_attribution_key" }),
   });
-  expect(serialized).toBe(0);
+  expect(result.contextProjection?.projectionRevision).toBe("butler.rolling-context.v1");
+  expect(serialized).toBeGreaterThan(0);
 });
 
-test("production Turn preserves typed projection failure instead of delivering a final", async () => {
+test("production Turn compacts and finishes without a private installation digest", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-phase-projection-terminal-"));
   writeFileSync(
     join(root, "eol.md"),
@@ -849,16 +853,17 @@ test("production Turn preserves typed projection failure instead of delivering a
     metadata: { accessMode: "read_only", runtimePolicy: { trackingMode: "none" } },
   });
   let modelRoundCalls = 0;
-  let failedRoundProviderCalls = 0;
+  let summaries = 0;
   const composition = createProductionBtccComposition({
     butlerHome: root, butlerData: root, ownerId: "projection-terminal",
     sessionBindings: bindings,
     modelRound: {
       initialRequestBytes: openAIInitialRequestSerializedBytes,
       statelessMessageBytes: openAIBoundedConversationSerializedBytes,
-      async runRound() {
+      async runRound(request) {
+        if (request.tools.length === 0) { summaries++; return { text: "Read large.txt; finish the requested read-only task.", toolCalls: [] }; }
         modelRoundCalls += 1;
-        if (modelRoundCalls > 2) failedRoundProviderCalls += 1;
+        if (modelRoundCalls === 4) return { text: "Read completed.", toolCalls: [] };
         const callId = `read-${modelRoundCalls}`;
         const rawArguments = JSON.stringify({ requests: [{ path: "large.txt" }] });
         return {
@@ -871,18 +876,15 @@ test("production Turn preserves typed projection failure instead of delivering a
     },
   });
   try {
-    await expect(composition.btcc.runTurn({
+    await composition.btcc.runTurn({
       turnId: "turn", sessionId: "session", eventId: "event",
       transport: "app", accountId: "local", peer: { kind: "dm", id: "session" },
       sender: { id: "user" },
       message: { id: "message", content: "Read the file twice.", timestamp: new Date(1_000).toISOString() },
       trigger: { kind: "user_message" }, route: { role: "butler", workspacePath: root },
-    })).rejects.toMatchObject({
-      name: "PhaseContinuityProjectionError",
-      code: "phase_continuity_projection_private_digest_failed",
     });
-    expect(modelRoundCalls).toBe(2);
-    expect(failedRoundProviderCalls).toBe(0);
+    expect(modelRoundCalls).toBe(4);
+    expect(summaries).toBeGreaterThan(0);
     const db = new Database(agentBtccStoragePaths(root).agentBtccDbPath, { readonly: true });
     try {
       expect(db.query<{
@@ -891,10 +893,9 @@ test("production Turn preserves typed projection failure instead of delivering a
       }, [string]>(`
         SELECT semantic_state, final_payload_json, canonical_assistant_message_id
         FROM btcc_turns WHERE turn_id = ?
-      `).get("turn")).toEqual({
-        semantic_state: "admitted",
-        final_payload_json: null,
-        canonical_assistant_message_id: null,
+      `).get("turn")).toMatchObject({
+        semantic_state: "delivered",
+        final_payload_json: expect.stringContaining("Read completed."),
       });
     } finally {
       db.close();
