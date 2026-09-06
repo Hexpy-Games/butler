@@ -1,6 +1,6 @@
 import { useButlerStore } from "@/app/store.ts";
 import { workerActivityDisplayName } from "@/app/utils.ts";
-import { PillButton, Stack } from "@/butler-ds";
+import { Button, Stack } from "@/butler-ds";
 import { stewardPlanProgress } from "./stewardProgressPresentation.ts";
 
 /** The invocation owns placement; SessionView owns the live child state. */
@@ -20,14 +20,13 @@ export function WorkerCallCapsule({ turnId, callId }: { turnId: string; callId: 
   const label = [workerActivityDisplayName(worker), progress, activity].filter(Boolean).join(" · ");
   return (
     <Stack cross="start" gap="xs" data-test-class="worker-call-capsule" data-worker-id={worker.worker_id}>
-      <PillButton
-        surface="glass"
+      <Button
+        variant="outline"
         aria-label={`${label}, 활동 보기`}
         title={worker.current_activity_title ?? worker.objective}
         onClick={() => open(worker.session_id ?? worker.worker_id)}
-      >
-        {label}
-      </PillButton>
+        text={label}
+      />
     </Stack>
   );
 }

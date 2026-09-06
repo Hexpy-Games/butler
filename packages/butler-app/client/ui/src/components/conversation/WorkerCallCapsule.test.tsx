@@ -35,6 +35,8 @@ test("Worker stays below the aggregate while its invocation is inside the expand
           safe_detail_rows: [{ id: "receipt", kind: "detail", safe_label: "전달됨" }] }],
     }]} />));
     const capsule = container.querySelector('[data-test-class="worker-call-capsule"]')!;
+    expect(capsule.querySelector("button")?.getAttribute("data-variant")).toBe("outline");
+    expect(capsule.querySelector('[data-surface="glass-pill"]')).toBeNull();
     const group = container.querySelector('[data-test-class="turn-work-tool-row turn-work-tool-group"]')!;
     const button = group.firstElementChild as HTMLButtonElement;
     expect(button.textContent).toBe("2 작업");
