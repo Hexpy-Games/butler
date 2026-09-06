@@ -72,6 +72,7 @@ interface ButlerAppBridge {
     handlers?: {
       onEvent?: (event: TimelineEvent) => void;
       onError?: (error: unknown) => void;
+      onOpen?: () => void;
     },
   ) => (() => void) | void;
   onNativeNavigation?: (
@@ -178,12 +179,13 @@ export function subscribeLiveEvents(
   cursor: number,
   onEvent: (event: TimelineEvent) => void,
   onError: (error: unknown) => void,
+  onOpen?: () => void,
 ): () => void {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
   if (typeof bridge?.subscribeLiveEvents === "function") {
     const unsubscribe = bridge.subscribeLiveEvents(
       { cursor },
-      { onEvent, onError },
+      { onEvent, onError, onOpen },
     );
     return typeof unsubscribe === "function" ? unsubscribe : () => {};
   }
@@ -192,6 +194,7 @@ export function subscribeLiveEvents(
     return () => {};
   }
   const liveSource = new EventSource(liveEventsUrl(cursor));
+  liveSource.onopen = () => onOpen?.();
   liveSource.onmessage = (message) => {
     try {
       onEvent(JSON.parse(message.data) as TimelineEvent);

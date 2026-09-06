@@ -792,6 +792,23 @@ export interface AppCopy {
     label: string;
     placeholder: string;
     close: string;
+    loading: string;
+    empty: string;
+    failed: string;
+  };
+  feedback: {
+    retry: string;
+    attachmentFailed: string;
+    attachmentRetry: (names: string) => string;
+    attachmentTooLarge: string;
+    attachmentSizeLimit: (names: string, limit: string) => string;
+    reconnecting: string;
+    dashboardLoading: string;
+    dashboardFailed: string;
+    dashboardRetry: string;
+    projectMissing: string;
+    projectMissingHelp: string;
+    newChat: string;
   };
 }
 
@@ -1684,6 +1701,23 @@ const koKrCopy: AppCopy = {
     label: "명령 팔레트",
     placeholder: "대화, 프로젝트, 자동화, 설정 검색",
     close: "명령 팔레트 닫기",
+    loading: "검색 중입니다.",
+    empty: "일치하는 항목이 없습니다. 다른 이름이나 제목으로 검색해 보세요.",
+    failed: "검색하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.",
+  },
+  feedback: {
+    retry: "다시 시도",
+    attachmentFailed: "파일을 첨부하지 못했습니다.",
+    attachmentRetry: (names) => `${names} — 연결을 확인한 뒤 파일을 다시 선택해 주세요.`,
+    attachmentTooLarge: "파일이 첨부 가능한 크기를 초과했습니다.",
+    attachmentSizeLimit: (names, limit) => `${names} — 파일당 ${limit} 이하로 줄이거나 다른 파일을 선택해 주세요.`,
+    reconnecting: "실시간 연결이 끊겨 다시 연결하고 있습니다. 표시된 작업 상태는 최신이 아닐 수 있습니다.",
+    dashboardLoading: "프로젝트 정보를 불러오는 중입니다.",
+    dashboardFailed: "프로젝트 정보를 불러오지 못했습니다.",
+    dashboardRetry: "연결을 확인한 뒤 다시 시도해 주세요.",
+    projectMissing: "프로젝트를 찾을 수 없습니다.",
+    projectMissingHelp: "사이드바에서 다른 프로젝트를 선택하거나 새 대화를 시작해 주세요.",
+    newChat: "새 대화",
   },
 };
 
@@ -2568,6 +2602,23 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     label: "Command palette",
     placeholder: "Search chats, projects, automations, and settings",
     close: "Close command palette",
+    loading: "Searching…",
+    empty: "No matches. Try another name or title.",
+    failed: "Could not search. Check your connection and try again.",
+  },
+  feedback: {
+    retry: "Try again",
+    attachmentFailed: "Could not attach the file.",
+    attachmentRetry: (names) => `${names} — Check your connection, then select the file again.`,
+    attachmentTooLarge: "The file exceeds the attachment size limit.",
+    attachmentSizeLimit: (names, limit) => `${names} — Reduce each file to ${limit} or less, or select another file.`,
+    reconnecting: "Live connection lost. Reconnecting automatically. The displayed work status may be out of date.",
+    dashboardLoading: "Loading project information…",
+    dashboardFailed: "Could not load project information.",
+    dashboardRetry: "Check your connection and try again.",
+    projectMissing: "Project not found.",
+    projectMissingHelp: "Select another project in the sidebar or start a new chat.",
+    newChat: "New chat",
   },
 };
 

@@ -8,11 +8,13 @@ import {
   AdaptiveShellScrim,
   AdaptiveShellSidebar,
   AdaptiveShellWorkspace,
+  Stack,
 } from "@/butler-ds";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
 import { Sidebar } from "@/components/layout/Sidebar.tsx";
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
+import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
 import { Conversation } from "@/components/conversation/Conversation.tsx";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
@@ -159,14 +161,19 @@ function AppWorkspaceShell() {
             data-test-class="workspace"
           >
             <Titlebar />
-            {view.kind === "automations" ||
-            view.kind === "automation-detail" ? (
-              <AutomationsView />
-            ) : view.kind === "project-dashboard" ? (
-              <ProjectDashboardView />
-            ) : (
-              <Conversation />
-            )}
+            <Stack fill gap="none">
+              <LiveConnectionNotice />
+              <Stack fill gap="none">
+                {view.kind === "automations" ||
+                view.kind === "automation-detail" ? (
+                  <AutomationsView />
+                ) : view.kind === "project-dashboard" ? (
+                  <ProjectDashboardView />
+                ) : (
+                  <Conversation />
+                )}
+              </Stack>
+            </Stack>
           </AdaptiveShellWorkspace>
         </>
       )}

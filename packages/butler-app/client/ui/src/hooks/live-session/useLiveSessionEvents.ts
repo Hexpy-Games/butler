@@ -57,6 +57,9 @@ export function useLiveSessionEvents(): void {
     );
 
     const markStreamHealthy = () => {
+      if (useButlerStore.getState().liveConnectionLost) {
+        useButlerStore.setState({ liveConnectionLost: false });
+      }
       consecutiveFailures = 0;
       if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
       stableConnectionTimer = undefined;
@@ -144,6 +147,7 @@ export function useLiveSessionEvents(): void {
         applyEvent,
         () => {
           if (cancelled || reconnectTimer) return;
+          useButlerStore.setState({ liveConnectionLost: true });
           if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
           stableConnectionTimer = undefined;
           unsubscribe?.();
@@ -155,6 +159,9 @@ export function useLiveSessionEvents(): void {
             connect(true);
           }, delayMs);
         },
+        () => {
+          if (!cancelled) useButlerStore.setState({ liveConnectionLost: false });
+        },
       );
       if (reconnectTimer) nextUnsubscribe();
       else unsubscribe = nextUnsubscribe;
@@ -163,6 +170,7 @@ export function useLiveSessionEvents(): void {
     connect();
     return () => {
       cancelled = true;
+      useButlerStore.setState({ liveConnectionLost: false });
       unsubscribe?.();
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconciliation.dispose();
