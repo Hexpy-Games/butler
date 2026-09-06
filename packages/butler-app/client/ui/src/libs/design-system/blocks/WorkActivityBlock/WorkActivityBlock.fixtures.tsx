@@ -1,6 +1,6 @@
 import { Search, Terminal, Wrench } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
-import { PillButton } from "../../components/PillButton";
+import { Button } from "../../components/Button";
 import { WorkActivityBlock } from "./WorkActivityBlock";
 
 export function WorkActivityBlockFixture() {
@@ -43,7 +43,7 @@ export function WorkActivityBlockFixture() {
       <WorkActivityBlock
         title="조사 작업 위임"
         tools={[{ id: "assignment", title: "워커 호출", details: "작업을 전달했습니다.",
-          after: <PillButton surface="glass">Juno · 2/3 · 파일 수정 중</PillButton> }]}
+          after: <Button variant="outline" text="Juno · 2/3 · 파일 수정 중" /> }]}
       />
     </Stack>
   );
