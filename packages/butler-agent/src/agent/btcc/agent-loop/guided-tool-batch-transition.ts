@@ -5,13 +5,14 @@ import type {
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
 import type { DurableWorkService } from "../work/index.ts";
-import { isFreshCurrentDisposition } from "./guided-turn-closeout.ts";
+import { guidedWorkReportDecision } from "./guided-work-report-decision.ts";
 
-/** A still-current Work disposition closes the current Turn's execution phase. */
+/** Only a reportable Work disposition closes this execution phase. */
 export function createGuidedToolBatchTransition(input: {
   turnId: string;
   durableWork: DurableWorkService;
   shouldWaitForWorker: () => Promise<boolean>;
+  requiresTerminalResult?: boolean;
 }): NonNullable<BtccAgentLoopInput["afterToolBatch"]> {
   return async (batch): Promise<BtccAfterToolBatchDisposition> => {
     if (batch.toolResults.some((result) => result.name === "wait_for_worker" &&
@@ -27,9 +28,8 @@ export function createGuidedToolBatchTransition(input: {
     if (!hasSuccessfulDisposition(batch.toolCalls, batch.toolResults)) {
       return "continue";
     }
-    const work = await input.durableWork.boundWorkForTurn(input.turnId)
-      .catch(() => null);
-    return work && isFreshCurrentDisposition(work, input.turnId)
+    const work = await input.durableWork.boundWorkForTurn(input.turnId);
+    return work && guidedWorkReportDecision(work, input.turnId, input.requiresTerminalResult ?? false).status === "report"
       ? "final_report"
       : "continue";
   };

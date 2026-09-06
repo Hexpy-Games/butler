@@ -381,6 +381,7 @@ export function createProductionGuidedTurnAgent(
         durableWork: input.durableWork, workScope,
         turnId: turn.turnId, originalRequest: turn.originalMessage,
         trackingMode: policy.trackingMode, responseLanguage,
+        requiresTerminalResult: policy.role !== "butler",
       });
       const delegationRelease = policy.role === "butler" ? createGuidedDelegationTurnRelease({
         reviewFinalCandidate: closeout.reviewFinalCandidate,
@@ -410,6 +411,7 @@ export function createProductionGuidedTurnAgent(
           turnId: turn.turnId,
           durableWork: input.durableWork,
           shouldWaitForWorker,
+          requiresTerminalResult: policy.role !== "butler",
         }),
       });
       const planExecution = createProjectPlanModeExecution({
@@ -524,6 +526,7 @@ export function createProductionGuidedTurnAgent(
         ? "no_visible" as const
         : undefined;
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
+      const acceptedWorkResult = suspension ? undefined : await closeout.acceptedWorkResult();
       const finalToolRecords = input.toolJournal.list(turn.turnId);
       const artifacts = collectGuidedFinalArtifacts(
         finalToolRecords,
@@ -542,11 +545,7 @@ export function createProductionGuidedTurnAgent(
         ...(finalWork?.status === "completed" || finalWork?.status === "blocked"
           ? { workStatus: finalWork.status }
           : {}),
-        ...(finalWork?.status === "completed"
-          ? { acceptedWorkResult: { status: "success" as const } }
-          : finalWork?.status === "blocked"
-            ? { acceptedWorkResult: { status: "blocked" as const } }
-            : {}),
+        ...(acceptedWorkResult ? { acceptedWorkResult } : {}),
         artifacts,
         changedFiles,
         ...(planMode

@@ -7,6 +7,8 @@ import { dispositionMaterialFingerprint } from "../work/index.ts";
 import { digest } from "../identity/index.ts";
 import { GuidedWorkCloseoutError } from "./guided-work-closeout-error.ts";
 import type { GuidedToolJournal } from "../ports/index.ts";
+import { guidedWorkReportDecision, isFreshCurrentDisposition, type AcceptedWorkResult } from "./guided-work-report-decision.ts";
+export { isFreshCurrentDisposition } from "./guided-work-report-decision.ts";
 
 type GuidedTurnCloseoutInput = {
   durableWork: DurableWorkService;
@@ -15,6 +17,7 @@ type GuidedTurnCloseoutInput = {
   trackingMode: "ledger" | "local" | "none";
   responseLanguage: string;
   originalRequest: string;
+  requiresTerminalResult?: boolean;
 };
 
 type GuidedTurnCloseoutReview =
@@ -58,43 +61,27 @@ function hasQueuedDelegation(input: {
 }
 
 /**
- * A disposition is a closeout declaration only while it still describes the
- * current durable Work snapshot.  Result/checkpoint/review/action/effect
- * writes change the material fingerprint, so a same-Turn declaration cannot
- * silently settle a Work after later progress.
- */
-export function isFreshCurrentDisposition(
-  work: DurableWorkView | null,
-  turnId: string,
-): boolean {
-  if (!work || work.status === "abandoned") return true;
-  const disposition = work.latestDisposition;
-  return Boolean(
-    disposition &&
-    disposition.originTurnId === turnId &&
-    disposition.disposition === work.status &&
-    disposition.materialFingerprint &&
-    disposition.materialFingerprint === dispositionMaterialFingerprint(work),
-  );
-}
-
-/**
- * Owns the bounded final-candidate reconciliation policy. A bound Work that
- * has no fresh disposition from this Turn gets one extra model opportunity;
- * a still-missing declaration is settled as a durable open disposition and
- * disclosed before the candidate is delivered.
+ * Delegated assignments keep executing until a terminal disposition. Ordinary
+ * conversations retain the bounded reconciliation that permits an open reply.
  */
 export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
   reviewFinalCandidate(candidate: { text: string }): Promise<GuidedTurnCloseoutReview>;
   reconcileAfterLoop(text: string): Promise<string>;
+  acceptedWorkResult(): Promise<AcceptedWorkResult | undefined>;
 } {
   return {
+    async acceptedWorkResult() {
+      const decision = guidedWorkReportDecision(await loadBoundWork(input), input.turnId, input.requiresTerminalResult ?? false);
+      return decision.status === "report" ? decision.result : undefined;
+    },
     async reviewFinalCandidate(candidate) {
       try {
-        if (input.trackingMode === "none") {
+        if (input.trackingMode === "none" && !input.requiresTerminalResult) {
           return { status: "accepted" as const };
         }
         const bound = await loadBoundWork(input);
+        const decision = guidedWorkReportDecision(bound, input.turnId, input.requiresTerminalResult ?? false);
+        if (input.requiresTerminalResult && decision.status === "continue") return decision;
         if (!bound) {
           return { status: "accepted" as const };
         }
@@ -124,8 +111,14 @@ export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
 
     async reconcileAfterLoop(text) {
       try {
-        if (input.trackingMode === "none") return text;
+        if (input.trackingMode === "none" && !input.requiresTerminalResult) return text;
         const bound = await loadBoundWork(input);
+        const decision = guidedWorkReportDecision(bound, input.turnId, input.requiresTerminalResult ?? false);
+        // The loop must obtain a terminal decision before delivering a child reply.
+        // A missing decision is an execution fault, never a successful partial report.
+        if (input.requiresTerminalResult && decision.status !== "report") {
+          throw new GuidedWorkCloseoutError(new Error("delegated_work_report_without_terminal_result"));
+        }
         if (!bound) return text;
         if (isFreshCurrentDisposition(bound, input.turnId)) {
           return bound.latestDisposition?.runtimeOwnedOpen
