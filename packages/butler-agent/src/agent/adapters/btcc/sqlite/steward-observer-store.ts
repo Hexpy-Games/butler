@@ -122,10 +122,30 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       return {
         task_id: row.task_id,
         objective: packet.objective,
+        source_tool_call_id: typeof packet.source_tool_call_id === "string"
+          ? packet.source_tool_call_id
+          : this.legacyWorkerCallId(row.packet_json),
       };
     } catch {
       return null;
     }
+  }
+
+  private legacyWorkerCallId(packetJson: string): string | undefined {
+    // Older packets predate explicit call correlation. Only an unambiguous
+    // exact invocation match can attach their capsule to a historical activity.
+    const matches = this.db.query<{ call_id: string }, [string]>(`
+      SELECT call_id FROM btcc_guided_tool_calls, json_each(?) AS packet
+      WHERE packet.key = 'parent_turn_id' AND turn_id = packet.value
+        AND tool_name = 'delegate_to_worker' AND status = 'completed'
+        AND json_extract(result_json, '$.status') = 'queued'
+        AND json_extract(arguments_json, '$.objective') = json_extract(packet.json, '$.objective')
+        AND json_extract(arguments_json, '$.action_key') = json_extract(packet.json, '$.plan_action.action_key')
+        AND json_extract(arguments_json, '$.implementation_brief') = json_extract(packet.json, '$.implementation_brief')
+        AND json_extract(arguments_json, '$.acceptance_criteria') = json_extract(packet.json, '$.acceptance_criteria')
+      LIMIT 2
+    `).all(packetJson);
+    return matches.length === 1 ? matches[0]!.call_id : undefined;
   }
 
   isParentResultInput(sessionId: string, text: string): boolean {

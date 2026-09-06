@@ -82,6 +82,7 @@ export async function delegateReviewedWorker(
   };
   const packet: DelegationPacket = {
     delegation_id: delegationId,
+    ...(request.source_tool_call_id ? { source_tool_call_id: request.source_tool_call_id } : {}),
     task_id: taskId,
     parent_session_id: request.parent_session_id,
     parent_turn_id: request.parent_turn_id,

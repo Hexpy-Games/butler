@@ -58,7 +58,7 @@ export function createSubsessionToolHandlers(input: {
         status: "queued",
       };
     },
-    [delegateToWorkerToolDefinition.name]: async (call: ButlerToolCall) => {
+    [delegateToWorkerToolDefinition.name]: async (call: ButlerToolCall, context) => {
       const identity = requireDelegationIdentity(input);
       const actionKey = requiredString(call.args.action_key, "action_key");
       const objective = requiredString(call.args.objective, "objective");
@@ -68,6 +68,7 @@ export function createSubsessionToolHandlers(input: {
       const profileId = optionalString(call.args.profile_id);
       await input.service!.delegateWorkerReviewed({
         ...identity,
+        ...(context?.effectOccurrenceId ? { source_tool_call_id: context.effectOccurrenceId } : {}),
         action_key: actionKey,
         objective,
         acceptance_criteria: acceptanceCriteria,

@@ -468,7 +468,7 @@ describe("App Steward observer projection", () => {
       worker_ordinal_label: "Worker 1",
       objective: "운영 배포 기준 확인",
       parent_turn_id: "steward-turn-1",
-      phase: "executing",
+      phase: "orienting",
       terminal: false,
     })]);
     expect(JSON.stringify(view)).not.toContain("raw Worker transport");

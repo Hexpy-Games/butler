@@ -1392,6 +1392,9 @@ export interface WorkerActivitySummary {
   work_blocks?: WorkBlockView[];
   session_id?: string;
   parent_turn_id?: string;
+  source_tool_call_id?: string;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
   project_id?: string;
   task_id?: string;
   orchestration_id?: string;
