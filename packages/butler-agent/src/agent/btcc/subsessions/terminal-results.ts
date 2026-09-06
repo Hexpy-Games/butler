@@ -12,7 +12,6 @@ import {
 export function normalizeTerminalReportContent(value: string): string {
   return value
     .replace(/\r\n?/gu, "\n")
-    .replace(/[^\S\n]+/gu, " ")
     .trim();
 }
 

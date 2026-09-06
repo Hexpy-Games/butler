@@ -939,6 +939,8 @@ test("BTCC turns a completed tool batch into one tool-free final report round", 
   expect(executed).toEqual(["observe", "finish"]);
   expect(requests).toHaveLength(2);
   expect(requests[1]?.tools).toEqual([]);
+  expect(requests[1]?.messages.at(-1)?.content).toContain("normal assistant response");
+  expect(requests[1]?.messages.at(-1)?.content).toContain("runtime delivers it");
   expect(result.finalText).toBe("Work is complete.");
 });
 

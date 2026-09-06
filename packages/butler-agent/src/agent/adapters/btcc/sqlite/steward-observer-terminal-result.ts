@@ -1,6 +1,7 @@
 import type { StewardResultView } from
   "../../../../gateways/app/interface/protocol/app-protocol.ts";
 import { projectBtccFinalContentSummary } from "../../../btcc/index.ts";
+import { recoverLegacyTruncatedReport } from "./subsession-result-record.ts";
 
 const LEGACY_STEWARD_FAILURE_SUMMARY = "Steward could not complete the bounded task.";
 
@@ -12,7 +13,8 @@ export function publicStewardTerminalFields(input: {
   finalPayloadJson: string | null;
 }): Pick<StewardResultView, "status" | "code" | "summary"> {
   if (input.summary !== LEGACY_STEWARD_FAILURE_SUMMARY) {
-    return { status: input.status, code: input.code ?? null, summary: input.summary };
+    return { status: input.status, code: input.code ?? null,
+      summary: recoverLegacyTruncatedReport(input.summary, input.finalPayloadJson) };
   }
   const status = input.workStatus === "completed"
     ? "success"
@@ -31,7 +33,7 @@ function finalPayloadSummary(raw: string | null): string | null {
   try {
     const content = (JSON.parse(raw) as { content?: unknown }).content;
     return typeof content === "string" && content.trim()
-      ? projectBtccFinalContentSummary(content).slice(0, 1_000)
+      ? projectBtccFinalContentSummary(content)
       : null;
   } catch {
     return null;

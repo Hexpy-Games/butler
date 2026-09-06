@@ -33,7 +33,7 @@ export const runCommandToolDefinition = {
       },
       output_paths: {
         type: "array",
-        description: "Existing workspace paths or artifact labels to publish after success. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR. Publication failure is reported separately and does not change the command exit status or success.",
+        description: "Existing regular files to publish as deliverables after success, not directories or globs. Omit for ordinary source changes and build directories; file changes are tracked separately. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR. Publication failure is separate from command exit status and success.",
         items: {
           type: "string",
         },

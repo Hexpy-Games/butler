@@ -22,6 +22,38 @@ function bindPlanWork(db: Database, sessionId: string, turnId: string, workId: s
 }
 
 describe("App Steward observer projection", () => {
+  test("Worker continuation retains earlier activity without inventing an assistant message", () => {
+    const relation = { relation_id: "r", parent_session_id: "parent", parent_turn_id: "parent-turn",
+      child_session_id: "steward", anchor_message_id: "anchor", ordinal: 1,
+      safe_title: "Work", created_at: "2026-09-06T00:00:00Z" };
+    const turns = ["waiting", "resumed"].map((id, index) => ({ id, state: "admitted",
+      created_at: `2026-09-06T00:0${index}:00Z`, updated_at: `2026-09-06T00:0${index}:30Z` }));
+    const snapshot = { session_id: "steward", title: "Work", turns, messages: [],
+      plan: null, result: null, updated_at: turns[1]!.updated_at,
+      progress_events: turns.map((turn, index) => ({
+        id: `event-${turn.id}`, session_id: "steward", turn_id: turn.id,
+        session_sequence: index + 1, turn_sequence: 1, kind: "tool.completed",
+        visibility: "public" as const, created_at: turn.updated_at,
+        payload: { activityKind: "used_tool", safeLabel: `tool-${turn.id}`,
+          toolName: index === 0 ? "delegate_to_worker" : "read_file",
+          toolCallId: `call-${turn.id}`, bridgePhase: "btcc_operation", state: "delivered" },
+      })),
+    };
+    const view = sessionViewForStewardObserver(relation, snapshot, 2);
+    expect(view.messages).toEqual([]);
+    expect(view.activity_history?.map((item) => item.turn_id)).toEqual(["waiting"]);
+    expect(view.activity_history?.[0]?.rows[0]?.tool_call_id).toBe("call-waiting");
+    expect(view.active_turn?.id).toBe("resumed");
+    expect(view.active_turn?.progress.safe_progress_rows[0]?.tool_call_id).toBe("call-resumed");
+    const historicalReply = { id: "reply", session_id: "steward", turn_id: "waiting",
+      role: "assistant" as const, text: "Waiting for Worker", created_at: turns[0]!.updated_at,
+      updated_at: turns[0]!.updated_at };
+    const withReply = sessionViewForStewardObserver(relation,
+      { ...snapshot, messages: [historicalReply] }, 2);
+    expect(withReply.activity_history).toEqual([]);
+    expect(withReply.messages[0]?.turn_activity_rows).toHaveLength(1);
+  });
+
   test("merges one tool call's start and completion into one activity row", () => {
     const rows = projectStewardActivityRows({
       session_id: "steward-tool-merge",

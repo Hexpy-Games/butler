@@ -13,6 +13,7 @@ import { collectGuidedFinalArtifacts } from "../../packages/butler-agent/src/age
 import { resolveParentResultEvidence } from "../../packages/butler-agent/src/agent/btcc/subsessions/accepted-terminal-report.ts";
 import { createSubsessionDelegationService, type SubsessionDelegationDependencies } from "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
 import { sessionViewForStewardObserver } from "../../packages/butler-agent/src/gateways/app/domain/sessions/steward-observer-view.ts";
+import { projectChildTerminalReport } from "../../packages/butler-agent/src/interfaces/gateway/btcc/project-turn-outcome.ts";
 
 test("later Worker result includes earlier same-Work reports and files for final Steward integration", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-worker-sibling-results-"));
@@ -99,7 +100,23 @@ test("delegated changes survive a review-only continuation through Worker, Stewa
 
     mutate("worker-implementation", "worker-edit", "src/app.ts", "old\n", "worker\n");
     mutate("worker-implementation", "worker-temporary", "src/temp.ts", "old\n", "temporary\n");
-    const worker = commit("a2", "worker-implementation", []);
+    const fullReport = `# Worker report\n${"Detailed finding.\n".repeat(150)}\nTests: 18 passed\nRemaining risks: deployment not checked\n\n\`\`\`ts\n  const result = true;\n\`\`\``;
+    const worker = commit("a2", "worker-implementation", [], fullReport);
+    expect(worker.result.summary).toBe(fullReport);
+    expect(store.resultByRelationId("relation-a2")?.summary).toBe(fullReport);
+    expect(store.pendingParentInputForResult(worker.result.result_id)?.text).toContain(fullReport);
+    expect(worker.parentInput.text).toContain(fullReport);
+    expect(worker.parentInput.text).not.toContain("Tests: none");
+    expect(worker.parentInput.text).not.toContain("Remaining risks: none");
+    expect(store.pendingParentInputForResult(worker.result.result_id)?.text)
+      .toBe(worker.parentInput.text);
+    // Historical result projection may be truncated while the accepted payload
+    // remains intact. Reading restores the report without enqueuing another Turn.
+    db.query("UPDATE btcc_turns SET final_payload_json = ? WHERE turn_id = ?")
+      .run(JSON.stringify({ content: fullReport }), "worker-implementation");
+    db.query("UPDATE btcc_steward_results SET summary = ? WHERE relation_id = ?")
+      .run(fullReport.replace(/\s+/gu, " ").slice(0, 1000), "relation-a2");
+    expect(store.resultByRelationId("relation-a2")?.summary).toBe(fullReport);
     expect(worker.result.changed_files?.map((file) => file.path)).toEqual([
       "src/app.ts", "src/temp.ts",
     ]);
@@ -211,12 +228,13 @@ test("delegated changes survive a review-only continuation through Worker, Stewa
       .run(id, "steward", turnId, "assistant", "Done", `message-${id}`, createdAt);
   }
 
-  function commit(id: string, childTurnId: string, changedFiles: ChangedFileDetail[]) {
+  function commit(id: string, childTurnId: string, changedFiles: ChangedFileDetail[], content = "Completed") {
+    const report = projectChildTerminalReport({ text: content, artifacts: [], changedFiles });
     return store.commitResult({
       relation: store.relationById(`relation-${id}`)!, childTurnId,
       resultId: `steward-result-${id}`, taskId: `task-${id}`,
       modelRef: "test/model", reasoningEffort: "medium", status: "success", code: null,
-      summary: "Completed", acceptanceEvidence: [], changedArtifacts: [], changedFiles,
+      summary: report.summary, acceptanceEvidence: [], changedArtifacts: report.changedArtifacts, changedFiles,
       commits: [], tests: [], remainingRisks: [], followUpRecommendations: [], detailRefs: [],
       parentChatId: "butler",
     });

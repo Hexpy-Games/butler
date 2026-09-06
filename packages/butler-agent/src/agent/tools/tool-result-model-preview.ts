@@ -73,13 +73,20 @@ export function structuredToolResultModelProjection(input: {
   }
   if (toolName === "grep_files") {
     const matches = Array.isArray(output.matches) ? output.matches : [];
-    return { preview: { tool_name: toolName, ...output,
+    const { evidence_receipts: _receipts, evidence_capability_receipts: _capabilities,
+      metrics: _metrics, ...facts } = output;
+    return { preview: { tool_name: toolName, ...facts,
       match_count: matches.length,
       candidate_paths: [...new Set(matches.flatMap((value) => {
         const path = record(value)?.path;
         return typeof path === "string" ? [path] : [];
       }))],
     }, partial: false };
+  }
+  if (toolName === "run_command") {
+    const { evidence_receipts: _receipts, evidence_capability_receipts: _capabilities,
+      ...facts } = output;
+    return { preview: { tool_name: toolName, ...facts }, partial: false };
   }
   return { preview: { tool_name: toolName, ...output }, partial: false };
 }

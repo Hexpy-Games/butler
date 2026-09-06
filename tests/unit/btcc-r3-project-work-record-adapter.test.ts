@@ -288,7 +288,7 @@ test("binding, closeout, replay/current view, required ports, and abandonment ar
   );
 });
 
-test("binding identity distinguishes omitted and explicit expected Work across replay", async () => {
+test("binding reuse accepts omitted or matching expected Work without republishing", async () => {
   const fixture = await createFixture();
   const service = createDurableWorkService(
     createProjectWorkStore(fixture.adapterInput),
@@ -301,11 +301,9 @@ test("binding identity distinguishes omitted and explicit expected Work across r
   const omitted = fixture.scope("turn-omitted");
   expect((await service.bindOpenWork(omitted))?.workId).toBe(started.workId);
   expect((await service.bindOpenWork(omitted))?.workId).toBe(started.workId);
-  await expect(
-    service.bindOpenWork(omitted, started.workId),
-  ).rejects.toMatchObject({
-    code: "project_ledger_effect_occurrence_conflict",
-  });
+  const afterOmitted = readFileSync(join(fixture.projectRoot, "ledger.jsonl"), "utf8");
+  expect((await service.bindOpenWork(omitted, started.workId))?.workId).toBe(started.workId);
+  expect(readFileSync(join(fixture.projectRoot, "ledger.jsonl"), "utf8")).toBe(afterOmitted);
 
   const explicit = fixture.scope("turn-explicit");
   expect((await service.bindOpenWork(explicit, started.workId))?.workId).toBe(
@@ -314,9 +312,10 @@ test("binding identity distinguishes omitted and explicit expected Work across r
   expect((await service.bindOpenWork(explicit, started.workId))?.workId).toBe(
     started.workId,
   );
-  await expect(service.bindOpenWork(explicit)).rejects.toMatchObject({
-    code: "project_ledger_effect_occurrence_conflict",
-  });
+  const afterExplicit = readFileSync(join(fixture.projectRoot, "ledger.jsonl"), "utf8");
+  expect((await service.bindOpenWork(explicit))?.workId).toBe(started.workId);
+  await expect(service.bindOpenWork(explicit, "another-work")).rejects.toThrow();
+  expect(readFileSync(join(fixture.projectRoot, "ledger.jsonl"), "utf8")).toBe(afterExplicit);
 });
 
 test("strict official metadata binds body status and rejects completion metadata", async () => {

@@ -28,6 +28,7 @@ type ResultRow = {
   follow_up_recommendations_json: string;
   detail_refs_json: string;
   created_at: string;
+  final_payload_json: string | null;
 };
 
 export function readStewardResult(
@@ -39,7 +40,9 @@ export function readStewardResult(
       status, code, summary, acceptance_evidence_json, changed_artifacts_json,
       changed_files_json,
       commits_json, tests_json, remaining_risks_json,
-      follow_up_recommendations_json, detail_refs_json, created_at
+      follow_up_recommendations_json, detail_refs_json, created_at,
+      (SELECT final_payload_json FROM btcc_turns
+        WHERE turn_id = btcc_steward_results.child_turn_id) AS final_payload_json
     FROM btcc_steward_results WHERE relation_id = ?
   `).get(relationId);
   return row ? {
@@ -50,7 +53,7 @@ export function readStewardResult(
     child_turn_id: row.child_turn_id,
     status: row.status,
     code: row.code ?? null,
-    summary: row.summary,
+    summary: recoverLegacyTruncatedReport(row.summary, row.final_payload_json),
     acceptance_evidence: JSON.parse(row.acceptance_evidence_json) as string[],
     changed_artifacts: JSON.parse(row.changed_artifacts_json) as string[],
     changed_files: row.changed_files_json
@@ -111,8 +114,23 @@ export function collectSubsessionChangedFiles(
 }
 
 export function safeStewardSummary(value: string): string {
-  return value.replace(/\s+/gu, " ").replace(/[\\/]Users[\\/][^ ]+/gu, "workspace artifact")
-    .trim().slice(0, 1_000) || "Steward could not provide a usable report.";
+  // This is the child report, not a UI preview. Context budgeting belongs to
+  // the model request layer; the durable handoff must retain the original text.
+  return value.trim() || "Steward could not provide a usable report.";
+}
+
+/** Read old truncated projections from their retained source; never replay a delivery. */
+export function recoverLegacyTruncatedReport(summary: string, finalPayloadJson: string | null): string {
+  if (summary.length !== 1_000 || !finalPayloadJson) return summary;
+  try {
+    const content: unknown = JSON.parse(finalPayloadJson).content;
+    if (typeof content !== "string") return summary;
+    const legacy = content.replace(/\s+/gu, " ")
+      .replace(/[\\/]Users[\\/][^ ]+/gu, "workspace artifact").trim();
+    return legacy.length > 1_000 && legacy.slice(0, 1_000) === summary ? content.trim() : summary;
+  } catch {
+    return summary;
+  }
 }
 
 export function renderParentResult(result: StewardResultEnvelope): string {
@@ -123,12 +141,15 @@ export function renderParentResult(result: StewardResultEnvelope): string {
     `Status: ${result.status}`,
     ...(result.code ? [`Code: ${result.code}`] : []),
     `Summary: ${result.summary}`,
-    `Acceptance evidence: ${result.acceptance_evidence.join("; ")}`,
-    `Changed artifacts: ${result.changed_artifacts.join("; ") || "none"}`,
-    `Commits: ${result.commits.join("; ") || "none"}`,
-    `Tests: ${result.tests.join("; ") || "none"}`,
-    `Remaining risks: ${result.remaining_risks.join("; ") || "none"}`,
-    `Follow-up recommendations: ${result.follow_up_recommendations.join("; ") || "none"}`,
-    `Detail refs: ${result.detail_refs.join("; ") || "none"}`,
+    ...([
+      ["Acceptance evidence", result.acceptance_evidence],
+      ["Changed artifacts", result.changed_artifacts],
+      ["Commits", result.commits],
+      ["Tests", result.tests],
+      ["Remaining risks", result.remaining_risks],
+      ["Follow-up recommendations", result.follow_up_recommendations],
+      ["Detail refs", result.detail_refs],
+    ] as const).flatMap(([label, values]) => values.length
+      ? [`${label}: ${values.join("; ")}`] : []),
   ].join("\n");
 }

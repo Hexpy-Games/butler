@@ -12,6 +12,10 @@ test("grep model preview preserves bounded candidate paths and actionable matche
     output: {
       pattern: "prompt_cache_key",
       files_searched: 42,
+      evidence_receipts: [{ internal: true }],
+      evidence_capability_receipts: [{ internal: true }],
+      metrics: { elapsed_ms: 5 },
+      next_cursor: "next-page",
       matches: [
         { path: "packages/butler-agent/src/integrations/providers/provider.ts", line: 713, text: "prompt_cache_key: key" },
         { path: "tests/unit/openai-auth-models.test.ts", line: 401, text: "expect(prompt_cache_key)" },
@@ -25,6 +29,7 @@ test("grep model preview preserves bounded candidate paths and actionable matche
     tool_name: "grep_files",
     pattern: "prompt_cache_key",
     match_count: 2,
+    next_cursor: "next-page",
     candidate_paths: [
       "packages/butler-agent/src/integrations/providers/provider.ts",
       "tests/unit/openai-auth-models.test.ts",
@@ -44,6 +49,9 @@ test("grep model preview preserves bounded candidate paths and actionable matche
     truncated: true,
     stopped_by: "max_matches",
   });
+  expect(preview).not.toHaveProperty("evidence_receipts");
+  expect(preview).not.toHaveProperty("evidence_capability_receipts");
+  expect(preview).not.toHaveProperty("metrics");
 });
 
 test("grep model preview unwraps audited executor result envelopes", () => {

@@ -86,6 +86,13 @@ export function sessionViewForStewardObserver(
       }
     : null;
   const fullMessages = resultMessage ? [...messages, resultMessage] : messages;
+  const messageTurns = new Set(fullMessages.filter((message) => message.role === "assistant")
+    .map((message) => message.turn_id));
+  const activityHistory = snapshot?.turns.flatMap((turn) => {
+    if (turn.id === projected.active_turn?.id || messageTurns.has(turn.id)) return [];
+    const rows = projectStewardActivityRows(snapshot, turn.id);
+    return rows.length ? [{ turn_id: turn.id, created_at: turn.created_at, rows }] : [];
+  }) ?? [];
   return {
     protocol_version: APP_PROTOCOL_VERSION,
     session_id: projected.session_id,
@@ -95,6 +102,7 @@ export function sessionViewForStewardObserver(
     latest_turn: projected.latest_turn,
     waiting_for_children: projected.waiting_for_children,
     messages: fullMessages,
+    activity_history: activityHistory,
     message_window: {
       next_cursor: fullMessages.length,
       complete: true,

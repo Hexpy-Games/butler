@@ -44,20 +44,11 @@ export function projectChildTerminalReport(
     result.changedFiles.map((file) => file.path),
   );
   return {
-    summary: structuredReport(result.text) ? projected.summary : result.text.trim(),
+    summary: result.text.trim(),
     changedArtifacts: [...new Set([
       ...projected.changedArtifacts,
       ...result.artifacts.map((artifact) => artifact.safePathLabel),
     ])],
     changedFiles: result.changedFiles,
   };
-}
-
-function structuredReport(content: string): boolean {
-  try {
-    const value = JSON.parse(content) as unknown;
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-  } catch {
-    return false;
-  }
 }
