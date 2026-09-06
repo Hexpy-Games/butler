@@ -54,6 +54,8 @@ export type DelegationProjectContextSnapshot = {
 
 export type DelegationPacket = {
   delegation_id: string;
+  /** Runtime correlation for the invoking activity; not model instructions. */
+  source_tool_call_id?: string;
   /** Compatibility name for the Butler managerial assignment, never a Worker Task. */
   task_id: string;
   parent_session_id: string;
@@ -192,6 +194,7 @@ export type ReviewedDelegationRequest = ReviewedDelegationIdentity & {
 };
 
 export type ReviewedWorkerDelegationRequest = ReviewedDelegationIdentity & {
+  source_tool_call_id?: string;
   action_key: string;
   objective: string;
   acceptance_criteria: string[];

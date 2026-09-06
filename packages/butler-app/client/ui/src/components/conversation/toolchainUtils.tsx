@@ -7,6 +7,7 @@ import { OperationOutputDetails } from "./OperationOutputDetails";
 import { publicOperationTitle } from
   "../../../../../../butler-progress-projection/src/index.ts";
 import { activityIcon } from "./toolchainIcons";
+import { WorkerCallCapsule } from "./WorkerCallCapsule";
 
 export { activityIcon } from "./toolchainIcons";
 
@@ -44,6 +45,9 @@ export function workActivityToolsFromRows(
     title: toolchainSummaryLabel(row),
     summaryLabel: toolchainGroupLabel(row),
     details: toolDetails(row, turnId),
+    ...(row.safe_tool_name === "delegate_to_worker" && turnId && row.tool_call_id ? {
+      after: <WorkerCallCapsule turnId={turnId} callId={row.tool_call_id} />,
+    } : {}),
     }));
 }
 
@@ -82,6 +86,7 @@ export function toolchainLabel(row: ProgressRow): string {
 }
 
 export function toolchainSummaryLabel(row: ProgressRow): string {
+  if (row.safe_tool_name === "delegate_to_worker") return "워커 호출";
   if (row.bridge_phase === "btcc_operation") {
     return row.safe_label || publicOperationTitle(row.safe_tool_name);
   }
@@ -103,6 +108,7 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
 }
 
 export function toolchainGroupLabel(row: ProgressRow): string {
+  if (row.safe_tool_name === "delegate_to_worker") return "워커 호출";
   if (row.bridge_phase === "btcc_operation") {
     if (row.safe_tool_name === "web_search") return "검색";
     if (
@@ -130,12 +136,8 @@ export function toolchainGroupLabel(row: ProgressRow): string {
   if (row.kind === "read") return toolName || "읽기";
   if (row.kind === "edited") return "편집";
   if (row.kind === "dispatch") return "작업";
-  if (toolName && !isGenericToolName(toolName)) return toolName;
+  if (toolName && !["Tool", "Used tool", "도구"].includes(toolName)) return toolName;
   return "검토";
-}
-
-function isGenericToolName(value: string): boolean {
-  return ["Tool", "Used tool", "도구"].includes(value);
 }
 
 export function toolchainDetailLabel(

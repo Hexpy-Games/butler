@@ -70,7 +70,6 @@ export function SessionObserverDialog() {
           <Stack as="section" aria-label={appCopy.inspector.tabs.activity} gap="lg">
             <SessionObserverTimeline
               messages={view?.messages ?? []}
-              workers={view?.workers ?? []}
             >
               {view?.active_turn ? (
                 <MessageRow
