@@ -10,7 +10,6 @@ import {
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { TurnActivityPanel } from "@/components/conversation/TurnActivityPanel.tsx";
 import { TurnActivityPending } from "@/components/conversation/TurnActivityPending.tsx";
 import { SessionObserverTimeline } from "./SessionObserverTimeline.tsx";
 import { SessionObserverHeader } from "./SessionObserverHeader.tsx";
@@ -34,7 +33,8 @@ export function SessionObserverDialog() {
   useEffect(() => {
     if (!sessionId || !targetTurnId || !view) return;
     const target = [...document.querySelectorAll<HTMLElement>('[data-test-class="steward-observer-dialog"] [data-turn-id]')]
-      .find((element) => element.dataset.turnId === targetTurnId);
+      .find((element) => element.dataset.turnId === targetTurnId ||
+        element.dataset.turnIds?.split(" ").includes(targetTurnId));
     if (!target) return;
     target.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')?.click();
     target.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -60,22 +60,8 @@ export function SessionObserverDialog() {
             <SessionObserverTimeline
               messages={view?.messages ?? []}
               activityHistory={view?.activity_history}
-            >
-              {view?.active_turn ? (
-                <MessageRow
-                  role="assistant"
-                  activity
-                  dataTestClass="steward-observer-activity"
-                >
-                  <TurnActivityPanel
-                    rows={view.active_turn.progress.safe_progress_rows}
-                    state={view.active_turn.state}
-                    startedAt={view.active_turn.created_at}
-                    turnId={view.active_turn.id}
-                  />
-                </MessageRow>
-              ) : null}
-            </SessionObserverTimeline>
+              activeTurn={view?.active_turn}
+            />
             {view?.waiting_for_children && !view.active_turn ? (
               <MessageRow
                 role="assistant"

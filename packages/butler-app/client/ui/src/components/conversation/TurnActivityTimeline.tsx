@@ -20,7 +20,7 @@ export function TurnActivityTimeline({
   live = false,
   turnId,
 }: {
-  activities: PhaseActivity[];
+  activities: Array<PhaseActivity & { turnId?: string }>;
   currentState?: string;
   live?: boolean;
   turnId?: string;
@@ -37,6 +37,7 @@ export function TurnActivityTimeline({
       aria-label={live ? "현재 작업" : "이 턴의 활동"}
       data-test-class="turn-current-phase-activity"
       data-turn-id={turnId}
+      data-turn-ids={[...new Set(activities.map((activity) => activity.turnId ?? turnId).filter(Boolean))].join(" ")}
     >
       <Stack gap="xs" aria-live={live ? "polite" : undefined}>
         <Stack cross="start">
@@ -54,18 +55,18 @@ export function TurnActivityTimeline({
           {expanded ? (
             <Stack as="ol" gap="sm" style={{ listStyle: "none", margin: 0, padding: 0 }}>
               {activities.map((activity, index) => (
-                <li key={activity.id}>
+                <li key={activity.id} data-turn-id={activity.turnId ?? turnId}>
                   <ActivityBlock
                     activity={activity}
                     connected={index < activities.length - 1}
-                    turnId={turnId}
+                    turnId={activity.turnId ?? turnId}
                   />
                 </li>
               ))}
             </Stack>
           ) : live ? (
             <RollingSwap itemKey={latest.id} motion={live}>
-              <ActivityBlock activity={latest} turnId={turnId} />
+              <ActivityBlock activity={latest} turnId={latest.turnId ?? turnId} />
             </RollingSwap>
           ) : null}
           {expanded ? (
