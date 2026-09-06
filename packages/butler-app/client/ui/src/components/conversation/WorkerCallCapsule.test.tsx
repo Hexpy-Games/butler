@@ -36,6 +36,7 @@ test("Worker stays below the aggregate while its invocation is inside the expand
     }]} />));
     const capsule = container.querySelector('[data-test-class="worker-call-capsule"]')!;
     expect(capsule.querySelector("button")?.getAttribute("data-variant")).toBe("outline");
+    expect(capsule.querySelector("button")?.getAttribute("data-shape")).toBe("pill");
     expect(capsule.querySelector('[data-surface="glass-pill"]')).toBeNull();
     const group = container.querySelector('[data-test-class="turn-work-tool-row turn-work-tool-group"]')!;
     const button = group.firstElementChild as HTMLButtonElement;
