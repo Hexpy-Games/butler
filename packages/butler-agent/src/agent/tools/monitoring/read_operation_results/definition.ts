@@ -5,11 +5,12 @@ export const OPERATION_RESULT_EXACT_READ_MAX_BYTES = 4 * 1024;
 export const readOperationResultsToolDefinition = {
   type: "function",
   name: "read_operation_results",
-  description: "Read up to length bytes from an exact stored result. Decode data from base64; continue at nextOffset until it is null. The last page may be shorter.",
+  description: "Read an exact stored result or its original request (source=request). Find references with list_operation_results. Decode data from base64; continue at nextOffset until null. The last page may be shorter.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
+      source: { type: "string", enum: ["request", "result"] },
       result_ref: { type: "string", minLength: 1, maxLength: 256 },
       sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
       revision: { anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }] },
@@ -30,3 +31,16 @@ export const readOperationResultsToolMetadata = {
   tags: ["read", "durable-result", "exact-range"],
   safetyNotes: ["Requires a turn-scoped exact-result capability."],
 } satisfies ToolCapabilityMetadata;
+
+export const listOperationResultsToolDefinition = {
+  type: "function", name: "list_operation_results",
+  description: "Find prior tool requests/results in this Turn and its existing Work without repeating the operation. Start with cursor=0 and through=null. Search request text (path, command, query), filter tool/status, or browse chronologically. Use returned exact_read with read_operation_results. Continue with next_cursor and the returned through watermark; request previews may be shortened, originals remain readable.",
+  parameters: { type: "object", additionalProperties: false, properties: {
+    query: { type: "string", maxLength: 500 }, tool_name: { type: "string" },
+    status: { anyOf: [{ type: "string", enum: ["completed", "failed", "cancelled"] }, { type: "null" }], description: "null searches all statuses." },
+    cursor: { type: "integer", minimum: 0 },
+    through: { anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }], description: "null for the first page; thereafter copy through from the previous page." },
+    limit: { type: "integer", minimum: 1, maximum: 10 },
+  }, required: [] },
+  effectBoundary: "none", concurrencySafe: true, interruptBehavior: "cancel", transcriptVisibility: "visible",
+} satisfies ButlerToolDefinition;

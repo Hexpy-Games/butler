@@ -6,9 +6,9 @@ export function createGuidedWorkContextRefresh(input: {
   initial: DurableWorkContext | null;
   load: () => Promise<DurableWorkContext | null>;
 }): () => Promise<string | undefined> {
-  let lastRendered = renderDurableWorkContext(input.initial);
+  let lastRendered = renderDurableWorkContext(input.initial, { includeResultHistory: false });
   return async () => {
-    const rendered = renderDurableWorkContext(await input.load());
+    const rendered = renderDurableWorkContext(await input.load(), { includeResultHistory: false });
     if (rendered === lastRendered) return undefined;
     lastRendered = rendered;
     return rendered

@@ -10,6 +10,7 @@ export const AGENT_BTCC_STATEFUL_TABLES = [
   "btcc_authority_requests",
   "btcc_canonical_deliveries",
   "btcc_checkpoints",
+  "btcc_context_compactions",
   "btcc_context_documents",
   "btcc_continuation_triggers",
   "btcc_conversation_permissions",
@@ -65,6 +66,7 @@ export const AGENT_BTCC_MIGRATION_MANIFEST_ID =
 
 /** Exact activated manifests shipped before additive authority/Steward tables. */
 export const ACCEPTED_HISTORICAL_MANIFEST_IDS = new Set([
+  "68d9fd98608a3da1896416a3cca92eaf5950b77687d55f217c0cdc7326b68a0d",
   "1c3729d8caea2737b4c8b3f22566a620a025f4d2d5899ae45484e3374187e7e3",
   "0ccdc30dc007152084907cd49f55a79a611204aa0ed9446905e6719e9d1652ed",
   "24183c8511c1b3b326fad29f45ea4b30924d896c1e017baffe73564822821958",

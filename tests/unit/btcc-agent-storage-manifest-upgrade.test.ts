@@ -17,16 +17,10 @@ import { migrateBtccSchema } from
 
 const roots: string[] = [];
 const HISTORICAL_STATEFUL_TABLES = AGENT_BTCC_STATEFUL_TABLES.filter((table) =>
-  ![
-    "btcc_authority_requests",
-    "btcc_session_relations",
-    "btcc_steward_results",
-    "btcc_subsession_delegations",
-    "btcc_subsession_directions",
-    "btcc_subsession_outbox",
-  ].includes(table),
+  table !== "btcc_context_compactions",
 );
-const HISTORICAL_MANIFEST_ID = "0ccdc30dc007152084907cd49f55a79a611204aa0ed9446905e6719e9d1652ed";
+// Exact schema shipped immediately before rolling context was added.
+const HISTORICAL_MANIFEST_ID = "68d9fd98608a3da1896416a3cca92eaf5950b77687d55f217c0cdc7326b68a0d";
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -64,12 +58,7 @@ function createPreviouslyActivatedDatabase(options: { additiveTables?: boolean }
   migrateBtccSchema(db);
   if (options.additiveTables === false) {
     db.exec(`
-      DROP TABLE btcc_subsession_outbox;
-      DROP TABLE btcc_subsession_directions;
-      DROP TABLE btcc_steward_results;
-      DROP TABLE btcc_subsession_delegations;
-      DROP TABLE btcc_session_relations;
-      DROP TABLE btcc_authority_requests;
+      DROP TABLE btcc_context_compactions;
     `);
   }
   db.exec(`
@@ -125,7 +114,7 @@ function createPreviouslyActivatedDatabase(options: { additiveTables?: boolean }
   return { root, paths };
 }
 
-test("upgrades an activated historical manifest after additive Steward tables exist", async () => {
+test("upgrades the previous activated manifest with an already-created compaction table", async () => {
   const { root, paths } = createPreviouslyActivatedDatabase();
 
   const result = await prepareAgentBtccStorage({
@@ -153,7 +142,7 @@ test("upgrades an activated historical manifest after additive Steward tables ex
   }
 });
 
-test("creates accepted additive tables for a pre-additive activated database", async () => {
+test("adds rolling context storage to the previous activated database", async () => {
   const { root, paths } = createPreviouslyActivatedDatabase({ additiveTables: false });
 
   const result = await prepareAgentBtccStorage({

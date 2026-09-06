@@ -27,7 +27,7 @@ export async function createGeminiContent(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
-  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number; admitProviderBody?(bytes: number): Promise<void> },
   providerRoundPolicyOrRetryAttempts?: Partial<ProviderRoundPolicy> | number,
   retryAttempts?: number,
 ): Promise<Record<string, any>> {
@@ -59,7 +59,7 @@ async function createGeminiContentOnce(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
-  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number; admitProviderBody?(bytes: number): Promise<void> },
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(geminiGenerateContentUrl(config));
   const requestBody = {
@@ -88,6 +88,7 @@ async function createGeminiContentOnce(
     usageAttribution: budgetContext?.attribution,
     roundIndex: budgetContext?.roundIndex,
   });
+  await budgetContext?.admitProviderBody?.(Buffer.byteLength(admittedRequest.serialized_request, "utf8"));
   let response: Response;
   try {
     response = await fetch(geminiGenerateContentUrl(config), {

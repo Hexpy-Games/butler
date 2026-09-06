@@ -24,6 +24,38 @@ import { SqlitePrincipalAuthorityRepository } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
 import { createPrincipalAuthority } from
   "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
+import { renderDurableWorkContext } from "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-context.ts";
+import { SqliteGuidedOperationResultReader } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/guided-operation-result-reader.ts";
+import { createGuidedOperationResultRuntime } from "../../packages/butler-agent/src/agent/btcc/operation-result-replay/guided-runtime.ts";
+
+test("current Work control does not reinsert history; a later Turn can rediscover its exact prior results", async () => {
+  const fixture = durableWorkFixture();
+  try {
+    const scope = fixture.turn("prior", "session", "Finish the parser");
+    const work = await fixture.service.startWork({ ...scope, mutationCallId: "start", objective: "Finish the parser" });
+    fixture.tool("prior", "source", "read_file", { ok: true, text: "ORIGINAL-SOURCE ".repeat(20000) });
+    await fixture.service.attachToolResult({ ...scope, mutationCallId: "attach", toolCallId: "source" });
+    const context = await fixture.service.loadContext(scope);
+    const original = JSON.stringify(context);
+    const control = renderDurableWorkContext(context, { includeResultHistory: false })!;
+    expect(control).toContain("Finish the parser");
+    expect(control).toContain("list_operation_results");
+    expect(control).not.toContain("ORIGINAL-SOURCE");
+    expect(Buffer.byteLength(control)).toBeLessThan(5000);
+    expect(JSON.stringify(context)).toBe(original);
+    const next = fixture.turn("next", "session", "Continue the parser");
+    await fixture.service.continueWork({ ...next, mutationCallId: "continue", workId: work.workId });
+    fixture.tool("unrelated", "private", "read_file", { text: "UNRELATED" });
+    const runtime = createGuidedOperationResultRuntime({ mode: "disabled", exactReadCapability: true,
+      turnId: next.turnId, turnRevision: 1, sessionId: next.sessionId, workId: work.workId,
+      journal: new SqliteGuidedToolJournal(fixture.db), exactReader: new SqliteGuidedOperationResultReader(fixture.db) });
+    const page = runtime.read!({ __list: true, cursor: 0, through: null }) as any;
+    expect(page.entries).toHaveLength(1);
+    const result = runtime.read!({ ...page.entries[0].exact_read, source: "result" }) as any;
+    expect(Buffer.from(result.data, "base64").toString()).toContain("ORIGINAL-SOURCE");
+    expect(Buffer.from(result.data, "base64").toString()).not.toContain("UNRELATED");
+  } finally { fixture.close(); }
+});
 
 test("first Plan opens scoped Work without making Direct or Assisted Turns pay for it", async () => {
   const fixture = durableWorkFixture();

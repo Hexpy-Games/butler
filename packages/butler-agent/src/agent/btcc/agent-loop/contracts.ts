@@ -157,6 +157,7 @@ export interface BtccFinalSynthesisOptions {
 }
 
 export interface BtccAgentLoopInput {
+  contextCompactor?: import("./context-compaction.ts").ContextCompactor;
   prompt: string;
   authorityContinuation?: import("./loop-continuation.ts").AuthorityLoopContinuation;
   authorityDecision?: import("./loop-continuation.ts").AuthorityLoopDecision;
@@ -206,7 +207,10 @@ export interface BtccAgentLoopInput {
   /** Context selection only; never enables execution-budget termination. */
   maxModelFacingBytes?: number;
   /** Consume new steering before assigning item identities and selecting context. */
-  beforeModelRound?: () => Promise<readonly string[]>;
+  beforeModelRound?: () => Promise<readonly (string | {
+    content: string;
+    requestSegmentKind: "current_user_request" | "project_ledger_and_work_authority";
+  })[]>;
   resolveOperationResultCallId?: (providerCallId: string) => string | undefined;
   onAssistantTextBeforeTools?: (input: {
     text: string;

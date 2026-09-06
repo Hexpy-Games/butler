@@ -20,6 +20,7 @@ export const OPERATION_RESULT_REFERENCE_SCHEMA =
   "butler.operation-result-reference.v1" as const;
 const TRUE_FLAG_VALUES = new Set(["1", "true", "on", "yes"]);
 const BOUNDED_RESULT_READER_TOOLS = new Set([
+  "list_operation_results",
   "read_operation_results",
   "read_tool_output_artifact",
   "read_tool_evidence_artifact",
@@ -218,6 +219,7 @@ export function createOperationResultReplay(input: {
         revision: direct ? null : read.revision,
         sessionId: input.sessionId, projectRef: input.projectRef,
         workId: read.work_id ?? undefined, offset: read.offset, length: read.length,
+        source: read.source,
       });
     },
   };
@@ -240,6 +242,7 @@ function assertReplayDependencies(
 }
 
 export type ExactReadArguments = {
+  source?: "request" | "result";
   result_ref: string;
   sha256: string;
   revision: number | null;
@@ -249,6 +252,7 @@ export type ExactReadArguments = {
 };
 
 export function exactReadArguments(value: Record<string, unknown>): ExactReadArguments {
+  if (value.source !== undefined && value.source !== "request" && value.source !== "result") throw new Error("operation_result_source_invalid");
   const result_ref = typeof value.result_ref === "string" ? value.result_ref.trim() : "";
   const sha256 = typeof value.sha256 === "string" ? value.sha256.trim() : "";
   const revision = value.revision ?? null;
@@ -272,6 +276,7 @@ export function exactReadArguments(value: Record<string, unknown>): ExactReadArg
   }
   return {
     result_ref, sha256, revision: revision as number | null,
+    ...(value.source ? { source: value.source as "request" | "result" } : {}),
     work_id: typeof work_id === "string" ? work_id.trim() : null,
     offset: offset as number, length: length as number,
   };

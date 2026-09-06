@@ -59,6 +59,9 @@ export function toolResultPayloadForProvider(
     ? undefined
     : options?.exactReadReference;
   const projected = preview ? { ...payload, output: preview } : payload;
+  // This source page is already bounded by the journal reader, with its own
+  // cursor. Do not truncate entries and lose the page's continuation boundary.
+  if (toolName === "list_operation_results") return projected;
   const projectedWithReference = preview && exactReadReference &&
       (projection.partial || previewSignalsPartial(preview))
     ? {
@@ -83,6 +86,7 @@ export function toolResultPayloadForProvider(
 }
 
 const RESULT_READER_TOOLS = new Set([
+  "list_operation_results",
   "read_operation_results",
   "read_tool_output_artifact",
   "read_tool_evidence_artifact",

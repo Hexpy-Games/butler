@@ -51,6 +51,7 @@ import {
 } from "./session-workspace/index.ts";
 import {
   readOperationResultsToolDefinition,
+  listOperationResultsToolDefinition,
   readOperationResultsToolMetadata,
 } from "./monitoring/read_operation_results/index.ts";
 import {
@@ -87,6 +88,7 @@ export const CORE_BUTLER_TOOLS = [
   completeProjectWorkToolDefinition,
   getContextMonitorToolDefinition,
   readOperationResultsToolDefinition,
+  listOperationResultsToolDefinition,
   readToolEvidenceArtifactToolDefinition,
   readToolOutputArtifactToolDefinition,
   getUsageMonitorToolDefinition,
@@ -147,6 +149,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [completeProjectWorkToolDefinition.name]: completeProjectWorkToolMetadata,
   [getContextMonitorToolDefinition.name]: getContextMonitorToolMetadata,
   [readOperationResultsToolDefinition.name]: readOperationResultsToolMetadata,
+  [listOperationResultsToolDefinition.name]: readOperationResultsToolMetadata,
   [readToolEvidenceArtifactToolDefinition.name]: readToolEvidenceArtifactToolMetadata,
   [readToolOutputArtifactToolDefinition.name]: readToolOutputArtifactToolMetadata,
   [getUsageMonitorToolDefinition.name]: getUsageMonitorToolMetadata,

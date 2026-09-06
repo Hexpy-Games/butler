@@ -45,6 +45,30 @@ implements GuidedOperationResultReader {
     private readonly projectAuthority?: ExactProjectWorkResultAuthority,
   ) {}
 
+  discover(input: { turnId: string; workId?: string; cursor: number; through?: number; query: string; toolName?: string; status?: string; limit: number }) {
+    // Work identity comes from the runtime's existing context, never tool arguments.
+    const scope = `(c.turn_id = ? OR EXISTS (SELECT 1 FROM btcc_guided_work_results w
+      WHERE w.tool_call_id = c.call_id AND w.work_id = ?))`;
+    const through = input.through ?? this.db.query<{ ordinal: number }, [string, string]>(
+      `SELECT COALESCE(MAX(c.rowid), 0) AS ordinal FROM btcc_guided_tool_calls c WHERE ${scope}`,
+    ).get(input.turnId, input.workId ?? "")!.ordinal;
+    const rows = this.db.query<{
+      callId: string; originTurnId: string; ordinal: number; toolName: string; status: string; startedAt: string; requestPreview: string; resultSha256: string;
+    }, [string, string, number, number, string, string, string, string, string, string, number]>(`
+      SELECT call_id AS callId, turn_id AS originTurnId, c.rowid AS ordinal, tool_name AS toolName, status,
+        started_at AS startedAt, substr(arguments_json, 1, 240) AS requestPreview, result_sha256 AS resultSha256
+      FROM btcc_guided_tool_calls c WHERE ${scope} AND c.rowid > ? AND c.rowid <= ?
+        AND result_json IS NOT NULL AND result_sha256 IS NOT NULL
+        AND tool_name NOT IN ('list_operation_results', 'read_operation_results')
+        AND (? = '' OR tool_name = ?) AND (? = '' OR status = ?)
+        AND (? = '' OR instr(lower(arguments_json), lower(?)) > 0)
+      ORDER BY c.rowid LIMIT ?
+    `).all(input.turnId, input.workId ?? "", input.cursor, through, input.toolName ?? "", input.toolName ?? "",
+      input.status ?? "", input.status ?? "", input.query, input.query, input.limit + 1);
+    const entries = rows.slice(0, input.limit);
+    return { entries, through, nextCursor: rows.length > input.limit ? entries.at(-1)!.ordinal : null };
+  }
+
   resolveResultReference(input: { turnId: string; callId: string }) {
     const canonical = this.projectAuthority?.resolve(input);
     if (canonical) {
@@ -90,6 +114,7 @@ implements GuidedOperationResultReader {
     workId?: string;
     offset: number;
     length: number;
+    source?: "request" | "result";
   }) {
     const work = this.workMetadataForRef(input.resultRef);
     if (work) {
@@ -207,7 +232,7 @@ function isManagedProjectProjection(work: WorkResultMetadata): boolean {
 
 function exactRange(
   row: ExactResultRow,
-  input: { resultSha256: string; offset: number; length: number },
+  input: { resultSha256: string; offset: number; length: number; source?: "request" | "result" },
 ) {
   if (
     !row.result_json ||
@@ -216,7 +241,7 @@ function exactRange(
   ) throw new Error("operation_result_body_hash_mismatch");
   if (row.result_sha256 !== input.resultSha256)
     throw new Error("operation_result_integrity_mismatch");
-  const bytes = Buffer.from(row.result_json, "utf8");
+  const bytes = Buffer.from(input.source === "request" ? row.raw_arguments : row.result_json, "utf8");
   if (input.offset >= bytes.length)
     throw new Error("operation_result_range_out_of_bounds");
   const end = Math.min(input.offset + input.length, bytes.length);

@@ -274,6 +274,14 @@ CREATE TABLE IF NOT EXISTS btcc_canonical_deliveries (
   inserted_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS btcc_context_compactions (
+  turn_id TEXT NOT NULL,
+  source_digest TEXT NOT NULL,
+  covered_units INTEGER NOT NULL,
+  summary TEXT NOT NULL,
+  PRIMARY KEY (turn_id, source_digest)
+);
+
 CREATE TABLE IF NOT EXISTS btcc_context_documents (
   context_ref TEXT PRIMARY KEY,
   content_sha256 TEXT NOT NULL,

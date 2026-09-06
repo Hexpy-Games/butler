@@ -48,7 +48,7 @@ export async function createHostedResponse(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
-  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number; admitProviderBody?(bytes: number): Promise<void> },
   retryAttempts?: number,
   providerRoundPolicy?: Partial<ProviderRoundPolicy>,
 ): Promise<OpenAIResponse> {
@@ -79,7 +79,7 @@ async function createHostedResponseOnce(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
-  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number; admitProviderBody?(bytes: number): Promise<void> },
 ): Promise<OpenAIResponse> {
   const endpoint = safeEndpointLabel(hostedResponsesUrl(config));
   const requestBody: Record<string, unknown> = {
@@ -96,6 +96,7 @@ async function createHostedResponseOnce(
     usageAttribution: budgetContext?.attribution,
     roundIndex: budgetContext?.roundIndex,
   });
+  await budgetContext?.admitProviderBody?.(Buffer.byteLength(admittedRequest.serialized_request, "utf8"));
   let response: Response;
   try {
     response = await fetch(hostedResponsesUrl(config), {
@@ -195,12 +196,13 @@ export async function runHostedResponsesModelRound(
     {
       ...(request.instructions?.trim() ? { instructions: request.instructions.trim() } : {}),
       input,
+      ...(request.maxOutputTokens ? { max_output_tokens: request.maxOutputTokens } : {}),
       ...(request.tools.length > 0 ? { tools: modelFacingFunctionTools(request.tools) } : {}),
       tool_choice: request.toolChoice ?? "auto",
       ...responseReasoning(request.reasoningEffort),
     },
     request.signal,
-    { attribution: request.usageAttribution, roundIndex },
+    { attribution: request.usageAttribution, roundIndex, admitProviderBody: request.boundedContinuation?.admitProviderBody },
     request.providerRetryAttempts,
   );
   const calls = getFunctionCalls(response).map((call) => ({

@@ -12,6 +12,7 @@ import { OPERATION_RESULT_EXACT_READ_MAX_BYTES } from
 
 export function renderDurableWorkContext(
   context: DurableWorkContext | null,
+  options: { includeResultHistory?: boolean } = {},
 ): string | null {
   if (!context) return null;
   const { work } = context;
@@ -163,37 +164,41 @@ export function renderDurableWorkContext(
       rows.push(`Next step: ${singleLine(work.latestCheckpoint.nextStep, 400)}`);
     }
   }
-  const factsByResultRef = new Map(context.resultFacts.flatMap((fact) =>
-    fact.resultRef ? [[fact.resultRef, fact] as const] : [],
-  ));
-  work.resultRefs.forEach((result) => {
-    const fact = factsByResultRef.get(result.resultRef);
-    rows.push(renderOperationResultReference(
-      work.workId,
-      result,
-      fact?.resultJson,
+  if (options.includeResultHistory !== false) {
+    const factsByResultRef = new Map(context.resultFacts.flatMap((fact) =>
+      fact.resultRef ? [[fact.resultRef, fact] as const] : [],
     ));
-  });
-  context.resultFacts.forEach((fact) => {
-    const result = fact.resultRef
-      ? work.resultRefs.find((candidate) => candidate.resultRef === fact.resultRef)
-      : undefined;
-    const exactReadReference = result
-      ? operationResultExactReadReference(work.workId, result, fact.resultJson)
-      : undefined;
-    const payload = toolResultPayloadForProvider({
-      ok: fact.status === "completed",
-      ...(fact.resultJson !== undefined ? { output: fact.resultJson } : {}),
-      ...(fact.errorCode ? { error: { code: fact.errorCode } } : {}),
-    }, {
-      toolName: fact.toolName,
-      ...(exactReadReference ? { exactReadReference } : {}),
+    work.resultRefs.forEach((result) => {
+      const fact = factsByResultRef.get(result.resultRef);
+      rows.push(renderOperationResultReference(
+        work.workId,
+        result,
+        fact?.resultJson,
+      ));
     });
-    rows.push(
-      `Result fact (${singleLine(fact.toolName, 100)}, ${fact.status}): ` +
-        JSON.stringify(payload),
-    );
-  });
+    context.resultFacts.forEach((fact) => {
+      const result = fact.resultRef
+        ? work.resultRefs.find((candidate) => candidate.resultRef === fact.resultRef)
+        : undefined;
+      const exactReadReference = result
+        ? operationResultExactReadReference(work.workId, result, fact.resultJson)
+        : undefined;
+      const payload = toolResultPayloadForProvider({
+        ok: fact.status === "completed",
+        ...(fact.resultJson !== undefined ? { output: fact.resultJson } : {}),
+        ...(fact.errorCode ? { error: { code: fact.errorCode } } : {}),
+      }, {
+        toolName: fact.toolName,
+        ...(exactReadReference ? { exactReadReference } : {}),
+      });
+      rows.push(
+        `Result fact (${singleLine(fact.toolName, 100)}, ${fact.status}): ` +
+          JSON.stringify(payload),
+      );
+    });
+  } else {
+    rows.push("Prior operation requests and results remain available through list_operation_results and read_operation_results; this context contains current Work state, not a duplicate of execution history.");
+  }
   rows.push(
     `Original request (highest priority): ${singleLine(context.originalRequest.content)}`,
   );

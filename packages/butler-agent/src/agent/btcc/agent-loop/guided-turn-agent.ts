@@ -26,6 +26,7 @@ import { guidedContinuationBudget } from "./guided-continuation-budget.ts";
 import { modelContextByteLimit } from "../turn/index.ts";
 import { guidedTurnResult } from "./guided-turn-result.ts";
 import { createGuidedModelRouteRuntime } from "./guided-turn-route-events.ts";
+import { createContextCompactor } from "./context-compaction.ts";
 import { createGuidedDelegationTurnRelease, createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
 import { createActiveDelegationAdmissionGuard, createGuidedRoundToolSurfaceResolver } from "./guided-round-tool-surface.ts";
 import { renderPhaseScopedGuidedTurnRequest } from "./phase-scoped-memory-projection.ts";
@@ -51,7 +52,7 @@ import {
   isAllowedProjectPlanMutation,
   projectPlanModeTools,
 } from "./guided-project-plan-mode.ts";
-type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
+type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority" | "contextCompactions"> & { modelRound: ModelRoundPort; contextCompactions?: ProductionGuidedTurnAgentInput["contextCompactions"] };
 export function createProductionGuidedTurnAgent(input: ProductionGuidedTurnAgentInput): BtccAgentLoop;
 export function createProductionGuidedTurnAgent(input: TestGuidedTurnAgentInput): BtccAgentLoop;
 export function createProductionGuidedTurnAgent(
@@ -165,6 +166,7 @@ export function createProductionGuidedTurnAgent(
         ...phasePolicy.exactResultReplay,
         turnId: turn.turnId,
         turnRevision: turn.revision,
+        workId: initialWork?.work.workId,
         journal: input.toolJournal,
         exactReader: input.operationResultReader,
         sessionId: turn.sessionId,
@@ -358,7 +360,7 @@ export function createProductionGuidedTurnAgent(
         stableInstructionPrefix: phasePolicy.stableInstructionPrefix,
         responseLanguage,
         promptInput: {
-          ...input, workContext: renderDurableWorkContext(initialWork), effectContext,
+          ...input, workContext: renderDurableWorkContext(initialWork, { includeResultHistory: false }), effectContext,
           ...(acceptedPlan
             ? { acceptedPlanContext: renderAcceptedProjectPlanContext(acceptedPlan) }
             : {}),
@@ -416,6 +418,29 @@ export function createProductionGuidedTurnAgent(
         executeTool: toolCalls.executeTool,
       });
       const loopOptions: BtccAgentLoopInput = {
+        ...(input.contextCompactions ? { contextCompactor: createContextCompactor({
+          turnId: turn.turnId, store: input.contextCompactions,
+          summarySizing: () => {
+            const size = baseModelRound.contextSizing?.({ model: resolveActiveModelRef(), tools: [], butlerData: input.butlerData });
+            return size ? { maxBytes: size.maxMessageBytes,
+              measure: (content) => size.messageBytes([{ role: "user", content }]) } : undefined;
+          },
+          summarize: async ({ text, maxOutputBytes, sourceDigest }) => {
+            const capacity = baseModelRound.contextSizing?.({ model: resolveActiveModelRef(), tools: [], butlerData: input.butlerData });
+            const response = await baseModelRound.runRound({
+              roundId: `btcc-summary-${sourceDigest}`, model: resolveActiveModelRef(),
+              messages: [{ role: "user", content: text }], tools: [], signal,
+              reasoningEffort: selectedReasoningEffort, butlerData: input.butlerData,
+              // Reasoning and visible summary share the provider output window.
+              // The summary's text allowance is not the reasoning allowance.
+              maxOutputTokens: Math.max(1, Math.min(capacity?.maxOutputTokens ?? Infinity,
+                capacity ? Math.floor(capacity.maxMessageBytes / 8) : Infinity,
+                Math.max(16_384, Math.floor(maxOutputBytes / 4)))),
+              usageAttribution: { turnId: turn.turnId, phase: "guided" },
+            });
+            return response.text ?? "";
+          },
+        }) } : {}),
         maxModelFacingBytes: modelContextByteLimit(turn.modelSelection.contextWindowTokens),
         prompt: requestAttribution.prompt,
         authorityContinuation: turn.authorityContinuation,
@@ -459,8 +484,8 @@ export function createProductionGuidedTurnAgent(
             ...(await directionAware.beforeModelRound?.() ?? []),
           ];
           const workContext = await refreshWorkContext();
-          if (workContext) observations.push(workContext);
-          return observations.length > 0 ? [observations.join("\n\n")] : [];
+          if (workContext) observations.push({ content: workContext, requestSegmentKind: "project_ledger_and_work_authority" });
+          return observations;
         },
         operationResultReplay: operationResults.replay,
         ...(continuationBudget ? { continuationBudget } : {}),
