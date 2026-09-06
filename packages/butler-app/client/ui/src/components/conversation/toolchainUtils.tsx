@@ -108,7 +108,7 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
 }
 
 export function toolchainGroupLabel(row: ProgressRow): string {
-  if (row.safe_tool_name === "delegate_to_worker") return "워커 호출";
+  if (row.safe_tool_name === "delegate_to_worker") return "작업";
   if (row.bridge_phase === "btcc_operation") {
     if (row.safe_tool_name === "web_search") return "검색";
     if (

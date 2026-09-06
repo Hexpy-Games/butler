@@ -36,7 +36,7 @@ export function projectStewardWorkerActivity(
     objective: presentation?.objective || relation.safe_title,
     phase,
     status_line: awaitingApproval ? "허용 대기 중" : workerStatusLine(phase),
-    ...(activity?.work_decision_title ? { current_activity_title: activity.work_decision_title } : {}),
+    ...(projected?.active_turn?.progress.summary ? { current_activity_title: projected.active_turn.progress.summary } : {}),
     ...(projected?.approved_plan_total !== undefined ? {
       approved_plan_total: projected.approved_plan_total,
       approved_plan_completed: projected.approved_plan_completed,
