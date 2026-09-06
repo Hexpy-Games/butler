@@ -258,6 +258,7 @@ export interface AppCopy {
     };
   };
   common: {
+    back: string;
     confirm: string;
     close: string;
     more: string;
@@ -1067,6 +1068,7 @@ const koKrCopy: AppCopy = {
     },
   },
   common: {
+    back: "뒤로가기",
     confirm: "확인",
     close: "닫기",
     more: "더보기",
@@ -1966,6 +1968,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     },
   },
   common: {
+    back: "Back",
     confirm: "Confirm",
     close: "Close",
     more: "More",

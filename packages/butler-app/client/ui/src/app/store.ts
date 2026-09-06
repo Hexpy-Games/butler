@@ -135,6 +135,7 @@ interface ButlerStore {
   sessionViews: Record<string, SessionView>;
   observerSessionId: string | null;
   observerTargetTurnId: string | null;
+  observerHistory: Array<{ sessionId: string; targetTurnId: string | null }>;
   messageLoadPending: boolean;
   optimisticSessionStart: OptimisticSessionStart | null;
   pendingProjectDocumentAttachment: {
@@ -183,6 +184,7 @@ interface ButlerStore {
   setMessageListView: (view: MessageListView) => void;
   setSessionView: (view: SessionView) => void;
   openSessionObserver: (sessionId: string, targetTurnId?: string) => void;
+  goBackSessionObserver: () => void;
   closeSessionObserver: () => void;
   setSummary: (summary: Updater<SessionSummaryView | null>) => void;
   setTurnProgress: (
@@ -911,6 +913,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   sessionViews: {},
   observerSessionId: null,
   observerTargetTurnId: null,
+  observerHistory: [],
   messageLoadPending: false,
   optimisticSessionStart: null,
   pendingProjectDocumentAttachment: null,
@@ -1025,6 +1028,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     set({
       activeChatId,
       observerSessionId: null,
+      observerTargetTurnId: null,
+      observerHistory: [],
       selectedArtifactId: null,
       selectedArtifact: null,
     }),
@@ -1072,9 +1077,23 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     set((state) => applyMessageListView(state, view)),
   setSessionView: (view) => set((state) => applySessionView(state, view)),
   openSessionObserver: (sessionId, targetTurnId) => {
-    set({ observerSessionId: sessionId, observerTargetTurnId: targetTurnId ?? null });
+    set((state) => ({
+      observerSessionId: sessionId,
+      observerTargetTurnId: targetTurnId ?? null,
+      observerHistory: state.observerSessionId && state.observerSessionId !== sessionId
+        ? [...state.observerHistory, { sessionId: state.observerSessionId, targetTurnId: state.observerTargetTurnId }]
+        : state.observerSessionId ? state.observerHistory : [],
+    }));
   },
-  closeSessionObserver: () => set({ observerSessionId: null, observerTargetTurnId: null }),
+  goBackSessionObserver: () => set((state) => {
+    const previous = state.observerHistory.at(-1);
+    return previous ? {
+      observerSessionId: previous.sessionId,
+      observerTargetTurnId: previous.targetTurnId,
+      observerHistory: state.observerHistory.slice(0, -1),
+    } : {};
+  }),
+  closeSessionObserver: () => set({ observerSessionId: null, observerTargetTurnId: null, observerHistory: [] }),
   setSummary: (summary) =>
     set((state) => {
       const resolvedSummary = resolveUpdate(summary, state.summary);
@@ -1210,6 +1229,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       return {
         activeChatId: chatId,
         observerSessionId: null,
+        observerTargetTurnId: null,
+        observerHistory: [],
         view: { kind: "session" },
         selectedArtifactId: null,
         selectedArtifact: null,
