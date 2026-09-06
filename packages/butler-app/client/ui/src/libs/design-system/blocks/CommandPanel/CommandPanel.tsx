@@ -52,6 +52,7 @@ export interface CommandPalettePanelProps {
   placeholder: string;
   closeLabel: string;
   items: CommandPaletteItem[];
+  feedback?: ReactNode;
   inputRef?: Ref<HTMLInputElement>;
   onClose: () => void;
   onQueryChange: (query: string) => void;
@@ -63,6 +64,7 @@ export function CommandPalettePanel({
   placeholder,
   closeLabel,
   items,
+  feedback,
   inputRef,
   onClose,
   onQueryChange,
@@ -95,6 +97,7 @@ export function CommandPalettePanel({
           </IconButton>
         </div>
         <div className={styles.results}>
+          {feedback ? <div role="status" aria-live="polite">{feedback}</div> : null}
           {items.map((item) => (
             <button key={item.id} type="button" onClick={item.onSelect}>
               {item.icon}

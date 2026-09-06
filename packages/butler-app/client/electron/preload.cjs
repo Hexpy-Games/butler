@@ -265,6 +265,8 @@ function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
         throw new Error("Live event stream response did not include a body.");
       }
       reader = response.body.getReader();
+      if (closed) { await reader.cancel(); return; }
+      handlers.onOpen?.();
       const decoder = new TextDecoder();
       let buffer = "";
       while (!closed) {

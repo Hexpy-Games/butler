@@ -45,7 +45,7 @@
   padding: 6px;
 }
 
-.results button {
+.results > button {
   display: grid;
   width: 100%;
   min-height: 42px;
@@ -61,7 +61,7 @@
   text-align: left;
 }
 
-.results button:hover {
+.results > button:hover {
   background: var(--selection);
 }
 

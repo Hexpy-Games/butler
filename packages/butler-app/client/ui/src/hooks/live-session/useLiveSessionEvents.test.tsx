@@ -14,6 +14,7 @@ import {
 interface LiveEventHandlers {
   onEvent(event: Record<string, unknown>): void;
   onError(error: unknown): void;
+  onOpen?: () => void;
 }
 
 const subscriptions: LiveEventHandlers[] = [];
@@ -82,6 +83,7 @@ const refreshSnapshots: Array<{ context: string; skills: string[] }> = [];
 let latestContext = "";
 let latestSkills: string[] = [];
 const storeState = {
+  liveConnectionLost: false,
   activeChatId: "session-live-events",
   navigation: initialNavigation(),
   sessionView: {
@@ -145,9 +147,10 @@ mock.module("@/app/api.ts", () => ({
     cursor: number,
     onEvent: LiveEventHandlers["onEvent"],
     onError: LiveEventHandlers["onError"],
+    onOpen: LiveEventHandlers["onOpen"],
   ) {
     subscriptionCursors.push(cursor);
-    subscriptions.push({ onEvent, onError });
+    subscriptions.push({ onEvent, onError, onOpen });
     let active = true;
     return () => {
       if (!active) return;
@@ -171,6 +174,7 @@ function selectStore<T>(selector: (state: typeof storeState) => T): T {
 
 const useButlerStore = Object.assign(selectStore, {
   getState: () => storeState,
+  setState: (patch: Partial<typeof storeState>) => Object.assign(storeState, patch),
 });
 
 mock.module("@/app/store.ts", () => ({ useButlerStore }));
@@ -191,6 +195,7 @@ afterEach(async () => {
   latestContext = "";
   latestSkills = [];
   storeState.activeChatId = "session-live-events";
+  storeState.liveConnectionLost = false;
   storeState.navigation = initialNavigation();
   navigationRefreshCalls = 0;
   navigationRefreshResolver = undefined;
@@ -217,6 +222,7 @@ test("transport errors reconnect without repeatedly refreshing the session view"
   expect(subscriptions).toHaveLength(1);
 
   subscriptions[0]?.onError(new Error("temporary disconnect"));
+  expect(storeState.liveConnectionLost).toBe(true);
   await flushMicrotasks();
   expect(refreshedSessions).toEqual([]);
   expect(unsubscribeCalls).toBe(1);
@@ -225,6 +231,9 @@ test("transport errors reconnect without repeatedly refreshing the session view"
   expect(subscriptions).toHaveLength(1);
   await fakeClock?.advanceBy(1);
   expect(subscriptions).toHaveLength(2);
+  expect(storeState.liveConnectionLost).toBe(true);
+  subscriptions[1]?.onOpen?.();
+  expect(storeState.liveConnectionLost).toBe(false);
   await flushMicrotasks();
   expect(refreshedSessions).toEqual(["session-live-events"]);
 
@@ -241,6 +250,15 @@ test("transport errors reconnect without repeatedly refreshing the session view"
   await fakeClock?.advanceBy(1);
   expect(refreshedSessions).toHaveLength(2);
   expect(appliedEvents).toEqual([]);
+});
+
+test("elapsed reconnect time alone does not claim the stream has recovered", async () => {
+  await renderHarness();
+  subscriptions[0]?.onError(new Error("disconnected"));
+  await fakeClock?.advanceBy(30_000);
+  expect(storeState.liveConnectionLost).toBe(true);
+  subscriptions.at(-1)?.onEvent({ type: "stream.reconcile_required", id: 43, payload: {} });
+  expect(storeState.liveConnectionLost).toBe(false);
 });
 
 test("session created and updated events reconcile the visible project session without reload", async () => {

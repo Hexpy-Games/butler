@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { uploadMessageFile } from "@/app/api.ts";
 import { browserRandomUUID } from "@/app/id.ts";
 import { notifyError } from "@/app/notifications.ts";
+import { appCopy } from "@/app/copy.ts";
 import { projectDocumentFileName } from "@/app/projectDocuments.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import type { MessageFileRef, ProjectDashboardDocument } from "@/app/types.ts";
@@ -37,15 +38,14 @@ export function useFileAttachments(activeChatId: string) {
     if (files.length === 0) return;
     const uploadEpoch = uploadEpochRef.current;
     const accepted: ComposerAttachment[] = [];
-    const rejected: string[] = [];
+    const failed: string[] = [];
+    const oversized: string[] = [];
     setUploadingCount((count) => count + files.length);
     for (const file of files) {
       if (!isMountedRef.current || uploadEpochRef.current !== uploadEpoch)
         break;
       if (file.size > ATTACHMENT_MAX_BYTES) {
-        rejected.push(
-          `${file.name}: larger than ${formatFileSize(ATTACHMENT_MAX_BYTES)}`,
-        );
+        oversized.push(file.name);
         if (isMountedRef.current && uploadEpochRef.current === uploadEpoch) {
           setUploadingCount((count) => Math.max(0, count - 1));
         }
@@ -61,10 +61,8 @@ export function useFileAttachments(activeChatId: string) {
           file: uploaded,
           kind: uploaded.kind ?? "generic",
         });
-      } catch (error) {
-        rejected.push(
-          `${file.name}: ${error instanceof Error ? error.message : "upload failed"}`,
-        );
+      } catch {
+        failed.push(file.name);
       } finally {
         if (isMountedRef.current && uploadEpochRef.current === uploadEpoch) {
           setUploadingCount((count) => Math.max(0, count - 1));
@@ -75,10 +73,14 @@ export function useFileAttachments(activeChatId: string) {
     if (accepted.length > 0) {
       setAttachments((current) => [...current, ...accepted]);
     }
-    if (rejected.length > 0) {
-      notifyError(new Error(rejected.join("; ")), "Attachment failed", {
+    if (failed.length > 0) {
+      notifyError(new Error(appCopy.feedback.attachmentRetry(failed.join(", "))), appCopy.feedback.attachmentFailed, {
         id: `attachment-${activeChatId}`,
       });
+    }
+    if (oversized.length > 0) {
+      notifyError(new Error(appCopy.feedback.attachmentSizeLimit(oversized.join(", "), formatFileSize(ATTACHMENT_MAX_BYTES))),
+        appCopy.feedback.attachmentTooLarge, { id: `attachment-size-${activeChatId}` });
     }
   }
 
@@ -107,8 +109,9 @@ export function useFileAttachments(activeChatId: string) {
           kind: "project-document",
         },
       ]);
-    } catch (error) {
-      notifyError(error, "Project document attachment failed", {
+    } catch {
+      if (!isMountedRef.current || uploadEpochRef.current !== uploadEpoch) return;
+      notifyError(new Error(appCopy.feedback.attachmentRetry(file.name)), appCopy.feedback.attachmentFailed, {
         id: `project-document-attachment-${activeChatId}`,
       });
     } finally {

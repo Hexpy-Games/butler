@@ -158,6 +158,7 @@ interface ButlerStore {
   creatingProject: boolean;
   projectCreateDialogOpen: boolean;
   commandOpen: boolean;
+  liveConnectionLost: boolean;
   renameProject: ProjectSummary | null;
   renameSession: SessionSummary | null;
   setLeftOpen: (value: Updater<boolean>) => void;
@@ -933,6 +934,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   creatingProject: false,
   projectCreateDialogOpen: false,
   commandOpen: false,
+  liveConnectionLost: false,
   renameProject: null,
   renameSession: null,
 

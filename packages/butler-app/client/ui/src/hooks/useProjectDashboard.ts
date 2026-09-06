@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
-import { notifyError } from "@/app/notifications.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type {
   ProjectDashboardView as ProjectDashboardData,
@@ -28,9 +27,14 @@ export function useProjectDashboard({
     view.kind === "project-dashboard" && view.projectId === projectId
       ? view
       : null;
-  const [dashboard, setDashboard] = useState<ProjectDashboardData | null>(
-    initialDashboard ?? null,
-  );
+  const [retry, setRetry] = useState(0);
+  const [request, setRequest] = useState<{
+    projectId?: string; status: "loading" | "ready" | "error";
+    data: ProjectDashboardData | null;
+  }>({ projectId: initialDashboard?.project.id, status: initialDashboard ? "ready" : "loading",
+    data: initialDashboard ?? null });
+  const status = !projectId ? "missing" : request.projectId !== projectId ? "loading" : request.status;
+  const dashboard = status === "ready" ? request.data : null;
 
   useEffect(() => {
     if (!projectId) return;
@@ -40,26 +44,25 @@ export function useProjectDashboard({
     // re-opening the currently selected project.
     if (initialDashboard && !dashboardActivation) return;
     let cancelled = false;
+    setRequest({ projectId, status: "loading", data: null });
     api<ProjectDashboardData>(
       `/projects/${encodeURIComponent(projectId)}/dashboard`,
     )
       .then((data) => {
-        if (!cancelled) setDashboard(data);
+        if (!cancelled) setRequest({ projectId, status: "ready", data });
       })
-      .catch((error) => {
-        if (!cancelled) {
-          notifyError(error, "Project dashboard failed", {
-            id: `project-dashboard-${projectId}`,
-          });
-        }
+      .catch(() => {
+        if (!cancelled) setRequest({ projectId, status: "error", data: null });
       });
     return () => {
       cancelled = true;
     };
-  }, [dashboardActivation, initialDashboard, projectId]);
+  }, [dashboardActivation, initialDashboard, projectId, retry]);
 
   return {
     dashboard,
+    status,
+    retry: () => setRetry((value) => value + 1),
     project,
     sessions: navigationProject
       ? navigationProject.sessions ?? []
