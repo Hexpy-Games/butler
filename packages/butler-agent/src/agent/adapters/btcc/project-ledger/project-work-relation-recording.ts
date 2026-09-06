@@ -34,6 +34,8 @@ export async function bindOpenProjectWork(
   const relation = await resolveRelation(context, scope);
   if (relation.binding) {
     const current = await requireBoundRelation(context, scope, relation);
+    if (expectedWorkId && expectedWorkId !== current.view.workId)
+      invalid("project_work_binding_identity_mismatch");
     const callerIdentity = bindingIdentity(
       context,
       scope,
@@ -52,26 +54,21 @@ export async function bindOpenProjectWork(
       kind: "reference",
       schema: "butler.btcc-project-work-binding.v1",
     });
-    const receiptIdentity = binding.operationIdentity.kind === "mutation_call"
-      ? binding.operationIdentity
-      : callerIdentity;
     await requireObservedProjectWorkReceipt({
       context,
-      identity: receiptIdentity,
+      // Replay the recorded binding operation, not a new request assembled
+      // from the optional expected-Work constraint of this read/reuse call.
+      identity: binding.operationIdentity,
       expectedTarget: {
         id: bindingRef.bindingRevisionId,
         kind: "reference",
         parentId: current.view.workId,
       },
     });
-    if (binding.operationIdentity.kind === "mutation_call") {
-      if (expectedWorkId && expectedWorkId !== current.view.workId)
-        invalid("project_work_binding_identity_mismatch");
-    } else if (
+    if (binding.operationIdentity.kind !== "mutation_call" && (
       binding.operationIdentity.kind !== callerIdentity.kind ||
-      binding.operationIdentity.id !== callerIdentity.id ||
-      binding.operationIdentity.requestSha256 !== callerIdentity.requestSha256
-    )
+      binding.operationIdentity.id !== callerIdentity.id
+    ))
       invalid("project_work_binding_identity_mismatch");
     if (relation.binding.view.sessionId !== scope.sessionId) return null;
     return isOpen(current.view) ? current.view : null;

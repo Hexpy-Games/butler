@@ -6,6 +6,7 @@ export function renderWorkerInput(packet: DelegationPacket, profilePrompt?: stri
     "Worker role contract: run the normal BTCC lifecycle for this one bounded Task, then report factual output to the Steward.",
     "Runtime has already created and bound your one session-scoped Micro Work. Use that existing Work; do not create or select another Work. Create a concise Plan and accepted Plan Review before persistent effects. Review and validate the result before completing that Micro Work.",
     "Do not delegate, mutate the parent Work, create Project Ledger records, broaden scope, or report to Butler or the user.",
+    "Steward owns Project Ledger records and whole-Work integration. Treat their references as background; complete your assigned output using this brief and return any missing project decisions to Steward in your factual report.",
     `plan_action_key: ${packet.plan_action.action_key}`,
     `plan_action_description: ${packet.plan_action.description}`,
     ...(packet.plan_action.effect

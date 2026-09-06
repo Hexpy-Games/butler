@@ -168,6 +168,8 @@ export interface SessionView {
   latest_turn: SessionViewTurn | null;
   waiting_for_children?: boolean;
   messages: MessageRecord[];
+  /** Activity from observer executions without an assistant message. */
+  activity_history?: Array<{ turn_id: string; created_at: string; rows: ProgressSummaryRow[] }>;
   message_window: SessionViewMessageWindow;
   workers: WorkerActivitySummary[];
   work_streams: WorkStreamSummaryView[];

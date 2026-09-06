@@ -19,6 +19,7 @@ import {
 } from "../../packages/butler-agent/src/agent/tools/file-tools/list_files/index.ts";
 import { createFileToolHandlers } from "../../packages/butler-agent/src/agent/tools/file-tools/index.ts";
 import { createWorkspaceReference } from "../../packages/butler-agent/src/agent/session-workspaces/index.ts";
+import { structuredToolResultModelPreview } from "../../packages/butler-agent/src/agent/tools/tool-support.ts";
 
 let root = "";
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "butler-file-tools-")); });
@@ -26,6 +27,19 @@ afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 const call = (a: Record<string, unknown>) => ({ name: "test", arguments: a });
 
 describe("workspace path guard", () => {
+  test("grep distinguishes explicit regex and literal searches while preserving old admitted calls", async () => {
+    await writeFile(join(root, "patterns.txt"), "alpha\nbeta\nalpha|beta\n", "utf8");
+    const search = (mode: Record<string, unknown>) => executeGrepFilesTool(
+      call({ pattern: "alpha|beta", ...mode }), { workspacePath: root });
+    const regex = await search({ literal: false });
+    const literal = await search({ literal: true });
+    const legacy = await search({});
+    expect(regex).toMatchObject({ ok: true, matches: [{ line: 1 }, { line: 2 }, { line: 3 }] });
+    expect(literal).toMatchObject({ ok: true, matches: [{ line: 3 }] });
+    expect(legacy).toMatchObject({ ok: true, matches: [{ line: 3 }] });
+    expect(grepFilesToolDefinition.parameters.properties).not.toHaveProperty("max_output_bytes");
+    expect(grepFilesToolDefinition.parameters.properties).not.toHaveProperty("max_dirs");
+  });
   test("allows in-workspace files and blocks traversal, sensitive paths, and symlink escape", async () => {
     await writeFile(join(root, "ok.txt"), "ok");
     expect((await resolveWorkspacePathGuard({ workspaceRoot: root, relativePath: "ok.txt" })).ok).toBe(true);
@@ -651,17 +665,17 @@ describe("Project Ledger protected path roots", () => {
 });
 
 describe("grep_files", () => {
-  test("exposes pattern as the only required search text field", () => {
+  test("exposes explicit search mode without runtime budget controls", () => {
     const parameters = grepFilesToolDefinition.parameters as {
       properties?: Record<string, unknown>;
       required?: string[];
     };
-    expect(parameters.required).toEqual(["pattern"]);
+    expect(parameters.required).toEqual(["pattern", "literal"]);
     expect(parameters.properties).toHaveProperty("pattern");
     expect(parameters.properties).not.toHaveProperty("query");
     expect(parameters.properties).toHaveProperty("include_globs");
     expect(parameters.properties).toHaveProperty("exclude_globs");
-    expect(parameters.properties).toHaveProperty("max_output_bytes");
+    expect(parameters.properties).not.toHaveProperty("max_output_bytes");
     expect(parameters.properties).not.toHaveProperty("mode");
     expect(parameters.properties).not.toHaveProperty("include");
     expect(parameters.properties).not.toHaveProperty("exclude");
@@ -826,7 +840,8 @@ describe("grep_files", () => {
     expect(result.truncated).toBe(true);
     expect(result.stopped_by).toBe("elapsed_ms");
     expect(result.next_cursor).toBeUndefined();
-    expect(result.recovery_hint).toContain("timeout_ms");
+    expect(result.recovery_hint).toContain("narrow the root or globs");
+    expect(result.recovery_hint).not.toContain("raise timeout_ms");
     expect(result.metrics.candidate_reads).toBeLessThanOrEqual(4);
     expect(result.metrics.candidate_reads).toBeLessThan(result.files_considered);
     expect(result.metrics.elapsed_ms).toBeGreaterThanOrEqual(100);
@@ -867,6 +882,12 @@ describe("grep_files", () => {
     expect(result.truncated).toBe(true);
     expect(result.partial_reasons).toContain("max_bytes_per_file");
     expect(result.recovery_hint).toContain("max_bytes_per_file");
+    const preview = structuredToolResultModelPreview({ toolName: "grep_files", output: result });
+    expect(preview).toMatchObject({
+      unsearched_files: [{ path: "large.txt", reason: "max_bytes_per_file" }],
+      recovery_hint: result.recovery_hint,
+    });
+    expect(preview).not.toHaveProperty("metrics");
     expect(result.next_cursor).toBeUndefined();
     expect(result.evidence_receipts[0].summary).toContain("bounded partial result");
     expect(result.evidence_receipts[0].summary).not.toContain("continuation");

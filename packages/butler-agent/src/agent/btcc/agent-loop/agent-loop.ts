@@ -36,6 +36,12 @@ export async function runBtccAgentLoop(
   let consecutiveEmptyResponses = 0, modelRoundIndex = restored?.modelRoundIndex ?? 0;
   let iteration = restored?.iteration ?? 0;
   let finalReportRound = false;
+  const beginFinalReport = () => {
+    finalReportRound = true;
+    continuationItems.push({ role: "user", content:
+      "Execution is settled. Write the final factual report as your normal assistant response now; the runtime delivers it to the recipient automatically. No reporting tool or further tool call is needed. Include the outcome, checks performed, and any remaining work from the results already received.",
+    });
+  };
   let resumedToolCall = input.resumedToolCall;
   let resumedBatch = restored?.batch;
   const appendObservation = (observation: string | { content: string; requestSegmentKind: "current_user_request" | "project_ledger_and_work_authority" }) => {
@@ -387,7 +393,7 @@ export async function runBtccAgentLoop(
         return { finalText: "", suspension: "waiting_for_worker", messages, events };
       }
       if (disposition === "final_report") {
-        finalReportRound = true;
+        beginFinalReport();
       }
       continue;
     }
@@ -448,7 +454,7 @@ export async function runBtccAgentLoop(
       return { finalText: "", suspension: "waiting_for_worker", messages, events };
     }
     if (disposition === "final_report") {
-      finalReportRound = true;
+      beginFinalReport();
     }
   }
 }

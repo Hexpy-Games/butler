@@ -404,6 +404,8 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
     "do not treat this task label as an access mode or tool restriction",
   );
   expect(readOnlyInstructions).toContain(optionalQualityContract);
+  expect(readOnlyInstructions).toContain("You own Project Ledger reading and required updates");
+  expect(readOnlyInstructions).toContain("contents in the brief, not just record IDs");
   expect(readOnlyInstructions).not.toContain("Use at least two truthful top-level Plan actions");
   const mutationInstructions = guidedStewardInstructions({
     accessMode: "full_access",
@@ -428,7 +430,7 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
     "Keep Plan actions inside this Work and create Worker tasks through delegate_to_worker",
   );
   expect(mutationInstructions).toContain(
-    "unless the delegated request asks or prefers Worker use; when an enabled Worker is available, assign that execution action before doing it directly",
+    "Honor an explicit Worker request",
   );
   expect(mutationInstructions).toContain(
     "Do not create Project Ledger bookkeeping unless the delegated outcome explicitly requires it",
@@ -467,7 +469,7 @@ test("Steward may delegate one Plan action while Worker has only execution duty"
   expect(stewardTools).toContain(steerWorkerToolDefinition.name);
   expect(stewardTools).toContain("write_file");
   expect(guidedStewardInstructions(stewardPolicy)).toContain(
-    "execute directly and/or through a bounded Worker",
+    "After assignment succeeds, manage Workers only",
   );
 
   const workerPolicy = { ...stewardPolicy, role: "worker" };
