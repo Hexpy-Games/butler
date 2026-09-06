@@ -365,7 +365,7 @@ test("Worker result returns to the current Steward Work before reporting", async
           if (modelCalls === 1) {
             expect(request.tools.map((tool) => tool.name)).toContain("read_file");
             expect(request.messages[0]?.content).toContain(
-              "Integrate it as an intermediate tool result",
+              "Review it against the existing Plan first",
             );
             return { text: "Worker review completed; other work remains.", toolCalls: [] };
           }

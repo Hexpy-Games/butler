@@ -105,7 +105,7 @@ export function renderGuidedPromptAttribution(
   );
   const entries: Array<{ text: string; kind: GuidedTextSegmentSource["kind"] }> = [
     { text: workerResultIntegration
-      ? "Current task:\nA Worker result returned to the current Steward Work. Integrate it as an intermediate tool result and continue the remaining requested execution before reporting to Butler."
+      ? "Current task:\nA Worker result returned to this same Steward Work. Review it against the existing Plan first; do not restart Conception or recreate the Plan because a result arrived. If it meets the assigned outcome, continue remaining integration and report. For concrete defects, assign only the necessary correction under the existing Plan; revise the Plan only when the Plan itself needs to change."
       : input.subsessionResultEvidence
       ? "User request:\nA delegated result is ready for final synthesis."
       : `User request:\n${turn.originalMessage}`, kind: "current_user_request" },

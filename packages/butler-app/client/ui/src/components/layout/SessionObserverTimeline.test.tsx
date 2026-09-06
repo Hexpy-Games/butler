@@ -36,3 +36,21 @@ test("activity-only execution stays between earlier and later messages", () => {
   expect(html.indexOf('data-turn-id="waiting-turn"')).toBeLessThan(html.indexOf("추가 지시"));
   expect(html).not.toContain("현재 작업");
 });
+
+test("a real direction separates activities even inside one internal Turn", () => {
+  const rows = ["10:00:00", "10:02:00"].map((time, index) => ({
+    id: `phase-${index}`, kind: "message", state: "running", safe_label: `활동 ${index}`,
+    semantic_block_id: `phase-${index}`, activity_stage: "execution",
+    work_decision_source: "model-authored" as const, work_decision_title: `활동 ${index}`,
+    work_decision_summary: `실행 내용 ${index}`,
+    created_at: `2026-09-06T${time}Z`,
+  }));
+  const html = renderToStaticMarkup(<SessionObserverTimeline messages={[{
+    id: "direction", chat_id: "s", role: "user", status: "delivered", text: "중간 지시",
+    created_at: "2026-09-06T10:01:00Z",
+  }]} activityHistory={[{ turn_id: "same-turn", created_at: rows[0]!.created_at, rows }]} />);
+  const marker = 'data-test-class="turn-current-phase-activity"';
+  expect(html.split(marker)).toHaveLength(3);
+  expect(html.indexOf(marker)).toBeLessThan(html.indexOf("중간 지시"));
+  expect(html.indexOf("중간 지시")).toBeLessThan(html.lastIndexOf(marker));
+});
