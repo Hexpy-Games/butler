@@ -343,6 +343,25 @@ test("Project Ledger read tools cannot leave the active App project", async () =
   })).rejects.toThrow("Explicit Project Ledger reference must match the active project id or be omitted.");
 });
 
+test("Project Ledger native list defaults absent and blank kind to all through the real CLI", async () => {
+  const projectPath = join(tempDir, "project-ledger", "projects", "contract");
+  runProjectLedger(["init", "--id", "contract", "--name", "Contract"], projectPath);
+  runProjectLedger(["work", "create", "--id", "W-CONTRACT", "--title", "Contract work", "--acceptance-exemption"], projectPath);
+  runProjectLedger(["record", "create", "--kind", "spec", "--id", "SPEC-CONTRACT", "--title", "Contract spec"], projectPath);
+  runProjectLedger(["index"], projectPath);
+  const execute = createButlerToolExecutor({ butlerHome: root, butlerData: tempDir });
+  for (const kindArgs of [{}, { kind: "" }, { kind: "  " }, { kind: "all" }]) {
+    const args = { project_ref: "contract", ...kindArgs };
+    const result = await execute({ name: "project_ledger_list", args, rawArguments: JSON.stringify(args) }) as Record<string, any>;
+    expect(result.ok).toBe(true);
+    expect(result.data.results.map((record: { id: string }) => record.id).sort()).toEqual(["SPEC-CONTRACT", "W-CONTRACT"]);
+  }
+  const args = { project_ref: "contract", kind: "spec" };
+  const filtered = await execute({ name: "project_ledger_list", args, rawArguments: JSON.stringify(args) }) as Record<string, any>;
+  expect(filtered.ok).toBe(true);
+  expect(filtered.data.results.map((record: { id: string }) => record.id)).toEqual(["SPEC-CONTRACT"]);
+});
+
 test("Project Ledger native tools route task completion through task handlers", async () => {
   const projectPath = join(tempDir, "project-ledger", "projects", "butler");
   runProjectLedger(["init", "--id", "butler", "--name", "Butler"], projectPath);
@@ -402,12 +421,13 @@ test("Project Ledger native tools route task completion through task handlers", 
   }) as {
     ok: boolean;
     recoverable?: boolean;
-    error?: { code?: string; next?: string[]; native_next?: Array<{ tool?: string; reason?: string }> };
+    error?: { code?: string; message?: string; next?: string[]; native_next?: Array<{ tool?: string; reason?: string }> };
   };
   expect(missingParent.ok).toBe(false);
   expect(missingParent.recoverable).toBe(true);
   expect(missingParent.error?.code).toBe("invalid_arguments");
-  expect(JSON.stringify(missingParent.error?.native_next)).toContain("Correct required Project Ledger");
+  expect(missingParent.error?.native_next).toBeUndefined();
+  expect(missingParent.error?.message?.length).toBeGreaterThan(0);
 
   const plannedTodoTask = await executor({
     name: "project_ledger_create",
@@ -538,7 +558,7 @@ test("Project Ledger native tools route task completion through task handlers", 
   const missingEvidenceWorkComplete = await executor({
     name: "project_ledger_work_complete",
     args: {
-      project_path: projectPath,
+      project_ref: "butler",
       id: "W-SANDY",
       validation: "validation evidence",
       review: "review evidence",
@@ -558,8 +578,17 @@ test("Project Ledger native tools route task completion through task handlers", 
   expect(missingEvidenceWorkComplete.error?.code).toBe("completion_gate_failed");
   expect(JSON.stringify(missingEvidenceWorkComplete.error)).toContain("missing_report");
   expect(missingEvidenceWorkComplete.error?.native_next).toContainEqual(expect.objectContaining({
-    tool: "project_ledger_work_complete",
+    tool: "project_ledger_show",
+    args: { project_ref: "butler", id: "W-SANDY", kind: "work" },
   }));
+  const inspectionHint = missingEvidenceWorkComplete.error!.native_next![0]!;
+  const inspected = await executor({
+    name: inspectionHint.tool!,
+    args: inspectionHint.args!,
+    rawArguments: JSON.stringify(inspectionHint.args),
+  }) as { ok: boolean; data?: { id?: string } };
+  expect(inspected.ok).toBe(true);
+  expect(inspected.data?.id).toBe("W-SANDY");
 
   runProjectLedger([
     "work",
@@ -3111,7 +3140,9 @@ test("Project Ledger tool schemas expose bounded project management wrappers", (
   expect(Object.keys(nativeStatus?.parameters.properties ?? {})).toEqual(["project_ref"]);
   expect(nativeIndex?.parameters.required).toEqual([]);
   expect(Object.keys(nativeIndex?.parameters.properties ?? {})).toEqual(["project_ref"]);
-  expect(nativeList?.parameters.required).toEqual(["kind"]);
+  expect(nativeList?.parameters.required).toEqual([]);
+  expect((nativeList?.parameters.properties as Record<string, unknown>).kind).toMatchObject({ default: "all" });
+  expect((nativeCreate?.parameters.properties as Record<string, unknown>).kind).not.toHaveProperty("default");
   expect(Object.keys(nativeList?.parameters.properties ?? {})).toEqual(["project_ref", "kind", "status", "query", "limit"]);
   expect(nativeCreate?.parameters.required).toEqual(["kind", "id", "title"]);
   expect(Object.keys(nativeCreate?.parameters.properties ?? {})).toContain("body");

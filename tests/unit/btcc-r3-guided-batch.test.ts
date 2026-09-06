@@ -145,21 +145,41 @@ test("guided batch prepares without mutation and dispatches one real registered 
 
 test("guided repeated-file edits share native ordering and durable aggregate recovery", async () => {
   const root = await mkdtemp(join(tmpdir(), "butler-guided-ordered-"));
+  let db: Database | undefined;
+  let dispatches = 0;
   try {
-    await writeFile(join(root, "one.txt"), "before\n", "utf8");
+    await writeFile(join(root, "one.txt"), "before\nlast\n", "utf8");
     const args = { edits: [
-      { path: "one.txt", old_text: "before", new_text: "middle" },
+      { path: "one.txt", old_text: "before", new_text: "middle\nadded" },
+      { path: "one.txt", old_text: "last", new_text: "end" },
       { path: "one.txt", old_text: "middle", new_text: "after" },
     ] };
-    const executeEditFile = registeredEditFile({ workspacePath: root, onDispatch() {} });
+    const executeEditFile = registeredEditFile({ workspacePath: root, onDispatch() { dispatches += 1; } });
     const prepared = await prepareGuidedWorkspaceFileEdit({ workspacePath: root, args, executeEditFile });
     if (!prepared.ok) throw new Error(prepared.error.message);
     const { adapter, input, target } = prepared.effect;
     const recovery = { priorInputSha256: guidedWorkspaceEditInputSha256(input), priorRecoveryHint: adapter.recoveryHint!(input) };
     expect(await prepareGuidedWorkspaceFileEdit({ workspacePath: root, args, executeEditFile, ...recovery })).toMatchObject({ ok: true, effect: { input } });
-    expect(await adapter.dispatch({ normalizedInput: input, normalizedTarget: target, idempotencyKey: "ordered", signal: new AbortController().signal })).toMatchObject({ status: "applied", result: { files: 1, bytes: 6 } });
-    expect(await readFile(join(root, "one.txt"), "utf8")).toBe("after\n");
-    expect(await prepareGuidedWorkspaceFileEdit({ workspacePath: root, args, executeEditFile, ...recovery })).toMatchObject({ ok: true, effect: { input } });
+    const dbPath = join(root, "effects.sqlite");
+    db = openEffectDatabase(dbPath);
+    const work = reviewedFileWork(target);
+    work.currentPlan!.actions[0]!.effect = { capability: "edit_file", target };
+    const execute = (journal: SqliteGuidedEffectJournal) => createGuidedEffectService(journal).execute({
+      work, accessMode: "full_access", occurrenceId: "ordered",
+      signal: new AbortController().signal, target, input, adapter,
+    });
+    expect(await execute(new SqliteGuidedEffectJournal(db))).toMatchObject({ ok: true, status: "applied" });
+    expect(await readFile(join(root, "one.txt"), "utf8")).toBe("after\nadded\nend\n");
+    db.close();
+    db = openEffectDatabase(dbPath);
+    const journal = new SqliteGuidedEffectJournal(db);
+    const stored = journal.listForWork(work.workId)[0]!;
+    expect(stored.recoveryHint).toEqual(recovery.priorRecoveryHint);
+    expect(await prepareGuidedWorkspaceFileEdit({ workspacePath: root, args, executeEditFile,
+      priorInputSha256: stored.inputSha256, priorRecoveryHint: stored.recoveryHint,
+    })).toMatchObject({ ok: true, effect: { input } });
+    expect(await execute(journal)).toMatchObject({ ok: true, status: "applied" });
+    expect(dispatches).toBe(1);
     expect(await adapter.reconcile({ normalizedInput: input, normalizedTarget: target, dispatchAttempts: 1, idempotencyKey: "ordered", signal: new AbortController().signal })).toMatchObject({ status: "applied", result: { files: 1 } });
     const mismatch = await prepareGuidedWorkspaceFileEdit({ workspacePath: root, args, executeEditFile });
     expect(mismatch).toMatchObject({ ok: false, error: { code: "old_text_mismatch" } });
@@ -169,6 +189,7 @@ test("guided repeated-file edits share native ordering and durable aggregate rec
     }
     expect(await prepareGuidedWorkspaceFileEdit({ workspacePath: root, args: { path: "one.txt", old_text: "after", new_text: "after" }, executeEditFile })).toMatchObject({ ok: false, error: { code: "edit_file_no_change" } });
   } finally {
+    db?.close();
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -398,9 +419,11 @@ test("after-dispatch-marker crash resumes the same batch journal occurrence", as
       });
     await expect(execute(crashing)).rejects.toThrow("crash after marker");
     const before = journal.listForWork(work.workId)[0];
+    // The service reconciles the same occurrence once before propagating the
+    // repeated fault; neither marker attempt reaches the registered file tool.
     expect(before).toMatchObject({
       status: "dispatching",
-      dispatchAttempts: 1,
+      dispatchAttempts: 2,
     });
     expect(await execute(createGuidedEffectService(journal))).toMatchObject({
       ok: true,
@@ -408,7 +431,7 @@ test("after-dispatch-marker crash resumes the same batch journal occurrence", as
     });
     const after = journal.listForWork(work.workId)[0];
     expect(after?.effectId).toBe(before?.effectId);
-    expect(after?.dispatchAttempts).toBe(2);
+    expect(after?.dispatchAttempts).toBe(3);
     expect(dispatches).toBe(1);
   } finally {
     markerDb?.close();

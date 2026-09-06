@@ -45,7 +45,7 @@ export const runCommandToolDefinition = {
       state_effect: {
         type: "string",
         enum: ["read_only", "mutation", "validation", "remote_observation"],
-        description: "Effect intent: mutation and remote_observation require full access plus accepted Plan Review. For read_only and validation, the admitted access mode owns the execution environment; validation_suite only labels evidence.",
+        description: "Effect intent: mutation and remote_observation require accepted Plan Review and admitted execution authority; ask_first suspends for approval and resumes after approval, while full_access uses existing authority. For read_only and validation, the admitted access mode owns the execution environment; validation_suite only labels evidence.",
       },
       output_mode: {
         type: "string",

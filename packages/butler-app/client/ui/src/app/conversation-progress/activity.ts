@@ -146,6 +146,7 @@ export function projectActivityReadModels(rows: ProgressRow[]): ActivityReadMode
 function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
   const activities: PhaseActivity[] = [];
   const currentByBlock = new Map<string, PhaseActivity>();
+  const operationsBeforeActivity = new Map<string, ProgressRow[]>();
   for (const row of rows) {
     if (isPhaseActivityRow(row)) {
       const activity: PhaseActivity = {
@@ -157,14 +158,23 @@ function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
         rationale: row.work_decision_rationale,
         nextStep: row.work_decision_next_step,
         createdAt: row.created_at,
-        operations: [],
+        operations: operationsBeforeActivity.get(row.semantic_block_id) ?? [],
       };
+      operationsBeforeActivity.delete(row.semantic_block_id);
       activities.push(activity);
       currentByBlock.set(row.semantic_block_id, activity);
       continue;
     }
     if (row.bridge_phase !== "btcc_operation" || !row.semantic_block_id) continue;
-    currentByBlock.get(row.semantic_block_id)?.operations.push(row);
+    const activity = currentByBlock.get(row.semantic_block_id);
+    if (activity) {
+      activity.operations.push(row);
+    } else {
+      // Work acceptance can publish its operation before the accepted activity.
+      const operations = operationsBeforeActivity.get(row.semantic_block_id) ?? [];
+      operations.push(row);
+      operationsBeforeActivity.set(row.semantic_block_id, operations);
+    }
   }
   return activities;
 }
