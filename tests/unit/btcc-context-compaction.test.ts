@@ -25,6 +25,37 @@ function contextDatabase() {
 }
 
 describe("common BTCC rolling context", () => {
+  test("steer received while compacting a final report restores its model and executor tool surface", async () => {
+    const db = contextDatabase();
+    try {
+      let reporting = false, pendingSteer = false, steered = false, rounds = 0;
+      const executed: string[] = [];
+      const tools = [{ name: "read_file", description: "Read", parameters: { type: "object", properties: {} } }];
+      const compactor = createContextCompactor({ turnId: "report-steer", store: new SqliteContextCompactionStore(db),
+        summarize: async () => { pendingSteer = reporting && !steered; return "Read six source files; ready to report."; } });
+      const result = await runBtccAgentLoop({ prompt: "Inspect the sources", tools,
+        maxModelFacingBytes: 24000,
+        contextCompactor: { prepare: (messages, bytes, options) => compactor.prepare(messages, reporting ? 8000 : bytes, options) },
+        beforeModelRound: async () => {
+          if (!pendingSteer) return [];
+          pendingSteer = false; steered = true;
+          return ["Read the last correction before reporting."];
+        },
+        afterToolBatch: () => { reporting = executed.length >= 6; return reporting ? "final_report" : "continue"; },
+        reviewFinalCandidate: async () => ({ status: "accepted" }),
+        modelRound: { async runRound(request) {
+          rounds += 1;
+          if (rounds === 8) { expect(request.tools).toEqual([]); return { text: "Corrected final report", toolCalls: [] }; }
+          expect(request.tools).toEqual(tools);
+          if (rounds === 7) expect(steered).toBe(true);
+          return { toolCalls: [{ id: `read-${rounds}`, name: "read_file", arguments: {}, rawArguments: "{}" }] };
+        } },
+        executeTool: async (call) => { executed.push(call.id); return { text: "captured source ".repeat(120) }; },
+      });
+      expect(executed).toHaveLength(7);
+      expect(result.finalText).toBe("Corrected final report");
+    } finally { db.close(); }
+  });
   test("live provider bookkeeping cannot exhaust a fitting serialized request", async () => {
     const db = contextDatabase();
     try {

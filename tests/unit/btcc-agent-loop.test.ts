@@ -931,9 +931,7 @@ test("BTCC turns a completed tool batch into one tool-free final report round", 
       )
         ? "final_report"
         : "continue",
-    reviewFinalCandidate: async () => {
-      throw new Error("a final report is not another completion gate");
-    },
+    reviewFinalCandidate: async () => ({ status: "accepted" }),
   });
 
   expect(executed).toEqual(["observe", "finish"]);
@@ -942,6 +940,42 @@ test("BTCC turns a completed tool batch into one tool-free final report round", 
   expect(requests[1]?.messages.at(-1)?.content).toContain("normal assistant response");
   expect(requests[1]?.messages.at(-1)?.content).toContain("runtime delivers it");
   expect(result.finalText).toBe("Work is complete.");
+});
+
+test("a report candidate rejected by fresh direction restores execution tools", async () => {
+  const { port, requests } = scriptedModelRound([
+    response({ toolCalls: [call("first", "echo", { message: "first" })] }),
+    response({ text: "Stale report" }),
+    response({ toolCalls: [call("second", "echo", { message: "second" })] }),
+    response({ text: "Updated full report" }),
+  ]);
+  let reviewed = 0;
+  const output = await runBtccAgentLoop({ prompt: "Complete work", tools: [echoTool], modelRound: port,
+    executeTool: async () => ({ ok: true }), afterToolBatch: () => "final_report",
+    reviewFinalCandidate: async () => ++reviewed === 1
+      ? { status: "continue", observation: "Apply the new requested correction before reporting." }
+      : { status: "accepted" },
+  });
+  expect(requests[1]?.tools).toEqual([]);
+  expect(requests[2]?.tools).toEqual([echoTool]);
+  expect(output.finalText).toBe("Updated full report");
+});
+
+test("steering before a report request restores tools before sending that request", async () => {
+  const { port, requests } = scriptedModelRound([
+    response({ toolCalls: [call("first", "echo", { message: "first" })] }),
+    response({ toolCalls: [call("second", "echo", { message: "correction" })] }),
+    response({ text: "Corrected report" }),
+  ]);
+  let round = 0;
+  const output = await runBtccAgentLoop({ prompt: "Complete work", tools: [echoTool], modelRound: port,
+    executeTool: async () => ({ ok: true }), afterToolBatch: () => "final_report",
+    beforeModelRound: async () => ++round === 2 ? ["Apply this correction before reporting."] : [],
+    reviewFinalCandidate: async () => ({ status: "accepted" }),
+  });
+  expect(requests[1]?.tools).toEqual([echoTool]);
+  expect(requests[2]?.tools).toEqual([]);
+  expect(output.finalText).toBe("Corrected report");
 });
 
 test("BTCC does not terminalize repeated failed tool calls when error text changes", async () => {

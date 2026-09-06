@@ -248,7 +248,7 @@ const RECORD_WORK_DISPOSITION: FunctionToolDefinition = {
   name: "record_work_disposition",
   description: [
     "Atomically declare the explicitly bound Work completed, open, or blocked.",
-    "Use this closeout operation when the current Turn has finished its Work update; it does not require Plan, Review, or stage sequence records.",
+    "This records Work state without requiring Plan, Review, or stage sequence records. Open saves progress; it does not end a delegated assignment. Steward and Worker continue actionable remaining work until completed or genuinely blocked, using the existing wait/approval flow when necessary.",
     "Completed requires every current Plan action done or skipped, no remaining actions, eligible evidence, and no unresolved or in-flight effect.",
     "Open or blocked requires a truthful remaining action or next condition; blocked also requires a concrete next condition.",
     "The Work id must be the exact id from the current bound Work context.",

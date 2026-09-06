@@ -24,8 +24,82 @@ import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import { seedLegacySessionWork } from
   "./support/btcc-r3-legacy-session-work-fixture.ts";
+import { providerNetworkError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 
 const eolRefByRoot = new Map<string, string>();
+
+test.each([
+  ["steward", false], ["worker", false], ["steward", true],
+] as const)("%s continues open Work and preserves completion (report failure: %s)", async (role, reportFailure) => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-delegated-open-"));
+  const dbPath = join(root, "butler.sqlite");
+  const stores = openBtccSqliteStores({ dbPath, ownerId: "delegated-open", storageProfile: "ephemeral" });
+  let workId = "";
+  const report = `Completed both files. ${"Full report preserved. ".repeat(100)}END-OF-REPORT`;
+  try {
+    const runtime = createRuntime({ root, dbPath, stores, butlerHome: process.cwd(), modelRound: scriptedModelRound([
+      () => toolResponse([toolCall("plan", "replace_work_plan", {
+        objective: "Write both requested files", execution_mode: "direct",
+        actions: ["first", "second"].map((key) => ({ action_key: key,
+          effect: { capability: "write_file", target: `workspace:${key}.txt` } })),
+        checks: ["Both files contain their marker"],
+      })]),
+      (request) => {
+        const result = lastToolOutput(request, "replace_work_plan") as { work: { work_id: string } };
+        workId = result.work.work_id;
+        return toolResponse([toolCall("review", "record_work_review", {
+          subject: "plan", verdict: "accept", summary: "Two files satisfy the request", corrections: [],
+        })]);
+      },
+      () => toolResponse([toolCall("first", "write_file", { path: "first.txt", content: "ORCHID" })]),
+      (request) => {
+        expect(lastToolOutput(request, "write_file")).toMatchObject({ ok: true });
+        return toolResponse([toolCall("open", "record_work_disposition", {
+        work_id: workId, disposition: "open", summary: "First file written; second remains",
+        action_updates: [{ action_key: "first", status: "done" }],
+        remaining_actions: ["second"], next_condition: "Continue immediately, no approval required",
+      })]);
+      },
+      (request) => {
+        expect(lastToolOutput(request, "record_work_disposition")).toMatchObject({ ok: true });
+        expect(request.tools.some((tool) => tool.name === "write_file")).toBe(true);
+        return { text: "Partial completion; second file remains.", toolCalls: [] };
+      },
+      (request) => {
+        expect(request.messages.some((message) => message.content.includes("delegated assignment is still open"))).toBe(true);
+        return { text: "", toolCalls: [] };
+      },
+      () => ({ text: "", toolCalls: [] }),
+      () => toolResponse([toolCall("second", "write_file", { path: "second.txt", content: "MAPLE" })]),
+      (request) => {
+        expect(lastToolOutput(request, "write_file")).toMatchObject({ ok: true });
+        return toolResponse([toolCall("complete", "record_work_disposition", {
+        work_id: workId, disposition: "completed", summary: "Both requested files written",
+        action_updates: [{ action_key: "first", status: "done" }, { action_key: "second", status: "done" }],
+        remaining_actions: [], followups: [],
+      })]);
+      },
+      (request) => {
+        expect(lastToolOutput(request, "record_work_disposition")).toMatchObject({ ok: true });
+        expect(request.tools).toEqual([]);
+        if (reportFailure) throw providerNetworkError({ provider: "openai", api: "responses", endpoint: "https://example.test", error: new Error("offline") });
+        return { text: report, toolCalls: [] };
+      },
+    ]) });
+    const input = command(root, `open-${role}`, "Write both requested files");
+    input.context.executionPolicy!.role = role;
+    const output = await runtime.runTurn(input);
+    expect(output).toMatchObject({ kind: "delivered", acceptedWorkResult: { status: "success" } });
+    expect(readFileSync(join(root, "first.txt"), "utf8")).toBe("ORCHID");
+    expect(readFileSync(join(root, "second.txt"), "utf8")).toBe("MAPLE");
+    expect(await stores.durableWork.boundWorkForTurn(input.turnId)).toMatchObject({ workId, status: "completed" });
+    if (reportFailure) expect(output).toHaveProperty("runtimeFailure");
+    else expect(output).toMatchObject({ content: report });
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("R3 Work Ledger maps managed Work across restart and fresh Turn lineage", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-integration-"));

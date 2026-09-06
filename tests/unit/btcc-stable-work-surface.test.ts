@@ -9,6 +9,8 @@ import { createGuidedWorkContextRefresh } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-context-refresh.ts";
 import type { DurableWorkService, DurableWorkView } from
   "../../packages/butler-agent/src/agent/btcc/work/index.ts";
+import { dispositionMaterialFingerprint } from
+  "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 
 const tools = [
   {
@@ -25,6 +27,24 @@ const tools = [
     parameters: { type: "object", properties: {} },
   },
 ] as const;
+
+test.each(["open", "completed", "blocked"] as const)("%s disposition respects delegated reporting and existing Worker wait", async (status) => {
+  const work = { workId: "work", status, actionProgress: [], resultRefs: [] } as unknown as DurableWorkView;
+  work.latestDisposition = { originTurnId: "turn", disposition: status,
+    materialFingerprint: dispositionMaterialFingerprint(work) } as DurableWorkView["latestDisposition"];
+  const batch = { iteration: 1,
+    toolCalls: [{ id: "declare", name: "record_work_disposition", arguments: {}, rawArguments: "{}" }],
+    toolResults: [{ toolCallId: "declare", name: "record_work_disposition", ok: true as const, output: { ok: true } }],
+  };
+  let waiting = false;
+  const input = { turnId: "turn", durableWork: { boundWorkForTurn: async () => work } as unknown as DurableWorkService,
+    shouldWaitForWorker: async () => waiting };
+  expect(await createGuidedToolBatchTransition(input)(batch)).toBe("final_report");
+  const child = createGuidedToolBatchTransition({ ...input, requiresTerminalResult: true });
+  expect(await child(batch)).toBe(status === "open" ? "continue" : "final_report");
+  waiting = true;
+  expect(await child(batch)).toBe("wait");
+});
 
 test("guided role tool schemas stay stable as Work and relations change", async () => {
   let work: DurableWorkView | null = null;

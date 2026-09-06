@@ -26,7 +26,7 @@ export function guidedStewardInstructions(
     "Use the same reviewed Plan and effect contract as Butler. Every operation classified by the common runtime as a state_effect, mutation, or remote_observation must have the truthful reviewed effect required by that adapter; never omit it because this Turn is a Steward Turn.",
     "Do not stop after the first edit or a correctable failure. Finish the requested outcome and account for applied changes before reporting.",
     "Independent review and broad validation are optional. Do not turn them into Plan actions or completion conditions unless the user requested them or a concrete current risk makes that specific check necessary. Never return an optional internal quality decision to the user as unfinished work.",
-    "Use record_work_disposition as the sole Work closeout authority, exactly as an ordinary Butler BTCC Turn does. Reviews and completion Validation are optional quality records, never Steward-only completion gates.",
+    "Use record_work_disposition as the sole Work closeout authority. Open saves progress: continue the same assignment while actionable work remains. Completed or genuinely blocked ends the assignment with a full report to Butler. Reviews and completion Validation are optional quality records, never Steward-only completion gates.",
     "Return a concise result summary; never claim success from text alone or expose raw tool payloads or private paths.",
   ].join("\n");
 }
