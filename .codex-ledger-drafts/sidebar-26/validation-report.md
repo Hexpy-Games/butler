@@ -37,6 +37,13 @@
   대한 무결점 보장은 검증 범위 밖이다.
 - 완성도 리뷰: 실제 SpaceSidebar→DS shell→그룹→native scroll 경로에서 승인된
   투명도/가림/단일 스크롤을 확인했다. source/runtime/데이터 정책 확장은 없다.
+- 반영: `ac898e16`을 main으로 fast-forward 병합하고 origin/main push 완료.
+  운영 gateway HTML에서 새 `index-CDr7aRVb.js`/`index-DV0BAZBQ.css` 제공 및 health
+  정상 확인. Electron은 기존 독립 실행 renderer에 Vite로 반영됐다. UI-only 수정이므로
+  에이전트 서비스나 진행 중인 작업을 재시작/중단하지 않았다.
+- DS render 명령은 완료됐지만 CollapsibleNavGroup fixture 캡처는 단독 재실행에서도
+  빈 배경으로 나왔다. 이 캡처를 시각적 통과 증거로 계산하지 않는다. 실제 제품의
+  중첩 그룹 DOM/스크린샷과 Electron 스크롤 검증을 이 수정의 수락 증거로 사용한다.
 
 ## r4 추가 보정 검증
 
