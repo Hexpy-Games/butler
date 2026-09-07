@@ -164,6 +164,12 @@
   backdrop-filter: var(--nav-sticky-filter, none);
 }
 
+.clippedContent {
+  min-width: 0;
+  flex: 1 0 auto;
+  clip-path: inset(var(--sticky-clip-top, 0) 0 0);
+}
+
 .stickyHeader::before {
   content: "";
   position: absolute;

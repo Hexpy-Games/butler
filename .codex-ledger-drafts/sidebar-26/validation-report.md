@@ -12,6 +12,32 @@
 - 실기기 iOS Safari와 Windows/macOS 외 네이티브 창은 이번 검증 범위가 아니다.
 - 운영 반영: 구현 `6282c650`을 main에 fast-forward 병합하고 origin/main으로 push했다. 2026-09-07 23:39 KST native supervisor 6개 서비스 online, `/health` 정상 확인. 초기 Electron 실행은 서버 준비 전 health 대기 제한에 걸려 종료됐으며 서버 준비 완료 후 재실행했다. 최종 독립 드라이버 PID 1700(PPID 1), Electron PID 1983. 재시작 후 실제 화면에서 원래 신호등 오른쪽 토글, 간격·재질·더보기 정렬, 일반 채널 완료/스피너 없음과 Gateway ready를 확인했다.
 
+## r6 투명 sticky 가림 보정 (2026-09-08)
+
+- 원인: transparent + backdrop blur는 아래 콘텐츠를 제거하지 않으므로 sticky 제목과
+  스크롤 텍스트가 같은 화면 영역에 그려졌다. 불투명 배경으로 돌아가지 않고 자식
+  영역을 헤더 bottom에서 clip한다. 원본 sticky와 단일 scrollbar를 유지했다.
+- SidebarShell의 한 passive scroll/RAF hook이 루트·그룹 경계를 측정한다. React
+  scroll state, 복제 헤더, wheel 전환, polling은 없다. DOM 읽기/쓰기를 분리하고
+  값이 바뀐 CSS 변수만 갱신한다. focus가 가려진 행에 도달하면 같은 scroll로 노출한다.
+- 실제 빌드 UI + 격리 HTTP/SQLite에서 1440/800/390/320px 통과: 루트/중첩 가지
+  pin·push-off·스크롤 복귀, 숨긴 영역 pointer hit-test 제외, focus 노출, 접기/펼치기,
+  높이 resize, 연속 wheel, native drag로 중첩 세션 순서 변경/복귀를 검사했다.
+  clip을 강제로 끈 negative control에서 기존 겹침 경계 위반을 감지했다.
+- 실제 실행 중 Electron에서도 자연스러운 스크롤로 butler→다음 프로젝트 구간을
+  확인했다. 배경 투명도를 유지하고 제목 뒤 텍스트 겹침이 사라졌다. renderer가
+  Vite를 통해 변경을 반영했으며 모델/서비스 코드와 사용자 이력은 변경하지 않았다.
+- typecheck, focused ESLint, lint:design, lint:css, UI build 통과. DS 두 block의
+  5 viewport 렌더 10개 생성. module audit은 기존 두 index.ts의 export-star만 지적;
+  새 hook은 SidebarShell 내부 전용이다. 실제 UI 증거는 `.tmp/sidebar-r5/clipped-*.png`.
+- app-client-design: 37 pass / 8 fail. 실패는 이전 chrome 소스 문자열·Electron CWD·
+  activityLabel·컴포넌트 구조/도메인 CSS 금지·toolDetailButton·NavSection Typo·문서
+  renderer 문자열 기대이며 이번 변경에서 해당 코드는 바꾸지 않았다. 전체 테스트
+  green으로 보고하지 않는다. 물리 iOS Safari/Windows, compositor의 모든 프레임에
+  대한 무결점 보장은 검증 범위 밖이다.
+- 완성도 리뷰: 실제 SpaceSidebar→DS shell→그룹→native scroll 경로에서 승인된
+  투명도/가림/단일 스크롤을 확인했다. source/runtime/데이터 정책 확장은 없다.
+
 ## r4 추가 보정 검증
 
 - 고유 general 채널은 archive/PATCH/DELETE/permanent-delete 모두 409로 거절한다. 권한 종료 부수효과 이전에 같은 정책을 검사한다. 일반이라는 제목의 다른 대화는 보관 가능하다.

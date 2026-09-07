@@ -11,8 +11,12 @@ below the fade and publishes its measured height as `--nav-sticky-offset` for
 nested tree headers. No wheel interception or second scrollbar is needed.
 The sticky header owns an 8px trailing gap; the all-menu scroll removes its
 legacy inter-section gap to avoid doubling that space. Sticky material accepts
-`--nav-sticky-surface` and `--nav-sticky-filter`; transparent blur preserves the
-parent glass material without applying its tint twice.
+`--nav-sticky-surface` and `--nav-sticky-filter`. Transparent surfaces do not
+need extra blur: the shell clips the child paint/hit-test area below the sticky
+header, including nested CollapsibleNavGroup branches. One passive scroll/RAF
+measurement updates CSS variables, without React state or a second scrollbar.
+Resize/structural changes refresh the boundaries; keyboard focus reveals a
+clipped row through the same scrollbar. Native sticky owns branch push-off.
 Set `--sidebar-compact-titlebar-display: flex` when a compact sidebar needs its
 brand titlebar alongside fixed window chrome. The default remains hidden.
 

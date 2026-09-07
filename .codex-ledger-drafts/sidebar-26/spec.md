@@ -727,6 +727,30 @@ prototype mock-store와 실제 store를 동시에 동기화하지 않는다. 기
 - 완료 상태: sidebar가 별도 상태를 추정하지 않는다. turn.state_changed 및 일반 session.updated는 기존 bounded navigation reconciliation의 invalidation 대상이다. 활성 대화인지 여부와 관계없이 최신 canonical /navigation을 적용하고, 진행 중 응답이 뒤늦게 완료 상태를 덮지 않도록 기존 generation fence를 쓴다. 모델/BTCC 완료 판정·DB 이력은 변경하지 않는다.
 - 검증: 실제 hook 이벤트→navigation→spaceActivity 경로에서 thinking→delivered와 타 세션 종료를 재현한다. shell에서 열림/닫힘 토글 좌표, 8px 간격, 더보기 정렬, browser/Electron의 390/800/1440px 레이아웃, 반투명 토큰을 검사하고 실제 Electron 화면을 확인한다.
 
+## 23. r6 투명 sticky의 표시 경계
+
+§22의 blur-only 가림 규칙을 대체한다. 기본 재질은 투명하게 유지하고
+고정 헤더 뒤의 목록 자체를 clip-path로 잘라낸다. 원본 sticky DOM과 단일
+native scroll을 유지한다. SidebarShell이 표시 경계를 소유하며 그룹은
+자신의 헤더/자식 영역을 선언한다. 별도 도메인 상태나 복제 헤더는 없다.
+
+각 자식 영역의 clipTop = max(0, min(contentHeight, headerBottom - contentTop)).
+루트 목록은 browse header 아래, 각 그룹 자식은 자신의 sticky header 아래에서만
+그려진다. 중첩 clip의 교집합이 실제 표시·pointer hit-test 영역이다. clip은
+layout/scroll container를 바꾸지 않으므로 CSS sticky의 가지 끝 push-off를 유지한다.
+각 영역의 header는 자신이 가리는 child 밖에 있으므로 자기 자신은 잘리지 않는다.
+
+단일 passive scroll listener가 RAF 한 번으로 DOM 측정/clip 변수 갱신을 합친다.
+읽기와 쓰기는 분리하고 변경된 변수만 쓴다. ResizeObserver와 child 구조 변경은
+경계를 재측정하며 idle polling, scroll마다 React 렌더, 행별 listener는 없다.
+키보드 focus가 가려진 항목으로 이동하면 같은 scrollbar를 이동해 헤더 아래로
+노출한다. 기존 viewport fade와 portal 메뉴는 유지한다.
+
+검증: 실제 UI에서 루트/중첩 그룹의 겹친 위치가 paint/hit-test에서 제외되는지,
+스크롤 복귀·가지 전환·접기·resize·focus와 빠른 wheel 이동을 확인한다. 320/390px와
+desktop, 실제 Electron 화면을 확인한다. JS/compositor 타이밍의 무결점 보장은
+하지 않으며 관찰한 결과와 플랫폼 잔여 검증을 구분한다.
+
 실제 모델 의미 판정은 확률적이므로 고정 mock 결과를 모델 E2E라고 부르지 않는다.
 분류의 데이터 불변성과 UI 상태는 결정적 테스트, 품질·응답시간은 실제 모델 측정으로 분리한다.
 회귀 범위는 기존 첨부/권한 수락/초안·큐/한글 조합/세션 열기/프로젝트 대시보드다.

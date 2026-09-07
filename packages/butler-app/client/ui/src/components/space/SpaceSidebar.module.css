@@ -17,7 +17,7 @@
 .sidebar {
   --sidebar-footer-border-width: 0;
   --nav-sticky-surface: transparent;
-  --nav-sticky-filter: var(--windows-sidebar-overlay-filter);
+  --nav-sticky-filter: none;
   --selection-strong: color-mix(in srgb, var(--selection) 75%, transparent);
   --nav-tree-indent: var(--space-sm);
   --nav-section-heading-inset: var(--space-xs);
