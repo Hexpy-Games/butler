@@ -1,5 +1,14 @@
 # NavRow
 
+Use `iconInteractive` when the icon slot contains an actual control (for example,
+a favorite toggle). It removes decorative `aria-hidden` from that slot. The
+control owns its accessible label and stops click/key propagation to the row.
+Use `multiline` for title/description rows: it adds vertical padding and aligns
+the icon with the first text line. Single-line consumers retain their layout.
+The label fills the available track so a composed title/status and metadata row
+can share a consistent trailing alignment. Nested identity controls may opt into
+Clickable's declared action/icon sizing; see Clickable's README.
+
 ## What is this block
 
 NavRow is a Butler design-system block for building navigation rows with icon, label, optional badge, and inline actions.

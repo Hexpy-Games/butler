@@ -13,6 +13,7 @@ import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { CommandPaletteResult } from "@/app/types.ts";
+import { useOrganization } from "@/app/space/organization";
 
 export function CommandPalette({
   onClose,
@@ -53,7 +54,7 @@ export function CommandPalette({
         if (!cancelled) setSearchState({ query, status: "error", results: [] });
       }
     }
-    const timer = setTimeout(search, 120);
+    const timer = setTimeout(search, 150);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -82,7 +83,10 @@ export function CommandPalette({
         title: result.title,
         subtitle: result.subtitle,
         icon: <CommandIcon kind={result.kind} />,
-        onSelect: () => select(result),
+        onSelect: () => {
+          if (result.kind === "group") { useOrganization.getState().reveal(`g:${result.id}`); close(); }
+          else select(result);
+        },
       }))}
     />
   );
@@ -90,7 +94,7 @@ export function CommandPalette({
 
 function CommandIcon({ kind }: { kind: CommandPaletteResult["kind"] }) {
   if (kind === "automation") return <Clock3 size={17} />;
-  if (kind === "project" || kind === "project_session")
+  if (kind === "project" || kind === "project_session" || kind === "group")
     return <Folder size={17} />;
   if (kind === "settings") return <Settings size={17} />;
   return <PencilLine size={17} />;

@@ -10,6 +10,7 @@ export interface SidebarShellProps {
   collapsed?: boolean;
   ariaLabel?: string;
   className?: string;
+  scrollFade?: boolean;
 }
 
 export function SidebarShell({
@@ -20,6 +21,7 @@ export function SidebarShell({
   collapsed = false,
   ariaLabel,
   className,
+  scrollFade = true,
 }: SidebarShellProps) {
   return (
     <aside
@@ -41,7 +43,10 @@ export function SidebarShell({
           className={styles.scrollFrame}
           data-test-class="sidebar-scroll-frame"
         >
-          <div className={styles.scroll} data-test-class="sidebar-scroll">
+          <div
+            className={cn(styles.scroll, !scrollFade && styles.unmasked)}
+            data-test-class="sidebar-scroll"
+          >
             <div className={styles.scrollContent}>{children}</div>
           </div>
         </div>

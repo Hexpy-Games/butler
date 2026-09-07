@@ -351,9 +351,7 @@ export async function openSession(
   run: PreparedRun,
   page: CdpPage,
 ): Promise<void> {
-  const sessionSelector = run.sessionKind === "project"
-    ? '[data-test-class="project-session-row"]'
-    : ".chat-row";
+  const sessionSelector = `[data-tree-item="s:${run.sessionId}"] [data-test-class="tree-row"]`;
   await page.waitForNamedElement(sessionSelector, run.sessionTitle);
   if (
     run.sessionKind === "project" &&
@@ -361,7 +359,7 @@ export async function openSession(
   ) {
     assert(run.projectDisplayName, "Project display name is missing.");
     await page.clickNamedElement(
-      '[data-test-class="project-group-row"]',
+      '[data-test-class="tree-row"]',
       run.projectDisplayName,
     );
   }

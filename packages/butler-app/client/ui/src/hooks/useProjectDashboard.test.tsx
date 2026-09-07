@@ -136,6 +136,7 @@ function Harness({
 
 function navigation(sessions: ProjectSummary["sessions"] = [session("session-live", "Prompt fallback")]): NavigationView {
   return {
+    space: { revision: 0, nodes: [], groups: [] },
     chats: [],
     projects: [{
       id: "project-live",

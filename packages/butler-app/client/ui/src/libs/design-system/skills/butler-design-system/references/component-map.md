@@ -230,8 +230,9 @@ the same right padding balance as the row's left padding.
 Use `NavSection` for grouping navigation items under a titled section with optional actions.
 
 Use `CollapsibleNavGroup` for expandable/collapsible navigation hierarchies like project folders with sessions.
-Children in a collapsible navigation group use the same row size and alignment
-as other rows; do not indent them unless a separate hierarchy block is designed.
+Children default to the same row size and alignment as other rows. For an
+explicitly hierarchical tree, use the `indented` variant: 16px per depth, with
+header actions visible. Do not apply one-off indentation in product CSS.
 
 Use `RowActionCluster` for inline action buttons within rows that need click
 isolation; it delegates spacing to `ButtonContainer`.

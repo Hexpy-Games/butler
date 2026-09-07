@@ -1,3 +1,4 @@
+import type { MessageContent } from "../../../../foundation/message-content.ts";
 import { Database } from "bun:sqlite";
 import { readCompactionSnapshots } from "../../../../agent/context/compaction.ts";
 import type { MessageRow } from "../../infrastructure/core/records.ts";
@@ -58,7 +59,7 @@ export class AppSessionMessageRecordStore {
     const query = beforeCursor !== undefined
       ? `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable, plan_json
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE chat_id = ?
         AND rowid < ?
@@ -69,7 +70,7 @@ export class AppSessionMessageRecordStore {
       : afterCursor !== undefined
         ? `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable, plan_json
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE chat_id = ?
         AND rowid > ?
@@ -79,7 +80,7 @@ export class AppSessionMessageRecordStore {
     `
         : `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable, plan_json
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE chat_id = ?
         AND ${visibleMessageSqlPredicate()}
@@ -215,7 +216,7 @@ export class AppSessionMessageRecordStore {
         .query<MessageRow, [string]>(
           `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable, plan_json
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE id = ?
     `,
@@ -246,7 +247,7 @@ export class AppSessionMessageRecordStore {
         .query<MessageRow, [string]>(
           `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable, plan_json
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE turn_id = ? AND role = 'assistant'
       ORDER BY rowid DESC
@@ -264,6 +265,7 @@ export class AppSessionMessageRecordStore {
     status: MessageStatus,
     options: {
       clientMessageId?: string;
+      contentParts?: MessageContent;
       turnId?: string;
       safeErrorCode?: string;
       retryable?: boolean;
@@ -287,10 +289,10 @@ export class AppSessionMessageRecordStore {
         `
       INSERT INTO messages (
         id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at,
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at,
         safe_error_code, retryable, plan_json
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .run(
@@ -302,6 +304,7 @@ export class AppSessionMessageRecordStore {
         options.conversationMessageId ?? null,
         role,
         text,
+        options.contentParts ? JSON.stringify(options.contentParts) : null,
         status,
         createdAt,
         createdAt,

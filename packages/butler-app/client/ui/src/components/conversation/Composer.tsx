@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { ComposerAdjunctPanels, composerHasAdjunct } from "./ComposerAdjunctPanels";
 import { ComposerInputSurface } from "./ComposerInputSurface";
 import { useComposerStore } from "./composerStore";
+import { useSpaceDrag } from "@/app/space/drag";
 import { useComposerControls } from "./hooks/useComposerControls";
 import { useComposerDraftSession } from "./hooks/useComposerDraftSession";
 import { useFileAttachments } from "./hooks/useFileAttachments";
@@ -24,6 +25,7 @@ interface ComposerProps {
 }
 export function Composer({ large, onOpenContext, onReserveChange }: ComposerProps) {
   const session = useComposerSession();
+  const referenceDragging = useSpaceDrag(state => state.source?.startsWith("s:") ?? false);
   useComposerDraftSession(session.activeChatId);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
@@ -31,7 +33,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
   const [isComposing, setIsComposing] = useState(false);
   const text = useComposerStore((store) => store.text);
   const setText = useComposerStore((store) => store.setText);
-  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textAreaRef = useRef<HTMLElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const controls = useComposerControls(
@@ -119,9 +121,8 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
   const presentation = useComposerPresentation({
     activeChatId: session.activeChatId,
     containerRef: wrapRef,
-    protectedExpanded: modelMenuOpen || accessMenuOpen || contextPopoverOpen,
+    protectedExpanded: referenceDragging || modelMenuOpen || accessMenuOpen || contextPopoverOpen,
   });
-
   return (
     <ComposerCard
       {...fileDrop}

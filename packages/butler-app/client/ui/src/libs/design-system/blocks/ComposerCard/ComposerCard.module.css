@@ -113,6 +113,31 @@
   color: var(--placeholder);
 }
 
+.editor {
+  position: relative;
+  min-width: 0;
+}
+
+.editor .textarea {
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.editor .textarea p {
+  margin: 0;
+}
+
+.editorPlaceholder {
+  position: absolute;
+  inset: 0;
+  padding: var(--composer-inner-padding-block)
+    var(--composer-inner-padding-inline);
+  color: var(--placeholder);
+  line-height: 1.5;
+  pointer-events: none;
+}
+
 .toolbar {
   display: flex;
   min-height: 42px;

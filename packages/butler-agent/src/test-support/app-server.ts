@@ -9,6 +9,8 @@ export type CreateTestAppServerOptions = CreateAppServerOptions & {
   responder?: AppMessageResponder;
   responderTimeoutMs?: number;
   serverIdleTimeoutSeconds?: number;
+  /** Unit fixtures must opt in before invoking the real optional grouping model. */
+  enableSmartGrouping?: boolean;
 };
 
 export function createTestAppServer(
@@ -18,11 +20,14 @@ export function createTestAppServer(
     responder,
     responderTimeoutMs,
     serverIdleTimeoutSeconds,
+    enableSmartGrouping = false,
     ...serverOptions
   } = options;
-  return createAppServerFromTestComposition(serverOptions, {
+  const server = createAppServerFromTestComposition(serverOptions, {
     responder,
     responderTimeoutMs,
     serverIdleTimeoutSeconds,
   });
+  if (!enableSmartGrouping) server.store.updateSettings({ smart_grouping_enabled: false });
+  return server;
 }

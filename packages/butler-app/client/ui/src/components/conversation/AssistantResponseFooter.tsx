@@ -1,4 +1,5 @@
 import { Copy, MessageFooter, MessageStatusRow, Tooltip, Typo } from "@/butler-ds";
+import type { ReactNode } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
 import { AssistantStatusLabel } from "./AssistantStatusLabel";
@@ -23,12 +24,14 @@ export function AssistantResponseFooter({
   onCopy,
   status,
   suppressTerminalStatus = false,
+  actions,
 }: {
   copied: boolean;
   meta: AssistantFooterMeta | null;
   onCopy: () => void;
   status?: string;
   suppressTerminalStatus?: boolean;
+  actions?: ReactNode;
 }) {
   const markTheme = useButlerMarkTheme();
   const terminalStatus = terminalAssistantStatus(status);
@@ -47,6 +50,7 @@ export function AssistantResponseFooter({
             <Copy size={14} />
           </button>
         </Tooltip>
+        {actions}
         {meta?.durationLabel && <span>Worked for {meta.durationLabel}</span>}
         {meta?.timeLabel && (
           <time dateTime={meta.completedAtIso ?? undefined}>{meta.timeLabel}</time>

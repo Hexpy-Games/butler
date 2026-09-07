@@ -2,6 +2,7 @@ import type { StewardObserverReader } from "../../../packages/butler-agent/src/g
 
 /** Test-only composition for App/retention tests that do not seed BTCC relations. */
 export const EMPTY_STEWARD_OBSERVER: StewardObserverReader = {
+  hasUnfinishedExecution: () => false,
   retainsApprovalClaim: () => false,
   workStatus: () => ({
     items: [],
@@ -19,6 +20,7 @@ export const EMPTY_STEWARD_OBSERVER: StewardObserverReader = {
   delegationPresentation: () => null,
   isParentResultInput: () => false,
   snapshot: () => null,
+  plan: () => null,
   recoverableTurns: () => [],
   readOperationOutputChunks: () => [],
 };

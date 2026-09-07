@@ -92,6 +92,25 @@ export class AgentConversationStore {
     this.connection.close();
   }
 
+  /** Relocation changes current scope, never the identity or contents of historical turns. */
+  syncSessionContext(input: { sessionId: string; projectId: string | null; revision: string }): void {
+    const db = this.connection.database;
+    db.transaction(() => {
+      db.exec(`CREATE TABLE IF NOT EXISTS conversation_session_context (
+        session_id TEXT PRIMARY KEY REFERENCES conversation_sessions(id) ON DELETE CASCADE,
+        revision TEXT NOT NULL
+      )`);
+      const session = db.query<{ id: string }, [string]>("SELECT id FROM conversation_sessions WHERE id=?").get(input.sessionId);
+      if (!session) throw new Error("conversation_session_not_found");
+      const current = db.query<{ revision: string }, [string]>("SELECT revision FROM conversation_session_context WHERE session_id=?").get(input.sessionId);
+      if (current?.revision === input.revision) return;
+      db.query("UPDATE conversation_sessions SET project_id=?,workspace_id=NULL,updated_at=? WHERE id=?")
+        .run(input.projectId, new Date().toISOString(), input.sessionId);
+      db.query(`INSERT INTO conversation_session_context VALUES(?,?) ON CONFLICT(session_id)
+        DO UPDATE SET revision=excluded.revision`).run(input.sessionId, input.revision);
+    })();
+  }
+
   beginTurn(input: BeginTurnInput): ConversationTurn {
     return this.sessionsAndTurns.beginTurn(input);
   }

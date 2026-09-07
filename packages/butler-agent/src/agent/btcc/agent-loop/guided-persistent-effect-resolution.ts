@@ -31,6 +31,7 @@ import {
 } from "./guided-project-ledger-effect.ts";
 import { prepareGuidedCommandEffect } from "./guided-command-effect.ts";
 import { prepareGuidedMcpToolEffect } from "./guided-mcp-tool-effect.ts";
+import { prepareGuidedConversationBranchEffect } from "./guided-conversation-branch-effect.ts";
 import {
   createGuidedWorkspaceFileEffectAdapter,
   workspaceFileEffectTarget,
@@ -55,6 +56,7 @@ export function createGuidedPersistentEffectResolver(input: {
   workspacePath: string;
   workspaceReference?: WorkspaceReference;
   sessionId?: string;
+  appSessionId?: string;
   sessionBindingStore?: SessionWorkspaceBindingStore;
   projectId?: string;
   trackingMode: ButlerExecutionPolicy["trackingMode"];
@@ -75,6 +77,10 @@ export function createGuidedPersistentEffectResolver(input: {
     return input.workspacePath;
   };
   return async (call, executeRegistered, effectContext) => {
+    if (call.name === "start_topic_conversation") {
+      return prepareGuidedConversationBranchEffect({ args: call.args,
+        butlerData: input.butlerData, appSessionId: input.appSessionId });
+    }
     if (call.name === "bind_session_git_worktree") {
       if (!input.sessionId || !input.sessionBindingStore || !input.workspaceReference) {
         return {

@@ -24,6 +24,27 @@
   cursor: pointer;
 }
 
+.row.multiline {
+  padding-block: var(--space-sm);
+  align-items: start;
+}
+
+.multiline .labelRegion {
+  align-items: start;
+}
+
+.multiline .label {
+  flex: 1;
+  white-space: normal;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.multiline .icon {
+  min-height: 1.5em;
+  font-size: var(--font-size-2);
+}
+
 .interactive:hover {
   background: color-mix(in srgb, var(--selection) 84%, transparent);
 }
@@ -58,6 +79,7 @@
 }
 
 .label {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -148,6 +170,9 @@
 }
 
 @media (width <= 640px) {
+  .multiline .icon {
+    font-size: var(--font-size-4);
+  }
   .compactHiddenActions {
     visibility: hidden;
     pointer-events: none;

@@ -315,6 +315,7 @@ function navigation(title: string): NavigationView {
   };
   return {
     chats: [],
+    space: { revision: 0, nodes: [], groups: [] },
     projects: [{
       id: "project-titlebar",
       display_name: "Titlebar project",

@@ -13,3 +13,4 @@ export type {
   ComposerSendButtonProps,
 } from "./ComposerCard";
 export { ComposerPlanToggle } from "./ComposerPlanToggle";
+export { ComposerCardEditor, ComposerCardEditable, ComposerCardPlaceholder } from "./ComposerCardEditor";

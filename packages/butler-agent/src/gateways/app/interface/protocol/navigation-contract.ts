@@ -1,4 +1,5 @@
 import type { ChatKind, ProjectStatus, TurnState } from "./base-contract.ts";
+import type { SpaceView } from "./space-contract.ts";
 
 export interface ChatSummary {
   id: string;
@@ -10,6 +11,8 @@ export interface ChatSummary {
 }
 
 export interface SessionSummary {
+  work_progress?: { completed: number; total: number };
+  branch_seed?: import("../../../../foundation/session-branch.ts").SessionBranchSeed;
   id: string;
   kind: ChatKind;
   title: string;
@@ -46,6 +49,7 @@ export interface ProjectSummary {
 }
 
 export interface NavigationView {
+  space: SpaceView;
   chats: SessionSummary[];
   projects: ProjectSummary[];
   automations_summary: {

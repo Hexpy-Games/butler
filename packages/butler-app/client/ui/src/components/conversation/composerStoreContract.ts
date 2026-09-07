@@ -17,25 +17,30 @@ import type {
 } from "@/app/types.ts";
 import type { KeyboardEventLike } from "./hooks/composerEventTypes";
 import type { ComposerAttachment } from "./hooks/useFileAttachments";
+import type { MessageContent } from "@/app/messageContent";
 
 type AttachmentSetter = Dispatch<SetStateAction<ComposerAttachment[]>>;
 
 export interface ComposerStore {
   draftRevision: number;
   draftSessionId: string;
-  activateDraftSession: (sessionId: string, text: string) => number;
+  activateDraftSession: (sessionId: string, text: string, contentParts?: MessageContent) => number;
   restoreDraftSession: (input: {
     revision: number;
     sessionId: string;
     text: string;
+    contentParts?: MessageContent;
   }) => boolean;
   engaged: boolean;
   setEngaged: (engaged: boolean) => void;
   text: string;
+  contentParts?: MessageContent;
+  setContentParts: (content: MessageContent) => void;
+  insertSessionReference: ((reference: { sessionId: string; titleSnapshot: string }) => void) | null;
   setText: (text: string) => void;
   setIsComposing: (value: boolean) => void;
   large: boolean;
-  textAreaRef: RefObject<HTMLTextAreaElement | null> | null;
+  textAreaRef: RefObject<HTMLElement | null> | null;
   fileInputRef: RefObject<HTMLInputElement | null> | null;
   attachments: ComposerAttachment[];
   setAttachments: AttachmentSetter;
@@ -65,7 +70,7 @@ export interface ComposerStore {
   canSend: boolean;
   workers: WorkerActivitySummary[];
   submit: (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => void;
-  handleKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+  handleKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
   focusDraftFromComposerChrome: (
     event: ReactPointerEvent<HTMLFormElement>,
   ) => void;

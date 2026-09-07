@@ -61,6 +61,7 @@ export function createRuntimeStoreApi(
     close() {
       if (kernel.closed) return;
       try {
+        kernel.sessionTopicGrouping.close();
         kernel.sessionQueueDispatcher.close();
         kernel.terminalTurnRetentionQueue.close();
         kernel.transportProjectionOwner.close();

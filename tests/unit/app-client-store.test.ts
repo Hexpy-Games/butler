@@ -3313,6 +3313,8 @@ test("hydrateUiState restores sidebar and panel presentation state", () => {
     sidebar_chats_collapsed: true,
     sidebar_projects_collapsed: true,
     sidebar_collapsed_project_ids: ["project-a", "project-b"],
+    space_tab: "recent",
+    space_collapsed_keys: ["g:health"],
   });
 
   expect(useButlerStore.getState()).toMatchObject({

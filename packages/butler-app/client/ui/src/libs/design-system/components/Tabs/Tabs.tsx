@@ -14,7 +14,11 @@ function Tabs({
     <TabsPrimitive.Root
       data-slot="tabs"
       data-orientation={orientation}
-      className={cn(styles.root, styles[`orientation-${orientation}`], className)}
+      className={cn(
+        styles.root,
+        styles[`orientation-${orientation}`],
+        className,
+      )}
       orientation={orientation}
       {...props}
     />
@@ -30,15 +34,21 @@ function tabsListVariants({
 function TabsList({
   className,
   variant = "default",
+  stretch = false,
   ...props
 }: React.ComponentPropsWithoutRef<typeof TabsPrimitive.List> & {
   variant?: TabsListVariant;
+  stretch?: boolean;
 }) {
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
       data-variant={variant}
-      className={cn(tabsListVariants({ variant }), className)}
+      className={cn(
+        tabsListVariants({ variant }),
+        stretch && styles.stretch,
+        className,
+      )}
       {...props}
     />
   );

@@ -48,6 +48,7 @@ export function createAppTransportModuleGraph(input: {
     },
     <T>(callback: () => T) => host.db.transaction(callback)(),
     (input) => host.sessionQueue.fenceQueuedTurnClaim(input),
+    sessionId => readSessionBranchSeed(db, sessionId),
   );
   const transportProjection = new AppTransportProjectionStore({
     db,
@@ -152,3 +153,4 @@ export function createAppTransportModuleGraph(input: {
   });
   return { appTransportQueue, transportProjection, transportProjectionOwner };
 }
+import { readSessionBranchSeed } from "../../domain/sessions/session-branch-store.ts";

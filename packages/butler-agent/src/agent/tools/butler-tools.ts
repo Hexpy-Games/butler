@@ -17,6 +17,7 @@ import {
   satisfiedCompletionObligationsFromEvidenceReceipts,
 } from "../output/evidence/receipts.ts";
 import { createAutomationToolHandlers } from "./automation/index.ts";
+import { createStartTopicConversationHandler } from "./conversation/executor.ts";
 import { createDataTableToolHandlers } from "./data-table/index.ts";
 import { createMcpToolHandlers } from "./mcp/index.ts";
 import { createImageToolHandlers } from "./image/index.ts";
@@ -205,6 +206,7 @@ export function createButlerToolExecutor(
       sessionId: input.sessionId,
       automationStore,
     }),
+    start_topic_conversation: createStartTopicConversationHandler(input),
     ...createWorkTrackingToolHandlers({
       butlerData: input.butlerData,
       sessionId: input.sessionId,

@@ -20,8 +20,19 @@ import type {
   UpdateSessionRequest,
 } from "../../interface/protocol/app-protocol.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
+import type { SpaceCommand, SpaceMutationResult } from "../../interface/protocol/space-contract.ts";
+import type { RelocateSessionRequest } from "../../domain/sessions/session-relocation.ts";
+import { AppSessionContextGate } from "../../domain/sessions/session-context-gate.ts";
+import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 
 export interface AppStoreNavigationProjectApi {
+  branchSession(request: import("../../../../foundation/session-branch.ts").SessionBranchRequest, signal?: AbortSignal): Promise<import("../../domain/sessions/session-branch-store.ts").SessionBranchResult>;
+  getSessionBranchSeed(sessionId: string): import("../../../../foundation/session-branch.ts").SessionBranchSeed | undefined;
+  branchSessionFromTool(args: Record<string, unknown>, signal?: AbortSignal): Promise<import("../../domain/sessions/session-branch-store.ts").SessionBranchResult>;
+  getBranchSource(sessionId: string): { view: import("../../interface/protocol/app-protocol.ts").SessionView; messageId: string };
+  mutateSpace(command: SpaceCommand): SpaceMutationResult;
+  relocateSession(request: RelocateSessionRequest): Promise<SpaceMutationResult>;
+  assertSessionContextAdmission(sessionId: string, turnId: string): void;
   listChats(): ChatSummary[];
   listNavigation(): NavigationView;
   getNewChatBriefing(options?: {
@@ -73,6 +84,34 @@ export function createNavigationProjectStoreApi(
   kernel: AppStoreKernel,
 ): AppStoreNavigationProjectApi {
   return {
+    branchSession: (request, signal) => kernel.sessionBranches.branch(request, signal),
+    branchSessionFromTool: (args, signal) => kernel.sessionBranches.fromTool(args, signal),
+    getSessionBranchSeed: sessionId => kernel.sessionBranches.seed(sessionId),
+    assertSessionContextAdmission(sessionId, turnId) {
+      kernel.sessionRelocation.recoverPending();
+      const turn = kernel.turns.getTurnRow(turnId);
+      const gate = new AppSessionContextGate(kernel.db);
+      gate.assertNotRelocating(sessionId);
+      if (!turn || turn.chat_id !== sessionId || gate.owner(sessionId)?.owner_id !== turnId) {
+        throw new AppStoreOperationError(409, "session_context_admission_mismatch", "대화의 실행 문맥이 변경되었습니다.");
+      }
+    },
+    relocateSession(request) {
+      return kernel.sessionRelocation.relocate(request);
+    },
+    mutateSpace(command) {
+      return kernel.space.execute(command);
+    },
+    getBranchSource(sessionId) {
+      kernel.sessionRecords.getSession(sessionId);
+      const seed = kernel.sessionBranches.seed(sessionId);
+      const source = seed && kernel.sessionRecords.getMessageRow(seed.sourceMessageId);
+      if (!source || !seed || source.chat_id !== seed.sourceSessionId) {
+        throw new AppStoreOperationError(404, "branch_source_unavailable", "원본 답변이 삭제되어 열 수 없습니다.");
+      }
+      return { messageId: seed.sourceMessageId, view: kernel.sessionViews.getSessionView(seed.sourceSessionId,
+        { beforeCursor: source.rowid + 1, limit: 30 }) };
+    },
     listChats() {
       return kernel.sessionCatalog.listChats();
     },

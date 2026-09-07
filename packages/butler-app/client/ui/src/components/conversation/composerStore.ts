@@ -6,36 +6,46 @@ import { create } from "zustand";
 import type { KeyboardEventLike } from "./hooks/composerEventTypes";
 import { writeCachedComposerDraft } from "@/app/composerDraftCache.ts";
 import type { ComposerStore } from "./composerStoreContract";
+import { messageContentText } from "@/app/messageContent";
 
 const noop = () => {};
 const noopAsync = async () => {};
 const noopSubmit = (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => {
   event.preventDefault();
 };
-const noopKeyDown = (_event: ReactKeyboardEvent<HTMLTextAreaElement>) => {};
+const noopKeyDown = (_event: ReactKeyboardEvent<HTMLElement>) => {};
 
 export const useComposerStore = create<ComposerStore>((set, get) => ({
   draftRevision: 0,
   draftSessionId: "draft:chat",
-  activateDraftSession: (draftSessionId, text) => {
+  activateDraftSession: (draftSessionId, text, contentParts) => {
     const draftRevision = get().draftRevision + 1;
-    set({ draftRevision, draftSessionId, text });
+    set({ draftRevision, draftSessionId, text, contentParts });
     return draftRevision;
   },
-  restoreDraftSession: ({ revision, sessionId, text }) => {
+  restoreDraftSession: ({ revision, sessionId, text, contentParts }) => {
     const state = get();
     if (state.draftRevision !== revision || state.draftSessionId !== sessionId) {
       return false;
     }
-    set({ text });
+    set({ text, contentParts });
     return true;
   },
   engaged: false,
   setEngaged: (engaged) => set({ engaged }),
   text: "",
+  contentParts: undefined,
+  insertSessionReference: null,
+  setContentParts: (content) => {
+    const state = get();
+    const text = messageContentText(content);
+    const contentParts = content.parts.some(part => part.type === "session_ref") ? content : undefined;
+    set({ draftRevision: state.draftRevision + 1, text, contentParts });
+    writeCachedComposerDraft(state.draftSessionId, text, contentParts);
+  },
   setText: (text) => {
     const state = get();
-    set({ draftRevision: state.draftRevision + 1, text });
+    set({ draftRevision: state.draftRevision + 1, text, contentParts: undefined });
     writeCachedComposerDraft(state.draftSessionId, text);
   },
   setIsComposing: noop,

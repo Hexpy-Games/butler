@@ -198,6 +198,7 @@ export class AppPreferencesStore {
       ),
       main_screen_theme_custom_colors: customColors,
       translucent_sidebar: stored.translucent_sidebar ?? true,
+      smart_grouping_enabled: stored.smart_grouping_enabled ?? true,
       diagnostics_enabled: stored.diagnostics_enabled ?? false,
       desktop_notifications: normalizeDesktopNotificationSettings(
         stored.desktop_notifications,
@@ -394,6 +395,7 @@ export class AppPreferencesStore {
         main_screen_theme: next.main_screen_theme,
         main_screen_theme_preset: next.main_screen_theme_preset,
         translucent_sidebar: next.translucent_sidebar,
+        smart_grouping_enabled: next.smart_grouping_enabled,
         desktop_notifications: next.desktop_notifications,
         desktop_tray_enabled: next.desktop_tray_enabled,
         web_search: next.web_search,

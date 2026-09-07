@@ -259,6 +259,17 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/setup/diagnostics") return await callBridge<T>(bridge, "exportSetupDiagnostics");
   if (method === "GET" && url.pathname === "/chats") return await callBridge<T>(bridge, "listChats");
   if (method === "GET" && url.pathname === "/navigation") return await callBridge<T>(bridge, "listNavigation");
+  if (url.pathname.startsWith("/space/")) {
+    const group = url.pathname.match(/^\/space\/groups\/([^/]+)$/);
+    if (group && (method === "PATCH" || method === "DELETE")) {
+      return await callBridge<T>(bridge, "changeSpaceGroup", { groupId: decodeURIComponent(group[1]!), method, body: parseBody(options.body) });
+    }
+    const resources = ["groups", "moves", "group-sessions", "undo", "pins", "relocations", "branches", "branch-source"];
+    const resource = url.pathname.slice("/space/".length);
+    if (method === "POST" && resources.includes(resource)) {
+      return await callBridge<T>(bridge, "mutateSpace", { resource, body: parseBody(options.body) });
+    }
+  }
   if (method === "GET" && url.pathname === "/work-status") return await callBridge<T>(bridge, "getWorkStatus");
   if (method === "GET" && url.pathname === "/new-chat-briefing") {
     return await callBridge<T>(bridge, "getNewChatBriefing", {
@@ -582,6 +593,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return await callBridge<T>(bridge, "queueMessage", {
       chatId: body.chat_id,
       text: body.text,
+      contentParts: body.content_parts,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,
@@ -595,6 +607,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return await callBridge<T>(bridge, "updateQueuedMessage", {
       queuedMessageId: decodeURIComponent(queuedMessageMatch[1]!),
       text: body.text,
+      contentParts: body.content_parts,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,
@@ -624,6 +637,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       chatId: body.chat_id,
       text: body.text,
       clientMessageId: body.client_message_id,
+      contentParts: body.content_parts,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,

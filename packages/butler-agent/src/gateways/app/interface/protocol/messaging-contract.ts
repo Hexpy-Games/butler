@@ -1,4 +1,6 @@
 import { APP_PROTOCOL_VERSION } from "./base-contract.ts";
+import type { MessageContent } from "../../../../foundation/message-content.ts";
+export type { MessageContent, MessageContentPart } from "../../../../foundation/message-content.ts";
 import type { MessageRole, MessageStatus, TurnState } from "./base-contract.ts";
 import type { SettingsView } from "./settings-contract.ts";
 import type { TurnExecutionControlsV1 } from "../../../core/turn-execution-controls.ts";
@@ -21,6 +23,7 @@ import type { ProjectDashboardDocument } from "./session-dashboard-contract.ts";
 import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
 
 export interface MessageRecord {
+  content_parts?: MessageContent;
   id: string;
   chat_id: string;
   turn_id?: string;
@@ -48,6 +51,7 @@ export interface MessageRecord {
 }
 
 export interface MessageSendRequest {
+  content_parts?: MessageContent;
   chat_id?: string;
   text?: string;
   client_message_id?: string;
@@ -73,6 +77,7 @@ export interface MessageSendResult {
 }
 
 export interface QueuedMessageRecord {
+  content_parts?: MessageContent;
   id: string;
   chat_id: string;
   text: string;
@@ -97,6 +102,7 @@ export interface SessionQueueView {
 }
 
 export interface QueueMessageRequest {
+  content_parts?: MessageContent;
   chat_id?: string;
   text?: string;
   client_message_id?: string;
@@ -114,6 +120,7 @@ export interface QueueMessageRequest {
 }
 
 export interface UpdateQueuedMessageRequest {
+  content_parts?: MessageContent;
   text?: string;
   /** Internal binding for a Plan-mode continuation. */
   plan_id?: string;

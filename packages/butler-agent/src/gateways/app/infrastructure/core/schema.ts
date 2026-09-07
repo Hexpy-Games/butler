@@ -4,6 +4,7 @@ import { ensureAppMessageQuerySchema } from "./message-query-schema.ts";
 import { ensureColumn, tableExists } from "./schema-migration.ts";
 import { ensureTerminalRetentionSchema } from "../retention/schema.ts";
 import { initializeProjectLedgerBindings } from "./project-ledger-binding-migration.ts";
+import { migrateSpaceSchema } from "./space-schema.ts";
 
 const DEFAULT_CHAT_ID = "general";
 const DEFAULT_CHAT_TITLE = "Onboarding";
@@ -315,6 +316,8 @@ export function migrateAppStoreSchema(
   ensureColumn(db, "messages", "safe_error_code", "TEXT");
   ensureColumn(db, "messages", "retryable", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "messages", "plan_json", "TEXT");
+  ensureColumn(db, "messages", "content_parts_json", "TEXT");
+  ensureColumn(db, "session_queued_messages", "content_parts_json", "TEXT");
   ensureColumn(db, "message_changed_files", "detail_json", "TEXT");
   ensureColumn(db, "projects", "ledger_project_id", "TEXT");
   ensureColumn(db, "turns", "execution_controls_json", "TEXT");
@@ -481,6 +484,7 @@ function legacyQueuedInputIdentityDigest(db: Database, row: {
 }
 
 export function seedAppStoreDefaults(db: Database): void {
+  migrateSpaceSchema(db);
   const now = new Date().toISOString();
   db.prepare(`
     INSERT OR IGNORE INTO chats (id, title, kind, project_id, pinned, archived, created_at, updated_at)

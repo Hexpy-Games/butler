@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import type { PointerEvent, RefObject } from "react";
 
 interface UseComposerFocusProps {
-  textAreaRef: RefObject<HTMLTextAreaElement | null>;
+  textAreaRef: RefObject<HTMLElement | null>;
 }
 
 export function useComposerFocus({ textAreaRef }: UseComposerFocusProps) {
@@ -12,7 +12,7 @@ export function useComposerFocus({ textAreaRef }: UseComposerFocusProps) {
       if (!(target instanceof Element)) return;
       if (
         target.closest(
-          "textarea,button,input,a,select,[role='button'],[role='menuitem'],[data-slot='switch']",
+          "[contenteditable='true'],textarea,button,input,a,select,[role='button'],[role='menuitem'],[data-slot='switch']",
         )
       ) {
         return;

@@ -7,6 +7,7 @@ export * from "./components/ButtonContainer";
 export * from "./components/Card";
 export * from "./components/Chart";
 export * from "./components/Clickable";
+export * from "./components/InlineReference";
 export * from "./components/ColorSwatchInput";
 export * from "./components/ContextMenu";
 export * from "./components/Dialog";

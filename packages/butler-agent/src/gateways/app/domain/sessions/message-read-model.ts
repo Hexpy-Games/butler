@@ -1,3 +1,4 @@
+import { readMessageContent } from "../../../../foundation/message-content.ts";
 import type {
   MessageFileKind,
   MessageFileRef,
@@ -20,6 +21,7 @@ import {
 } from "../../../../agent/btcc/project-plan.ts";
 
 export interface MessageReadModelRow {
+  content_parts_json?: string | null;
   rowid: number;
   id: string;
   chat_id: string;
@@ -93,6 +95,7 @@ export function messageFromRow(
     conversation_message_id: row.conversation_message_id ?? undefined,
     role: row.role,
     text: row.text,
+    content_parts: readMessageContent(row.content_parts_json),
     status: row.status,
     created_at: row.created_at,
     updated_at: row.updated_at,

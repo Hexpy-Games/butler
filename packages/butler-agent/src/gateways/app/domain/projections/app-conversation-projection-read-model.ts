@@ -59,7 +59,7 @@ export class AppConversationProjectionReadModel {
   ): MessageRecord[] {
     const rows = this.input.db.query<MessageRow, [string, number]>(`
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at, safe_error_code, retryable
       FROM messages
       WHERE conversation_session_id = ?
         AND rowid > ?

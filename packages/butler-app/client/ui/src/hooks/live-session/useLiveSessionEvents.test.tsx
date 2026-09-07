@@ -46,6 +46,7 @@ const navigationSession = (input: {
   archived: input.archived ?? false,
 });
 const initialNavigation = (): NavigationView => ({
+  space: { revision: 0, nodes: [], groups: [] },
   chats: [],
   projects: [
     {

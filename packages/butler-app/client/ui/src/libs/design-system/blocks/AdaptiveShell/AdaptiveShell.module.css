@@ -214,6 +214,10 @@
     backdrop-filter: var(--windows-sidebar-overlay-filter);
   }
 
+  .root[data-compact-sidebar-full-width="true"] .sidebar {
+    width: 100%;
+  }
+
   .inspector {
     right: 0;
     width: min(var(--right-panel-width), 92vw);

@@ -1,4 +1,6 @@
 import { Database } from "bun:sqlite";
+import { isMessageContent, messageContentText, readMessageContent } from "../../../../foundation/message-content.ts";
+import { AppSessionContextGate } from "./session-context-gate.ts";
 import { createHash } from "node:crypto";
 import type { QueuedMessageRow } from "../../infrastructure/core/records.ts";
 import type { AppMessageFileStore } from "../message-files/message-file-store.ts";
@@ -99,7 +101,7 @@ export class AppSessionQueueStore {
     const rows = this.db
       .query<QueuedMessageRow, [string]>(
         `
-      SELECT rowid, id, chat_id, text, controls_json, attachments_json, state,
+      SELECT rowid, id, chat_id, text, controls_json, attachments_json, content_parts_json, state,
         client_message_id, input_identity_digest, control_resolution_json, safe_error_code,
         dispatched_message_id, turn_id,
         claim_id, claim_owner, claimed_at, lease_expires_at,
@@ -127,7 +129,11 @@ export class AppSessionQueueStore {
   ): Promise<SessionQueueView> {
     const chatId = input.chat_id?.trim() || DEFAULT_CHAT_ID;
     this.ensureChat(chatId);
-    const text = (input.text ?? "").trim();
+    new AppSessionContextGate(this.db).assertNotRelocating(chatId);
+    if (input.content_parts !== undefined && !isMessageContent(input.content_parts)) {
+      throw new AppStoreOperationError(400, "invalid_message_content", "대화 참조의 형식이 올바르지 않습니다.");
+    }
+    const text = input.content_parts ? messageContentText(input.content_parts) : (input.text ?? "").trim();
     const clientMessageId = stableClientMessageId(input.client_message_id);
     const existing = this.getQueuedMessageByClientId(chatId, clientMessageId);
     if (existing) {
@@ -143,7 +149,7 @@ export class AppSessionQueueStore {
         queuedInputIdentityDigest(input, text, replayFiles, {
           includeSubsessionResult: false,
         });
-      const legacyReplayMatches = existing.input_identity_digest ===
+      const legacyReplayMatches = !input.content_parts && existing.input_identity_digest ===
         legacyQueuedInputIdentityDigest(input, text, replayFiles) &&
         sameAttachmentIdentityOrder(
           requestedAttachmentIds(input),
@@ -178,6 +184,7 @@ export class AppSessionQueueStore {
     };
     try {
       reservation = this.db.transaction(() => {
+        new AppSessionContextGate(this.db).assertNotRelocating(chatId);
         const concurrent = this.getQueuedMessageByClientId(chatId, clientMessageId);
         if (concurrent) return { concurrent };
         const resolvedControls = admittedControls ?? this.controlsForMessageSend(chatId, input);
@@ -198,12 +205,12 @@ export class AppSessionQueueStore {
             `
       INSERT INTO session_queued_messages (
         id, chat_id, text, client_message_id, input_identity_digest, control_resolution_json,
-        controls_json, attachments_json,
+        controls_json, attachments_json, content_parts_json,
         state, safe_error_code, dispatched_message_id, turn_id, claim_id,
         claim_owner, claimed_at, lease_expires_at, terminal_result_message_id,
         created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', NULL, NULL, NULL, NULL, NULL, NULL,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, ?, ?)
             `,
           )
@@ -216,6 +223,7 @@ export class AppSessionQueueStore {
             JSON.stringify(controlResolution),
             JSON.stringify(controlResolution.controls),
             JSON.stringify(queueAttachmentPayload(attachableFiles)),
+            input.content_parts ? JSON.stringify(input.content_parts) : null,
             now,
             now,
           );
@@ -324,11 +332,11 @@ export class AppSessionQueueStore {
     this.db.query(`
       INSERT INTO session_queued_messages (
         id, chat_id, text, client_message_id, input_identity_digest, control_resolution_json,
-        controls_json, attachments_json, state, safe_error_code, dispatched_message_id,
+        controls_json, attachments_json, content_parts_json, state, safe_error_code, dispatched_message_id,
         turn_id, claim_id, claim_owner, claimed_at, lease_expires_at,
         terminal_result_message_id, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, '[]', 'queued', NULL, NULL, NULL, NULL, NULL, NULL,
+      VALUES (?, ?, ?, ?, ?, ?, ?, '[]', NULL, 'queued', NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, ?, ?)
     `).run(
       queuedId,
@@ -368,8 +376,11 @@ export class AppSessionQueueStore {
         "Approved command queue entries cannot be edited.",
       );
     }
-    const text =
-      typeof input.text === "string" ? input.text.trim() : current.text;
+    if (input.content_parts !== undefined && !isMessageContent(input.content_parts)) {
+      throw new AppStoreOperationError(400, "invalid_message_content", "대화 참조의 형식이 올바르지 않습니다.");
+    }
+    const content = input.content_parts ?? (input.text === undefined ? readMessageContent(current.content_parts_json) : undefined);
+    const text = content ? messageContentText(content) : typeof input.text === "string" ? input.text.trim() : current.text;
     const attachableFiles =
       input.attachments === undefined
         ? this.messageFiles.queuedRows(current)
@@ -406,14 +417,14 @@ export class AppSessionQueueStore {
       attachableFiles,
       controlResolution.controls.model,
     );
-    const inputIdentityDigest = queuedInputIdentityDigest(input, text, attachableFiles);
+    const inputIdentityDigest = queuedInputIdentityDigest({ ...input, content_parts: content }, text, attachableFiles);
     const now = new Date().toISOString();
     this.db
       .query(
         `
       UPDATE session_queued_messages
       SET text = ?, control_resolution_json = ?, controls_json = ?,
-        attachments_json = ?, input_identity_digest = ?, updated_at = ?
+        attachments_json = ?, content_parts_json = ?, input_identity_digest = ?, updated_at = ?
       WHERE id = ? AND state = 'queued'
     `,
       )
@@ -422,6 +433,7 @@ export class AppSessionQueueStore {
         JSON.stringify(controlResolution),
         JSON.stringify(controlResolution.controls),
         JSON.stringify(queueAttachmentPayload(attachableFiles, visualAdmission)),
+        content ? JSON.stringify(content) : null,
         inputIdentityDigest,
         now,
         queuedMessageId,
@@ -476,7 +488,7 @@ export class AppSessionQueueStore {
       SELECT rowid, id, chat_id, text, client_message_id, input_identity_digest,
         control_resolution_json,
         controls_json,
-        attachments_json, state, safe_error_code, dispatched_message_id, turn_id,
+        attachments_json, content_parts_json, state, safe_error_code, dispatched_message_id, turn_id,
         claim_id, claim_owner, claimed_at, lease_expires_at,
         terminal_result_message_id, created_at, updated_at
       FROM session_queued_messages
@@ -499,7 +511,7 @@ export class AppSessionQueueStore {
       SELECT rowid, id, chat_id, text, client_message_id, input_identity_digest,
         control_resolution_json,
         controls_json,
-        attachments_json, state, safe_error_code, dispatched_message_id, turn_id,
+        attachments_json, content_parts_json, state, safe_error_code, dispatched_message_id, turn_id,
         claim_id, claim_owner, claimed_at, lease_expires_at,
         terminal_result_message_id, created_at, updated_at
       FROM session_queued_messages
@@ -525,7 +537,7 @@ export class AppSessionQueueStore {
       SELECT rowid, id, chat_id, text, client_message_id, input_identity_digest,
         control_resolution_json,
         controls_json,
-        attachments_json, state, safe_error_code, dispatched_message_id, turn_id,
+        attachments_json, content_parts_json, state, safe_error_code, dispatched_message_id, turn_id,
         claim_id, claim_owner, claimed_at, lease_expires_at,
         terminal_result_message_id, created_at, updated_at
       FROM session_queued_messages
@@ -543,7 +555,7 @@ export class AppSessionQueueStore {
     const recoveryRows = currentOwner
       ? rows.concat(this.db.query<QueuedMessageRow, string[]>(`
           SELECT rowid, id, chat_id, text, client_message_id, input_identity_digest,
-            control_resolution_json, controls_json, attachments_json, state,
+            control_resolution_json, controls_json, attachments_json, content_parts_json, state,
             safe_error_code, dispatched_message_id, turn_id,
             claim_id, claim_owner, claimed_at, lease_expires_at,
             terminal_result_message_id, created_at, updated_at
@@ -880,6 +892,7 @@ export class AppSessionQueueStore {
       id: row.id,
       chat_id: row.chat_id,
       text: row.text,
+      content_parts: readMessageContent(row.content_parts_json),
       ...(row.client_message_id
         ? { client_message_id: row.client_message_id }
         : {}),
@@ -926,6 +939,7 @@ function queuedInputIdentityDigest(
   return createHash("sha256").update(JSON.stringify({
     version: requestedIds.length > 0 ? 2 : 1,
     text,
+    ...(input.content_parts ? { content_parts: input.content_parts } : {}),
     explicit_controls: {
       model: input.model ?? null,
       reasoning_effort: input.reasoning_effort ?? null,

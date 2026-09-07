@@ -137,6 +137,7 @@ export interface SettingsView {
     string,
   ];
   translucent_sidebar: boolean;
+  smart_grouping_enabled: boolean;
   diagnostics_enabled: boolean;
   desktop_notifications: DesktopNotificationSettingsView;
   desktop_tray_enabled: boolean;
@@ -180,6 +181,7 @@ export interface UpdateSettingsRequest {
   main_screen_theme_preset?: SettingsView["main_screen_theme_preset"];
   main_screen_theme_custom_colors?: SettingsView["main_screen_theme_custom_colors"];
   translucent_sidebar?: boolean;
+  smart_grouping_enabled?: boolean;
   diagnostics_enabled?: boolean;
   desktop_notifications?: Partial<DesktopNotificationSettingsView>;
   desktop_tray_enabled?: boolean;
@@ -190,7 +192,7 @@ export interface UpdateSettingsRequest {
 
 export interface CommandPaletteResult {
   id: string;
-  kind: "chat" | "project" | "project_session" | "automation" | "settings";
+  kind: "chat" | "project" | "project_session" | "group" | "automation" | "settings";
   title: string;
   subtitle?: string;
   route: string;

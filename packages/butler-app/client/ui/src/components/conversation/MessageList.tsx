@@ -1,4 +1,6 @@
-import { memo, useRef } from "react";
+import { memo, useRef, useLayoutEffect, useState } from "react";
+import { SessionBranchSeed } from "./SessionBranchSeed";
+import { useMessageNavigation } from "@/app/messageNavigation";
 import type { MessageRecord, TurnProgressSnapshot } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { MessageItem } from "./MessageItem";
@@ -25,6 +27,18 @@ function MessageListComponent({
   const parentRef = useRef<HTMLDivElement | null>(null);
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const summary = useButlerStore((state) => state.summary);
+  const seedRef = useRef<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const target = useMessageNavigation(state => state.target);
+  useLayoutEffect(() => {
+    const node = seedRef.current;
+    if (!node) { setHeaderHeight(0); return; }
+    const measure = () => setHeaderHeight(node.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [summary?.branch_seed]);
 
   const {
     visibleMessages,
@@ -48,6 +62,7 @@ function MessageListComponent({
       itemCount,
       bottomReserve,
       scrollRef: parentRef,
+      headerHeight,
     });
 
   const scrollState = useConversationAutoScroll({
@@ -59,11 +74,24 @@ function MessageListComponent({
     showTurnActivity,
     scrollRef: parentRef,
   });
+  useLayoutEffect(() => {
+    if (target?.sessionId !== activeChatId) return;
+    const index = visibleMessages.findIndex(message => message.id === target.messageId);
+    if (index < 0) return;
+    const frame = requestAnimationFrame(() => {
+      scrollState.releaseBottomLock();
+      const offset = rowVirtualizer.getOffsetForIndex(index, "start");
+      rowVirtualizer.scrollToOffset((offset?.[0] ?? 0) + topOffset);
+      useMessageNavigation.setState({ target: null });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [target, activeChatId, visibleMessages, rowVirtualizer, scrollState.releaseBottomLock, topOffset]);
 
   return (
     <>
       <ConversationScroll virtualized scrollRef={parentRef}>
         <MessageListSurface height={virtualListHeight}>
+          {summary?.branch_seed && <div ref={seedRef}><SessionBranchSeed /></div>}
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
             if (
               showTurnActivity &&

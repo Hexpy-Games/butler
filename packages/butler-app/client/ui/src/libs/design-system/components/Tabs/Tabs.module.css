@@ -29,6 +29,13 @@
   display: none;
 }
 
+.stretch {
+  display: grid;
+  width: 100%;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
+
 .variant-default {
   min-height: 32px;
   padding: var(--space-1);
@@ -88,6 +95,15 @@
 .trigger[data-disabled] {
   cursor: not-allowed;
   opacity: 0.52;
+}
+
+.stretch .trigger {
+  gap: var(--space-xs);
+  padding-inline: var(--space-sm);
+}
+
+.stretch .trigger svg {
+  flex-shrink: 0;
 }
 
 .orientation-vertical .list {

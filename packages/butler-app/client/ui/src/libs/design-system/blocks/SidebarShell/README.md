@@ -1,5 +1,11 @@
 # SidebarShell
 
+The shell accepts `--sidebar-region-gap` and `--sidebar-content-inset` CSS
+variables for token-based section spacing. Defaults preserve existing layouts.
+Set `--sidebar-footer-border-width: 0` for a spacing-only footer separation.
+Set `scrollFade={false}` when the scrolling content has opaque sticky headers
+that should not fade at the viewport edge. The default fade remains unchanged.
+
 ## What is this component
 
 `SidebarShell` is the responsive structural shell for Butler's left navigation.

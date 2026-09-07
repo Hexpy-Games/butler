@@ -192,7 +192,11 @@ export async function runScenarioStep(
   });
   const previousTurnId = before.latest_turn?.id ?? null;
   const prompt = materializePrompt(step.prompt, run);
-  await launch.page.fill('[data-test-class="composer-card"] textarea', prompt);
+  const compact = '[data-test-class="composer-card"][data-expanded="false"] [data-slot="composer-compact-preview"]';
+  if (await launch.page.evaluate<boolean>(`Boolean(document.querySelector(${JSON.stringify(compact)}))`)) {
+    await launch.page.clickSelector(compact);
+  }
+  await launch.page.fill('[data-test-class="composer-card"] [contenteditable="true"]', prompt);
   const submittedAtMs = Date.now();
   await launch.page.clickSelector('[data-test-class="composer-send-button"]');
   const terminal = await waitForTurn(

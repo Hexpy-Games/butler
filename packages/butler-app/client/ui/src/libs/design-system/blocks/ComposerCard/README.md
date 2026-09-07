@@ -32,6 +32,11 @@ Product containers provide draft state, submit handlers, attachment actions,
 and menu controls. Compose `ComposerCardTextarea`, `ComposerCardToolbar`,
 `ComposerPlanToggle`, and `ComposerSendButton`.
 
+For inline references, use `ComposerCardEditor` with `ComposerCardEditable`
+(a slot for the editor's contenteditable) and `ComposerCardPlaceholder`.
+These reuse the same padding, eight-line maximum, typography and toolbar.
+The DS owns appearance only; the product owns Lexical and serialization.
+
 Plan decisions reuse the product Composer textarea and toolbar. Do not add a
 second input card or nest another form inside `ComposerCard`.
 

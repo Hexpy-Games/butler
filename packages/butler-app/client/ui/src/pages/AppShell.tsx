@@ -133,6 +133,7 @@ function AppWorkspaceShell() {
       chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window"
       leftOpen={leftOpen}
+      compactSidebarFullWidth
       platform={nativePlatform()}
       resizing={Boolean(resizingPanel)}
       rightOpen={effectiveRightOpen}

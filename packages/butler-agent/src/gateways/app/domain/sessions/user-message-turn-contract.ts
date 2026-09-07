@@ -1,3 +1,4 @@
+import type { MessageContent } from "../../../../foundation/message-content.ts";
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
 import type { MessageFileRow } from "../message-files/message-file-store.ts";
 import type {
@@ -109,6 +110,7 @@ export interface UserMessageTurnStoreInput {
     status: "sent",
     options: {
       clientMessageId?: string;
+      contentParts?: MessageContent;
       turnId?: string;
       attachments?: MessageFileRow[];
     },
@@ -116,6 +118,7 @@ export interface UserMessageTurnStoreInput {
   setTurnUserMessage: (turnId: string, messageId: string) => void;
   appendEvent: (type: string, payload: Record<string, unknown>) => void;
   isPublicUserMessage: (chatId: string, text: string) => boolean;
+  organizeFirstMessage: (message: MessageRecord, model: string) => void;
   appendTurnAcknowledgedEvent: (chatId: string, turnId: string) => void;
   updateTurnState: (
     turnId: string,

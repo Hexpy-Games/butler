@@ -132,6 +132,7 @@ export function createAppSessionModuleGraph(input: {
       host.enqueueAppTransportTurn(turnInput),
   });
   const userMessageTurns = new AppUserMessageTurnStore({
+    organizeFirstMessage: (message, model) => { void host.sessionTopicGrouping.start(message.chat_id, message.id, message.text, model); },
     butlerData,
     defaultChatId,
     ensureChat: (chatId) => host.ensureChat(chatId),
