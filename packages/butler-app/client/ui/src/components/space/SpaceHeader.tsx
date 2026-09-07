@@ -1,10 +1,8 @@
 import {
   Button,
   ButtonContainer,
-  IconButton,
   NavRow,
   NavSectionHeading,
-  PanelLeft,
   PencilLine,
   Search,
   Stack,
@@ -14,6 +12,7 @@ import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
 import type { SpaceRowData } from "@/app/space/projection";
 import { SpaceRow } from "./SpaceRow";
+import { SpaceBrand } from "./SpaceBrand";
 import styles from "./SpaceSidebar.module.css";
 
 /** These entry actions and shortcuts scroll away before the browse tabs stick. */
@@ -24,20 +23,7 @@ export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
   return (
     <Stack gap="6" className={styles.sidebarHeader}>
       <Stack gap="1">
-        <Stack
-          align="row"
-          justify="between"
-          cross="center"
-          className={styles.brand}
-        >
-          <Typo.AppTitle>Butler</Typo.AppTitle>
-          <IconButton
-            label="사이드바 닫기"
-            onClick={() => useButlerStore.getState().setLeftOpen(false)}
-          >
-            <PanelLeft />
-          </IconButton>
-        </Stack>
+        {window.butlerApp && <SpaceBrand />}
         <nav className={styles.primaryActions} aria-label="대화 시작과 검색">
           <NavRow
             icon={<PencilLine />}

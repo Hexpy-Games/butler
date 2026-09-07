@@ -13,7 +13,7 @@ import {
 export function AdaptiveShellFixture() {
   const [panel, setPanel] = useState<"left" | "right" | null>("left");
   return (
-    <div style={{ height: 420 }}>
+    <div style={{ height: 420, contain: "layout paint" }}>
       <AdaptiveShell
         leftOpen={panel === "left"}
         rightOpen={panel === "right"}

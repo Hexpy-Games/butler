@@ -6,6 +6,8 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { NavigationView, SessionSummary } from "@/app/types.ts";
 import { activeChatFromNavigation } from "@/app/utils.ts";
+import { projectSpace } from "@/app/space/projection";
+import { spaceActivity } from "@/app/space/activity";
 import {
   FakeClock,
   flushMicrotasks,
@@ -574,6 +576,34 @@ test("relevant active-session events use leading and trailing refreshes", async 
   expect(refreshedSessions).toHaveLength(1);
   await fakeClock?.advanceBy(1);
   expect(refreshedSessions).toHaveLength(2);
+});
+
+test.each(["general", "session-live-events"])("general completion converges sidebar activity with active session %s", async (activeSession) => {
+  const general: SessionSummary = {
+    id: "general", kind: "chat", title: "일반", pinned: false, archived: false,
+    created_at: "2026-09-07T10:00:00.000Z", updated_at: "2026-09-07T10:00:00.000Z",
+    last_activity_at: "2026-09-07T10:00:00.000Z", active_turn_state: "thinking",
+  };
+  storeState.navigation = { ...initialNavigation(), chats: [general] };
+  storeState.activeChatId = activeSession;
+  await renderHarness();
+  expect(spaceActivity(projectSpace(storeState.navigation).get("s:general")?.session)).toBe("working");
+  navigationRefreshSnapshots.push({ ...storeState.navigation, chats: [{ ...general, active_turn_state: "delivered" }] });
+  deliverEvent(0, {
+    id: 43, type: "turn.state_changed", created_at: "2026-09-07T10:01:00.000Z",
+    payload: { turn: { id: "general-turn", chat_id: "general", state: "delivered" } },
+  });
+  await flushMicrotasks();
+  expect(navigationRefreshCalls).toBe(1);
+  expect(spaceActivity(projectSpace(storeState.navigation).get("s:general")?.session)).toBeNull();
+  navigationRefreshSnapshots.push({ ...storeState.navigation, chats: [{ ...general, title: "Updated" }] });
+  deliverEvent(0, {
+    id: 44, type: "session.updated", created_at: "2026-09-07T10:02:00.000Z",
+    payload: { session: { ...general, title: "Updated" } },
+  });
+  await flushMicrotasks();
+  expect(navigationRefreshCalls).toBe(2);
+  expect(storeState.navigation.chats[0]?.title).toBe("Updated");
 });
 
 test("a single relevant event causes exactly one refresh", async () => {

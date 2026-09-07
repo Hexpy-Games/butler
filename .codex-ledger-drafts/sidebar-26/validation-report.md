@@ -1,5 +1,16 @@
 # #26 검증·완성도 리뷰
 
+## r5 창 레이아웃·완료 상태 보정
+
+- 원인: scrollContent의 18px gap과 sticky padding 중복, 신호등 공간+스크롤 inset+brand padding 중복, 창 토글을 브랜드 옆으로 옮긴 이중 소유, SpaceSidebar의 불투명 덮개, 환경을 무시한 1023px overlay 분기, turn.state_changed/일반 session.updated의 navigation 갱신 누락이었다.
+- 단일 window chrome 토글을 복원했다. Electron 열림/닫힘 실제 화면에서 신호등 오른쪽 좌표를 유지했다. 약 800px 실제 Electron 창에서도 sidebar와 workspace가 함께 도킹되며, 검증 후 창 크기를 복원했다.
+- 실제 빌드 UI+격리 App HTTP/SQLite에서 1440/800/390/320px 검증 통과. 제목 영역→첫 아이템 간격 Favorites/Space 모두 8px; 더보기와 같은 깊이 세션 제목 x 차이 0px; sidebar/sticky surface에 불투명 덮개 없음; browser 800px부터 단일 push 및 세션 선택 시 닫힘. 스크린샷 `.tmp/sidebar-r5/browser-{width}.png`.
+- 실제 HTTP 메시지→live event→실제 sidebar에서 작업 상태 표시 후 delivered 응답에 따라 스피너 DOM이 제거됐다. 페이지 reload/수동 navigation 갱신 없이 통과했다. 모델 의미 E2E가 아니라 deterministic responder를 사용한 UI 이벤트 통합 검사다. 운영 Electron에서도 실제 사용자의 완료 응답과 일반 채널 스피너 없음 확인.
+- live-session hook/navigation 26 tests, 99 assertions 통과. 현재 일반 채널과 다른 활성 채널 두 경우를 검사했다. responsive 11 tests, 68 assertions 통과. 기존 main의 Lexical 전환 이후 남은 composer `const minRows = 1` 소스 문자열 검사 1개는 해당 없음으로 별도 기록하고 회귀 실행에서 제외했다. 전체 저장소 테스트 무오류를 주장하지 않는다.
+- typecheck, lint(DS/CSS), UI build, diff whitespace 검사 통과. DS AdaptiveShell/SidebarShell/CollapsibleNavGroup/NavSection/ChromeFrame을 5개 viewport에서 총 25개 렌더링했다. fixture의 fixed drawer가 viewer 바깥으로 튀어나오지 않도록 fixture만 paint/layout contain 처리했다.
+- 구조 리뷰: 창 토글 한 소유자, viewport 분류 공유, openSession에서 drawer 탐색 완료 처리, canonical navigation만 상태 권위로 유지했다. 새 polling/BTCC 상태/원본 데이터 보정은 없다. module audit의 기존 큰 테스트 파일 2개와 기존 SidebarShell barrel은 이번 런타임 경로 변경 대상이 아니며 별도 분리하지 않았다.
+- 실기기 iOS Safari와 Windows/macOS 외 네이티브 창은 이번 검증 범위가 아니다.
+
 ## r4 추가 보정 검증
 
 - 고유 general 채널은 archive/PATCH/DELETE/permanent-delete 모두 409로 거절한다. 권한 종료 부수효과 이전에 같은 정책을 검사한다. 일반이라는 제목의 다른 대화는 보관 가능하다.

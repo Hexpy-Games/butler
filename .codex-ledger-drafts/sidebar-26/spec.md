@@ -1,6 +1,6 @@
 # #26 사이드바와 대화 정리 — 합의 명세
 
-Revision: 2026-09-07-r4. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
+Revision: 2026-09-07-r5. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
 GitHub: https://github.com/Hexpy-Games/butler/issues/26
 Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 
@@ -16,7 +16,8 @@ Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 ## 2. 정보 구조
 
 ```text
-Butler                         사이드바 토글
+창 상단 고정 사이드바 토글       기존 위치 유지
+Butler
 새 대화
 검색                           모바일에서도 각각 한 줄
 
@@ -712,6 +713,19 @@ prototype mock-store와 실제 store를 동시에 동기화하지 않는다. 기
 - 서버: 기존 seedAppStoreDefaults에서 id=general만 archived=0으로 복구한다. session lifecycle의 공통 보호 정책을 authority close 전에 적용하고, store의 update/archive/delete/creation rollback도 같은 정책을 사용한다. 거절은 409 general_channel_protected이며 대기 중인 권한 요청을 닫지 않는다.
 - UI: SidebarShell의 scrollHeader/stickyHeader 슬롯은 같은 scrollContent 안에 있다. CSS position:sticky로만 스크롤을 처리하며 중첩 스크롤/휠 전환 로직을 만들지 않는다. ResizeObserver가 sticky 헤더 높이만 CSS 변수로 전달하고 트리 조상 sticky top에 그 높이를 더한다. scroll 이벤트별 React 상태 갱신은 없다.
 - 검사: 실제 API의 보관/PATCH/삭제 거절, 일반과 동명이인 보관 가능, DB 재개방 시 기존 일반 이력 보존 복구, 권한 close 부수효과 없음. 브라우저에서는 모바일 세로 배치/빈 설명 정렬/메뉴 전체 이동/sticky 고정/페이드 computed style을 확인한다.
+
+## 22. r5 창 레이아웃·상태 보정
+
+최신 사용자 7개 지적이 r4의 충돌하는 시각 규칙보다 우선한다.
+
+- 제목→첫 행: Favorites/Space/Recent/Running 모두 제목 영역 아래 8px. SidebarShell의 기존 scrollContent 18px gap과 sticky padding을 중복 합산하지 않는다. 스크롤 시작 영역→탭 구역 간 24px 분리는 별도로 유지한다.
+- Electron: 원래 titlebar 높이 48px만 신호등에 예약하고 Butler 제목 위 추가 fade padding과 brand padding을 중복하지 않는다. 창 토글은 기존 ChromeFloatingToggleLayer의 좌표(macOS x=traffic-controls-width+8px, y=10px)를 열림/닫힘 모두 사용한다. 브랜드 옆 별도 토글을 제거한다. 브라우저에서도 한 개의 고정 chrome 컨트롤만 사용하며 제목/탭을 가리지 않도록 상단 공간을 예약한다.
+- 더보기: 기존 SidebarSessionLoadMore/NavRow를 재사용한다. 아이콘의 동일 폭 슬롯을 예약해 텍스트가 같은 깊이의 세션 제목 시작점에 맞는다. 펼친 가지 끝에는 8px 여백을 두며 접힌 가지에는 추가하지 않는다.
+- 환경별 반응형: 브라우저 1023px 이하의 좌측 패널은 모바일과 같은 push 방식, Electron 641px 이상은 원래 좌측 docked/grid 방식이다. Electron 640px 이하는 compact를 유지한다. CSS와 store/hook의 모드 분류가 같은 기준을 따른다. 독립적인 중간 overlay 사이드바는 제거한다.
+- 배경: SpaceSidebar의 불투명 rgb(alpha=1) 덮개를 제거하고 기존 AdaptiveShell/sidebar-bg 반투명 재질을 사용한다. 고정 헤더는 transparent + 기존 backdrop blur로 아래 텍스트의 가독성을 유지한다. 부모 재질의 색을 한 번 더 칠해 어두운 띠를 만들지 않는다. 창 모서리와 workspace/inspector 합성은 기존 shell 소유를 유지한다.
+- 제목 배치: 브라우저 Butler 브랜드는 고정 titlebar에서 원래 창 토글 다음에 배치하며 compact에서도 유지한다. Electron은 기존 신호등 titlebar 바로 아래 첫 스크롤 행에 브랜드를 둔다. 즐겨찾기/스페이스 heading은 액션 유무와 관계없이 같은 최소 높이를 사용해 텍스트 기준 간격도 맞춘다.
+- 완료 상태: sidebar가 별도 상태를 추정하지 않는다. turn.state_changed 및 일반 session.updated는 기존 bounded navigation reconciliation의 invalidation 대상이다. 활성 대화인지 여부와 관계없이 최신 canonical /navigation을 적용하고, 진행 중 응답이 뒤늦게 완료 상태를 덮지 않도록 기존 generation fence를 쓴다. 모델/BTCC 완료 판정·DB 이력은 변경하지 않는다.
+- 검증: 실제 hook 이벤트→navigation→spaceActivity 경로에서 thinking→delivered와 타 세션 종료를 재현한다. shell에서 열림/닫힘 토글 좌표, 8px 간격, 더보기 정렬, browser/Electron의 390/800/1440px 레이아웃, 반투명 토큰을 검사하고 실제 Electron 화면을 확인한다.
 
 실제 모델 의미 판정은 확률적이므로 고정 mock 결과를 모델 E2E라고 부르지 않는다.
 분류의 데이터 불변성과 UI 상태는 결정적 테스트, 품질·응답시간은 실제 모델 측정으로 분리한다.

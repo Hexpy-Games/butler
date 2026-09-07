@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { chromeEnvironment } from "./chromeEnvironment.ts";
 import {
   currentAdaptiveMode,
   normalizeAdaptivePanelState,
@@ -945,7 +946,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       const leftOpen = resolveUpdate(value, state.leftOpen);
       return leftOpen
         ? normalizeAdaptivePanelState({
-            mode: currentAdaptiveMode(),
+            mode: currentAdaptiveMode(chromeEnvironment()),
             requested: "left",
             leftOpen,
             rightOpen: state.rightOpen,
@@ -957,7 +958,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       const rightOpen = resolveUpdate(value, state.rightOpen);
       return rightOpen
         ? normalizeAdaptivePanelState({
-            mode: currentAdaptiveMode(),
+            mode: currentAdaptiveMode(chromeEnvironment()),
             requested: "right",
             leftOpen: state.leftOpen,
             rightOpen,
@@ -970,7 +971,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   openArtifact: (artifactId, artifact) =>
     set((state) => ({
       ...normalizeAdaptivePanelState({
-        mode: currentAdaptiveMode(),
+        mode: currentAdaptiveMode(chromeEnvironment()),
         requested: "right",
         leftOpen: state.leftOpen,
         rightOpen: true,
@@ -1001,7 +1002,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     })),
   hydrateUiState: (uiState) => {
     const panels = restoreAdaptivePanelState({
-      mode: currentAdaptiveMode(),
+      mode: currentAdaptiveMode(chromeEnvironment()),
       leftOpen: uiState.left_open,
       rightOpen: uiState.right_open,
     });
@@ -1232,6 +1233,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         : sessionMessageViews;
       return {
         activeChatId: chatId,
+        leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded"
+          ? state.leftOpen : false,
         observerSessionId: null,
         observerTargetTurnId: null,
         observerHistory: [],

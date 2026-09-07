@@ -5,6 +5,7 @@ import type {
   ReactNode,
 } from "react";
 import { cn } from "../../lib/utils";
+import { useAdaptiveDrawer } from "../../responsive";
 import styles from "./AdaptiveShell.module.css";
 
 export interface AdaptiveShellProps extends HTMLAttributes<HTMLDivElement> {
@@ -30,6 +31,7 @@ export function AdaptiveShell({
   children,
   ...props
 }: AdaptiveShellProps) {
+  const drawer = useAdaptiveDrawer(chromeEnvironment);
   return (
     <div
       className={cn(styles.root, className)}
@@ -39,6 +41,7 @@ export function AdaptiveShell({
       data-resizing={resizing}
       data-transparent-workspace={transparentWorkspace}
       data-chrome-environment={chromeEnvironment}
+      data-panel-layout={drawer ? "drawer" : "docked"}
       data-platform={platform}
       data-compact-sidebar-full-width={compactSidebarFullWidth || undefined}
       {...props}

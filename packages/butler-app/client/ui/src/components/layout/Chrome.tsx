@@ -1,6 +1,7 @@
 import {
   ChromeFloatingToggleLayer,
   PanelLeft,
+  PanelLeftOpen,
 } from "@/butler-ds";
 import { IconButton } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
@@ -17,16 +18,13 @@ export function WindowChromeLayer({
   const leftOpen = leftOpenProp ?? storeLeftOpen;
   const toggle = onToggle ?? (() => setLeftOpen((value) => !value));
 
-  // The open sidebar owns its close control beside the brand.
-  if (leftOpen) return null;
-
   return (
     <ChromeFloatingToggleLayer>
       <IconButton
-        label="Show sidebar"
+        label={leftOpen ? "Hide sidebar" : "Show sidebar"}
         onClick={toggle}
       >
-        <PanelLeft size={16} />
+        {leftOpen ? <PanelLeftOpen size={16} /> : <PanelLeft size={16} />}
       </IconButton>
     </ChromeFloatingToggleLayer>
   );

@@ -13,11 +13,13 @@ import { useOrganization } from "@/app/space/organization";
 import { projectSpace, spaceChildren } from "@/app/space/projection";
 import { spaceActivity } from "@/app/space/activity";
 import { SpaceHeader } from "./SpaceHeader";
+import { SpaceBrand } from "./SpaceBrand";
 import { SpaceBrowseHeader } from "./SpaceBrowseHeader";
 import { SpaceRow } from "./SpaceRow";
 import { SpaceDialogs } from "./SpaceDialogs";
 import { SpaceRootDrop } from "./SpaceRootDrop";
 import { SidebarSettingsItem } from "../layout/SidebarSettingsItem";
+import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 import styles from "./SpaceSidebar.module.css";
 
 export function SpaceSidebar() {
@@ -46,9 +48,9 @@ export function SpaceSidebar() {
       <SidebarShell
         collapsed={!leftOpen}
         titlebar={
-          window.butlerApp?.platform === "darwin" ? (
+          window.butlerApp ? (
             <SidebarTrafficSpace />
-          ) : undefined
+          ) : <SpaceBrand />
         }
         className={styles.sidebar}
         ariaLabel="스페이스 탐색"
@@ -95,15 +97,10 @@ export function SpaceSidebar() {
               />
             ))}
           {roots.length > visibleCount && (
-            <ButtonContainer size="sm">
-              <Button
-                size="sm"
-                variant="inline"
-                onClick={() => setVisibleCount((n) => n + 30)}
-              >
-                나머지 {roots.length - visibleCount}개 더보기
-              </Button>
-            </ButtonContainer>
+            <SidebarSessionLoadMore
+              remainingCount={roots.length - visibleCount}
+              onClick={() => setVisibleCount((n) => n + 30)}
+            />
           )}
           {tab === "all" && <SpaceRootDrop rows={rows} />}
           {tab === "running" && (

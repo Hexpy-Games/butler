@@ -9,6 +9,12 @@ For an all-menu scroll, put entry actions in `scrollHeader` and browse controls
 in `stickyHeader`. Both use the same scrollbar as children. The sticky slot sits
 below the fade and publishes its measured height as `--nav-sticky-offset` for
 nested tree headers. No wheel interception or second scrollbar is needed.
+The sticky header owns an 8px trailing gap; the all-menu scroll removes its
+legacy inter-section gap to avoid doubling that space. Sticky material accepts
+`--nav-sticky-surface` and `--nav-sticky-filter`; transparent blur preserves the
+parent glass material without applying its tint twice.
+Set `--sidebar-compact-titlebar-display: flex` when a compact sidebar needs its
+brand titlebar alongside fixed window chrome. The default remains hidden.
 
 ## What is this component
 
