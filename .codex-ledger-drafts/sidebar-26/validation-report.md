@@ -1,5 +1,15 @@
 # #26 검증·완성도 리뷰
 
+## r4 추가 보정 검증
+
+- 고유 general 채널은 archive/PATCH/DELETE/permanent-delete 모두 409로 거절한다. 권한 종료 부수효과 이전에 같은 정책을 검사한다. 일반이라는 제목의 다른 대화는 보관 가능하다.
+- 재시작 시 보관된 general만 복구한다. 기존 메시지와 생성 시각, 대화 식별자 보존을 테스트했다.
+- 모바일 액션 세로 배치, 즐겨찾기 제목 아래 8px, 빈 설명의 아이콘 시작점 정렬, 단일 전체 스크롤, 탐색 헤더 sticky, 기존 fade를 적용했다. DS SidebarShell 슬롯과 CollapsibleNavGroup offset을 확장했다.
+- 집중 검사 16 tests / 263 assertions, 일반 대화 보관 중 transport 검사 1 test 통과. typecheck, lint, UI build 및 DS 5개 viewport render 통과. 기존 app-client-design 실패 7건은 그대로이며 전체 저장소 green을 의미하지 않는다.
+- 실제 제품 DOM에서 Chromium 320/390/430px 및 1440px의 배치와 스크롤 좌표를 검사했다. 최신 탭에서도 고정 동작을 확인했다. 트리 그룹 sticky top은 탐색 헤더 118px + fade 14px = 132px로 반영됐다.
+- /tmp/butler-r4-mobile-top.png, /tmp/butler-r4-mobile-sticky.png, /tmp/butler-r4-desktop-top.png, /tmp/butler-r4-desktop-sticky.png를 직접 확인했다. 격리 서버의 샘플 대화로 UI를 검사했으며 실제 모델 또는 물리 iOS Safari 검증으로 주장하지 않는다.
+- 완성도 리뷰: 여섯 요청은 동일 제품 경로에 반영됐다. 수동 스크롤 전환·별도 스크롤 컨테이너·모델 실행 변경은 없다. 운영 반영은 아래 추가 기록으로 확인한다.
+
 기준: UI-SIDEBAR-INFORMATION-ARCHITECTURE r3 및 2026-09-07 메시지 하단 아이콘 배치 추가 요청.
 구현/리뷰는 직접 수행했다. 서브에이전트는 사용하지 않았다.
 

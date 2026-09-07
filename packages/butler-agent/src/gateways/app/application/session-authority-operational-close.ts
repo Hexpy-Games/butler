@@ -6,6 +6,7 @@ import type {
 import type { ProjectActionResult, SessionActionResult } from "../interface/protocol/app-protocol.ts";
 import type { AppStoreNavigationProjectApi } from "./store-api/navigation-project-store-api.ts";
 import { sessionHintForRow } from "../domain/sessions/session-read-model.ts";
+import { assertSessionCanClose } from "../domain/sessions/session-lifecycle-policy.ts";
 
 /** Real App session lifecycle stop that operationally closes open requests. */
 export type SessionLifecycleStopTrigger =
@@ -61,6 +62,7 @@ export function sessionLifecycleStopWithAuthorityClose(input: {
   stop: SessionLifecycleStopTrigger;
   metadata?: SessionLifecycleStopMetadata;
 }): SessionActionResult {
+  assertSessionCanClose(input.sessionId);
   input.store.getSession(input.sessionId);
   closeSelfSessionRequests({
     authority: input.authority,

@@ -490,6 +490,9 @@ export function seedAppStoreDefaults(db: Database): void {
     INSERT OR IGNORE INTO chats (id, title, kind, project_id, pinned, archived, created_at, updated_at)
     VALUES (?, ?, ?, ?, 0, 0, ?, ?)
   `).run(DEFAULT_CHAT_ID, DEFAULT_CHAT_TITLE, "chat", null, now, now);
+  // Repair only the permanent channel. Same-title topic sessions remain archived.
+  db.query("UPDATE chats SET archived = 0 WHERE id = ? AND archived != 0")
+    .run(DEFAULT_CHAT_ID);
   db
     .query(
       `

@@ -1,10 +1,12 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import styles from "./SidebarShell.module.css";
 
 export interface SidebarShellProps {
   titlebar?: ReactNode;
   header?: ReactNode;
+  scrollHeader?: ReactNode;
+  stickyHeader?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
   collapsed?: boolean;
@@ -16,6 +18,8 @@ export interface SidebarShellProps {
 export function SidebarShell({
   titlebar,
   header,
+  scrollHeader,
+  stickyHeader,
   children,
   footer,
   collapsed = false,
@@ -23,6 +27,22 @@ export function SidebarShell({
   className,
   scrollFade = true,
 }: SidebarShellProps) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const stickyRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    const sticky = stickyRef.current;
+    if (!content || !sticky) return;
+    const measure = () =>
+      content.style.setProperty(
+        "--sidebar-sticky-header-height",
+        `${sticky.getBoundingClientRect().height}px`,
+      );
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(sticky);
+    return () => observer.disconnect();
+  }, [Boolean(stickyHeader)]);
   return (
     <aside
       className={cn(styles.shell, className)}
@@ -47,7 +67,23 @@ export function SidebarShell({
             className={cn(styles.scroll, !scrollFade && styles.unmasked)}
             data-test-class="sidebar-scroll"
           >
-            <div className={styles.scrollContent}>{children}</div>
+            <div
+              ref={contentRef}
+              className={styles.scrollContent}
+              data-sticky-header={stickyHeader ? "true" : undefined}
+            >
+              {scrollHeader}
+              {stickyHeader ? (
+                <div
+                  ref={stickyRef}
+                  className={styles.stickyHeader}
+                  data-test-class="sidebar-sticky-header"
+                >
+                  {stickyHeader}
+                </div>
+              ) : null}
+              {children}
+            </div>
           </div>
         </div>
         {footer ? <div className={styles.footer}>{footer}</div> : null}

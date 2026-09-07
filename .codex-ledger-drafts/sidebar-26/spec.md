@@ -1,6 +1,6 @@
 # #26 사이드바와 대화 정리 — 합의 명세
 
-Revision: 2026-09-07-r3. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
+Revision: 2026-09-07-r4. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
 GitHub: https://github.com/Hexpy-Games/butler/issues/26
 Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 
@@ -17,7 +17,8 @@ Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 
 ```text
 Butler                         사이드바 토글
-새 대화 / 검색
+새 대화
+검색                           모바일에서도 각각 한 줄
 
 즐겨찾기
   세션·프로젝트 바로가기
@@ -25,8 +26,8 @@ Butler                         사이드바 토글
 [전체보기 | 최신 | 진행중]
 일반                           전체보기에서만 고정
 
-스페이스 / 최신 / 진행중        제목과 작업 버튼 고정
-  세션·그룹·프로젝트            이 부분만 스크롤
+스페이스 / 최신 / 진행중
+  세션·그룹·프로젝트            메뉴 전체와 하나의 스크롤
 
 설정                           하단 고정
 ```
@@ -43,6 +44,7 @@ Butler                         사이드바 토글
 ## 3. 일반 채널과 새 주제
 
 - 일반은 지속되는 기본 대화다. 여러 주제를 유지하고 예약 작업 결과도 받을 수 있다.
+- 일반의 정체성은 표시 이름이 아니라 유일한 `id=general`이다. 항상 존재하며 보관·영구 삭제·프로젝트 이동을 허용하지 않는다. 같은 이름의 일반 주제 세션은 보관할 수 있다. 시작 시 누락된 기본 채널만 생성하고 이미 보관된 고유 채널은 이력을 보존한 채 복구한다.
 - 일반을 스마트 그룹에 넣거나 주제를 이유로 자동 분할하지 않는다.
 - 답변에서 `새 주제대화 시작`, `새 프로젝트 시작`을 제공한다.
 - 두 액션은 메시지 하단 메타데이터 줄에서 `복사 → 새 주제대화 → 새 프로젝트 → 작업시간 → 메시지 시간` 순서로 배치한다. 아이콘만 표시하고 툴팁·접근성 이름을 제공한다. 별도 텍스트 버튼 줄은 없다.
@@ -78,7 +80,9 @@ Butler                         사이드바 토글
 - DS 구성요소와 토큰을 사용한다. 구분선 대신 간격으로 주 작업/즐겨찾기/탐색 영역을 나눈다.
 - 즐겨찾기·목록 섹션 제목은 4px 광학 들여쓰기, 트리 단계 들여쓰기는 8px이다.
 - 탭은 동일 폭 1:1:1, 아이콘 포함, 외곽선이 있는 형태다.
-- 주 작업·즐겨찾기·탭·일반·목록 제목·설정은 고정하고 목록만 스크롤한다.
+- 설정과 데스크톱 창 컨트롤은 고정한다. 나머지 메뉴는 하나의 스크롤 영역에 배치한다. 탭·일반·목록 제목을 포함한 탐색 헤더는 원래 위치에서 함께 스크롤하다 상단에 닿으면 sticky로 고정되고 목록이 그 아래로 스크롤한다.
+- 상하단 스크롤 페이드를 복원한다. sticky 헤더는 상단 페이드 아래의 불투명 영역에 위치시켜 글자가 사라지지 않게 한다. 즐겨찾기 빈 설명은 세션 행의 아이콘 시작점과 같은 8px 들여쓰기를 쓴다.
+- 즐겨찾기 제목과 항목/빈 설명 사이에는 8px 간격을 둔다. 항목끼리의 간격은 기존 규칙을 유지한다.
 - 펼친 그룹/프로젝트의 상위 제목은 해당 가지 안에서 sticky로 쌓이며 가지가 끝나면 사라진다.
 - 즐겨찾기 고정 영역은 두 항목과 전체 보기로 제한한다. 그룹 자식은 최초 다섯 항목과 더보기를 제공한다.
 - 선택 배경은 기존 DS 선택 톤의 75%로 낮춘 평면 배경이다. 새로운 틴트·그림자·테두리를 추가하지 않는다.
@@ -348,9 +352,9 @@ HTML payload는 `application/x-butler-session` 또는 `application/x-butler-spac
 
 ```tsx
 SidebarShell
-  header: Brand + PrimaryActions + Favorites(limit=2) + EqualTabs
-          + (view=='all' ? GeneralRow : null) + SpaceHeading
-  body:   view=='all' ? SpaceTree : SessionActivityList
+  scrollHeader: Brand + PrimaryActions(vertical) + Favorites(limit=2)
+  stickyHeader: EqualTabs + (view=='all' ? GeneralRow : null) + SpaceHeading
+  body: view=='all' ? SpaceTree : SessionActivityList
   footer: ExistingSettingsEntry
 
 SpaceTree:
@@ -701,7 +705,13 @@ prototype mock-store와 실제 store를 동시에 동기화하지 않는다. 기
 | 답변에서 새 주제 시작 | 원문 보존, 새 세션 seed/출처, 원문 복귀 | UI→branch→새 세션 실제 경로 |
 | 두 여행 요청과 무관한 코드 요청 생성 | 실제 분류 결과 기록; 코드 대화 강제 편입 없음 | 실제 provider, 지연/입력 사용량 측정 |
 | 분류 중 사용자가 다른 그룹으로 이동 | 늦은 분류가 수동 변경을 덮지 않음 | 결정적 지연 provider 검사 |
-| 모바일 long press/상태 slot/scroll | 메뉴 열림, 상태와 more 중복 없음, 목록만 scroll | 320/390/430px Playwright |
+| 모바일 long press/상태 slot/scroll | 메뉴 열림, 상태와 more 중복 없음, 전체 메뉴 scroll 후 탐색 헤더 sticky | 320/390/430px Playwright |
+
+## 21. r4 보정 구현과 검증
+
+- 서버: 기존 seedAppStoreDefaults에서 id=general만 archived=0으로 복구한다. session lifecycle의 공통 보호 정책을 authority close 전에 적용하고, store의 update/archive/delete/creation rollback도 같은 정책을 사용한다. 거절은 409 general_channel_protected이며 대기 중인 권한 요청을 닫지 않는다.
+- UI: SidebarShell의 scrollHeader/stickyHeader 슬롯은 같은 scrollContent 안에 있다. CSS position:sticky로만 스크롤을 처리하며 중첩 스크롤/휠 전환 로직을 만들지 않는다. ResizeObserver가 sticky 헤더 높이만 CSS 변수로 전달하고 트리 조상 sticky top에 그 높이를 더한다. scroll 이벤트별 React 상태 갱신은 없다.
+- 검사: 실제 API의 보관/PATCH/삭제 거절, 일반과 동명이인 보관 가능, DB 재개방 시 기존 일반 이력 보존 복구, 권한 close 부수효과 없음. 브라우저에서는 모바일 세로 배치/빈 설명 정렬/메뉴 전체 이동/sticky 고정/페이드 computed style을 확인한다.
 
 실제 모델 의미 판정은 확률적이므로 고정 mock 결과를 모델 E2E라고 부르지 않는다.
 분류의 데이터 불변성과 UI 상태는 결정적 테스트, 품질·응답시간은 실제 모델 측정으로 분리한다.

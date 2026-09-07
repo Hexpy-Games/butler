@@ -28,17 +28,17 @@ test("real App session archive operationally closes only that self-session's ope
   const btccDbPath = join(root, "agent-runtime", "btcc.sqlite");
   const appDbPath = join(root, "app.sqlite");
   prepareAuthorityStore(btccDbPath);
-  const generalOwner = "butler/app-general";
+  const topicOwner = "butler/app-archive-topic";
   const otherOwner = "butler/app-other";
   const privateCommand =
     "printf 'close-private-value' --close-private-flag > closed-private-target.txt";
   insertOpenWork(btccDbPath, {
     workId: "work-close-general",
-    sessionId: generalOwner,
+    sessionId: topicOwner,
   });
   insertAuthorityRequest(btccDbPath, {
     requestRef: "authority-ref-close-general",
-    ownerSessionId: generalOwner,
+    ownerSessionId: topicOwner,
     sourceWorkId: "work-close-general",
     privateCommand,
     clientMessageId: "client-close-general-0000000000000000000000",
@@ -52,7 +52,7 @@ test("real App session archive operationally closes only that self-session's ope
   });
   insertDecidedAppliedRequest(btccDbPath, {
     requestRef: "authority-ref-close-done",
-    ownerSessionId: generalOwner,
+    ownerSessionId: topicOwner,
     sourceWorkId: "work-done-general",
     clientMessageId: "client-close-done-00000000000000000000000",
   });
@@ -62,9 +62,10 @@ test("real App session archive operationally closes only that self-session's ope
     butlerData: root,
     port: 0,
   });
+  server.store.createSession({ kind: "chat", session_hint: "archive-topic" });
   try {
     const beforeResponse = await fetch(
-      `${server.url}authority-requests?session_id=general`,
+      `${server.url}authority-requests?session_id=archive-topic`,
     );
     expect(beforeResponse.status).toBe(200);
     const beforeBody = await beforeResponse.json() as {
@@ -79,7 +80,7 @@ test("real App session archive operationally closes only that self-session's ope
     expect(publicProjection).not.toContain("close-private-value");
     expect(publicProjection).not.toContain("closed-private-target.txt");
 
-    const archive = await fetch(`${server.url}sessions/general/archive`, {
+    const archive = await fetch(`${server.url}sessions/archive-topic/archive`, {
       method: "POST",
     });
     expect(archive.status).toBe(200);
@@ -87,14 +88,14 @@ test("real App session archive operationally closes only that self-session's ope
       protocol_version: "butler.app.v1",
       data: {
         session: expect.objectContaining({
-          id: "general",
+          id: "archive-topic",
           archived: true,
         }),
       },
     });
 
     const afterResponse = await fetch(
-      `${server.url}authority-requests?session_id=general`,
+      `${server.url}authority-requests?session_id=archive-topic`,
     );
     expect(afterResponse.status).toBe(200);
     const afterBody = await afterResponse.json() as {
@@ -144,7 +145,7 @@ test("real App session archive operationally closes only that self-session's ope
     });
 
     const laterDeny = await fetch(
-      `${server.url}authority-requests/${encodeURIComponent("authority-ref-close-general")}/deny?session_id=general`,
+      `${server.url}authority-requests/${encodeURIComponent("authority-ref-close-general")}/deny?session_id=archive-topic`,
       { method: "POST" },
     );
     expect(laterDeny.status).toBe(409);
@@ -173,7 +174,7 @@ test("real App session archive operationally closes only that self-session's ope
     ownerId: "af02f-operational-close-reload",
   });
   try {
-    expect(reopened.authority.list({ ownerSessionId: generalOwner })).toEqual([]);
+    expect(reopened.authority.list({ ownerSessionId: topicOwner })).toEqual([]);
     const persistedRow = readAuthorityRow(btccDbPath, "authority-ref-close-general");
     expect(persistedRow).toMatchObject({
       decision: "pending",

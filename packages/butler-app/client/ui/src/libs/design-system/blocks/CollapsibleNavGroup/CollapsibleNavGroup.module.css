@@ -39,7 +39,10 @@
 
 .stickyGroup > .header[data-slot="clickable"] {
   position: sticky;
-  top: calc(var(--nav-sticky-depth) * var(--sidebar-row-height));
+  top: calc(
+    var(--nav-sticky-offset, 0px) + var(--nav-sticky-depth) *
+      var(--sidebar-row-height)
+  );
   z-index: calc(20 - var(--nav-sticky-depth));
   background: var(--nav-sticky-surface, var(--color-surface-base));
 }
