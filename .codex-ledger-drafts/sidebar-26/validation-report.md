@@ -48,3 +48,4 @@
 - 운영 Electron의 실제 접근성 트리와 화면에서 혼합 트리, 즐겨찾기, 전체보기/최신/진행중 탭, 하단 설정을 확인했다. 기존 general 채널은 archived=1이므로 사용자 보관 상태를 임의 변경하지 않았다.
 - 격리 E2E에서 새 주제 생성 후 원본 답변 복귀도 마지막으로 재확인했다. `/tmp/butler26-final-footer-success.png`, `/tmp/butler26-final-branch-success.png`에 화면 증거를 보존했다.
 - 계획 P1–P8과 최신 하단 아이콘 요청의 구현·검증·main 반영·운영 재시작을 완료했다. 남은 플랫폼 확인은 위에 명시한 물리 iOS Safari이며, #164는 변경하지 않았다.
+- 재시작 후 지연 점검에서 watchdog/scheduler 종료를 추가로 발견했다. watchdog 로그는 격리 E2E watchdog PID를 전역 singleton으로 간주해 스스로 종료했음을 보여준다. scheduler 종료 원인은 이 로그로 확정할 수 없다. 테스트 환경을 먼저 종료하고 기존 supervisor API로 두 서비스를 다시 시작했다(PID 99208/99206). 이 운영상 복구와 별개로 watchdog의 데이터 루트 간 singleton 격리 결함은 #26 기능 수정에 포함하지 않았다.
