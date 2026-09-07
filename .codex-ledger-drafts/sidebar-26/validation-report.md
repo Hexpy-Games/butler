@@ -9,6 +9,7 @@
 - 실제 제품 DOM에서 Chromium 320/390/430px 및 1440px의 배치와 스크롤 좌표를 검사했다. 최신 탭에서도 고정 동작을 확인했다. 트리 그룹 sticky top은 탐색 헤더 118px + fade 14px = 132px로 반영됐다.
 - /tmp/butler-r4-mobile-top.png, /tmp/butler-r4-mobile-sticky.png, /tmp/butler-r4-desktop-top.png, /tmp/butler-r4-desktop-sticky.png를 직접 확인했다. 격리 서버의 샘플 대화로 UI를 검사했으며 실제 모델 또는 물리 iOS Safari 검증으로 주장하지 않는다.
 - 완성도 리뷰: 여섯 요청은 동일 제품 경로에 반영됐다. 수동 스크롤 전환·별도 스크롤 컨테이너·모델 실행 변경은 없다. 운영 반영은 아래 추가 기록으로 확인한다.
+- 운영: 80d4470a를 main에 fast-forward 병합·origin/main 푸시 후 UI build와 운영 재시작을 마쳤다. 6개 서비스 online, app health 성공. general은 archived=1에서 0으로 복구됐으며 생성 시각과 메시지 174개는 유지됐다. Electron 드라이버 PID 29588은 PPID 1로 재실행했다.
 
 기준: UI-SIDEBAR-INFORMATION-ARCHITECTURE r3 및 2026-09-07 메시지 하단 아이콘 배치 추가 요청.
 구현/리뷰는 직접 수행했다. 서브에이전트는 사용하지 않았다.
