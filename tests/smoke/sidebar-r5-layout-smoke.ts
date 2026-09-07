@@ -6,6 +6,7 @@ import { chromium } from "playwright";
 import { createTestAppServer } from "../../packages/butler-agent/src/test-support/app-server.ts";
 import { FIRST_RUN_STORAGE_KEY, firstRunCompleteState } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
 import { readFirstChatOnboardingState, writeFirstChatOnboardingState } from "../../packages/butler-agent/src/personalization/onboarding.ts";
+import { checkStickyClipping } from "./sidebar-sticky-clipping.ts";
 
 // Layout fixtures only: real HTTP/store/UI, no provider or production data writes.
 const dir = mkdtempSync(join(tmpdir(), "butler-sidebar-r5-"));
@@ -22,9 +23,10 @@ const mutate = (fields: Record<string, unknown>) => store.mutateSpace({
   ...fields, expectedRevision: store.listNavigation().space.revision,
 } as Parameters<typeof store.mutateSpace>[0]);
 const group = mutate({ action: "create", title: "제품", parentKey: null });
+const nested = mutate({ action: "create", title: "디자인", parentKey: `g:${group.groupId}` });
 for (let i = 0; i < 40; i++) {
   const session = store.createSession({ kind: "chat", title: `검증 대화 ${i + 1}` }).session;
-  if (i < 8) mutate({ action: "move", sourceKey: `s:${session.id}`, targetKey: `g:${group.groupId}`, position: "inside" });
+  if (i < 8) mutate({ action: "move", sourceKey: `s:${session.id}`, targetKey: `g:${i < 4 ? nested.groupId : group.groupId}`, position: "inside" });
   if (i < 2) mutate({ action: "pin", nodeKey: `s:${session.id}`, pinned: true });
 }
 const browser = await chromium.launch({ headless: true });
@@ -60,7 +62,8 @@ try {
         range.selectNodeContents(el.querySelector('[data-slot="nav-row-label"]')!);
         return range.getBoundingClientRect().left;
       };
-      const groupedSession = rowLabels.find(el => el.textContent?.includes("검증 대화"))!;
+      const groupedSession = rowLabels.find(el => el.textContent?.includes("검증 대화") &&
+        el.getAttribute("aria-label") && el.closest("[data-sticky-clip]") === more.closest("[data-sticky-clip]"))!;
       return {
         width: innerWidth, layout: root.dataset.panelLayout,
         sidebarWidth: sidebar.getBoundingClientRect().width,
@@ -82,6 +85,7 @@ try {
     assert.equal(metrics.background, "rgba(0, 0, 0, 0)");
     assert.equal(metrics.stickyBackground, "rgba(0, 0, 0, 0)");
     await page.screenshot({ path: join(output, `browser-${width}.png`) });
+    await checkStickyClipping(page, join(output, `clipped-${width}.png`));
     await hide.click();
     await show.waitFor();
     await page.waitForTimeout(250);

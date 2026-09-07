@@ -68,6 +68,7 @@ export function CollapsibleNavGroup({
         className={cn(styles.content, !expanded && styles.collapsed)}
         data-test-class={contentDataTestClass}
         data-state={expanded ? "open" : "closed"}
+        data-sticky-clip={stickyDepth !== undefined ? "branch" : undefined}
         aria-hidden={!expanded}
       >
         <div className={styles.inner}>

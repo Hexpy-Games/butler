@@ -55,8 +55,10 @@ const [expanded, setExpanded] = useState(true);
   many ancestor rows. Use a shared scrolling list outside the groups. This mode
   removes intermediate overflow clipping and uses immediate collapse so native
   sticky positioning works; existing non-sticky groups retain their animation.
-  Set `--nav-sticky-surface` to the owning navigation surface's opaque color so
-  pinned headers occlude content without appearing as separately tinted panels.
+  Inside SidebarShell's sticky layout, the shell measures the declared child
+  boundary and clips it below this header. This permits a transparent
+  `--nav-sticky-surface` without overlapping text or losing native vibrancy.
+  Outside that shell, use an opaque sticky surface to occlude scrolling content.
 
 ## Wrong use cases
 

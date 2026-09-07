@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import styles from "./SidebarShell.module.css";
+import { useStickyClipping } from "./hooks/useStickyClipping";
 
 export interface SidebarShellProps {
   titlebar?: ReactNode;
@@ -29,6 +30,7 @@ export function SidebarShell({
 }: SidebarShellProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const stickyRef = useRef<HTMLDivElement>(null);
+  useStickyClipping(contentRef, Boolean(stickyHeader));
   useLayoutEffect(() => {
     const content = contentRef.current;
     const sticky = stickyRef.current;
@@ -83,7 +85,11 @@ export function SidebarShell({
                   {stickyHeader}
                 </div>
               ) : null}
-              {children}
+              {stickyHeader ? (
+                <div className={styles.clippedContent} data-sticky-clip="root">
+                  {children}
+                </div>
+              ) : children}
             </div>
           </div>
         </div>
