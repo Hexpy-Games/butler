@@ -11084,25 +11084,26 @@ test("app transport sync skips unchanged transcript snapshots", async () => {
 test("app transport sync includes archived sessions while a turn is active", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  server.store.createSession({ kind: "chat", session_hint: "archive-topic" });
   const result = await postJson(`${server.url}messages`, {
-    chat_id: "general",
+    chat_id: "archive-topic",
     text: "archived active progress",
   });
   const turnId = result.data.turn.id;
   const userMessageId = result.data.accepted.id;
-  await postJson(`${server.url}sessions/general/archive`, {});
+  await postJson(`${server.url}sessions/archive-topic/archive`, {});
   server.stop();
 
   appendAppTranscriptEvent(
     createTranscriptEvent({
-      sessionId: "butler/app-general",
+      sessionId: "butler/app-archive-topic",
       kind: "outbound",
       transport: "app",
       timestamp: "2026-05-18T12:05:30.000Z",
       payload: {
         actionId: `runtime-intermediate:app:${userMessageId}:archived-active-progress`,
         accountId: "local",
-        peer: { kind: "dm", id: "general" },
+        peer: { kind: "dm", id: "archive-topic" },
         message: {
           text: "",
           replyToMessageId: userMessageId,

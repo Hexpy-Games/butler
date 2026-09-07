@@ -24,7 +24,7 @@
   --nav-section-heading-inset: var(--space-xs);
   user-select: none;
   -webkit-user-select: none;
-  --sidebar-content-inset: var(--space-xs);
+  --sidebar-content-inset: var(--sidebar-scroll-fade-size);
   --sidebar-region-gap: var(--space-xs);
   flex: 0 0 var(--sidebar-width);
   height: 100%;
@@ -45,6 +45,10 @@
   margin-top: 0;
 }
 .muted {
+  color: var(--text-secondary);
+}
+.emptyFavorites {
+  padding-inline: var(--space-2);
   color: var(--text-secondary);
 }
 .context {
@@ -81,7 +85,7 @@
     gap: var(--space-lg);
   }
   .primaryActions {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-sm);
   }
 }

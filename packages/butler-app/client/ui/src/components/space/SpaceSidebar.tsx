@@ -13,6 +13,7 @@ import { useOrganization } from "@/app/space/organization";
 import { projectSpace, spaceChildren } from "@/app/space/projection";
 import { spaceActivity } from "@/app/space/activity";
 import { SpaceHeader } from "./SpaceHeader";
+import { SpaceBrowseHeader } from "./SpaceBrowseHeader";
 import { SpaceRow } from "./SpaceRow";
 import { SpaceDialogs } from "./SpaceDialogs";
 import { SpaceRootDrop } from "./SpaceRootDrop";
@@ -50,9 +51,9 @@ export function SpaceSidebar() {
           ) : undefined
         }
         className={styles.sidebar}
-        scrollFade={false}
         ariaLabel="스페이스 탐색"
-        header={<SpaceHeader rows={rows} />}
+        scrollHeader={<SpaceHeader rows={rows} />}
+        stickyHeader={<SpaceBrowseHeader />}
         footer={
           <Stack gap="1">
             {error && <Typo.Caption role="alert">{error}</Typo.Caption>}

@@ -390,7 +390,7 @@ test("dedicated client keeps complete work history and session management contro
   expect(sidebarCss).not.toContain("margin-right: -");
   expect(
     read("packages/butler-app/client/ui/src/components/space/SpaceSidebar.tsx"),
-  ).toContain("header={");
+  ).toContain("scrollHeader={");
   expect(
     read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/NavSection/NavSection.tsx",

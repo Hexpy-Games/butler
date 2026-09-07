@@ -1,6 +1,7 @@
 import type { MessageContent } from "../../../../foundation/message-content.ts";
 import { Database } from "bun:sqlite";
 import { readSessionBranchSeed } from "./session-branch-store.ts";
+import { assertSessionCanClose } from "./session-lifecycle-policy.ts";
 import type {
   ChatRow,
   MessageRow,
@@ -114,6 +115,7 @@ export class AppSessionRecordStore {
   }
 
   rollbackSessionCreation(sessionId: string): void {
+    assertSessionCanClose(sessionId);
     this.db.query("DELETE FROM chats WHERE id = ?").run(sessionId);
   }
 
@@ -121,6 +123,7 @@ export class AppSessionRecordStore {
     sessionId: string,
     input: UpdateSessionRequest,
   ): SessionActionResult {
+    if (input.archived === true) assertSessionCanClose(sessionId);
     const current = this.getSession(sessionId);
     const title = input.title?.trim();
     if (input.title !== undefined && !title) {
@@ -149,6 +152,7 @@ export class AppSessionRecordStore {
   }
 
   deleteSessionPermanent(sessionId: string): SessionActionResult {
+    assertSessionCanClose(sessionId);
     const session = this.getSession(sessionId);
     this.db.query("DELETE FROM chats WHERE id = ?").run(sessionId);
     this.appendEvent("session.permanently_deleted", { session });

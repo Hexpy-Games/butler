@@ -5,6 +5,10 @@ variables for token-based section spacing. Defaults preserve existing layouts.
 Set `--sidebar-footer-border-width: 0` for a spacing-only footer separation.
 Set `scrollFade={false}` when the scrolling content has opaque sticky headers
 that should not fade at the viewport edge. The default fade remains unchanged.
+For an all-menu scroll, put entry actions in `scrollHeader` and browse controls
+in `stickyHeader`. Both use the same scrollbar as children. The sticky slot sits
+below the fade and publishes its measured height as `--nav-sticky-offset` for
+nested tree headers. No wheel interception or second scrollbar is needed.
 
 ## What is this component
 

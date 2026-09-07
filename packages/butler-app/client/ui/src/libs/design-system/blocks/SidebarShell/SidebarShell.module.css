@@ -147,6 +147,31 @@
   mask-image: none;
 }
 
+.scrollContent[data-sticky-header] {
+  --nav-sticky-offset: calc(
+    var(--sidebar-scroll-fade-size) + var(--sidebar-sticky-header-height, 0px)
+  );
+}
+
+.stickyHeader {
+  position: sticky;
+  top: var(--sidebar-scroll-fade-size);
+  z-index: 30;
+  flex: none;
+  background: var(--nav-sticky-surface, var(--color-surface-base));
+  padding-bottom: var(--space-xs);
+}
+
+.stickyHeader::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  height: var(--sidebar-scroll-fade-size);
+  background: inherit;
+  pointer-events: none;
+}
+
 .scroll::-webkit-scrollbar {
   width: 8px;
 }
