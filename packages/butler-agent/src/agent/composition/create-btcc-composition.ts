@@ -4,6 +4,7 @@ import {
   openProductionBtccSqliteStores,
 } from "../adapters/index.ts";
 import { createBtcc } from "../btcc/index.ts";
+import { AppContextPreparation } from "./app-context-preparation.ts";
 import {
   createTurnRuntime,
   DefaultBtccTurnPreparation,
@@ -157,7 +158,9 @@ export function createProductionBtccComposition(input: {
   let startupRecovery: Promise<void> = Promise.resolve();
   const assembly = createBtcc({
     runtime,
-    preparation: new DefaultBtccTurnPreparation(preparationDependencies),
+    preparation: new AppContextPreparation(new DefaultBtccTurnPreparation(preparationDependencies), {
+      serverUrl: appServerUrl, localAuth: appLocalAuth,
+    }, stores.turns),
     progressEvents: stores.progressEvents,
     turns: stores.turns,
     close: async () => {

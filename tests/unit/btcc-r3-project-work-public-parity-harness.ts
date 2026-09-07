@@ -261,6 +261,8 @@ export class PublicParityHarness {
       butlerData: this.root,
       ownerId: `public-parity-${this.ownerIndex}`,
       sessionBindings: this.bindings,
+      appServerUrl: this.server.url,
+      appLocalAuth: { required: false, token: null },
       modelRound,
     });
     try {

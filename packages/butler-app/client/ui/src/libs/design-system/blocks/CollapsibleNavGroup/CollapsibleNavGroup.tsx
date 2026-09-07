@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { NavRow } from "../NavRow";
 import { cn } from "../../lib/utils";
 import styles from "./CollapsibleNavGroup.module.css";
@@ -18,6 +18,10 @@ export interface CollapsibleNavGroupProps {
   actions?: ReactNode;
   /** Additional CSS class */
   className?: string;
+  /** Opt-in tree hierarchy; flat remains the default for existing navigation. */
+  indented?: boolean;
+  /** Opt-in stacked sticky header, relative to the outer list scroll container. */
+  stickyDepth?: number;
   /** Test identifier for the group header row */
   dataTestClass?: string;
   /** Test identifier for the collapsible content region */
@@ -32,16 +36,29 @@ export function CollapsibleNavGroup({
   children,
   actions,
   className,
+  indented = false,
+  stickyDepth,
   dataTestClass,
   contentDataTestClass,
 }: CollapsibleNavGroupProps) {
   return (
-    <div className={cn(styles.group, className)}>
+    <div
+      className={cn(
+        styles.group,
+        stickyDepth !== undefined && styles.stickyGroup,
+        className,
+      )}
+      style={
+        stickyDepth === undefined
+          ? undefined
+          : ({ "--nav-sticky-depth": stickyDepth } as CSSProperties)
+      }
+    >
       <NavRow
         icon={icon}
         label={label}
         actions={actions}
-        actionsVisibility="hover"
+        actionsVisibility={indented ? "visible" : "hover"}
         onClick={onToggle}
         className={styles.header}
         dataTestClass={dataTestClass}
@@ -54,7 +71,9 @@ export function CollapsibleNavGroup({
         aria-hidden={!expanded}
       >
         <div className={styles.inner}>
-          <div className={styles.items}>{children}</div>
+          <div className={cn(styles.items, indented && styles.indented)}>
+            {children}
+          </div>
         </div>
       </div>
     </div>

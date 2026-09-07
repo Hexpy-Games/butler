@@ -1,4 +1,6 @@
+import type { MessageContent } from "../../../../foundation/message-content.ts";
 import { Database } from "bun:sqlite";
+import { readSessionBranchSeed } from "./session-branch-store.ts";
 import type {
   ChatRow,
   MessageRow,
@@ -207,7 +209,7 @@ export class AppSessionRecordStore {
         "Session not found.",
       );
     }
-    return sessionFromRow(row);
+    return { ...sessionFromRow(row), branch_seed: readSessionBranchSeed(this.db, sessionId) };
   }
 
   listTurns(chatId: string, cursor = 0): TurnRecord[] {
@@ -320,6 +322,7 @@ export class AppSessionRecordStore {
     status: MessageStatus,
     options: {
       clientMessageId?: string;
+      contentParts?: MessageContent;
       turnId?: string;
       safeErrorCode?: string;
       retryable?: boolean;

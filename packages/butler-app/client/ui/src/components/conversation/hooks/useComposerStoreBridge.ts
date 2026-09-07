@@ -27,7 +27,7 @@ interface UseComposerStoreBridgeProps {
   setIsComposing: Dispatch<SetStateAction<boolean>>;
   setModelMenuOpen: Dispatch<SetStateAction<boolean>>;
   state: ReturnType<typeof useComposerState>;
-  textAreaRef: RefObject<HTMLTextAreaElement | null>;
+  textAreaRef: RefObject<HTMLElement | null>;
 }
 
 export function useComposerStoreBridge(props: UseComposerStoreBridgeProps) {

@@ -1,3 +1,4 @@
+import type { MessageContent } from "../../../../foundation/message-content.ts";
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
 import type {
   MessageRow,
@@ -36,6 +37,7 @@ export interface AppStoreKernelMessageRecordHost {
     status: MessageStatus,
     options?: {
       clientMessageId?: string;
+      contentParts?: MessageContent;
       turnId?: string;
       safeErrorCode?: string;
       retryable?: boolean;

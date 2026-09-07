@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Stack } from "../../components/Stack";
-import { Typo } from "../../components/Typo";
+import { NavSectionHeading } from "./NavSectionHeading";
 import { cn } from "../../lib/utils";
 import styles from "./NavSection.module.css";
 
@@ -31,19 +31,7 @@ export function NavSection({
       gap="sm"
       className={cn(styles.section, className)}
     >
-      <Stack
-        align="row"
-        justify="between"
-        cross="center"
-        className={styles.header}
-      >
-        <Typo.SectionTitle className={styles.title}>{title}</Typo.SectionTitle>
-        {actions && (
-          <Stack align="row" gap="xs" cross="center" className={styles.actions}>
-            {actions}
-          </Stack>
-        )}
-      </Stack>
+      <NavSectionHeading title={title} actions={actions} />
       <div
         className={cn(styles.content, collapsed && styles.contentCollapsed)}
         aria-hidden={collapsed}

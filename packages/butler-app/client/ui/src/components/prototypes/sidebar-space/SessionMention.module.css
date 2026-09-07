@@ -1,0 +1,18 @@
+.mention {
+  color: var(--color-action-primary);
+  white-space: nowrap;
+}
+.mention svg {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  margin-inline-end: var(--space-xs);
+}
+.link {
+  color: var(--color-action-primary);
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}

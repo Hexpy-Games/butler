@@ -159,6 +159,7 @@ export interface StewardSessionSummaryView {
 }
 
 export interface SessionView {
+  branch_seed?: import("../../../../foundation/session-branch.ts").SessionBranchSeed;
   protocol_version: typeof APP_PROTOCOL_VERSION;
   session_id: string;
   kind: ChatKind;
@@ -188,6 +189,7 @@ export interface SessionView {
 }
 
 export interface SessionSummaryView {
+  branch_seed?: import("../../../../foundation/session-branch.ts").SessionBranchSeed;
   session_id: string;
   latest_progress: TurnProgressSnapshotView;
   latest_turn_cancellable?: boolean;

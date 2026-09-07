@@ -17,6 +17,7 @@ export function AdaptiveShellFixture() {
       <AdaptiveShell
         leftOpen={panel === "left"}
         rightOpen={panel === "right"}
+        compactSidebarFullWidth
         style={{ height: "100%" }}
       >
         <AdaptiveShellSidebar open={panel === "left"}>

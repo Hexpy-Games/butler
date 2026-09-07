@@ -36,4 +36,8 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Do not lock dimensions to pixel-perfect desktop-only widths. Use responsive containers, intrinsic sizing, and tokens.
 
 ## Tags
+`MessageSquare` is the plain speech bubble; `Notebook` is the note icon.
+`GeneralChat` is the rounded conversation bubble for a default chat channel.
+Use them to distinguish conversation kinds without adding an action symbol.
+
 iconography, action, status

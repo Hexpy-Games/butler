@@ -30,13 +30,13 @@
 }
 
 .clickable [data-slot="button"][data-size^="icon"] {
-  width: 1lh;
-  height: 1lh;
-  min-height: 1lh;
+  width: var(--clickable-action-size, 1lh);
+  height: var(--clickable-action-size, 1lh);
+  min-height: var(--clickable-action-size, 1lh);
   border-radius: min(var(--radius-control), 1lh);
 }
 
 .clickable [data-slot="button"][data-size^="icon"] svg {
-  width: min(15px, 0.78lh);
-  height: min(15px, 0.78lh);
+  width: var(--clickable-action-icon-size, min(15px, 0.78lh));
+  height: var(--clickable-action-icon-size, min(15px, 0.78lh));
 }

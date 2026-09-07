@@ -6,6 +6,10 @@ import styles from "./NavRow.module.css";
 export interface NavRowProps {
   /** Icon element to display at the start */
   icon?: ReactNode;
+  /** Expose a supplied icon action to keyboard and assistive technology. */
+  iconInteractive?: boolean;
+  /** Multi-line label with vertical breathing room and first-line icon alignment. */
+  multiline?: boolean;
   /** Label text or element */
   label: ReactNode;
   /** Optional badge text or number */
@@ -34,6 +38,8 @@ export interface NavRowProps {
 
 export function NavRow({
   icon,
+  iconInteractive = false,
+  multiline = false,
   label,
   badge,
   active = false,
@@ -52,11 +58,17 @@ export function NavRow({
     <>
       <span className={styles.labelRegion}>
         {icon && (
-          <span className={styles.icon} aria-hidden="true" data-slot="nav-row-icon">
+          <span
+            className={styles.icon}
+            aria-hidden={iconInteractive ? undefined : true}
+            data-slot="nav-row-icon"
+          >
             {icon}
           </span>
         )}
-        <span className={styles.label} data-slot="nav-row-label">{label}</span>
+        <span className={styles.label} data-slot="nav-row-label">
+          {label}
+        </span>
       </span>
       {(badge || actions) && (
         <span
@@ -83,13 +95,15 @@ export function NavRow({
 
   const rowClassName = cn(
     styles.row,
+    multiline && styles.multiline,
     active && styles.active,
     disabled && styles.disabled,
     onClick && styles.interactive,
     className,
   );
 
-  const accessibleLabel = ariaLabel ?? (typeof label === "string" ? label : undefined);
+  const accessibleLabel =
+    ariaLabel ?? (typeof label === "string" ? label : undefined);
 
   if (onClick && !disabled) {
     return (

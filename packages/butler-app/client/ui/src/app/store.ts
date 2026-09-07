@@ -304,6 +304,7 @@ function messageRecordsEqual(
       message.status === other.status &&
       message.turn_id === other.turn_id &&
       message.text === other.text &&
+      structurallyEqual(message.content_parts, other.content_parts) &&
       message.delivery_state === other.delivery_state &&
       structurallyEqual(message.limitation_codes ?? [], other.limitation_codes ?? []) &&
       structurallyEqual(message.limitations ?? [], other.limitations ?? []) &&
@@ -602,6 +603,7 @@ function summaryFromSessionView(view: SessionView): SessionSummaryView {
   };
   return {
     session_id: view.session_id,
+    branch_seed: view.branch_seed,
     turn_state: view.latest_turn?.state ?? "idle",
     latest_progress: latestProgress,
     latest_turn_cancellable: view.latest_turn?.cancellable,
@@ -1594,6 +1596,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           chat_id: targetChatId,
           text,
           model: controls.model,
+          content_parts: controls.contentParts,
           reasoning_effort: controls.reasoningEffort,
           access_mode: controls.accessMode,
           plan_mode: controls.planMode,
@@ -1608,6 +1611,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           status: { label: "ready", tone: "ok" },
         });
       }
+      controls.onAccepted?.();
     } catch (error) {
       notifyError(error, "Message queue failed", {
         id: `queue-message-${targetChatId}`,
@@ -1626,6 +1630,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           body: JSON.stringify({
             text,
             model: controls.model,
+            content_parts: controls.contentParts,
             reasoning_effort: controls.reasoningEffort,
             access_mode: controls.accessMode,
             plan_mode: controls.planMode,
@@ -1637,6 +1642,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       );
       if (get().activeChatId === targetChatId)
         set({ sessionQueue: data.queued_messages });
+      controls.onAccepted?.();
     } catch (error) {
       notifyError(error, "Queued message update failed", {
         id: `update-queued-message-${queuedMessageId}`,
@@ -1712,6 +1718,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
               role: "user",
               text,
               attachments,
+              content_parts: controls.contentParts,
               status: "pending",
               retryable: false,
               cursor: 0.5,
@@ -1829,6 +1836,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
               role: "user",
               text,
               attachments,
+              content_parts: controls.contentParts,
               status: "pending",
               retryable: false,
               cursor: optimisticCursor,
@@ -1849,6 +1857,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           chat_id: targetChatId,
           text,
           client_message_id: clientMessageId,
+          content_parts: controls.contentParts,
           model: controls.model,
           reasoning_effort: controls.reasoningEffort,
           access_mode: controls.accessMode,
@@ -1860,6 +1869,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         }),
       });
       if (result.queued && !result.accepted) {
+        controls.onAccepted?.();
         set((state) => ({
           messages: state.messages.filter(
             (message) => message.id !== clientMessageId,
@@ -1874,6 +1884,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         throw new Error("Message send returned no accepted message.");
       }
       const accepted = result.accepted;
+      controls.onAccepted?.();
       const replies = result.replies ?? (result.reply ? [result.reply] : []);
       const hasImmediateAssistantReply = replies.length > 0;
       set((state) => {

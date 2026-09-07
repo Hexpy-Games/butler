@@ -8,6 +8,7 @@ import { handleAuthorityRoutes } from "./routes/authority-routes.ts";
 import { handleMessageRoutes } from "./routes/message-routes.ts";
 import { handlePersonalizationRoutes } from "./routes/personalization-routes.ts";
 import { handleProjectSessionRoutes } from "./routes/project-session-routes.ts";
+import { handleSpaceRoutes } from "./routes/space-routes.ts";
 import { handleRuntimeRoutes } from "./routes/runtime-routes.ts";
 import { handleSettingsRoutes } from "./routes/settings-routes.ts";
 import { handleInternalResultRoutes } from "./routes/internal-result-routes.ts";
@@ -21,6 +22,7 @@ const ROUTE_HANDLERS: AppRouteHandler[] = [
   handleSettingsRoutes,
   handlePersonalizationRoutes,
   handleProjectSessionRoutes,
+  handleSpaceRoutes,
   handleMessageRoutes,
   handleAutomationWorkerRoutes,
   handleAuthorityRoutes,

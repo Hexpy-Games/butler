@@ -77,6 +77,19 @@ export class CdpPage {
       `document.querySelector(${JSON.stringify(selector)}) !== null`,
       `field ${selector}`,
     );
+    const editable = await this.evaluate<boolean>(`(() => {
+      const field = document.querySelector(${JSON.stringify(selector)});
+      if (!(field instanceof HTMLElement) || !field.isContentEditable) return false;
+      field.focus();
+      const range = document.createRange(); range.selectNodeContents(field);
+      const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      return true;
+    })()`);
+    if (editable) {
+      await this.client.send("Input.insertText", { text: value });
+      await this.waitFor(`document.querySelector(${JSON.stringify(selector)})?.innerText === ${JSON.stringify(value)}`, "editable input");
+      return;
+    }
     const filled = await this.evaluate<boolean>(`(() => {
       const field = document.querySelector(${JSON.stringify(selector)});
       if (!(field instanceof HTMLTextAreaElement) && !(field instanceof HTMLInputElement)) {

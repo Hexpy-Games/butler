@@ -597,6 +597,14 @@ const butlerApp = Object.freeze({
   deleteProjectPermanent: ({ projectId }) => requestJson(`/projects/${encodeURIComponent(projectId)}?permanent=true`, {
     method: "DELETE",
   }),
+  mutateSpace: ({ resource, body }) => {
+    if (!["groups", "moves", "group-sessions", "undo", "pins", "relocations", "branches", "branch-source"].includes(resource)) throw new Error("Invalid space operation");
+    return requestJson(`/space/${resource}`, { method: "POST", body: JSON.stringify(body) });
+  },
+  changeSpaceGroup: ({ groupId, method, body }) => {
+    if (method !== "PATCH" && method !== "DELETE") throw new Error("Invalid group operation");
+    return requestJson(`/space/groups/${encodeURIComponent(groupId)}`, { method, body: JSON.stringify(body) });
+  },
   getProjectDashboard: ({ projectId }) => requestJson(`/projects/${encodeURIComponent(projectId)}/dashboard`),
   selectProjectFolder: () => ipcRenderer.invoke("butler:select-project-folder"),
   listSessions: ({ kind, projectId } = {}) => {
@@ -687,12 +695,13 @@ const butlerApp = Object.freeze({
       body: form,
     });
   },
-  sendMessage: ({ chatId, text, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments }) => requestJson("/messages", {
+  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments }) => requestJson("/messages", {
     method: "POST",
     body: JSON.stringify({
       chat_id: chatId,
       text,
       client_message_id: clientMessageId,
+      content_parts: contentParts,
       model,
       reasoning_effort: reasoningEffort,
       access_mode: accessMode,
@@ -737,11 +746,12 @@ const butlerApp = Object.freeze({
       },
     );
   },
-  queueMessage: ({ chatId, text, model, reasoningEffort, accessMode, planMode, attachments }) => requestJson("/session-queue", {
+  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) => requestJson("/session-queue", {
     method: "POST",
     body: JSON.stringify({
       chat_id: chatId,
       text,
+      content_parts: contentParts,
       model,
       reasoning_effort: reasoningEffort,
       access_mode: accessMode,
@@ -749,11 +759,12 @@ const butlerApp = Object.freeze({
       attachments,
     }),
   }),
-  updateQueuedMessage: ({ queuedMessageId, text, model, reasoningEffort, accessMode, planMode, attachments }) =>
+  updateQueuedMessage: ({ queuedMessageId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) =>
     requestJson(`/session-queue/${encodeURIComponent(queuedMessageId ?? "")}`, {
       method: "PATCH",
       body: JSON.stringify({
         text,
+        content_parts: contentParts,
         model,
         reasoning_effort: reasoningEffort,
         access_mode: accessMode,

@@ -6,6 +6,7 @@ import type {
 } from "./types.ts";
 
 export const EMPTY_NAVIGATION: NavigationView = {
+  space: { revision: 0, nodes: [], groups: [] },
   chats: [],
   projects: [],
   automations_summary: { total_count: 0, enabled_count: 0 },
@@ -53,6 +54,7 @@ export const EMPTY_SETTINGS: SettingsView = {
     "#434d70",
   ],
   translucent_sidebar: true,
+  smart_grouping_enabled: true,
   diagnostics_enabled: false,
   desktop_notifications: {
     enabled: true,

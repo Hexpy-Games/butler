@@ -28,6 +28,7 @@ import {
   verifyTurnExecutionControls,
   type TurnExecutionControlsV1,
 } from "../../../core/turn-execution-controls.ts";
+import { resolveSessionReferences } from "../../domain/sessions/session-references.ts";
 
 export class AppTransportQueueStore {
   constructor(
@@ -66,6 +67,7 @@ export class AppTransportQueueStore {
       turnId: string;
       claimId: string;
     }) => boolean,
+    private readonly branchSeed: (sessionId: string) => import("../../../../foundation/session-branch.ts").SessionBranchSeed | undefined,
   ) {}
 
   enqueueAppTransportTurn(input: {
@@ -116,6 +118,10 @@ export class AppTransportQueueStore {
         executionControls,
         appQueueClaimId: input.queueClaimId,
         appTurnContext: {
+          branchSeed: this.branchSeed(input.chatId),
+          contentParts: input.message.content_parts,
+          sessionReferences: resolveSessionReferences({ content: input.message.content_parts,
+            butlerData: this.butlerData, getChat: (id) => this.getChatRow(id) }),
           version: 1,
           session: {
             id: input.chatId,

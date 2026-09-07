@@ -11,6 +11,7 @@ export function CollapsibleNavGroupFixture() {
   return (
     <Stack gap="2" style={{ width: "100%" }}>
       <CollapsibleNavGroup
+        indented
         icon={<Folder size={17} />}
         label="Interactive Group"
         expanded={expanded}

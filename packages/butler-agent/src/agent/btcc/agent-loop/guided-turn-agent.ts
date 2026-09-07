@@ -229,6 +229,7 @@ export function createProductionGuidedTurnAgent(
         workspacePath: policy.workspacePath,
         sessionId: turn.sessionId,
         originChatId: turn.sessionId,
+        appSessionId: turn.context.appSessionId,
         projectId: policy.projectId ?? turn.context.projectRef,
         workspaceReference,
         sessionBindingStore: sessionWorkspace.bindingStore,
@@ -282,6 +283,7 @@ export function createProductionGuidedTurnAgent(
             executeRegistered,
           }),
           resolvePersistentEffect: createGuidedPersistentEffectResolver({
+            appSessionId: turn.context.appSessionId,
             butlerHome: input.butlerHome,
             butlerData: input.butlerData,
             workspacePath: policy.workspacePath,

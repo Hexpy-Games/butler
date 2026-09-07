@@ -533,6 +533,7 @@ export interface SettingsView {
     string,
   ];
   translucent_sidebar: boolean;
+  smart_grouping_enabled: boolean;
   diagnostics_enabled: boolean;
   desktop_notifications: DesktopNotificationSettingsView;
   desktop_tray_enabled: boolean;
@@ -676,6 +677,7 @@ export type ComposerModelState = ModelCatalogState;
 export type ControlsLoadState = "loading" | "ready" | "error";
 
 export interface SessionSummary {
+  work_progress?: { completed: number; total: number };
   id: string;
   kind: ChatKind;
   title: string;
@@ -709,7 +711,10 @@ export interface ProjectSummary {
   sessions?: SessionSummary[];
 }
 
+export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../../../butler-agent/src/gateways/app/interface/protocol/app-protocol.ts";
+
 export interface NavigationView {
+  space: import("../../../../../butler-agent/src/gateways/app/interface/protocol/app-protocol.ts").SpaceView;
   chats: SessionSummary[];
   projects: ProjectSummary[];
   automations_summary: {
@@ -761,6 +766,7 @@ export interface PlanDocumentRecord {
 }
 
 export interface MessageRecord {
+  content_parts?: import("./messageContent").MessageContent;
   id: string;
   chat_id?: string;
   turn_id?: string;
@@ -790,6 +796,7 @@ export interface MessageRecord {
 }
 
 export interface QueuedMessageRecord {
+  content_parts?: import("./messageContent").MessageContent;
   id: string;
   chat_id: string;
   text: string;
@@ -1035,6 +1042,7 @@ export interface StewardSessionSummaryView {
 }
 
 export interface SessionView {
+  branch_seed?: import("../../../../../butler-agent/src/foundation/session-branch.ts").SessionBranchSeed;
   protocol_version?: string;
   session_id: string;
   kind: ChatKind;
@@ -1419,6 +1427,7 @@ export interface WorkStreamSummary {
 }
 
 export interface SessionSummaryView {
+  branch_seed?: import("../../../../../butler-agent/src/foundation/session-branch.ts").SessionBranchSeed;
   session_id?: string;
   turn_state?: string;
   latest_progress?: TurnProgressSnapshot;
@@ -1511,7 +1520,7 @@ export type AppView =
 
 export interface CommandPaletteResult {
   id: string;
-  kind: "chat" | "project" | "project_session" | "automation" | "settings";
+  kind: "chat" | "project" | "project_session" | "group" | "automation" | "settings";
   title: string;
   subtitle?: string;
   route: string;
@@ -1537,6 +1546,9 @@ export interface SessionOption {
 }
 
 export interface ComposerControls {
+  contentParts?: import("./messageContent").MessageContent;
+  /** UI-only acknowledgement; never serialized into the transport request. */
+  onAccepted?: () => void;
   model?: string;
   reasoningEffort?: ReasoningEffort;
   accessMode?: AccessMode;

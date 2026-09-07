@@ -278,6 +278,40 @@ export class SessionBindingStore {
     return new Date(nextMs).toISOString();
   }
 
+  /** Replace execution identity together; transcript, model and transport identity stay intact. */
+  compareAndSetExecutionContext(input: {
+    sessionId: string;
+    expectedUpdatedAt: string;
+    operationId: string;
+    workspacePath: string;
+    projectId: string | null;
+    appProjectId: string | null;
+    ledgerProjectId: string | null;
+    metadata: Record<string, unknown>;
+  }): ReturnType<SessionBindingStore["rebindWorkspace"]> {
+    return this.db.transaction(() => {
+      const current = this.getBySessionId(input.sessionId);
+      if (!current) return { status: "missing" as const };
+      if (current.metadata?.relocationId === input.operationId) {
+        const same = current.workspacePath === input.workspacePath &&
+          (current.projectId ?? null) === input.projectId &&
+          (current.appProjectId ?? null) === input.appProjectId &&
+          (current.ledgerProjectId ?? null) === input.ledgerProjectId;
+        return { status: same ? "applied" as const : "changed" as const, binding: current };
+      }
+      if (current.updatedAt !== input.expectedUpdatedAt) return { status: "changed" as const, binding: current };
+      const updatedAt = this.nextRevisionTimestamp(input.expectedUpdatedAt);
+      this.db.query(`UPDATE session_bindings
+        SET workspace_path=?,project_id=?,app_project_id=?,ledger_project_id=?,metadata_json=?,updated_at=?
+        WHERE session_id=? AND updated_at=?`).run(
+          input.workspacePath, input.projectId, input.appProjectId, input.ledgerProjectId,
+          JSON.stringify({ ...input.metadata, relocationId: input.operationId }), updatedAt,
+          input.sessionId, input.expectedUpdatedAt,
+        );
+      return { status: "applied" as const, binding: this.getBySessionId(input.sessionId)! };
+    })();
+  }
+
   getBySessionId(sessionId: string): StoredSessionBinding | null {
     const row = this.db.query(`
       SELECT

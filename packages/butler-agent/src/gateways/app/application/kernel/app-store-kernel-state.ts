@@ -13,6 +13,9 @@ import type { AppProjectStore } from "../../domain/projects/project-store.ts";
 import type { AppRuntimeInfoStore } from "../../domain/runtime/runtime-info-store.ts";
 import type { AppSystemMonitorStore } from "../../domain/runtime/system-monitor-store.ts";
 import type { AppNavigationStore } from "../../domain/sessions/navigation-store.ts";
+import type { AppSpaceOrganization } from "../../domain/sessions/space-organization.ts";
+import type { AppSessionRelocation } from "../../domain/sessions/session-relocation.ts";
+import type { AppSessionBranchStore } from "../../domain/sessions/session-branch-store.ts";
 import type { AppNewChatBriefingStore } from "../../domain/sessions/new-chat-briefing-store.ts";
 import type { AppSessionCatalogStore } from "../../domain/sessions/session-catalog-store.ts";
 import type { AppSessionControlsStore } from "../../domain/sessions/session-controls-store.ts";
@@ -70,6 +73,9 @@ export interface AppStoreKernelState {
   projects: AppProjectStore;
   sessionCatalog: AppSessionCatalogStore;
   navigation: AppNavigationStore;
+  space: AppSpaceOrganization;
+  sessionRelocation: AppSessionRelocation;
+  sessionBranches: AppSessionBranchStore;
   workers: AppWorkerActivityStore;
   workerControls: AppWorkerControlStore;
   sessionRecords: AppSessionModuleGraph["sessionRecords"];
@@ -86,6 +92,7 @@ export interface AppStoreKernelState {
   turnProgressView: AppSessionModuleGraph["turnProgressView"];
   userMessageTurns: AppSessionModuleGraph["userMessageTurns"];
   generatedSessionTitles: AppSessionModuleGraph["generatedSessionTitles"];
+  sessionTopicGrouping: import("../../domain/sessions/session-topic-grouping.ts").AppSessionTopicGrouping;
   newChatBriefing: AppNewChatBriefingStore;
   responderRuntime: AppSessionModuleGraph["responderRuntime"];
   systemResponderTurns: AppSessionModuleGraph["systemResponderTurns"];

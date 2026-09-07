@@ -1,0 +1,19 @@
+.editor {
+  width: 100%;
+  min-height: calc(3em + var(--composer-inner-padding-block) * 2);
+  max-height: calc(8lh + var(--composer-inner-padding-block) * 2);
+  overflow: auto;
+  padding: var(--composer-inner-padding-block)
+    var(--composer-inner-padding-inline);
+  font: inherit;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+.editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--placeholder);
+  pointer-events: none;
+}

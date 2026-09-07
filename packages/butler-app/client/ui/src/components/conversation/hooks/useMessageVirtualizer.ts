@@ -9,6 +9,7 @@ interface UseMessageVirtualizerOptions {
   itemCount: number;
   bottomReserve: number;
   scrollRef: RefObject<HTMLDivElement | null>;
+  headerHeight?: number;
 }
 
 export function useMessageVirtualizer({
@@ -17,6 +18,7 @@ export function useMessageVirtualizer({
   itemCount,
   bottomReserve,
   scrollRef,
+  headerHeight = 0,
 }: UseMessageVirtualizerOptions) {
   const getScrollElement = useCallback(() => scrollRef.current, [scrollRef]);
   const getItemKey = useCallback(
@@ -40,11 +42,12 @@ export function useMessageVirtualizer({
     getItemKey,
     estimateSize,
     overscan: 8,
+    paddingStart: headerHeight,
   });
   rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     keepScrollOffsetOnSizeChange;
 
-  const virtualContentHeight = rowVirtualizer.getTotalSize();
+  const virtualContentHeight = Math.max(headerHeight, rowVirtualizer.getTotalSize());
   const viewportHeight =
     rowVirtualizer.scrollRect?.height ?? scrollRef.current?.clientHeight ?? 0;
   const topOffset = Math.max(

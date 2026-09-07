@@ -19,6 +19,7 @@ export type ButlerToolProfile =
   | "artifact-data";
 
 const STARTUP_TOOL_NAMES = [
+  "start_topic_conversation",
   "list_tool_capabilities",
   "tool_search",
   "tool_describe",

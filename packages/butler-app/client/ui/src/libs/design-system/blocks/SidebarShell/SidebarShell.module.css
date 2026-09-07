@@ -1,7 +1,7 @@
 .shell {
   --sidebar-scrollbar-offset: 10px;
   --sidebar-scroll-fade-size: 14px;
-  --sidebar-scroll-edge-padding: 16px;
+  --sidebar-scroll-edge-padding: var(--sidebar-content-inset, 16px);
 
   display: flex;
   position: relative;
@@ -48,7 +48,7 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sidebar-region-gap, 10px);
   overflow: visible;
   transition:
     opacity 160ms ease,
@@ -142,6 +142,11 @@
   padding-block: var(--sidebar-scroll-edge-padding);
 }
 
+.scroll.unmasked {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 .scroll::-webkit-scrollbar {
   width: 8px;
 }
@@ -162,7 +167,7 @@
   max-width: 100%;
   min-width: 0;
   flex: none;
-  border-top: 1px solid var(--line);
+  border-top: var(--sidebar-footer-border-width, 1px) solid var(--line);
   padding-top: 10px;
 }
 

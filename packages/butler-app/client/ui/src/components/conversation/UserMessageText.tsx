@@ -2,10 +2,12 @@ import { useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import styles from "./UserMessageText.module.css";
+import type { MessageContent } from "@/app/messageContent";
+import { SessionReferenceText } from "./SessionReferenceText";
 
 const COLLAPSED_LINES = 5;
 
-export function UserMessageText({ text }: { text: string }) {
+export function UserMessageText({ text, contentParts }: { text: string; contentParts?: MessageContent }) {
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
@@ -32,7 +34,8 @@ export function UserMessageText({ text }: { text: string }) {
         className={expanded ? styles.text : styles.collapsed}
         data-test-class="user-message-text"
       >
-        {text}
+        {contentParts ? contentParts.parts.map((part, index) => part.type === "text" ? part.text :
+          <SessionReferenceText key={index} sessionId={part.sessionId} title={part.titleSnapshot} />) : text}
       </div>
       {overflowing && (
         <Button

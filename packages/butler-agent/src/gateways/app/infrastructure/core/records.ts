@@ -49,6 +49,7 @@ export interface SessionSummaryRow {
 }
 
 export interface MessageRow {
+  content_parts_json?: string | null;
   rowid: number;
   id: string;
   chat_id: string;
@@ -67,6 +68,7 @@ export interface MessageRow {
 }
 
 export interface QueuedMessageRow {
+  content_parts_json?: string | null;
   rowid: number;
   id: string;
   chat_id: string;

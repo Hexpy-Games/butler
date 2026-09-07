@@ -71,7 +71,7 @@ export function Conversation() {
     summary?.steward_children?.some((child) => child.active_turn) ||
     summary?.latest_progress?.safe_progress_rows?.length,
   );
-  const showMessageList = hasMessages || hasDurableActivity;
+  const showMessageList = hasMessages || hasDurableActivity || Boolean(summary?.branch_seed);
   const showEmptyState = !showMessageList && !messageLoadPending;
   const composerLarge = true;
   const newChatTitleIconSize = showEmptyState

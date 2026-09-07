@@ -151,6 +151,7 @@ export class AppSessionViewStore {
         : undefined;
     return {
       session_id: session.id,
+      branch_seed: session.branch_seed,
       latest_progress: latestProgress,
       latest_turn_cancellable: latestTurn?.cancellable,
       latest_turn_subsession_result:
@@ -231,6 +232,7 @@ export class AppSessionViewStore {
     const firstCursor = Number(messagePage.items[0]?.cursor ?? 0);
     const afterCursor = requestedAfterCursor;
     const view: SessionView = {
+      branch_seed: session.branch_seed,
       protocol_version: APP_PROTOCOL_VERSION,
       session_id: session.id,
       kind: session.kind,

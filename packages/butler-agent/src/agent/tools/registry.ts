@@ -26,6 +26,7 @@ import {
   analyzeAttachedImageToolMetadata,
 } from "./image/index.ts";
 import { createAutomationToolDefinition, createAutomationToolMetadata } from "./automation/create_automation/index.ts";
+import { startTopicConversationDefinition, startTopicConversationMetadata } from "./conversation/definition.ts";
 import { listAutomationsToolDefinition, listAutomationsToolMetadata } from "./automation/list_automations/index.ts";
 import { deleteAutomationToolDefinition, deleteAutomationToolMetadata } from "./automation/delete_automation/index.ts";
 import { runDueAutomationsToolDefinition, runDueAutomationsToolMetadata } from "./automation/run_due_automations/index.ts";
@@ -101,6 +102,7 @@ export const CORE_BUTLER_TOOLS = [
   readMcpResourceToolDefinition,
   analyzeAttachedImageToolDefinition,
   createAutomationToolDefinition,
+  startTopicConversationDefinition,
   listAutomationsToolDefinition,
   deleteAutomationToolDefinition,
   runDueAutomationsToolDefinition,
@@ -162,6 +164,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [readMcpResourceToolDefinition.name]: readMcpResourceToolMetadata,
   [analyzeAttachedImageToolDefinition.name]: analyzeAttachedImageToolMetadata,
   [createAutomationToolDefinition.name]: createAutomationToolMetadata,
+  [startTopicConversationDefinition.name]: startTopicConversationMetadata,
   [listAutomationsToolDefinition.name]: listAutomationsToolMetadata,
   [deleteAutomationToolDefinition.name]: deleteAutomationToolMetadata,
   [runDueAutomationsToolDefinition.name]: runDueAutomationsToolMetadata,

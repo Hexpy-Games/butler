@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { api } from "@/app/api.ts";
+import { useOrganization } from "@/app/space/organization";
 import { EMPTY_NAVIGATION } from "@/app/constants.ts";
 import {
   messageListSyncCursor,
@@ -66,12 +67,39 @@ export function useAppBootstrap() {
     async function restoreUiState() {
       try {
         const snapshot = await readCachedAppUiState();
-        if (!cancelled && snapshot) hydrateUiState(snapshot);
+        if (!cancelled && snapshot) {
+          hydrateUiState(snapshot);
+          useOrganization.setState({ tab: snapshot.space_tab, collapsed: snapshot.space_collapsed_keys });
+        }
       } finally {
         if (!cancelled) uiStateHydratedRef.current = true;
       }
     }
     restoreUiState();
+    const save = () => {
+      if (!uiStateHydratedRef.current) return;
+      if (uiStateTimerRef.current) clearTimeout(uiStateTimerRef.current);
+      uiStateTimerRef.current = setTimeout(() => {
+        const current = useButlerStore.getState();
+        const organization = useOrganization.getState();
+        void writeCachedAppUiState({
+          active_session_id: current.activeChatId,
+          left_open: current.leftOpen,
+          right_open: current.rightOpen,
+          right_tab: current.rightTab,
+          left_panel_width: current.leftPanelWidth,
+          right_panel_width: current.rightPanelWidth,
+          sidebar_chats_collapsed: current.sidebarChatsCollapsed,
+          sidebar_projects_collapsed: current.sidebarProjectsCollapsed,
+          sidebar_collapsed_project_ids: current.sidebarCollapsedProjectIds,
+          space_tab: organization.tab,
+          space_collapsed_keys: organization.collapsed,
+        });
+      }, 250);
+    };
+    const unsubscribeOrganization = useOrganization.subscribe((state, previous) => {
+      if (state.tab !== previous.tab || state.collapsed !== previous.collapsed) save();
+    });
     const unsubscribe = useButlerStore.subscribe((state, previous) => {
       if (!uiStateHydratedRef.current) return;
       const changed =
@@ -86,25 +114,12 @@ export function useAppBootstrap() {
         state.sidebarCollapsedProjectIds !==
           previous.sidebarCollapsedProjectIds;
       if (!changed) return;
-      if (uiStateTimerRef.current) clearTimeout(uiStateTimerRef.current);
-      uiStateTimerRef.current = setTimeout(() => {
-        const current = useButlerStore.getState();
-        void writeCachedAppUiState({
-          active_session_id: current.activeChatId,
-          left_open: current.leftOpen,
-          right_open: current.rightOpen,
-          right_tab: current.rightTab,
-          left_panel_width: current.leftPanelWidth,
-          right_panel_width: current.rightPanelWidth,
-          sidebar_chats_collapsed: current.sidebarChatsCollapsed,
-          sidebar_projects_collapsed: current.sidebarProjectsCollapsed,
-          sidebar_collapsed_project_ids: current.sidebarCollapsedProjectIds,
-        });
-      }, 250);
+      save();
     });
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeOrganization();
       if (uiStateTimerRef.current) clearTimeout(uiStateTimerRef.current);
     };
   }, [hydrateUiState]);

@@ -79,6 +79,11 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
     return readWorkStatus(this.db);
   }
 
+  hasUnfinishedExecution(sessionId: string): boolean {
+    return Boolean(this.db.query(`SELECT 1 FROM btcc_turns WHERE session_id=?
+      AND semantic_state NOT IN ('delivered','cancelled') LIMIT 1`).get(sessionId));
+  }
+
   retainsApprovalClaim(turnId: string): boolean {
     return Boolean(this.db.query(`
       SELECT 1 FROM btcc_turns WHERE turn_id = ?
@@ -161,6 +166,10 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
         AND result.result_id = ?
       LIMIT 1
     `).get(sessionId, refs.relationId, refs.resultId));
+  }
+
+  plan(sessionId: string) {
+    return readStewardObserverPlan(this.db, sessionId, this.butlerData);
   }
 
   snapshot(sessionId: string): StewardObserverSnapshot | null {

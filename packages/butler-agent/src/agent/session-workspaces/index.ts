@@ -16,6 +16,8 @@ export type {
 export { WorkspaceReferenceUnavailableError } from "./contracts.ts";
 export { bindSessionGitWorktree } from "./bind.ts";
 export { shortSessionWorktreeBranch } from "./branch.ts";
+export { prepareWorkspaceForRelocation, discardRelocationWorkspace } from "./relocation.ts";
+export type { PreparedRelocationWorkspace } from "./relocation.ts";
 export {
   recoverSessionWorkspaceReference,
   resolveSessionWorkspaceAuthority,

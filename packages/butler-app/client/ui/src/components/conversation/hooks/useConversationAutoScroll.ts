@@ -38,6 +38,7 @@ interface UseConversationAutoScrollOptions {
 }
 
 export interface ConversationScrollState {
+  releaseBottomLock: () => void;
   isAwayFromBottom: boolean;
   hasUnreadMessages: boolean;
   scrollToBottom: (options?: ScrollToBottomOptions) => void;
@@ -92,6 +93,13 @@ export function useConversationAutoScroll({
     },
     [latestMessageVersion, scrollRef, virtualListHeight],
   );
+
+  const releaseBottomLock = useCallback(() => {
+    cancelScheduledScrolls();
+    pinnedToBottomRef.current = false;
+    lastAutoScrolledChatRef.current = activeChatId;
+    setIsAwayFromBottom(true);
+  }, [activeChatId, cancelScheduledScrolls]);
 
   useEffect(() => {
     latestSeenMessageVersionRef.current = latestMessageVersion;
@@ -247,6 +255,7 @@ export function useConversationAutoScroll({
   ]);
 
   return {
+    releaseBottomLock,
     isAwayFromBottom,
     hasUnreadMessages,
     scrollToBottom,

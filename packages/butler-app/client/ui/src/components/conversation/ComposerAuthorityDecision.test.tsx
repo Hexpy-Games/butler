@@ -15,6 +15,7 @@ async function renderDecision() {
   Object.assign(globalThis, { window: dom.window, document: dom.window.document,
     navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, Element: dom.window.Element,
     Node: dom.window.Node, CustomEvent: dom.window.CustomEvent,
+    MutationObserver: dom.window.MutationObserver,
     getComputedStyle: dom.window.getComputedStyle.bind(dom.window),
     requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window),
     cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window), IS_REACT_ACT_ENVIRONMENT: true });
@@ -62,13 +63,13 @@ test("only the oldest actual request replaces the Composer with ordered decision
   expect(container.querySelector("textarea")).toBeNull();
   await act(async () => { store.setState({ authorityApprovals: { sessionId: "different", cards: store.getState().authorityApprovals!.cards } }); });
   expect(container.textContent).not.toContain("이번만 허용");
-  expect(container.querySelector("textarea")?.value).toBe("보존할 일반 대화 초안");
+  expect(container.querySelector('[contenteditable="true"]')?.textContent).toBe("보존할 일반 대화 초안");
 });
 
 test("a pending request can be folded away without consuming the normal Composer draft", async () => {
   const { container, composer } = await renderDecision();
   await act(async () => { current!.onComposeMessage(); });
-  expect(container.querySelector("textarea")?.value).toBe(composer.getState().text);
+  expect(container.querySelector('[contenteditable="true"]')?.textContent).toBe(composer.getState().text);
   expect(container.textContent).toContain("허용 대기 2개");
   expect(container.textContent).not.toContain("이번만 허용");
   await act(async () => { current!.onShowDecision(); });

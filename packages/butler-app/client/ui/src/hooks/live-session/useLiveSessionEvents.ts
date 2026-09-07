@@ -109,6 +109,13 @@ export function useLiveSessionEvents(): void {
           }
         }
       }
+      if (event.type === "space.changed" || event.type === "session.created" || event.type === "project.created" || event.type === "project.updated") {
+        if (!isProjectNavigationEvent(event)) {
+          state.noteNavigationEvent();
+          navigationReconciliation.noteLiveNavigationEvent();
+        }
+        navigationReconciliation.requestRefresh();
+      }
       navigationReconciliation.noteLiveEvent();
       state.applyTimelineEvents([event]);
       advanceEventCursor(eventCursorRef, event.id);

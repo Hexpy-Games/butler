@@ -93,6 +93,7 @@ export interface StewardObserverDelegationPresentation {
 }
 
 export interface StewardObserverReader {
+  hasUnfinishedExecution(sessionId: string): boolean;
   retainsApprovalClaim(turnId: string): boolean;
   workStatus(): WorkStatusView;
   relationsForParent(sessionId: string): StewardObserverRelation[];
@@ -103,6 +104,7 @@ export interface StewardObserverReader {
   ): StewardObserverDelegationPresentation | null;
   isParentResultInput(sessionId: string, text: string): boolean;
   snapshot(sessionId: string): StewardObserverSnapshot | null;
+  plan(sessionId: string): StewardObserverPlan | null;
   recoverableTurns(): Array<{
     relation: StewardObserverRelation;
     turn_id: string;

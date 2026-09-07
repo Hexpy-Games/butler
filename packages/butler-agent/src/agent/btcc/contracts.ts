@@ -28,6 +28,10 @@ export type AdmittedModelSelection = {
   modelRoute?: ModelRouteState;
 };
 export type ButlerContextInput = {
+  branchSeed?: import("../../foundation/session-branch.ts").SessionBranchSeed;
+  appSessionId?: string;
+  messageContent?: import("../../foundation/message-content.ts").MessageContent;
+  sessionReferences?: import("../../foundation/message-content.ts").ResolvedSessionReference[];
   userRef: string;
   projectRef?: string;
   profileRefs: string[];

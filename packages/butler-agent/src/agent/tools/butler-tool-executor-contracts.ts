@@ -51,6 +51,7 @@ export type ButlerToolExecutorInput = {
   workspacePath?: string;
   sessionId?: string;
   originChatId?: string;
+  appSessionId?: string;
   projectId?: string;
   turnId?: string;
   imageManifests?: readonly VisualAdmittedManifest[];

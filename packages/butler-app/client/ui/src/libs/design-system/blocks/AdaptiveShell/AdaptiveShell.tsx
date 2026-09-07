@@ -1,5 +1,4 @@
 import type {
-  CSSProperties,
   HTMLAttributes,
   KeyboardEvent,
   PointerEvent,
@@ -16,6 +15,7 @@ export interface AdaptiveShellProps extends HTMLAttributes<HTMLDivElement> {
   transparentWorkspace?: boolean;
   chromeEnvironment?: "browser" | "electron";
   platform?: "browser" | "darwin" | "linux" | "win32";
+  compactSidebarFullWidth?: boolean;
 }
 export function AdaptiveShell({
   leftOpen,
@@ -25,6 +25,7 @@ export function AdaptiveShell({
   transparentWorkspace = false,
   chromeEnvironment = "browser",
   platform = "browser",
+  compactSidebarFullWidth = false,
   className,
   children,
   ...props
@@ -39,6 +40,7 @@ export function AdaptiveShell({
       data-transparent-workspace={transparentWorkspace}
       data-chrome-environment={chromeEnvironment}
       data-platform={platform}
+      data-compact-sidebar-full-width={compactSidebarFullWidth || undefined}
       {...props}
     >
       {children}
@@ -144,17 +146,4 @@ export function AdaptivePanelTitlebar({
       {children}
     </div>
   );
-}
-
-export function adaptivePanelStyle({
-  leftWidth,
-  rightWidth,
-}: {
-  leftWidth: number;
-  rightWidth: number;
-}): CSSProperties {
-  return {
-    "--sidebar-width": `${leftWidth}px`,
-    "--right-panel-width": `${rightWidth}px`,
-  } as CSSProperties;
 }

@@ -35,6 +35,12 @@ export class LazyAppSessionBindingStore
     return this.readable()?.deleteSession(...args);
   }
 
+  compareAndSetExecutionContext(
+    ...args: Parameters<SessionBindingStore["compareAndSetExecutionContext"]>
+  ): ReturnType<SessionBindingStore["compareAndSetExecutionContext"]> {
+    return this.writable().compareAndSetExecutionContext(...args);
+  }
+
   close(): void {
     this.store?.close();
     this.store = undefined;

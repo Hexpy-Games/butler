@@ -23,6 +23,7 @@ export function requestIdentityForRequest(
       triggerKey: request.eventId,
       messageId: request.message.id,
       content: request.message.content,
+      messageContent: request.appTurnContext?.contentParts,
     };
   }
   return {
@@ -126,6 +127,15 @@ function contextForRequest(
   request: BtccTurnRequest,
   context: ButlerContextInput,
 ): ButlerContextInput {
+  if (request.appTurnContext) context = { ...context, appSessionId: request.appTurnContext.session.id };
+  if (request.appTurnContext?.branchSeed) context = { ...context, branchSeed: request.appTurnContext.branchSeed };
+  if (request.appTurnContext?.contentParts) context = { ...context, messageContent: request.appTurnContext.contentParts };
+  if (request.appTurnContext?.sessionReferences?.length) context = { ...context,
+    sessionReferences: request.appTurnContext.sessionReferences,
+    ...(context.executionPolicy ? { executionPolicy: { ...context.executionPolicy,
+      requiredNativeTools: [...new Set([...context.executionPolicy.requiredNativeTools, "read_conversation_session"])],
+    } } : {}),
+  };
   return request.emptyResponsePolicy
     ? { ...context, emptyResponsePolicy: request.emptyResponsePolicy }
     : context;
@@ -145,6 +155,7 @@ function destinationForRequest(request: BtccTurnRequest): BtccProgressDestinatio
 
 export function inboundEnvelopeFor(request: BtccTurnRequest): InboundEnvelope {
   return {
+    appTurnContext: request.appTurnContext,
     eventId: request.eventId,
     signal: request.signal,
     transport: request.transport,

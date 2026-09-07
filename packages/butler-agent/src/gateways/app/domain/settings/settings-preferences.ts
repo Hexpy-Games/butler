@@ -119,6 +119,8 @@ export function sanitizeSettingsUpdate(
     );
     if (colors) output.main_screen_theme_custom_colors = colors;
   }
+  if (typeof input.smart_grouping_enabled === "boolean")
+    output.smart_grouping_enabled = input.smart_grouping_enabled;
   if (typeof input.translucent_sidebar === "boolean")
     output.translucent_sidebar = input.translucent_sidebar;
   if (typeof input.diagnostics_enabled === "boolean")

@@ -18,6 +18,8 @@ exclusive open-panel state.
 - Expanded layouts use resizable grid tracks.
 - Medium layouts use bounded overlay panels.
 - Compact layouts use an 88vw left drawer and full-cover right sheet.
+- Pass `compactSidebarFullWidth` for navigation that should fully cover the
+  compact viewport. The default bounded drawer remains available.
 - Panels animate with transform and honor reduced motion.
 - The always-mounted scrim keeps a promoted compositor layer and animates only
   opacity, preventing repeated mobile panel toggles from flashing.

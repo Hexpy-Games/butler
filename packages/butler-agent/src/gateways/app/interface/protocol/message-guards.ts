@@ -3,6 +3,7 @@ import type {
   PlanDecisionRequest,
   QueueMessageRequest,
 } from "./messaging-contract.ts";
+import { isMessageContent, messageContentText } from "../../../../foundation/message-content.ts";
 
 export function isPlanDecisionRequest(
   value: unknown,
@@ -19,6 +20,10 @@ export function isMessageSendRequest(
 ): value is MessageSendRequest {
   if (!value || typeof value !== "object") return false;
   const input = value as Partial<MessageSendRequest>;
+  if (input.content_parts !== undefined) {
+    if (!isMessageContent(input.content_parts)) return false;
+    return isMessageSendRequest({ ...input, content_parts: undefined, text: messageContentText(input.content_parts) });
+  }
   const hasText =
     typeof input.text === "string" && input.text.trim().length > 0;
   const hasAttachments =
@@ -42,6 +47,10 @@ export function isQueueMessageRequest(
 ): value is QueueMessageRequest {
   if (!value || typeof value !== "object") return false;
   const input = value as Partial<QueueMessageRequest>;
+  if (input.content_parts !== undefined) {
+    if (!isMessageContent(input.content_parts)) return false;
+    return isQueueMessageRequest({ ...input, content_parts: undefined, text: messageContentText(input.content_parts) });
+  }
   const hasText =
     typeof input.text === "string" && input.text.trim().length > 0;
   const hasAttachments =

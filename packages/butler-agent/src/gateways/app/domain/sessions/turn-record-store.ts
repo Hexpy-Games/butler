@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { AppSessionContextGate } from "./session-context-gate.ts";
 import {
   FIRST_VISIBLE_PROGRESS_EVENT_KIND,
 } from "../../../../agent/events/turn-events.ts";
@@ -35,6 +36,8 @@ export class AppTurnRecordStore {
           resolvedAt: createdAt,
         })
       : undefined;
+    this.db.transaction(() => {
+    new AppSessionContextGate(this.db).claimTurn(chatId, id);
     this.db
       .query(
         `
@@ -55,6 +58,7 @@ export class AppTurnRecordStore {
         createdAt,
         createdAt,
       );
+    })();
     return this.getTurn(id);
   }
 

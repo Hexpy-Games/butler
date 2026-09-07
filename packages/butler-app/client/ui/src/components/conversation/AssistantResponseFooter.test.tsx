@@ -4,6 +4,23 @@ import { expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
+import { BranchMessageActions } from "./BranchMessageActions";
+
+test("branch icon actions stay between copy and timing in the metadata row", () => {
+  const html = renderToStaticMarkup(<AssistantResponseFooter copied={false} onCopy={() => {}}
+    meta={{ durationLabel: "12초", timeLabel: "오전 1:23", completedAtIso: null }}
+    actions={<BranchMessageActions sessionId="general" messageId="answer" />} />);
+  const copy = html.indexOf('aria-label="Copy assistant response"');
+  const topic = html.indexOf('aria-label="새 주제대화 시작"');
+  const project = html.indexOf('aria-label="새 프로젝트 시작"');
+  const duration = html.indexOf("Worked for");
+  expect(copy).toBeGreaterThan(-1);
+  expect(topic).toBeGreaterThan(copy);
+  expect(project).toBeGreaterThan(topic);
+  expect(duration).toBeGreaterThan(project);
+  expect(html).not.toContain(">새 주제대화 시작</button>");
+  expect(html).not.toContain(">새 프로젝트 시작</button>");
+});
 
 test("delivered assistant footer keeps completion in a separate bottom row", () => {
   const html = renderFooter();

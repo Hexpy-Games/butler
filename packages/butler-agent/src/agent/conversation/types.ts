@@ -2,7 +2,7 @@ export type ConversationRole = "system" | "developer" | "user" | "assistant" | "
 export type ConversationVisibility = "model" | "user" | "operator" | "audit_link";
 export type ConversationStatus = "pending" | "complete" | "failed" | "compacted";
 export type ConversationProvenance = "trusted" | "recovered" | "imported" | "synthetic_summary";
-export type ConversationPartKind = "text" | "attachment_ref" | "tool_call" | "tool_result" | "summary_ref";
+export type ConversationPartKind = "text" | "attachment_ref" | "tool_call" | "tool_result" | "summary_ref" | "message_content";
 export type ConversationProviderShape = "openai" | "anthropic" | "generic" | null;
 
 export interface ConversationSession {
