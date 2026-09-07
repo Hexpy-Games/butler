@@ -1,3 +1,7 @@
+import { useCallback, useSyncExternalStore } from "react";
+
+export type ChromeEnvironment = "browser" | "electron";
+
 export const ADAPTIVE_BREAKPOINTS = {
   compactMax: 640,
   mediumMax: 1023,
@@ -13,15 +17,32 @@ export const ADAPTIVE_MEDIA = {
 export type AdaptiveMode = "compact" | "medium" | "expanded";
 export type AdaptivePanel = "left" | "right";
 
-export function classifyAdaptiveMode(width: number): AdaptiveMode {
+export function classifyAdaptiveMode(width: number, environment: ChromeEnvironment = "browser"): AdaptiveMode {
   if (width <= ADAPTIVE_BREAKPOINTS.compactMax) return "compact";
+  if (environment === "electron") return "expanded";
   if (width <= ADAPTIVE_BREAKPOINTS.mediumMax) return "medium";
   return "expanded";
 }
 
-export function currentAdaptiveMode(): AdaptiveMode {
+export function currentAdaptiveMode(environment: ChromeEnvironment = "browser"): AdaptiveMode {
   if (typeof window === "undefined") return "expanded";
-  return classifyAdaptiveMode(window.innerWidth);
+  return classifyAdaptiveMode(window.innerWidth, environment);
+}
+
+export function adaptiveDrawerQuery(environment: ChromeEnvironment): string {
+  return environment === "electron" ? ADAPTIVE_MEDIA.compact : `(max-width: ${ADAPTIVE_BREAKPOINTS.mediumMax}px)`;
+}
+
+/** CSS shell and product panel state share the same environment-aware breakpoint. */
+export function useAdaptiveDrawer(environment: ChromeEnvironment): boolean {
+  const query = adaptiveDrawerQuery(environment);
+  const subscribe = useCallback((notify: () => void) => {
+    const media = window.matchMedia(query);
+    media.addEventListener("change", notify);
+    return () => media.removeEventListener("change", notify);
+  }, [query]);
+  const read = useCallback(() => window.matchMedia(query).matches, [query]);
+  return useSyncExternalStore(subscribe, read, () => false);
 }
 
 export function normalizeAdaptivePanelState({

@@ -15,27 +15,34 @@
 }
 
 .sidebar {
-  --space-page-surface: rgb(from var(--background) r g b / 1);
-  background: var(--space-page-surface);
   --sidebar-footer-border-width: 0;
-  --nav-sticky-surface: var(--space-page-surface);
+  --nav-sticky-surface: transparent;
+  --nav-sticky-filter: var(--windows-sidebar-overlay-filter);
   --selection-strong: color-mix(in srgb, var(--selection) 75%, transparent);
   --nav-tree-indent: var(--space-sm);
   --nav-section-heading-inset: var(--space-xs);
+  --nav-section-heading-min-height: var(--control-hit-target);
   user-select: none;
   -webkit-user-select: none;
-  --sidebar-content-inset: var(--sidebar-scroll-fade-size);
+  --sidebar-content-inset: 0px;
+  --sidebar-compact-titlebar-display: flex;
   --sidebar-region-gap: var(--space-xs);
-  flex: 0 0 var(--sidebar-width);
+  width: 100%;
+  flex: 1 1 auto;
   height: 100%;
   min-height: 0;
 }
 
 .brand {
-  padding-block: var(--space-xs);
+  min-height: var(--titlebar-height);
+  padding-inline-start: calc(var(--control-hit-target) + var(--space-sm));
 }
 .sidebarHeader {
-  padding-top: var(--space-xs);
+  padding-bottom: var(--space-2xl);
+}
+.sidebarHeader .brand {
+  min-height: var(--control-hit-target);
+  padding-inline-start: 0;
 }
 .primaryActions {
   display: grid;
@@ -71,6 +78,7 @@
   .sidebar {
     width: 100%;
     flex-basis: 100%;
+    padding-block-start: var(--safe-area-top);
     --space-tree-icon-size: var(--space-xl);
     --space-icon-optical-offset: calc(var(--font-size-4) * -0.03);
     --sidebar-row-height: var(--control-hit-target);

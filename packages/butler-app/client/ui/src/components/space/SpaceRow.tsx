@@ -1,7 +1,6 @@
 import { SpaceRowLabel } from "./SpaceRowLabel";
 import { memo, useEffect, useRef, useState } from "react";
 import {
-  Button,
   ButtonContainer,
   ChevronDown,
   ChevronRight,
@@ -16,6 +15,7 @@ import { projectSpace, spaceChildren } from "@/app/space/projection";
 import { useLongPressAction } from "../layout/useLongPressAction";
 import { SpaceGlyph, SpaceIdentity } from "./SpaceIdentity";
 import { SpaceRowMenu } from "./SpaceRowMenu";
+import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 import { SpaceDragRow } from "./SpaceDragRow";
 import styles from "./SpaceSidebar.module.css";
 import interaction from "./SpaceInteractions.module.css";
@@ -115,15 +115,10 @@ export const SpaceRow = memo(function SpaceRow({
               />
             ))}
             {children.length > limit && (
-              <ButtonContainer size="sm">
-                <Button
-                  size="sm"
-                  variant="inline"
-                  onClick={() => setVisibleCount(limit + 5)}
-                >
-                  나머지 {children.length - limit}개 더보기
-                </Button>
-              </ButtonContainer>
+              <SidebarSessionLoadMore
+                remainingCount={children.length - limit}
+                onClick={() => setVisibleCount(limit + 5)}
+              />
             )}
           </CollapsibleNavGroup>
         ) : (
@@ -143,8 +138,6 @@ export const SpaceRow = memo(function SpaceRow({
                   .getState()
                   .openProjectDashboard(row.node.entityId);
               else useButlerStore.getState().openSession(row.node.entityId);
-              if (window.matchMedia("(max-width: 640px)").matches)
-                useButlerStore.getState().setLeftOpen(false);
             }}
           />
         )}

@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
+import { adaptiveDrawerQuery } from "@/libs/design-system/responsive";
+import { chromeEnvironment } from "@/app/chromeEnvironment";
 
 export const NARROW_RIGHT_PANEL_QUERY = "(max-width: 640px)";
-export const ADAPTIVE_OVERLAY_QUERY = "(max-width: 1023px)";
 
 export function useNarrowRightPanelAutoCollapse({
   leftOpen,
@@ -25,7 +26,7 @@ export function useNarrowRightPanelAutoCollapse({
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
-    const media = window.matchMedia(ADAPTIVE_OVERLAY_QUERY);
+    const media = window.matchMedia(adaptiveDrawerQuery(chromeEnvironment()));
     const reconcileOverlayMode = (event?: MediaQueryListEvent) => {
       const matches = event?.matches ?? media.matches;
       if (matches) {
@@ -53,7 +54,7 @@ export function useNarrowRightPanelAutoCollapse({
     ) {
       return;
     }
-    const media = window.matchMedia(NARROW_RIGHT_PANEL_QUERY);
+    const media = window.matchMedia(adaptiveDrawerQuery(chromeEnvironment()));
     const collapseLeftIfNarrow = () => {
       if (media.matches) setLeftOpen(false);
     };

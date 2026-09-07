@@ -1,4 +1,4 @@
-import { NavRow } from "@/butler-ds";
+import { NavRow, Space } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 
 interface SidebarSessionLoadMoreProps {
@@ -21,6 +21,7 @@ export function SidebarSessionLoadMore({
     <NavRow
       ariaLabel={label}
       dataTestClass="sidebar-load-more"
+      icon={<Space direction="horizontal" size="lg" style={{ width: "var(--sidebar-icon-size, 17px)" }} />}
       label={label}
       onClick={onClick}
     />

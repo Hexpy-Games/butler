@@ -47,6 +47,7 @@ export function SidebarShell({
     <aside
       className={cn(styles.shell, className)}
       data-collapsed={collapsed ? "true" : undefined}
+      data-has-titlebar={Boolean(titlebar) || undefined}
       data-test-class="app-sidebar"
       aria-label={ariaLabel}
     >

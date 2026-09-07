@@ -148,6 +148,7 @@
 }
 
 .scrollContent[data-sticky-header] {
+  gap: 0;
   --nav-sticky-offset: calc(
     var(--sidebar-scroll-fade-size) + var(--sidebar-sticky-header-height, 0px)
   );
@@ -159,7 +160,8 @@
   z-index: 30;
   flex: none;
   background: var(--nav-sticky-surface, var(--color-surface-base));
-  padding-bottom: var(--space-xs);
+  padding-bottom: var(--space-sm);
+  backdrop-filter: var(--nav-sticky-filter, none);
 }
 
 .stickyHeader::before {
@@ -206,7 +208,7 @@
 
 @media (width <= 640px) {
   .titlebar {
-    display: none;
+    display: var(--sidebar-compact-titlebar-display, none);
   }
 
   .trafficSpace {

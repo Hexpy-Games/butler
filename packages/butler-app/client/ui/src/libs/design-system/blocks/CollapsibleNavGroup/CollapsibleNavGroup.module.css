@@ -35,6 +35,7 @@
 
 .indented {
   padding-inline-start: var(--nav-tree-indent, var(--space-lg));
+  padding-bottom: var(--space-sm);
 }
 
 .stickyGroup > .header[data-slot="clickable"] {
@@ -45,6 +46,7 @@
   );
   z-index: calc(20 - var(--nav-sticky-depth));
   background: var(--nav-sticky-surface, var(--color-surface-base));
+  backdrop-filter: var(--nav-sticky-filter, none);
 }
 
 .stickyGroup > .header[data-slot="clickable"]:hover {
