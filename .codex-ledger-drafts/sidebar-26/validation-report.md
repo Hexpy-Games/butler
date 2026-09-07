@@ -10,6 +10,7 @@
 - typecheck, lint(DS/CSS), UI build, diff whitespace 검사 통과. DS AdaptiveShell/SidebarShell/CollapsibleNavGroup/NavSection/ChromeFrame을 5개 viewport에서 총 25개 렌더링했다. fixture의 fixed drawer가 viewer 바깥으로 튀어나오지 않도록 fixture만 paint/layout contain 처리했다.
 - 구조 리뷰: 창 토글 한 소유자, viewport 분류 공유, openSession에서 drawer 탐색 완료 처리, canonical navigation만 상태 권위로 유지했다. 새 polling/BTCC 상태/원본 데이터 보정은 없다. module audit의 기존 큰 테스트 파일 2개와 기존 SidebarShell barrel은 이번 런타임 경로 변경 대상이 아니며 별도 분리하지 않았다.
 - 실기기 iOS Safari와 Windows/macOS 외 네이티브 창은 이번 검증 범위가 아니다.
+- 운영 반영: 구현 `6282c650`을 main에 fast-forward 병합하고 origin/main으로 push했다. 2026-09-07 23:39 KST native supervisor 6개 서비스 online, `/health` 정상 확인. 초기 Electron 실행은 서버 준비 전 health 대기 제한에 걸려 종료됐으며 서버 준비 완료 후 재실행했다. 최종 독립 드라이버 PID 1700(PPID 1), Electron PID 1983. 재시작 후 실제 화면에서 원래 신호등 오른쪽 토글, 간격·재질·더보기 정렬, 일반 채널 완료/스피너 없음과 Gateway ready를 확인했다.
 
 ## r4 추가 보정 검증
 
