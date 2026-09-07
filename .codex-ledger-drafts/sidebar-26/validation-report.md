@@ -40,4 +40,11 @@
 자연어 도구 재검증: sidebar-organization-live-1788786919108-d3ffaa97. 실제 모델의 start_topic_conversation 호출이 성공했고, 새 대화 ‘별빛노트 다음 협의’와 원본 합의/출처가 저장됐다. effect applied receipt와 started=false를 확인했다.
 실행 자료는 운영 데이터와 분리된 임시 run 디렉터리에 보존했다. 종료된 이전 run의 재생성 가능한 설치 패키지만 공간 확보를 위해 삭제했다.
 
-남은 단계: commit/main 병합 → 운영 서비스/Electron 재시작 → 운영 상태 확인.
+## main·운영 반영 완료
+
+- 구현 커밋 `e2fbf03b32dbc6076574009fc83282b9ca79557b`를 main에 통합하고 origin/main으로 push했다. 커밋 훅의 lint/typecheck를 우회하지 않았다.
+- 2026-09-07 22:22 KST 기존 native-supervisor 운영 서비스를 재시작했다. app-gateway, butler-main, watchdog, scheduler, sync-consumer, embed-server online 및 `/health` 정상 응답을 확인했다.
+- Electron 개발 앱도 main checkout으로 재시작했다. 새 드라이버 PID 69659는 PPID 1이며 Electron PID 70025로 실행됐다. Codex 셸의 자식 수명에 종속되지 않는다.
+- 운영 Electron의 실제 접근성 트리와 화면에서 혼합 트리, 즐겨찾기, 전체보기/최신/진행중 탭, 하단 설정을 확인했다. 기존 general 채널은 archived=1이므로 사용자 보관 상태를 임의 변경하지 않았다.
+- 격리 E2E에서 새 주제 생성 후 원본 답변 복귀도 마지막으로 재확인했다. `/tmp/butler26-final-footer-success.png`, `/tmp/butler26-final-branch-success.png`에 화면 증거를 보존했다.
+- 계획 P1–P8과 최신 하단 아이콘 요청의 구현·검증·main 반영·운영 재시작을 완료했다. 남은 플랫폼 확인은 위에 명시한 물리 iOS Safari이며, #164는 변경하지 않았다.
