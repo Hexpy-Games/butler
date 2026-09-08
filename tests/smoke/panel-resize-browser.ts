@@ -27,7 +27,7 @@ try {
   const handle = page.locator("[data-test-class~='right-panel-resize-handle']");
   await handle.waitFor();
   const measure = () => page.evaluate(() => {
-    const shell = document.querySelector('[data-panel-layout]')!;
+    const shell = document.querySelector("[data-panel-layout]")!;
     const main = shell.querySelector("main")!;
     const right = document.querySelector('[data-test-class="right-panel-slot"]')!;
     return { main: main.getBoundingClientRect().width, right: right.getBoundingClientRect().width,
@@ -81,7 +81,8 @@ try {
   await page.waitForTimeout(80);
   assert.equal((await measure()).right, 292);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(100);
+  await page.locator('[data-test-class="sidebar-slot"]').waitFor({ state: "hidden" });
+  await page.locator('[data-test-class="right-panel-slot"]').waitFor({ state: "hidden" });
   assert.equal((await measure()).main, 390);
   assert.equal(await handle.isVisible(), false);
   await page.screenshot({ path: join(output, "mobile-drawer-regression.png") });
