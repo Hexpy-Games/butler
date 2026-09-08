@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getAppCopy, type InterfaceContentReferences } from "../../../../../butler-i18n/src/index.ts";
 import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type { DurableWorkView, WorkStage } from "../work/index.ts";
 import {
@@ -21,6 +22,7 @@ export type GuidedActivityBinding = {
 };
 
 type ActivityGroup = GuidedActivityBinding & {
+  interfaceContent?: InterfaceContentReferences;
   title: string;
   summary: string;
   rationale?: string;
@@ -212,7 +214,10 @@ export function createGuidedActivityProjection(input: {
   function ordinaryActivity(candidate: ActivityGroup): ActivityGroup {
     if (pendingStage) {
       candidate.displayStage = pendingStage;
-      if (pendingExecutionTitle) candidate.title = pendingExecutionTitle;
+      if (pendingExecutionTitle) {
+        candidate.title = pendingExecutionTitle;
+        if (candidate.interfaceContent) candidate.interfaceContent.title = undefined;
+      }
       currentActivity = candidate;
       pendingStage = undefined;
       pendingExecutionTitle = undefined;
@@ -250,6 +255,10 @@ export function createGuidedActivityProjection(input: {
       summary: commandActivity
         ? content.summary
         : distinctSummary(content.title, content.summary),
+      interfaceContent: { ...content.interfaceContent,
+        ...(content.interfaceContent?.summary && !commandActivity && distinctSummary(content.title, content.summary) !== content.summary ? { summary: { key: "checkingInformation" as const } } : {}),
+        ...(groupInput.title || first?.name === "record_work_checkpoint" && activeActionTitle ? { title: undefined } : {}),
+      },
       ...(content.rationale ? { rationale: content.rationale } : {}),
       ...(content.nextStep ? { nextStep: content.nextStep } : {}),
       ...(first?.name === "record_work_review" &&
@@ -269,9 +278,10 @@ export function createGuidedActivityProjection(input: {
         activityId: activityId(input.turnId),
         displayStage: "conception",
         deferredUntilAccepted: group.deferredUntilAccepted,
-        title: "요청 의도 확인",
+        title: getAppCopy().guided.conceptionTitle,
         summary: conceptionSummary(content.summary),
-        nextStep: "요청에 맞는 작업 순서와 검증 기준을 정합니다.",
+        nextStep: getAppCopy().guided.planningNext,
+        interfaceContent: { title: { key: "conceptionTitle" }, summary: { key: "conceptionSummary", parameters: { text: content.summary } }, nextStep: { key: "planningNext" } },
         published: false,
       };
       group.precedingGroups = [conception];
@@ -288,8 +298,9 @@ export function createGuidedActivityProjection(input: {
           activityId: activityId(input.turnId),
           displayStage: "reporting",
           deferredUntilAccepted: group.deferredUntilAccepted,
-          title: "결과 보고",
-          summary: distinctSummary("결과 보고", reportingDirection),
+          title: getAppCopy().guided.reportTitle,
+          summary: distinctSummary(getAppCopy().guided.reportTitle, reportingDirection),
+          interfaceContent: { title: { key: "reportTitle" } },
           published: false,
         };
         group.followingGroups = [reporting];
@@ -325,6 +336,7 @@ async function publishGroup(
       displayStage: group.displayStage,
       title: group.title,
       summary: group.summary,
+      interfaceContent: group.interfaceContent,
       ...(group.rationale ? { rationale: group.rationale } : {}),
       ...(group.nextStep ? { nextStep: group.nextStep } : {}),
     });

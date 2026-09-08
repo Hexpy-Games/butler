@@ -1,4 +1,5 @@
 import { PromptSuggestionList } from "@/butler-ds";
+import { getAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import type { ActiveChatView, NewChatBriefingView } from "@/app/types.ts";
@@ -13,7 +14,7 @@ import {
 } from "./mainScreenTheme";
 import { activeProjectId } from "./composerProjectContext";
 import {
-  GENERAL_FALLBACK_SUGGESTIONS,
+  generalFallbackSuggestions,
   projectFallbackSuggestions,
   skillFallbackSuggestions,
 } from "./emptyStateSuggestions";
@@ -26,7 +27,7 @@ interface EmptyStateProps {
 }
 
 function newChatMomentLabel(): string {
-  return new Intl.DateTimeFormat("ko-KR", {
+  return new Intl.DateTimeFormat(getAppLocale(), {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date());
@@ -68,14 +69,14 @@ export function EmptyState({
     return () => {
       cancelled = true;
     };
-  }, [isGeneralNewChat, isProjectNewChat, projectId]);
+  }, [isGeneralNewChat, isProjectNewChat, projectId, settings.language]);
 
   const suggestions = isSkillChat
     ? skillFallbackSuggestions(activeChat.project)
     : isProjectNewChat
       ? (briefing?.suggestions ??
         projectFallbackSuggestions(activeChat.project))
-      : (briefing?.suggestions ?? GENERAL_FALLBACK_SUGGESTIONS);
+      : (briefing?.suggestions ?? generalFallbackSuggestions());
   const description = briefing?.description;
   const titleIconSrc =
     markTheme === "dark" ? butlerMarkDarkSrc : butlerMarkLightSrc;

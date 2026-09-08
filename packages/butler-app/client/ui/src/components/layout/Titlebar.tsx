@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useMemo, useState } from "react";
 import {
   Archive,
@@ -32,6 +33,7 @@ import { TitlebarWorkspaceSubtitle } from "./TitlebarWorkspaceSubtitle";
 import { WindowControls } from "./WindowControls";
 
 export function Titlebar() {
+  useAppLocale();
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const storeView = useButlerStore((state) => state.view);
   const storeNavigation = useButlerStore((state) => state.navigation);

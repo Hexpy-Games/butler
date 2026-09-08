@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -19,6 +20,7 @@ interface SettingsViewProps {
   isActive?: boolean;
 }
 export function SettingsView({ initialSection, onClose, isActive = false }: SettingsViewProps = {}) {
+  useAppLocale();
   const [compactPane, setCompactPane] = useState<"master" | "detail">("master");
   const settings = useButlerStore((state) => state.settings);
   const closeSettings = useButlerStore((state) => state.closeSettings);

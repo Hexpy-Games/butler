@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { DisclosureRow, ListRow, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -10,6 +11,7 @@ import {
 } from "./toolchainUtils";
 
 export function ToolchainDisclosureRow({ row }: { row: ProgressRow }) {
+  useAppLocale();
   const [expanded, setExpanded] = useState(false);
   const detailRows = row.safe_detail_rows ?? [];
   const hasDetails = detailRows.length > 0;

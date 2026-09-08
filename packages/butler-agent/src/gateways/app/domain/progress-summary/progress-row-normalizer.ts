@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readInterfaceContent } from "../../../../../../butler-i18n/src/index.ts";
 import type { ProgressSummaryRow } from "../../interface/protocol/app-protocol.ts";
 import { isPublicDecisionSource } from "./public-decision-source.ts";
 import {
@@ -42,6 +43,8 @@ function applyBasicProgressFields(
   input: Record<string, unknown>,
 ): void {
   const toolName = safeOptionalShortText(input.safe_tool_name);
+  const interfaceContent = readInterfaceContent(input.interface_content);
+  if (interfaceContent) row.interface_content = interfaceContent;
   if (toolName) row.safe_tool_name = toolName;
   const inputLabel = safeOptionalPublicText(input.safe_input_label);
   if (inputLabel) row.safe_input_label = inputLabel;
@@ -57,6 +60,13 @@ function applyBasicProgressFields(
   }
   const bridgePhase = safeOptionalShortToken(input.bridge_phase);
   if (bridgePhase) row.bridge_phase = bridgePhase;
+  const interfaceLabelKey = safeOptionalShortToken(input.interface_label_key);
+  if (interfaceLabelKey) row.interface_label_key = interfaceLabelKey;
+  const parameters = input.interface_label_parameters;
+  if (parameters && typeof parameters === "object") {
+    const { attempt, maxAttempts } = parameters as Record<string, unknown>;
+    if (typeof attempt === "number" && Number.isInteger(attempt) && typeof maxAttempts === "number" && Number.isInteger(maxAttempts)) row.interface_label_parameters = { attempt, maxAttempts };
+  }
   const receiptKind = safeOptionalShortToken(input.receipt_kind);
   if (receiptKind) row.receipt_kind = receiptKind;
   const workContractId = safeOptionalShortToken(input.work_contract_id);

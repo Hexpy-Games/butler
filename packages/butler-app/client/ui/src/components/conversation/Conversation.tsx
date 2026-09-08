@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useMemo, useState } from "react";
 import { activeChatFromNavigation } from "@/app/utils.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -18,6 +19,7 @@ import { useSessionViewSubscription } from
 void appCopy;
 
 export function Conversation() {
+  const locale = useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const navigation = useButlerStore((state) => state.navigation);
   const messages = useButlerStore((state) => state.messages);
@@ -39,7 +41,7 @@ export function Conversation() {
 
   const activeChat = useMemo(
     () => activeChatFromNavigation(navigation, activeChatId),
-    [activeChatId, navigation],
+    [activeChatId, navigation, locale],
   );
   const isActiveChatSending =
     isSending &&

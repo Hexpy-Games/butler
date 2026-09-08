@@ -2,6 +2,7 @@ import type { HTMLAttributes, ReactNode } from "react";
 import { Clickable } from "../../components/Clickable";
 import { cn } from "../../lib/utils";
 import styles from "./NavRow.module.css";
+import { NavRowContent } from "./NavRowContent";
 
 export interface NavRowProps {
   /** Icon element to display at the start */
@@ -12,6 +13,8 @@ export interface NavRowProps {
   multiline?: boolean;
   /** Label text or element */
   label: ReactNode;
+  /** Full-width second line, independent of the first-line action track. */
+  meta?: ReactNode;
   /** Optional badge text or number */
   badge?: ReactNode;
   /** Whether this row is currently active/selected */
@@ -41,6 +44,7 @@ export function NavRow({
   iconInteractive = false,
   multiline = false,
   label,
+  meta,
   badge,
   active = false,
   disabled = false,
@@ -55,42 +59,8 @@ export function NavRow({
 }: NavRowProps) {
   const hasHoverActions = Boolean(actions && actionsVisibility !== "visible");
   const content = (
-    <>
-      <span className={styles.labelRegion}>
-        {icon && (
-          <span
-            className={styles.icon}
-            aria-hidden={iconInteractive ? undefined : true}
-            data-slot="nav-row-icon"
-          >
-            {icon}
-          </span>
-        )}
-        <span className={styles.label} data-slot="nav-row-label">
-          {label}
-        </span>
-      </span>
-      {(badge || actions) && (
-        <span
-          className={styles.controlRegion}
-          data-has-hover-actions={hasHoverActions ? "true" : undefined}
-        >
-          {badge && <span className={styles.badge}>{badge}</span>}
-          {actions && (
-            <span
-              className={cn(
-                styles.actions,
-                actionsVisibility !== "visible" && styles.hoverActions,
-                actionsVisibility === "hover-compact-hidden" &&
-                  styles.compactHiddenActions,
-              )}
-            >
-              {actions}
-            </span>
-          )}
-        </span>
-      )}
-    </>
+    <NavRowContent icon={icon} iconInteractive={iconInteractive} label={label}
+      badge={badge} actions={actions} actionsVisibility={actionsVisibility} meta={meta} />
   );
 
   const rowClassName = cn(

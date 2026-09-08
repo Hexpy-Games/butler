@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Button, ButtonContainer } from "@/butler-ds";
 
@@ -8,6 +9,7 @@ export function SkillActions({
   onImport: () => void;
   onCreate: () => void;
 }) {
+  useAppLocale();
   const copy = appCopy.settings.actions;
   return (
     <ButtonContainer size="sm">

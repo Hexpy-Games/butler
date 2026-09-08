@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { appLocaleFromLanguage, getAppCopy } from "../../../../butler-i18n/src/index.ts";
 
 export type RuntimeMessageLanguage = "en" | "ko";
 
@@ -66,49 +67,18 @@ export function resolveRuntimeMessageLanguage(options: {
   const config = readJson(join(butlerData, "butler.config.json"));
   return normalizeLanguage(options.explicit) ??
     normalizeLanguage(process.env.BUTLER_RESPONSE_LANGUAGE) ??
-    normalizeLanguage(process.env.BUTLER_LANG) ??
     normalizeLanguage(config?.user?.responseLanguage) ??
-    normalizeLanguage(config?.user?.language) ??
     languageFromPersona(butlerData) ??
     "en";
 }
 
-const EN_MESSAGES: RuntimeMessages = {
-  ungroundedWorkerDispatch() {
-    return [
-      "I could not verify worker execution for this response.",
-      "",
-      "I will not claim background work has started until the execution record confirms it. If you ask again, I will first verify the state and then continue safely.",
-    ].join("\n");
-  },
-  ungroundedTaskInspection() {
-    return [
-      "The task queue has not been checked yet.",
-      "",
-      "I will not report task status from memory alone. If you ask again, I will read the durable task state before answering.",
-    ].join("\n");
-  },
-};
-
-const KO_MESSAGES: RuntimeMessages = {
-  ungroundedWorkerDispatch() {
-    return [
-      "이번 답변에서는 워커 또는 백그라운드 작업 실행을 확인하지 못했습니다.",
-      "",
-      "실행 기록으로 확인되기 전에는 백그라운드 작업이 시작됐다고 단정하지 않겠습니다. 다시 요청하시면 먼저 상태를 확인한 뒤 안전하게 이어가겠습니다.",
-    ].join("\n");
-  },
-  ungroundedTaskInspection() {
-    return [
-      "아직 작업 큐를 확인하지 않았습니다.",
-      "",
-      "기억만으로 작업 상태를 보고하지 않겠습니다. 다시 물어보시면 저장된 작업 상태를 먼저 읽고 답하겠습니다.",
-    ].join("\n");
-  },
-};
+/** A response preference is a default, not a ban on the user's requested language. */
+export function responseLanguageInstruction(language: string): string {
+  return `Use ${language.trim()} for every user-facing message by default. Follow the user's explicit request to answer or translate into another language instead. Interface language controls app labels only and must not change the answer language.`;
+}
 
 export function runtimeMessages(language: RuntimeMessageLanguage): RuntimeMessages {
-  return language === "ko" ? KO_MESSAGES : EN_MESSAGES;
+  return getAppCopy(appLocaleFromLanguage(language)).runtimeMessages;
 }
 
 export function resolveRuntimeMessages(options: {

@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { memo, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -50,6 +51,7 @@ function MessageMarkdownComponent({
   attachments = EMPTY_ATTACHMENTS,
   text,
 }: MessageMarkdownProps) {
+  useAppLocale();
   const components = useMemo(
     () => markdownComponents(attachments),
     [attachments],

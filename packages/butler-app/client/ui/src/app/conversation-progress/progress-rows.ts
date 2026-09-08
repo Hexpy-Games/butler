@@ -1,4 +1,5 @@
 import type { ProgressRow } from "../types.ts";
+import { localizeProgressRow } from "../copy.ts";
 
 const INTERNAL_TOOL_NAMES = new Set([
   "Update Todo List",
@@ -17,7 +18,7 @@ const LIFECYCLE_LABELS = new Set([
   "preparing final answer", "final answer ready", "completed", "delivered",
 ]);
 export function visibleProgressRows(rows: ProgressRow[]): ProgressRow[] {
-  return rows.filter((row) => !isInternalProgressRow(row));
+  return rows.filter((row) => !isInternalProgressRow(row)).map(localizeProgressRow);
 }
 
 export function isInternalProgressRow(row: ProgressRow): boolean {

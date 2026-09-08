@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import type {
   ProviderQuotaReasonCode,
   ProviderQuotaResultView,
@@ -6,17 +7,17 @@ import type {
 export function windowLabel(
   window: ProviderQuotaResultView["windows"][number],
 ): string {
-  if (window.id === "mcp-month") return "MCP 월간 한도";
+  if (window.id === "mcp-month") return appCopy.interfaceStatus.mcpMonthly;
   if (window.id === "tokens-5-hour" || window.id.startsWith("tokens-5-hour-")) {
-    return "5시간 한도";
+    return appCopy.interfaceStatus.fiveHour;
   }
   if (window.id === "tokens-weekly" || window.id.startsWith("tokens-weekly-")) {
-    return "주간 한도";
+    return appCopy.interfaceStatus.weekly;
   }
   if (window.windowDurationMins !== null) {
-    return `${window.windowDurationMins}분 한도`;
+    return appCopy.interfaceStatus.minutesLimit(window.windowDurationMins);
   }
-  return window.id === "individualLimit" ? "개별 한도" : "제공된 한도";
+  return window.id === "individualLimit" ? appCopy.interfaceStatus.individual : appCopy.interfaceStatus.providedLimit;
 }
 
 export function planLabel(
@@ -24,17 +25,17 @@ export function planLabel(
   name: string | null,
 ): string {
   if (name) return name;
-  if (kind === "subscription") return "구독";
-  if (kind === "api") return "API 사용량";
-  return "확인되지 않음";
+  if (kind === "subscription") return appCopy.interfaceStatus.subscription;
+  if (kind === "api") return appCopy.interfaceStatus.apiUsage;
+  return appCopy.interfaceStatus.unconfirmed;
 }
 
 export function sourceLabel(
   kind: ProviderQuotaResultView["sourceKind"],
 ): string {
-  if (kind === "codex_app_server") return "OpenAI Codex 공식 사용량";
-  if (kind === "zai_usage_query") return "Z.AI Coding Plan 공식 사용량";
-  return "공식 프로바이더 사용량";
+  if (kind === "codex_app_server") return appCopy.interfaceStatus.codexUsage;
+  if (kind === "zai_usage_query") return appCopy.interfaceStatus.zaiUsage;
+  return appCopy.interfaceStatus.providerUsage;
 }
 
 export function quotaReasonLabel(
@@ -42,38 +43,38 @@ export function quotaReasonLabel(
 ): string {
   switch (code) {
     case "provider_auth_not_applicable":
-      return "API 키에는 Codex 구독 잔여량이 적용되지 않습니다.";
+      return appCopy.interfaceStatus.authNotApplicable;
     case "provider_auth_required":
-      return "OpenAI Codex 구독 인증이 필요합니다.";
+      return appCopy.interfaceStatus.authRequired;
     case "provider_auth_surface_mismatch":
-      return "Codex 구독 인증 방식을 사용할 수 없습니다.";
+      return appCopy.interfaceStatus.authMismatch;
     case "provider_auth_failure":
-      return "OpenAI Codex 인증을 확인하지 못했습니다.";
+      return appCopy.interfaceStatus.authFailure;
     case "provider_executable_unavailable":
-      return "Codex 실행 파일을 확인할 수 없습니다.";
+      return appCopy.interfaceStatus.executableUnavailable;
     case "provider_timeout":
-      return "프로바이더 사용량 응답 시간이 초과되었습니다.";
+      return appCopy.interfaceStatus.quotaTimeout;
     case "provider_response_malformed":
-      return "프로바이더 사용량 응답을 읽을 수 없습니다.";
+      return appCopy.interfaceStatus.quotaMalformed;
     case "provider_rpc_failure":
-      return "프로바이더 사용량 조회에 실패했습니다.";
+      return appCopy.interfaceStatus.quotaFailure;
     case "provider_temporary_failure":
-      return "프로바이더 사용량을 잠시 확인할 수 없습니다.";
+      return appCopy.interfaceStatus.quotaTemporary;
     case "provider_quota_surface_unavailable":
-      return "공식 잔여량 조회를 지원하지 않습니다.";
+      return appCopy.interfaceStatus.quotaUnsupported;
     default:
-      return "프로바이더 잔여량을 확인할 수 없습니다.";
+      return appCopy.interfaceStatus.quotaUnknown;
   }
 }
 
 export function formatRemaining(value: number | null): string {
-  if (value === null) return "미확인";
+  if (value === null) return appCopy.interfaceStatus.unknown;
   return `${Math.round(Math.max(0, Math.min(100, value)))}%`;
 }
 
 export function formatQuotaTimestamp(value: string): string {
   const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) return "미확인";
+  if (!Number.isFinite(timestamp)) return appCopy.interfaceStatus.unknown;
   return new Intl.DateTimeFormat(undefined, {
     month: "2-digit",
     day: "2-digit",

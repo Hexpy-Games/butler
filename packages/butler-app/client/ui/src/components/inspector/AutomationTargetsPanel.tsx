@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Clock3 } from "@/butler-ds";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
 import { Clickable, ListRow, Section, Stack } from "@/butler-ds";
@@ -12,6 +13,7 @@ export function AutomationTargetsPanel({
   automations: AutomationTargetSummary[];
   onOpenAutomation: (automationId: string) => void;
 }) {
+  useAppLocale();
   return (
     <Section
       title={appCopy.automations.title}

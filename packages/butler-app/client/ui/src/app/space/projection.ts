@@ -1,3 +1,4 @@
+import { appCopy, getAppLocale } from "@/app/copy.ts";
 import type {
   NavigationView,
   SpaceNode,
@@ -17,7 +18,8 @@ export interface SpaceRowData {
   ancestors: string[];
 }
 
-const projections = new WeakMap<NavigationView, Map<string, SpaceRowData>>();
+let projectionLocale = getAppLocale();
+let projections = new WeakMap<NavigationView, Map<string, SpaceRowData>>();
 const childrenIndexes = new WeakMap<Map<string, SpaceRowData>, Map<string | null, SpaceRowData[]>>();
 let previousRows = new Map<string, SpaceRowData>();
 let previousChildren = new Map<string | null, SpaceRowData[]>();
@@ -26,6 +28,12 @@ let previousChildren = new Map<string | null, SpaceRowData[]>();
 export function projectSpace(
   navigation: NavigationView,
 ): Map<string, SpaceRowData> {
+  if (projectionLocale !== getAppLocale()) {
+    projectionLocale = getAppLocale();
+    projections = new WeakMap();
+    previousRows = new Map();
+    previousChildren = new Map();
+  }
   const cached = projections.get(navigation);
   if (cached) return cached;
   const sessions = new Map(
@@ -57,11 +65,11 @@ export function projectSpace(
         manualPlacement: false,
         scopeProjectId: null,
       },
-      title: "일반",
+      title: appCopy.space.general,
       session: general,
       pinned: false,
       smart: false,
-      location: "일반",
+      location: appCopy.space.general,
       updatedAt: general.last_activity_at,
       ancestors: [],
     });
@@ -90,7 +98,7 @@ export function projectSpace(
       project,
       pinned: session?.pinned ?? project?.pinned ?? false,
       smart: groups.get(node.entityId)?.origin === "smart",
-      location: path.join(" › ") || "스페이스",
+      location: path.join(" › ") || appCopy.space.space,
       updatedAt: session?.last_activity_at ?? project?.last_activity_at ?? "",
       ancestors,
     });

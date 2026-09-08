@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -16,6 +17,7 @@ import {
 import { SettingsSection } from "./SettingsSection";
 
 export function UpdatesSettings() {
+  useAppLocale();
   const copy = appCopy.settings;
   const [view, setView] = useState<UpdateStatusView | null>(null);
   const [loading, setLoading] = useState(false);

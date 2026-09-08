@@ -74,6 +74,7 @@ export function createGuidedAskFirstProgress(
       turnId: update.turnId, semanticState: update.semanticState,
       activityId: update.activityId, requestId: update.requestId,
       publicTitle: update.publicTitle, capabilityRef: update.capabilityRef, status: update.status,
+      interfaceContent: update.interfaceContent,
     }),
     modelRoundWaitingChanged: (update) => progress.modelRoundWaitingChanged?.(update),
     operationalNoticeChanged: (update) => progress.operationalNoticeChanged?.(update),

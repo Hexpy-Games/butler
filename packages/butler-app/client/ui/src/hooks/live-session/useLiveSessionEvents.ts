@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useEffect, useRef } from "react";
 import { subscribeLiveEvents } from "@/app/api.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
@@ -229,8 +230,8 @@ function notifyDesktopEvent(
     if (message.turn_id) turnIdsRef.current.add(message.turn_id);
     void showDesktopNotification({
       kind: "assistant_message",
-      title: "Butler",
-      body: message.text || "새 메시지가 도착했습니다.",
+      title: appCopy.firstRun.product,
+      body: message.text || appCopy.interfaceTemplates.notificationNewMessage,
       sessionId: message.chat_id,
     });
   }
@@ -247,7 +248,7 @@ function notifyDesktopEvent(
   turnIdsRef.current.add(turn.id);
   void showDesktopNotification({
     kind: "task_completion",
-    title: "Butler",
+    title: appCopy.firstRun.product,
     body: turnCompletionBody(turn.state, turn.safe_status_label),
     sessionId: turn.chat_id,
   });
@@ -275,8 +276,8 @@ function isDeliveredAssistantMessage(event: TimelineEvent): boolean {
 
 function turnCompletionBody(state: string, safeStatusLabel?: string): string {
   if (safeStatusLabel?.trim()) return safeStatusLabel.trim();
-  if (state === "delivered") return "작업이 완료되었습니다.";
-  if (state === "failed") return "작업이 실패했습니다.";
-  if (state === "cancelled") return "작업이 취소되었습니다.";
-  return "작업 상태가 업데이트되었습니다.";
+  if (state === "delivered") return appCopy.interfaceTemplates.notificationCompleted;
+  if (state === "failed") return appCopy.interfaceTemplates.notificationFailed;
+  if (state === "cancelled") return appCopy.interfaceTemplates.notificationCancelled;
+  return appCopy.interfaceTemplates.notificationUpdated;
 }

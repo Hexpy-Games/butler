@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { NavRow, Space } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 
@@ -15,6 +16,7 @@ export function SidebarSessionLoadMore({
   remainingCount,
   onClick,
 }: SidebarSessionLoadMoreProps) {
+  useAppLocale();
   const label = `${appCopy.common.more} (${remainingCount})`;
 
   return (

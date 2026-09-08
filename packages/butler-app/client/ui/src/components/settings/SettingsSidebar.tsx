@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import {
@@ -24,6 +25,7 @@ export function SettingsSidebar({
   onSectionChange,
   isActive = false,
 }: SettingsSidebarProps) {
+  useAppLocale();
   const [searchQuery, setSearchQuery] = useState("");
   const filteredGroups = useMemo(
     () => filterSettingsSectionGroups(sectionGroups, searchQuery),

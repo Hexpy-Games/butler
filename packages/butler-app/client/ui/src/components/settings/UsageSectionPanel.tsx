@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Stack, SurfacePanel, Typo } from "@/butler-ds";
 import { formatCount } from "./usageSettingsFormat";
@@ -16,10 +17,11 @@ export function UsageSectionPanel({
 }: {
   rows: UsageSectionRow[];
 }) {
+  useAppLocale();
   return (
     <SurfacePanel elevation="none">
       <Stack gap="md">
-        <Typo.Body as="div">컨텍스트 섹션별 추정</Typo.Body>
+        <Typo.Body as="div">{appCopy.interfaceDetails.contextEstimates}</Typo.Body>
         {rows.length === 0 ? (
           <Typo.Caption>{appCopy.settings.descriptions.usageMonitorEmpty}</Typo.Caption>
         ) : (
@@ -40,7 +42,7 @@ export function UsageSectionPanel({
                 <Stack gap="xs" style={{ minWidth: 0, flex: "1 1 260px" }}>
                   <Typo.Body as="div">{name}</Typo.Body>
                   <Typo.Caption>
-                    요청 {formatCount(bucket.requestCount)} · 문자 {formatCount(bucket.chars)}
+                    {appCopy.interfaceDetails.requests}{formatCount(bucket.requestCount)} {appCopy.interfaceDetails.characters}{formatCount(bucket.chars)}
                   </Typo.Caption>
                 </Stack>
                 <Typo.Body as="div" style={{ textAlign: "right", whiteSpace: "nowrap" }}>

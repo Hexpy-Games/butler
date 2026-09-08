@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Button, ButtonContainer, Input, SettingsField, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { OpenAIOAuthLoginResult } from "./modelManagementApi";
@@ -19,6 +20,7 @@ export function HostedOAuthFields({
   onOpenUrl,
   onRestart,
 }: HostedOAuthFieldsProps) {
+  useAppLocale();
   const copy = appCopy.settings.modelManagement;
   const pending = login?.status === "pending" || login?.status === "starting";
   const failed = login?.status === "failed" || login?.status === "cancelled";

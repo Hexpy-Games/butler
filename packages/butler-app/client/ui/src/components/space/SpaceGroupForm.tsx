@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { useState } from "react";
 import {
   Button,
@@ -17,6 +19,7 @@ export function SpaceGroupForm({
 }: {
   dialog: Extract<SpaceDialog, { kind: "create" | "rename" }>;
 }) {
+  useAppLocale();
   const [title, setTitle] = useState(
     dialog.kind === "rename" ? dialog.title : "",
   );
@@ -44,14 +47,13 @@ export function SpaceGroupForm({
       <Stack gap="4">
         <DialogHeader>
           <DialogTitle>
-            {dialog.kind === "create" ? "그룹 만들기" : "그룹 이름 변경"}
+            {dialog.kind === "create" ? appCopy.space.createGroup : appCopy.space.renameGroup}
           </DialogTitle>
           <DialogDescription>
-            대화와 프로젝트를 원하는 이름으로 정리합니다.
-          </DialogDescription>
+            {appCopy.space.groupDescription}</DialogDescription>
         </DialogHeader>
         <Field>
-          <FieldLabel htmlFor="space-group-title">그룹 이름</FieldLabel>
+          <FieldLabel htmlFor="space-group-title">{appCopy.space.groupName}</FieldLabel>
           <Input
             id="space-group-title"
             autoFocus
@@ -67,11 +69,9 @@ export function SpaceGroupForm({
             type="button"
             onClick={() => useOrganization.getState().setDialog(null)}
           >
-            취소
-          </Button>
+            {appCopy.space.cancel}</Button>
           <Button size="sm" type="submit" disabled={pending || !title.trim()}>
-            저장
-          </Button>
+            {appCopy.space.save}</Button>
         </ButtonContainer>
       </Stack>
     </form>

@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useRef } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useConfirmationStore } from "@/app/confirmation.ts";
@@ -7,6 +8,7 @@ import {
 } from "@/butler-ds";
 
 export function AppConfirmationDialog() {
+  useAppLocale();
   const pending = useConfirmationStore((state) => state.pending);
   const cancelRef = useRef<HTMLButtonElement>(null);
   if (!pending) return null;

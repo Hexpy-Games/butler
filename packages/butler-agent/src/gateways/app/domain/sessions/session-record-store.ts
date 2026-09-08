@@ -192,6 +192,15 @@ export class AppSessionRecordStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+
+        (
+          SELECT t.safe_status_label_parameters_json
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS safe_status_label_parameters_json,
+        (SELECT t.safe_status_content_json FROM turns t WHERE t.chat_id = c.id ORDER BY t.rowid DESC LIMIT 1) AS safe_status_content_json,
         (
           SELECT t.safe_error_code
           FROM turns t
@@ -221,7 +230,7 @@ export class AppSessionRecordStore {
     const rows = this.db
       .query<TurnRow, [string, number]>(
         `
-      SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
+      SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_status_label_key, safe_error_code,
         retryable, cancellable, attempt, execution_controls_json, execution_model_json,
         created_at, updated_at
       FROM turns
@@ -239,7 +248,7 @@ export class AppSessionRecordStore {
     const row = this.db
       .query<TurnRow, [string]>(
         `
-      SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
+      SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_status_label_key, safe_error_code,
         retryable, cancellable, attempt, execution_controls_json, execution_model_json,
         created_at, updated_at
       FROM turns

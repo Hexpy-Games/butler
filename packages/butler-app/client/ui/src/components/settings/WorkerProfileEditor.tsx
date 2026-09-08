@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useId, useState } from "react";
 import {
   Button,
@@ -38,6 +39,7 @@ export function WorkerProfileEditor({
   onUpdate,
   onDelete,
 }: WorkerProfileEditorProps) {
+  useAppLocale();
   const nameId = useId();
   const enabledId = useId();
   const saving = useSettingsUIStore((state) => state.saving);

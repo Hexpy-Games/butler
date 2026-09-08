@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import {
   getSessionFolderLaunchTargets,
@@ -23,6 +24,7 @@ export function SessionFolderMenu({
   disabled: boolean;
   sessionId: string;
 }) {
+  useAppLocale();
   const [targets, setTargets] = useState<SessionFolderLaunchTarget[] | null>(null);
   const [loading, setLoading] = useState(false);
 

@@ -1,8 +1,10 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { SystemEventSummary } from "@/app/types.ts";
 import { Stack, SurfacePanel, Typo } from "@/butler-ds";
 
 export function SystemEventCard({ event }: { event: SystemEventSummary }) {
+  useAppLocale();
   const timeLabel = event.occurred_at ? formatTimestamp(event.occurred_at) : "";
   const eventLabels = appCopy.settings.systemEventLabels;
   const modelLabel = event.model_ref

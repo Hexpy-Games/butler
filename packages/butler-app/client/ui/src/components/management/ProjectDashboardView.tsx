@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { useButlerStore } from "@/app/store.ts";
 import { useProjectDashboard } from "@/hooks/useProjectDashboard.ts";
@@ -27,6 +28,7 @@ export function ProjectDashboardView({
   onOpenSession?: (sessionId: string) => void;
   onNewProjectChat?: (projectId: string) => void;
 } = {}) {
+  useAppLocale();
   const openSession = useButlerStore((state) => state.openSession);
   const openNewChat = useButlerStore((state) => state.openNewChat);
   const openNewProjectChat = useButlerStore(

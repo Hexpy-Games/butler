@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
@@ -9,6 +10,7 @@ import { SearchSettings } from "./SearchSettings";
 import { WorkStatusPanelContainer } from "./WorkStatusPanelContainer";
 
 export function GeneralSettings() {
+  useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
@@ -23,7 +25,7 @@ export function GeneralSettings() {
   return (
     <>
       <SettingsSection title={settingsCopy.sections.general}>
-        <SettingsSwitch label="스마트 그룹" description="새 대화를 같은 주제의 그룹으로 자동 정리합니다. 직접 옮긴 대화는 그대로 둡니다."
+        <SettingsSwitch label={appCopy.interfaceDetails.smartGroups} description={appCopy.interfaceDetails.smartGroupsDescription}
           checked={draft.smart_grouping_enabled} onChange={value => update({ smart_grouping_enabled: value }, setSettings)} />
         <SettingsSelect
           label={settingsFields.language}

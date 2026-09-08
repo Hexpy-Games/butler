@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { relativeAge } from "@/app/utils.ts";
 import {
   Button,
@@ -19,6 +21,7 @@ export function ArchiveItemRow({
   onRestore: () => void;
   onRemove: () => void;
 }) {
+  useAppLocale();
   return (
     <SurfacePanel elevation="none">
       <Stack align="row" cross="center" gap="md" justify="between" wrap>
@@ -36,8 +39,7 @@ export function ArchiveItemRow({
             disabled={busy}
             onClick={onRestore}
           >
-            아카이브 취소
-          </Button>
+            {appCopy.interfaceDetails.unarchive}</Button>
           <Button
             type="button"
             size="sm"
@@ -45,8 +47,7 @@ export function ArchiveItemRow({
             disabled={busy}
             onClick={onRemove}
           >
-            삭제
-          </Button>
+            {appCopy.interfaceDetails.delete}</Button>
         </ButtonContainer>
       </Stack>
     </SurfacePanel>

@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import {
   ComposerCardToolbar,
   ComposerCardToolbarSpacer,
@@ -14,6 +15,7 @@ import { ComposerCompactPreview } from "./ComposerCompactPreview";
 import { ComposerPlanModeBadge } from "./ComposerPlanModeBadge";
 
 export function ComposerToolbar() {
+  useAppLocale();
   const isSending = useComposerStore((store) => store.isSending);
   const activeTurn = useComposerStore((store) => store.activeTurn);
   const canSend = useComposerStore((store) => store.canSend);

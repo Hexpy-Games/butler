@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { ProgressRow } from "@/app/types.ts";
 import { TodoProgressPanel } from "@/butler-ds";
@@ -13,6 +14,7 @@ export function WorkProgressPanel({
   rows: ProgressRow[];
   turnState?: string;
 }) {
+  useAppLocale();
   const items = projectComposerTasks(rows, turnState);
   if (items.length === 0) return null;
   const copy = appCopy.conversation.work;

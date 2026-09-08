@@ -3275,6 +3275,9 @@ test("new chat briefing returns localized onboarding fallback until onboarding c
       response_language: "ko",
     });
     expect(localized.data.response_language).toBe("ko");
+    const stillEnglishBriefing = await getJson(`${server.url}new-chat-briefing`);
+    expect(stillEnglishBriefing.data.source.locale).toBe("en");
+    await patchJson(`${server.url}settings`, { language: "ko" });
     const koreanBriefing = await getJson(`${server.url}new-chat-briefing`);
     expect(koreanBriefing.data).toMatchObject({
       moment: "온보딩",

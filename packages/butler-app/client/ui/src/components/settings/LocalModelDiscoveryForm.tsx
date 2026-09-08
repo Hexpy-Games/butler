@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import {
   Select,
   SelectContent,
@@ -23,6 +24,7 @@ export function LocalModelDiscoveryForm({
   selectedModelRef,
   setSelectedModelRef,
 }: LocalModelDiscoveryFormProps) {
+  useAppLocale();
   const copy = appCopy.settings.localModels;
   const controlId = useId();
   const descriptionId = useId();

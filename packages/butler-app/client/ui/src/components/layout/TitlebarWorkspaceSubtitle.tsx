@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { GitBranch } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { SessionSummaryView } from "@/app/types.ts";
@@ -12,6 +13,7 @@ export function TitlebarWorkspaceSubtitle({
   branchInfo,
   projectLabel,
 }: TitlebarWorkspaceSubtitleProps) {
+  useAppLocale();
   const branch = branchInfo?.branch_name?.trim() || undefined;
   const workspaceLabel = branchInfo?.workspace_binding === "session_worktree"
     ? appCopy.titlebar.sessionWorktree(branch)

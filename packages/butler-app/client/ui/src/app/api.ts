@@ -1,3 +1,4 @@
+import { appCopy } from "./copy.ts";
 import type {
   AppInfoView,
   MessageFileRef,
@@ -140,7 +141,7 @@ export async function uploadMessageFile(file: File, sessionId?: string): Promise
     body: form,
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.error?.message ?? "File upload failed.");
+  if (!response.ok) throw new Error(payload?.error?.message ?? appCopy.interfaceFeedback.uploadFailed);
   return payload.data.file as MessageFileRef;
 }
 
@@ -161,7 +162,7 @@ export async function importSkillZip(file: File, projectId?: string): Promise<Sk
     body: form,
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.error?.message ?? "Skill import failed.");
+  if (!response.ok) throw new Error(payload?.error?.message ?? appCopy.interfaceFeedback.importFailed);
   return payload.data as SkillImportResult;
 }
 
@@ -238,7 +239,7 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
   }).then(async (response) => {
     const body = await response.json();
     if (!response.ok) {
-      const error = new Error(body.error?.message ?? "Request failed.");
+      const error = new Error(appCopy.serverErrors[body.error?.code] ?? body.error?.message ?? appCopy.interfaceFeedback.requestFailed);
       Object.assign(error, {
         ...(typeof body.error?.code === "string" ? { code: body.error.code } : {}),
         status: response.status,
@@ -756,7 +757,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
 export async function selectProjectFolder(): Promise<{ cancelled?: boolean; display_name?: string; folder_selection_token?: string }> {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
   if (!bridge?.selectProjectFolder) {
-    const error = new Error("Project folder picker is only available in the desktop app.");
+    const error = new Error(appCopy.interfaceFeedback.desktopFolderOnly);
     Object.assign(error, { code: "project_folder_picker_unavailable" });
     throw error;
   }

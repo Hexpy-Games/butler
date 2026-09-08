@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { McpTransportKind } from "@/app/types.ts";
 import {
@@ -26,6 +27,7 @@ export function McpServerForm({
   onCancel: () => void;
   onSave: () => void;
 }) {
+  useAppLocale();
   const copy = appCopy.settings;
   return (
     <Stack gap="sm">

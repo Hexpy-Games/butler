@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { WorkStatusItemView, WorkStatusView } from "@/app/types.ts";
 import { Button, Stack, SurfacePanel, Tag, Typo } from "@/butler-ds";
@@ -13,6 +14,7 @@ export function WorkStatusPanel({
   unavailable = false,
   onOpenSession,
 }: WorkStatusPanelProps) {
+  useAppLocale();
   const copy = appCopy.settings.workStatus;
   if (unavailable) return <Typo.Caption>{copy.unavailable}</Typo.Caption>;
   if (!view) return <Typo.Caption>{copy.loading}</Typo.Caption>;
@@ -39,6 +41,7 @@ function WorkStatusRow({
   item: WorkStatusItemView;
   onOpenSession: (sessionId: string) => void;
 }) {
+  useAppLocale();
   const copy = appCopy.settings.workStatus;
   const meta = [
     item.stage ? copy.stages[item.stage] : null,

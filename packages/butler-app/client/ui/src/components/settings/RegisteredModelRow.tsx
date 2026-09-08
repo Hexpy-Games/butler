@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import {
   Button,
   ButtonContainer,
@@ -25,6 +26,7 @@ export function RegisteredModelRow({
   onEdit,
   onDelete,
 }: RegisteredModelRowProps) {
+  useAppLocale();
   const copy = appCopy.settings.modelManagement;
   const name = modelDisplayName(model);
 

@@ -97,7 +97,7 @@ export class AppTurnCancellation {
     this.input.db.transaction(() => {
       const decision = this.input.db.query(`
         UPDATE turns
-        SET state = 'cancelling', safe_status_label = 'Stopping',
+        SET state = 'cancelling', safe_status_label = 'Stopping', safe_status_label_key = 'stopping', safe_status_label_parameters_json = NULL, safe_status_content_json = NULL,
           safe_error_code = NULL, retryable = 0, cancellable = 0, updated_at = ?
         WHERE id = ?
           AND state NOT IN ('cancelled', 'delivered', 'failed', 'runtime_fault')

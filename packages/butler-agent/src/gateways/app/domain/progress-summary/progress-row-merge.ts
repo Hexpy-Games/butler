@@ -226,6 +226,7 @@ function mergeProgressRow(
   }
   const incomingWins =
     progressMergeState(current.state, incoming.state) === incoming.state;
+  const labelOwner = incomingWins ? incoming : current;
   const base = incomingWins
     ? { ...current, ...incoming }
     : { ...incoming, ...current };
@@ -261,6 +262,11 @@ function mergeProgressRow(
       incoming.tool_result_byte_length,
     bridge_phase:
       base.bridge_phase ?? current.bridge_phase ?? incoming.bridge_phase,
+    interface_label_key:
+      labelOwner.interface_label_key,
+    interface_content: labelOwner.interface_content,
+    interface_label_parameters:
+      labelOwner.interface_label_parameters,
     turn_event_sequence: minimumOptionalNumber(
       current.turn_event_sequence,
       incoming.turn_event_sequence,

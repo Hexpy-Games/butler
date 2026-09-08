@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { createElement } from "react";
 import { ConversationScrollToBottomButton } from "@/butler-ds";
 import { appCopy } from "../../app/copy.ts";
@@ -11,6 +12,7 @@ export function ScrollToBottomButton({
   hasUnreadMessages,
   onScrollToBottom,
 }: ScrollToBottomButtonProps) {
+  useAppLocale();
   const label = hasUnreadMessages
     ? appCopy.conversation.scrollToBottom.newMessagesLabel
     : appCopy.conversation.scrollToBottom.label;

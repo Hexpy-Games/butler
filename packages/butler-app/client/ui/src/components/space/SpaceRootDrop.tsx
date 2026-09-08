@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { useState } from "react";
 import { useSpaceDrag, canDrop } from "@/app/space/drag";
 import { requestSpaceMove } from "@/app/space/move";
@@ -5,6 +7,7 @@ import type { SpaceRowData } from "@/app/space/projection";
 import styles from "./SpaceInteractions.module.css";
 
 export function SpaceRootDrop({ rows }: { rows: Map<string, SpaceRowData> }) {
+  useAppLocale();
   const source = useSpaceDrag((s) => s.source);
   const [active, setActive] = useState(false);
   if (!source || !canDrop(rows, source, null, "inside")) return null;
@@ -27,7 +30,6 @@ export function SpaceRootDrop({ rows }: { rows: Map<string, SpaceRowData> }) {
         useSpaceDrag.getState().end();
       }}
     >
-      스페이스 최상위로 이동
-    </div>
+      {appCopy.space.moveToRoot}</div>
   );
 }

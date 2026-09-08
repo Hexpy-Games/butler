@@ -10,6 +10,7 @@ import { progressRowFromSharedTurnEvent } from "../../../../../../butler-progres
 import { projectBtccFinalReport } from "../../../../agent/btcc/index.ts";
 import { dedupeProgressRows } from "../progress-summary/progress-row-merge.ts";
 import { normalizeProgressSummaryRow } from "../progress-summary/progress-row-normalizer.ts";
+import { formatInterfaceText, type InterfaceTextReference } from "../../../../../../butler-i18n/src/index.ts";
 
 export interface StewardObserverRelation extends SessionRelationView {}
 
@@ -171,6 +172,7 @@ export function projectStewardActivityRows(
     id: `steward-turn:${latestTurn.id}`,
     kind: "message",
     safe_label: stewardStateLabel(latestTurn.state),
+    interface_content: { summary: stewardStateReference(latestTurn.state) },
     state: stewardProgressState(latestTurn.state),
     created_at: latestTurn.updated_at,
     semantic_block_id: `steward-turn:${latestTurn.id}`,
@@ -192,11 +194,12 @@ function projectStewardTurn(
       delivery_state: "failed_system",
       limitations: [],
       limitation_codes: [],
-      safe_status_label: "작업이 중단되었습니다. 이어서 진행할 수 있습니다.",
+      safe_status_label: stewardStateLabel("interrupted"),
       cancellable: false,
       retryable: true,
       progress: {
-        summary: "작업이 중단되었습니다. 이어서 진행할 수 있습니다.",
+        summary: stewardStateLabel("interrupted"),
+        summary_reference: stewardStateReference("interrupted"),
         updated_at: activityUpdatedAt,
         turn_id: turn.id,
         state: "runtime_fault",
@@ -210,6 +213,12 @@ function projectStewardTurn(
     : active ? "thinking" : observerTurnState(turn.state);
   const terminal = ["delivered", "failed", "cancelled"].includes(state);
   const progressState = terminal || state === "waiting_for_form" ? state : state === "accepted" ? "accepted" : "thinking";
+  const currentActivity = currentStewardActivityRow(activityRows);
+  const fallbackState = state === "waiting_for_form" ? state : waitingForChildren && !active ? "waitingForChildren" : turn.state;
+  const preferState = state === "waiting_for_form" || waitingForChildren && !active;
+  const summaryReference = !preferState && currentActivity
+    ? currentActivity.interface_content?.summary ?? (!currentActivity.work_decision_summary ? currentActivity.interface_content?.title : undefined)
+    : stewardStateReference(fallbackState);
   return {
     id: turn.id,
     state,
@@ -219,9 +228,8 @@ function projectStewardTurn(
     cancellable: !terminal,
     retryable: state === "failed",
     progress: {
-      summary: state === "waiting_for_form" ? stewardStateLabel(state) : waitingForChildren && !active
-        ? "Worker 결과를 기다리는 중입니다."
-        : currentStewardActivityLabel(activityRows) ?? stewardStateLabel(turn.state),
+      summary: !preferState && currentActivity ? currentActivity.safe_label : stewardStateLabel(fallbackState),
+      summary_reference: summaryReference,
       updated_at: activityUpdatedAt,
       turn_id: turn.id,
       state: progressState,
@@ -232,9 +240,9 @@ function projectStewardTurn(
   };
 }
 
-function currentStewardActivityLabel(
+function currentStewardActivityRow(
   rows: ProgressSummaryRow[],
-): string | undefined {
+): ProgressSummaryRow | undefined {
   const currentActivity = rows.findLast((row) =>
     row.kind !== "todo" &&
     row.kind !== "turn" &&
@@ -243,7 +251,7 @@ function currentStewardActivityLabel(
     (row.state === "running" || row.state === "thinking") &&
     row.safe_label.trim().length > 0,
   );
-  if (currentActivity) return currentActivity.safe_label;
+  if (currentActivity) return currentActivity;
   const latestActivity = rows.findLast((row) =>
     row.kind !== "todo" &&
     row.kind !== "turn" &&
@@ -251,17 +259,17 @@ function currentStewardActivityLabel(
     !isModelAuthoredPhaseActivity(row) &&
     row.safe_label.trim().length > 0,
   );
-  if (latestActivity) return latestActivity.safe_label;
+  if (latestActivity) return latestActivity;
   const currentPlanAction = rows.find((row) =>
     row.kind === "todo" && row.state === "active" && row.safe_label.trim().length > 0,
   );
-  if (currentPlanAction) return currentPlanAction.safe_label;
+  if (currentPlanAction) return currentPlanAction;
   return rows.findLast((row) =>
     row.kind !== "todo" &&
     row.kind !== "turn" &&
     !isModelAuthoredPhaseActivity(row) &&
     row.safe_label.trim().length > 0,
-  )?.safe_label;
+  );
 }
 
 function isModelAuthoredPhaseActivity(row: ProgressSummaryRow): boolean {
@@ -411,11 +419,11 @@ function stewardProgressState(state: string): string {
 }
 
 function stewardStateLabel(state: string): string {
-  if (state === "waiting_for_form") return "허용 여부를 기다리고 있습니다.";
-  if (state === "delivered") return "작업을 완료했습니다.";
-  if (state === "cancelled") return "작업이 중단되었습니다.";
-  if (state === "failed") return "작업을 완료하지 못했습니다.";
-  return "작업을 진행 중입니다.";
+  return formatInterfaceText(stewardStateReference(state), "en-US");
+}
+
+function stewardStateReference(state: string): InterfaceTextReference {
+  return { key: "workerStatus", parameters: { phase: state } };
 }
 
 function approvedPlanRows(

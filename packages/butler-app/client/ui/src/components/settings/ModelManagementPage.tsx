@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { Button, Plus, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -13,6 +14,7 @@ import { registeredModels } from "./modelManagementUtils";
 import type { AppModelSummary } from "@/app/types.ts";
 
 export function ModelManagementPage() {
+  useAppLocale();
   const modelCatalog = useButlerStore((state) => state.modelCatalog);
   const setModelCatalog = useButlerStore((state) => state.setModelCatalog);
   const openAdd = useSettingsUIStore((state) => state.openModelAdd);

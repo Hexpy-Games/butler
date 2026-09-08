@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
 import { Copy, Tooltip } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -6,6 +7,7 @@ import { notifyError } from "@/app/notifications.ts";
 const COPY_FEEDBACK_MS = 2000;
 
 export function CopyTextButton({ text, label }: { text: string; label: string }) {
+  useAppLocale();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {

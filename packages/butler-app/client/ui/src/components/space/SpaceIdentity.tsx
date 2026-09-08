@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import {
   Folder,
   LayoutDashboard,
@@ -12,6 +14,7 @@ import type { SpaceRowData } from "@/app/space/projection";
 import styles from "./SpaceInteractions.module.css";
 
 export function SpaceGlyph({ row }: { row: SpaceRowData }) {
+  useAppLocale();
   const Glyph =
     row.node.entityId === "general"
       ? GeneralChat
@@ -30,6 +33,7 @@ export function SpaceGlyph({ row }: { row: SpaceRowData }) {
 }
 
 export function SpaceIdentity({ row }: { row: SpaceRowData }) {
+  useAppLocale();
   const mutate = useOrganization((s) => s.mutate);
   if (row.node.entityId === "general") return <SpaceGlyph row={row} />;
   return (
@@ -37,7 +41,7 @@ export function SpaceIdentity({ row }: { row: SpaceRowData }) {
       <IconButton
         className={styles.favorite}
         aria-pressed={row.pinned}
-        label={`${row.title} ${row.pinned ? "즐겨찾기 해제" : "즐겨찾기 추가"}`}
+        label={`${row.title} ${row.pinned ? appCopy.space.unpin : appCopy.space.pinShort}`}
         draggable={false}
         onClick={(e) => {
           e.stopPropagation();

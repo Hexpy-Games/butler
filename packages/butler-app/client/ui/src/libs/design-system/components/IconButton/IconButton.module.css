@@ -3,7 +3,7 @@
   height: var(--icon-button-size, 30px);
   min-height: var(--icon-button-size, 30px);
   overflow: hidden;
-  border-radius: var(--radius-pill);
+  border-radius: var(--icon-button-radius, var(--radius-pill));
   color: var(--text-secondary);
   cursor: pointer;
   background: transparent;

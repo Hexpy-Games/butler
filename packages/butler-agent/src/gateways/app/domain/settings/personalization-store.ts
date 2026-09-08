@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { resolveRuntimeMessageLanguage } from "../../../../agent/output/messages.ts";
 import { join } from "node:path";
 import {
   PERSONALIZATION_PROFILE_STORAGE_LABEL,
@@ -56,7 +57,7 @@ export class AppPersonalizationStore {
       updated_at: new Date().toISOString(),
       response_language:
         configUserSettings.responseLanguage ??
-        (settings.language === "ko" ? "ko" : "en"),
+        resolveRuntimeMessageLanguage({ butlerData: this.butlerData }),
       persona_presets: readPersonaPresets(this.butlerHome, settings.language),
       profile: {
         ...profile,

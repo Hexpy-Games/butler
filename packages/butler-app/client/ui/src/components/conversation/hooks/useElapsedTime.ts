@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 
 export function useElapsedTime(startedAt?: string): string {
@@ -12,5 +13,5 @@ export function useElapsedTime(startedAt?: string): string {
   if (!Number.isFinite(started)) return "";
   const totalSeconds = Math.max(0, Math.floor((now - started) / 1_000));
   const minutes = Math.floor(totalSeconds / 60);
-  return `${minutes}분 ${totalSeconds % 60}초`;
+  return appCopy.interfaceTemplates.elapsed(minutes, totalSeconds % 60);
 }

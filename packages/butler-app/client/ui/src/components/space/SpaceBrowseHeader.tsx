@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import {
   Activity,
   ButtonContainer,
@@ -19,6 +21,7 @@ import styles from "./SpaceSidebar.module.css";
 
 /** One sticky browse region; its measured height offsets nested tree headers. */
 export function SpaceBrowseHeader() {
+  useAppLocale();
   const tab = useOrganization((s) => s.tab);
   const setTab = useOrganization((s) => s.setTab);
   const setDialog = useOrganization((s) => s.setDialog);
@@ -32,19 +35,16 @@ export function SpaceBrowseHeader() {
           value={tab}
           onValueChange={(value) => setTab(value as typeof tab)}
         >
-          <TabsList stretch aria-label="대화 보기">
+          <TabsList stretch aria-label={appCopy.space.views}>
             <TabsTrigger value="all">
               <ListFilter />
-              전체보기
-            </TabsTrigger>
+              {appCopy.space.all}</TabsTrigger>
             <TabsTrigger value="recent">
               <Clock3 />
-              최신
-            </TabsTrigger>
+              {appCopy.space.recent}</TabsTrigger>
             <TabsTrigger value="running">
               <Activity />
-              진행중
-            </TabsTrigger>
+              {appCopy.space.running}</TabsTrigger>
           </TabsList>
         </Tabs>
         {tab === "all" && hasGeneral && (
@@ -53,32 +53,32 @@ export function SpaceBrowseHeader() {
       </Stack>
       <NavSectionHeading
         title={
-          tab === "all" ? "스페이스" : tab === "recent" ? "최신" : "진행중"
+          tab === "all" ? appCopy.space.space : tab === "recent" ? appCopy.space.recent : appCopy.space.running
         }
         actions={
           <ButtonContainer size="icon-sm">
-            <IconButton
-              label="그룹 만들기"
+            {tab === "all" && <IconButton
+              label={appCopy.space.createGroup}
               onClick={() => setDialog({ kind: "create", parentKey: null })}
             >
               <Plus />
-            </IconButton>
+            </IconButton>}
             <OverflowActionMenu
-              label="스페이스 메뉴"
+              label={appCopy.space.menu}
               items={[
                 {
-                  label: "새 프로젝트",
+                  label: appCopy.space.newProject,
                   onSelect: () =>
                     useButlerStore.getState().setProjectCreateDialogOpen(true),
                 },
                 {
-                  label: "예약 작업",
+                  label: appCopy.space.automations,
                   icon: <Clock3 />,
                   onSelect: () =>
                     useButlerStore.getState().setView({ kind: "automations" }),
                 },
                 {
-                  label: "보관함",
+                  label: appCopy.space.archives,
                   onSelect: () =>
                     useButlerStore.getState().openSettings("archive"),
                 },

@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { create } from "zustand";
 import { api } from "../api";
 import { useButlerStore } from "../store";
@@ -108,7 +109,7 @@ export const useOrganization = create<OrganizationUi>((set, get) => ({
         pending: false,
         dialog:
           intent.action === "group" && result.groupId
-            ? { kind: "rename", groupId: result.groupId, title: "새 그룹" }
+            ? { kind: "rename", groupId: result.groupId, title: appCopy.space.newGroup }
             : null,
         undoToken: result.undoToken ?? null,
         undoRevision: result.space.revision,
@@ -121,7 +122,7 @@ export const useOrganization = create<OrganizationUi>((set, get) => ({
         error:
           error instanceof Error
             ? error.message
-            : "목록 변경을 저장하지 못했습니다.",
+            : appCopy.space.saveFailed,
       });
       return false;
     }

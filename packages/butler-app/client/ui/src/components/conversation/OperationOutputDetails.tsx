@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import type { OperationOutputView } from "@/app/types.ts";
@@ -15,6 +17,7 @@ export function OperationOutputDetails({
   resultId: string;
   toolName?: string;
 }) {
+  useAppLocale();
   const [pages, setPages] = useState<OperationOutputView[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
   const latest = pages.at(-1);
@@ -56,7 +59,7 @@ export function OperationOutputDetails({
   }
 
   if (state === "failed" && pages.length === 0) {
-    return <Typo.Caption>도구 출력을 불러오지 못했습니다.</Typo.Caption>;
+    return <Typo.Caption>{appCopy.interfaceDetails.outputLoadFailed}</Typo.Caption>;
   }
 
   const output = presentOperationOutput(
@@ -93,7 +96,7 @@ export function OperationOutputDetails({
           disabled={state === "loading"}
           onClick={() => void loadMore()}
           size="xs"
-          text={state === "loading" ? "불러오는 중" : "출력 더 보기"}
+          text={state === "loading" ? appCopy.interfaceDetails.loading : appCopy.interfaceDetails.moreOutput}
           type="button"
           variant="borderless"
         />

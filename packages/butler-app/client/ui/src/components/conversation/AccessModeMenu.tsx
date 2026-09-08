@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import {
   OptionMenu,
@@ -22,6 +23,7 @@ import {
 } from "./accessModeUtils";
 
 export function AccessModeMenu() {
+  useAppLocale();
   const [revoking, setRevoking] = useState<string>();
   const [revokeFailed, setRevokeFailed] = useState(false);
   const accessMode = useComposerStore((store) => store.accessMode);
@@ -42,7 +44,7 @@ export function AccessModeMenu() {
     <Popover open={accessMenuOpen} onOpenChange={setAccessMenuOpen}>
       <PopoverTrigger asChild>
         <ComposerControlButton
-          aria-label={`${appCopy.composer.permission}: ${accessLabel(accessMode)}${permissions.length ? ` · 허용 ${permissions.length}개` : ""}`}
+          aria-label={`${appCopy.composer.permission}: ${accessLabel(accessMode)}${permissions.length ? ` · ${appCopy.interfaceTemplates.allowedCount(permissions.length)}` : ""}`}
           compact={permissions.length ? "label" : "icon"}
           data-test-class="access-button"
           icon={accessModeIcon(accessMode, 16)}
@@ -50,7 +52,7 @@ export function AccessModeMenu() {
         >
           <span data-test-class="composer-control-label">
             {accessLabel(accessMode)}
-            {permissions.length ? ` · 허용 ${permissions.length}개` : ""}
+            {permissions.length ? ` · ${appCopy.interfaceTemplates.allowedCount(permissions.length)}` : ""}
           </span>
         </ComposerControlButton>
       </PopoverTrigger>
@@ -81,10 +83,10 @@ export function AccessModeMenu() {
             ),
           )}
         </OptionMenu>
-        {permissions.length ? <OptionMenu title="이 대화에서 허용 중">
+        {permissions.length ? <OptionMenu title={appCopy.interfaceDetails.allowedConversation}>
           {permissions.map((permission) => <OptionMenuItem
             key={permission.grant_ref}
-            label={`${permission.title} — 해제`}
+            label={appCopy.interfaceTemplates.revoke(permission.title)}
             description={permission.description}
             descriptionPlacement="block"
             disabled={revoking !== undefined}
@@ -95,7 +97,7 @@ export function AccessModeMenu() {
             }}
           />)}
         </OptionMenu> : null}
-        {revokeFailed ? <Typo.Caption role="alert">허용을 해제하지 못했습니다. 다시 시도해 주세요.</Typo.Caption> : null}
+        {revokeFailed ? <Typo.Caption role="alert">{appCopy.interfaceDetails.revokeFailed}</Typo.Caption> : null}
       </PopoverContent>
     </Popover>
   );

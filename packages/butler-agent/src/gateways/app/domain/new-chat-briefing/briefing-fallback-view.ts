@@ -1,13 +1,9 @@
 import type { NewChatBriefingView } from "../../interface/protocol/app-protocol.ts";
-import {
-  GENERAL_FALLBACK,
-  ONBOARDING_FALLBACK,
-} from "./fallback-copy.ts";
+import { getAppCopy, appLocaleFromLanguage } from "../../../../../../butler-i18n/src/index.ts";
 import {
   formatMoment,
   userFacingProjectName,
 } from "./briefing-format.ts";
-import { projectFallbackSuggestions } from "./project-fallback-suggestions.ts";
 import type {
   AppLocale,
   ProjectBriefingInput,
@@ -17,9 +13,9 @@ export function onboardingFallbackView(input: {
   locale: AppLocale;
   now: Date;
 }): NewChatBriefingView {
-  const fallback = ONBOARDING_FALLBACK[input.locale];
+  const fallback = getAppCopy(appLocaleFromLanguage(input.locale)).briefing.onboarding;
   return {
-    moment: input.locale === "ko" ? "온보딩" : "Onboarding",
+    moment: getAppCopy(appLocaleFromLanguage(input.locale)).briefing.onboardingMoment,
     title: fallback.title,
     description: fallback.description,
     suggestions: fallback.suggestions,
@@ -38,7 +34,7 @@ export function generalFallbackView(input: {
   now: Date;
   consolidationRunId: string | null;
 }): NewChatBriefingView {
-  const fallback = GENERAL_FALLBACK[input.locale];
+  const fallback = getAppCopy(appLocaleFromLanguage(input.locale)).briefing.general;
   return {
     moment: formatMoment(input.now, input.locale),
     title: fallback.title,
@@ -62,16 +58,12 @@ export function projectFallbackView(input: {
 }): NewChatBriefingView {
   const name = userFacingProjectName(input.project.displayName);
   return {
-    moment: input.locale === "ko" ? "프로젝트" : "Project",
+    moment: getAppCopy(appLocaleFromLanguage(input.locale)).briefing.projectMoment,
     title:
-      input.locale === "ko"
-        ? `${name}에서 이어갈 일을 살펴볼까요`
-        : `What should we continue in ${name}?`,
+      getAppCopy(appLocaleFromLanguage(input.locale)).briefing.projectTitle(name),
     description:
-      input.locale === "ko"
-        ? `${name}에서 열어볼 만한 시작점 몇 가지가 있습니다.`
-        : `A few ${name} starting points are ready.`,
-    suggestions: projectFallbackSuggestions(name, input.locale),
+      getAppCopy(appLocaleFromLanguage(input.locale)).briefing.projectDescription(name),
+    suggestions: getAppCopy(appLocaleFromLanguage(input.locale)).briefing.projectSuggestions(name),
     source: fallbackSource({
       scope: "project",
       locale: input.locale,

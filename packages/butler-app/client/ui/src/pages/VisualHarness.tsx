@@ -103,7 +103,7 @@ export function VisualHarness() {
     const workerProfiles: WorkerProfile[] = [
       {
         id: "default",
-        label: "Default",
+        label: appCopy.interfaceDetails.default,
         enabled: true,
         job: { kind: "builtin", job: "coding" },
         model: HARNESS_PRIMARY_MODEL.model_ref,

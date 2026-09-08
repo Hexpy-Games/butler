@@ -35,6 +35,9 @@ export interface SharedProgressRow {
   tool_result_id?: string;
   tool_result_byte_length?: number;
   bridge_phase?: string;
+  interface_label_key?: string;
+  interface_content?: InterfaceContentReferences;
+  interface_label_parameters?: { attempt: number; maxAttempts: number };
   receipt_kind?: string;
   public_decision_role?: string;
   public_decision_summary?: string;
@@ -67,3 +70,4 @@ export interface SharedProgressRow {
   runtime_fault_safe_cause?: string;
   safe_detail_rows?: SharedProgressDetailRow[];
 }
+import type { InterfaceContentReferences } from "../../butler-i18n/src/index.ts";

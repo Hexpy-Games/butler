@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import {
   Button,
@@ -17,6 +18,7 @@ import { useSessionViewSubscription } from "./hooks/useSessionViewSubscription.t
 import styles from "./SessionObserverDialog.module.css";
 
 export function SessionObserverDialog() {
+  useAppLocale();
   const [cancelling, setCancelling] = useState(false);
   const [resuming, setResuming] = useState(false);
   const sessionId = useButlerStore((state) => state.observerSessionId);

@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { SpaceActivity } from "./SpaceActivity";
 import {
   Archive,
@@ -26,6 +28,7 @@ export function SpaceRowMenu({
   open: boolean;
   onOpenChange(open: boolean): void;
 }) {
+  useAppLocale();
   const app = useButlerStore;
   const mutate = useOrganization((s) => s.mutate);
   const setDialog = useOrganization((s) => s.setDialog);
@@ -33,33 +36,33 @@ export function SpaceRowMenu({
   const items = [
     ...(row.session ? [{
       icon: <MessageSquarePlus />,
-      label: "작성 중인 메시지에 참조",
+      label: appCopy.space.reference,
       onSelect: () => useComposerStore.getState().insertSessionReference?.({ sessionId: row.node.entityId, titleSnapshot: row.title }),
     }] : []),
     ...(row.project
       ? [
           {
             icon: <LayoutDashboard />,
-            label: "프로젝트 대시보드",
+            label: appCopy.space.dashboard,
             onSelect: () =>
               app.getState().openProjectDashboard(row.node.entityId),
           },
           {
             icon: <MessageSquarePlus />,
-            label: "새 대화",
+            label: appCopy.space.newChat,
             onSelect: () =>
               app.getState().openNewProjectChat(row.node.entityId),
           },
           {
             icon: <Folder />,
-            label: "하위 그룹 만들기",
+            label: appCopy.space.subgroup,
             onSelect: () => setDialog({ kind: "create", parentKey: row.node.key }),
           },
         ]
       : []),
     {
       icon: <PencilLine />,
-      label: "이름 변경",
+      label: appCopy.space.rename,
       onSelect: () => {
         if (row.session)
           void app.getState().runSessionAction(row.session, "rename");
@@ -75,20 +78,20 @@ export function SpaceRowMenu({
     },
     {
       icon: <Folder />,
-      label: "이동…",
+      label: appCopy.space.moveMenu,
       onSelect: () => setDialog({ kind: "move", sourceKey: row.node.key }),
     },
     ...(row.node.kind === "group"
       ? [
           {
             icon: <Folder />,
-            label: "하위 그룹 만들기",
+            label: appCopy.space.subgroup,
             onSelect: () =>
               setDialog({ kind: "create", parentKey: row.node.key }),
           },
           {
             icon: <Trash2 />,
-            label: "그룹 해제",
+            label: appCopy.space.dissolve,
             onSelect: () => {
               void mutate({ action: "dissolve", groupId: row.node.entityId });
             },
@@ -97,7 +100,7 @@ export function SpaceRowMenu({
       : [
           {
             icon: <Pin />,
-            label: row.pinned ? "즐겨찾기 해제" : "즐겨찾기에 추가",
+            label: row.pinned ? appCopy.space.unpin : appCopy.space.pin,
             onSelect: () => {
               void mutate({
                 action: "pin",
@@ -108,7 +111,7 @@ export function SpaceRowMenu({
           },
           {
             icon: <Archive />,
-            label: "보관",
+            label: appCopy.space.archive,
             onSelect: () => {
               if (row.session)
                 void app.getState().runSessionAction(row.session, "archive");
@@ -120,7 +123,7 @@ export function SpaceRowMenu({
             ? [
                 {
                   icon: <Trash2 />,
-                  label: "프로젝트 삭제",
+                  label: appCopy.space.deleteProject,
                   variant: "destructive" as const,
                   onSelect: () => {
                     void app
@@ -144,7 +147,7 @@ export function SpaceRowMenu({
       <SpaceActivity session={row.session} />
       <OverflowActionMenu
         className={styles.menuButton}
-        label={`${row.title} 메뉴`}
+        label={appCopy.space.rowMenu(row.title)}
         items={row.node.entityId === "general" ? items.slice(0, 1) : items}
         open={open}
         onOpenChange={onOpenChange}

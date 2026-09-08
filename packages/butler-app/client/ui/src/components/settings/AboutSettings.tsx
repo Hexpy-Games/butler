@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useId, useState, type CSSProperties } from "react";
 import { api, setDeveloperMode } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -13,6 +14,7 @@ const readOnlyValueStyle: CSSProperties = {
 };
 
 export function AboutSettings() {
+  useAppLocale();
   const [info, setInfo] = useState<AppInfoView | null>(null);
   const [saving, setSaving] = useState(false);
   const setSettings = useButlerStore((state) => state.setSettings);
@@ -78,7 +80,7 @@ export function AboutSettings() {
     <SettingsSection title={settingsCopy.panels.about}>
       <SettingsField
         label={settingsCopy.fields.appName}
-        control={readOnlyValue(info?.name ?? "Butler")}
+        control={readOnlyValue(info?.name ?? appCopy.firstRun.product)}
         data-test-class="about-app-name"
       />
       <SettingsField

@@ -1,9 +1,11 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Button, ButtonContainer, ListChecks } from "@/butler-ds";
 import type { ComposerPlanDecision } from "./useComposerPlanDecision";
 import { ComposerDecisionSurface } from "./ComposerDecisionSurface";
 
 export function ComposerPlanDecisionSurface({ decision }: { decision: ComposerPlanDecision }) {
+  useAppLocale();
   return <ComposerDecisionSurface
     icon={<ListChecks aria-hidden="true" size={18} />}
     title={decision.planTitle}

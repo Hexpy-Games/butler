@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { ArrowLeft, Clock3, Play, RotateCcw, Save, Trash2 } from "@/butler-ds";
 import { Button, ButtonContainer } from "@/butler-ds";
 import {
@@ -27,6 +28,7 @@ export function AutomationActions({
   onResume,
   onDelete,
 }: AutomationActionsProps) {
+  useAppLocale();
   const isNew = useAutomationStore((state) => state.isNew);
   const title = useAutomationStore((state) => state.title);
   const state = useAutomationStore((state) => state.state);

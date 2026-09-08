@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import type { ReactNode } from "react";
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 import { Copy } from "@/butler-ds";
@@ -13,6 +14,7 @@ import type { MessageRecord } from "@/app/types.ts";
 import { isAssistantFailureNoticeMessage } from "@/app/utils.ts";
 import { MessageAvatar } from "./MessageAvatar";
 import { UserMessageFooter } from "./UserMessageFooter";
+import { isCompactionMessage, visibleSystemMessageText } from "@/app/system-event-message.ts";
 
 interface VirtualMessageRowProps {
   message: MessageRecord;
@@ -31,9 +33,8 @@ export function VirtualMessageRow({
   onCopyContextMenuText,
   children,
 }: VirtualMessageRowProps) {
-  const isCompactionEvent =
-    message.role === "system_event" &&
-    /^Context automatically compact/iu.test(message.text);
+  useAppLocale();
+  const isCompactionEvent = isCompactionMessage(message);
 
   return (
     <ContextMenu>
@@ -58,7 +59,7 @@ export function VirtualMessageRow({
         </MessageRow>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onSelect={() => onCopyContextMenuText(message)}>
+        <ContextMenuItem onSelect={() => onCopyContextMenuText({ ...message, text: visibleSystemMessageText(message) })}>
           <Copy size={14} />
           <span>{appCopy.common.copy}</span>
         </ContextMenuItem>

@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { QueuedMessageRecord } from "@/app/types.ts";
 import {
@@ -16,6 +17,7 @@ export function QueuedComposerPanel({
   onEdit,
   onDelete,
 }: QueuedComposerPanelProps) {
+  useAppLocale();
   if (messages.length === 0) return null;
   const queued = messages.filter((message) => message.state !== "failed");
   const failed = messages.filter((message) => message.state === "failed");
@@ -57,6 +59,7 @@ function MessageQueuePanel(props: {
   onEdit: (message: QueuedMessageRecord) => void;
   onDelete: (message: QueuedMessageRecord) => void;
 }) {
+  useAppLocale();
   const byId = new Map(props.messages.map((message) => [message.id, message]));
   return (
     <ComposerQueuePanel

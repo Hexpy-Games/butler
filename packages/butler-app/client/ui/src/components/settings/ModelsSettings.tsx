@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
@@ -17,6 +18,7 @@ import {
 import type { WorkerProfile } from "@/app/types.ts";
 
 export function ModelsSettings() {
+  useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const update = useSettingsUIStore((state) => state.update);
   const modelRoute = useSettingsUIStore((state) => state.modelRoute);

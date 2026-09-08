@@ -1,9 +1,11 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { ArrowLeft, Button, DialogDescription, DialogHeader, DialogTitle, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import styles from "./SessionObserverDialog.module.css";
 
 export function SessionObserverHeader() {
+  useAppLocale();
   const title = useButlerStore((state) => {
     const sessionId = state.observerSessionId;
     return sessionId ? state.sessionViews[sessionId]?.relation?.safe_title ?? sessionId : "";

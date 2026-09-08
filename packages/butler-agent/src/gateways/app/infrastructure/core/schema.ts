@@ -321,6 +321,9 @@ export function migrateAppStoreSchema(
   ensureColumn(db, "message_changed_files", "detail_json", "TEXT");
   ensureColumn(db, "projects", "ledger_project_id", "TEXT");
   ensureColumn(db, "turns", "execution_controls_json", "TEXT");
+  ensureColumn(db, "turns", "safe_status_label_key", "TEXT");
+  ensureColumn(db, "turns", "safe_status_label_parameters_json", "TEXT");
+  ensureColumn(db, "turns", "safe_status_content_json", "TEXT");
   ensureColumn(db, "turns", "execution_model_json", "TEXT");
   ensureColumn(db, "session_queued_messages", "client_message_id", "TEXT");
   ensureColumn(db, "session_queued_messages", "input_identity_digest", "TEXT");

@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { UsageMonitorView } from "@/app/types.ts";
 import { Stack, SurfacePanel, Typo } from "@/butler-ds";
@@ -8,10 +9,11 @@ export function UsageToolPanel({
 }: {
   rows: Array<[string, UsageMonitorView["tools"]["byTool"][string]]>;
 }) {
+  useAppLocale();
   return (
     <SurfacePanel elevation="none">
       <Stack gap="md">
-        <Typo.Body as="div">도구별 호출</Typo.Body>
+        <Typo.Body as="div">{appCopy.interfaceDetails.callsByTool}</Typo.Body>
         {rows.length === 0 ? (
           <Typo.Caption>
             {appCopy.settings.descriptions.usageMonitorEmpty}
@@ -34,8 +36,8 @@ export function UsageToolPanel({
                 <Stack gap="xs" style={{ minWidth: 0, flex: "1 1 260px" }}>
                   <Typo.Body as="div">{name}</Typo.Body>
                   <Typo.Caption>
-                    결과 {formatCount(bucket.results)} · 성공{" "}
-                    {formatCount(bucket.successes)} · 실패{" "}
+                    {appCopy.interfaceDetails.results}{formatCount(bucket.results)} {appCopy.interfaceDetails.success}{" "}
+                    {formatCount(bucket.successes)} {appCopy.interfaceDetails.failures}{" "}
                     {formatCount(bucket.failures)}
                   </Typo.Caption>
                 </Stack>

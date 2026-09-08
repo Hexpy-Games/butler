@@ -1,9 +1,11 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Settings } from "@/butler-ds";
 import { SidebarItem } from "@/components/layout/SidebarItem.tsx";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 
 export function SidebarSettingsItem() {
+  useAppLocale();
   const active = useButlerStore((state) => state.view.kind === "settings");
   const openSettings = useButlerStore((state) => state.openSettings);
   return (

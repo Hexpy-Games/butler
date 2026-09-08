@@ -17,8 +17,9 @@ import { publishWorkProgress } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { activityContent } from
   "../../packages/butler-agent/src/agent/btcc/projection/guided-activity-content.ts";
-import { publicToolTitle } from
+import { publicToolTitle as runtimePublicToolTitle } from
   "../../packages/butler-agent/src/agent/btcc/projection/guided-activity-content.ts";
+const publicToolTitle = (name: string, args: Record<string, unknown> = {}) => runtimePublicToolTitle(name, args, "ko-KR");
 import { projectTurnProgressToEvents } from
   "../../packages/butler-agent/src/agent/btcc/projection/turn-progress.ts";
 import { projectTurnActivity } from
@@ -56,7 +57,8 @@ test("a freshly admitted Turn publishes an honest visible progress block", async
     expect.objectContaining({
       kind: "assistant.public_note",
       payload: expect.objectContaining({
-        note: "요청을 확인하고 있습니다",
+        note: "Request accepted.",
+        interfaceLabelKey: "accepted",
         btccState: "admitted",
       }),
     }),
@@ -273,7 +275,7 @@ test("ordinary tool activity has public content without a stage authority", () =
     "",
   );
 
-  expect(activity.title).toBe("읽기: index.ts");
+  expect(activity.title).toBe("Read file: index.ts");
   expect(activity.displayStage).toBeUndefined();
 });
 
@@ -379,11 +381,11 @@ test("basic file operations project deterministic basename labels", async () => 
 
   expect(updates).toEqual([
     expect.objectContaining({
-      publicTitle: "수정: game-handler.ts",
+      publicTitle: "Edit file: game-handler.ts",
       inputLabel: "game-handler.ts",
     }),
     expect.objectContaining({
-      publicTitle: "읽기: game-handler.ts",
+      publicTitle: "Read file: game-handler.ts",
       inputLabel: "game-handler.ts",
     }),
   ]);
@@ -465,7 +467,7 @@ test("progressive tool discovery and dispatch keep distinct product-facing title
   expect(publicToolTitle("tool_search")).toBe("사용 가능한 도구 찾기");
   expect(publicToolTitle("tool_describe")).toBe("도구 사용법 확인");
   expect(publicToolTitle("replace_work_plan")).toBe("실행 계획 수립");
-  expect(publicToolTitle("record_work_checkpoint")).toBe("진행 상태 기록");
+  expect(publicToolTitle("record_work_checkpoint")).toBe("작업 진행 확인");
   expect(publicToolTitle("record_work_review", { subject: "plan" })).toBe(
     "계획 검토",
   );
@@ -490,7 +492,7 @@ test("progressive tool discovery and dispatch keep distinct product-facing title
   })).toBe("실행: git commit");
   expect(publicToolTitle("read_file", {
     requests: [{ path: "src/games/word-chain/game-handler.ts" }],
-  })).toBe("읽기: game-handler.ts");
+  })).toBe("파일 읽기: game-handler.ts");
   expect(publicToolTitle("edit_file", {
     path: "src/games/word-chain/game-handler.ts",
   })).toBe("수정: game-handler.ts");

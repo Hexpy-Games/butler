@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
 import {
   Clock3,
@@ -22,6 +23,7 @@ export function CommandPalette({
   onClose?: () => void;
   onSelect?: (result: CommandPaletteResult) => void;
 } = {}) {
+  useAppLocale();
   const setCommandOpen = useButlerStore((state) => state.setCommandOpen);
   const navigateCommandResult = useButlerStore(
     (state) => state.navigateCommandResult,
@@ -93,6 +95,7 @@ export function CommandPalette({
 }
 
 function CommandIcon({ kind }: { kind: CommandPaletteResult["kind"] }) {
+  useAppLocale();
   if (kind === "automation") return <Clock3 size={17} />;
   if (kind === "project" || kind === "project_session" || kind === "group")
     return <Folder size={17} />;

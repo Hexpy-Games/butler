@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { presentReadOperation } from "./operationReadOutputPresentation";
 import { presentStructuredOperation } from "./operationStructuredOutputPresentation";
 
@@ -17,7 +18,7 @@ export function presentOperationOutput(
   if (!complete) {
     return {
       kind: "summary",
-      content: "결과 일부를 불러왔습니다. 전체 결과를 보려면 출력 더 보기를 선택하세요.",
+      content: appCopy.interfaceStatus.partialOutput,
     };
   }
   const value = operationResultRecord(content);
@@ -35,10 +36,10 @@ export function presentOperationOutput(
   if (typeof value.ok === "boolean") {
     return {
       kind: "summary",
-      content: value.ok ? "도구 실행은 완료됐지만 상세 결과 표시를 지원하지 않습니다." : "작업을 완료하지 못했습니다.",
+      content: value.ok ? appCopy.interfaceStatus.noDetailSupport : appCopy.interfaceStatus.operationFailed,
     };
   }
-  return { kind: "summary", content: "도구 결과를 확인했습니다." };
+  return { kind: "summary", content: appCopy.interfaceStatus.resultChecked };
 }
 
 function commandOutput(value: Record<string, unknown>): OperationOutputPresentation {
@@ -46,9 +47,9 @@ function commandOutput(value: Record<string, unknown>): OperationOutputPresentat
   const exitCode = typeof value.exit_code === "number" ? value.exit_code : undefined;
   const succeeded = value.ok === true && !timedOut && (exitCode === undefined || exitCode === 0);
   const summary = timedOut
-    ? "명령 실행 시간이 초과되었습니다."
-    : `${succeeded ? "명령 완료" : "명령 실패"}${
-      exitCode === undefined ? "" : ` · 종료 코드 ${exitCode}`
+    ? appCopy.interfaceStatus.commandTimeout
+    : `${succeeded ? appCopy.interfaceStatus.commandDone : appCopy.interfaceStatus.commandFailed}${
+      exitCode === undefined ? "" : ` · ${appCopy.interfaceStatus.exitCode(exitCode)}`
     }`;
   const stdout = stringValue(value.stdout);
   const stderr = stringValue(value.stderr);
@@ -57,7 +58,7 @@ function commandOutput(value: Record<string, unknown>): OperationOutputPresentat
 }
 
 function commandText(stdout: string, stderr: string): string {
-  if (stdout && stderr) return `출력\n${stdout}\n\n오류 출력\n${stderr}`;
+  if (stdout && stderr) return appCopy.interfaceStatus.commandStreams(stdout, stderr);
   return stdout || stderr;
 }
 
@@ -66,16 +67,16 @@ function basicFileOutput(
   value: Record<string, unknown>,
 ): OperationOutputPresentation {
   if (value.ok !== true) {
-    return { kind: "summary", content: "파일 작업을 완료하지 못했습니다." };
+    return { kind: "summary", content: appCopy.interfaceStatus.fileFailed };
   }
   if (toolName === "read_file" && typeof value.content === "string") {
     return { kind: "code", content: value.content };
   }
   const fileName = operationFileName(value.path);
-  if (!fileName) return { kind: "summary", content: "파일 작업을 완료했습니다." };
-  const action = toolName === "edit_file" ? "수정 완료" : "작성 완료";
+  if (!fileName) return { kind: "summary", content: appCopy.interfaceStatus.fileDone };
+  const action = toolName === "edit_file" ? appCopy.interfaceStatus.editDone : appCopy.interfaceStatus.writeDone;
   const byteLabel = typeof value.bytes === "number"
-    ? ` · ${new Intl.NumberFormat("ko-KR").format(value.bytes)}바이트`
+    ? ` · ${appCopy.interfaceStatus.bytes(value.bytes)}`
     : "";
   return { kind: "summary", content: `${action} · ${fileName}${byteLabel}` };
 }

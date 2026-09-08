@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import {
   SettingsField,
   Stack,
@@ -26,6 +27,7 @@ export function BackupModelsSettings({
   saving,
   onUpdate,
 }: BackupModelsSettingsProps) {
+  useAppLocale();
   const copy = appCopy.settings.backupModels;
   const descriptionId = useId();
   const fallback = draft.model_fallback;

@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { useState } from "react";
 import {
   DialogDescription,
@@ -21,6 +23,7 @@ export function SpaceMoveForm({
   sourceKey: string;
   rows: Map<string, SpaceRowData>;
 }) {
+  useAppLocale();
   const [query, setQuery] = useState("");
   const candidates = [...rows.values()].filter(
     (r) =>
@@ -33,13 +36,12 @@ export function SpaceMoveForm({
   return (
     <Stack gap="4">
       <DialogHeader>
-        <DialogTitle>이동할 위치</DialogTitle>
+        <DialogTitle>{appCopy.space.moveDestination}</DialogTitle>
         <DialogDescription>
-          대화와 파일은 유지하고 정리 위치를 변경합니다.
-        </DialogDescription>
+          {appCopy.space.moveDescription}</DialogDescription>
       </DialogHeader>
       <Input
-        aria-label="그룹 또는 프로젝트 검색"
+        aria-label={appCopy.space.searchDestination}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -47,7 +49,7 @@ export function SpaceMoveForm({
         <Stack gap="1">
           {canDrop(rows, sourceKey, null, "inside") && (
             <NavRow
-              label="스페이스 최상위"
+              label={appCopy.space.root}
               onClick={() => {
                 requestSpaceMove(rows, sourceKey, null, "inside");
               }}
@@ -64,7 +66,7 @@ export function SpaceMoveForm({
             />
           ))}
           {!candidates.length && query && (
-            <Typo.Caption>일치하는 위치가 없습니다.</Typo.Caption>
+            <Typo.Caption>{appCopy.space.noDestination}</Typo.Caption>
           )}
         </Stack>
       </ScrollArea>

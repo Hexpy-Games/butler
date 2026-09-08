@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Button, Input, SettingsField, SlidersHorizontal, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { LocalModelDiscoveryRequest } from "@/app/types.ts";
@@ -8,7 +9,7 @@ const PLATFORM_OPTIONS = [
   { value: "llama_cpp", label: "llama.cpp" },
   { value: "ollama", label: "Ollama" },
   { value: "lm_studio", label: "LM Studio" },
-  { value: "custom", label: "Custom OpenAI-compatible" },
+  { value: "custom", label: appCopy.interfacePanels.customProvider },
 ] as const;
 
 interface LocalModelConfigFormProps {
@@ -28,6 +29,7 @@ export function LocalModelConfigForm({
   advancedOpen,
   setAdvancedOpen,
 }: LocalModelConfigFormProps) {
+  useAppLocale();
   const copy = appCopy.settings.localModels;
 
   return (

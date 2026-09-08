@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { SidebarSection } from "@/components/layout/SidebarSection.tsx";
 import { SidebarProjectGroup } from "@/components/layout/SidebarProjectGroup.tsx";
@@ -9,6 +10,7 @@ import { appThemeClasses } from "@/app/utils.ts";
 import { useButlerStore } from "@/app/store.ts";
 
 export function SidebarProjectsSection() {
+  useAppLocale();
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const collapse = useSidebarProjectCollapse();
   const navigation = useButlerStore((state) => state.navigation);

@@ -1,5 +1,5 @@
 import { isVisibleToolActivity } from "@/app/conversation-progress";
-import { appCopy } from "@/app/copy.ts";
+import { appCopy, interfaceProgressLabel, interfaceText } from "@/app/copy.ts";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import type {
   ProgressRow,
@@ -30,13 +30,13 @@ export function stewardProgressStatus(
     "approved_plan_total" | "approved_plan_completed" | "status"
   >,
 ): string {
-  if (child.status === "delivered") return "완료됨";
-  if (child.status === "failed") return "실패함";
-  if (child.status === "cancelled") return "중단됨";
-  if (child.status === "idle") return "대기 중";
+  if (child.status === "delivered") return appCopy.interfaceStatus.delivered;
+  if (child.status === "failed") return appCopy.interfaceStatus.failedPast;
+  if (child.status === "cancelled") return appCopy.interfaceStatus.cancelled;
+  if (child.status === "idle") return appCopy.interfaceStatus.idle;
   const progress = stewardPlanProgress(child);
-  if (progress) return `작업 중 · ${progress}`;
-  return "작업 중";
+  if (progress) return `${appCopy.interfaceStatus.working} · ${progress}`;
+  return appCopy.interfaceStatus.working;
 }
 
 export function stewardPlanProgress(
@@ -85,12 +85,12 @@ export function stewardCurrentActivityTitle(
     row.safe_label.trim().length > 0,
   );
   return (
-    activeActivity?.safe_label ||
-    latestActivity?.safe_label ||
-    activePlanStep?.safe_label ||
-    genericActivity?.safe_label ||
-    child.active_turn?.progress.summary ||
-    "작업 진행 중"
+    (activeActivity && interfaceProgressLabel(activeActivity)) ||
+    (latestActivity && interfaceProgressLabel(latestActivity)) ||
+    (activePlanStep && interfaceProgressLabel(activePlanStep)) ||
+    (genericActivity && interfaceProgressLabel(genericActivity)) ||
+    interfaceText(child.active_turn?.progress.summary_reference, child.active_turn?.progress.summary ?? "") ||
+    appCopy.interfaceStatus.progress
   ).trim().replace(/\s+/gu, " ");
 }
 

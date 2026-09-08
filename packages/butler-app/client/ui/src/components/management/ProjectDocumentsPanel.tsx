@@ -1,8 +1,10 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { useState } from "react";
 import {
   groupSpecs,
-  PLAN_BOARD_TABS,
-  PLAN_LANES,
+  planBoardTabs,
+  planLanes,
   planBoardType,
   planLane,
   projectDocumentBadgeLabel,
@@ -35,6 +37,7 @@ export function ProjectDocumentsPanel({
   documents: ProjectDashboardDocument[];
   onSelectDocument: (document: ProjectDashboardDocument) => void;
 }) {
+  useAppLocale();
   const specs = documents.filter((document) => document.kind === "spec");
   const plans = documents.filter((document) => planBoardType(document));
   const specsByCategory = groupSpecs(specs);
@@ -47,17 +50,17 @@ export function ProjectDocumentsPanel({
 
   return (
     <Stack gap="xl">
-      <Section gap="lg" icon={<ListChecks size={16} />} title="Plans">
+      <Section gap="lg" icon={<ListChecks size={16} />} title={appCopy.interfacePanels.plans}>
         {plans.length > 0 ? (
           <Tabs defaultValue="work">
             <TabsList variant="line">
-              {PLAN_BOARD_TABS.map((tab) => (
+              {planBoardTabs().map((tab) => (
                 <TabsTrigger key={tab.id} value={tab.id}>
                   {tab.label}
                 </TabsTrigger>
               ))}
             </TabsList>
-            {PLAN_BOARD_TABS.map((tab) => {
+            {planBoardTabs().map((tab) => {
               const tabPlans = plans.filter((plan) => planBoardType(plan) === tab.id);
               return (
                 <TabsContent key={tab.id} value={tab.id}>
@@ -67,7 +70,7 @@ export function ProjectDocumentsPanel({
                     style={projectDocumentLayout.planBoard}
                     data-test-class={`project-plan-kanban-${tab.id}`}
                   >
-                    {PLAN_LANES.map((lane) => {
+                    {planLanes().map((lane) => {
                       const lanePlans = tabPlans.filter((plan) => planLane(plan) === lane.id);
                       return (
                         <SurfacePanel
@@ -105,10 +108,10 @@ export function ProjectDocumentsPanel({
             })}
           </Tabs>
         ) : (
-          <EmptyPanelLine label="No Project Ledger plans found" />
+          <EmptyPanelLine label={appCopy.interfacePanels.noPlans} />
         )}
       </Section>
-      <Section gap="lg" icon={<BookOpenText size={16} />} title="Specs">
+      <Section gap="lg" icon={<BookOpenText size={16} />} title={appCopy.interfacePanels.specs}>
         {specsByCategory.length > 0 ? (
           <SurfacePanel
             elevation="none"
@@ -149,7 +152,7 @@ export function ProjectDocumentsPanel({
             </div>
           </SurfacePanel>
         ) : (
-          <EmptyPanelLine label="No Project Ledger specs found" />
+          <EmptyPanelLine label={appCopy.interfacePanels.noSpecs} />
         )}
       </Section>
     </Stack>

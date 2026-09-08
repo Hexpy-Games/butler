@@ -1,5 +1,41 @@
 # #26 검증·완성도 리뷰
 
+## r7 행 정렬·중앙 다국어·응답 언어 분리 (2026-09-08)
+
+- 최신/진행중 행의 제목/오른쪽 버튼과 소속/오른쪽 메타데이터를 별도 트랙으로
+  분리했다. 버튼 hit target은 오른쪽 끝, 배경 radius는 부모 행과 동일하다.
+  자동 그룹의 별도 아이콘/해제, 최신·진행중 추가 버튼과 안내문을 제거했다.
+- 중앙 `packages/butler-i18n`으로 완전한 en/ko catalog와 타입 계약을 옮겼다.
+  UI는 기존 copy adapter를 통해 현재 locale을 구독하며, 캐시·메모된 화면도
+  입력 초안을 지우지 않고 갱신한다. 문서 메뉴/metadata와 시스템 compaction
+  안내도 렌더 시 현재 언어를 해석한다.
+- 실제 guided 도구·단계 이벤트부터 저장/재생/워커·스튜어드/사이드바까지
+  시스템 문구의 템플릿 참조를 보존한다. 공개 경로/매개변수만 전달한다.
+  모델 작성 문구로 교체하면 기존 참조도 함께 지워 번역이 원문을 덮지 않게 한다.
+  상세 감사·제외 범위: `r7-i18n-audit.md`.
+- 응답 언어 오류의 원인은 UI 설정이 responseLanguage를 암묵적으로 생성하고,
+  컨텍스트/결정적 응답도 UI 언어를 fallback으로 사용한 것이었다. 또한 기존
+  기본언어 강제 문장이 명시적 번역 요청과 충돌했다. 두 설정의 권위를 분리하고
+  모든 역할에서 명시적 사용자 언어 요청이 응답 기본값보다 우선하도록 통일했다.
+- 실제 격리 Electron + production native executor + `openai/gpt-6-astra`에서
+  UI=en/답변=ko, UI=ko/답변=en, 답변=en에서 한국어 재작성 요청의 3경로를
+  실제 composer로 확인했다(각 12/11/10초). 확률적 모델의 모든 응답을 보장한다는
+  주장이 아니라 보고된 충돌 경로의 실제 확인이다. 운영 이력은 수정하지 않았다.
+- 최종 빌드 browser smoke 1440/800/390/320px: 오른쪽 끝/메타 정렬/radius,
+  이전 transparent sticky·focus·drag·terminal spinner 회귀 통과. 실제 설정 UI
+  en→ko 전환에서 캐시/라벨 갱신, 사용자 제목/입력 초안/response preference 보존 통과.
+  스크린샷 `.tmp/sidebar-r5/recent-*.png`, `.tmp/sidebar-r7/locale-*.png`.
+- root 집중 회귀 21 tests/157 assertions, 워커·문서 locale 2/14, compaction 1/8,
+  워커 캡슐 배치 1/23, 연속 observer 이력 1/19 통과. 중앙 guided 및 packaging
+  수치는 audit에 기록했다. 타입 검사, 전체 lint(DS/CSS), UI build, diff 검사 통과.
+- 구조 audit의 3개 큰 파일은 중앙 타입과 두 언어의 순수 catalog다. 별도 실행
+  책임은 없으므로 기계적 분리하지 않았다. 새 polling/실행 루프는 추가하지 않았다.
+- 실기기 iOS/Windows는 검증하지 않았다. 기존 무표식 과거 이력, 외부 도구 원문,
+  알 수 없는 provider 오류는 임의 번역하지 않는다. 넓은 기존 테스트의 BTCC
+  admission fixture 12건, source-regex 1건, Linux packaging 의존성 2건은
+  통과로 계산하지 않았으며 이번 변경으로 수정하지 않았다.
+- main 병합·운영 반영 결과는 실행 후 아래에 별도 기록한다.
+
 ## r5 창 레이아웃·완료 상태 보정
 
 - 원인: scrollContent의 18px gap과 sticky padding 중복, 신호등 공간+스크롤 inset+brand padding 중복, 창 토글을 브랜드 옆으로 옮긴 이중 소유, SpaceSidebar의 불투명 덮개, 환경을 무시한 1023px overlay 분기, turn.state_changed/일반 session.updated의 navigation 갱신 누락이었다.

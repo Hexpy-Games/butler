@@ -7,6 +7,7 @@ import { createTestAppServer } from "../../packages/butler-agent/src/test-suppor
 import { FIRST_RUN_STORAGE_KEY, firstRunCompleteState } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
 import { readFirstChatOnboardingState, writeFirstChatOnboardingState } from "../../packages/butler-agent/src/personalization/onboarding.ts";
 import { checkStickyClipping } from "./sidebar-sticky-clipping.ts";
+import { checkSidebarRowControls } from "./sidebar-row-controls.ts";
 
 // Layout fixtures only: real HTTP/store/UI, no provider or production data writes.
 const dir = mkdtempSync(join(tmpdir(), "butler-sidebar-r5-"));
@@ -19,6 +20,7 @@ const server = createTestAppServer({ butlerData: dir, dbPath: join(dir, "app.sql
   uiRoot: resolve("packages/butler-app/client/ui/dist"), port: 0,
   responder: async () => { await replyGate; return { texts: ["사이드바 완료 상태 검증 응답"] }; } });
 const store = server.store;
+store.updateSettings({ language: "ko" });
 const mutate = (fields: Record<string, unknown>) => store.mutateSpace({
   ...fields, expectedRevision: store.listNavigation().space.revision,
 } as Parameters<typeof store.mutateSpace>[0]);
@@ -86,6 +88,7 @@ try {
     assert.equal(metrics.stickyBackground, "rgba(0, 0, 0, 0)");
     await page.screenshot({ path: join(output, `browser-${width}.png`) });
     await checkStickyClipping(page, join(output, `clipped-${width}.png`));
+    await checkSidebarRowControls(page, join(output, `recent-${width}.png`));
     await hide.click();
     await show.waitFor();
     await page.waitForTimeout(250);

@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import type { ChartConfig } from "@/butler-ds";
 import type { ContextDetailsView } from "@/app/types.ts";
 
@@ -65,7 +66,7 @@ export function buildContextChart(context: ContextDetailsView): {
     ...categorySegments,
     {
       key: "free",
-      label: "Free context",
+      label: appCopy.interfacePanels.freeContext,
       value: freeTokens,
       color: "var(--context-chart-free)",
       radius: [0, 10, 10, 0] as [number, number, number, number],
@@ -84,7 +85,7 @@ export function buildContextChart(context: ContextDetailsView): {
       ...accumulator,
       [segment.key]: segment.value,
     }),
-    { name: "Context" },
+    { name: appCopy.interfacePanels.context },
   );
   const config = segments.reduce<ChartConfig>((accumulator, segment) => {
     accumulator[segment.key] = {

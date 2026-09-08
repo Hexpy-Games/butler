@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import type { RefObject } from "react";
 import { ComposerCardExpandedBody } from "@/butler-ds";
 import { ComposerAttachments } from "./ComposerAttachments";
@@ -22,6 +24,7 @@ export function ComposerInputSurface({
   planDecision?: ComposerPlanDecision;
   authorityDecision?: ComposerAuthorityDecision;
 }) {
+  useAppLocale();
   if (authorityDecision && !authorityDecision.composingMessage) {
     return <ComposerAuthorityDecisionSurface decision={authorityDecision} />;
   }
@@ -32,7 +35,7 @@ export function ComposerInputSurface({
     <>
       <ComposerCardExpandedBody>
         {authorityDecision ? (
-          <ComposerDecisionAttachment title={authorityDecision.title} label={`허용 대기 ${authorityDecision.pendingCount}개`} onShowDecision={authorityDecision.onShowDecision} />
+          <ComposerDecisionAttachment title={authorityDecision.title} label={appCopy.interfaceTemplates.pendingApprovals(authorityDecision.pendingCount)} onShowDecision={authorityDecision.onShowDecision} />
         ) : planDecision?.editingInstruction ? (
           <ComposerPlanInstructionContext decision={planDecision} />
         ) : null}
