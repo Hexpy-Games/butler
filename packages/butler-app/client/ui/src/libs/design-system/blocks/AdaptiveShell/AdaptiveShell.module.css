@@ -76,6 +76,8 @@
 }
 
 .workspace {
+  container-name: workspace;
+  container-type: inline-size;
   position: relative;
   display: grid;
   contain: paint;

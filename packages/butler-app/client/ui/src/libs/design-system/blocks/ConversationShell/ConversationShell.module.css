@@ -1,4 +1,6 @@
 .shell {
+  container-name: conversation;
+  container-type: inline-size;
   --conversation-shell-content-gutter: 7%;
   --conversation-content-width: min(
     760px,
@@ -108,6 +110,16 @@
 
 @media (width <= 560px) {
   .shell {
+    --conversation-content-width: calc(
+      100% - var(--adaptive-composer-inset) - var(--adaptive-composer-inset)
+    );
+  }
+}
+
+@container workspace (width <= 560px) {
+  .shell {
+    --adaptive-composer-inset: var(--space-md);
+    --adaptive-page-gutter: var(--space-lg);
     --conversation-content-width: calc(
       100% - var(--adaptive-composer-inset) - var(--adaptive-composer-inset)
     );

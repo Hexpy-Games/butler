@@ -1,4 +1,5 @@
 import { PromptSuggestionList } from "./PromptSuggestionList";
+import { ConversationShell } from "../ConversationShell";
 import { Sparkles } from "../../components/Icons";
 import type { FluidPalette, FluidRgb } from "./promptFluid";
 
@@ -24,6 +25,8 @@ const fluidPaletteOptions = [
 
 export function PromptSuggestionListFixture() {
   return (
+    <div style={{ height: 640, position: "relative", contain: "layout paint" }}>
+    <ConversationShell composerReserve={160}>
     <PromptSuggestionList
       title="오늘의 일을 같이 펼쳐볼까요"
       description="흩어진 맥락을 한곳에 모으고, 지금 붙잡을 수 있는 다음 일을 골라보세요."
@@ -60,5 +63,7 @@ export function PromptSuggestionListFixture() {
         },
       ]}
     />
+    </ConversationShell>
+    </div>
   );
 }

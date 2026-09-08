@@ -1,5 +1,16 @@
 # #26 검증·완성도 리뷰
 
+## r11 우측 패널 확장과 320px 대화창
+
+- 고정 520px 제한을 실제 shell 폭 기반 상한으로 교체했다. 열린 사이드바를
+  제외한 나머지에서 대화창 320px를 보장하고 저장 선호 폭은 별도로 유지한다.
+- 1440px/왼쪽 닫힘에서 우측 1120px까지 확장, 창 축소 후 복원 및 reload 통과.
+  pointer, Home/End, ARIA/실측 폭 일치, 모바일 drawer 유지 검증 완료.
+- 실제 패널 폭으로 시작 화면·컴포저가 반응하도록 컨테이너 쿼리 적용.
+  `.tmp/panel-resize/desktop-main-320.png`에서 좁은 실제 UI를 리뷰했다.
+- 단위 5개 및 기존 sidebar 4폭 smoke 통과. 광범위 DS 소스 테스트의 기존
+  11실패와 독립 Prompt fixture 시각 증거 제한은 r11-plan.md에 기록했다.
+
 ## r10 프로젝트 액션과 최소 버튼 간격
 
 - 프로젝트 Briefcase / 대시보드 LayoutDashboard 구분. 상시 대시보드 버튼 다음에

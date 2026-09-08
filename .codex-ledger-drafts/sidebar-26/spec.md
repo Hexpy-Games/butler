@@ -1,6 +1,6 @@
 # #26 사이드바와 대화 정리 — 합의 명세
 
-Revision: 2026-09-08-r10. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
+Revision: 2026-09-08-r11. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
 GitHub: https://github.com/Hexpy-Games/butler/issues/26
 Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 
@@ -14,6 +14,14 @@ Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 목업은 시각·상호작용 기준이며 실제 저장, 작업 폴더 이동, 모델 분류의 구현 증거가 아니다.
 
 ### r7 최신 보정 계약 (이전의 충돌하는 규칙보다 우선)
+
+- r11 우측 패널에는 고정 520px 상한이 없다. docked shell의 실제 내부 너비에서
+  열린 사이드바와 대화창 최소 320 CSS px를 빼서 최대 폭을 계산한다.
+  표시 폭, 드래그 시작 폭, keyboard Home/End, ARIA는 같은 geometry를 사용한다.
+  창 크기 변화 시 저장 선호 폭은 유지하며 캐시에도 520px 상한을 적용하지 않는다.
+  공간 부족 시 패널 최소 폭보다 대화창 320px를 우선한다. 모바일 drawer는 그대로다.
+  시작 화면/컴포저 여백도 viewport가 아닌 실제 workspace/conversation 폭으로
+  반응하여 320px에서도 입력창과 안내 문구가 잘리지 않아야 한다.
 
 - r10 프로젝트 표식은 Briefcase, 대시보드 명령은 LayoutDashboard로 구분한다.
   트리 프로젝트 오른쪽은 항상 보이는 대시보드 버튼 → 메뉴/펼침 공용 슬롯이다.

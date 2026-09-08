@@ -114,6 +114,9 @@ try {
       await generalRow.locator('[role="status"]').waitFor({ state: "detached" });
       console.log("PASS HTTP turn → live event → actual sidebar spinner removed, without reload");
     }
+    // Session navigation closes the drawer after the loaded view is applied.
+    // Do not reopen it while that public navigation is still in flight.
+    await page.getByText("사이드바 완료 상태 검증 응답", { exact: true }).waitFor();
     if (await show.isVisible()) await show.click();
     await hide.waitFor();
     await page.waitForTimeout(250);
