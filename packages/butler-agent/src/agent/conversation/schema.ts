@@ -1,4 +1,4 @@
-export const CONVERSATION_STORE_SCHEMA_VERSION = 2;
+export const CONVERSATION_STORE_SCHEMA_VERSION = 3;
 
 export const CONVERSATION_STORE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
   compacted_by_summary_id TEXT,
   source_gateway TEXT,
   source_ref TEXT,
+  origin_kind TEXT NOT NULL DEFAULT 'unknown',
+  origin_ref TEXT,
   UNIQUE (session_id, seq),
   FOREIGN KEY (session_id) REFERENCES conversation_sessions(id) ON DELETE CASCADE,
   FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE SET NULL

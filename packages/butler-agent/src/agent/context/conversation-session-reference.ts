@@ -14,8 +14,16 @@ import {
   toContextMessage,
   type ConversationContextMessage,
 } from "./conversation-context-format.ts";
+import {
+  readActiveDescriptor,
+  resolveMemorySource,
+} from "../cognition/memory/index.ts";
 
-export type ConversationSessionReferenceScope = "current_project" | "all_sessions";
+export type ConversationSessionReferenceScope =
+  | "current_session"
+  | "current_project"
+  | "all_user_sessions"
+  | "all_sessions";
 
 export interface ConversationSessionReferenceReader {
   close?(): void;
@@ -77,6 +85,7 @@ export interface ReadConversationSessionInput {
   butlerData: string;
   currentSessionId: string;
   conversationSessionId: string;
+  sourceRef?: string;
   projectId?: string | null;
   scope?: ConversationSessionReferenceScope;
   anchorMessageId?: string;
@@ -96,7 +105,20 @@ export interface ConversationSessionReadFailure {
 
 export type ReadConversationSessionResult =
   | ConversationContextResult
-  | ConversationSessionReadFailure;
+  | ConversationSessionReadFailure
+  | {
+    ok: true;
+    mode: "source";
+    source_ref: string;
+    conversation_session_id: string;
+    conversation_message_id: string;
+    text: string;
+    source_hash: string;
+    byte_start: number;
+    byte_end: number;
+    next_cursor: null;
+    diagnostics: string[];
+  };
 
 interface ConversationSessionReferenceScopeResult {
   kind: ConversationSessionReferenceScope;
@@ -178,6 +200,12 @@ export function listConversationSessions(
 }
 
 export function readConversationSession(
+  input: ReadConversationSessionInput & { sourceRef: string },
+): ReadConversationSessionResult;
+export function readConversationSession(
+  input: ReadConversationSessionInput & { sourceRef?: undefined },
+): ConversationContextResult | ConversationSessionReadFailure;
+export function readConversationSession(
   input: ReadConversationSessionInput,
 ): ReadConversationSessionResult {
   return withReferenceReader(input, (reader) => {
@@ -190,6 +218,50 @@ export function readConversationSession(
       input.projectId,
       reader.getSession(currentConversationSessionId)?.project_id,
     );
+    if (input.sourceRef) {
+      const descriptor = readActiveDescriptor(input.butlerData);
+      const source = resolveMemorySource({
+        context: {
+          butlerData: input.butlerData,
+          target: {
+            kind: "active",
+            expected_generation: descriptor.generation_id,
+          },
+          signal: new AbortController().signal,
+        },
+        sourceRef: input.sourceRef,
+        maxChars: input.maxChars,
+      });
+      const sourceSession = reader.getSession(source.conversation_session_id);
+      const permitted =
+        scope.kind === "all_user_sessions" ||
+        scope.kind === "all_sessions" ||
+        (scope.kind === "current_session" &&
+          source.conversation_session_id === currentConversationSessionId) ||
+        (scope.kind === "current_project" &&
+          sourceSession?.project_id === scope.project_id);
+      if (!permitted) {
+        return {
+          ok: false,
+          code: "conversation_session_scope_mismatch",
+          conversation_session_id: "",
+          scope,
+        };
+      }
+      return {
+        ok: true,
+        mode: "source",
+        source_ref: source.source_ref,
+        conversation_session_id: source.conversation_session_id,
+        conversation_message_id: source.conversation_message_id,
+        text: source.text,
+        source_hash: source.source_hash,
+        byte_start: source.byte_start,
+        byte_end: source.byte_end,
+        next_cursor: null,
+        diagnostics: [],
+      };
+    }
     const conversationSessionId = input.conversationSessionId.trim();
     const session = conversationSessionId
       ? reader.getSession(conversationSessionId)
@@ -231,8 +303,18 @@ function referenceScope(
   currentSessionProjectId: string | null | undefined,
 ): ConversationSessionReferenceScopeResult {
   const normalizedProjectId = projectId?.trim() || currentSessionProjectId?.trim() || null;
-  if (requested === "all_sessions" || !normalizedProjectId) {
-    return { kind: "all_sessions", project_id: null };
+  if (requested === "current_session") {
+    return { kind: "current_session", project_id: normalizedProjectId };
+  }
+  if (
+    requested === "all_sessions" ||
+    requested === "all_user_sessions" ||
+    !normalizedProjectId
+  ) {
+    return {
+      kind: requested === "all_sessions" ? "all_sessions" : "all_user_sessions",
+      project_id: null,
+    };
   }
   return { kind: "current_project", project_id: normalizedProjectId };
 }

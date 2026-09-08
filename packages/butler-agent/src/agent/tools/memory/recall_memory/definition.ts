@@ -1,9 +1,14 @@
-import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.ts";
+import type {
+  ButlerToolDefinition,
+  ToolCapabilityMetadata,
+} from "../../types.ts";
 
 export const recallMemoryToolDefinition = {
   type: "function",
   name: "recall_memory",
-  description: "Recall relevant local Butler memory for prior task outcomes, hot-cache context, explicit rules, and associative context. Use results[].text as the primary safe memory evidence; items are ranking diagnostics. Treat results as candidate memory evidence, not exact chronological database truth.",
+  toolContractVersion: 2,
+  description:
+    "Recall source-backed associative context through graph evidence. Use evidence.read_args unchanged with read_conversation_session to inspect canonical source text.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -18,80 +23,42 @@ export const recallMemoryToolDefinition = {
       },
       include_vector: {
         type: "boolean",
-        description: "Whether to try vector episode search in addition to lexical, graph, project/task, and explicit memory. Defaults to true for tool calls.",
+        description:
+          "Whether to try vector episode search in addition to lexical, graph, project/task, and explicit memory. Defaults to true for tool calls.",
+      },
+      seed_phrases: {
+        type: "array",
+        items: { type: "string" },
       },
       vector_queries: {
         type: "array",
-        description: "Optional current-phase model-expanded semantic episode queries.",
-        items: {
-          type: "string",
-        },
+        items: { type: "string" },
       },
-      generated_queries: {
-        type: "array",
-        description: "Optional selected-model semantic expansions. `search_vector_episode` queries are used as vector episode queries.",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            strategy: {
-              type: "string",
-              enum: [
-                "read_recent_context",
-                "query_exact_transcript",
-                "search_lexical_memory",
-                "search_vector_episode",
-                "read_graph_memory",
-                "read_explicit_memory",
-                "read_task_state",
-              ],
-            },
-            query: {
-              type: "string",
-            },
-          },
-          required: [
-            "strategy",
-            "query",
-          ],
-        },
+      scope: {
+        type: "string",
+        enum: ["current_session", "current_project", "all_user_sessions"],
       },
-      strategies: {
-        type: "array",
-        description: "Optional current-phase model-selected retrieval strategies for this recall. Use this to make ranking follow the requested evidence path instead of the fallback scorer.",
-        items: {
-          type: "string",
-          enum: [
-            "read_recent_context",
-            "query_exact_transcript",
-            "search_lexical_memory",
-            "search_vector_episode",
-            "read_graph_memory",
-            "read_explicit_memory",
-            "read_task_state",
-          ],
-        },
+      include_internal: { type: "boolean" },
+      cursor: { type: "string" },
+      as_of: { type: "string" },
+      session_ids: { type: "array", items: { type: "string" } },
+      project_filter: {
+        type: "string",
+        enum: ["any", "unassigned", "selected"],
       },
-      evidence_required: {
-        type: "array",
-        description: "Optional evidence types this recall must prove before Butler can use the result.",
-        items: {
-          type: "string",
-          enum: [
-            "exact_quote",
-            "recent_turn_hit",
-            "task_continuity",
-            "project_memory_hit",
-            "vector_episode_hit",
-            "explicit_rule_hit",
-            "graph_relation_hit",
-          ],
+      project_ids: { type: "array", items: { type: "string" } },
+      time: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          from: { type: "string" },
+          to: { type: "string" },
+          basis: { type: "string", enum: ["conversation", "event"] },
         },
+        required: ["from", "to", "basis"],
       },
     },
-    required: [
-      "cue",
-    ],
+    required: ["cue"],
   },
   effectBoundary: "none",
   concurrencySafe: true,
@@ -101,16 +68,7 @@ export const recallMemoryToolDefinition = {
 
 export const recallMemoryToolMetadata = {
   category: "memory",
-  tags: [
-    "memory",
-    "recall",
-    "association",
-    "search",
-  ],
-  safetyNotes: [
-    "Treat recall as evidence to consider, not guaranteed truth.",
-  ],
-  satisfiesCompletionObligations: [
-    "source_verified",
-  ],
+  tags: ["memory", "recall", "association", "search"],
+  safetyNotes: ["Treat recall as evidence to consider, not guaranteed truth."],
+  satisfiesCompletionObligations: ["source_verified"],
 } satisfies ToolCapabilityMetadata;

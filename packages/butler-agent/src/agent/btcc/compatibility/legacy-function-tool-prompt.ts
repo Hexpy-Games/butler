@@ -79,6 +79,17 @@ export async function runLegacyFunctionToolPromptText(
       options.log?.(`final no-tool synthesis failed; using safe fallback: ${message}`);
     },
   } satisfies BtccAgentLoopInput["finalSynthesis"];
+  const executeTool: BtccAgentLoopInput["executeTool"] = async (call) => {
+    const selectedCall = {
+      name: call.name,
+      args: call.arguments,
+      rawArguments: call.rawArguments,
+      providerCallId: call.id,
+      toolContractVersion: call.toolContractVersion,
+      signal: call.signal,
+    };
+    return options.executeTool(selectedCall);
+  };
   const result = await runBtccAgentLoop({
     prompt: options.prompt,
     model,
@@ -126,13 +137,7 @@ export async function runLegacyFunctionToolPromptText(
           };
         }
       : undefined,
-    executeTool: async (call) => await options.executeTool({
-      name: call.name,
-      args: call.arguments,
-      rawArguments: call.rawArguments,
-      providerCallId: call.id,
-      signal: call.signal,
-    }),
+    executeTool,
     outcomeFromToolResult: options.finalTextFromToolResult
       ? ({ toolCall, toolResult }) => toolResult.ok
         ? Promise.resolve(options.finalTextFromToolResult!({

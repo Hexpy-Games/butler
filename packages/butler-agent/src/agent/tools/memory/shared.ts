@@ -19,6 +19,7 @@ type ToolCall = { args: Record<string, unknown> };
 export function createMemoryToolHandlers(input: {
   butlerHome: string;
   butlerData: string;
+  turnId?: string;
   sessionId?: string;
   projectId?: string;
   memoryVectorBackend?: VectorEpisodeBackend;
@@ -29,7 +30,7 @@ export function createMemoryToolHandlers(input: {
       const taskId = typeof call.args.task_id === "string" ? call.args.task_id.trim() : "";
       if (!taskId) throw new Error("ingest_task_memory requires task_id");
       return ingestTaskOutcomeMemory({
-        butlerData: input.butlerData,
+      butlerData: input.butlerData,
         taskId,
       });
     },

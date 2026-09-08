@@ -142,6 +142,7 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
       turnId: request.turnId,
       timestamp: request.message.timestamp,
       butlerData: this.dependencies.butlerData,
+      origin: resolvedConversationOrigin(binding, request),
     });
     conversation.admitInbound();
 
@@ -167,6 +168,22 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
       },
     };
   }
+}
+
+function resolvedConversationOrigin(
+  binding: StoredSessionBinding,
+  request: BtccTurnRequest,
+): { kind: "user_input" | "internal_control"; ref: string } {
+  const metadata = binding.metadata ?? {};
+  const internal = (binding.role === "worker" || binding.role === "steward") ||
+    isSubsessionBinding(binding) ||
+    Boolean(metadata.nativeStewardContext) ||
+    Boolean(request.appTurnContext?.authorityRequestRef ?? request.authorityRequestRef) ||
+    request.trigger.kind === "authorized_wake";
+  return {
+    kind: internal ? "internal_control" : "user_input",
+    ref: `btcc:${request.turnId}:${request.message.id}`,
+  };
 }
 export function snapshotTurnContext(input: {
   binding: StoredSessionBinding;
