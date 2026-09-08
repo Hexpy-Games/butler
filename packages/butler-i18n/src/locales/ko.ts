@@ -406,6 +406,7 @@ export const koKrCopy: AppCopy = {
     deleteProject: "프로젝트 삭제",
     navigation: "스페이스 탐색",
     undo: "목록 변경 되돌리기",
+    organizationUpdated: "목록을 변경했습니다.",
     conversationList: "대화 목록",
     primaryActions: "대화 시작과 검색",
     search: "검색",

@@ -1,5 +1,19 @@
 # #26 검증·완성도 리뷰
 
+## r12 목록 정리 Sonner 알림
+
+- 사이드바 footer의 정리 알림/되돌리기/오류 텍스트를 제거했다. 설정만 남는다.
+  중앙 notification API와 기존 AppToaster를 통해 ko/en 알림 및 undo action을 제공한다.
+- undo token과 revision으로 유효성을 확인하며 같은 알림을 navigation 갱신마다
+  재표시하지 않는다. workspace shell이 수명을 소유하므로 설정 진입에도 유지된다.
+- Sonner dismiss의 지연 이벤트가 다음 알림을 닫는 실제 브라우저 재현을 수정했다.
+  token별 ID로 이전 알림 닫기와 새 알림 표시를 분리한다.
+- hook 단위 검증: StrictMode 중복 방지, pending/무효 undo 차단, ko/en 문구.
+  실제 HTTP+SQLite+제품 UI smoke: 1440px/390px에서 footer 위치 불변, 화면 경계,
+  그룹 생성 후 Sonner action으로 실제 undo 복원 통과. 외부 모델 호출 없음.
+- `.tmp/space-notice/toast-1440.png`, `toast-390.png` 화면 직접 리뷰 완료.
+  UI build/lint/typecheck/diff 검사 통과. 운영 에이전트 재시작 없이 Vite HMR 반영.
+
 ## r11 우측 패널 확장과 320px 대화창
 
 - 고정 520px 제한을 실제 shell 폭 기반 상한으로 교체했다. 열린 사이드바를

@@ -2,6 +2,7 @@ import { appCopy } from "@/app/copy.ts";
 import { create } from "zustand";
 import { api } from "../api";
 import { useButlerStore } from "../store";
+import { notifyError } from "../notifications";
 import type { SpaceCommand, SpaceMutationResult } from "../types";
 
 type TreeIntent = SpaceCommand extends infer T
@@ -116,6 +117,7 @@ export const useOrganization = create<OrganizationUi>((set, get) => ({
       });
       return true;
     } catch (error) {
+      notifyError(error, appCopy.space.saveFailed);
       await useButlerStore.getState().refreshNavigation();
       set({
         pending: false,

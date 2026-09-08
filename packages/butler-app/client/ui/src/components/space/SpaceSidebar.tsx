@@ -1,12 +1,9 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useMemo, useState } from "react";
 import {
-  Button,
-  ButtonContainer,
   SidebarShell,
   SidebarTrafficSpace,
   Stack,
-  Typo,
 } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
@@ -27,12 +24,6 @@ export function SpaceSidebar() {
   const navigation = useButlerStore((s) => s.navigation);
   const leftOpen = useButlerStore((s) => s.leftOpen);
   const tab = useOrganization((s) => s.tab);
-  const error = useOrganization((s) => s.error);
-  const undoToken = useOrganization((s) => s.undoToken);
-  const undoRevision = useOrganization((s) => s.undoRevision);
-  const smartNotice = navigation.space.smartNotice;
-  const availableUndo = smartNotice?.undoToken ?? (undoRevision === navigation.space.revision ? undoToken : null);
-  const pending = useOrganization((s) => s.pending);
   const revealPath = useOrganization((s) => s.revealPath);
   const rows = useMemo(() => projectSpace(navigation), [navigation, locale]);
   const [visibleCount, setVisibleCount] = useState(30);
@@ -57,28 +48,7 @@ export function SpaceSidebar() {
         ariaLabel={appCopy.space.navigation}
         scrollHeader={<SpaceHeader rows={rows} />}
         stickyHeader={<SpaceBrowseHeader />}
-        footer={
-          <Stack gap="1">
-            {error && <Typo.Caption role="alert">{error}</Typo.Caption>}
-            {smartNotice && <Typo.Caption role="status">{appCopy.space.organized(smartNotice.title)}</Typo.Caption>}
-            {availableUndo && (
-              <ButtonContainer size="sm">
-                <Button
-                  size="sm"
-                  variant="inline"
-                  disabled={pending}
-                  onClick={() => {
-                    void useOrganization
-                      .getState()
-                      .mutate({ action: "undo", undoToken: availableUndo });
-                  }}
-                >
-                  {appCopy.space.undo}</Button>
-              </ButtonContainer>
-            )}
-            <SidebarSettingsItem />
-          </Stack>
-        }
+        footer={<SidebarSettingsItem />}
       >
         <Stack gap="1" as="nav" aria-label={appCopy.space.conversationList}>
           {roots

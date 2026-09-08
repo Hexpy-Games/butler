@@ -383,6 +383,7 @@ export const enUsCopy: AppCopy = {
     deleteProject: "Delete project",
     navigation: "Space navigation",
     undo: "Undo organization change",
+    organizationUpdated: "Organization updated.",
     conversationList: "Conversations",
     primaryActions: "Start and search conversations",
     search: "Search",

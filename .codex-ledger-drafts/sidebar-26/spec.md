@@ -1,6 +1,6 @@
 # #26 사이드바와 대화 정리 — 합의 명세
 
-Revision: 2026-09-08-r11. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
+Revision: 2026-09-08-r12. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
 GitHub: https://github.com/Hexpy-Games/butler/issues/26
 Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 
@@ -14,6 +14,16 @@ Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 목업은 시각·상호작용 기준이며 실제 저장, 작업 폴더 이동, 모델 분류의 구현 증거가 아니다.
 
 ### r7 최신 보정 계약 (이전의 충돌하는 규칙보다 우선)
+
+- r12 목록 정리 알림/되돌리기는 사이드바 footer를 차지하지 않고 기존 AppToaster의
+  Sonner 토스트로 제공한다. 자동 정리는 그룹명, 수동 변경은 목록 변경 완료를 표시한다.
+  유효한 undoToken별로 한 번 표시하고 8초 뒤 닫는다. 동일 navigation 갱신은 재표시하지
+  않는다. 목록 revision 변경으로 undo가 무효화되면 토스트를 닫고, 클릭 시에도 최신
+  token/revision을 확인하여 기존 organization.mutate(undo)만 호출한다.
+  footer에는 설정만 남긴다. 변경 실패는 중앙 오류 토스트로 알리며 폼 오류는 유지한다.
+  실행 중 에이전트와 백엔드는 변경/재시작하지 않는다.
+  알림 hook은 사이드바가 아닌 workspace shell 수명에 연결하여 설정 화면을 오가도
+  같은 알림을 다시 띄우지 않는다.
 
 - r11 우측 패널에는 고정 520px 상한이 없다. docked shell의 실제 내부 너비에서
   열린 사이드바와 대화창 최소 320 CSS px를 빼서 최대 폭을 계산한다.

@@ -13,6 +13,7 @@ import {
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
 import { Sidebar } from "@/components/layout/Sidebar.tsx";
+import { useOrganizationNotice } from "@/components/space/hooks/useOrganizationNotice";
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
 import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
 import { Conversation } from "@/components/conversation/Conversation.tsx";
@@ -78,6 +79,7 @@ export function AppShell() {
 
 function AppWorkspaceShell() {
   useAppBootstrap();
+  useOrganizationNotice();
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const setLeftOpen = useButlerStore((state) => state.setLeftOpen);
   const view = useButlerStore((state) => state.view);
