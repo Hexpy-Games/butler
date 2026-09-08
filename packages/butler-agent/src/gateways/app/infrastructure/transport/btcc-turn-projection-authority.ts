@@ -60,7 +60,7 @@ export function reconcileBtccTurnProjectionAuthorityBatch(
       const synthesis = subsessionResultForTurn(db, row.turn_id);
       db.query(`
         UPDATE turns
-        SET state = 'running', safe_status_label = ?, safe_error_code = NULL,
+        SET state = 'running', safe_status_label = ?, safe_status_label_key = NULL, safe_status_label_parameters_json = NULL, safe_status_content_json = NULL, safe_error_code = NULL,
           retryable = 0, cancellable = ?, updated_at = ?
         WHERE id = ? AND state IN ('failed', 'runtime_fault')
       `).run(

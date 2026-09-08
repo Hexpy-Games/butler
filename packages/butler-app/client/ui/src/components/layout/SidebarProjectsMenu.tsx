@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Collapse, Expand, FolderPlus } from "@/butler-ds";
 import {
   DropdownMenu,
@@ -32,6 +33,7 @@ export function SidebarProjectsMenu({
   onCreateScratch,
   onUseExistingFolder,
 }: SidebarProjectsMenuProps) {
+  useAppLocale();
   const sidebarCopy = appCopy.sidebar;
 
   return (

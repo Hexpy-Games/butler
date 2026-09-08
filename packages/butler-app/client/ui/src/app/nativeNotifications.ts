@@ -168,7 +168,7 @@ export function subscribeNativeNavigation(
 
 function compactNotificationBody(value: string): string {
   const compact = value.replace(/\s+/gu, " ").trim();
-  if (!compact) return "Butler update is ready.";
+  if (!compact) return appCopy.interfaceFeedback.updateReady;
   return compact.length > 180 ? `${compact.slice(0, 177)}...` : compact;
 }
 
@@ -267,7 +267,7 @@ function normalizeNativeNotificationSettingsTarget(
   return null;
 }
 
-function nativeNotificationStatusDetails(
+export function nativeNotificationStatusDetails(
   code: NativeNotificationDetailsCode,
 ): string {
   const copy = appCopy.settings.nativeNotifications.status;
@@ -280,7 +280,7 @@ function nativeNotificationStatusDetails(
   return copy.unavailable;
 }
 
-function nativeNotificationSettingsLabel(
+export function nativeNotificationSettingsLabel(
   target: NativeNotificationSettingsTarget | null,
 ): string | null {
   const copy = appCopy.settings.nativeNotifications.settings;

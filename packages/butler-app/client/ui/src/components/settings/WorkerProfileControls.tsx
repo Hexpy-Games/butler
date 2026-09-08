@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { Button, Input, SettingsField, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -21,6 +22,7 @@ export function WorkerProfileControls({
   onAdd,
   onMaxChange,
 }: WorkerProfileControlsProps) {
+  useAppLocale();
   const saving = useSettingsUIStore((state) => state.saving);
   const [maxTextDraft, setMaxTextDraft] = useState<string | null>(null);
   const panelCopy = appCopy.settings.workerProfilesPanel;

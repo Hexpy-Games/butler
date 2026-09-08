@@ -5,8 +5,11 @@ import { createRoot } from "react-dom/client";
 import { useButlerStore } from "@/app/store.ts";
 import type { ProgressRow, SessionView, WorkerActivitySummary } from "@/app/types.ts";
 import { SessionObserverTimeline } from "./SessionObserverTimeline.tsx";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
 
 test("Worker return continues one expanded activity list and retains each tool's original Turn", async () => {
+  const previousLocale = getAppLocale();
+  setAppCopyLanguage("ko");
   const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
   const before = useButlerStore.getState();
   const globals = ["window", "document", "navigator", "HTMLElement", "Node", "ResizeObserver", "IS_REACT_ACT_ENVIRONMENT"] as const;
@@ -75,6 +78,7 @@ test("Worker return continues one expanded activity list and retains each tool's
     expect(container.querySelectorAll('[data-test-class="turn-current-status-slot"]')).toHaveLength(1);
   } finally {
     await act(async () => root.unmount());
+    setAppCopyLanguage(previousLocale);
     useButlerStore.setState({ observerSessionId: before.observerSessionId, sessionViews: before.sessionViews });
     globals.forEach((key, index) => { const value = saved[index];
       if (value) Object.defineProperty(globalThis, key, value); else Reflect.deleteProperty(globalThis, key); });

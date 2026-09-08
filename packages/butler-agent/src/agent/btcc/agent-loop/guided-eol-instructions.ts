@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { responseLanguageInstruction } from "../../output/messages.ts";
 import type { ContextDocumentReader } from "../../context/context-projection.ts";
 import type { TurnRecord } from "../turn/index.ts";
 import type { ModelContextSegmentKind } from "../ports/model-round.ts";
@@ -72,7 +73,7 @@ export function attributeGuidedInstructions(input: {
     sources.push({
       kind: "accepted_corrections_and_unresolved_obligations",
       stability: "dynamic",
-      text: `\nUse ${responseLanguage} for every user-facing message in this Turn.`,
+      text: `\n${responseLanguageInstruction(responseLanguage)}`,
     });
   }
   const eol = input.eolInstructions.trim();

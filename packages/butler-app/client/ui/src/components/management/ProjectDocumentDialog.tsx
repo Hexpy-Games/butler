@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +26,7 @@ export function ProjectDocumentDialog({
   onClose: () => void;
   onStartChatWithDocument?: (document: ProjectDashboardDocument) => void;
 }) {
+  useAppLocale();
   return (
     <Dialog
       open={Boolean(document)}
@@ -50,8 +53,7 @@ export function ProjectDocumentDialog({
               variant="default"
               onClick={() => onStartChatWithDocument(document)}
             >
-              이 문서로 대화 시작하기
-            </Button>
+              {appCopy.interfaceDetails.documentConversation}</Button>
           ) : null}
         </div>
       </DialogContent>

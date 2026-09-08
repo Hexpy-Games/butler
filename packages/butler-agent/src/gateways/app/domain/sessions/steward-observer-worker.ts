@@ -1,4 +1,5 @@
 import type { WorkerActivitySummary } from "../../interface/protocol/app-protocol.ts";
+import { formatInterfaceText, type InterfaceTextReference } from "../../../../../../butler-i18n/src/index.ts";
 import { projectStewardSession } from "./steward-observer.ts";
 import type {
   StewardObserverDelegationPresentation,
@@ -27,6 +28,7 @@ export function projectStewardWorkerActivity(
           : snapshot?.turns.at(-1)?.recovery?.state === "recoverable"
             ? "recoverable"
             : awaitingApproval ? "blocked" : workerActivityPhase(activity?.activity_stage);
+  const statusReference: InterfaceTextReference = { key: "workerStatus", parameters: { phase: awaitingApproval ? "approval" : phase } };
   return {
     worker_id: relation.child_session_id,
     activity_kind: "worker",
@@ -35,7 +37,9 @@ export function projectStewardWorkerActivity(
     worker_ordinal_label: ordinal,
     objective: presentation?.objective || relation.safe_title,
     phase,
-    status_line: awaitingApproval ? "허용 대기 중" : workerStatusLine(phase),
+    status_line: formatInterfaceText(statusReference, "en-US"),
+    status_reference: statusReference,
+    current_activity_reference: projected?.active_turn?.progress.summary_reference,
     ...(projected?.active_turn?.progress.summary ? { current_activity_title: projected.active_turn.progress.summary } : {}),
     ...(projected?.approved_plan_total !== undefined ? {
       approved_plan_total: projected.approved_plan_total,
@@ -50,19 +54,6 @@ export function projectStewardWorkerActivity(
     updated_at: snapshot?.updated_at ?? relation.created_at,
     supported_controls: [],
   };
-}
-
-function workerStatusLine(phase: WorkerActivitySummary["phase"]): string {
-  if (phase === "orienting") return "구상 중";
-  if (phase === "planning") return "계획 중";
-  if (phase === "verifying") return "검토 중";
-  if (phase === "reporting") return "보고 중";
-  if (phase === "complete") return "완료";
-  if (phase === "blocked") return "진행이 막힘";
-  if (phase === "failed") return "실패";
-  if (phase === "cancelled") return "취소됨";
-  if (phase === "recoverable") return "이어서 진행 가능";
-  return "작업 중";
 }
 
 function workerActivityPhase(stage?: string): WorkerActivitySummary["phase"] {

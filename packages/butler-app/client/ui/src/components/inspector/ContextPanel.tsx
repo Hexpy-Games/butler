@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
 import { KeyValueRow, ScrollArea, Section, Stack } from "@/butler-ds";
@@ -12,6 +14,7 @@ import {
 } from "./inspectorLayout.ts";
 
 export function ContextPanel({ context }: { context?: ContextDetailsView }) {
+  useAppLocale();
   const contextChart = context ? buildContextChart(context) : null;
   const sortedCategories = context
     ? [...context.categories].sort(
@@ -30,7 +33,7 @@ export function ContextPanel({ context }: { context?: ContextDetailsView }) {
   );
   return (
     <Section
-      title="Context details"
+      title={appCopy.interfacePanels.contextDetails}
       gap="md"
       fill
       contentFill
@@ -40,29 +43,29 @@ export function ContextPanel({ context }: { context?: ContextDetailsView }) {
         <Stack gap="md" fill>
           <Stack gap="sm" data-test-class="context-overview">
             <KeyValueRow
-              label="Context window"
-              value={`${usedPercent}% full`}
-              description={`${formatTokenCount(context.used_tokens)} used`}
-              meta={`${formatTokenCount(context.budget_tokens)} budget`}
+              label={appCopy.interfacePanels.contextWindow}
+              value={appCopy.interfaceTemplates.contextMetric("full", usedPercent)}
+              description={appCopy.interfaceTemplates.contextMetric("used", formatTokenCount(context.used_tokens))}
+              meta={appCopy.interfaceTemplates.contextMetric("budget", formatTokenCount(context.budget_tokens))}
               valueTextSize="caption"
             />
             {context.available_working_context_tokens !== undefined &&
             context.used_working_context_tokens !== undefined ? (
               <KeyValueRow
-                label="Working context"
-                value={`${formatTokenCount(context.used_working_context_tokens)} used`}
-                description={`${formatTokenCount(context.available_working_context_tokens)} available before compaction pressure`}
+                label={appCopy.interfacePanels.workingContext}
+                value={appCopy.interfaceTemplates.contextMetric("used", formatTokenCount(context.used_working_context_tokens))}
+                description={appCopy.interfaceTemplates.contextMetric("available", formatTokenCount(context.available_working_context_tokens))}
                 detailLayout="stack"
                 meta={
                   context.auto_compact_at_tokens
-                    ? `auto compact at ${formatTokenCount(context.auto_compact_at_tokens)}`
+                    ? appCopy.interfaceTemplates.contextMetric("compact", formatTokenCount(context.auto_compact_at_tokens))
                     : undefined
                 }
                 valueTextSize="caption"
               />
             ) : null}
             <ChartContainer
-              aria-label="Context window usage chart"
+              aria-label={appCopy.interfacePanels.contextChart}
               config={contextChart.config}
               data-density="compact"
               initialDimension={{ width: 320, height: 36 }}
@@ -110,7 +113,7 @@ export function ContextPanel({ context }: { context?: ContextDetailsView }) {
           </ScrollArea>
         </Stack>
       ) : (
-        <EmptyPanelLine label="Context is unavailable" />
+        <EmptyPanelLine label={appCopy.interfacePanels.contextUnavailable} />
       )}
     </Section>
   );

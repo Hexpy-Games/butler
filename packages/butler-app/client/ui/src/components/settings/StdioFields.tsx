@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import {
   Field,
@@ -16,6 +17,7 @@ export function StdioFields({
   form: McpServerFormState;
   onChange: (patch: Partial<McpServerFormState>) => void;
 }) {
+  useAppLocale();
   const copy = appCopy.settings;
   return (
     <>
@@ -49,7 +51,7 @@ export function StdioFields({
         <FieldDescription>{copy.descriptions.mcpSecrets}</FieldDescription>
         <McpSecretRows
           title={copy.fields.mcpEnv}
-          addLabel="환경 변수 추가"
+          addLabel={appCopy.interfaceDetails.addEnvironment}
           rows={form.envRows}
           onRowsChange={(envRows) => onChange({ envRows, envDirty: true })}
         />

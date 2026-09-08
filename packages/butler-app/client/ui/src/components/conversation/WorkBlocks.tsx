@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { memo, useState } from "react";
 import {
   Button,
@@ -25,11 +26,12 @@ function CollapsedTurnActivityComponent({
   live?: boolean;
   turnId?: string;
 }) {
+  useAppLocale();
   const [expanded, setExpanded] = useState(false);
   const workCopy = appCopy.conversation.work;
   const latest = blocks.at(-1);
   if (!latest) return null;
-  const headerLabel = `${live ? "현재" : "활동"} · ${latest.label} · ${blocks.length}개 기록`;
+  const headerLabel = appCopy.interfaceTemplates.activityHistory(live, latest.label, blocks.length);
   return (
     <section
       data-test-class="turn-activity-collapsed turn-work-collapsed"
@@ -82,6 +84,7 @@ function ActivityBlock({
   block: WorkBlockView;
   turnId?: string;
 }) {
+  useAppLocale();
   return (
     <WorkActivityBlock
       data-work-block-id={block.id}

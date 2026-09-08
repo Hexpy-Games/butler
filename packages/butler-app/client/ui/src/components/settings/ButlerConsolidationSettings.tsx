@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { reasoningOptionLabel } from "@/app/utils.ts";
 import type {
@@ -19,6 +20,7 @@ export function ButlerConsolidationSettings({
   draft: SettingsView;
   onUpdate: (partial: Partial<SettingsView>) => void;
 }) {
+  useAppLocale();
   const settingsCopy = appCopy.settings;
   const settingsFields = settingsCopy.fields;
   const settingsDescriptions = settingsCopy.descriptions;

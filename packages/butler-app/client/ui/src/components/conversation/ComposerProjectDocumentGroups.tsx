@@ -1,5 +1,6 @@
+import { appCopy } from "@/app/copy.ts";
 import {
-  PROJECT_DOCUMENT_PICKER_FILTERS,
+  projectDocumentPickerFilters,
   projectDocumentType,
 } from "@/app/projectDocuments.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
@@ -7,18 +8,18 @@ import type { FilteredSelectGroup } from "@/butler-ds";
 import { BookOpenText, FileText, ListChecks } from "@/butler-ds";
 
 export type ProjectDocumentFilter =
-  (typeof PROJECT_DOCUMENT_PICKER_FILTERS)[number]["id"];
+  ReturnType<typeof projectDocumentPickerFilters>[number]["id"];
 
 type ProjectDocumentGroup = Exclude<ProjectDocumentFilter, "all">;
 
-const PROJECT_DOCUMENT_GROUPS: Array<{
+const projectDocumentGroups = (): Array<{
   id: ProjectDocumentGroup;
   title: string;
-}> = [
-  { id: "spec", title: "Spec" },
-  { id: "roadmap", title: "Roadmap" },
-  { id: "work", title: "Work" },
-  { id: "task", title: "Task" },
+}> => [
+  { id: "spec", title: appCopy.interfaceStatus.spec },
+  { id: "roadmap", title: appCopy.projectDocumentMetadata.roadmap },
+  { id: "work", title: appCopy.interfaceStatus.work },
+  { id: "task", title: appCopy.interfaceStatus.task },
 ];
 
 export function projectDocumentPickerGroups({
@@ -35,7 +36,7 @@ export function projectDocumentPickerGroups({
   searchValue: string;
 }): FilteredSelectGroup[] {
   const visible = filterProjectDocuments(documents, filter, searchValue);
-  return PROJECT_DOCUMENT_GROUPS.map((group) => ({
+  return projectDocumentGroups().map((group) => ({
     ...group,
     items: visible
       .filter((document) => documentBelongsToGroup(document, group.id))

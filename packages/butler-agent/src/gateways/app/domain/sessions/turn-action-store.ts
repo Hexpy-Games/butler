@@ -213,7 +213,7 @@ export class AppTurnActionStore {
       UPDATE turns
       SET
         state = 'delivered',
-        safe_status_label = 'Delivered',
+        safe_status_label = 'Delivered', safe_status_label_key = NULL, safe_status_label_parameters_json = NULL, safe_status_content_json = NULL,
         safe_error_code = NULL,
         retryable = 0,
         cancellable = 0,

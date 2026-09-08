@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
@@ -25,6 +26,7 @@ import type {
 } from "@/app/types.ts";
 
 export function ButlerModelSettings() {
+  useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const update = useSettingsUIStore((state) => state.update);
   const saving = useSettingsUIStore((state) => state.saving);

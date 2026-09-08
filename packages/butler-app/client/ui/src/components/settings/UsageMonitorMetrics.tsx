@@ -1,8 +1,11 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import type { UsageMonitorView, UsageTokenBucketView } from "@/app/types.ts";
 import { MetricCard, MetricGrid } from "@/butler-ds";
 import { formatCompact, formatCount, formatPercent } from "./usageSettingsFormat";
 
 export function UsageMonitorMetrics({ view }: { view: UsageMonitorView | null }) {
+  useAppLocale();
   const model = view?.model;
   const webSearch = view?.webSearch;
   const tools = view?.tools;
@@ -11,41 +14,41 @@ export function UsageMonitorMetrics({ view }: { view: UsageMonitorView | null })
     <MetricGrid>
       <MetricCard
         value={formatCompact(model?.requestCount ?? 0)}
-        label="모델 요청"
+        label={appCopy.interfaceStatus.modelRequests}
       />
       <MetricCard
         value={formatCompact(model?.promptTokens ?? 0)}
-        label="입력 토큰"
+        label={appCopy.interfaceStatus.inputTokens}
       />
       <MetricCard
         value={formatCompact(model?.cachedTokens ?? 0)}
-        label="캐시 입력"
+        label={appCopy.interfaceStatus.cachedInput}
         change={formatPercent(model?.cacheHitRatio ?? 0)}
         trend="neutral"
       />
       <MetricCard
         value={formatCompact(model?.uncachedTokens ?? 0)}
-        label="비캐시 입력"
+        label={appCopy.interfaceStatus.uncachedInput}
       />
       <MetricCard
         value={formatCompact(model?.outputTokens ?? 0)}
-        label="출력 토큰"
+        label={appCopy.interfaceStatus.outputTokens}
       />
       <MetricCard
         value={formatCompact(webSearch?.requestCount ?? 0)}
-        label="웹 검색"
+        label={appCopy.interfaceStatus.webSearch}
         change={webSearch?.lastProvider ?? undefined}
         trend="neutral"
       />
       <MetricCard
         value={formatCompact(tools?.calls ?? 0)}
-        label="도구 호출"
+        label={appCopy.interfaceStatus.toolCalls}
         change={`${formatCount(tools?.successes ?? 0)} ok · ${formatCount(tools?.failures ?? 0)} fail`}
         trend="neutral"
       />
       <MetricCard
         value={formatCompact(model?.totalTokens ?? 0)}
-        label="총 토큰"
+        label={appCopy.interfaceStatus.totalTokens}
         change={formatMissingTotals(model)}
         trend="neutral"
       />

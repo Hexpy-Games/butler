@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { FileText, Typo } from "@/butler-ds";
 import type { ComposerPlanDecision } from "./useComposerPlanDecision";
@@ -8,6 +9,7 @@ export function ComposerPlanInstructionContext({
 }: {
   decision: ComposerPlanDecision;
 }) {
+  useAppLocale();
   return (
     <div className={styles.wrap} data-test-class="composer-plan-instruction-context">
       <button

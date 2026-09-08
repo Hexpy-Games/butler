@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import {
   Dialog,
@@ -22,6 +23,7 @@ export function ProjectRenameDialog({
   onCancel?: () => void;
   onSubmit?: (project: ProjectSummary, value: string) => void;
 } = {}) {
+  useAppLocale();
   const storeProject = useButlerStore((state) => state.renameProject);
   const setRenameProject = useButlerStore((state) => state.setRenameProject);
   const submitProjectRename = useButlerStore(

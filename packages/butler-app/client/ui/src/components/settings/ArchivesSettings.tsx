@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { confirmAction } from "@/app/confirmation.ts";
@@ -11,6 +12,7 @@ import { SettingsSection } from "./SettingsSection";
 const PAGE_SIZE = 20;
 
 export function ArchivesSettings() {
+  useAppLocale();
   const [archives, setArchives] = useState<ArchiveListView | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -57,7 +59,7 @@ export function ArchivesSettings() {
   };
 
   const remove = async (item: ArchiveItem) => {
-    if (!await confirmAction(`"${item.title}" 항목을 삭제할까요?`, {
+    if (!await confirmAction(appCopy.interfaceTemplates.deleteItem(item.title), {
       title: appCopy.common.delete, confirmLabel: appCopy.common.delete, destructive: true,
     })) return;
     setBusyId(item.id);
@@ -82,7 +84,7 @@ export function ArchivesSettings() {
     <SettingsSection title={appCopy.settings.panels.archives}>
       <Stack gap="md">
         {items.length === 0 ? (
-          <Typo.Body>보관된 프로젝트나 대화가 없습니다.</Typo.Body>
+          <Typo.Body>{appCopy.interfaceDetails.archivesEmpty}</Typo.Body>
         ) : (
           <Stack gap="md">
             {items.map((item) => (

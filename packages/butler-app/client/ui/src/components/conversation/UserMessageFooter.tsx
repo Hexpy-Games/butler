@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { MessageFooter } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageRecord } from "@/app/types.ts";
@@ -22,6 +23,7 @@ function formatSentTime(date: Date): string {
 }
 
 export function UserMessageFooter({ message }: { message: MessageRecord }) {
+  useAppLocale();
   const date = message.created_at ? new Date(message.created_at) : null;
   const sentAt = date && !Number.isNaN(date.getTime()) ? date : null;
   return (

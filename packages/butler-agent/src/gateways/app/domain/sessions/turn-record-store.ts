@@ -98,7 +98,7 @@ export class AppTurnRecordStore {
       .query(
         `
       UPDATE turns
-      SET state = ?, safe_status_label = ?, safe_error_code = ?, retryable = ?,
+      SET state = ?, safe_status_label = ?, safe_status_label_key = NULL, safe_status_label_parameters_json = NULL, safe_status_content_json = NULL, safe_error_code = ?, retryable = ?,
         cancellable = ?, attempt = ?, updated_at = ?
       WHERE id = ?
     `,
@@ -129,7 +129,7 @@ export class AppTurnRecordStore {
       .query(
         `
       UPDATE turns
-      SET state = 'retrying', safe_status_label = ?, safe_error_code = NULL,
+      SET state = 'retrying', safe_status_label = ?, safe_status_label_key = NULL, safe_status_label_parameters_json = NULL, safe_status_content_json = NULL, safe_error_code = NULL,
         retryable = 0, cancellable = ?, attempt = ?, updated_at = ?
       WHERE id = ? AND state = 'runtime_fault' AND retryable = 1
     `,

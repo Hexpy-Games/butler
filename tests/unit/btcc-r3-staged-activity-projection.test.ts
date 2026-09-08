@@ -71,10 +71,10 @@ test("ask-first keeps authored Work activity and its plan review subject through
     await guided.publicActivity.publishAccepted(binding);
   }
   expect(updates).toContainEqual(expect.objectContaining({
-    title: "실행 계획 수립", summary: calls[0]!.args.objective,
+    title: "Plan execution", summary: calls[0]!.args.objective,
   }));
   expect(updates).toContainEqual(expect.objectContaining({
-    title: "계획 검토", summary: calls[1]!.args.summary,
+    title: "Review plan", summary: calls[1]!.args.summary,
   }));
   expect(updates.some((update) => update.title === "결과 검토")).toBe(false);
   expect(updates.some((update) => update.summary === "작업에 필요한 정보를 확인하고 있습니다.")).toBe(false);
@@ -178,7 +178,7 @@ test("completion review projects a distinct validation activity without another 
   await projection.publishAccepted(binding);
   expect(updates).toEqual([expect.objectContaining({
     displayStage: "validation",
-    title: "완료 검토",
+    title: "Review completion",
     summary: "원 요청, 계획, 검사 결과와 실제 산출물이 모두 일치합니다.",
   })]);
 });
@@ -224,8 +224,8 @@ test("Work continuation publishes the committed stage before same-batch editing,
       activityId: binding.activityId, displayStage: "execution",
     });
   }
-  expect(publicToolTitle("continue_work")).toBe("진행 내용 확인");
-  expect(publicToolTitle("start_work")).toBe("요청 내용 확인");
+  expect(publicToolTitle("continue_work")).toBe("Check progress");
+  expect(publicToolTitle("start_work")).toBe("Check request");
 });
 
 test("a bound Work starts ordinary tools at its saved review stage without a new Conception", async () => {
@@ -272,12 +272,12 @@ test("accepted completion projects the model-authored reporting direction after 
   expect(updates).toEqual([
     expect.objectContaining({
       displayStage: "validation",
-      title: "완료 검토",
+      title: "Review completion",
       summary: "원 요청과 검증 결과가 모두 일치합니다.",
     }),
     expect.objectContaining({
       displayStage: "reporting",
-      title: "결과 보고",
+      title: "Report results",
       summary: "변경 내용, 검증 결과, 운영 반영 순서로 정리해 보고합니다.",
     }),
   ]);
@@ -322,12 +322,12 @@ test("the first Plan projects distinct conception and planning activities from o
   expect(updates).toEqual([
     expect.objectContaining({
       displayStage: "conception",
-      title: "요청 의도 확인",
-      summary: "요청의 목표와 범위를 확인했습니다: 두 입력을 비교해 검증된 보고서를 만듭니다.",
+      title: "Confirm request intent",
+      summary: "Confirmed the request goal and scope: 두 입력을 비교해 검증된 보고서를 만듭니다.",
     }),
     expect.objectContaining({
       displayStage: "planning",
-      title: "실행 계획 수립",
+      title: "Plan execution",
       summary: "두 입력을 비교해 검증된 보고서를 만듭니다.",
       nextStep: "두 입력을 확인하고 공통점을 비교합니다.",
     }),
@@ -625,7 +625,7 @@ test("the active model-authored action owns prose summaries and deterministic op
 
   expect(updates).toEqual([
     expect.objectContaining({
-      title: "계획 검토",
+      title: "Review plan",
       summary: reviewArgs.summary,
     }),
     expect.objectContaining({
@@ -636,7 +636,7 @@ test("the active model-authored action owns prose summaries and deterministic op
   expect(editBinding.activityId).toBe(firstBinding.activityId);
   expect(updates[1]?.title).not.toContain("냥, 답변 경로부터");
   expect(updates[1]?.summary).toBe(fullSummary);
-  expect(publicToolTitle(edit.name, edit.args)).toBe("수정: game-handler.ts");
+  expect(publicToolTitle(edit.name, edit.args)).toBe("Edit file: game-handler.ts");
 });
 
 test("unanchored empty ordinary rounds reuse one fallback activity across tool mixtures", async () => {
@@ -689,7 +689,7 @@ test("unanchored assistant prose remains a full summary and never becomes the ac
   await projection.observeTool({ ...call, effectiveToolName: call.name });
 
   expect(updates).toEqual([expect.objectContaining({
-    title: "읽기: game-handler.ts",
+    title: "Read file: game-handler.ts",
     summary,
   })]);
 });
@@ -783,8 +783,8 @@ test("progressive dispatch activity adopts the effective tool title and summary"
   });
 
   expect(updates).toEqual([expect.objectContaining({
-    title: "프로젝트 기록 변경",
-    summary: "프로젝트 기록을 변경하고 있습니다.",
+    title: "Update project records",
+    summary: "Checking the required information with Update project records.",
   })]);
 });
 
@@ -868,7 +868,7 @@ test("Review subjects project their entered Review or Validation activity", asyn
     summary: "계획을 검토했습니다.",
   })).toEqual(expect.objectContaining({
     displayStage: "review",
-    title: "계획 검토",
+    title: "Review plan",
   }));
   expect(await acceptedActivity("record_work_review", {
     subject: "result",
@@ -876,7 +876,7 @@ test("Review subjects project their entered Review or Validation activity", asyn
     summary: "실행 결과를 검토했습니다.",
   })).toEqual(expect.objectContaining({
     displayStage: "review",
-    title: "결과 검토",
+    title: "Review results",
   }));
   expect(await acceptedActivity("record_work_review", {
     subject: "completion",

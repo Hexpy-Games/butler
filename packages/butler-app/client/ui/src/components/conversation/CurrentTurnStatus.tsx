@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy, getAppLocale, interfaceProgressLabel } from "@/app/copy.ts";
 import type { ProgressRow } from "@/app/types.ts";
 import { RollingStatusLine } from "@/libs/design-system";
 import { publicOperationTitle } from "../../../../../../butler-progress-projection/src/index.ts";
@@ -23,18 +25,19 @@ export function CurrentTurnStatus({
   startedAt?: string;
   state?: string;
 }) {
+  useAppLocale();
   const markTheme = useButlerMarkTheme();
   const elapsed = useElapsedTime(startedAt);
   const operationLabel = operation
-    ? operation.safe_label || publicOperationTitle(operation.safe_tool_name)
+    ? interfaceProgressLabel(operation) || publicOperationTitle(operation.safe_tool_name, getAppLocale())
     : undefined;
   const providerRecovery = publicActivity?.bridge_phase ===
     "operational_recovery" ? publicActivity : undefined;
   const waitingForApproval = state === "waiting_for_form";
-  const fullLabel = waitingForApproval ? "허용 여부를 기다리고 있습니다." : operationLabel ?? providerRecovery?.safe_label ??
-    modelRoundWait?.safe_label ?? publicActivity?.safe_label ??
+  const fullLabel = waitingForApproval ? appCopy.interfaceStatus.approvalWaiting : operationLabel ?? (providerRecovery ? interfaceProgressLabel(providerRecovery) : undefined) ??
+    (modelRoundWait ? interfaceProgressLabel(modelRoundWait) : undefined) ?? (publicActivity ? interfaceProgressLabel(publicActivity) : undefined) ??
     phaseLabel ??
-    "응답 생성 중";
+    appCopy.interfaceStatus.generating;
   return (
     <RollingStatusLine
       aria-live="polite"

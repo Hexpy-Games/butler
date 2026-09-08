@@ -360,9 +360,6 @@ export class AppPreferencesStore {
     if (sanitized.timezone) configUserPatch.timezone = next.timezone;
     if (sanitized.language) {
       configUserPatch.language = next.language;
-      if (!readConfigUserSettings(this.butlerData).responseLanguage) {
-        configUserPatch.responseLanguage = next.language;
-      }
     }
     if (shouldPersistModelFallback) {
       configUserPatch.modelFallback = next.model_fallback;

@@ -1,3 +1,4 @@
+import { appCopy } from "../copy.ts";
 import { projectSharedWorkBlocks } from "../../../../../../butler-progress-projection/src/index.ts";
 import type { ProgressRow, WorkBlockView } from "../types.ts";
 import { visibleProgressRows } from "./progress-rows.ts";
@@ -120,7 +121,7 @@ export function projectActivityReadModels(rows: ProgressRow[]): ActivityReadMode
       return [{ type: "work_block", id: row.work_block_id, label: row.work_block_label, state: row.state }];
     }
     if (isToolControlRow(row)) {
-      const toolName = row.safe_tool_name ?? "Tool";
+      const toolName = row.safe_tool_name ?? appCopy.interfaceDetails.tool;
       const inputLabel = row.safe_input_label;
       return [{
         type: "tool_control",
@@ -128,7 +129,7 @@ export function projectActivityReadModels(rows: ProgressRow[]): ActivityReadMode
         inputLabel,
         label: inputLabel && row.safe_tool_name
           ? `${toolName}: ${inputLabel}`
-          : row.safe_tool_name ?? inputLabel ?? "Tool",
+          : row.safe_tool_name ?? inputLabel ?? appCopy.interfaceDetails.tool,
         toolCallId: row.tool_call_id,
         workBlockId: row.work_block_id,
       }];

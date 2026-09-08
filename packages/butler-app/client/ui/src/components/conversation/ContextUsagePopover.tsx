@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import type { SessionSummaryView } from "@/app/types.ts";
 import { ProgressMeter, Stack } from "@/butler-ds";
 
@@ -11,13 +13,14 @@ export function ContextUsagePopover({
 }: {
   context?: SessionSummaryView["context_details"];
 }) {
+  useAppLocale();
   if (!context) return null;
   const percent = Math.round(Math.max(0, Math.min(1, context.ratio)) * 100);
 
   return (
     <Stack gap="sm">
-      <strong>Context window: {percent}% full</strong>
-      <ProgressMeter label="Context window" value={percent} />
+      <strong>{appCopy.interfacePanels.contextWindow}: {appCopy.interfaceTemplates.contextMetric("full", percent)}</strong>
+      <ProgressMeter label={appCopy.interfacePanels.contextWindow} value={percent} />
       <span>
         {formatTokenCount(context.used_tokens)} /{" "}
         {formatTokenCount(context.budget_tokens)}

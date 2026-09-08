@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import type { ActivityReadModel } from "@/app/conversation-progress";
 import { Stack, Typo } from "@/butler-ds";
 
@@ -27,6 +29,7 @@ const detailStyle = {
 } as const;
 
 export function TurnDecisionRow({ decision }: { decision: DecisionReadModel }) {
+  useAppLocale();
   const details = [decision.rationale, decision.nextStep].filter(
     (line): line is string => Boolean(line?.trim()),
   );
@@ -37,7 +40,7 @@ export function TurnDecisionRow({ decision }: { decision: DecisionReadModel }) {
       gap="xs"
       style={rowStyle}
       data-test-class="turn-decision-row"
-      aria-label="Assistant decision"
+      aria-label={appCopy.interfacePanels.assistantDecision}
     >
       <Typo.Body
         as="p"

@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import {
   useId,
   useState,
@@ -26,6 +28,7 @@ export function SpaceDragRow({
   enabled: boolean;
   children: ReactNode;
 }) {
+  useAppLocale();
   const instance = useId();
   const placement = useSpaceDrag((s) =>
     s.target?.instance === instance ? s.target.position : undefined,
@@ -128,7 +131,7 @@ export function SpaceDragRow({
       {children}
       {placement === "group" && (
         <span className={styles.groupHint}>
-          <Typo.Caption>그룹으로 묶기</Typo.Caption>
+          <Typo.Caption>{appCopy.space.groupTogether}</Typo.Caption>
         </span>
       )}
     </div>

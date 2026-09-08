@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import {
   AttachmentList,
   BookOpenText,
@@ -11,6 +12,7 @@ import type { ComposerAttachment } from "./hooks/useFileAttachments";
 import { formatFileSize, messageFileUrl } from "./conversationUtils";
 
 export function ComposerAttachments() {
+  useAppLocale();
   const attachments = useComposerStore((store) => store.attachments);
   const removeAttachment = useComposerStore((store) => store.removeAttachment);
 

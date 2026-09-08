@@ -1,9 +1,11 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { memo, useId, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { ChangedFileDetail } from "@/app/types.ts";
 import { ChangedLineDiff, DisclosureRow, FileText, ListRow } from "@/butler-ds";
 
 function MessageChangedFileRowComponent({ file }: { file: ChangedFileDetail }) {
+  useAppLocale();
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
   const hasLines = file.lines.length > 0;

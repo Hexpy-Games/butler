@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import type { StewardSessionSummaryView } from "@/app/types.ts";
 import type { ReactNode } from "react";
 import { useButlerStore } from "@/app/store.ts";
@@ -24,6 +26,7 @@ export function StewardComposerCapsules({
   children: StewardSessionSummaryView[];
   synthesis?: SynthesisContext;
 }) {
+  useAppLocale();
   const markTheme = useButlerMarkTheme();
   const openSessionObserver = useButlerStore(
     (state) => state.openSessionObserver,
@@ -45,7 +48,7 @@ export function StewardComposerCapsules({
   return (
     <Stack
       align="row"
-      aria-label="진행 중인 작업"
+      aria-label={appCopy.interfaceDetails.activeWork}
       data-test-class="steward-composer-capsules"
       data-alignment="center"
       gap="xs"
@@ -54,7 +57,7 @@ export function StewardComposerCapsules({
     >
       {synthesis ? (
         <PillButton
-          aria-label={`${synthesis.safe_title} 보고 준비 상태`}
+          aria-label={appCopy.interfaceTemplates.reportPreparing(synthesis.safe_title)}
           className={styles.capsule}
           data-truncation="ellipsis"
           data-test-class="steward-synthesis-capsule"
@@ -65,7 +68,7 @@ export function StewardComposerCapsules({
           type="button"
           surface="glass"
         >
-          {`${synthesis.safe_title} 작업에 대한 보고 준비 중`}
+          {appCopy.interfaceTemplates.reportPreparing(synthesis.safe_title)}
         </PillButton>
       ) : null}
       {activeChildren.map((child) => (
@@ -89,12 +92,13 @@ function StewardProgressCapsule({
   mark: ReactNode;
   onOpen: () => void;
 }) {
-  const taskTitle = child.title.trim().replace(/\s+/gu, " ") || "진행 중인 작업";
+  useAppLocale();
+  const taskTitle = child.title.trim().replace(/\s+/gu, " ") || appCopy.interfaceDetails.activeWork;
   const activityTitle = stewardCurrentActivityTitle(child);
   const progress = stewardPlanProgress(child);
   return (
     <PillButton
-      aria-label={`${taskTitle}, ${activityTitle}${progress ? `, 진행도 ${progress}` : ""}, 진행 상세 보기`}
+      aria-label={appCopy.interfaceTemplates.progressDetails(taskTitle, activityTitle, progress)}
       className={styles.capsule}
       data-test-class="steward-progress-capsule"
       icon={mark}

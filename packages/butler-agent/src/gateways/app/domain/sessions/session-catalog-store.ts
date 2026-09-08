@@ -85,6 +85,15 @@ export class AppSessionCatalogStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+
+        (
+          SELECT t.safe_status_label_parameters_json
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS safe_status_label_parameters_json,
+        (SELECT t.safe_status_content_json FROM turns t WHERE t.chat_id = c.id ORDER BY t.rowid DESC LIMIT 1) AS safe_status_content_json,
         (
           SELECT t.safe_error_code
           FROM turns t
@@ -188,6 +197,15 @@ export class AppSessionCatalogStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+
+        (
+          SELECT t.safe_status_label_parameters_json
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS safe_status_label_parameters_json,
+        (SELECT t.safe_status_content_json FROM turns t WHERE t.chat_id = c.id ORDER BY t.rowid DESC LIMIT 1) AS safe_status_content_json,
         (
           SELECT t.safe_error_code
           FROM turns t

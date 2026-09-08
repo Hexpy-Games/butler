@@ -43,6 +43,9 @@ export interface SessionSummaryRow {
   last_message_preview: string | null;
   active_turn_state: TurnState | null;
   safe_status_label: string | null;
+  safe_status_label_key?: string | null;
+  safe_status_label_parameters_json?: string | null;
+  safe_status_content_json?: string | null;
   active_turn_safe_error_code: string | null;
   pinned: number;
   archived: number;
@@ -105,6 +108,7 @@ export interface TurnRow {
   user_message_id: string | null;
   state: TurnState;
   safe_status_label: string;
+  safe_status_label_key?: string | null;
   safe_error_code: string | null;
   retryable: number;
   cancellable: number;

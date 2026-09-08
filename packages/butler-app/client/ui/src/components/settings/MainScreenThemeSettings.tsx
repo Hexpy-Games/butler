@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
@@ -17,6 +18,7 @@ function customColorsFrom(
 }
 
 export function MainScreenThemeSettings() {
+  useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);

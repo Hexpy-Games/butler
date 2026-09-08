@@ -1,8 +1,8 @@
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useMemo, useState } from "react";
 import {
   Button,
   ButtonContainer,
-  Clock3,
   SidebarShell,
   SidebarTrafficSpace,
   Stack,
@@ -23,6 +23,7 @@ import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 import styles from "./SpaceSidebar.module.css";
 
 export function SpaceSidebar() {
+  const locale = useAppLocale();
   const navigation = useButlerStore((s) => s.navigation);
   const leftOpen = useButlerStore((s) => s.leftOpen);
   const tab = useOrganization((s) => s.tab);
@@ -33,7 +34,7 @@ export function SpaceSidebar() {
   const availableUndo = smartNotice?.undoToken ?? (undoRevision === navigation.space.revision ? undoToken : null);
   const pending = useOrganization((s) => s.pending);
   const revealPath = useOrganization((s) => s.revealPath);
-  const rows = useMemo(() => projectSpace(navigation), [navigation]);
+  const rows = useMemo(() => projectSpace(navigation), [navigation, locale]);
   const [visibleCount, setVisibleCount] = useState(30);
   const roots =
     tab === "all"
@@ -53,13 +54,13 @@ export function SpaceSidebar() {
           ) : <SpaceBrand />
         }
         className={styles.sidebar}
-        ariaLabel="스페이스 탐색"
+        ariaLabel={appCopy.space.navigation}
         scrollHeader={<SpaceHeader rows={rows} />}
         stickyHeader={<SpaceBrowseHeader />}
         footer={
           <Stack gap="1">
             {error && <Typo.Caption role="alert">{error}</Typo.Caption>}
-            {smartNotice && <Typo.Caption role="status">{smartNotice.title} 그룹으로 정리했습니다.</Typo.Caption>}
+            {smartNotice && <Typo.Caption role="status">{appCopy.space.organized(smartNotice.title)}</Typo.Caption>}
             {availableUndo && (
               <ButtonContainer size="sm">
                 <Button
@@ -72,15 +73,14 @@ export function SpaceSidebar() {
                       .mutate({ action: "undo", undoToken: availableUndo });
                   }}
                 >
-                  목록 변경 되돌리기
-                </Button>
+                  {appCopy.space.undo}</Button>
               </ButtonContainer>
             )}
             <SidebarSettingsItem />
           </Stack>
         }
       >
-        <Stack gap="1" as="nav" aria-label="대화 목록">
+        <Stack gap="1" as="nav" aria-label={appCopy.space.conversationList}>
           {roots
             .slice(
               0,
@@ -103,11 +103,6 @@ export function SpaceSidebar() {
             />
           )}
           {tab === "all" && <SpaceRootDrop rows={rows} />}
-          {tab === "running" && (
-            <Typo.Caption className={styles.muted}>
-              <Clock3 /> 확인이 필요한 대화도 포함합니다.
-            </Typo.Caption>
-          )}
         </Stack>
       </SidebarShell>
       <SpaceDialogs rows={rows} />

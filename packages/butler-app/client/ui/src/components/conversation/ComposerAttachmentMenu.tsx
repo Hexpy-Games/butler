@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -20,6 +21,7 @@ import { useComposerStore } from "./composerStore";
 import { ComposerProjectDocumentMenu } from "./ComposerProjectDocumentMenu";
 
 export function ComposerAttachmentMenu() {
+  useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const navigation = useButlerStore((state) => state.navigation);
   const settings = useButlerStore((state) => state.settings);

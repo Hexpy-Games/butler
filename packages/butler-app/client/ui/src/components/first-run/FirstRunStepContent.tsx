@@ -1,3 +1,4 @@
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import {
   firstRunCopy,
   type FirstRunLanguage,
@@ -64,6 +65,7 @@ export function FirstRunStepContent({
   onRetryModelSave,
   onRetryInstall,
 }: FirstRunStepContentProps) {
+  useAppLocale();
   if (step === "language") {
     return (
       <SetupWizardContent>
@@ -79,8 +81,8 @@ export function FirstRunStepContent({
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              <SelectItem value="ko">한국어</SelectItem>
-              <SelectItem value="en">English</SelectItem>
+              <SelectItem value="ko">{appCopy.settings.options.korean}</SelectItem>
+              <SelectItem value="en">{appCopy.settings.options.english}</SelectItem>
             </SelectGroup>
           </SelectContent>
         </Select>

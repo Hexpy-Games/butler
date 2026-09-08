@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useAppLocale } from "@/app/copy.ts";
+import { useEffect, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import {
   getNativeNotificationStatus,
+  nativeNotificationStatusDetails,
+  nativeNotificationSettingsLabel,
   openNativeNotificationSettings,
   testDesktopNotification,
   type NativeNotificationStatus,
@@ -17,9 +20,10 @@ import {
 } from "@/butler-ds";
 
 export function NativeNotificationStatusPanel() {
+  useAppLocale();
   const [status, setStatus] = useState<NativeNotificationStatus | null>(null);
   const [busy, setBusy] = useState(false);
-  const statusText = useMemo(() => statusLabel(status), [status]);
+  const statusText = statusLabel(status);
   const copy = appCopy.settings.nativeNotifications;
 
   useEffect(() => {
@@ -40,18 +44,18 @@ export function NativeNotificationStatusPanel() {
       const result = await testDesktopNotification();
       setStatus(result.status);
       if (result.shown) {
-        notifyStatus("테스트 알림을 보냈습니다.", {
+        notifyStatus(appCopy.interfaceStatus.notificationSent, {
           id: "native-notification-test",
           tone: "ok",
         });
       } else {
-        notifyStatus(result.error ?? "운영체제가 알림을 표시하지 않았습니다.", {
+        notifyStatus(result.error ?? appCopy.interfaceStatus.notificationHidden, {
           id: "native-notification-test",
           tone: "error",
         });
       }
     } catch (error) {
-      notifyError(error, "테스트 알림 실패", {
+      notifyError(error, appCopy.interfaceStatus.notificationFailed, {
         id: "native-notification-test",
       });
     } finally {
@@ -65,13 +69,13 @@ export function NativeNotificationStatusPanel() {
       const result = await openNativeNotificationSettings();
       setStatus(result.status);
       if (!result.opened) {
-        notifyStatus(result.error ?? "운영체제 알림 설정을 열 수 없습니다.", {
+        notifyStatus(result.error ?? appCopy.interfaceStatus.notificationSettingsUnavailable, {
           id: "native-notification-settings",
           tone: "error",
         });
       }
     } catch (error) {
-      notifyError(error, "알림 설정 열기 실패", {
+      notifyError(error, appCopy.interfaceStatus.notificationSettingsFailed, {
         id: "native-notification-settings",
       });
     } finally {
@@ -81,8 +85,8 @@ export function NativeNotificationStatusPanel() {
 
   return (
     <SettingsField
-      label="OS 알림 상태"
-      description={status?.details ?? copy.status.checking}
+      label={appCopy.interfaceStatus.notificationStatus}
+      description={status ? nativeNotificationStatusDetails(status.details_code) : copy.status.checking}
       control={
         <Stack align="row" gap="xs" wrap>
           <Button
@@ -93,8 +97,7 @@ export function NativeNotificationStatusPanel() {
             onClick={() => void runTestNotification()}
           >
             <ShieldQuestion size={15} />
-            테스트
-          </Button>
+            {appCopy.interfaceStatus.test}</Button>
           {status?.can_open_settings ? (
             <Button
               type="button"
@@ -104,7 +107,7 @@ export function NativeNotificationStatusPanel() {
               onClick={() => void openSystemSettings()}
             >
               <Settings size={15} />
-              {status.settings_label ?? copy.settings.fallback}
+              {nativeNotificationSettingsLabel(status.settings_target ?? null) ?? copy.settings.fallback}
             </Button>
           ) : null}
         </Stack>
@@ -122,11 +125,11 @@ export function NativeNotificationStatusPanel() {
 }
 
 function statusLabel(status: NativeNotificationStatus | null): string {
-  if (!status) return "확인 중";
+  if (!status) return appCopy.interfaceStatus.checking;
   if (!status.supported || status.permission === "unsupported") {
-    return `${platformLabel(status.platform)} · 지원 안 함`;
+    return `${platformLabel(status.platform)} · ${appCopy.interfaceStatus.unsupported}`;
   }
-  return `${platformLabel(status.platform)} · 권한 상태 확인 필요`;
+  return `${platformLabel(status.platform)} · ${appCopy.interfaceStatus.permissionCheck}`;
 }
 
 function platformLabel(platform: string): string {
@@ -134,5 +137,5 @@ function platformLabel(platform: string): string {
   if (platform === "win32") return "Windows";
   if (platform === "linux") return "Linux";
   if (platform === "browser") return "Browser";
-  return platform || "Unknown";
+  return platform || appCopy.interfaceStatus.unknown;
 }

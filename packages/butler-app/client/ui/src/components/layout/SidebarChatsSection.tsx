@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Collapse, Expand, MessageSquarePlus } from "@/butler-ds";
 import { ButtonContainer, IconButton } from "@/butler-ds";
 import { SidebarSection } from "@/components/layout/SidebarSection.tsx";
@@ -8,6 +9,7 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 
 export function SidebarChatsSection() {
+  useAppLocale();
   const chatsCollapsed = useButlerStore((state) => state.sidebarChatsCollapsed);
   const setChatsCollapsed = useButlerStore(
     (state) => state.setSidebarChatsCollapsed,

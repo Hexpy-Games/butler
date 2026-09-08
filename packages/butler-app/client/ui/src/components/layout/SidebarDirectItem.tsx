@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { SidebarItem } from "@/components/layout/SidebarItem.tsx";
 import { useButlerStore } from "@/app/store.ts";
 import type { IconElement } from "@/app/types.ts";
@@ -13,6 +14,7 @@ export function SidebarDirectItem({
   label,
   title,
 }: SidebarDirectItemProps) {
+  useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const view = useButlerStore((state) => state.view);
   const openNewChat = useButlerStore((state) => state.openNewChat);

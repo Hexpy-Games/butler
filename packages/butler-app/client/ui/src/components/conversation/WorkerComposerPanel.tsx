@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import {
   groupWorkerActivities,
@@ -22,6 +23,7 @@ function activityRow(worker: WorkerActivitySummary, depth = 0) {
 }
 
 export function WorkerComposerPanel() {
+  useAppLocale();
   const workers = useComposerStore((store) => store.workers);
   const groups = groupWorkerActivities(workers).slice(0, 4);
 
@@ -58,5 +60,5 @@ function workerCollapsedSummary(
   if (!first) return undefined;
   const summary = workerActivityCollapsedSummaryLine(first);
   const remaining = count - 1;
-  return remaining > 0 ? `${summary} 외 ${remaining}개` : summary;
+  return remaining > 0 ? appCopy.interfaceTemplates.more(summary, remaining) : summary;
 }

@@ -3030,14 +3030,14 @@ function writeLocalModelConfig(
   }), "utf8");
 }
 
-test("runtime messages resolve from response language before interface language", () => {
+test("runtime messages resolve independently of interface language", () => {
   expect(resolveRuntimeMessageLanguage({ butlerData: tempDir })).toBe("en");
 
   writeFileSync(join(tempDir, "butler.config.json"), JSON.stringify({
     user: { language: "ko" },
   }), "utf8");
 
-  expect(resolveRuntimeMessageLanguage({ butlerData: tempDir })).toBe("ko");
+  expect(resolveRuntimeMessageLanguage({ butlerData: tempDir })).toBe("en");
   writeFileSync(join(tempDir, "butler.config.json"), JSON.stringify({
     user: { language: "ko", responseLanguage: "en" },
   }), "utf8");

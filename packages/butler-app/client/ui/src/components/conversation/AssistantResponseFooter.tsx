@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Copy, MessageFooter, MessageStatusRow, Tooltip, Typo } from "@/butler-ds";
 import type { ReactNode } from "react";
 import { appCopy } from "@/app/copy.ts";
@@ -33,6 +34,7 @@ export function AssistantResponseFooter({
   suppressTerminalStatus?: boolean;
   actions?: ReactNode;
 }) {
+  useAppLocale();
   const markTheme = useButlerMarkTheme();
   const terminalStatus = terminalAssistantStatus(status);
   return (
@@ -45,13 +47,13 @@ export function AssistantResponseFooter({
           <button
             type="button"
             onClick={onCopy}
-            aria-label="Copy assistant response"
+            aria-label={appCopy.interfacePanels.copyResponse}
           >
             <Copy size={14} />
           </button>
         </Tooltip>
         {actions}
-        {meta?.durationLabel && <span>Worked for {meta.durationLabel}</span>}
+        {meta?.durationLabel && <span>{appCopy.interfaceTemplates.workedFor(meta.durationLabel)}</span>}
         {meta?.timeLabel && (
           <time dateTime={meta.completedAtIso ?? undefined}>{meta.timeLabel}</time>
         )}
@@ -75,10 +77,10 @@ function terminalAssistantStatus(status?: string): {
   label: string;
   state: "complete" | "failed" | "cancelled";
 } | null {
-  if (status === "failed") return { label: "답변 실패", state: "failed" };
+  if (status === "failed") return { label: appCopy.interfaceDetails.answerFailed, state: "failed" };
   if (status === "cancelled") {
-    return { label: "답변 중지", state: "cancelled" };
+    return { label: appCopy.interfaceDetails.answerStopped, state: "cancelled" };
   }
   if (status && NON_TERMINAL_ASSISTANT_STATUSES.has(status)) return null;
-  return { label: "답변 완료", state: "complete" };
+  return { label: appCopy.interfaceDetails.answerDone, state: "complete" };
 }

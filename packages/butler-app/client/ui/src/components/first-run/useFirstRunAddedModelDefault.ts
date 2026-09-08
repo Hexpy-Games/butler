@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { api } from "@/app/api.ts";
 import {
@@ -19,7 +20,7 @@ function selectedModelWorkerProfiles(
       : [
           {
             id: "default",
-            label: "Default",
+            label: appCopy.interfaceDetails.default,
             enabled: true,
             job: { kind: "builtin", job: "coding" },
             model: targetModel.model_ref,

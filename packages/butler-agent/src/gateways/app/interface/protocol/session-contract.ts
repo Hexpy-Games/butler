@@ -39,6 +39,7 @@ export interface WorkStreamSummaryView {
 }
 
 export interface TurnProgressSnapshotView {
+  summary_reference?: import("../../../../../../butler-i18n/src/index.ts").InterfaceTextReference;
   summary?: string;
   updated_at?: string;
   turn_id?: string;

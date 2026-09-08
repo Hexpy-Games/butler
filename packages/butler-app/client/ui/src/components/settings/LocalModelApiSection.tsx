@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Button, RefreshCcw, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { LocalModelDiscoveryRequest } from "@/app/types.ts";
@@ -27,6 +28,7 @@ export function LocalModelApiSection({
   discovering,
   onDiscover,
 }: LocalModelApiSectionProps) {
+  useAppLocale();
   const copy = appCopy.settings.localModels;
 
   return (

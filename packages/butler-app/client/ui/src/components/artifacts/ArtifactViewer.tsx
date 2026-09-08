@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
@@ -41,6 +42,7 @@ export function ArtifactViewer({
   artifact: SessionArtifactSummary;
   onBack: () => void;
 }) {
+  useAppLocale();
   const url = artifactUrl(artifact);
   const mode = artifactPreviewMode(artifact);
   const [text, setText] = useState("");

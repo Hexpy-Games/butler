@@ -1344,7 +1344,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       await get().refreshSessionView(parentSessionId);
       return true;
     } catch (error) {
-      notifyError(error, "Steward stop failed", { id: `steward-stop-${relationId}` });
+      notifyError(error, appCopy.interfaceFeedback.stewardStopFailed, { id: `steward-stop-${relationId}` });
       return false;
     }
   },
@@ -1361,7 +1361,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       await get().refreshSessionView(parentSessionId);
       return true;
     } catch (error) {
-      notifyError(error, "Steward resume failed", { id: `steward-resume-${relationId}` });
+      notifyError(error, appCopy.interfaceFeedback.stewardResumeFailed, { id: `steward-resume-${relationId}` });
       return false;
     }
   },
@@ -1465,7 +1465,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       }
       return data;
     } catch (error) {
-      notifyError(error, "Plan decision failed", {
+      notifyError(error, appCopy.interfaceFeedback.planDecisionFailed, {
         id: `plan-decision-${sessionId}-${planId}`,
       });
       return null;
@@ -1616,7 +1616,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       }
       controls.onAccepted?.();
     } catch (error) {
-      notifyError(error, "Message queue failed", {
+      notifyError(error, appCopy.interfaceFeedback.queueFailed, {
         id: `queue-message-${targetChatId}`,
       });
     }
@@ -1647,7 +1647,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         set({ sessionQueue: data.queued_messages });
       controls.onAccepted?.();
     } catch (error) {
-      notifyError(error, "Queued message update failed", {
+      notifyError(error, appCopy.interfaceFeedback.queueUpdateFailed, {
         id: `update-queued-message-${queuedMessageId}`,
       });
     }
@@ -1668,7 +1668,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       if (get().activeChatId === targetChatId)
         set({ sessionQueue: data.queued_messages });
     } catch (error) {
-      notifyError(error, "Queued message delete failed", {
+      notifyError(error, appCopy.interfaceFeedback.queueDeleteFailed, {
         id: `delete-queued-message-${queuedMessageId}`,
       });
     }
@@ -1678,7 +1678,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     const clientMessageId = browserRandomId("client");
     const clientTurnId = clientTurnIdFromMessageId(clientMessageId);
     const attachments = controls.attachments ?? [];
-    const messageTitle = text.trim() || attachments[0]?.safe_name || "New chat";
+    const messageTitle = text.trim() || attachments[0]?.safe_name || appCopy.interfaceFeedback.newChat;
     const startedAt = new Date().toISOString();
     const initialChatId = get().activeChatId;
     const sendOperationId = `send-${clientMessageId}`;
@@ -1757,7 +1757,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
             latest_turn_subsession_result: undefined,
             latest_progress: {
               turn_id: clientTurnId,
-              summary: "Thinking",
+              summary: appCopy.interfaceFeedback.thinking,
               state: "thinking",
               updated_at: startedAt,
               safe_progress_rows: [
@@ -1765,7 +1765,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
                   id: `thinking-${clientMessageId}`,
                   kind: "thinking",
                   state: "thinking",
-                  safe_label: "Thinking",
+                  safe_label: appCopy.interfaceFeedback.thinking,
                   created_at: startedAt,
                 },
               ],
@@ -1955,7 +1955,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
             ? null
             : state.optimisticSessionStart,
       }));
-      notifyError(error, "Message send failed", {
+      notifyError(error, appCopy.interfaceFeedback.sendFailed, {
         id: `send-message-${targetChatId}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -1997,7 +1997,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         return;
       }
       if (!refreshed) {
-        notifyError(new Error("Session view refresh failed."), "Stop failed", {
+        notifyError(new Error("Session view refresh failed."), appCopy.interfaceFeedback.stopFailed, {
           id: "turn-stop",
         });
         set({ status: { label: "ready", tone: "ok" } });
@@ -2051,7 +2051,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       });
     } catch (error) {
       if (get().activeChatId === activeChatId) {
-        notifyError(error, "Stop failed", { id: "turn-stop" });
+        notifyError(error, appCopy.interfaceFeedback.stopFailed, { id: "turn-stop" });
         set({ status: { label: "ready", tone: "ok" } });
       } else {
         settleStoppingStatus();
@@ -2077,7 +2077,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       set({ messages: [], status: { label: "ready", tone: "ok" } });
       return true;
     } catch (error) {
-      notifyError(error, "Project creation failed", { id: "project-create" });
+      notifyError(error, appCopy.interfaceFeedback.projectCreationFailed, { id: "project-create" });
       set({ status: { label: "ready", tone: "ok" } });
       return false;
     } finally {
@@ -2089,9 +2089,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     if (!canSelectProjectFolder()) {
       notifyError(
         new Error(
-          "Project folder picker is only available in the desktop app.",
+          appCopy.interfaceFeedback.desktopFolderOnly,
         ),
-        "Project folder failed",
+        appCopy.interfaceFeedback.projectFolderFailed,
         {
           id: "project-folder-picker-unavailable",
         },
@@ -2125,7 +2125,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         set({ status: { label: "ready", tone: "ok" } });
         return;
       }
-      notifyError(error, "Project folder failed", { id: "project-folder" });
+      notifyError(error, appCopy.interfaceFeedback.projectFolderFailed, { id: "project-folder" });
       set({ status: { label: "ready", tone: "ok" } });
     } finally {
       set({ creatingProject: false });
@@ -2163,7 +2163,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       }
       await get().refreshNavigation();
     } catch (error) {
-      notifyError(error, "Project action failed", {
+      notifyError(error, appCopy.interfaceFeedback.projectActionFailed, {
         id: `project-action-${project.id}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -2183,7 +2183,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         if (get().activeChatId === session.id) get().openNewChat();
       }
     } catch (error) {
-      notifyError(error, "Session action failed", {
+      notifyError(error, appCopy.interfaceFeedback.sessionActionFailed, {
         id: `session-action-${session.id}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -2204,7 +2204,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         status: { label: "project renamed", tone: "ok" },
       });
     } catch (error) {
-      notifyError(error, "Rename failed", {
+      notifyError(error, appCopy.interfaceFeedback.renameFailed, {
         id: `project-rename-${project.id}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -2225,7 +2225,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         status: { label: "session renamed", tone: "ok" },
       });
     } catch (error) {
-      notifyError(error, "Rename failed", {
+      notifyError(error, appCopy.interfaceFeedback.renameFailed, {
         id: `session-rename-${session.id}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -2260,7 +2260,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       set({ status: { label: "ready", tone: "ok" } });
     } catch (error) {
       await get().reloadMessages(get().activeChatId);
-      notifyError(error, "Retry failed", { id: `turn-retry-${turnId}` });
+      notifyError(error, appCopy.interfaceFeedback.retryFailed, { id: `turn-retry-${turnId}` });
       set({ status: { label: "ready", tone: "ok" } });
     } finally {
       set({ retryingTurnId: null });
@@ -2283,7 +2283,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       set({ status: { label: "ready", tone: "ok" } });
     } catch (error) {
       await get().reloadMessages(get().activeChatId);
-      notifyError(error, "Retry with current settings failed", {
+      notifyError(error, appCopy.interfaceFeedback.retryCurrentFailed, {
         id: `turn-retry-current-${turnId}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -2310,7 +2310,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       }
       await get().refreshSessionSummary(get().activeChatId);
     } catch (error) {
-      notifyError(error, "Worker control failed", {
+      notifyError(error, appCopy.interfaceFeedback.workerControlFailed, {
         id: `worker-control-${workerId}`,
       });
       set({ status: { label: "ready", tone: "ok" } });

@@ -1,8 +1,10 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { ComposerCardCompactPreview } from "@/butler-ds";
 import { useComposerStore } from "./composerStore";
 
 export function ComposerCompactPreview() {
+  useAppLocale();
   const large = useComposerStore((store) => store.large);
   const setEngaged = useComposerStore((store) => store.setEngaged);
   const text = useComposerStore((store) => store.text);

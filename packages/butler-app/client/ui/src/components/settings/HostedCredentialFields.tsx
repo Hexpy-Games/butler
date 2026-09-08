@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Input, SettingsField, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { ModelCatalogView, ProviderAuthMethod } from "@/app/types.ts";
@@ -54,6 +55,7 @@ export function HostedCredentialFields({
   onCredentialLabelChange,
   authMethods,
 }: HostedCredentialFieldsProps) {
+  useAppLocale();
   const copy = appCopy.settings.modelManagement;
   const credentials = providerCredentials(modelCatalog, providerId);
   const selectedCredential = credentials.find((item) => item.id === credentialId);

@@ -1,10 +1,11 @@
 import type { DurableWorkView, WorkStage } from "../work/index.ts";
+import { formatInterfaceText, getAppCopy, type InterfaceTextReference, type InterfaceContentReferences } from "../../../../../butler-i18n/src/index.ts";
 import { sanitizePublicText } from "../../events/turn-events.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import {
   safeCommandActionLabel,
   safeCommandActionIdentity,
-  safeFileActionLabel,
+  safeFileActionTarget,
 } from "../../output/progress/arguments.ts";
 import { normalizeGuidedToolCall } from "../../tools/tool-support.ts";
 import { publicWorkActionDisplay } from "./work-action-display.ts";
@@ -17,37 +18,26 @@ export type GuidedActivityToolCall = {
 export function publicToolTitle(
   name: string,
   args: Record<string, unknown> = {},
+  locale: "en-US" | "ko-KR" = "en-US",
 ): string {
-  if (name === "web_search") return "웹 검색";
-  if (name === "web_read") return "웹 문서 읽기";
-  if (name === "read_file") return safeFileActionLabel(name, args) || "파일 읽기";
-  if (name === "list_files") return "작업공간 파일 찾기";
-  if (name === "grep_files") return "작업공간 검색";
-  if (name === "write_file" || name === "edit_file") {
-    return safeFileActionLabel(name, args) || "파일 변경";
-  }
-  if (name === "tool_search") return "사용 가능한 도구 찾기";
-  if (name === "tool_describe") return "도구 사용법 확인";
+  return formatInterfaceText(publicToolTitleReference(name, args), locale);
+}
+
+export function publicToolTitleReference(name: string, args: Record<string, unknown> = {}): InterfaceTextReference {
   if (name === "tool_call") {
     const normalized = normalizeGuidedToolCall({ toolName: name, args });
-    return normalized.name === name
-      ? "도구 실행"
-      : publicToolTitle(normalized.name, normalized.args);
+    if (normalized.name !== name) return publicToolTitleReference(normalized.name, normalized.args);
   }
-  if (name === "run_command") {
-    return safeCommandActionLabel(args) || "명령 실행";
-  }
+  let toolName = name;
   if (name.startsWith("project_ledger")) {
-    return isProjectLedgerMutation(name) ? "프로젝트 기록 변경" : "프로젝트 기록 확인";
+    toolName = isProjectLedgerMutation(name) ? "project_ledger_change" : "project_ledger_read";
   }
-  if (name === "start_work") return "요청 내용 확인";
-  if (name === "continue_work") return "진행 내용 확인";
-  if (name === "replace_work_plan") return "실행 계획 수립";
-  if (name === "record_work_checkpoint") return "진행 상태 기록";
-  if (name === "record_work_review") return reviewTitle(args.subject);
-  if (name === "record_work_disposition") return "완료 상태 기록";
-  if (isDurableWorkTool(name)) return "작업 상태 변경";
-  return "도구 사용";
+  if (name === "record_work_review") toolName = args.subject === "plan" ? "plan_review" : args.subject === "completion" ? "completion_review" : name;
+  if (!getAppCopy().guided.tools[toolName] && isDurableWorkTool(name)) toolName = "work_tool";
+  const target = name === "read_file" || name === "edit_file" || name === "write_file"
+    ? safeFileActionTarget(name, args)
+    : name === "run_command" ? safeCommandActionLabel(args) : "";
+  return { key: "toolTitle", parameters: { toolName, ...(target ? { target } : {}) } };
 }
 
 export function activityContent(
@@ -60,15 +50,15 @@ export function activityContent(
   summary: string;
   rationale?: string;
   nextStep?: string;
+  interfaceContent?: InterfaceContentReferences;
 } {
   if (first?.name === "start_work" || first?.name === "continue_work") {
     const continuing = first.name === "continue_work";
     return {
       ...(continuing ? {} : { displayStage: "conception" as const }),
-      title: continuing ? "진행 내용 확인" : "요청 내용 확인",
-      summary: continuing
-        ? "이전에 진행하던 내용과 현재 상태를 확인하고 있습니다."
-        : "요청하신 내용과 필요한 결과를 정리하고 있습니다.",
+      title: publicToolTitle(first.name),
+      summary: continuing ? getAppCopy().guided.checkingPrevious : getAppCopy().guided.checkingRequest,
+      interfaceContent: { title: publicToolTitleReference(first.name), summary: { key: continuing ? "checkingPrevious" : "checkingRequest" } },
     };
   }
   if (first?.name === "replace_work_plan") {
@@ -76,8 +66,9 @@ export function activityContent(
       publicToolTitle(first.name);
     return {
       displayStage: "planning",
-      title: "실행 계획 수립",
+      title: publicToolTitle(first.name),
       summary,
+      interfaceContent: { title: publicToolTitleReference(first.name), ...(!publicText(first.args.objective) && !publicText(assistantText) ? { summary: publicToolTitleReference(first.name) } : {}) },
       nextStep: firstPlanAction(first.args),
     };
   }
@@ -89,6 +80,7 @@ export function activityContent(
       displayStage: completionValidation ? "validation" : "review",
       title: reviewTitle(first.args.subject),
       summary,
+      interfaceContent: { title: publicToolTitleReference(first.name, first.args), ...(!publicText(first.args.summary) && !publicText(assistantText) ? { summary: publicToolTitleReference(first.name, first.args) } : {}) },
       nextStep: firstCorrection(first.args),
     };
   }
@@ -99,6 +91,7 @@ export function activityContent(
       displayStage: "execution",
       title: checkpointTitle(),
       summary,
+      interfaceContent: { title: publicToolTitleReference(first.name), ...(!publicText(first.args.public_summary) && !publicText(assistantText) ? { summary: publicToolTitleReference(first.name) } : {}) },
       nextStep: publicText(first.args.next_step),
     };
   }
@@ -109,27 +102,32 @@ export function activityContent(
   const commandLabel = commandActionLabel(calls);
   const authoredSummary = publicText(assistantText);
   const summary = authoredSummary || commandLabel || toolSummary ||
-    "도구 작업을 진행하고 있습니다";
+    getAppCopy().guided.toolWorking;
   return {
     title,
     summary: commandLabel && !authoredSummary
       ? summary
       : distinctSummary(title, summary, toolSummary),
+    interfaceContent: {
+      title: new Set(titles).size === 1 && calls[0] ? publicToolTitleReference(calls[0].name, calls[0].args) : { key: "toolTitle", parameters: { toolName: "tool_work" } },
+      ...(!authoredSummary && !commandLabel ? { summary: { key: "toolsSummary" as const, parameters: { tools: calls.map(call => { const ref = publicToolTitleReference(call.name, call.args); return { name: ref.parameters?.toolName ?? "fallback", target: ref.parameters?.target }; }) } } } : {}),
+    },
   };
 }
 
 /** Presentation of the selected Work, never a new lifecycle transition. */
 export function resumedWorkActivity(work: DurableWorkView): {
-  displayStage?: WorkStage; title: string; summary: string;
+  displayStage?: WorkStage; title: string; summary: string; interfaceContent?: InterfaceContentReferences;
 } {
   const activeKey = work.actionProgress.find((action) => action.status === "active")?.actionKey;
   const activeAction = work.currentPlan?.actions.find((action) => action.actionKey === activeKey);
   const title = activeAction
-    ? publicWorkActionDisplay(activeAction, activeAction.description || "진행 내용 확인")
-    : "진행 내용 확인";
+    ? publicWorkActionDisplay(activeAction, activeAction.description || publicToolTitle("continue_work"))
+    : publicToolTitle("continue_work");
   return {
     displayStage: work.currentStage,
     title: boundedTitle(title),
+    interfaceContent: activeAction ? undefined : { title: publicToolTitleReference("continue_work") },
     summary: publicText(work.latestCheckpoint?.publicSummary) ||
       publicText(activeAction?.description) || publicText(work.objective),
   };
@@ -150,9 +148,7 @@ export function publicText(value: unknown): string {
 }
 
 export function conceptionSummary(objective: string): string {
-  return objective
-    ? `요청의 목표와 범위를 확인했습니다: ${objective}`
-    : "요청의 목표와 범위를 확인했습니다.";
+  return getAppCopy().guided.conceptionSummary(objective);
 }
 
 export function ordinaryGroupSignature(calls: GuidedActivityToolCall[]): string {
@@ -168,11 +164,11 @@ export function ordinaryGroupKey(call: GuidedActivityToolCall): string {
 export function distinctSummary(
   title: string,
   summary: string,
-  fallback = "작업에 필요한 정보를 확인하고 있습니다.",
+  fallback = getAppCopy().guided.checkingInformation,
 ): string {
   if (normalizeText(title) !== normalizeText(summary)) return summary;
   if (fallback && normalizeText(title) !== normalizeText(fallback)) return fallback;
-  return `${summary} 작업을 진행하고 있습니다.`;
+  return getAppCopy().guided.workInProgress(summary);
 }
 
 export function boundedTitle(text: string): string {
@@ -230,21 +226,15 @@ function firstCorrection(args: Record<string, unknown>): string | undefined {
 }
 
 function reviewTitle(subject: unknown): string {
-  if (subject === "plan") return "계획 검토";
-  if (subject === "completion") return "완료 검토";
-  return "결과 검토";
+  return publicToolTitle("record_work_review", { subject });
 }
 
 function checkpointTitle(): string {
-  return "작업 진행 확인";
+  return publicToolTitle("record_work_checkpoint");
 }
 
 export function toolActivitySummary(name: string, title: string): string {
-  if (name === "tool_search") return "작업에 필요한 도구를 찾고 있습니다.";
-  if (name === "tool_describe") return "선택한 도구의 사용 방법을 확인하고 있습니다.";
-  if (title === "프로젝트 기록 변경") return "프로젝트 기록을 변경하고 있습니다.";
-  if (title === "프로젝트 기록 확인") return "프로젝트 기록을 확인하고 있습니다.";
-  return `${title} 작업을 진행하고 있습니다.`;
+  return getAppCopy().guided.workInProgress(title);
 }
 
 function isProjectLedgerMutation(name: string): boolean {
@@ -263,9 +253,9 @@ function ordinaryActivityTitle(
   if (
     new Set(calls.map((call) => call.name)).size === 1 &&
     calls[0]?.name === "run_command"
-  ) return titles[0] || "명령 실행";
-  if (unique.length === 1) return unique[0] || "도구 작업";
-  return "도구 작업";
+  ) return titles[0] || publicToolTitle("run_command");
+  if (unique.length === 1) return unique[0] || getAppCopy().guided.tools.tool_work;
+  return getAppCopy().guided.tools.tool_work;
 }
 
 function ordinaryToolSummary(
@@ -274,15 +264,10 @@ function ordinaryToolSummary(
 ): string {
   const names = new Set(calls.map((call) => call.name));
   if (names.size === 1 && calls[0]?.name === "run_command") {
-    return commandActionLabel(calls) ?? "작업 공간에서 필요한 명령을 실행하고 있습니다.";
-  }
-  if (names.size === 1 && calls[0]) {
-    return toolActivitySummary(calls[0].name, titles[0] || "도구 작업");
+    return commandActionLabel(calls) ?? getAppCopy().guided.commandExecuting;
   }
   const grouped = groupedToolLabels(titles);
-  return grouped
-    ? `${grouped} 도구로 필요한 정보를 확인하고 있습니다.`
-    : "필요한 도구로 작업을 진행하고 있습니다.";
+  return getAppCopy().guided.toolsSummary(grouped);
 }
 
 function commandActionLabel(

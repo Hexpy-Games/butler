@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import type { OperationOutputPresentation, OperationOutputSection } from "./operationOutputPresentation";
 
 type OutputRecord = Record<string, unknown>;
@@ -8,29 +9,29 @@ const ENVELOPE_KEYS = ["output", "result", "data", "work", "text", "stdout", "st
 /** Display public content fields, never dump receipts, identities or raw JSON. */
 export function presentStructuredOperation(value: OutputRecord): OperationOutputPresentation | null {
   if (value.pending === true || value.authority_pending === true) {
-    return { kind: "summary", content: "아직 실행하지 않았습니다. 허용 여부를 기다리고 있습니다." };
+    return { kind: "summary", content: appCopy.interfaceStatus.notExecuted };
   }
   const error = record(value.error);
   if (value.ok === false && (error?.message || typeof value.error === "string")) {
-    return { kind: "sections", summary: "도구 실행 실패", sections: [{
-      title: "실패 원인", content: text(error?.message) || text(value.error),
+    return { kind: "sections", summary: appCopy.interfaceStatus.toolFailed, sections: [{
+      title: appCopy.interfaceStatus.failureReason, content: text(error?.message) || text(value.error),
     }] };
   }
   const sections = publicSections(value);
   if (sections.length === 0) return null;
-  return { kind: "sections", summary: value.ok === false ? "도구 실행 실패" : `조회 결과 · ${sections.length}개`, sections };
+  return { kind: "sections", summary: value.ok === false ? appCopy.interfaceStatus.toolFailed : appCopy.interfaceStatus.countSummary("results", sections.length), sections };
 }
 
 function publicSections(value: OutputRecord): OperationOutputSection[] {
-  const title = text(value.title) || text(value.label) || text(value.display_name) || text(value.name) || "결과";
+  const title = text(value.title) || text(value.label) || text(value.display_name) || text(value.name) || appCopy.interfaceStatus.result;
   const parts = [...new Set(TEXT_KEYS.flatMap((key) => typeof value[key] === "string" && value[key] ? [value[key]] : []))];
   if (typeof value.row_count === "number" && Array.isArray(value.columns)) {
-    parts.unshift(`${value.row_count}행 · ${value.columns.length}열${typeof value.artifact_label === "string" ? ` · ${value.artifact_label}` : ""}`);
+    parts.unshift(`${appCopy.interfaceStatus.dimensions(Number(value.row_count), value.columns.length)}${typeof value.artifact_label === "string" ? ` · ${value.artifact_label}` : ""}`);
   }
   const schema = record(value.schema) ?? record(value.input_schema);
   const properties = record(schema?.properties);
   if (properties) {
-    parts.push("입력 항목\n" + Object.entries(properties).map(([key, entry]) => {
+    parts.push(appCopy.interfaceStatus.inputFields + "\n" + Object.entries(properties).map(([key, entry]) => {
       const field = record(entry);
       return [key, text(field?.type), text(field?.description)].filter(Boolean).join(" · ");
     }).join("\n"));
@@ -51,7 +52,7 @@ function publicSections(value: OutputRecord): OperationOutputSection[] {
     const nested = record(value[key]);
     if (nested) own.push(...publicSections(nested));
   }
-  if (!own.length && title !== "결과") own.push({ title });
+  if (!own.length && title !== appCopy.interfaceStatus.result) own.push({ title });
   return own;
 }
 

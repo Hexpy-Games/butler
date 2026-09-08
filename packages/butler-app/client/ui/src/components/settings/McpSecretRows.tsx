@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { useEffect, useMemo, useState } from "react";
 import type { McpSecretSource } from "@/app/types.ts";
 import {
@@ -15,10 +17,10 @@ import {
 import { emptySecretRow, type McpSecretRowState } from "./mcpSettingsUtils";
 import { mcpSecretValuePlaceholder } from "./mcpSecretRowsUtils";
 
-const SOURCE_OPTIONS: Array<{ value: McpSecretSource; label: string }> = [
-  { value: "literal", label: "직접값" },
-  { value: "env", label: "ENV 참조" },
-  { value: "file", label: "파일" },
+const sourceOptions = (): Array<{ value: McpSecretSource; label: string }> => [
+  { value: "literal", label: appCopy.interfaceDetails.literal },
+  { value: "env", label: appCopy.interfaceDetails.envReference },
+  { value: "file", label: appCopy.interfaceStatus.file },
 ];
 
 export function McpSecretRows({
@@ -32,6 +34,7 @@ export function McpSecretRows({
   rows: McpSecretRowState[];
   onRowsChange: (rows: McpSecretRowState[]) => void;
 }) {
+  useAppLocale();
   const commonSource = useMemo(() => {
     if (rows.length === 0) return null;
     const firstSource = rows[0]?.source;
@@ -61,18 +64,18 @@ export function McpSecretRows({
   return (
     <SettingsSecretRows
       title={title}
-      emptyState={rows.length === 0 ? "추가된 항목이 없습니다." : undefined}
+      emptyState={rows.length === 0 ? appCopy.interfaceDetails.noEntries : undefined}
       actions={
         <>
           <NativeSelect
-            aria-label={`${title} 기본 출처`}
+            aria-label={appCopy.interfaceTemplates.defaultSource(title)}
             size="sm"
             value={selectedSource}
             onChange={(event) =>
               setSelectedSource(event.target.value as McpSecretSource)
             }
           >
-            {SOURCE_OPTIONS.map((option) => (
+            {sourceOptions().map((option) => (
               <NativeSelectOption key={option.value} value={option.value}>
                 {option.label}
               </NativeSelectOption>
@@ -89,8 +92,7 @@ export function McpSecretRows({
               }
               onClick={applySourceToAll}
             >
-              전체 출처 적용
-            </Button>
+              {appCopy.interfaceDetails.applyAllSources}</Button>
             <Button type="button" size="xs" variant="outline" onClick={addRow}>
               <Plus size={13} />
               {addLabel}
@@ -104,7 +106,7 @@ export function McpSecretRows({
           key={row.id}
           sourceControl={
             <NativeSelect
-              aria-label={`${title} 값 출처`}
+              aria-label={appCopy.interfaceTemplates.valueSource(title)}
               value={row.source}
               onChange={(event) =>
                 updateRow(row.id, {
@@ -112,7 +114,7 @@ export function McpSecretRows({
                 })
               }
             >
-              {SOURCE_OPTIONS.map((option) => (
+              {sourceOptions().map((option) => (
                 <NativeSelectOption key={option.value} value={option.value}>
                   {option.label}
                 </NativeSelectOption>
@@ -141,7 +143,7 @@ export function McpSecretRows({
           }
           actionControl={
             <IconButton
-              label={`${title} 행 삭제`}
+              label={appCopy.interfaceTemplates.deleteRow(title)}
               onClick={() => deleteRow(row.id)}
             >
               <Trash2 size={14} />

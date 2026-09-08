@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import {
   Button,
   Clickable,
@@ -24,6 +25,7 @@ export function AutomationsList({
   onSelectAutomation,
   onNewAutomation,
 }: AutomationsListProps) {
+  useAppLocale();
   const copy = appCopy.automations;
 
   return (

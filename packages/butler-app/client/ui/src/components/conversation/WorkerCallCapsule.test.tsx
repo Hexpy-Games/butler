@@ -7,8 +7,11 @@ import type { SessionView, WorkerActivitySummary } from "@/app/types.ts";
 import { TurnActivityTimeline } from "./TurnActivityTimeline";
 import { WorkActivityToolGroup } from "@/libs/design-system/blocks/WorkActivityBlock/WorkActivityToolGroup";
 import { WorkerCallCapsule } from "./WorkerCallCapsule";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
 
 test("Worker stays below the aggregate while its invocation is inside the expanded list", async () => {
+  const previousLocale = getAppLocale();
+  setAppCopyLanguage("ko");
   const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
   const before = useButlerStore.getState();
   const globals = ["window", "document", "navigator", "HTMLElement", "Node", "IS_REACT_ACT_ENVIRONMENT"] as const;
@@ -73,6 +76,7 @@ test("Worker stays below the aggregate while its invocation is inside the expand
     expect(container.textContent).toContain("워커 호출");
   } finally {
     await act(async () => root.unmount());
+    setAppCopyLanguage(previousLocale);
     useButlerStore.setState({ observerSessionId: before.observerSessionId, sessionViews: before.sessionViews });
     globals.forEach((key, i) => { const descriptor = saved[i]; if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); });
     dom.window.close();

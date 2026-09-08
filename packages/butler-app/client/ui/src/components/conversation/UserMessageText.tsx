@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -8,6 +9,7 @@ import { SessionReferenceText } from "./SessionReferenceText";
 const COLLAPSED_LINES = 5;
 
 export function UserMessageText({ text, contentParts }: { text: string; contentParts?: MessageContent }) {
+  useAppLocale();
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);

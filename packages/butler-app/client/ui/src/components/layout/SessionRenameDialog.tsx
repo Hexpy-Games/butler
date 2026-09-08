@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import {
   Dialog,
@@ -22,6 +23,7 @@ export function SessionRenameDialog({
   onCancel?: () => void;
   onSubmit?: (session: SessionSummary, value: string) => void;
 } = {}) {
+  useAppLocale();
   const storeSession = useButlerStore((state) => state.renameSession);
   const setRenameSession = useButlerStore((state) => state.setRenameSession);
   const submitSessionRename = useButlerStore(

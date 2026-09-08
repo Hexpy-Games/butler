@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { resolveRuntimeMessageLanguage } from "../output/messages.ts";
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, join } from "path";
@@ -334,13 +335,6 @@ function hashSections(sections: PromptSection[]): string {
     .slice(0, 16);
 }
 
-function promptLocale(config: PromptButlerConfig): "en" | "ko" {
-  const language = (safeConfigText(config.user?.responseLanguage) ||
-    safeConfigText(config.user?.language)).toLocaleLowerCase("en-US");
-  if (/\bko\b|\bkor\b|korean|한국|한국어/u.test(language)) return "ko";
-  return "en";
-}
-
 function buildActivePersonaReminderSection(butlerData: string): PromptSection | null {
   const activePersona = readTextIfExists(join(butlerData, "personas", "active.md"));
   if (!activePersona) return null;
@@ -355,8 +349,8 @@ function buildActivePersonaReminderSection(butlerData: string): PromptSection | 
     scopeKind: "user",
     content: [
       "Use this current persona for every user-facing answer in this turn.",
-      "Use the configured Assistant Response Language from the Turn Environment for every final answer and visible status text.",
-      "Preserve the persona's tone and signature speech patterns; if the persona text is written in another language, translate or adapt that voice into the configured response language.",
+      "Use the configured Assistant Response Language from the Turn Environment by default. Follow the user's explicit request to answer or translate into another language instead.",
+      "Preserve the persona's tone and signature speech patterns; translate or adapt that voice into the configured response language, or the language explicitly requested by the user.",
       "For long answers, carry the persona through section bodies and the closing, not only the opening sentence.",
       "Do not let tool, review, or report formatting instructions erase the persona.",
       "",
@@ -383,6 +377,7 @@ function buildRuntimeStateSection(input: {
   lines.push(...buildTurnEnvironmentContext({
     envelope: input.envelope,
     config: input.config,
+    butlerData: input.butlerData,
   }));
 
   if (input.binding.projectId) {
@@ -633,12 +628,13 @@ function projectMemoryStatus(input: {
 function buildTurnEnvironmentContext(input: {
   envelope: InboundEnvelope;
   config: PromptButlerConfig;
+  butlerData: string;
 }): string[] {
   const user = input.config.user ?? {};
   const timestamp = parseTurnTimestamp(input.envelope.message.timestamp);
   const timezone = safeConfigText(user.timezone) || "UTC";
   const language = safeConfigText(user.language) || "unknown";
-  const responseLanguage = safeConfigText(user.responseLanguage) || language;
+  const responseLanguage = resolveRuntimeMessageLanguage({ butlerData: input.butlerData });
   const techLanguage = safeConfigText(user.techLanguage);
   const geoHint = bestGeoHint(user, timezone);
   const localTime = formatLocalTime(timestamp, timezone);
@@ -647,7 +643,7 @@ function buildTurnEnvironmentContext(input: {
     `Current Time UTC: ${timestamp.toISOString()}`,
     `Current Local Time: ${localTime}`,
     `User Timezone: ${timezone}`,
-    `User Language: ${language}`,
+    `Interface Language (app labels only): ${language}`,
     `Assistant Response Language: ${responseLanguage}`,
   ];
   if (techLanguage) lines.push(`User Technical Language: ${techLanguage}`);
@@ -912,7 +908,6 @@ export class PromptAssembler {
     envelope: InboundEnvelope;
     route?: GatewayRoute;
   }, includeLegacyWorkState: boolean): ContextAssembly {
-    const config = readPromptButlerConfig(this.butlerData);
     const roleConfiguration = buildLiveConfigurationSections({
       butlerHome: this.butlerHome,
       butlerData: this.butlerData,
@@ -923,7 +918,7 @@ export class PromptAssembler {
       butlerData: this.butlerData,
       sessionId: input.binding.sessionId,
       role: input.binding.role,
-      locale: promptLocale(config),
+      locale: resolveRuntimeMessageLanguage({ butlerData: this.butlerData }),
       projectId: input.binding.projectId,
     });
     const common = this.buildSharedContextAssembly(input, includeLegacyWorkState, [

@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Stack, SurfacePanel, Typo } from "@/butler-ds";
 import {
@@ -12,6 +13,7 @@ export function UsageBucketPanel({
   title: string;
   rows: UsageNamedBucket[];
 }) {
+  useAppLocale();
   return (
     <SurfacePanel elevation="none">
       <Stack gap="md">
@@ -38,8 +40,8 @@ export function UsageBucketPanel({
                 <Stack gap="xs" style={{ minWidth: 0, flex: "1 1 260px" }}>
                   <Typo.Body as="div">{name}</Typo.Body>
                   <Typo.Caption>
-                    입력 {formatCount(bucket.promptTokens)} · 캐시{" "}
-                    {formatCount(bucket.cachedTokens)} · 출력{" "}
+                    {appCopy.interfaceDetails.input}{formatCount(bucket.promptTokens)} {appCopy.interfaceDetails.cache}{" "}
+                    {formatCount(bucket.cachedTokens)} {appCopy.interfaceDetails.outputLabel}{" "}
                     {formatCount(bucket.outputTokens)}
                   </Typo.Caption>
                 </Stack>

@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
@@ -78,7 +79,7 @@ export function useComposerControls(
           })
           .catch((error) => {
             setModelState("error");
-            notifyError(error, "Model catalog refresh failed", {
+            notifyError(error, appCopy.interfacePanels.modelRefreshFailed, {
               id: `model-catalog-generation-${activeChatId}`,
             });
           });

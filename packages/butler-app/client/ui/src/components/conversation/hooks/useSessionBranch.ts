@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useRef, useState } from "react";
 import { api } from "@/app/api";
 import { useButlerStore } from "@/app/store";
@@ -22,7 +23,7 @@ export function useSessionBranch() {
       await useButlerStore.getState().openSession(result.session.id);
       return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "새 대화를 만들지 못했습니다. 다시 시도해 주세요.");
+      setError(cause instanceof Error ? cause.message : appCopy.interfaceDetails.branchFailed);
       return false;
     } finally { setPending(false); }
   }

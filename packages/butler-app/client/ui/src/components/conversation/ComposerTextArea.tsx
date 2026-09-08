@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useCallback } from "react";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
@@ -13,6 +14,7 @@ import { ComposerEditorPlugin } from "./editor/ComposerEditorPlugin";
 export const COMPOSER_MAX_AUTO_ROWS = 8;
 
 export function ComposerTextArea({ placeholder }: { placeholder?: string }) {
+  useAppLocale();
   const sessionId = useComposerStore(state => state.draftSessionId);
   const setIsComposing = useComposerStore(state => state.setIsComposing);
   const handleKeyDown = useComposerStore(state => state.handleKeyDown);

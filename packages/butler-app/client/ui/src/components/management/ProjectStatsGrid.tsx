@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import type { ProjectDashboardView as ProjectDashboardData } from "@/app/types.ts";
 import { MetricGrid } from "@/butler-ds";
 import { DashboardStat } from "./DashboardStat.tsx";
@@ -9,6 +11,7 @@ export function ProjectStatsGrid({
   dashboard: ProjectDashboardData | null;
   sessionsCount: number;
 }) {
+  useAppLocale();
   const stats = dashboard?.stats;
   return (
     <MetricGrid>
@@ -21,13 +24,13 @@ export function ProjectStatsGrid({
         value={String(stats?.recent_messages_30d ?? 0)}
       />
       <DashboardStat
-        label="Active sessions"
+        label={appCopy.interfacePanels.activeSessions}
         value={String(stats?.active_sessions ?? sessionsCount)}
       />
-      <DashboardStat label="Specs" value={String(stats?.specs ?? 0)} />
-      <DashboardStat label="Plans" value={String(stats?.plans ?? 0)} />
+      <DashboardStat label={appCopy.interfacePanels.specs} value={String(stats?.specs ?? 0)} />
+      <DashboardStat label={appCopy.interfacePanels.plans} value={String(stats?.plans ?? 0)} />
       <DashboardStat
-        label="Archived"
+        label={appCopy.interfacePanels.archived}
         value={String(stats?.archived_sessions ?? 0)}
       />
     </MetricGrid>

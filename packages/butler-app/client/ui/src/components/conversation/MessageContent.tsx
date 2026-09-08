@@ -1,6 +1,8 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { memo } from "react";
 import type { MessageRecord } from "@/app/types.ts";
 import { appCopy } from "@/app/copy.ts";
+import { visibleSystemMessageText } from "@/app/system-event-message.ts";
 import { Stack, Tag } from "@/butler-ds";
 import {
   isAssistantFailureNoticeMessage,
@@ -39,6 +41,7 @@ function MessageContentComponent({
   onCopyAssistantMessage,
   stewardProgress,
 }: MessageContentProps) {
+  useAppLocale();
   const artifacts = message.artifacts ?? [];
   const failureNotice = isAssistantFailureNoticeMessage(message);
   return (
@@ -88,7 +91,7 @@ function MessageContentComponent({
       ) : message.role === "user" ? (
         <UserMessageText key={message.id} text={message.text} contentParts={message.content_parts} />
       ) : (
-        message.text
+        visibleSystemMessageText(message)
       )}
       {message.role !== "assistant" && (
         <MessageAttachments attachments={message.attachments ?? []} />

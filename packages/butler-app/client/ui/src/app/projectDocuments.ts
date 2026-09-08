@@ -1,14 +1,15 @@
+import { appCopy } from "./copy.ts";
 import type { CSSProperties } from "react";
 import type {
   ProjectDashboardDocument,
   ProjectDashboardDocumentType,
 } from "./types.ts";
 
-export const PLAN_LANES = [
-  { id: "planned", label: "Planned" },
-  { id: "active", label: "Active" },
-  { id: "done", label: "Done" },
-  { id: "other", label: "Other" },
+export const planLanes = () => [
+  { id: "planned", label: appCopy.interfaceStatus.planned },
+  { id: "active", label: appCopy.projectDocumentMetadata.active },
+  { id: "done", label: appCopy.conversation.work.todoItemCompletedLabel },
+  { id: "other", label: appCopy.projectDocumentMetadata.other },
 ] as const;
 
 export const projectDocumentLayout = {
@@ -69,18 +70,18 @@ export const projectDocumentDialogLayout = {
   },
 } satisfies Record<string, CSSProperties>;
 
-export const PLAN_BOARD_TABS = [
-  { id: "plan", label: "Plan" },
-  { id: "work", label: "Work" },
-  { id: "task", label: "Task" },
+export const planBoardTabs = () => [
+  { id: "plan", label: appCopy.composer.plan },
+  { id: "work", label: appCopy.interfaceStatus.work },
+  { id: "task", label: appCopy.interfaceStatus.task },
 ] as const;
 
-export const PROJECT_DOCUMENT_PICKER_FILTERS = [
-  { id: "all", label: "All" },
-  { id: "spec", label: "Spec" },
-  { id: "roadmap", label: "Roadmap" },
-  { id: "work", label: "Work" },
-  { id: "task", label: "Task" },
+export const projectDocumentPickerFilters = () => [
+  { id: "all", label: appCopy.interfaceDetails.all },
+  { id: "spec", label: appCopy.interfaceStatus.spec },
+  { id: "roadmap", label: appCopy.projectDocumentMetadata.roadmap },
+  { id: "work", label: appCopy.interfaceStatus.work },
+  { id: "task", label: appCopy.interfaceStatus.task },
 ] as const;
 
 export function groupSpecs(
@@ -88,7 +89,7 @@ export function groupSpecs(
 ): Array<[string, ProjectDashboardDocument[]]> {
   const groups = new Map<string, ProjectDashboardDocument[]>();
   for (const spec of specs) {
-    const category = spec.category?.trim() || "General";
+    const category = spec.category?.trim() || appCopy.space.general;
     groups.set(category, [...(groups.get(category) ?? []), spec]);
   }
   return [...groups.entries()].sort(([left], [right]) =>
@@ -98,7 +99,7 @@ export function groupSpecs(
 
 export function planLane(
   plan: ProjectDashboardDocument,
-): (typeof PLAN_LANES)[number]["id"] {
+): ReturnType<typeof planLanes>[number]["id"] {
   const status = plan.status?.toLocaleLowerCase("en-US") ?? "";
   if (/done|complete|shipped|closed|reported/u.test(status)) return "done";
   if (/active|progress|running|review|current/u.test(status)) return "active";
@@ -108,7 +109,7 @@ export function planLane(
 
 export function planBoardType(
   plan: ProjectDashboardDocument,
-): (typeof PLAN_BOARD_TABS)[number]["id"] | null {
+): ReturnType<typeof planBoardTabs>[number]["id"] | null {
   const type = projectDocumentType(plan);
   if (type === "plan") return "plan";
   if (type === "task") return "task";
@@ -126,11 +127,11 @@ export function projectDocumentBadgeLabel(
   document: ProjectDashboardDocument,
 ): string {
   const type = projectDocumentType(document);
-  if (type === "task") return "Task";
-  if (type === "plan") return "Plan";
-  if (type === "roadmap") return "Roadmap";
-  if (type === "spec") return "Spec";
-  return "Work";
+  if (type === "task") return appCopy.interfaceStatus.task;
+  if (type === "plan") return appCopy.composer.plan;
+  if (type === "roadmap") return appCopy.projectDocumentMetadata.roadmap;
+  if (type === "spec") return appCopy.interfaceStatus.spec;
+  return appCopy.interfaceStatus.work;
 }
 
 export function projectDocumentFileName(
@@ -151,22 +152,6 @@ export interface ProjectDocumentFrontmatterEntry {
   label: string;
   value: string;
 }
-
-const FRONTMATTER_LABELS: Record<string, string> = {
-  id: "ID",
-  kind: "Kind",
-  status: "Status",
-  updatedAt: "Updated",
-  migratedFrom: "Migrated from",
-  parent: "Parent",
-  owner: "Owner",
-  priority: "Priority",
-  acceptance: "Acceptance",
-  validation: "Validation",
-  review: "Review",
-  report: "Report",
-  implementation: "Implementation",
-};
 
 const HIDDEN_FRONTMATTER_KEYS = new Set(["schema", "title"]);
 
@@ -194,7 +179,7 @@ function parseProjectDocumentFrontmatter(
       const value = cleanFrontmatterValue(match[2] ?? "");
       return {
         key,
-        label: FRONTMATTER_LABELS[key] ?? titleCaseKey(key),
+        label: appCopy.projectDocumentMetadata.labels[key] ?? titleCaseKey(key),
         value,
       };
     })

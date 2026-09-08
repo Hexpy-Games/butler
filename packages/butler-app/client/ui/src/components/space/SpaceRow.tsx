@@ -1,4 +1,7 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { SpaceRowLabel } from "./SpaceRowLabel";
+import { SpaceRowMeta } from "./SpaceRowMeta";
 import { memo, useEffect, useRef, useState } from "react";
 import {
   ButtonContainer,
@@ -7,7 +10,6 @@ import {
   CollapsibleNavGroup,
   IconButton,
   NavRow,
-  Sparkles,
 } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
@@ -31,6 +33,7 @@ export const SpaceRow = memo(function SpaceRow({
   shortcut?: boolean;
   depth?: number;
 }) {
+  useAppLocale();
   const row = useButlerStore(s => projectSpace(s.navigation).get(rowKey));
   const active = useButlerStore(s => s.activeChatId === row?.node.entityId);
   const children = useButlerStore(s => spaceChildren(projectSpace(s.navigation), rowKey));
@@ -86,7 +89,6 @@ export const SpaceRow = memo(function SpaceRow({
             label={
               <span className={styles.groupLabel}>
                 {label}
-                {row.smart && <Sparkles />}
               </span>
             }
             actions={
@@ -99,7 +101,7 @@ export const SpaceRow = memo(function SpaceRow({
                 {menu}
                 <IconButton
                   className={interaction.collapseButton}
-                  label={`${row.title} ${expanded ? "접기" : "펼치기"}`}
+                  label={`${row.title} ${expanded ? appCopy.space.collapse : appCopy.space.expand}`}
                   onClick={() => toggle(row.node.key)}
                 >
                   {expanded ? <ChevronDown /> : <ChevronRight />}
@@ -128,6 +130,7 @@ export const SpaceRow = memo(function SpaceRow({
             multiline={flat}
             icon={<SpaceIdentity row={row} />}
             label={label}
+            meta={flat ? <SpaceRowMeta row={row} /> : undefined}
             active={active}
             ariaLabel={row.title}
             actionsVisibility="visible"

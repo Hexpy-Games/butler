@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useId, useState } from "react";
 import { Input, SettingsField } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -28,6 +29,7 @@ function DeferredTextField({
   onCommit,
   onUnchanged,
 }: DeferredTextFieldProps) {
+  useAppLocale();
   const controlId = useId();
   const [draft, setDraft] = useState<string | null>(null);
   return (
@@ -66,6 +68,7 @@ export function WorkerProfileTaskFields({
   profile,
   onCommit,
 }: WorkerProfileTaskFieldsProps) {
+  useAppLocale();
   const saving = useSettingsUIStore((state) => state.saving);
   const [customSelection, setCustomSelection] = useState<boolean>(false);
   const jobCopy = appCopy.settings.workerJobs;

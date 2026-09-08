@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import {
   Button,
@@ -28,6 +29,7 @@ export function ProjectCreateDialog({
   onOpenChange: onOpenChangeProp,
   onSubmit: onSubmitProp,
 }: ProjectCreateDialogProps = {}) {
+  useAppLocale();
   const storeOpen = useButlerStore((state) => state.projectCreateDialogOpen);
   const setStoreOpen = useButlerStore(
     (state) => state.setProjectCreateDialogOpen,

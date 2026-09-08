@@ -37,6 +37,14 @@ export function NavRowFixture() {
       <NavRow
         multiline
         icon={<Folder size={17} />}
+        label="Recent conversation"
+        meta={<span>Project / conversation context · 3 minutes ago</span>}
+        actions={<IconButton label="Add"><Plus size={14} /></IconButton>}
+        onClick={() => undefined}
+      />
+      <NavRow
+        multiline
+        icon={<Folder size={17} />}
         label={
           <>
             Multi-line navigation title

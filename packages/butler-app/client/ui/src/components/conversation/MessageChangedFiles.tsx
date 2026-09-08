@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { ChangedFileDetail } from "@/app/types.ts";
@@ -7,6 +8,7 @@ import { MessageChangedFileRow } from "./MessageChangedFileRow.tsx";
 const INITIAL_VISIBLE_FILES = 5;
 
 export function MessageChangedFiles({ files }: { files: ChangedFileDetail[] }) {
+  useAppLocale();
   const [expanded, setExpanded] = useState(false);
   if (files.length === 0) return null;
   const additions = files.reduce((total, file) => total + file.additions, 0);

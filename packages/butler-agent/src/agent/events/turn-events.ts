@@ -128,6 +128,9 @@ export type RuntimeTurnEventInput = Omit<
 };
 
 export interface ProgressRowLike {
+  interface_content?: import("../../../../butler-i18n/src/index.ts").InterfaceContentReferences;
+  interface_label_key?: string;
+  interface_label_parameters?: { attempt: number; maxAttempts: number };
   id: string;
   kind: string;
   safe_label: string;
@@ -338,6 +341,9 @@ export function turnEventFromProgressRow(input: {
       toolName: row.safe_tool_name,
       inputLabel: row.safe_input_label,
       safeLabel: row.safe_label,
+      ...(row.interface_content ? { interfaceContent: row.interface_content } : {}),
+      ...(row.interface_label_key ? { interfaceLabelKey: row.interface_label_key } : {}),
+      ...(row.interface_label_parameters ? { interfaceLabelParameters: row.interface_label_parameters } : {}),
       toolCallId: row.tool_call_id,
       workBlockId: row.work_block_id,
       workBlockLabel: row.work_block_label,

@@ -1,4 +1,5 @@
 import type { BtccTurnProgressObserver } from "../contracts.ts";
+import { getAppCopy } from "../../../../../butler-i18n/src/index.ts";
 import type { RuntimeTurnEventInput } from "../../events/turn-events.ts";
 import { publicOperationTitle } from "../../events/progress-projection.ts";
 import {
@@ -42,6 +43,7 @@ export function projectTurnProgressToEvents(
         kind: "assistant.public_note",
         payload: {
           note: progressLabel(update.semanticState),
+          interfaceLabelKey: update.semanticState === "admitted" ? "accepted" : "working",
           btccState: update.semanticState,
           semanticBlockId: update.semanticState,
           turnRevision: update.turnRevision,
@@ -95,6 +97,7 @@ export function projectTurnProgressToEvents(
           btccState: update.semanticState,
           decisionTitle: update.title,
           decisionSummary: update.summary,
+          ...(update.interfaceContent ? { interfaceContent: update.interfaceContent } : {}),
           ...(update.rationale !== undefined
             ? { decisionRationale: update.rationale }
             : {}),
@@ -121,6 +124,8 @@ export function projectTurnProgressToEvents(
         kind: operationEventKind(update.status),
         payload: {
           safeLabel: update.publicTitle || publicOperationTitle(update.capabilityRef),
+          ...(update.interfaceContent ? { interfaceContent: update.interfaceContent } : {}),
+          ...(!update.publicTitle ? { interfaceLabelKey: `operation:${update.capabilityRef ?? ""}` } : {}),
           toolName: update.capabilityRef,
           toolCallId: update.requestId,
           activityKind: "used_tool",
@@ -169,7 +174,8 @@ export function projectTurnProgressToEvents(
       await publish({
         kind: modelRoundWaitingEventKind(update.status),
         payload: {
-          safeLabel: "응답 생성 중",
+          safeLabel: getAppCopy().interfaceStatus.generating,
+          interfaceLabelKey: "generating",
           toolName: "model_round",
           toolCallId: update.requestId,
           activityKind: "message",
@@ -184,6 +190,7 @@ export function projectTurnProgressToEvents(
           kind: "assistant.public_note",
           payload: {
             note: progressLabel(update.semanticState),
+            interfaceLabelKey: update.semanticState === "admitted" ? "accepted" : "working",
             btccState: update.semanticState,
             semanticBlockId: update.semanticState,
             bridgePhase: "operational_recovery",
@@ -202,6 +209,8 @@ export function projectTurnProgressToEvents(
           ),
           btccState: update.semanticState,
           operational: true,
+          ...(Number.isInteger(update.attempt) && Number.isInteger(update.maxAttempts) ? { interfaceLabelParameters: { attempt: update.attempt, maxAttempts: update.maxAttempts } } : {}),
+          interfaceLabelKey: update.activationKind === "automatic_storage_recovery" ? "storageRecovery" : update.activationKind === "automatic_provider_recovery" ? "reconnecting" : "stopping",
           semanticBlockId: update.semanticState,
           bridgePhase: "operational_recovery",
           recoveryStatus: update.status,
@@ -245,21 +254,21 @@ function operationalProgressLabel(
   maxAttempts?: number,
 ): string {
   if (activation === "automatic_storage_recovery") {
-    return "저장소 쓰기 순서를 조정하고 있습니다";
+    return getAppCopy().progress.storageRecovery;
   }
   if (
     activation === "automatic_provider_recovery" &&
     Number.isInteger(attempt) &&
     Number.isInteger(maxAttempts)
   ) {
-    return `재연결 중 (${attempt}/${maxAttempts})`;
+    return `${getAppCopy().progress.reconnecting} (${attempt}/${maxAttempts})`;
   }
-  return "요청을 중지하고 있습니다";
+  return getAppCopy().progress.stopping;
 }
 
 function progressLabel(state: string): string {
   switch (state) {
-    case "admitted": return "요청을 확인하고 있습니다";
-    default: return "요청을 처리하고 있습니다";
+    case "admitted": return getAppCopy().conversation.work.pendingStateLabels.accepted;
+    default: return getAppCopy().interfaceStatus.working;
   }
 }

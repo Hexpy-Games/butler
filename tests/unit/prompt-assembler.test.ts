@@ -915,7 +915,7 @@ test("turn context includes current time, timezone, language, and geo hint", () 
     expect(turnContext).toContain("## Turn Environment");
     expect(turnContext).toContain("Current Time UTC: 2026-05-07T01:21:14.000Z");
     expect(turnContext).toContain("User Timezone: Asia/Seoul");
-    expect(turnContext).toContain("User Language: ko");
+    expect(turnContext).toContain("Interface Language (app labels only): ko");
     expect(turnContext).toContain("Assistant Response Language: en");
     expect(turnContext).toContain("User Technical Language: en");
     expect(turnContext).toContain("User Geo Hint: Chungju, Chungcheongbuk-do, South Korea");

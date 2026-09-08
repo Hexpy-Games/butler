@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useRef, useState } from "react";
 import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
 import type { AuthorityApprovalCard } from "@/app/types.ts";
@@ -32,7 +33,7 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
   return {
     title: request.scope ? `${request.scope.title} · ${request.scope.description}` : request.reason,
     scope: request.scope, pending: pending.has(key),
-    error: failed === key ? "결정을 전달하지 못했습니다. 다시 시도해 주세요." : undefined,
+    error: failed === key ? appCopy.interfaceDetails.decisionFailed : undefined,
     composingMessage: collapsed === key, pendingCount: requests.length,
     onAllow: () => void decide("allow"),
     onAllowConversation: () => void decide("allow", "conversation"),

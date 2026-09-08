@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useId, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { DEFAULT_WEB_SEARCH_SETTINGS } from "@/app/constants.ts";
@@ -19,6 +20,7 @@ type WebSearchWritableKey =
   | "planning_default_depth";
 
 export function SearchSettings({ draft }: { draft: SettingsView }) {
+  useAppLocale();
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
   const [apiKeyDraft, setApiKeyDraft] = useState("");

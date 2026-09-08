@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import {
@@ -17,6 +18,7 @@ import {
 import { useProfileMigrationPrompt } from "./useProfileMigrationPrompt";
 
 export function PersonalizationProfileMigration() {
+  useAppLocale();
   const personalization = useSettingsUIStore((state) => state.personalization);
   const importProfileMigration = useSettingsUIStore(
     (state) => state.importProfileMigration,

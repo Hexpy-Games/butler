@@ -694,6 +694,9 @@ export interface SessionSummary {
   archived: boolean;
   last_message_preview?: string;
   safe_status_label?: string;
+  safe_status_label_key?: string;
+  safe_status_label_parameters?: { attempt: number; maxAttempts: number };
+  safe_status_content?: InterfaceContentReferences;
   unread_count?: number;
   automation_target_count?: number;
 }
@@ -766,6 +769,7 @@ export interface PlanDocumentRecord {
 }
 
 export interface MessageRecord {
+  system_event_kind?: "context.compaction.started" | "context.compaction.completed";
   content_parts?: import("./messageContent").MessageContent;
   id: string;
   chat_id?: string;
@@ -873,6 +877,9 @@ export interface ProgressRow {
   tool_result_id?: string;
   tool_result_byte_length?: number;
   bridge_phase?: string;
+  interface_label_key?: string;
+  interface_content?: InterfaceContentReferences;
+  interface_label_parameters?: { attempt: number; maxAttempts: number };
   receipt_kind?: string;
   public_decision_role?: string;
   public_decision_summary?: string;
@@ -921,6 +928,7 @@ export interface OperationOutputView {
 }
 
 export interface TurnProgressSnapshot {
+  summary_reference?: InterfaceTextReference;
   turn_id?: string;
   started_at?: string;
   summary?: string;
@@ -1397,6 +1405,8 @@ export interface WorkerActivitySummary {
   semantic_phase?: WorkerActivityPhase;
   action_kind?: string;
   status_line: string;
+  status_reference?: InterfaceTextReference;
+  current_activity_reference?: InterfaceTextReference;
   current_activity_title?: string;
   work_blocks?: WorkBlockView[];
   session_id?: string;
@@ -1610,3 +1620,4 @@ export interface AuthorityApprovalProjection {
 
 export type IconElement = ReactElement<{ size?: number }>;
 export type ChildrenProps = { children?: ReactNode };
+import type { InterfaceContentReferences, InterfaceTextReference } from "../../../../../butler-i18n/src/index.ts";

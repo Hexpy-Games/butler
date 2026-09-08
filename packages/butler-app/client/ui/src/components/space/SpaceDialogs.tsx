@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +17,7 @@ import { SpaceGroupForm } from "./SpaceGroupForm";
 import { SpaceMoveForm } from "./SpaceMoveForm";
 import { SpaceRelocationForm } from "./SpaceRelocationForm";
 export function SpaceDialogs({ rows }: { rows: Map<string, SpaceRowData> }) {
+  useAppLocale();
   const dialog = useOrganization((s) => s.dialog);
   const error = useOrganization((s) => s.error);
   return (
@@ -38,10 +41,9 @@ export function SpaceDialogs({ rows }: { rows: Map<string, SpaceRowData> }) {
         ) : dialog?.kind === "favorites" ? (
           <Stack gap="4">
             <DialogHeader>
-              <DialogTitle>즐겨찾기</DialogTitle>
+              <DialogTitle>{appCopy.space.favorites}</DialogTitle>
               <DialogDescription>
-                고정한 대화와 프로젝트입니다.
-              </DialogDescription>
+                {appCopy.space.favoritesDescription}</DialogDescription>
             </DialogHeader>
             <ScrollArea>
               {[...rows.values()]

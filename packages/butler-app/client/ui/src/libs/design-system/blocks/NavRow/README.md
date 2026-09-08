@@ -8,6 +8,10 @@ the icon with the first text line. Single-line consumers retain their layout.
 The label fills the available track so a composed title/status and metadata row
 can share a consistent trailing alignment. Nested identity controls may opt into
 Clickable's declared action/icon sizing; see Clickable's README.
+Use `meta` for a second line that spans the full row: the first-line actions do
+not consume its trailing space. Metadata aligns with the label after the icon.
+`--nav-action-edge-offset` may cancel the row inset for internally padded action
+targets; text metadata keeps its normal trailing inset.
 
 ## What is this block
 
