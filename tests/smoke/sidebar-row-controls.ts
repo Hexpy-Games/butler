@@ -36,7 +36,7 @@ export async function checkSidebarRowControls(page: Page, screenshot: string) {
   });
   assert.equal(surface.width, mobile ? 44 : 30);
   assert.equal(surface.height, mobile ? 44 : 30);
-  assert.equal(surface.size, mobile ? "28px 28px" : "24px 24px");
+  assert.equal(surface.size, mobile ? "24px 24px" : "20px 20px");
   assert.equal(surface.position, "50% 50%");
   assert(surface.image.startsWith("radial-gradient("), JSON.stringify(surface));
   assert.equal(surface.color, "rgba(0, 0, 0, 0)");

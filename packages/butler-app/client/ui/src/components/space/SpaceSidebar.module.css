@@ -15,7 +15,7 @@
 }
 
 .sidebar {
-  --icon-button-surface-size: var(--control-height-xs);
+  --icon-button-surface-size: var(--space-xl);
   --icon-button-surface: radial-gradient(
       circle closest-side,
       var(--selection) 98%,
@@ -45,7 +45,7 @@
 
 @media (width <= 640px), (pointer: coarse) {
   .sidebar {
-    --icon-button-surface-size: var(--control-height-sm);
+    --icon-button-surface-size: var(--control-height-xs);
   }
 }
 
