@@ -12,6 +12,14 @@ export function SpaceRowMeta({ row }: { row: SpaceRowData }) {
   const locale = useAppLocale();
   const tab = useOrganization(s => s.tab);
   useMinuteClock(tab === "recent");
+  const status = interfaceProgressLabel({
+    safe_label: row.session?.safe_status_label ?? "",
+    interface_content: row.session?.safe_status_content,
+    interface_label_key: row.session?.safe_status_label_key,
+    interface_label_parameters: row.session?.safe_status_label_parameters,
+  }) || (spaceActivity(row.session) === "working" ? appCopy.space.working : appCopy.space.attention);
+  const progress = row.session?.work_progress;
+  const progressText = progress ? ` · ${Math.min(progress.total, progress.completed + 1)}/${progress.total}` : "";
   return (
     <span className={interaction.rowMeta}>
       <Typo.Caption title={row.location}>{row.location}</Typo.Caption>
@@ -20,9 +28,9 @@ export function SpaceRowMeta({ row }: { row: SpaceRowData }) {
           {relativeAge(row.updatedAt)}
         </time>
       ) : (
-        <Typo.Caption className={interaction.statusText}>
-          {interfaceProgressLabel({ safe_label: row.session?.safe_status_label ?? "", interface_content: row.session?.safe_status_content, interface_label_key: row.session?.safe_status_label_key, interface_label_parameters: row.session?.safe_status_label_parameters }) || (spaceActivity(row.session) === "working" ? appCopy.space.working : appCopy.space.attention)}
-          {row.session?.work_progress && ` · ${Math.min(row.session.work_progress.total, row.session.work_progress.completed + 1)}/${row.session.work_progress.total}`}
+        <Typo.Caption className={interaction.statusText} title={`${status}${progressText}`}>
+          <span className={interaction.statusLabel}>{status}</span>
+          {progressText && <span className={interaction.statusProgress}>{progressText}</span>}
         </Typo.Caption>
       )}
     </span>

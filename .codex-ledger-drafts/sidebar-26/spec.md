@@ -1,6 +1,6 @@
 # #26 사이드바와 대화 정리 — 합의 명세
 
-Revision: 2026-09-08-r12. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
+Revision: 2026-09-08-r13. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
 GitHub: https://github.com/Hexpy-Games/butler/issues/26
 Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 
@@ -15,8 +15,17 @@ Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 
 ### r7 최신 보정 계약 (이전의 충돌하는 규칙보다 우선)
 
+- r13 최신/진행중 보조 정보는 행의 실제 가용 너비 안에 머문다. 왼쪽 소속 경로는
+  남은 너비에서 한 줄 말줄임하고, 오른쪽 상태는 보조 정보 줄의 최대 60%만 사용한다.
+  상태 문구만 한 줄 말줄임하며 진척도 n/k는 축소하지 않는다. 전체 상태/진척도는
+  title로 확인할 수 있다. 제목 최대 두 줄, 우측 상단 상태/메뉴 슬롯, DS 색상은 유지한다.
+  문자열/저장 데이터는 자르지 않는다. 최신의 상대 시간은 기존 오른쪽 정렬을 유지한다.
+- r13 추가: 수동 그룹 생성/폴더·세션 이동/이름 변경 등은 성공 토스트를 표시하지 않는다.
+  서버 smartNotice가 현재 revision에 유효한 자동 그룹 정리만 알린다. 수동 undoToken을
+  알림으로 변환하는 fallback은 제거한다. 자동 정리의 되돌리기와 변경 실패 오류는 유지한다.
+
 - r12 목록 정리 알림/되돌리기는 사이드바 footer를 차지하지 않고 기존 AppToaster의
-  Sonner 토스트로 제공한다. 자동 정리는 그룹명, 수동 변경은 목록 변경 완료를 표시한다.
+  Sonner 토스트로 제공한다. 자동 정리는 그룹명을 표시한다(수동 성공 알림은 r13에서 제거).
   유효한 undoToken별로 한 번 표시하고 8초 뒤 닫는다. 동일 navigation 갱신은 재표시하지
   않는다. 목록 revision 변경으로 undo가 무효화되면 토스트를 닫고, 클릭 시에도 최신
   token/revision을 확인하여 기존 organization.mutate(undo)만 호출한다.

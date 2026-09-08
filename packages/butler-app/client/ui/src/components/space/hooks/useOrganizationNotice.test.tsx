@@ -8,7 +8,7 @@ import { useOrganization } from "@/app/space/organization";
 import { useButlerStore } from "@/app/store";
 import { useOrganizationNotice } from "./useOrganizationNotice";
 
-test("organization notice deduplicates refreshes and guards revision-bound undo", async () => {
+test("only automatic grouping is announced, with deduplication and revision-bound undo", async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "Node", "requestAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"] as const;
   const saved = keys.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
@@ -58,12 +58,21 @@ test("organization notice deduplicates refreshes and guards revision-bound undo"
     expect(commands).toHaveLength(1);
     setAppCopyLanguage("en");
     await act(async () => useOrganization.setState({ undoToken: "manual-test", undoRevision: 11 }));
-    expect(lastToast().title).toBe("Organization updated.");
+    expect(messages).toHaveBeenCalledTimes(1);
+    await act(async () => useButlerStore.setState({ navigation: { ...originalApp.navigation,
+      space: { ...space, revision: 12, smartNotice: undefined } } }));
+    await act(async () => useOrganization.setState({ undoToken: "manual-move", undoRevision: 12 }));
+    expect(messages).toHaveBeenCalledTimes(1);
+    // A later automatic grouping still announces even after intervening manual changes.
+    await act(async () => useButlerStore.setState({ navigation: { ...originalApp.navigation,
+      space: { ...space, revision: 13, smartNotice: { title: "Travel", undoToken: "smart-next", revision: 13 } } } }));
+    expect(messages).toHaveBeenCalledTimes(2);
+    expect(lastToast().title).toBe("Organized into Travel.");
   } finally {
     await act(async () => root.unmount());
     messages.mockRestore();
     dismiss.mockRestore();
-    toast.dismiss("space-organization:manual-test");
+    toast.dismiss("space-organization:smart-next");
     useButlerStore.setState(originalApp);
     useOrganization.setState(originalOrganization);
     setAppCopyLanguage("en-US");

@@ -113,6 +113,8 @@
   font-size: var(--font-size-1);
 }
 .rowMeta > :first-child {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -123,8 +125,21 @@
 }
 .statusText {
   color: var(--text-secondary);
-  flex: none;
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
   white-space: nowrap;
+}
+.statusLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.statusProgress {
+  flex: none;
+  white-space: pre;
 }
 .titleLine {
   display: flex;
