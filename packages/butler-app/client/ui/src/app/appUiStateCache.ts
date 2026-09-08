@@ -3,8 +3,7 @@ import {
   DEFAULT_RIGHT_PANEL_WIDTH,
   LEFT_PANEL_MAX_WIDTH,
   LEFT_PANEL_MIN_WIDTH,
-  RIGHT_PANEL_MAX_WIDTH,
-  RIGHT_PANEL_MIN_WIDTH,
+  normalizeRightPanelWidth,
   clampPanelWidth,
 } from "./panelSizing.ts";
 
@@ -73,10 +72,8 @@ export function snapshotForAppUiState(
       LEFT_PANEL_MIN_WIDTH,
       LEFT_PANEL_MAX_WIDTH,
     ),
-    right_panel_width: clampPanelWidth(
+    right_panel_width: normalizeRightPanelWidth(
       Number(input.right_panel_width ?? DEFAULT_RIGHT_PANEL_WIDTH),
-      RIGHT_PANEL_MIN_WIDTH,
-      RIGHT_PANEL_MAX_WIDTH,
     ),
     sidebar_chats_collapsed: input.sidebar_chats_collapsed ?? false,
     sidebar_projects_collapsed: input.sidebar_projects_collapsed ?? false,

@@ -43,8 +43,6 @@ import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
 import {
   LEFT_PANEL_MAX_WIDTH,
   LEFT_PANEL_MIN_WIDTH,
-  RIGHT_PANEL_MAX_WIDTH,
-  RIGHT_PANEL_MIN_WIDTH,
   usePanelResize,
 } from "@/hooks/usePanelResize.ts";
 import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
@@ -111,6 +109,9 @@ function AppWorkspaceShell() {
     enabled: chromeEnvironment() === "browser",
   });
   const {
+    shellRef,
+    rightMin,
+    rightMax,
     beginPanelResize,
     handlePanelResizeKeyDown,
     leftPanelWidth,
@@ -118,6 +119,7 @@ function AppWorkspaceShell() {
     rightPanelWidth,
     resizingPanel,
   } = usePanelResize({
+    leftOpen,
     setLeftOpen: (value) => setLeftOpen(value),
   });
   useNarrowRightPanelAutoCollapse({
@@ -130,6 +132,7 @@ function AppWorkspaceShell() {
 
   return (
     <AdaptiveShell
+      ref={shellRef}
       className={`mac-window ${appThemeClasses(settings, systemPrefersDark)}`}
       chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window"
@@ -207,8 +210,8 @@ function AppWorkspaceShell() {
           aria-label={appCopy.titlebar.resizeRightPanel}
           aria-orientation="vertical"
           aria-controls="butler-right-inspector"
-          aria-valuemax={RIGHT_PANEL_MAX_WIDTH}
-          aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
+          aria-valuemax={rightMax}
+          aria-valuemin={rightMin}
           aria-valuenow={rightPanelWidth}
           data-test-class="panel-resize-handle right-panel-resize-handle"
           side="right"

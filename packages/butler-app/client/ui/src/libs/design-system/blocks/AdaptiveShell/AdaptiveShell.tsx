@@ -3,12 +3,14 @@ import type {
   KeyboardEvent,
   PointerEvent,
   ReactNode,
+  Ref,
 } from "react";
 import { cn } from "../../lib/utils";
 import { useAdaptiveDrawer } from "../../responsive";
 import styles from "./AdaptiveShell.module.css";
 
 export interface AdaptiveShellProps extends HTMLAttributes<HTMLDivElement> {
+  ref?: Ref<HTMLDivElement>;
   leftOpen: boolean;
   rightOpen: boolean;
   settingsActive?: boolean;
