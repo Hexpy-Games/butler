@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { appCopy } from "@/app/copy.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import {
   AdaptivePanelResizeHandle,
   AdaptiveShell,
@@ -53,6 +53,7 @@ import { FirstRunSetup } from "@/components/first-run/FirstRunSetup.tsx";
 import { readFirstRunState } from "@/app/firstRunSetup.ts";
 
 export function AppShell() {
+  useAppLocale();
   const [firstRunState, setFirstRunState] = useState(() =>
     readFirstRunState(
       window.localStorage,
@@ -180,7 +181,7 @@ function AppWorkspaceShell() {
       )}
       {!isSettingsView && leftOpen && (
         <AdaptivePanelResizeHandle
-          aria-label="Resize left sidebar"
+          aria-label={appCopy.titlebar.resizeLeftPanel}
           aria-orientation="vertical"
           aria-controls="butler-left-sidebar"
           aria-valuemax={LEFT_PANEL_MAX_WIDTH}
@@ -203,7 +204,7 @@ function AppWorkspaceShell() {
       )}
       {!isSettingsView && effectiveRightOpen && (
         <AdaptivePanelResizeHandle
-          aria-label="Resize right panel"
+          aria-label={appCopy.titlebar.resizeRightPanel}
           aria-orientation="vertical"
           aria-controls="butler-right-inspector"
           aria-valuemax={RIGHT_PANEL_MAX_WIDTH}
@@ -218,7 +219,7 @@ function AppWorkspaceShell() {
       {!isSettingsView && (
         <AdaptiveShellScrim
           label={
-            effectiveRightOpen ? appCopy.titlebar.hideRightPanel : "Hide sidebar"
+            effectiveRightOpen ? appCopy.titlebar.hideRightPanel : appCopy.titlebar.hideLeftPanel
           }
           open={leftOpen || effectiveRightOpen}
           onDismiss={() =>

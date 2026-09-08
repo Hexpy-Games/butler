@@ -1457,6 +1457,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
   },
   titlebar: {
+    hideLeftPanel: "사이드바 숨기기", showLeftPanel: "사이드바 보기",
+    resizeLeftPanel: "왼쪽 사이드바 크기 조절", resizeRightPanel: "오른쪽 패널 크기 조절",
     commandPalette: "명령 팔레트",
     sessionWorktree: (branch) => branch ? `워크트리 · ${branch}` : "워크트리",
     localWorkspace: (branch) => branch ? `Local · ${branch}` : "Local",

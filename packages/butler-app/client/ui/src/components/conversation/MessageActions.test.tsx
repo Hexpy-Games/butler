@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, setSystemTime, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { appCopy } from "@/app/copy.ts";
+import { appCopy, getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { UserMessageFooter } from "./UserMessageFooter";
 import { UserMessageText } from "./UserMessageText";
@@ -114,8 +114,13 @@ test("sent time includes only the date parts needed for the local calendar day",
       <UserMessageFooter message={{ id: "dated", role: "user", text: "hello", created_at: date.toISOString() }} />,
     ));
     expect(container.querySelector("time")?.textContent)
-      .toBe(new Intl.DateTimeFormat(undefined, options).format(date));
+      .toBe(new Intl.DateTimeFormat(getAppLocale(), options).format(date));
   }
+  const previousLocale = getAppLocale();
+  await act(async () => setAppCopyLanguage("ko"));
+  const [lastDate, lastOptions] = cases.at(-1)!;
+  expect(container.querySelector("time")?.textContent).toBe(new Intl.DateTimeFormat("ko-KR", lastOptions).format(lastDate));
+  await act(async () => setAppCopyLanguage(previousLocale));
 });
 
 test("Markdown code copy copies only the selected full block and preserves inline code", async () => {
