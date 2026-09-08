@@ -110,7 +110,18 @@ export function activityContent(
       : distinctSummary(title, summary, toolSummary),
     interfaceContent: {
       title: new Set(titles).size === 1 && calls[0] ? publicToolTitleReference(calls[0].name, calls[0].args) : { key: "toolTitle", parameters: { toolName: "tool_work" } },
-      ...(!authoredSummary && !commandLabel ? { summary: { key: "toolsSummary" as const, parameters: { tools: calls.map(call => { const ref = publicToolTitleReference(call.name, call.args); return { name: ref.parameters?.toolName ?? "fallback", target: ref.parameters?.target }; }) } } } : {}),
+      ...(!authoredSummary && !commandLabel ? {
+        summary: {
+          key: "toolsSummary" as const,
+          parameters: {
+            tools: calls.map(call => {
+              const ref = publicToolTitleReference(call.name, call.args);
+              const target = ref.parameters?.target;
+              return { name: ref.parameters?.toolName ?? "fallback", ...(target !== undefined ? { target } : {}) };
+            }),
+          },
+        },
+      } : {}),
     },
   };
 }
