@@ -19,3 +19,5 @@
   스크린샷 검토. DS Icons fixture를 실제 registry에 연결하여 render all 통과.
 - 빌드/타입 검사 통과. 아키텍처 shape 17파일 이슈 없음. 기존 design-source
   suite는 이전과 동일한 34통과/11실패(레거시 소스 기대)로 이번 범위에서 확대하지 않았다.
+- 탭 R 추가 확인: 운영 Vite UI에서 외곽과 세 탭 모두 8px임을 실측했다.
+  시각적 크기 변경 없이 단일 CSS 규칙으로 묶고 4폭 smoke에 token 동일성 검증을 추가한다.

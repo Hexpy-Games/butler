@@ -9,6 +9,9 @@
 - 더보기(n)는 text-secondary, 기존 제목 들여쓰기 유지. 4폭 sidebar smoke 및
   DS Icons render all 통과. 상세 결과/기존 광범위 테스트 제한은 r10-plan.md.
 - UI 변경만 적용하며 운영 에이전트를 중단하거나 재시작하지 않는다.
+- 추가 탭 확인: 운영 UI 실측에서 외곽/세 탭 모두 radius-control=8px이었다.
+  단일 CSS 규칙으로 통합했으며 R값 자체를 변경했다고 주장하지 않는다.
+  DS Tabs render all 및 기준값 동일성 검증을 추가한 실제 UI 4폭 smoke 통과.
 
 ## r9 원형 배경 추가 축소
 

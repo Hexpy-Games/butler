@@ -46,7 +46,6 @@ import {
   Textarea,
   Tooltip,
   Typo,
-  Folder,
   Plus,
   Search,
 } from "./index";
