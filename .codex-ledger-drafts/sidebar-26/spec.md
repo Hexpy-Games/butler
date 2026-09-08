@@ -1,6 +1,6 @@
 # #26 사이드바와 대화 정리 — 합의 명세
 
-Revision: 2026-09-08-r7. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
+Revision: 2026-09-08-r8. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
 GitHub: https://github.com/Hexpy-Games/butler/issues/26
 Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 
@@ -19,8 +19,9 @@ Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
   두 트랙으로 렌더링한다. NavRow의 meta 슬롯은 전체 열을 사용하므로
   메뉴 너비가 시간 표시의 오른쪽 정렬을 밀어내지 않는다.
 - 오른쪽 버튼의 hit target은 행 오른쪽 끝에 붙이고 버튼 내부 padding으로
-  아이콘 여백을 확보한다. 행 버튼 배경은 부모의 직사각형 radius-control을
-  사용한다. 모바일 long-press 및 hover 시 상태→메뉴 전환은 유지한다.
+  아이콘 여백을 확보한다. r8: 클릭 가능한 직사각형 크기는 그대로 유지하되
+  hover/selected 배경만 중앙의 작은 원(데스크톱 24px, 모바일 28px)으로 그린다.
+  원 바깥 투명 여백도 클릭 가능하다. 모바일 long-press 및 상태→메뉴 전환은 유지한다.
 - 자동으로 만들어진 그룹도 일반 그룹과 동일하다. 별도 smart 아이콘/해제
   기능은 제공하지 않는다. 전체 자동 그룹 설정과 일반 그룹 관리는 유지한다.
 - 최신/진행중에는 그룹 추가 버튼이 없고 진행중 하단 설명도 표시하지 않는다.
