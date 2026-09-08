@@ -216,7 +216,7 @@ export function createGuidedActivityProjection(input: {
       candidate.displayStage = pendingStage;
       if (pendingExecutionTitle) {
         candidate.title = pendingExecutionTitle;
-        if (candidate.interfaceContent) candidate.interfaceContent.title = undefined;
+        if (candidate.interfaceContent) delete candidate.interfaceContent.title;
       }
       currentActivity = candidate;
       pendingStage = undefined;
@@ -257,7 +257,6 @@ export function createGuidedActivityProjection(input: {
         : distinctSummary(content.title, content.summary),
       interfaceContent: { ...content.interfaceContent,
         ...(content.interfaceContent?.summary && !commandActivity && distinctSummary(content.title, content.summary) !== content.summary ? { summary: { key: "checkingInformation" as const } } : {}),
-        ...(groupInput.title || first?.name === "record_work_checkpoint" && activeActionTitle ? { title: undefined } : {}),
       },
       ...(content.rationale ? { rationale: content.rationale } : {}),
       ...(content.nextStep ? { nextStep: content.nextStep } : {}),
@@ -273,6 +272,9 @@ export function createGuidedActivityProjection(input: {
         : {}),
       published: false,
     };
+    if (groupInput.title || first?.name === "record_work_checkpoint" && activeActionTitle) {
+      delete group.interfaceContent?.title;
+    }
     if (first?.name === "replace_work_plan") {
       const conception: ActivityGroup = {
         activityId: activityId(input.turnId),
