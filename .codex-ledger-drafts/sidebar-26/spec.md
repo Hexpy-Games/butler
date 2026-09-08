@@ -1,6 +1,6 @@
 # #26 사이드바와 대화 정리 — 합의 명세
 
-Revision: 2026-09-08-r9. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
+Revision: 2026-09-08-r10. 최신 사용자 승인과 최종 DS 목업을 기준으로 한다.
 GitHub: https://github.com/Hexpy-Games/butler/issues/26
 Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 
@@ -14,6 +14,20 @@ Work: W-UI-SIDEBAR-INFORMATION-ARCHITECTURE
 목업은 시각·상호작용 기준이며 실제 저장, 작업 폴더 이동, 모델 분류의 구현 증거가 아니다.
 
 ### r7 최신 보정 계약 (이전의 충돌하는 규칙보다 우선)
+
+- r10 프로젝트 표식은 Briefcase, 대시보드 명령은 LayoutDashboard로 구분한다.
+  트리 프로젝트 오른쪽은 항상 보이는 대시보드 버튼 → 메뉴/펼침 공용 슬롯이다.
+  프로젝트 바로가기에도 대시보드를 항상 표시한다. 기존 openProjectDashboard를
+  호출하며 클릭이 행의 펼침/접힘으로 전파되지 않는다.
+  그룹에는 공용 슬롯만 있다. 데스크톱은 평소 chevron, 행 hover/키보드 focus/메뉴
+  열린 동안 더보기를 같은 위치에 표시한다. 행 클릭은 계속 펼침/접힘이다.
+  모바일은 chevron 및 long-press 메뉴를 유지한다. 최신 추가 피드백에 따라
+  스페이스/프로젝트 ButtonContainer의 여백은 2px(space-xs / 2)로 최소화한다.
+  hit target 30px/44px와 원형 배경은 r9 그대로이며 데스크톱 중심 간격은
+  이전 스페이스와 같은 32px이다. 모바일은 hit target을 보존한 46px이다.
+  스페이스 제목도 동일한 hit target을 사용하고 제목의 광학적 들여쓰기는
+  액션에 적용하지 않아 두 컨트롤의 중심과 오른쪽 끝이 프로젝트 행과 정렬된다.
+  하위 더보기(n)의 텍스트는 text-secondary로 낮추되 들여쓰기와 hit box는 불변이다.
 
 - 최신/진행중 행은 제목+오른쪽 상태/메뉴, 소속+오른쪽 시간/진척도의
   두 트랙으로 렌더링한다. NavRow의 meta 슬롯은 전체 열을 사용하므로

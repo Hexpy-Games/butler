@@ -38,6 +38,7 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 ## Tags
 `MessageSquare` is the plain speech bubble; `Notebook` is the note icon.
 `GeneralChat` is the rounded conversation bubble for a default chat channel.
+`Briefcase` identifies a project; `LayoutDashboard` opens its dashboard.
 Use them to distinguish conversation kinds without adding an action symbol.
 
 iconography, action, status

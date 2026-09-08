@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import {
   Folder,
-  LayoutDashboard,
+  Briefcase,
   MessageSquare,
   Notebook,
   IconButton,
@@ -21,7 +21,7 @@ export function SpaceGlyph({ row }: { row: SpaceRowData }) {
       : row.node.kind === "group"
         ? Folder
         : row.node.kind === "project"
-          ? LayoutDashboard
+          ? Briefcase
           : row.node.scopeProjectId
             ? Notebook
             : MessageSquare;

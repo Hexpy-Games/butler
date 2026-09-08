@@ -8,6 +8,7 @@ import { FIRST_RUN_STORAGE_KEY, firstRunCompleteState } from "../../packages/but
 import { readFirstChatOnboardingState, writeFirstChatOnboardingState } from "../../packages/butler-agent/src/personalization/onboarding.ts";
 import { checkStickyClipping } from "./sidebar-sticky-clipping.ts";
 import { checkSidebarRowControls } from "./sidebar-row-controls.ts";
+import { checkSidebarProjectControls } from "./sidebar-project-controls.ts";
 
 // Layout fixtures only: real HTTP/store/UI, no provider or production data writes.
 const dir = mkdtempSync(join(tmpdir(), "butler-sidebar-r5-"));
@@ -16,7 +17,7 @@ const output = resolve(".tmp/sidebar-r5");
 mkdirSync(output, { recursive: true });
 let finishReply: (() => void) | undefined;
 const replyGate = new Promise<void>(resolveReply => { finishReply = resolveReply; });
-const server = createTestAppServer({ butlerData: dir, dbPath: join(dir, "app.sqlite"),
+const server = createTestAppServer({ butlerData: dir, dbPath: join(dir, "app.sqlite"), projectWorkspaceRoot: join(dir, "projects"),
   uiRoot: resolve("packages/butler-app/client/ui/dist"), port: 0,
   responder: async () => { await replyGate; return { texts: ["사이드바 완료 상태 검증 응답"] }; } });
 const store = server.store;
@@ -31,6 +32,8 @@ for (let i = 0; i < 40; i++) {
   if (i < 8) mutate({ action: "move", sourceKey: `s:${session.id}`, targetKey: `g:${i < 4 ? nested.groupId : group.groupId}`, position: "inside" });
   if (i < 2) mutate({ action: "pin", nodeKey: `s:${session.id}`, pinned: true });
 }
+const project = store.createProject({ source: "scratch", display_name: "프로젝트 검증" }).project;
+mutate({ action: "move", sourceKey: `p:${project.id}`, targetKey: `g:${group.groupId}`, position: "before" });
 const browser = await chromium.launch({ headless: true });
 try {
   for (const width of [1440, 800, 390, 320]) {
@@ -111,6 +114,10 @@ try {
       await generalRow.locator('[role="status"]').waitFor({ state: "detached" });
       console.log("PASS HTTP turn → live event → actual sidebar spinner removed, without reload");
     }
+    if (await show.isVisible()) await show.click();
+    await hide.waitFor();
+    await page.waitForTimeout(250);
+    await checkSidebarProjectControls(page, join(output, `project-${width}.png`));
     console.log(JSON.stringify(metrics));
     await page.close();
   }

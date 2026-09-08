@@ -1,14 +1,9 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { appCopy } from "@/app/copy.ts";
 import { SpaceRowLabel } from "./SpaceRowLabel";
 import { SpaceRowMeta } from "./SpaceRowMeta";
 import { memo, useEffect, useRef, useState } from "react";
 import {
-  ButtonContainer,
-  ChevronDown,
-  ChevronRight,
   CollapsibleNavGroup,
-  IconButton,
   NavRow,
 } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
@@ -16,7 +11,7 @@ import { useOrganization } from "@/app/space/organization";
 import { projectSpace, spaceChildren } from "@/app/space/projection";
 import { useLongPressAction } from "../layout/useLongPressAction";
 import { SpaceGlyph, SpaceIdentity } from "./SpaceIdentity";
-import { SpaceRowMenu } from "./SpaceRowMenu";
+import { SpaceRowActions } from "./SpaceRowActions";
 import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 import { SpaceDragRow } from "./SpaceDragRow";
 import styles from "./SpaceSidebar.module.css";
@@ -58,8 +53,9 @@ export const SpaceRow = memo(function SpaceRow({
     children.findIndex((r) => r.node.key === activeChild) + 1,
     children.findIndex((r) => revealPath.includes(r.node.key)) + 1,
   );
-  const menu = (
-    <SpaceRowMenu row={row} open={menuOpen} onOpenChange={setMenuOpen} />
+  const actions = (
+    <SpaceRowActions row={row} collapsible={row.node.kind !== "session" && !shortcut}
+      menuOpen={menuOpen} onMenuChange={setMenuOpen} />
   );
   const label = <SpaceRowLabel row={row} flat={flat} />;
   return (
@@ -91,23 +87,7 @@ export const SpaceRow = memo(function SpaceRow({
                 {label}
               </span>
             }
-            actions={
-              <ButtonContainer
-                size="icon-sm"
-                wrap={false}
-                className={interaction.groupActions}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {menu}
-                <IconButton
-                  className={interaction.collapseButton}
-                  label={`${row.title} ${expanded ? appCopy.space.collapse : appCopy.space.expand}`}
-                  onClick={() => toggle(row.node.key)}
-                >
-                  {expanded ? <ChevronDown /> : <ChevronRight />}
-                </IconButton>
-              </ButtonContainer>
-            }
+            actions={actions}
           >
             {children.slice(0, limit).map((child) => (
               <SpaceRow
@@ -134,7 +114,7 @@ export const SpaceRow = memo(function SpaceRow({
             active={active}
             ariaLabel={row.title}
             actionsVisibility="visible"
-            actions={menu}
+            actions={actions}
             onClick={() => {
               if (row.node.kind === "project")
                 useButlerStore
