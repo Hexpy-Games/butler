@@ -15,6 +15,8 @@
 }
 
 .sidebar {
+  --sidebar-action-size: var(--control-hit-target);
+  --space-action-gap: calc(var(--space-xs) / 2);
   --icon-button-surface-size: var(--space-xl);
   --icon-button-surface: radial-gradient(
       circle closest-side,
@@ -82,6 +84,10 @@
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
+}
+.browseActions {
+  gap: var(--space-action-gap);
+  margin-inline-end: calc(-1 * var(--nav-section-heading-inset));
 }
 .flatLabel {
   display: flex;

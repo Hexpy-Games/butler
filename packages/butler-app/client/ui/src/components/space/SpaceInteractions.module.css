@@ -153,6 +153,9 @@
 .groupActions {
   flex: none;
 }
+.groupActions {
+  gap: var(--space-action-gap);
+}
 .menuAction {
   position: relative;
 }
@@ -177,6 +180,7 @@
   }
 }
 .menuButton,
+.dashboardButton,
 .collapseButton {
   flex: none;
   min-width: var(--control-hit-target);
@@ -185,9 +189,37 @@
   min-height: var(--control-hit-target);
 }
 .menuButton svg,
+.dashboardButton svg,
 .collapseButton svg {
   width: var(--space-tree-icon-size, var(--space-lg));
   height: var(--space-tree-icon-size, var(--space-lg));
+}
+.disclosureSlot {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.disclosureSlot > .menuAction {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+@media (width > 640px) {
+  .rowShell
+    [data-test-class="tree-row"]:is(:hover, :focus-within)
+    .disclosureSlot
+    > .menuAction,
+  .disclosureSlot[data-menu-open] > .menuAction {
+    visibility: visible;
+    opacity: 1;
+  }
+  .rowShell
+    [data-test-class="tree-row"]:is(:hover, :focus-within)
+    .disclosureSlot
+    > .collapseButton,
+  .disclosureSlot[data-menu-open] > .collapseButton {
+    visibility: hidden;
+  }
 }
 @media (width > 640px) and (hover: hover) and (pointer: fine) {
   .menuAction:not([data-has-status]) {

@@ -56,7 +56,7 @@ export function SpaceBrowseHeader() {
           tab === "all" ? appCopy.space.space : tab === "recent" ? appCopy.space.recent : appCopy.space.running
         }
         actions={
-          <ButtonContainer size="icon-sm">
+          <ButtonContainer size="icon-sm" className={styles.browseActions}>
             {tab === "all" && <IconButton
               label={appCopy.space.createGroup}
               onClick={() => setDialog({ kind: "create", parentKey: null })}

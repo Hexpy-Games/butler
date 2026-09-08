@@ -56,9 +56,9 @@ export async function checkStickyClipping(page: Page, screenshot: string) {
   for (const region of await measure()) assert(Math.abs(region.clip - region.required) < 1);
   await scroll.evaluate(el => { el.scrollTop = 0; });
   await page.waitForTimeout(50);
-  const toggle = page.getByRole("button", { name: "디자인 접기", exact: true });
-  await toggle.click();
-  await page.getByRole("button", { name: "디자인 펼치기", exact: true }).click();
+  // Desktop hover replaces the disclosure icon with the menu; the label always toggles.
+  await page.getByText("디자인", { exact: true }).click();
+  await page.getByText("디자인", { exact: true }).click();
   const size = page.viewportSize()!;
   await page.setViewportSize({ ...size, height: size.height - 100 });
   await scroll.evaluate(el => { el.scrollTop = 400; });

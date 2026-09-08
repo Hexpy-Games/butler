@@ -55,6 +55,7 @@ import {
 import { AdaptiveShellFixture } from "./blocks/AdaptiveShell/AdaptiveShell.fixtures";
 import { NavRowFixture } from "./blocks/NavRow/NavRow.fixtures";
 import { ButtonContainerFixture } from "./components/ButtonContainer/ButtonContainer.fixtures";
+import { IconsFixture } from "./components/Icons/Icons.fixtures";
 import { PillButtonFixture } from "./components/PillButton/PillButton.fixtures";
 import { NavSectionFixture } from "./blocks/NavSection/NavSection.fixtures";
 import { CollapsibleNavGroupFixture } from "./blocks/CollapsibleNavGroup/CollapsibleNavGroup.fixtures";
@@ -849,13 +850,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     name: "Icons",
     path: "components/Icons",
     tags: ["iconography", "action"],
-    fixture: () => (
-      <Stack align="row" gap="2">
-        <Folder size={18} />
-        <Search size={18} />
-        <Plus size={18} />
-      </Stack>
-    ),
+    fixture: IconsFixture,
   },
   {
     name: "Tooltip",

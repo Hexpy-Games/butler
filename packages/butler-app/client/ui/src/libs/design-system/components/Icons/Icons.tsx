@@ -34,6 +34,7 @@ export const ArrowLeft = createIcon("ArrowLeft01Icon");
 export const Blocks = createIcon("SquareLock02Icon");
 export const BookOpenText = createIcon("BookOpen01Icon");
 export const Bot = createIcon("BotIcon");
+export const Briefcase = createIcon("Briefcase01Icon");
 export const CheckIcon = createIcon("Tick02Icon");
 export const ChevronDown = createIcon("ArrowDown01Icon");
 export const ChevronDownIcon = createIcon("ArrowDown01Icon");
