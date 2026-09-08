@@ -27,12 +27,13 @@ settings; changing interface language must never rewrite response preference.
 
 ## Execution
 
-1. Implemented, in integration review (root): sidebar geometry and response-language root-cause trace/fix.
-2. Active (Astra medium, user-authorized): central i18n audit/migration and tests.
+1. Complete (root): sidebar geometry and response-language root-cause trace/fix.
+2. Complete (Astra medium, user-authorized): central i18n audit/migration and tests.
    Ownership excludes root's sidebar files and response-context/settings policy files.
    Report central API early so root can localize its own changed surfaces.
-3. Pending: integrate, focused regressions for UI geometry and crossed language
-   preferences, real client verification, whole-goal review, main/operational rollout.
+3. Complete: integration, focused regressions for UI geometry and crossed language
+   preferences, real client verification and whole-goal review. Main rollout at
+   64dbc5c9 is verified; final native-window tooltip/date locale follow-up is included.
 
 Validation is based on the actual settings → context and UI paths. No provider calls
 are needed for pure translations; model response policy additionally needs a bounded
@@ -69,8 +70,8 @@ every surface. Record found categories, changed owners, exclusions, and residual
 - Broader existing BTCC phase suites: 38 pass/12 fail at pre-existing fixture
   admission/policy-version assertions, before the changed language behavior.
   No unrelated lifecycle changes made to satisfy those assertions.
-- Remaining: central locale audit/integration, final static gates and locale
-  switching client checks, spec/report closeout, merge and operational rollout.
+- Closed: central locale audit/integration, static gates and locale switching checks.
+  Canonical spec/report updated and implementation merged/pushed to main.
 - Settings-control browser smoke now passes en→ko without reload: translated
   navigation cache/metadata refresh, authored titles and composer draft remain,
   persisted response language stays ko. Screenshots `.tmp/sidebar-r7/locale-*.png`.

@@ -1426,6 +1426,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
   },
   titlebar: {
+    hideLeftPanel: "Hide sidebar", showLeftPanel: "Show sidebar",
+    resizeLeftPanel: "Resize left sidebar", resizeRightPanel: "Resize right panel",
     commandPalette: "Command palette",
     sessionWorktree: (branch) => branch ? `Worktree · ${branch}` : "Worktree",
     localWorkspace: (branch) => branch ? `Local · ${branch}` : "Local",

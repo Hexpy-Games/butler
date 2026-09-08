@@ -1238,6 +1238,10 @@ export interface AppCopy {
     };
   };
   titlebar: {
+    hideLeftPanel: string;
+    showLeftPanel: string;
+    resizeLeftPanel: string;
+    resizeRightPanel: string;
     commandPalette: string;
     sessionWorktree: (branch?: string) => string;
     localWorkspace: (branch?: string) => string;

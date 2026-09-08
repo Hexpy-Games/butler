@@ -34,7 +34,15 @@
   알 수 없는 provider 오류는 임의 번역하지 않는다. 넓은 기존 테스트의 BTCC
   admission fixture 12건, source-regex 1건, Linux packaging 의존성 2건은
   통과로 계산하지 않았으며 이번 변경으로 수정하지 않았다.
-- main 병합·운영 반영 결과는 실행 후 아래에 별도 기록한다.
+- 운영 반영: `64dbc5c9`를 main에 fast-forward 병합·push하고 09:52 KST
+  native supervisor 6개 online, `/health` 정상 확인했다. 독립 Electron driver
+  PID 383(PPID 1), Electron PID 421로 재실행했으며 실제 운영 창이 기존
+  세션·사이드바·한국어 UI와 gateway ready를 표시하는 것을 확인했다.
+- 실제 창 확인에서 발견한 토글/크기조절 접근성 라벨과 사용자 메시지 날짜의
+  OS-locale 고정을 중앙 UI locale로 추가 보정했다. 날짜/메시지 UI 4 tests,
+  27 assertions 통과. 과거의 무표식 Failed 라벨은 역사적 원문이라 변경하지 않았다.
+- 저장된 모델 답변 언어 설정은 임의로 변경하지 않았다. 현재 설정값이 영어이면
+  영어가 기본이며, 한국어 재작성 등 사용자의 명시적 요청이 우선한다.
 
 ## r5 창 레이아웃·완료 상태 보정
 

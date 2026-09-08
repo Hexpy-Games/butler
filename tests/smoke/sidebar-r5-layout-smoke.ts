@@ -40,9 +40,9 @@ try {
       { key: FIRST_RUN_STORAGE_KEY, value: firstRunCompleteState("ko") });
     await page.goto(server.url);
     const chrome = page.locator('[data-test-class="chrome-floating-toggle-layer"]');
-    const show = chrome.getByRole("button", { name: "Show sidebar", exact: true });
+    const show = chrome.getByRole("button", { name: "사이드바 보기", exact: true });
     if (await show.isVisible()) await show.click();
-    const hide = chrome.getByRole("button", { name: "Hide sidebar", exact: true });
+    const hide = chrome.getByRole("button", { name: "사이드바 숨기기", exact: true });
     await hide.waitFor();
     await page.getByRole("button", { name: "검증 대화 1", exact: true }).first().waitFor();
     await page.waitForTimeout(250); // CSS panel transition, not runtime polling.
