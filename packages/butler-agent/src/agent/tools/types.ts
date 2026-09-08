@@ -7,6 +7,7 @@ export interface ButlerToolCall {
   rawArguments: string;
   providerCallId?: string;
   signal?: AbortSignal;
+  toolContractVersion?: 1 | 2;
 }
 
 export type ButlerToolEffectBoundary =
@@ -16,6 +17,7 @@ export type ButlerToolEffectBoundary =
   | "dynamic";
 
 export interface ButlerToolDefinition extends FunctionToolDefinition {
+  toolContractVersion?: 1 | 2;
   effectBoundary: ButlerToolEffectBoundary;
   concurrencySafe: boolean;
   interruptBehavior: "continue" | "cancel";

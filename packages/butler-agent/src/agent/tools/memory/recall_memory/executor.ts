@@ -8,15 +8,51 @@ import type {
   RetrievalStrategy,
 } from "../../../cognition/memory/retrieval-planning.ts";
 import type { createMemoryToolHandlers } from "../shared.ts";
+import type { ButlerToolCall } from "../../types.ts";
+import {
+  readActiveDescriptor,
+  recallMemory,
+} from "../../../cognition/memory/index.ts";
 
 const RECALL_VECTOR_TIMEOUT_MS = 10_000;
 
-export function createRecallMemoryToolHandler(input: Parameters<typeof createMemoryToolHandlers>[0]) {
-  return async (call: { args: Record<string, unknown> }) => {
+export function createRecallMemoryToolHandler(
+  input: Parameters<typeof createMemoryToolHandlers>[0],
+) {
+  return async (call: ButlerToolCall) => {
     const cue = typeof call.args.cue === "string" ? call.args.cue.trim() : "";
     if (!cue) throw new Error("recall_memory requires cue");
-    const generatedQueries = normalizeGeneratedQueries(call.args.generated_queries);
-    const strategies = normalizeEnumArray(call.args.strategies, RECALL_STRATEGIES);
+    if ((call.toolContractVersion ?? 1) === 2) {
+      if (!input.sessionId?.trim() || !input.turnId?.trim()) {
+        throw new Error(
+          "recall_memory v2 requires runtime session and turn binding",
+        );
+      }
+      const descriptor = readActiveDescriptor(input.butlerData);
+      const result = recallMemory({
+        context: {
+          butlerData: input.butlerData,
+          target: {
+            kind: "active",
+            expected_generation: descriptor.generation_id,
+          },
+          signal: call.signal ?? new AbortController().signal,
+        },
+        cue,
+        includeVector: call.args.include_vector !== false,
+        limit: typeof call.args.limit === "number" ? call.args.limit : 6,
+        sessionId: input.sessionId ?? "",
+        projectId: input.projectId ?? null,
+      });
+      return { ok: true, ...result };
+    }
+    const generatedQueries = normalizeGeneratedQueries(
+      call.args.generated_queries,
+    );
+    const strategies = normalizeEnumArray(
+      call.args.strategies,
+      RECALL_STRATEGIES,
+    );
     const evidenceRequired = normalizeEnumArray(
       call.args.evidence_required,
       RECALL_EVIDENCE_REQUIREMENTS,
@@ -27,35 +63,39 @@ export function createRecallMemoryToolHandler(input: Parameters<typeof createMem
         .filter((query) => query.strategy === "search_vector_episode")
         .map((query) => query.query),
     );
-    const evidencePolicy = strategies.length > 0 || evidenceRequired.length > 0
-      ? {
-        strategies,
-        evidenceRequired,
-        retrievalPlan: { strategies, evidence_required: evidenceRequired },
-      }
-      : undefined;
-    const honorVectorOptOut = call.args.include_vector === false && (
-      strategies.includes("query_exact_transcript") ||
-      evidenceRequired.includes("exact_quote")
-    );
+    const evidencePolicy =
+      strategies.length > 0 || evidenceRequired.length > 0
+        ? {
+            strategies,
+            evidenceRequired,
+            retrievalPlan: { strategies, evidence_required: evidenceRequired },
+          }
+        : undefined;
+    const honorVectorOptOut =
+      call.args.include_vector === false &&
+      (strategies.includes("query_exact_transcript") ||
+        evidenceRequired.includes("exact_quote"));
     const recall = honorVectorOptOut
       ? recallMemoryEvidence({
-        butlerData: input.butlerData,
-        cue,
-        projectId: input.projectId,
-        limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
-        evidencePolicy,
-      })
+          butlerData: input.butlerData,
+          cue,
+          projectId: input.projectId,
+          limit:
+            typeof call.args.limit === "number" ? call.args.limit : undefined,
+          evidencePolicy,
+        })
       : await recallMemoryEvidenceWithVector({
-        butlerData: input.butlerData,
-        cue,
-        projectId: input.projectId,
-        limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
-        vectorQueries,
-        evidencePolicy,
-        vectorBackend: input.memoryVectorBackend,
-        vectorTimeoutMs: input.memoryVectorTimeoutMs ?? RECALL_VECTOR_TIMEOUT_MS,
-      });
+          butlerData: input.butlerData,
+          cue,
+          projectId: input.projectId,
+          limit:
+            typeof call.args.limit === "number" ? call.args.limit : undefined,
+          vectorQueries,
+          evidencePolicy,
+          vectorBackend: input.memoryVectorBackend,
+          vectorTimeoutMs:
+            input.memoryVectorTimeoutMs ?? RECALL_VECTOR_TIMEOUT_MS,
+        });
     return {
       ok: true,
       ...recall,
@@ -97,11 +137,19 @@ function stringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function normalizeEnumArray<T extends string>(value: unknown, allowed: Set<T>): T[] {
+function normalizeEnumArray<T extends string>(
+  value: unknown,
+  allowed: Set<T>,
+): T[] {
   if (!Array.isArray(value)) return [];
   const output: T[] = [];
   for (const item of value) {
-    if (typeof item !== "string" || !allowed.has(item as T) || output.includes(item as T)) continue;
+    if (
+      typeof item !== "string" ||
+      !allowed.has(item as T) ||
+      output.includes(item as T)
+    )
+      continue;
     output.push(item as T);
   }
   return output;
@@ -114,10 +162,11 @@ function normalizeGeneratedQueries(value: unknown): RetrievalGeneratedQuery[] {
   for (const item of value) {
     if (!item || typeof item !== "object") continue;
     const raw = item as Record<string, unknown>;
-    const strategy = typeof raw.strategy === "string" &&
+    const strategy =
+      typeof raw.strategy === "string" &&
       RECALL_STRATEGIES.has(raw.strategy as RetrievalStrategy)
-      ? raw.strategy as RetrievalStrategy
-      : null;
+        ? (raw.strategy as RetrievalStrategy)
+        : null;
     const query = typeof raw.query === "string" ? raw.query.trim() : "";
     if (!strategy || query.length < 2) continue;
     const key = `${strategy}:${query.toLocaleLowerCase("en-US")}`;

@@ -29,8 +29,12 @@ import { runHealth } from "./phases/health.ts";
 import { findMainSessions } from "./lib/sessions.ts";
 import { compactHotCacheFile } from "./lib/hot-cache-compaction.ts";
 import { butlerAgentSourcePath } from "../../../../runtime/paths.ts";
-import { cognitionConsolidationRoot, cognitionMemoryRoot } from "../../paths.ts";
+import {
+  cognitionConsolidationRoot,
+  cognitionMemoryRoot,
+} from "../../paths.ts";
 import { refreshRegisteredProjectCapsules } from "../project-memory.ts";
+import { initializeEmptyMemoryGeneration } from "../projection/generation.ts";
 
 const fs: typeof import("fs") = createRequire(import.meta.url)("fs");
 
@@ -81,7 +85,10 @@ export async function runConsolidationCycle(
   const failedPhases: Array<{ phase: string; error: string }> = [];
   let aborted: ConsolidationCycleResult["aborted"];
 
-  if (!acquireConsolidationLock(cfg.lockPath)) {
+  const lease = acquireConsolidationLock(cfg.lockPath, {
+    purpose: "memory_maintenance",
+  });
+  if (!lease) {
     const info = inspectConsolidationLock(cfg.lockPath);
     logger.emit({
       phase: "lock",
@@ -140,7 +147,7 @@ export async function runConsolidationCycle(
       }
     }
   } finally {
-    releaseConsolidationLock(cfg.lockPath);
+    releaseConsolidationLock(cfg.lockPath, lease);
   }
 
   const duration_ms = Date.now() - start;
@@ -174,7 +181,9 @@ async function runPhase(
       return runWithBudget(deps.runOptimize, budget);
     case "health":
       return runWithBudget(async () => {
-        const projectCapsules = deps.runProjectCapsules ? await deps.runProjectCapsules() : {};
+        const projectCapsules = deps.runProjectCapsules
+          ? await deps.runProjectCapsules()
+          : {};
         const health = await deps.runHealth();
         return {
           ...health,
@@ -240,7 +249,9 @@ function loadRawConsolidationCycle(): any {
   }
 }
 
-function buildCatchupSessions(): Array<import("./phases/catchup.ts").CatchupSession> {
+function buildCatchupSessions(): Array<
+  import("./phases/catchup.ts").CatchupSession
+> {
   try {
     return findMainSessions().map((s) => ({
       path: s.path,
@@ -258,9 +269,24 @@ function makeCatchupDrain(): (args: {
   fromByte: number;
   toByte: number;
 }) => { ok: boolean; linesProcessed: number } {
-  const indexTs = butlerAgentSourcePath(butlerHome(), "agent", "cognition", "memory", "scripts", "index.ts");
-  const saveHotTs = butlerAgentSourcePath(butlerHome(), "agent", "cognition", "memory", "scripts", "save_hot.ts");
-  const { spawnSync } = require("child_process") as typeof import("child_process");
+  const indexTs = butlerAgentSourcePath(
+    butlerHome(),
+    "agent",
+    "cognition",
+    "memory",
+    "scripts",
+    "index.ts",
+  );
+  const saveHotTs = butlerAgentSourcePath(
+    butlerHome(),
+    "agent",
+    "cognition",
+    "memory",
+    "scripts",
+    "save_hot.ts",
+  );
+  const { spawnSync } =
+    require("child_process") as typeof import("child_process");
   const bunExec = process.execPath;
   return ({ sessionId, path }) => {
     // Best-effort: invoke save_hot (non-fatal) then index.ts against the full
@@ -270,7 +296,16 @@ function makeCatchupDrain(): (args: {
       try {
         spawnSync(
           bunExec,
-          ["run", saveHotTs, "--session-id", sessionId, "--type", "conversation", "--project", "butler"],
+          [
+            "run",
+            saveHotTs,
+            "--session-id",
+            sessionId,
+            "--type",
+            "conversation",
+            "--project",
+            "butler",
+          ],
           { encoding: "utf8", timeout: 60_000 },
         );
       } catch {}
@@ -305,6 +340,25 @@ function makeCatchupDrain(): (args: {
 }
 
 if (import.meta.main) {
+  if (
+    process.argv.includes("--memory-rebuild") &&
+    process.argv.includes("initialize-empty")
+  ) {
+    try {
+      console.log(
+        JSON.stringify({
+          ok: true,
+          descriptor: initializeEmptyMemoryGeneration(butlerData()),
+        }),
+      );
+      process.exit(0);
+    } catch (error) {
+      const code =
+        error instanceof Error ? error.message : "memory_initialization_failed";
+      console.error(JSON.stringify({ ok: false, code }));
+      process.exit(1);
+    }
+  }
   const cfg = loadConfig();
   if (!cfg.enabled) {
     const r = await runConsolidationCycle(cfg, {
@@ -339,7 +393,8 @@ if (import.meta.main) {
   const decayD = sc.activationDecayD ?? 0.5;
   const edgeBoostWindowMs = 7 * 86400_000;
   const activationPruneFloor = sc.activationPruneFloor ?? -3.0;
-  const hotCacheCompactThresholdBytes = sc.hotCacheCompactThresholdBytes ?? 32768;
+  const hotCacheCompactThresholdBytes =
+    sc.hotCacheCompactThresholdBytes ?? 32768;
   const logRetentionDays = sc.logRetentionDays ?? 7;
   const diskQuotaMb = sc.diskQuotaMb ?? 2048;
 
@@ -353,7 +408,12 @@ if (import.meta.main) {
       }) as unknown as Record<string, unknown>;
     },
     runConsolidate: async () =>
-      runConsolidate({ db, nowMs: Date.now(), decayD, edgeBoostWindowMs }) as unknown as Record<string, unknown>,
+      runConsolidate({
+        db,
+        nowMs: Date.now(),
+        decayD,
+        edgeBoostWindowMs,
+      }) as unknown as Record<string, unknown>,
     runOptimize: async () => {
       if (!lanceTable) return { skipped: true, reason: "no-lance-table" };
       return (await runOptimize({
@@ -398,7 +458,9 @@ if (import.meta.main) {
     // orchestrator itself throws we must still release DB handles.
     exitCode = 1;
   } finally {
-    try { db.close(); } catch {}
+    try {
+      db.close();
+    } catch {}
   }
   process.exit(exitCode);
 }

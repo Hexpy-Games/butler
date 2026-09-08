@@ -5,7 +5,13 @@
 // Managed by Butler's native supervisor as `butler-sync-consumer`.
 // PID lock: $BUTLER_DATA/cognition/memory/locks/sync-consumer.pid
 
-import { dequeue, peek, type SyncRequest } from "./queue.ts";
+import {
+  ack,
+  dequeue,
+  peek,
+  type LegacySyncRequest,
+  type SyncRequest,
+} from "./queue.ts";
 import {
   existsSync,
   mkdirSync,
@@ -31,24 +37,21 @@ import { cognitionMemoryRoot } from "../../paths.ts";
 import { indexTranscriptLinesForQuery } from "../exact-query.ts";
 import { butlerAgentSourcePath } from "../../../../runtime/paths.ts";
 import {
-  completionJobProcessed,
   readConversationCompletionObservation,
-  writeCompletionJobReceipt,
   type ConversationCompletionObservation,
 } from "../../continuity/completion-observation.ts";
 import {
-  writeSemanticHotCacheEntry,
-  type HotCacheWriteReceipt,
-} from "../../continuity/hot-cache-writer.ts";
+  advanceNextMemoryProjection,
+  ingestConversationMemory,
+  readActiveDescriptor,
+} from "../index.ts";
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
-const BUTLER_HOME =
-  process.env.BUTLER_HOME || process.cwd();
-const BUTLER_DATA =
-  process.env.BUTLER_DATA || join(homedir(), ".butler");
+const BUTLER_HOME = process.env.BUTLER_HOME || process.cwd();
+const BUTLER_DATA = process.env.BUTLER_DATA || join(homedir(), ".butler");
 const MEMORY_DIR = cognitionMemoryRoot(BUTLER_DATA);
 
 const POLL_INTERVAL_MS = 1000;
@@ -57,15 +60,25 @@ const PID_FILE = join(MEMORY_DIR, "locks", "sync-consumer.pid");
 export const CONSOLIDATION_LOCK = consolidationLockPath(BUTLER_DATA);
 const BUN = process.execPath;
 
-const SAVE_HOT = butlerAgentSourcePath(BUTLER_HOME, "agent", "cognition", "memory", "scripts", "save_hot.ts");
-const INDEX_TS = butlerAgentSourcePath(BUTLER_HOME, "agent", "cognition", "memory", "scripts", "index.ts");
+const SAVE_HOT = butlerAgentSourcePath(
+  BUTLER_HOME,
+  "agent",
+  "cognition",
+  "memory",
+  "scripts",
+  "save_hot.ts",
+);
+const INDEX_TS = butlerAgentSourcePath(
+  BUTLER_HOME,
+  "agent",
+  "cognition",
+  "memory",
+  "scripts",
+  "index.ts",
+);
 
 const DLQ_FILE = join(MEMORY_DIR, "queue", "dead-letter.jsonl");
-const FAIL_COUNTER_FILE = join(
-  MEMORY_DIR,
-  "locks",
-  "sync-consumer-fail-count",
-);
+const FAIL_COUNTER_FILE = join(MEMORY_DIR, "locks", "sync-consumer-fail-count");
 const FAIL_ALERT_THRESHOLD = 5;
 
 interface ResolveTranscriptOptions {
@@ -210,7 +223,10 @@ function acquireLock(): boolean {
   mkdirSync(lockDir, { recursive: true });
 
   try {
-    const fd = openSync(PID_FILE, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL);
+    const fd = openSync(
+      PID_FILE,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL,
+    );
     writeFileSync(fd, process.pid.toString());
     closeSync(fd);
     return true;
@@ -221,15 +237,22 @@ function acquireLock(): boolean {
     if (existingPid && !isNaN(existingPid)) {
       try {
         process.kill(existingPid, 0);
-        log(`Another sync-consumer instance is running (PID ${existingPid}) — exiting`);
+        log(
+          `Another sync-consumer instance is running (PID ${existingPid}) — exiting`,
+        );
         return false;
       } catch (e: any) {
         // EPERM = process exists but owned by another user → treat as alive
         if (e?.code === "EPERM") return false;
         log(`Removing stale lock file (PID ${existingPid} is dead)`);
-        try { unlinkSync(PID_FILE); } catch {}
         try {
-          const fd = openSync(PID_FILE, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL);
+          unlinkSync(PID_FILE);
+        } catch {}
+        try {
+          const fd = openSync(
+            PID_FILE,
+            fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL,
+          );
           writeFileSync(fd, process.pid.toString());
           closeSync(fd);
           return true;
@@ -238,7 +261,9 @@ function acquireLock(): boolean {
         }
       }
     }
-    try { unlinkSync(PID_FILE); } catch {}
+    try {
+      unlinkSync(PID_FILE);
+    } catch {}
     return false;
   }
 }
@@ -254,8 +279,15 @@ function releaseLock() {
 // ---------------------------------------------------------------------------
 
 export interface ProcessDeps {
-  runIndex?: (args: string[], env: NodeJS.ProcessEnv) => SpawnSyncReturns<string>;
-  runSaveHot?: (args: string[], env: NodeJS.ProcessEnv, input: string) => SpawnSyncReturns<string>;
+  runIndex?: (
+    args: string[],
+    env: NodeJS.ProcessEnv,
+  ) => SpawnSyncReturns<string>;
+  runSaveHot?: (
+    args: string[],
+    env: NodeJS.ProcessEnv,
+    input: string,
+  ) => SpawnSyncReturns<string>;
   resolveTranscript?: (sessionId: string) => string | null;
   onAlert?: (count: number) => void;
   butlerHome?: string;
@@ -264,49 +296,124 @@ export interface ProcessDeps {
   failCounterFile?: string;
   saveHotPath?: string;
   indexTsPath?: string;
+  ingest?: typeof ingestConversationMemory;
 }
 
 export interface ProcessResult {
   dequeue: boolean;
   failCount: number;
   reason?: string;
+  generationId?: string;
 }
 
-export function processEntry(
+export async function processEntry(
   entry: SyncRequest,
   deps: ProcessDeps = {},
-): ProcessResult {
-  log(
-    `Processing: ${entry.project} (session: ${entry.session_id}, trigger: ${entry.trigger})`,
-  );
-
+): Promise<ProcessResult> {
   const butlerHome = deps.butlerHome ?? BUTLER_HOME;
   const butlerData = deps.butlerData ?? BUTLER_DATA;
-  const env = { ...process.env, BUTLER_HOME: butlerHome, BUTLER_DATA: butlerData };
-  const dlqFile = deps.dlqFile ?? DLQ_FILE;
-  const counterFile = deps.failCounterFile ?? FAIL_COUNTER_FILE;
+  const env = {
+    ...process.env,
+    BUTLER_HOME: butlerHome,
+    BUTLER_DATA: butlerData,
+  };
+  const dlqFile =
+    deps.dlqFile ??
+    join(cognitionMemoryRoot(butlerData), "queue", "dead-letter.jsonl");
+  const counterFile =
+    deps.failCounterFile ??
+    join(cognitionMemoryRoot(butlerData), "locks", "sync-consumer-fail-count");
   const saveHotPath = deps.saveHotPath ?? SAVE_HOT;
   const indexTsPath = deps.indexTsPath ?? INDEX_TS;
   const resolve =
-    deps.resolveTranscript ?? ((id: string) => resolveTranscriptPath(id, { butlerDataDir: butlerData }));
+    deps.resolveTranscript ??
+    ((id: string) => resolveTranscriptPath(id, { butlerDataDir: butlerData }));
   const onAlert = deps.onAlert ?? emitFailureAlert;
   const completion = canonicalCompletionObservation(entry, butlerData);
+  const logProject =
+    completion && completion !== "invalid"
+      ? (completion.project_id ?? "global")
+      : entry.schema_version === "butler.memory-sync-request.v3"
+        ? "canonical"
+        : entry.project;
+  const logSession =
+    completion && completion !== "invalid"
+      ? completion.runtime_session_id
+      : entry.schema_version === "butler.memory-sync-request.v3"
+        ? entry.source.session_id
+        : entry.session_id;
+  log(`Processing: ${logProject} (session: ${logSession})`);
   if (completion === "invalid") {
     const reason = "completion_observation_invalid";
-    appendDLQ({
-      timestamp: new Date().toISOString(),
-      session_id: entry.session_id,
-      project: entry.project,
-      reason,
-      exit_code: null,
-      stderr_tail: "canonical completion observation is missing, corrupt, or does not match its queue request",
-    }, dlqFile);
+    appendDLQ(
+      {
+        timestamp: new Date().toISOString(),
+        session_id: logSession,
+        project: logProject,
+        reason,
+        exit_code: null,
+        stderr_tail:
+          "canonical completion observation is missing, corrupt, or does not match its queue request",
+      },
+      dlqFile,
+    );
     return { dequeue: true, failCount: readFailCounter(counterFile), reason };
   }
-  if (completion && completionJobProcessed(butlerData, completion.job_id)) {
-    return { dequeue: true, failCount: readFailCounter(counterFile), reason: "completion_already_processed" };
+  if (completion) {
+    try {
+      const descriptor = readActiveDescriptor(butlerData);
+      const projection = await (deps.ingest ?? ingestConversationMemory)({
+        context: {
+          butlerData,
+          target: {
+            kind: "active",
+            expected_generation: descriptor.generation_id,
+          },
+          signal: new AbortController().signal,
+        },
+        source: {
+          kind: "conversation_turn",
+          session_id: completion.conversation_session_id,
+          turn_id: completion.conversation_turn_id,
+          outcome_generation: completion.outcome_generation,
+        },
+        completionJobId: completion.job_id,
+      });
+      return {
+        dequeue: projection.source.state === "complete",
+        failCount: readFailCounter(counterFile),
+        generationId: descriptor.generation_id,
+      };
+    } catch (error) {
+      const reason = safeIngestionFailure(error);
+      if (reason === "memory_source_ineligible") {
+        return {
+          dequeue: true,
+          failCount: readFailCounter(counterFile),
+          reason,
+        };
+      }
+      appendDLQ(
+        {
+          timestamp: new Date().toISOString(),
+          session_id: logSession,
+          project: logProject,
+          reason,
+          exit_code: null,
+          stderr_tail: reason,
+        },
+        dlqFile,
+      );
+      return {
+        dequeue: false,
+        failCount: readFailCounter(counterFile),
+        reason,
+      };
+    }
   }
-
+  if (entry.schema_version === "butler.memory-sync-request.v3") {
+    throw new Error("memory_sync_request_v3_unresolved");
+  }
   if (!isSafeProvenanceValue(entry.source)) {
     const reason = "unsafe_source_provenance";
     appendDLQ(
@@ -330,7 +437,7 @@ export function processEntry(
     resolve,
     dlqFile,
     counterFile,
-    completion,
+    completion: null,
   });
   if ("result" in payload) return payload.result;
   const chunk = payload.chunks[0];
@@ -347,20 +454,26 @@ export function processEntry(
       },
       dlqFile,
     );
-    log(`  conversation contained no indexable text for ${entry.session_id} — routed to DLQ`);
+    log(
+      `  conversation contained no indexable text for ${entry.session_id} — routed to DLQ`,
+    );
     return { dequeue: true, failCount: readFailCounter(counterFile), reason };
   }
 
-  let hotCacheReceipt: HotCacheWriteReceipt | null = null;
-  // 2. Semantic consolidation. Canonical completion jobs use save_hot only as
-  // a summarizer; the consumer owns scope resolution and the shared writer.
+  // Legacy queue entries retain their original save_hot/index compatibility path.
   if (existsSync(saveHotPath)) {
     const runSaveHot =
       deps.runSaveHot ??
-      ((args, e) =>
-        spawnSync(BUN, args, { input: chunk.conversationText, encoding: "utf8", timeout: 60000, env: e }));
+      ((args, environment) =>
+        spawnSync(BUN, args, {
+          input: chunk.conversationText,
+          encoding: "utf8",
+          timeout: 60000,
+          env: environment,
+        }));
     try {
-      const saveHotArgs = [
+      const result = runSaveHot(
+        [
           "run",
           saveHotPath,
           "--project",
@@ -369,66 +482,20 @@ export function processEntry(
           chunk.sessionId.storage,
           "--type",
           "conversation",
-          ...(completion ? ["--summarize-only"] : []),
-        ];
-      const result = runSaveHot(
-        saveHotArgs,
+        ],
         env,
         chunk.conversationText,
       );
-      if (result.status === 0) {
-        if (completion) {
-          const summary = result.stdout.trim();
-          if (!summary) throw new Error("semantic_summary_empty");
-          hotCacheReceipt = writeSemanticHotCacheEntry({
-            butlerData,
-            scope: completion.scope,
-            projectId: completion.project_id,
-            sessionId: completion.runtime_session_id,
-            sourceId: completion.job_id,
-            body: summary,
-            createdAt: completion.completed_at,
-          });
-        }
-        log("  save_hot: OK");
-      } else {
-        if (completion) throw new Error(`semantic_summary_failed:${result.status}`);
-        log(`  save_hot: failed — ${(result.stderr || "").slice(0, 200)}`);
-      }
-    } catch (e: any) {
-      if (completion) {
-        const reason = "semantic_hot_cache_write_failed";
-        const n = readFailCounter(counterFile) + 1;
-        writeFailCounter(n, counterFile);
-        appendDLQ({
-          timestamp: new Date().toISOString(),
-          session_id: entry.session_id,
-          project: entry.project,
-          reason,
-          exit_code: null,
-          stderr_tail: String(e?.message ?? e).slice(-500),
-        }, dlqFile);
-        return { dequeue: n >= FAIL_ALERT_THRESHOLD, failCount: n, reason };
-      }
-      log(`  save_hot: error — ${e.message}`);
+      if (result.status === 0) log("  save_hot: OK");
+      else log(`  save_hot: failed — ${(result.stderr || "").slice(0, 200)}`);
+    } catch (error: any) {
+      log(`  save_hot: error — ${error.message}`);
     }
-  } else if (completion) {
-    const reason = "semantic_summarizer_missing";
-    appendDLQ({
-      timestamp: new Date().toISOString(),
-      session_id: entry.session_id,
-      project: entry.project,
-      reason,
-      exit_code: null,
-      stderr_tail: "configured semantic summarizer is missing",
-    }, dlqFile);
-    return { dequeue: true, failCount: readFailCounter(counterFile), reason };
   }
 
   // 3. index.ts with --file (this is the contract fix)
   if (!existsSync(indexTsPath)) {
     log(`  index: ${indexTsPath} missing — skipping`);
-    completeCanonicalJob(butlerData, completion, hotCacheReceipt, "skipped");
     return { dequeue: true, failCount: readFailCounter(counterFile) };
   }
 
@@ -496,7 +563,6 @@ export function processEntry(
       resetFailCounter(counterFile);
       alertedForStreak = false;
     }
-    completeCanonicalJob(butlerData, completion, hotCacheReceipt, "ok");
     return { dequeue: true, failCount: 0 };
   }
 
@@ -525,7 +591,7 @@ export function processEntry(
 }
 
 function resolveMemoryPayload(input: {
-  entry: SyncRequest;
+  entry: LegacySyncRequest;
   butlerData: string;
   resolve: (sessionId: string) => string | null;
   dlqFile: string;
@@ -534,18 +600,22 @@ function resolveMemoryPayload(input: {
 }): MemoryTranscriptPayload | { result: ProcessResult } {
   const canonical = buildMemoryConversationObservationPayload({
     butlerData: input.butlerData,
-    sourceSessionId: input.completion?.conversation_session_id ?? input.entry.session_id,
+    sourceSessionId:
+      input.completion?.conversation_session_id ?? input.entry.session_id,
     conversationTurnId: input.completion?.conversation_turn_id,
     chunkByGap: false,
   });
-  const canonicalIds = new Set(canonical.chunks.flatMap((chunk) => chunk.sourceMessageIds));
-  const canonicalIdentityMatches = !input.completion || (
-    canonicalIds.has(input.completion.inbound_message_id) &&
-    canonicalIds.has(input.completion.outbound_message_id)
+  const canonicalIds = new Set(
+    canonical.chunks.flatMap((chunk) => chunk.sourceMessageIds),
   );
+  const canonicalIdentityMatches =
+    !input.completion ||
+    (canonicalIds.has(input.completion.inbound_message_id) &&
+      canonicalIds.has(input.completion.outbound_message_id));
   if (canonical.chunks.length > 0 && canonicalIdentityMatches) {
     return {
-      sourceSessionId: canonical.conversationSessionId ?? input.entry.session_id,
+      sourceSessionId:
+        canonical.conversationSessionId ?? input.entry.session_id,
       chunks: canonical.chunks,
       messageCount: canonical.messageCount,
     };
@@ -553,15 +623,25 @@ function resolveMemoryPayload(input: {
 
   if (input.completion) {
     const reason = "canonical_completion_not_resolved";
-    appendDLQ({
-      timestamp: new Date().toISOString(),
-      session_id: input.entry.session_id,
-      project: input.entry.project,
-      reason,
-      exit_code: null,
-      stderr_tail: "canonical conversation turn did not contain the completion observation message identities",
-    }, input.dlqFile);
-    return { result: { dequeue: true, failCount: readFailCounter(input.counterFile), reason } };
+    appendDLQ(
+      {
+        timestamp: new Date().toISOString(),
+        session_id: input.entry.session_id,
+        project: input.entry.project,
+        reason,
+        exit_code: null,
+        stderr_tail:
+          "canonical conversation turn did not contain the completion observation message identities",
+      },
+      input.dlqFile,
+    );
+    return {
+      result: {
+        dequeue: true,
+        failCount: readFailCounter(input.counterFile),
+        reason,
+      },
+    };
   }
 
   const filePath = input.resolve(input.entry.session_id);
@@ -583,8 +663,16 @@ function resolveMemoryPayload(input: {
       },
       input.dlqFile,
     );
-    log(`  conversation/transcript not found for ${input.entry.session_id} — routed to DLQ`);
-    return { result: { dequeue: true, failCount: readFailCounter(input.counterFile), reason } };
+    log(
+      `  conversation/transcript not found for ${input.entry.session_id} — routed to DLQ`,
+    );
+    return {
+      result: {
+        dequeue: true,
+        failCount: readFailCounter(input.counterFile),
+        reason,
+      },
+    };
   }
 
   const rawLines = readFileSync(filePath, "utf8")
@@ -606,35 +694,35 @@ function canonicalCompletionObservation(
   entry: SyncRequest,
   butlerData: string,
 ): ConversationCompletionObservation | null | "invalid" {
-  if (entry.schema_version !== "butler.memory-sync-request.v2") return null;
+  if (
+    entry.schema_version !== "butler.memory-sync-request.v2" &&
+    entry.schema_version !== "butler.memory-sync-request.v3"
+  )
+    return null;
   if (!entry.job_id) return "invalid";
-  const observation = readConversationCompletionObservation(butlerData, entry.job_id);
+  const observation = readConversationCompletionObservation(
+    butlerData,
+    entry.job_id,
+  );
   if (!observation) return "invalid";
+  if (entry.schema_version === "butler.memory-sync-request.v3") {
+    const source = entry.source;
+    return source.kind === "conversation_turn" &&
+      source.session_id === observation.conversation_session_id &&
+      source.turn_id === observation.conversation_turn_id &&
+      source.outcome_generation === observation.outcome_generation
+      ? observation
+      : "invalid";
+  }
   return observation.runtime_session_id === entry.session_id &&
-      observation.conversation_session_id === entry.conversation_session_id &&
-      observation.conversation_turn_id === entry.conversation_turn_id &&
-      observation.inbound_message_id === entry.inbound_message_id &&
-      observation.outbound_message_id === entry.outbound_message_id &&
-      observation.scope === entry.scope &&
-      observation.project_id === (entry.project_id ?? null)
+    observation.conversation_session_id === entry.conversation_session_id &&
+    observation.conversation_turn_id === entry.conversation_turn_id &&
+    observation.inbound_message_id === entry.inbound_message_id &&
+    observation.outbound_message_id === entry.outbound_message_id &&
+    observation.scope === entry.scope &&
+    observation.project_id === (entry.project_id ?? null)
     ? observation
     : "invalid";
-}
-
-function completeCanonicalJob(
-  butlerData: string,
-  completion: ConversationCompletionObservation | null,
-  hotCacheReceipt: HotCacheWriteReceipt | null,
-  indexStatus: "ok" | "skipped",
-): void {
-  if (!completion) return;
-  writeCompletionJobReceipt(butlerData, {
-    schema_version: "butler.memory-completion-job-receipt.v1",
-    job_id: completion.job_id,
-    completed_at: new Date().toISOString(),
-    hot_cache_receipt: hotCacheReceipt as unknown as Record<string, unknown> | null,
-    index_status: indexStatus,
-  });
 }
 
 // Small delay between entries to avoid starving the queue file
@@ -649,7 +737,10 @@ export interface PollDeps {
   lockPath?: string;
   peek?: () => SyncRequest | null;
   dequeue?: () => SyncRequest | null;
-  process?: (entry: SyncRequest) => ProcessResult;
+  process?: (entry: SyncRequest) => ProcessResult | Promise<ProcessResult>;
+  ack?: (expectedJobId: string) => SyncRequest | null;
+  advance?: typeof advanceNextMemoryProjection;
+  butlerData?: string;
   now?: () => number;
 }
 
@@ -673,16 +764,19 @@ export function resetPauseState(): void {
  * Contract: when the consolidation lock is present, the consumer must not
  * touch peek()/dequeue(). Debounce map state is preserved across pauses.
  */
-export function pollIteration(deps: PollDeps = {}): PollResult {
-  const lockPath = deps.lockPath ?? CONSOLIDATION_LOCK;
-  const p = deps.peek ?? peek;
-  const d = deps.dequeue ?? dequeue;
-  const proc = deps.process ?? processEntry;
+export async function pollIteration(deps: PollDeps = {}): Promise<PollResult> {
+  const dataRoot = deps.butlerData ?? BUTLER_DATA;
+  const lockPath = deps.lockPath ?? consolidationLockPath(dataRoot);
+  const p = deps.peek ?? (() => peek(dataRoot));
+  const d = deps.dequeue ?? (() => dequeue(dataRoot));
+  const proc =
+    deps.process ?? ((entry) => processEntry(entry, { butlerData: dataRoot }));
 
   // Use inspectConsolidationLock (which goes through node:module's createRequire)
   // rather than the top-level existsSync so bun:test mock.module("fs") leakage
   // from unrelated test files cannot falsely pause us.
-  const lockHeld = inspectConsolidationLock(lockPath) !== null;
+  const lockHeld =
+    existsSync(lockPath) || inspectConsolidationLock(lockPath) !== null;
   if (lockHeld) {
     let transitioned: "paused" | undefined;
     if (!pausedState) {
@@ -701,23 +795,79 @@ export function pollIteration(deps: PollDeps = {}): PollResult {
   }
 
   const entry = p();
-  if (!entry) return { action: "idle", transitioned };
+  if (!entry) {
+    try {
+      const descriptor = readActiveDescriptor(dataRoot);
+      const progress = await (deps.advance ?? advanceNextMemoryProjection)({
+        context: {
+          butlerData: dataRoot,
+          target: {
+            kind: "active",
+            expected_generation: descriptor.generation_id,
+          },
+          signal: new AbortController().signal,
+        },
+      });
+      return { action: progress ? "processed" : "idle", transitioned };
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "memory_generation_unavailable"
+      ) {
+        return { action: "idle", transitioned };
+      }
+      throw error;
+    }
+  }
 
-  const topicKey = entry.topic ?? "_";
-  const debounceKey = `${entry.project}:${topicKey}`;
+  const topicKey =
+    entry.schema_version === "butler.memory-sync-request.v3"
+      ? "_"
+      : (entry.topic ?? "_");
+  const debounceKey =
+    entry.schema_version === "butler.memory-sync-request.v3"
+      ? entry.job_id
+      : `${entry.project}:${topicKey}`;
   const prevLast = lastSync.get(debounceKey);
 
-  if (entry.schema_version !== "butler.memory-sync-request.v2" && !shouldSync(entry.project, entry.topic)) {
+  if (
+    entry.schema_version !== "butler.memory-sync-request.v2" &&
+    entry.schema_version !== "butler.memory-sync-request.v3" &&
+    !shouldSync(entry.project, entry.topic)
+  ) {
     log(`Debounced: ${debounceKey} (synced <5min ago)`);
     d();
     return { action: "dequeued_debounced", transitioned };
   }
 
-  const result = proc(entry);
+  const result = await proc(entry);
   if (result.dequeue) {
-    d();
+    if (
+      (entry.schema_version === "butler.memory-sync-request.v2" ||
+        entry.schema_version === "butler.memory-sync-request.v3") &&
+      entry.job_id
+    ) {
+      const removed = (deps.ack ?? ((jobId: string) => ack(jobId, dataRoot)))(
+        entry.job_id,
+      );
+      if (!removed) return { action: "idle", transitioned };
+      if (result.generationId) {
+        await (deps.advance ?? advanceNextMemoryProjection)({
+          context: {
+            butlerData: dataRoot,
+            target: {
+              kind: "active",
+              expected_generation: result.generationId,
+            },
+            signal: new AbortController().signal,
+          },
+        });
+      }
+    } else d();
   } else {
-    rollbackDebounce(entry.project, entry.topic, prevLast);
+    if (entry.schema_version !== "butler.memory-sync-request.v3") {
+      rollbackDebounce(entry.project, entry.topic, prevLast);
+    }
   }
   return { action: "processed", transitioned };
 }
@@ -745,7 +895,7 @@ async function main(): Promise<void> {
 
   while (running) {
     try {
-      const r = pollIteration();
+      const r = await pollIteration();
       if (r.action === "processed") {
         await new Promise((resolve) => setTimeout(resolve, PROCESS_DELAY_MS));
         continue;
@@ -757,6 +907,21 @@ async function main(): Promise<void> {
 
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
+}
+
+function safeIngestionFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  return [
+    "memory_generation_unavailable",
+    "memory_generation_changed",
+    "memory_write_busy",
+    "memory_source_not_terminal",
+    "memory_authoritative_user_source_missing",
+    "memory_source_text_missing",
+    "memory_source_ineligible",
+  ].includes(message)
+    ? message
+    : "memory_source_registration_failed";
 }
 
 if (import.meta.main) {

@@ -132,6 +132,8 @@ export interface ModelRoundTool {
   description: string;
   parameters: Record<string, unknown>;
   concurrencySafe?: boolean;
+  /** Runtime-private schema contract selected with this frozen tool surface. */
+  toolContractVersion?: 1 | 2;
 }
 
 export type RoundToolSurfaceErrorCode =

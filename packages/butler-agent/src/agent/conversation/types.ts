@@ -4,6 +4,7 @@ export type ConversationStatus = "pending" | "complete" | "failed" | "compacted"
 export type ConversationProvenance = "trusted" | "recovered" | "imported" | "synthetic_summary";
 export type ConversationPartKind = "text" | "attachment_ref" | "tool_call" | "tool_result" | "summary_ref" | "message_content";
 export type ConversationProviderShape = "openai" | "anthropic" | "generic" | null;
+export type ConversationOriginKind = "user_input" | "assistant_public" | "internal_control" | "unknown";
 
 export interface ConversationSession {
   id: string;
@@ -51,6 +52,8 @@ export interface ConversationMessage {
   compacted_by_summary_id: string | null;
   source_gateway: string | null;
   source_ref: string | null;
+  origin_kind?: ConversationOriginKind;
+  origin_ref?: string | null;
 }
 
 export interface ConversationPart {
@@ -170,6 +173,8 @@ export interface AppendMessageInput {
   provenance?: ConversationProvenance;
   sourceGateway?: string | null;
   sourceRef?: string | null;
+  originKind?: ConversationOriginKind;
+  originRef?: string | null;
   now?: string;
   parts?: Array<{
     kind: ConversationPartKind;

@@ -86,6 +86,9 @@ export function butlerToolsForAgentLoop(): BtccAgentLoopToolDefinition[] {
     description: tool.description,
     parameters: tool.parameters,
     concurrencySafe: tool.concurrencySafe,
+    ...(!("toolContractVersion" in tool) || tool.toolContractVersion === undefined
+      ? {}
+      : { toolContractVersion: tool.toolContractVersion }),
   }));
 }
 
@@ -220,6 +223,7 @@ export function createButlerToolExecutor(
     ...createMemoryToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
+      turnId: input.turnId,
       sessionId: input.sessionId,
       projectId: input.projectId,
       memoryVectorBackend: input.memoryVectorBackend,

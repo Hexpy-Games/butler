@@ -196,6 +196,7 @@ export function createActiveDelegationAdmissionGuard(
           args: call.arguments,
           rawArguments: call.rawArguments,
           providerCallId: call.id,
+          toolContractVersion: call.toolContractVersion,
           signal: call.signal,
         });
       };

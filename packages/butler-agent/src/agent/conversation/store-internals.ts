@@ -72,6 +72,8 @@ export class ConversationStoreInternals {
 
   ensureSchema(): void {
     this.db.exec(CONVERSATION_STORE_SCHEMA_SQL);
+    try { this.db.exec("ALTER TABLE conversation_messages ADD COLUMN origin_kind TEXT NOT NULL DEFAULT 'unknown'"); } catch {}
+    try { this.db.exec("ALTER TABLE conversation_messages ADD COLUMN origin_ref TEXT"); } catch {}
     this.db.query(`
       INSERT OR IGNORE INTO conversation_schema_migrations (version, applied_at)
       VALUES (?, ?)
@@ -125,8 +127,8 @@ export class ConversationStoreInternals {
     this.db.query(`
       INSERT INTO conversation_messages (
         id, session_id, turn_id, seq, role, status, visibility, provenance,
-        created_at, compacted_by_summary_id, source_gateway, source_ref
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, compacted_by_summary_id, source_gateway, source_ref, origin_kind, origin_ref
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       message.id,
       message.session_id,
@@ -140,6 +142,8 @@ export class ConversationStoreInternals {
       message.compacted_by_summary_id,
       message.source_gateway,
       message.source_ref,
+      message.origin_kind ?? "unknown",
+      message.origin_ref ?? null,
     );
     return message;
   }

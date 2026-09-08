@@ -23,6 +23,7 @@ export interface ConversationAdmissionTurnInput {
   turnId: string;
   timestamp: string;
   butlerData?: string;
+  origin: { kind: "user_input" | "internal_control"; ref: string };
 }
 
 export interface ConversationAdmissionProvenance {
@@ -229,6 +230,8 @@ export class ConversationAdmissionTurn {
           visibility: decision.operation.visibility,
           sourceGateway: decision.operation.sourceGateway,
           sourceRef: decision.operation.sourceRef,
+          originKind: this.input.origin.kind,
+          originRef: this.input.origin.ref,
         });
         this.requestMessageId ??= message.id;
         return;
@@ -241,6 +244,10 @@ export class ConversationAdmissionTurn {
           visibility: decision.operation.visibility,
           sourceGateway: decision.operation.sourceGateway,
           sourceRef: decision.operation.sourceRef,
+          originKind: this.input.origin.kind === "internal_control"
+            ? "internal_control"
+            : "assistant_public",
+          originRef: this.input.origin.ref,
         });
         if (decision.operation.visibility === "user" || event.kind === "outbound.final") {
           this.publicAssistantMessageId = message.id;

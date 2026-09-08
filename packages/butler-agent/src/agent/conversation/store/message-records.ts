@@ -127,6 +127,16 @@ export class ConversationMessageRecords {
     return this.hydrateRows(rows);
   }
 
+  countSourceBearingMessages(): number {
+    const row = this.dependencies.db.query<{ count: number }, []>(`
+      SELECT COUNT(DISTINCT m.id) AS count
+      FROM conversation_messages m
+      JOIN conversation_parts p ON p.message_id = m.id
+      WHERE p.kind IN ('text', 'message_content')
+    `).get();
+    return Number(row?.count ?? 0);
+  }
+
   readProjectionMessages(
     sessionId: string,
     input: { afterSeq?: number; limit?: number } = {},
@@ -280,6 +290,8 @@ export class ConversationMessageRecords {
       compacted_by_summary_id: null,
       source_gateway: input.sourceGateway ?? null,
       source_ref: input.sourceRef ?? null,
+      origin_kind: input.originKind ?? "unknown",
+      origin_ref: input.originRef ?? null,
     };
   }
 

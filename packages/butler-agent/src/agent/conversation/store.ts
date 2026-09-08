@@ -210,6 +210,10 @@ export class AgentConversationStore {
     return this.messages.readCognitionMessages(input);
   }
 
+  countSourceBearingMessages(): number {
+    return this.messages.countSourceBearingMessages();
+  }
+
   readProjectionMessages(
     sessionId: string,
     input: { afterSeq?: number; limit?: number } = {},

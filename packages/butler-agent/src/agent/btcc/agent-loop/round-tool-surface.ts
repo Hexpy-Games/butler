@@ -76,6 +76,9 @@ function freezeTool(tool: BtccAgentLoopToolDefinition): BtccAgentLoopToolDefinit
     ...(tool.concurrencySafe === undefined
       ? {}
       : { concurrencySafe: tool.concurrencySafe }),
+    ...(tool.toolContractVersion === undefined
+      ? {}
+      : { toolContractVersion: tool.toolContractVersion }),
   });
 }
 

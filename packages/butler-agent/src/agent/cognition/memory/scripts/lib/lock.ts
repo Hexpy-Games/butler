@@ -1,126 +1,119 @@
-// Consolidation lock utility.
-// Shared by the consolidation-cycle orchestrator (acquire/release) and sync-consumer (check only).
-//
-// fs is resolved via createRequire so bun:test `mock.module("fs", ...)` cycles
-// in unrelated test files (notably compact-compaction-fix.test.ts) cannot
-// leave us holding a stale `unlinkSync` reference after their mock.restore().
+// One lease gate shared by memory projection and consolidation writers.
+import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import { dirname, join } from "path";
-import { hostname } from "os";
+import { dirname, join } from "node:path";
+import { hostname } from "node:os";
 import { cognitionConsolidationRoot } from "../../../paths.ts";
 
-const fs: typeof import("fs") = createRequire(import.meta.url)("fs");
+const fs: typeof import("node:fs") = createRequire(import.meta.url)("node:fs");
 
 export interface LockInfo {
   pid: number;
   startedAt: string;
   host: string;
+  owner_nonce: string;
+  purpose: string;
 }
+
+export type ConsolidationLease = Readonly<{
+  owner_nonce: string;
+  purpose: string;
+}>;
 
 export interface AcquireOptions {
+  /** Retained for source compatibility. A live owner is never stolen by age. */
   staleAgeMs?: number;
+  purpose?: string;
 }
 
-const DEFAULT_STALE_AGE_MS = 30 * 60 * 1000;
-
-function writePayload(path: string): void {
+function writePayload(path: string, purpose: string): ConsolidationLease {
+  const lease = Object.freeze({ owner_nonce: randomUUID(), purpose });
   const payload: LockInfo = {
     pid: process.pid,
     startedAt: new Date().toISOString(),
     host: hostname(),
+    owner_nonce: lease.owner_nonce,
+    purpose: lease.purpose,
   };
-  const fd = fs.openSync(
+  const descriptor = fs.openSync(
     path,
     fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
+    0o600,
   );
-  fs.writeFileSync(fd, JSON.stringify(payload));
-  fs.closeSync(fd);
-}
-
-function isAlive(pid: number): boolean {
   try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e: any) {
-    if (e?.code === "EPERM") return true;
-    return false;
+    fs.writeFileSync(descriptor, JSON.stringify(payload));
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
   }
+  return lease;
 }
 
 export function inspectConsolidationLock(path: string): LockInfo | null {
   if (!fs.existsSync(path)) return null;
   try {
-    const raw = fs.readFileSync(path, "utf8");
-    const obj = JSON.parse(raw);
-    if (typeof obj?.pid !== "number" || typeof obj?.startedAt !== "string") return null;
-    return obj as LockInfo;
+    const value = JSON.parse(fs.readFileSync(path, "utf8"));
+    if (
+      typeof value?.pid !== "number" ||
+      typeof value?.startedAt !== "string" ||
+      typeof value?.host !== "string" ||
+      typeof value?.owner_nonce !== "string" ||
+      typeof value?.purpose !== "string"
+    )
+      return null;
+    return value as LockInfo;
   } catch {
     return null;
   }
 }
 
-function isStale(info: LockInfo, staleAgeMs: number): boolean {
-  if (!isAlive(info.pid)) return true;
-  const age = Date.now() - new Date(info.startedAt).getTime();
-  return Number.isFinite(age) && age > staleAgeMs;
-}
-
 export function acquireConsolidationLock(
   path: string,
-  opts: AcquireOptions = {},
-): boolean {
-  const staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
+  options: AcquireOptions = {},
+): ConsolidationLease | null {
   fs.mkdirSync(dirname(path), { recursive: true });
-
+  const purpose = options.purpose?.trim() || "memory_write";
   try {
-    writePayload(path);
-    return true;
-  } catch (err: any) {
-    if (err?.code !== "EEXIST") throw err;
+    return writePayload(path, purpose);
+  } catch (error: any) {
+    if (error?.code !== "EEXIST") throw error;
   }
 
-  const info = inspectConsolidationLock(path);
-  if (!info || isStale(info, staleAgeMs)) {
-    try {
-      fs.unlinkSync(path);
-    } catch {}
-    try {
-      writePayload(path);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  return false;
+  // Stale recovery is deliberately fail closed. Node has no portable
+  // compare-and-unlink primitive, so removing a path here could unlink a
+  // replacement owner's lease between inspection and removal.
+  return null;
 }
 
-export function releaseConsolidationLock(path: string): void {
+export function releaseConsolidationLock(
+  path: string,
+  lease: ConsolidationLease,
+): void {
+  const current = inspectConsolidationLock(path);
+  if (
+    !current ||
+    current.pid !== process.pid ||
+    current.host !== hostname() ||
+    current.owner_nonce !== lease.owner_nonce ||
+    current.purpose !== lease.purpose
+  )
+    return;
   try {
     fs.unlinkSync(path);
   } catch {}
 }
 
 export function sweepStaleLocks(
-  directory: string,
-  opts: AcquireOptions = {},
+  _directory: string,
+  _options: AcquireOptions = {},
 ): string[] {
-  if (!fs.existsSync(directory)) return [];
-  const staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
-  const removed: string[] = [];
-  for (const name of fs.readdirSync(directory)) {
-    if (!name.endsWith(".lock")) continue;
-    const full = join(directory, name);
-    const info = inspectConsolidationLock(full);
-    if (!info || isStale(info, staleAgeMs)) {
-      try {
-        fs.unlinkSync(full);
-        removed.push(name);
-      } catch {}
-    }
-  }
-  return removed;
+  return [];
 }
 
 export function consolidationLockPath(butlerData: string): string {
-  return join(cognitionConsolidationRoot(butlerData), "locks", "consolidation.lock");
+  return join(
+    cognitionConsolidationRoot(butlerData),
+    "locks",
+    "consolidation.lock",
+  );
 }

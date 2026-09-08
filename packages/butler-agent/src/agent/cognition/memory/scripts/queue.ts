@@ -14,7 +14,12 @@ import {
   mkdirSync,
   renameSync,
   unlinkSync,
+  openSync,
+  closeSync,
+  fsyncSync,
+  constants as fsConstants,
 } from "fs";
+import { randomUUID } from "node:crypto";
 import { BUTLER_DIR } from "./constants.ts";
 import { cognitionMemoryRoot } from "../../paths.ts";
 
@@ -22,7 +27,9 @@ import { cognitionMemoryRoot } from "../../paths.ts";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface SyncRequest {
+import type { MemorySourceNotice } from "../projection/contracts.ts";
+
+export interface LegacySyncRequest {
   schema_version?: "butler.memory-sync-request.v2";
   job_id?: string;
   scope?: "project" | "global";
@@ -38,6 +45,15 @@ export interface SyncRequest {
   timestamp: string; // ISO-8601
   trigger: string;
 }
+
+export interface MemorySyncRequestV3 {
+  schema_version: "butler.memory-sync-request.v3";
+  job_id: string;
+  source: MemorySourceNotice;
+  created_at: string;
+}
+
+export type SyncRequest = LegacySyncRequest | MemorySyncRequestV3;
 
 // ---------------------------------------------------------------------------
 // Queue file path
@@ -62,10 +78,29 @@ export function appendToQueue(entry: SyncRequest, butlerData?: string): void {
   if (!existsSync(queueDir)) {
     mkdirSync(queueDir, { recursive: true });
   }
-  if (entry.job_id && readQueueFile(queueFile).some((queued) => queued.job_id === entry.job_id)) return;
-  // Compact JSON (no spaces after colons/commas) + newline
-  const line = JSON.stringify(entry) + "\n";
-  appendFileSync(queueFile, line);
+  withQueueLock(queueFile, () => {
+    if (
+      entry.job_id &&
+      readQueueFile(queueFile).some((queued) => queued.job_id === entry.job_id)
+    )
+      return;
+    appendFileSync(queueFile, JSON.stringify(entry) + "\n");
+    fsyncPath(queueFile);
+  });
+}
+
+export function ack(
+  expectedJobId: string,
+  butlerData?: string,
+): SyncRequest | null {
+  const queueFile = butlerData ? memorySyncQueueFile(butlerData) : QUEUE_FILE;
+  return withQueueLock(queueFile, () => {
+    const entries = readQueueFile(queueFile);
+    const first = entries[0];
+    if (!first || first.job_id !== expectedJobId) return null;
+    replaceQueue(queueFile, entries.slice(1));
+    return first;
+  });
 }
 
 /** Read all entries from the queue. Returns [] if file is missing or empty. */
@@ -74,9 +109,10 @@ export function readQueue(): SyncRequest[] {
 }
 
 /** Remove and return the first entry (FIFO). Atomic via temp-file + rename. */
-export function dequeue(): SyncRequest | null {
-  if (!existsSync(QUEUE_FILE)) return null;
-  const content = readFileSync(QUEUE_FILE, "utf-8");
+export function dequeue(butlerData?: string): SyncRequest | null {
+  const queueFile = butlerData ? memorySyncQueueFile(butlerData) : QUEUE_FILE;
+  if (!existsSync(queueFile)) return null;
+  const content = readFileSync(queueFile, "utf-8");
   const lines = content.split("\n").filter((l) => l.length > 0);
   if (lines.length === 0) return null;
 
@@ -85,20 +121,21 @@ export function dequeue(): SyncRequest | null {
 
   if (remaining.length === 0) {
     // Queue is now empty -- remove the file
-    unlinkSync(QUEUE_FILE);
+    unlinkSync(queueFile);
   } else {
-    const tmp = QUEUE_FILE + ".tmp";
+    const tmp = queueFile + ".tmp";
     writeFileSync(tmp, remaining.join("\n") + "\n");
-    renameSync(tmp, QUEUE_FILE);
+    renameSync(tmp, queueFile);
   }
 
   return first;
 }
 
 /** Return the first entry without removing it. */
-export function peek(): SyncRequest | null {
-  if (!existsSync(QUEUE_FILE)) return null;
-  const content = readFileSync(QUEUE_FILE, "utf-8");
+export function peek(butlerData?: string): SyncRequest | null {
+  const queueFile = butlerData ? memorySyncQueueFile(butlerData) : QUEUE_FILE;
+  if (!existsSync(queueFile)) return null;
+  const content = readFileSync(queueFile, "utf-8");
   const lines = content.split("\n").filter((l) => l.length > 0);
   if (lines.length === 0) return null;
   return JSON.parse(lines[0]) as SyncRequest;
@@ -174,7 +211,7 @@ function cli(args: string[]): void {
     printUsage();
   }
 
-  const entry: SyncRequest = {
+  const entry: LegacySyncRequest = {
     project: project!,
     topic,
     source,
@@ -199,4 +236,57 @@ function readQueueFile(path: string): SyncRequest[] {
   const content = readFileSync(path, "utf-8").trim();
   if (!content) return [];
   return content.split("\n").map((line) => JSON.parse(line) as SyncRequest);
+}
+
+function replaceQueue(path: string, entries: SyncRequest[]): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const temp = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(
+    temp,
+    entries.map((entry) => JSON.stringify(entry)).join("\n") +
+      (entries.length ? "\n" : ""),
+  );
+  fsyncPath(temp);
+  renameSync(temp, path);
+  const directory = openSync(dirname(path), "r");
+  try {
+    fsyncSync(directory);
+  } finally {
+    closeSync(directory);
+  }
+}
+
+function withQueueLock<T>(queueFile: string, run: () => T): T {
+  mkdirSync(dirname(queueFile), { recursive: true });
+  const lockPath = `${queueFile}.lock`;
+  let descriptor: number;
+  try {
+    descriptor = openSync(
+      lockPath,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL,
+      0o600,
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    throw new Error("memory_queue_busy", { cause: error });
+  }
+  try {
+    writeFileSync(
+      descriptor,
+      JSON.stringify({ pid: process.pid, nonce: randomUUID() }),
+    );
+    return run();
+  } finally {
+    closeSync(descriptor);
+    unlinkSync(lockPath);
+  }
+}
+
+function fsyncPath(path: string): void {
+  const descriptor = openSync(path, "r");
+  try {
+    fsyncSync(descriptor);
+  } finally {
+    closeSync(descriptor);
+  }
 }

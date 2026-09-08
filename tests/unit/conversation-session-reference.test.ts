@@ -3,8 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentConversationStore } from
-  "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import {
   BUTLER_TOOLS,
   createButlerToolExecutor,
@@ -12,8 +11,7 @@ import {
 import {
   listConversationSessions,
   readConversationSession,
-} from
-  "../../packages/butler-agent/src/agent/context/conversation-session-reference.ts";
+} from "../../packages/butler-agent/src/agent/context/conversation-session-reference.ts";
 
 let root = "";
 let appDbPath = "";
@@ -70,9 +68,13 @@ test("session discovery uses Agent conversation facts without reading App titles
   });
 
   expect(result.ok).toBe(true);
-  expect(result.scope).toEqual({ kind: "current_project", project_id: "project-butler" });
-  expect(result.sessions.map((session) => session.conversation_session_id))
-    .toEqual(["cs_sandy", "cs_current"]);
+  expect(result.scope).toEqual({
+    kind: "current_project",
+    project_id: "project-butler",
+  });
+  expect(
+    result.sessions.map((session) => session.conversation_session_id),
+  ).toEqual(["cs_sandy", "cs_current"]);
   expect(result.sessions[0]).toMatchObject({
     title: null,
     catalog_source: null,
@@ -80,7 +82,9 @@ test("session discovery uses Agent conversation facts without reading App titles
     project_id: "project-butler",
     message_count: 2,
   });
-  expect(result.sessions[0]?.recent_messages.map((message) => message.text)).toEqual([
+  expect(
+    result.sessions[0]?.recent_messages.map((message) => message.text),
+  ).toEqual([
     "샌디봇 최근 작업을 확인해줘",
     "SSH 상태와 배포 결과를 확인했습니다.",
   ]);
@@ -115,8 +119,9 @@ test("all-session discovery can find another project but project-scoped reading 
     projectId: "project-butler",
     scope: "all_sessions",
   });
-  expect(listed.sessions.map((session) => session.conversation_session_id))
-    .toEqual(["cs_other", "cs_current"]);
+  expect(
+    listed.sessions.map((session) => session.conversation_session_id),
+  ).toEqual(["cs_other", "cs_current"]);
 
   const rejected = readConversationSession({
     butlerData: root,
@@ -167,8 +172,12 @@ test("cross-session reading rejects unknown canonical ids", () => {
 });
 
 test("native session-reference tools expose bounded schemas and execute the canonical path", async () => {
-  const listTool = BUTLER_TOOLS.find((tool) => tool.name === "list_conversation_sessions");
-  const readTool = BUTLER_TOOLS.find((tool) => tool.name === "read_conversation_session");
+  const listTool = BUTLER_TOOLS.find(
+    (tool) => tool.name === "list_conversation_sessions",
+  );
+  const readTool = BUTLER_TOOLS.find(
+    (tool) => tool.name === "read_conversation_session",
+  );
   expect(listTool?.parameters.required).toEqual([]);
   expect(Object.keys(listTool?.parameters.properties ?? {})).toEqual([
     "scope",
@@ -176,10 +185,15 @@ test("native session-reference tools expose bounded schemas and execute the cano
     "include_archived",
     "preview_messages",
   ]);
-  expect(readTool?.parameters.required).toEqual(["conversation_session_id"]);
+  expect(readTool?.parameters.required).toEqual([]);
+  expect(
+    (readTool as { toolContractVersion?: number } | undefined)
+      ?.toolContractVersion,
+  ).toBe(2);
   expect(Object.keys(readTool?.parameters.properties ?? {})).toEqual([
     "conversation_session_id",
     "scope",
+    "source_ref",
     "anchor_message_id",
     "direction",
     "limit",
@@ -215,19 +229,20 @@ test("native session-reference tools expose bounded schemas and execute the cano
     projectId: "project-butler",
   });
 
-  const listed = await execute({
+  const listed = (await execute({
     name: "list_conversation_sessions",
     args: {},
     rawArguments: "{}",
-  }) as ReturnType<typeof listConversationSessions>;
-  expect(listed.sessions.map((session) => session.conversation_session_id))
-    .toEqual(["cs_target", "cs_current"]);
+  })) as ReturnType<typeof listConversationSessions>;
+  expect(
+    listed.sessions.map((session) => session.conversation_session_id),
+  ).toEqual(["cs_target", "cs_current"]);
 
-  const read = await execute({
+  const read = (await execute({
     name: "read_conversation_session",
     args: { conversation_session_id: "cs_target" },
     rawArguments: JSON.stringify({ conversation_session_id: "cs_target" }),
-  }) as ReturnType<typeof readConversationSession>;
+  })) as ReturnType<typeof readConversationSession>;
   expect(read.ok).toBe(true);
   if (!read.ok) throw new Error("expected native canonical conversation read");
   expect(read.messages.map((message) => message.text)).toEqual([

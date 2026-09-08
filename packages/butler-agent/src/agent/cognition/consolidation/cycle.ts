@@ -148,7 +148,8 @@ export async function runCognitionConsolidationCycle(
     return result;
   }
 
-  if (!acquireConsolidationLock(lockPath)) {
+  const lease = acquireConsolidationLock(lockPath, { purpose: "cognition_consolidation" });
+  if (!lease) {
     const info = inspectConsolidationLock(lockPath);
     const locked: ConsolidationPhaseResult = {
       phase: "preflight",
@@ -205,7 +206,7 @@ export async function runCognitionConsolidationCycle(
     writeJsonAtomic(summaryPath, result);
     return result;
   } finally {
-    releaseConsolidationLock(lockPath);
+    releaseConsolidationLock(lockPath, lease);
   }
 }
 
