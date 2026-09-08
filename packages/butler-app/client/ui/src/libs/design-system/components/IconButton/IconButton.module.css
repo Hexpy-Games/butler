@@ -11,13 +11,13 @@
   place-items: center;
   display: inline-grid;
 }
-.moduleScope:hover {
-  background: var(--selection);
+.moduleScope:hover:not(:disabled) {
+  background: var(--icon-button-surface, var(--selection));
   color: var(--text-primary);
 }
 
 .moduleScope.selected {
-  background: var(--selection);
+  background: var(--icon-button-surface, var(--selection));
   color: var(--text-primary);
 }
 .moduleScope:disabled {
