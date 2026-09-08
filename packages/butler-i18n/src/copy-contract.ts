@@ -357,7 +357,6 @@ export interface AppCopy {
     deleteProject: string;
     navigation: string;
     undo: string;
-    organizationUpdated: string;
     conversationList: string;
     primaryActions: string;
     search: string;
