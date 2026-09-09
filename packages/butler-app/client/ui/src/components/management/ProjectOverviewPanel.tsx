@@ -22,6 +22,7 @@ export function ProjectOverviewPanel({ overview, projectId, onSelect, onShowAll 
         <Typo.Body>{copy.blocked} {overview.progress.blocked}</Typo.Body>
       </div>
       <Typo.Caption className={styles.summary}>{copy.recorded} · {copy.registered} {overview.totalWorks}
+        {overview.progress.abandoned > 0 && ` · ${copy.abandoned} ${overview.progress.abandoned}`}
         {overview.progress.unknown > 0 && ` · ${copy.unknown} ${overview.progress.unknown}`}</Typo.Caption>
     </Stack>
     <Section title={copy.remaining}>
