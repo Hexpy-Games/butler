@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Scatter, ScatterChart, XAxis, YAxis, ZAxis } from "recharts";
+import { useState, type CSSProperties } from "react";
+import { CartesianGrid, Scatter, ScatterChart, XAxis, YAxis, ZAxis } from "recharts";
 import { Button, ChartContainer, ChartTooltip, ChartTooltipContent, Section, Stack, Typo } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { DashboardStatisticsView } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
@@ -17,24 +17,27 @@ export function ProjectWorkTimeline({ data }: { data: DashboardStatisticsView })
   const labels: Record<string, string> = { created: copy.created, updated: copy.updated, completed: copy.recordedCompletion,
     reviewed: copy.reviewed, disposition: copy.disposition };
   const date = (at: number) => new Date(at).toLocaleDateString(locale, { timeZone: data.timezone, month: "numeric", day: "numeric" });
+  const points = visible.flatMap(([workId, title], row) => events.filter((event) => event.workId === workId)
+    .map((event) => ({ at: Date.parse(event.at), row, title, label: labels[event.action] ?? copy.updated })));
   return <Section title={copy.workChanges} description={copy.timelineHelp}>
     <Stack gap="md">
       {data.timeline.truncated && <Typo.Caption>{copy.timelineLimited}</Typo.Caption>}
-      {visible.map(([workId, title]) => <Stack key={workId} gap="xs">
-        <Typo.Body>{title}</Typo.Body>
-        <ChartContainer className={styles.timelineRow} aria-label={title} config={{ event: { label: copy.workChanges, color: "var(--context-chart-1)" } }}
-          initialDimension={{ width: 320, height: 64 }} onKeyDownCapture={() => setKeyboard(true)} onPointerDownCapture={() => setKeyboard(false)}>
-          <ScatterChart accessibilityLayer margin={{ top: 4, right: 16, bottom: 0, left: 16 }}>
+      {visible.length > 0 && <ChartContainer className={styles.timelineRow} style={{ "--timeline-rows": visible.length } as CSSProperties} aria-label={copy.workChanges} config={{ event: { label: copy.workChanges, color: "var(--context-chart-1)" } }}
+          onKeyDownCapture={() => setKeyboard(true)} onPointerDownCapture={() => setKeyboard(false)}>
+          <ScatterChart accessibilityLayer margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
+            <CartesianGrid stroke="var(--line)" horizontal={false} />
             <XAxis type="number" dataKey="at" domain={[Date.parse(data.days[0]!.start), Date.parse(data.observedAt)]}
               tickFormatter={date} tickCount={4} minTickGap={32} />
-            <YAxis type="number" dataKey="row" domain={[-1, 1]} hide /><ZAxis range={[40, 40]} />
+            <YAxis type="number" dataKey="row" reversed domain={[-.5, Math.max(.5, visible.length - .5)]}
+              ticks={visible.map((_, index) => index)} tickLine={false} axisLine={false} width={130}
+              tickFormatter={(row: number) => { const title = visible[row]?.[1] ?? ""; return title.length > 14 ? `${title.slice(0, 14)}…` : title; }} />
+            <ZAxis range={[40, 40]} />
             <ChartTooltip trigger={keyboard ? "hover" : "click"} content={<ChartTooltipContent hideLabel formatter={(_value, _name, item) =>
-              `${date(Number(item.payload?.at))} · ${String(item.payload?.label ?? "")}`} />} />
+              `${String(item.payload?.title ?? "")} · ${date(Number(item.payload?.at))} · ${String(item.payload?.label ?? "")}`} />} />
             <Scatter name="event" fill="var(--color-event)" isAnimationActive={false}
-              data={events.filter((event) => event.workId === workId).map((event) => ({ at: Date.parse(event.at), row: 0, label: labels[event.action] ?? copy.updated }))} />
+              data={points} />
           </ScatterChart>
-        </ChartContainer>
-      </Stack>)}
+        </ChartContainer>}
       {!works.length && <Typo.Body>{copy.noHistory}</Typo.Body>}
       {works.length > limit && <Button variant="borderless" onClick={() => setLimit((value) => value + 8)}>{copy.loaded(limit, works.length)} · {copy.loadMore}</Button>}
     </Stack>

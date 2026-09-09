@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { rememberDashboardLoadedCount, useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, DocumentTile, Grid, Notice, Section, Stack, Typo } from "@/butler-ds";
+import { Button, ButtonContainer, ChevronRight, FileText, IconButton, MessageSquarePlus, NavRow, Pin, Notice, Section, Stack, Typo } from "@/butler-ds";
+import styles from "./ProjectInformation.module.css";
 import type { DashboardArtifactPage } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { useProjectArtifactAttachment } from "@/hooks/useProjectArtifactAttachment.ts";
@@ -35,10 +36,10 @@ export function ProjectResultsPanel({ projectId, preferences, onUpdated, onSelec
   useEffect(() => {
     let cancelled = false;
     setLoading(true); setError(false);
-    const query = new URLSearchParams({ limit: "50", ...(cursor ? { cursor } : {}) });
+    const query = new URLSearchParams({ limit: "8", ...(cursor ? { cursor } : {}) });
     const request = async () => {
       let next = await api<DashboardArtifactPage>(`/projects/${encodeURIComponent(projectId)}/dashboard/artifacts?${query}`);
-      const wanted = useProjectDashboardState.getState().projects[projectId]?.loadedCounts?.results ?? 50;
+      const wanted = useProjectDashboardState.getState().projects[projectId]?.loadedCounts?.results ?? 8;
       while (!cursor && !cancelled && next.nextCursor && next.items.length < wanted) {
         query.set("cursor", next.nextCursor);
         const more = await api<DashboardArtifactPage>(`/projects/${encodeURIComponent(projectId)}/dashboard/artifacts?${query}`);
@@ -60,13 +61,17 @@ export function ProjectResultsPanel({ projectId, preferences, onUpdated, onSelec
       {error && <Notice tone="error" message={appCopy.feedback.dashboardRetry} action={<Button variant="outline"
         onClick={() => { setCursor(undefined); setPage(null); setAttempt((value) => value + 1); }}>{appCopy.feedback.retry}</Button>} />}
       {!page && loading && <Typo.Body role="status">{appCopy.feedback.dashboardLoading}</Typo.Body>}
-      <Grid columns="auto-fit">{page?.items.map((item) => <DocumentTile key={`${item.message_id}:${item.file_id}`}
-        title={item.title} description={item.session_title} meta={new Date(item.created_at).toLocaleString(locale)}
-        clickTarget="tile" actionLabel={item.title} onOpen={() => onSelect({ id: item.id, project_id: projectId, revision: item.revision,
+      {!!page?.items.length && <div className={styles.rows}>{page.items.map((item) => <NavRow key={`${item.message_id}:${item.file_id}`}
+        icon={<FileText />} label={<span className={styles.title}>{item.title}</span>} multiline
+        meta={<Typo.Caption className={styles.summary}>{item.session_title} · {new Date(item.created_at).toLocaleDateString(locale)}</Typo.Caption>}
+        onClick={() => onSelect({ id: item.id, project_id: projectId, revision: item.revision,
           document_type: "artifact", kind: "report", title: item.title, markdown: "", safe_path_label: item.title, updated_at: item.created_at })}
-        actions={[{ id: "ask", label: appCopy.projectSignpost.addToComposer, onClick: () => void attach({ id: item.id, revision: item.revision }) },
-          ...(preferences ? [{ id: "pin", label: pinned(item.id) ? appCopy.projectSignpost.unpin : appCopy.projectSignpost.pin,
-            onClick: () => void togglePin(item) }] : [])]} />)}</Grid>
+        actions={<ButtonContainer size="sm">
+          <IconButton label={appCopy.projectSignpost.addToComposer} onClick={(event) => { event.stopPropagation(); void attach({ id: item.id, revision: item.revision }); }}><MessageSquarePlus /></IconButton>
+          {preferences && <IconButton label={pinned(item.id) ? appCopy.projectSignpost.unpin : appCopy.projectSignpost.pin}
+            onClick={(event) => { event.stopPropagation(); void togglePin(item); }}><Pin /></IconButton>}
+          <ChevronRight />
+        </ButtonContainer>} />)}</div>}
       {page?.items.length === 0 && <Typo.Body>{appCopy.projectSignpost.noResults}</Typo.Body>}
       {page?.nextCursor && <Button variant="borderless" disabled={loading} onClick={() => setCursor(page.nextCursor!)}>{appCopy.projectSignpost.loadMore}</Button>}
     </Stack>

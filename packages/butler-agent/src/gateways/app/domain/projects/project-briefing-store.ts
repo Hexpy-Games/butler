@@ -4,6 +4,7 @@ import type { DashboardBriefingContent, DashboardBriefingView } from "../../inte
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 import { PROJECT_BRIEFING_GENERATOR_VERSION, type ProjectBriefingPack } from "./project-briefing-facts.ts";
 import { generateProjectBriefing, validateProjectBriefing } from "./project-briefing-generation.ts";
+import { initializeProjectIntroduction } from "./project-introduction.ts";
 
 /** A disposable read cache. Never participates in Turn/Work completion or queues. */
 export class ProjectBriefingStore {
@@ -33,7 +34,10 @@ export class ProjectBriefingStore {
     this.attempted.add(pack.revision);
     const job = { key: pack.revision, abort: new AbortController() };
     this.active = job;
-    void this.finish(pack, reasoningEffort, job);
+    const preferences = this.input.db.query<{ dashboard_preferences_revision: number }, [string]>(
+      "SELECT dashboard_preferences_revision FROM projects WHERE id = ?",
+    ).get(projectId);
+    void this.finish(pack, reasoningEffort, job, preferences?.dashboard_preferences_revision ?? 0);
     return { ...view, status: "generating" };
   }
 
@@ -53,7 +57,7 @@ export class ProjectBriefingStore {
       : this.attempted.has(pack.revision) ? "unavailable" : "needed" };
   }
 
-  private async finish(pack: ProjectBriefingPack, reasoningEffort: ReasoningEffort, job: { key: string; abort: AbortController }) {
+  private async finish(pack: ProjectBriefingPack, reasoningEffort: ReasoningEffort, job: { key: string; abort: AbortController }, preferencesRevision: number) {
     try {
       const content: DashboardBriefingContent = await (this.input.generate ?? generateProjectBriefing)({
         pack, reasoningEffort, butlerData: this.input.butlerData, signal: job.abort.signal,
@@ -62,12 +66,22 @@ export class ProjectBriefingStore {
       validateProjectBriefing(JSON.stringify(content), pack);
       const current = await this.input.readPack(pack.projectId);
       if (this.closed || current.pack.revision !== pack.revision) return;
+      let cachePack = pack;
+      if (!pack.description && initializeProjectIntroduction(this.input.db, pack.projectId, preferencesRevision, content.introduction)) {
+        const refreshed = await this.input.readPack(pack.projectId);
+        cachePack = refreshed.pack;
+        // Only reuse this answer for our own introduction write, never for changed project facts.
+        if (refreshed.reasoningEffort !== reasoningEffort || cachePack.description !== content.introduction ||
+            JSON.stringify([cachePack.binding, cachePack.facts, cachePack.sources, cachePack.candidates, cachePack.coverage, cachePack.language, cachePack.model]) !==
+            JSON.stringify([pack.binding, pack.facts, pack.sources, pack.candidates, pack.coverage, pack.language, pack.model])) return;
+      }
+      if (this.closed || job.abort.signal.aborted) return;
       this.input.db.query(`INSERT INTO project_dashboard_briefing_cache
         (project_id, binding_revision, source_digest, response_language, generator_version, content_json, generated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(project_id, response_language) DO UPDATE SET
         binding_revision=excluded.binding_revision, source_digest=excluded.source_digest,
         generator_version=excluded.generator_version, content_json=excluded.content_json, generated_at=excluded.generated_at
-      `).run(pack.projectId, pack.binding, pack.revision, pack.language, PROJECT_BRIEFING_GENERATOR_VERSION, JSON.stringify(content), new Date().toISOString());
+      `).run(cachePack.projectId, cachePack.binding, cachePack.revision, cachePack.language, PROJECT_BRIEFING_GENERATOR_VERSION, JSON.stringify(content), new Date().toISOString());
     } catch { /* Safe generic UI state; provider errors/prompts are never published. No automatic retry loop. */ }
     finally {
       if (this.active === job) this.active = null;

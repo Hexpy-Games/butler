@@ -5,10 +5,3 @@
     max(var(--space-md), var(--safe-area-bottom));
   min-width: 0;
 }
-.target {
-  width: min(100%, var(--conversation-content-width, 760px));
-  margin-inline: auto;
-}
-.target > button {
-  max-width: min(100%, 24rem);
-}

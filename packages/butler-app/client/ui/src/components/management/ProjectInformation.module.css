@@ -1,0 +1,27 @@
+.title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.suggestion {
+  border-left: 2px solid var(--line);
+  padding-left: var(--space-lg);
+}
+.rows {
+  display: grid;
+  gap: var(--space-xs);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: var(--space-xs);
+}
+.summary {
+  color: var(--text-secondary);
+}
+.numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-lg);
+}

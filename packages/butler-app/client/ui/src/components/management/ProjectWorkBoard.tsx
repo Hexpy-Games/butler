@@ -3,9 +3,9 @@ import { useButlerStore } from "@/app/store.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { planLanes } from "@/app/projectDocuments.ts";
 import { useProjectBoard } from "@/hooks/useProjectBoard.ts";
-import { Button, DocumentTile, LoaderCircle, Notice, Section, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Stack, Tabs, TabsList, TabsTrigger, Typo } from "@/butler-ds";
+import { Button, Notice, Section, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Stack, Tabs, TabsList, TabsTrigger, Typo } from "@/butler-ds";
+import { ProjectBoardCard } from "./ProjectBoardCard.tsx";
 import styles from "./ProjectWorkBoard.module.css";
-import type { DashboardBoardCard } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 
 export function ProjectWorkBoard({ projectId, onOpenSession, onSelect, revision }: {
@@ -25,7 +25,7 @@ export function ProjectWorkBoard({ projectId, onOpenSession, onSelect, revision 
   return <Stack gap="lg">
     {disconnected && <Typo.Caption role="status">{copy.disconnected}</Typo.Caption>}
     <Tabs value={kind} onValueChange={(value) => update(projectId, { boardKind: value as typeof kind })}>
-      <TabsList variant="line">
+      <TabsList>
         <TabsTrigger value="work">{appCopy.interfaceStatus.work}</TabsTrigger>
         <TabsTrigger value="plan">{appCopy.composer.plan}</TabsTrigger>
         <TabsTrigger value="task">{appCopy.interfaceStatus.task}</TabsTrigger>
@@ -45,35 +45,17 @@ export function ProjectWorkBoard({ projectId, onOpenSession, onSelect, revision 
     {page?.status === "ready" && <>
       <Typo.Body>{copy.loaded(page.items.length, page.total)}</Typo.Body>
       <div className={styles.board} data-test-class="project-work-board">
-        {lanes.map((lane) => <Section key={lane.id} title={`${lane.label} · ${page.items.filter((card) => card.lane === lane.id).length}/${page.laneCounts[lane.id]}`}>
-          {page.items.filter((card) => card.lane === lane.id).map((card) => <DocumentTile key={card.id}
-            clickTarget="tile" actionLabel={card.title} onOpen={() => onSelect({ id: card.id, project_id: projectId,
+        {lanes.map((lane) => <Section key={lane.id} className={styles.lane} title={`${lane.label} · ${page.laneCounts[lane.id]}`}>
+          {page.items.filter((card) => card.lane === lane.id).map((card) => <ProjectBoardCard key={card.id} card={card}
+            running={Boolean(card.session?.running && !disconnected)} onOpen={() => onSelect({ id: card.id, project_id: projectId,
               revision: page.sourceRevision, kind: "plan", document_type: card.kind, title: card.title,
               markdown: "", safe_path_label: card.id, updated_at: card.updatedAt })}
-            title={card.title} badge={card.session?.running && !disconnected ? appCopy.space.working : statusLabel(card)}
-            icon={card.session?.running && !disconnected ? <LoaderCircle size={16} className={styles.spinner} /> : undefined}
-            meta={[card.taskProgress && `${copy.tasks} ${card.taskProgress.done}/${card.taskProgress.total}`,
-              card.actionProgress && `${appCopy.composer.plan} ${card.actionProgress.done}/${card.actionProgress.total}`]
-              .filter(Boolean).join(" · ")}
-            description={card.session?.title}
-            actions={card.session ? [{ id: "session", label: card.session.title,
-              onClick: () => onOpenSession(card.session!.id) }] : []} />)}
+            onOpenSession={() => { if (card.session) onOpenSession(card.session.id); }} />)}
+          <Typo.Caption>{copy.loaded(page.items.filter((card) => card.lane === lane.id).length, page.laneCounts[lane.id])}</Typo.Caption>
         </Section>)}
       </div>
       {page.total === 0 && <Typo.Body>{copy.noWork}</Typo.Body>}
       {page.nextCursor && <Button variant="borderless" disabled={loading} onClick={loadMore}>{copy.loadMore}</Button>}
     </>}
   </Stack>;
-}
-
-function statusLabel(card: DashboardBoardCard): string {
-  const labels = appCopy.projectSignpost;
-  if (card.status === "completed") return labels.completed;
-  if (card.status === "blocked") return labels.blocked;
-  if (card.status === "unknown") return labels.unknown;
-  if (card.status === "abandoned") return labels.abandoned;
-  if (card.lane === "review") return appCopy.interfaceStatus.review;
-  if (card.lane === "blocked") return labels.blocked;
-  if (card.kind === "plan" && card.lane === "active") return labels.currentPlan;
-  return planLanes().find((lane) => lane.id === card.lane)!.label;
 }

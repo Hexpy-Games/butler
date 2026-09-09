@@ -155,6 +155,8 @@ function koreanSkillFallbackSuggestions(
 
 export const koKrCopy: AppCopy = {
   projectSignpost: {
+    evidenceCount: (count) => `근거 기록 ${count}개 보기`,
+    importantMaterials: "중요한 자료", projectDocuments: "프로젝트 문서", selectedDay: "선택한 날짜", calculation: "집계 기준",
     importantMaterialsHelp: "고정한 자료와 남은 작업에 명시적으로 연결된 계획·기준·최신 보고입니다.",
     sessionUnconfirmed: "대화 연결 미확인",
     reviewed: "검토 기록", disposition: "상태 판정 기록", result: "도구 결과 등록",
@@ -179,7 +181,7 @@ export const koKrCopy: AppCopy = {
     created: "생성", updated: "갱신", recordedCompletion: "완료 기록", noHistory: "아직 기록이 없습니다.",
     description: "프로젝트 소개", editDescription: "소개 편집", pin: "주요 자료로 고정", unpin: "고정 해제",
     overview: "개요", work: "작업", materials: "자료", history: "기록", statistics: "통계",
-    position: "현재 위치", remaining: "남아 있는 일", completed: "실행 완료", open: "남은 작업",
+    position: "진행 상황", remaining: "남아 있는 일", completed: "실행 완료", open: "남은 작업",
     blocked: "막힌 작업", abandoned: "종료한 작업", unknown: "확인하지 못한 작업", registered: "등록된 작업",
     noWork: "아직 등록된 작업이 없습니다.", unbound: "이 프로젝트에 연결된 원장이 없습니다.",
     unavailable: "원장 정보를 확인하지 못했습니다. 완료 여부를 추정하지 않습니다.",
