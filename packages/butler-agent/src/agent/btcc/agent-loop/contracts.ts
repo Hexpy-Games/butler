@@ -5,6 +5,7 @@ import type {
 import type {
   ModelRoundMessage,
   ModelRoundPort,
+  ModelRoundObserver,
   ModelRoundResult,
   ModelRoundTool,
   ModelRoundToolCall,
@@ -68,6 +69,7 @@ export interface BtccAgentLoop {
     recoveryAttempt?: number;
     signal: AbortSignal;
     memoryAttribution?: RuntimeMemoryAttributionPort;
+    modelRoundObserver?: ModelRoundObserver;
     progress?: BtccTurnProgressObserver;
     onProviderResponseIdentity?: (identity: {
       provider: string;

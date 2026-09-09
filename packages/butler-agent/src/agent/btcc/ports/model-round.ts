@@ -287,6 +287,12 @@ export interface ModelRoundResult {
   };
 }
 
+/** Passive, execution-local diagnostics at the actual provider boundary. */
+export interface ModelRoundObserver {
+  request(request: ModelRoundRequest): void;
+  response(result: ModelRoundResult): void;
+}
+
 export interface ModelRoundPort {
   contextSizing?(request: Pick<ModelRoundRequest, "model" | "instructions" | "tools" | "attachments" | "maxOutputTokens" | "butlerData">): {
     maxOutputTokens?: number;
