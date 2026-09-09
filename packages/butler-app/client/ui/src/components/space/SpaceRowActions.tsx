@@ -32,6 +32,8 @@ export function SpaceRowActions({ row, collapsible, menuOpen, onMenuChange }: {
       {collapsible ? (
         <span className={styles.disclosureSlot} data-menu-open={menuOpen || undefined}>
           <IconButton className={styles.collapseButton}
+            // The row already toggles with Enter/Space. Keep one keyboard target for that action.
+            tabIndex={-1}
             label={`${row.title} ${expanded ? appCopy.space.collapse : appCopy.space.expand}`}
             onClick={() => toggle(row.node.key)}>
             {expanded ? <ChevronDown /> : <ChevronRight />}

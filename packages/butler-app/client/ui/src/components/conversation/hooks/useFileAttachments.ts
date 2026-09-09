@@ -87,7 +87,7 @@ export function useFileAttachments(activeChatId: string) {
     }
   }
 
-  async function addProjectDocument(document: ProjectDashboardDocument) {
+  async function addProjectDocument(document: ProjectDashboardDocument, topic?: string) {
     const uploadEpoch = uploadEpochRef.current;
     const fileName = projectDocumentFileName(document);
     setUploadingCount((count) => count + 1);
@@ -95,7 +95,8 @@ export function useFileAttachments(activeChatId: string) {
       if (document.project_id && document.revision) {
         const source = await readProjectDocumentPage(document);
         if (!isMountedRef.current || uploadEpochRef.current !== uploadEpoch) return;
-        const part = { type: "project_source_ref", projectId: document.project_id, titleSnapshot: source.title,
+        const part = { type: "project_source_ref", projectId: document.project_id, titleSnapshot: topic ?? source.title,
+          ...(topic ? { topic } : {}),
           source: { kind: source.document_type ?? source.kind, id: source.id, revision: source.revision } };
         if (!isProjectSourceContentPart(part)) throw new Error("Invalid project source.");
         const draft = useComposerStore.getState();

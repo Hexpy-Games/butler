@@ -289,11 +289,13 @@ test("project references travel through HTTP acceptance and durable queue; origi
     db.query("UPDATE projects SET ledger_project_id = ? WHERE id = ?").run("exact-ledger", projectId);
     db.query("INSERT INTO chats (id,title,kind,project_id,created_at,updated_at) VALUES (?,?,?,?,?,?)").run("source-chat", "Source chat", "project", projectId, stamp, stamp);
     const metadata = (await fetch(`${server.url}projects/${projectId}/dashboard/materials`).then((response) => response.json())).data.documents[0];
-    const reference = { type: "project_source_ref", projectId, titleSnapshot: "Client title is not authoritative",
+    const reference = { type: "project_source_ref", projectId, titleSnapshot: "Client title is not authoritative", topic: "Check the long response delivery",
       source: { kind: "report", id: metadata.id, revision: metadata.revision } };
     const request = { chat_id: "source-chat", client_message_id: "client-source-proof", text: "Read this",
       content_parts: { version: 1, parts: [{ type: "text", text: "Read this " }, reference] } };
     expect(isMessageContent(request.content_parts)).toBe(true);
+    expect(isMessageContent({ version: 1, parts: [{ ...reference, topic: "x".repeat(81) }] })).toBe(false);
+    expect(isMessageContent({ version: 1, parts: [{ ...reference, topic: 1 }] })).toBe(false);
     expect(isMessageContent({ version: 1, parts: [{ ...reference, source: { ...reference.source, revision: "fake" } }] })).toBe(false);
     const response = await post("messages", request);
     expect(response.status).toBe(202);
@@ -303,6 +305,7 @@ test("project references travel through HTTP acceptance and durable queue; origi
     const sources: ResolvedProjectSource[] = JSON.parse(row.project_source_refs_json);
     expect(sources).toHaveLength(1);
     expect(sources[0]!.title).toBe("REPORT-LONG");
+    expect(sources[0]!.topic).toBe(reference.topic);
     expect(sources[0]!.excerptTruncated).toBe(true);
     const report = join(root, "reports/report-long.md");
     writeFileSync(report, readFileSync(report, "utf8").replace("REPORT END", "LATER VERSION"));

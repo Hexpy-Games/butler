@@ -47,7 +47,7 @@ export interface ComposerStore {
   removeAttachment: (id: string) => void;
   uploadingCount: number;
   addFiles: (files: FileList | null) => void;
-  addProjectDocument: (document: ProjectDashboardDocument) => Promise<void>;
+  addProjectDocument: (document: ProjectDashboardDocument, topic?: string) => Promise<void>;
   modelMenuOpen: boolean;
   setModelMenuOpen: (open: boolean) => void;
   accessMenuOpen: boolean;
