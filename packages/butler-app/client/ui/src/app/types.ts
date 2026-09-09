@@ -1145,6 +1145,10 @@ export interface ProjectDashboardActivityDay {
 }
 
 export type ProjectDashboardDocumentType =
+  | "artifact"
+  | "reference"
+  | "message"
+  | "report"
   | "spec"
   | "plan"
   | "roadmap"
@@ -1152,8 +1156,14 @@ export type ProjectDashboardDocumentType =
   | "task";
 
 export interface ProjectDashboardDocument {
+  artifact?: SessionArtifactSummary;
+  unavailable?: boolean;
+  revision?: string;
+  project_id?: string;
+  truncated?: boolean;
+  nextCursor?: string | null;
   id: string;
-  kind: "spec" | "plan";
+  kind: "spec" | "plan" | "report";
   document_type?: ProjectDashboardDocumentType;
   title: string;
   category?: string;
@@ -1340,6 +1350,10 @@ export interface PaginationView {
 }
 
 export interface ProjectDashboardView {
+  briefing?: import("../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts").DashboardBriefingView;
+  description?: string | null;
+  preferences?: { revision: number; pinnedSourceRefs: Array<{ kind: string; id: string; revision: string }> };
+  overview?: import("../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts").DashboardOverview;
   project: ProjectSummary;
   stats: {
     active_sessions: number;
@@ -1556,6 +1570,8 @@ export interface SessionOption {
 }
 
 export interface ComposerControls {
+  /** UI target for the existing sender; dashboard remains visible until acceptance. */
+  dashboardTarget?: { projectId: string; sessionId?: string; clientMessageId?: string; onSessionCreated?: (id: string) => void };
   contentParts?: import("./messageContent").MessageContent;
   /** UI-only acknowledgement; never serialized into the transport request. */
   onAccepted?: () => void;

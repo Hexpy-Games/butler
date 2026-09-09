@@ -15,6 +15,11 @@ export {
 export { observeProjectLedgerHead } from "./observe-project-ledger.ts";
 export { createProjectWorkStore } from "./project-work-store.ts";
 export { readProjectWorkPlan } from "./project-work-plan-reader.ts";
+export { createProjectDashboardLedgerReader } from "./project-dashboard-reader.ts";
+export { readProjectDashboardSource } from "./project-dashboard-source.ts";
+export { readProjectDashboardHistory, createProjectDashboardHistoryReader } from "./project-dashboard-history.ts";
+export { createProjectDashboardWorkHistoryReader } from "./project-dashboard-work-history.ts";
+export type { DashboardLedgerSnapshot, DashboardLedgerRecord, DashboardLedgerWork } from "./project-dashboard-reader.ts";
 export { createExactProjectWorkResultAuthority } from "./project-work-result-reader.ts";
 export type {
   ExactProjectWorkResultAuthority,

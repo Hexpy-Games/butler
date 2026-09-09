@@ -20,6 +20,7 @@ import type {
 } from "../../interface/protocol/app-protocol.ts";
 import { sessionHintForRow } from "./session-read-model.ts";
 import { visibleMessageSqlPredicate } from "./visible-message-sql.ts";
+import { projectMessageArtifacts } from "./project-message-artifacts.ts";
 import {
   normalizeSessionMessagePageOptions,
   type SessionMessagePage,
@@ -29,6 +30,9 @@ import type { ChangedFileDetail, ChangedFileLine } from "../../../../agent/tools
 import type { ProjectLedgerPlan } from "../../../../agent/btcc/project-plan.ts";
 
 export class AppSessionMessageRecordStore {
+  listProjectArtifacts(projectId: string, query: { cursor?: string; limit: number }) {
+    return projectMessageArtifacts(this.db, projectId, query);
+  }
   constructor(
     private readonly db: Database,
     private readonly butlerData: string,

@@ -105,6 +105,30 @@ interface ConversationCopy {
 }
 
 export interface AppCopy {
+  projectSignpost: {
+    importantMaterialsHelp: string;
+    sessionUnconfirmed: string;
+    reviewed: string; disposition: string; result: string;
+    reported: string; historyLedgerUnavailable: string; linkedResults: (count: number) => string;
+    currentPlan: string; disconnected: string;
+    reportQuestion: string;
+    timelineHelp: string;
+    parentWork: string; allWork: string;
+    userMessages: string; activeConversations: string; workChanges: string; statisticsHelp: string; timelineLimited: string;
+    periodDays: (days: number) => string; statisticsZone: (zone: string) => string;
+    briefing: string; suggestions: string; briefingPending: string; briefingUnavailable: string; summarized: string; addToComposer: string;
+    briefingCoverage: (works: number, total: number, documents: number, reports: number, excluded: number) => string;
+    conversationTarget: string; newProjectConversation: string; pendingConversation: string; sourceQuestion: string;
+    missingSource: string;
+    loaded: (loaded: number, total: number) => string;
+    results: string; noResults: string;
+    overview: string; work: string; materials: string; history: string; statistics: string;
+    position: string; remaining: string; completed: string; open: string; blocked: string;
+    abandoned: string; unknown: string; registered: string; noWork: string; unbound: string;
+    unavailable: string; noRemaining: string; tasks: string; recorded: string; loadMore: string;
+    description: string; editDescription: string; pin: string; unpin: string;
+    created: string; updated: string; recordedCompletion: string; noHistory: string;
+  };
   projectDocumentMetadata: { active: string; other: string; roadmap: string; labels: Record<string, string> };
   guided: {
     workerStatus: Record<string, string>;

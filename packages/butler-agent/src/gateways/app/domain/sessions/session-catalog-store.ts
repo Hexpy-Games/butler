@@ -30,7 +30,7 @@ export class AppSessionCatalogStore {
     const rows = this.db
       .query<ChatRow, []>(
         `
-      SELECT id, title, kind, project_id, created_at, updated_at
+      SELECT id, title, kind, project_id, archived, created_at, updated_at
       FROM chats
       WHERE archived = 0 AND NOT EXISTS(SELECT 1 FROM app_session_branches b WHERE b.target_session_id=chats.id AND b.state='prepared')
       ORDER BY updated_at DESC, created_at DESC

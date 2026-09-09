@@ -13,6 +13,7 @@ const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "web_search",
   "web_read",
   "read_file",
+  "read_project_source",
   "grep_files",
   "list_files",
   "read_tool_evidence_artifact",

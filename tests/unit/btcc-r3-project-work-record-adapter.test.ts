@@ -21,6 +21,9 @@ import {
 } from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import {
   createProjectWorkStore,
+  createProjectDashboardLedgerReader,
+  createProjectDashboardWorkHistoryReader,
+  readProjectDashboardSource,
   reconcileProjectLedgerRecordUpdates,
   type ProjectWorkOperationIdentity,
   type ProjectWorkRuntimeProjection,
@@ -31,6 +34,7 @@ import { captureMaterialSnapshot } from "../../packages/butler-agent/src/agent/a
 import { projectWorkRecordId } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-work-json.ts";
 import { publishProjectWorkRecords } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-work-publication.ts";
 import { requireCurrentProjectWork } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-work-snapshot.ts";
+import { projectDashboardBoard } from "../../packages/butler-agent/src/gateways/app/domain/projects/project-dashboard-board.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -123,6 +127,33 @@ test("public service maps Work, Plan, checkpoint, Reviews, and completed disposi
     evidenceRefs: [],
   });
   expect(completed.status).toBe("completed");
+
+  // Dashboard observes the real published Work even though publication defers index refresh.
+  const readDashboard = createProjectDashboardLedgerReader(fixture.butlerData);
+  const dashboard = await readDashboard("app-project", "ledger-project");
+  expect(dashboard.works.find((item) => item.record.id === completed.workId)).toMatchObject({
+    availability: "ready", record: { status: "review" }, managed: { status: "completed" },
+  });
+  expect((await readDashboard("another-app-project", "ledger-project")).works[0]?.availability).toBe("unavailable");
+  const plans = projectDashboardBoard(dashboard, "plan", () => null);
+  expect(plans).toHaveLength(1);
+  expect(plans[0]).toMatchObject({ id: planned.currentPlan!.planRevisionId, parentId: completed.workId,
+    lane: "done", actionProgress: { done: 1, total: 1 }, taskProgress: null });
+  const planSource = await readProjectDashboardSource({ butlerData: fixture.butlerData,
+    appProjectId: "app-project", ledgerProjectId: "ledger-project", snapshot: dashboard,
+    kind: "plan", id: planned.currentPlan!.planRevisionId });
+  expect(planSource.title).toBe(planned.currentPlan!.objective);
+  expect(planSource.body).toContain(planned.currentPlan!.actions[0]!.description);
+  expect(planSource.body).not.toContain("operationIdentity");
+  const historyReader = createProjectDashboardWorkHistoryReader(fixture.butlerData);
+  const history = await historyReader("app-project", "ledger-project", dashboard);
+  expect(history.some((entry) => entry.action === "reviewed")).toBe(true);
+  const disposition = history.find((entry) => entry.action === "disposition")!;
+  expect(disposition.status).toBe("completed");
+  expect(JSON.parse(disposition.body).summary).toBe("Complete");
+  expect(JSON.stringify(history)).not.toContain("operationIdentity");
+  expect(JSON.stringify(history)).not.toContain("materialFingerprint");
+  expect(await historyReader("app-project", "ledger-project", dashboard, completed.workId)).toEqual(history);
 
   const index = fixture.core.buildIndex(fixture.projectRoot);
   const work = index.records.find((record) => record.id === completed.workId)!;

@@ -25,7 +25,7 @@ export function registerComposerClipboard(editor: LexicalEditor, knownSession: (
       if (raw) {
         try {
           const content: unknown = JSON.parse(raw);
-          if (isMessageContent(content) && content.parts.every(part => part.type === "text" || knownSession(part.sessionId))) {
+          if (isMessageContent(content) && content.parts.every(part => part.type !== "session_ref" || knownSession(part.sessionId))) {
             event.preventDefault(); $insertNodes($nodesForContent(content)); return true;
           }
         } catch { /* Foreign clipboard falls through to plain text. */ }

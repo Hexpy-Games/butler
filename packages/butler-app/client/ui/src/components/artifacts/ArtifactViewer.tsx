@@ -38,9 +38,11 @@ const MARKDOWN_COMPONENTS: Components = {
 export function ArtifactViewer({
   artifact,
   onBack,
+  embedded = false,
 }: {
   artifact: SessionArtifactSummary;
   onBack: () => void;
+  embedded?: boolean;
 }) {
   useAppLocale();
   const url = artifactUrl(artifact);
@@ -73,7 +75,7 @@ export function ArtifactViewer({
 
   return (
     <Stack gap="md">
-      <PanelHeader
+      {embedded ? <Typo.Caption>{meta}</Typo.Caption> : <PanelHeader
         actions={
           <Button
             iconStart={<ArrowLeft size={14} />}
@@ -85,7 +87,7 @@ export function ArtifactViewer({
         }
         description={meta}
         title={artifact.title}
-      />
+      />}
       <ArtifactPreview data-test-class="artifact-viewer">
         {renderPreview({ mode, state, text, title: artifact.title, url })}
       </ArtifactPreview>

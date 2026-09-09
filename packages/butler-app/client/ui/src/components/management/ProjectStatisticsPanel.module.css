@@ -1,0 +1,10 @@
+.chart {
+  height: 13rem;
+  min-width: 0;
+  width: 100%;
+}
+.timelineRow {
+  height: 4rem;
+  min-width: 0;
+  width: 100%;
+}

@@ -224,6 +224,7 @@ export function createProductionGuidedTurnAgent(
       );
       const effectService = createGuidedEffectService(input.effectJournal, input.guidedEffectFaultHook ? { faultHook: input.guidedEffectFaultHook } : {});
       const execute = createButlerToolExecutor({
+        projectSources: turn.context.projectSources,
         butlerHome: input.butlerHome,
         butlerData: input.butlerData,
         workspacePath: policy.workspacePath,

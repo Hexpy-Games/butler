@@ -10,6 +10,7 @@ import type {
 import type { useFileAttachments } from "./useFileAttachments";
 
 interface UseComposerQueueProps {
+  enabled?: boolean;
   activeChatId: string;
   summary: SessionSummaryView | null;
   files: ReturnType<typeof useFileAttachments>;
@@ -18,6 +19,7 @@ interface UseComposerQueueProps {
 }
 
 export function useComposerQueue({
+  enabled = true,
   activeChatId,
   summary,
   files,
@@ -33,8 +35,10 @@ export function useComposerQueue({
   );
 
   useEffect(() => {
+    if (!enabled) return;
     void refreshSessionQueue(activeChatId);
   }, [
+    enabled,
     activeChatId,
     refreshSessionQueue,
     summary?.latest_progress?.state,
@@ -61,7 +65,7 @@ export function useComposerQueue({
   };
 
   return {
-    sessionQueue,
+    sessionQueue: enabled ? sessionQueue : [],
     handleEditQueued,
     handleDeleteQueued,
   };

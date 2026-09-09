@@ -12,6 +12,19 @@
 .scrollArea {
   height: 100%;
 }
+.withFooter {
+  display: flex;
+  flex-direction: column;
+}
+.withFooter .scrollArea {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.footer {
+  flex: none;
+  min-width: 0;
+}
 
 .content {
   display: grid;
