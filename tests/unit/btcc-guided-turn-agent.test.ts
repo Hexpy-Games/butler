@@ -1,4 +1,6 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-store.ts";
+import { createTurnDeveloperLogCapturePort } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-turn-capture/index.ts";
 import { TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER } from
   "../support/phase-continuity-private-digester.ts";
 import { Database } from "bun:sqlite";
@@ -191,6 +193,90 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
   } finally {
     fixture.close();
   }
+});
+
+for (const developerMode of [false, true]) {
+  test(`Guided provider HTTP failure is logged before reduction (developer mode ${developerMode})`, async () => {
+    const fixture = createFixture("guided-http-error-log");
+    const logged: string[] = [];
+    const logger = spyOn(console, "error").mockImplementation((value) => { logged.push(String(value)); });
+    try {
+      const store = new DeveloperLogStore({ butlerData: fixture.root });
+      const capture = createTurnDeveloperLogCapturePort({ store, gate: () => developerMode }).startExecution();
+      const failure = new ModelProviderRequestError({
+        code: "provider_api_error", message: "Local model API request failed with HTTP 400.",
+        provider: "local", api: "chat_completions", statusCode: 400,
+        cause: "Invalid tool call; api_key=fixture-secret", retryable: false,
+        providerErrorType: "BadRequestError", providerRequestId: "request-fixture",
+        measuredInputTokens: 50004, registeredInputCapacity: 110592,
+      });
+      let calls = 0;
+      const agent = fixture.agent({ async runRound() { calls += 1; throw failure; } });
+      const turn = await admitTurn(localRunCommand(fixture.root, "http-error-log"), fixture.stores.admission, fixture.stores.turns);
+      const result = await agent.run({ turn, signal: new AbortController().signal,
+        modelRoundObserver: capture.modelRoundObserver });
+      expect(calls).toBe(1);
+      expect(result.runtimeFailure).toEqual({ code: "provider_api_error", retryable: false });
+      const records = logged.map((line) => JSON.parse(line)).filter((r) => r.event === "btcc_model_round_failed");
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({ turnId: turn.turnId, roundId: "btcc-model-round-0",
+        modelRef: "openai/gpt-5.6-sol", diagnostic: { statusCode: 400,
+          provider: "local", providerErrorType: "BadRequestError", providerRequestId: "request-fixture",
+          cause: "Invalid tool call; [redacted]", measuredInputTokens: 50004 } });
+      expect(logged.join("\n")).not.toContain("fixture-secret");
+      capture.capture({ kind: "model_turn_error", turn, timestamp: new Date().toISOString(),
+        failure: { ...result.runtimeFailure!, message: "provider_api_error" } });
+      expect(store.list().total).toBe(developerMode ? 1 : 0);
+      if (developerMode) {
+        expect(store.list().entries[0]?.response.raw).toMatchObject({ failure: {
+          statusCode: 400, cause: "Invalid tool call; [redacted]", providerRequestId: "request-fixture",
+        } });
+      }
+    } finally { logger.mockRestore(); fixture.close(); }
+  });
+}
+
+test("Guided retry preserves the failed attempt log and clears developer failure on success", async () => {
+  const fixture = createFixture("guided-retry-error-log");
+  const logged: string[] = [];
+  const logger = spyOn(console, "error").mockImplementation((value) => { logged.push(String(value)); });
+  try {
+    const store = new DeveloperLogStore({ butlerData: fixture.root });
+    const capture = createTurnDeveloperLogCapturePort({ store, gate: () => true }).startExecution();
+    let calls = 0;
+    const agent = fixture.agent({ async runRound() {
+      if (++calls === 1) throw new ModelProviderRequestError({ code: "provider_api_error",
+        message: "Service unavailable", statusCode: 503, retryable: true });
+      return { text: "Recovered", toolCalls: [] };
+    } });
+    const turn = await admitTurn(localRunCommand(fixture.root, "http-error-log"), fixture.stores.admission, fixture.stores.turns);
+    turn.modelRoute = buildModelRoute({ primaryModelRef: "openai/gpt-5.6-sol", backupModelRefs: [],
+      reasoningEffort: "low", retryCeiling: 2, catalogGeneration: "fixture" });
+    const result = await agent.run({ turn, signal: new AbortController().signal,
+      modelRoundObserver: capture.modelRoundObserver,
+      recordModelRoundAcceptance: async () => {}, loadModelRoundAcceptance: async () => undefined });
+    expect(calls).toBe(2);
+    expect(result.content).toBe("Recovered");
+    expect(logged.filter((line) => line.includes('"event":"btcc_model_round_failed"'))).toHaveLength(1);
+    capture.capture({ kind: "model_turn", turn, result, timestamp: new Date().toISOString() });
+    expect(store.list().entries[0]?.kind).toBe("model_turn");
+    expect(JSON.stringify(store.list())).not.toContain("Service unavailable");
+  } finally { logger.mockRestore(); fixture.close(); }
+});
+
+test("Guided failure logging errors do not replace the original provider failure", async () => {
+  const fixture = createFixture("guided-broken-error-log");
+  const logger = spyOn(console, "error").mockImplementation(() => { throw new Error("log unavailable"); });
+  try {
+    const agent = fixture.agent({ async runRound() {
+      throw new ModelProviderRequestError({ code: "provider_api_error", message: "HTTP 400",
+        statusCode: 400, retryable: false });
+    } });
+    const turn = await admitTurn(localRunCommand(fixture.root, "broken-error-log"), fixture.stores.admission, fixture.stores.turns);
+    const result = await agent.run({ turn, signal: new AbortController().signal,
+      modelRoundObserver: { request() {}, response() {}, failure() { throw new Error("observer unavailable"); } } });
+    expect(result.runtimeFailure).toEqual({ code: "provider_api_error", retryable: false });
+  } finally { logger.mockRestore(); fixture.close(); }
 });
 
 test("feature Guided Turn restores the existing bounded Work closeout opportunity", async () => {

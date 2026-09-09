@@ -291,6 +291,8 @@ export interface ModelRoundResult {
 export interface ModelRoundObserver {
   request(request: ModelRoundRequest): void;
   response(result: ModelRoundResult): void;
+  /** Observe before the loop reduces errors to their public failure identity. */
+  failure?(error: unknown): void;
 }
 
 export interface ModelRoundPort {

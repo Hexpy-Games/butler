@@ -4057,6 +4057,7 @@ test("local model discovery registers safe runtime-supported catalog entries", a
     expect(JSON.stringify(discovery)).not.toContain("model_path");
 
     const discoveredModel = discovery.data.models[0];
+    expect(discoveredModel).not.toHaveProperty("max_output_tokens");
     const registered = await postJson(
       `${server.url}model-catalog/local-models`,
       {
@@ -4072,14 +4073,13 @@ test("local model discovery registers safe runtime-supported catalog entries", a
         source: "discovered",
       },
     );
+    expect(registered.data.model).not.toHaveProperty("max_output_tokens");
+    expect(registered.data.model).not.toHaveProperty("reasoning_budget_tokens");
     expect(registered.data.model).toMatchObject({
       model_ref: "local/gemma-4-31B-it-Q4_K_M.gguf",
       context_window_tokens: 16_384,
-      default_reasoning_effort: "high",
-      reasoning_efforts: ["none", "high"],
-      reasoning_budget_tokens: {
-        high: 1024,
-      },
+      default_reasoning_effort: "none",
+      reasoning_efforts: ["none"],
       local_reasoning_budget_ratio: 0.25,
       runtime_supported: true,
     });
@@ -4097,7 +4097,7 @@ test("local model discovery registers safe runtime-supported catalog entries", a
     expect(settings.data).toMatchObject({
       model: "local/gemma-4-31B-it-Q4_K_M.gguf",
       context_window_tokens: 16_384,
-      reasoning_effort: "high",
+      reasoning_effort: "none",
     });
   } finally {
     server.stop();

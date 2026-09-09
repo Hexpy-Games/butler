@@ -12,7 +12,7 @@ import { runHostedResponsesModelRound } from "../../packages/butler-agent/src/in
 import { readPromptCacheMetrics } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
 import type { OpenAIAuthOverride } from "../../packages/butler-agent/src/integrations/providers/runtime-contracts.ts";
 import type { HostedRuntimeConfig } from "../../packages/butler-agent/src/integrations/providers/shared/model-routing.ts";
-import type { LocalModelConfig } from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
+import { discoverLocalModels, readLocalModelConfigs, upsertLocalModelConfig, type LocalModelConfig } from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 import type { ModelRoundRequest } from "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 
 const originalFetch = globalThis.fetch;
@@ -251,3 +251,41 @@ function temporaryButlerData(): string {
   temporaryDirectories.push(directory);
   return directory;
 }
+
+
+test("local discovery and persisted registration leave an unspecified output limit absent", async () => {
+  const discovered = await discoverLocalModels({ serverUrl: "http://localhost:1234",
+    fetchImpl: (async (url) => String(url).endsWith("/models")
+      ? Response.json({ data: [{ id: "test-model", max_model_len: 32768 }] })
+      : new Response("", { status: 404 })) as typeof fetch });
+  expect(discovered.models[0]).not.toHaveProperty("max_output_tokens");
+  const data = temporaryButlerData();
+  const input = { serverUrl: "http://localhost:1234", modelId: "test-model", contextWindowTokens: 32768 };
+  upsertLocalModelConfig(input, data);
+  expect(readLocalModelConfigs(data)[0]!.max_output_tokens).toBeUndefined();
+  upsertLocalModelConfig({ ...input, maxOutputTokens: 4096 }, data);
+  expect(readLocalModelConfigs(data)[0]!.max_output_tokens).toBe(4096);
+  upsertLocalModelConfig(input, data);
+  expect(readLocalModelConfigs(data)[0]!.max_output_tokens).toBeUndefined();
+});
+
+test("local outbound requests omit unspecified limits and preserve explicit config and request limits", async () => {
+  let body: Record<string, unknown> = {};
+  globalThis.fetch = (async (_url, init) => {
+    body = JSON.parse(String(init?.body));
+    return Response.json({ choices: [{ message: { role: "assistant", content: "ok" } }] });
+  }) as typeof fetch;
+  const config = localConfig();
+  delete config.max_output_tokens;
+  const request = { ...modelRoundRequest(temporaryButlerData()), model: config.model_ref };
+  await runLocalModelRound(config, request);
+  expect(body).not.toHaveProperty("max_tokens");
+  expect(body).not.toHaveProperty("max_completion_tokens");
+  await runLocalModelRound(config, { ...request, maxOutputTokens: 256 });
+  expect(body.max_tokens).toBe(256);
+  config.max_output_tokens = 4096;
+  await runLocalModelRound(config, request);
+  expect(body.max_tokens).toBe(4096);
+  await runLocalModelRound(config, { ...request, maxOutputTokens: 256 });
+  expect(body.max_tokens).toBe(256);
+});

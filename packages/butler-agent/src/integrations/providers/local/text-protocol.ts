@@ -56,7 +56,7 @@ export function localReasoningRequestParams(config: LocalModelConfig): Record<st
   const ratio = config.reasoning_budget_ratio;
   if (typeof ratio !== "number" || !Number.isFinite(ratio) || ratio <= 0) return {};
   const maxOutputTokens = Number.isFinite(config.max_output_tokens)
-    ? Math.trunc(config.max_output_tokens)
+    ? Math.trunc(Number(config.max_output_tokens))
     : 0;
   if (maxOutputTokens <= 0) return {};
   const budget = Math.round(maxOutputTokens * Math.min(1, ratio));

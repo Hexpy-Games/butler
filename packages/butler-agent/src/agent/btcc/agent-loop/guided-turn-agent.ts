@@ -4,6 +4,7 @@ import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
 import { ActiveProjectLedgerResolver } from "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { runProjectLedgerTool } from "../../../integrations/project-ledger/client.ts";
 import { createProviderModelRoundPort } from "../../../integrations/providers/runtime.ts";
+import { safeRuntimeFailure } from "../../../integrations/providers/provider-errors.ts";
 import { createGuidedToolBatchTransition } from "./guided-tool-batch-transition.ts";
 import { guidedPlanModeInstructions, providerImageAttachments, renderGuidedResponseLanguage } from "./guided-turn-prompt.ts";
 import { directSynthesisToolDefinitions, GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES, guidedNativeToolDefinitions, hiddenNativeToolNamesForGuidedTurn } from "./guided-turn-policy.ts";
@@ -325,17 +326,32 @@ export function createProductionGuidedTurnAgent(
         // A decision resumes the ordinary loop; it is not a replacement report.
       });
       const provider = input.modelRound ?? createProviderModelRoundPort();
-      const baseModelRound: ModelRoundPort = modelRoundObserver ? {
+      const baseModelRound: ModelRoundPort = {
         contextSizing: provider.contextSizing?.bind(provider),
         initialRequestBytes: provider.initialRequestBytes?.bind(provider),
         statelessMessageBytes: provider.statelessMessageBytes?.bind(provider),
         async runRound(request) {
-          try { modelRoundObserver.request(request); } catch { /* Diagnostics are passive. */ }
-          const response = await provider.runRound(request);
-          try { modelRoundObserver.response(response); } catch { /* Diagnostics are passive. */ }
-          return response;
+          try { modelRoundObserver?.request(request); } catch { /* Diagnostics are passive. */ }
+          try {
+            const response = await provider.runRound(request);
+            try { modelRoundObserver?.response(response); } catch { /* Diagnostics are passive. */ }
+            return response;
+          } catch (error) {
+            try {
+              console.error(JSON.stringify({
+                event: "btcc_model_round_failed",
+                timestamp: new Date().toISOString(),
+                turnId: turn.turnId,
+                roundId: request.roundId,
+                modelRef: request.model,
+                diagnostic: safeRuntimeFailure(error),
+              }));
+            } catch { /* Logging must preserve the original failure and retry policy. */ }
+            try { modelRoundObserver?.failure?.(error); } catch { /* Diagnostics are passive. */ }
+            throw error;
+          }
         },
-      } : provider;
+      };
       const {
         modelRound,
         activeModelRef: resolveActiveModelRef,
@@ -450,7 +466,9 @@ export function createProductionGuidedTurnAgent(
               reasoningEffort: selectedReasoningEffort, butlerData: input.butlerData,
               // Reasoning and visible summary share the provider output window.
               // The summary's text allowance is not the reasoning allowance.
-              maxOutputTokens: Math.max(1, Math.min(capacity?.maxOutputTokens ?? Infinity,
+              maxOutputTokens: String(resolveActiveModelRef()).startsWith("local/") && capacity?.maxOutputTokens === undefined
+                ? undefined
+                : Math.max(1, Math.min(capacity?.maxOutputTokens ?? Infinity,
                 capacity ? Math.floor(capacity.maxMessageBytes / 8) : Infinity,
                 Math.max(16_384, Math.floor(maxOutputBytes / 4)))),
               usageAttribution: { turnId: turn.turnId, phase: "guided" },
