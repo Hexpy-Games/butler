@@ -1,3 +1,6 @@
+import { localModelConfigToMetadata } from "../../packages/butler-agent/src/integrations/providers/local/catalog.ts";
+import { runLocalPromptTextWithConfig } from "../../packages/butler-agent/src/integrations/providers/local/execution.ts";
+import { localReasoningRequestParams } from "../../packages/butler-agent/src/integrations/providers/local/text-protocol.ts";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -288,4 +291,41 @@ test("local outbound requests omit unspecified limits and preserve explicit conf
   expect(body.max_tokens).toBe(4096);
   await runLocalModelRound(config, { ...request, maxOutputTokens: 256 });
   expect(body.max_tokens).toBe(256);
+});
+
+
+test("Qwen native effort catalog maps each selection to both actual request paths", async () => {
+  const config: LocalModelConfig = { ...localConfig(), model_id: "qwen3.8-27b",
+    model_ref: "local/qwen3.8-27b", platform: "llama_cpp", max_output_tokens: undefined,
+    reasoning_budget_ratio: 0.25 };
+  const metadata = localModelConfigToMetadata(config);
+  expect(metadata.reasoning_efforts).toEqual(["none", "low", "medium", "xhigh"]);
+  expect(metadata.default_reasoning_effort).toBe("xhigh");
+  expect(metadata.local_reasoning_budget_ratio).toBeUndefined();
+  expect(metadata.reasoning_budget_tokens).toBeUndefined();
+  const bodies: Record<string, unknown>[] = [];
+  globalThis.fetch = (async (_url, init) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    return Response.json({ choices: [{ message: { role: "assistant", content: "ok" } }] });
+  }) as typeof fetch;
+  const data = temporaryButlerData();
+  for (const effort of metadata.reasoning_efforts) {
+    await runLocalModelRound(config, { ...modelRoundRequest(data), model: config.model_ref,
+      reasoningEffort: effort, tools: [] });
+    await runLocalPromptTextWithConfig(config, { model: config.model_ref, prompt: "hello",
+      reasoningEffort: effort, butlerData: data });
+    for (const body of bodies.slice(-2)) {
+      expect(body.reasoning_effort).toBe(effort);
+      expect(body).not.toHaveProperty("thinking_budget_tokens");
+      expect(body).not.toHaveProperty("max_tokens");
+    }
+  }
+  expect(localReasoningRequestParams(config)).toEqual({});
+  expect(() => localReasoningRequestParams(config, "high")).toThrow("Unsupported local reasoning effort");
+  expect(localModelConfigToMetadata({ ...config, model_id: "Qwen/Qwen3.8-27B-FP8" }).reasoning_efforts)
+    .toEqual(metadata.reasoning_efforts);
+  expect(localModelConfigToMetadata(localConfig()).reasoning_efforts).toEqual(["none"]);
+  expect(localReasoningRequestParams({ ...localConfig(), platform: "llama_cpp",
+    reasoning_budget_ratio: 0.25 }, "high")).toEqual({ thinking_budget_tokens: 128 });
+  expect(localReasoningRequestParams(localConfig(), "low")).toEqual({});
 });

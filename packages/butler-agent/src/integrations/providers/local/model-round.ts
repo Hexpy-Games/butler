@@ -40,7 +40,7 @@ export async function runLocalModelRound(
             tool_choice: request.toolChoice ?? "auto",
           }
         : {}),
-      ...localReasoningRequestParams(config),
+      ...localReasoningRequestParams(config, request.reasoningEffort),
       stream: false,
       ...(request.maxOutputTokens ? { max_tokens: request.maxOutputTokens } : {}),
     }, request.signal, { ...context, admitProviderBody: request.boundedContinuation?.admitProviderBody }, undefined, request.providerRetryAttempts),

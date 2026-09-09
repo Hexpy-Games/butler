@@ -1,3 +1,5 @@
+import type { ReasoningEffort } from "../model-catalog.ts";
+import { localNativeReasoningEfforts } from "./reasoning.ts";
 import type { FunctionToolDefinition } from "../runtime-contracts.ts";
 import type { LocalModelConfig } from "./models.ts";
 import { findFirstLocalTextToolCallMarker } from "./tool-call-protocol.ts";
@@ -51,7 +53,18 @@ export function localChatTools(tools: FunctionToolDefinition[]): Array<Record<st
 
 
 
-export function localReasoningRequestParams(config: LocalModelConfig): Record<string, unknown> {
+export function localReasoningRequestParams(
+  config: LocalModelConfig,
+  effort?: ReasoningEffort,
+): Record<string, unknown> {
+  const nativeEfforts = localNativeReasoningEfforts(config);
+  if (nativeEfforts) {
+    if (!effort) return {};
+    if (!nativeEfforts.includes(effort)) {
+      throw new Error(`Unsupported local reasoning effort: ${effort}`);
+    }
+    return { reasoning_effort: effort };
+  }
   if (config.platform !== "llama_cpp") return {};
   const ratio = config.reasoning_budget_ratio;
   if (typeof ratio !== "number" || !Number.isFinite(ratio) || ratio <= 0) return {};

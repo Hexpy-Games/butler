@@ -1,11 +1,14 @@
 import type { LocalModelConfig } from "./models.ts";
 import type { ProviderModelMetadata, ReasoningEffort } from "../model-catalog.ts";
 
+import { localNativeReasoningEfforts } from "./reasoning.ts";
+
 export function localModelConfigToMetadata(model: LocalModelConfig): ProviderModelMetadata {
-  const reasoningBudgetTokens = localReasoningBudgetTokens(model);
-  const reasoningEfforts: ReasoningEffort[] = reasoningBudgetTokens
+  const nativeEfforts = localNativeReasoningEfforts(model);
+  const reasoningBudgetTokens = nativeEfforts ? null : localReasoningBudgetTokens(model);
+  const reasoningEfforts: ReasoningEffort[] = nativeEfforts ?? (reasoningBudgetTokens
     ? ["none", "high"]
-    : ["none"];
+    : ["none"]);
   return {
     provider_id: "local",
     provider_label: model.provider_label,
@@ -15,7 +18,7 @@ export function localModelConfigToMetadata(model: LocalModelConfig): ProviderMod
     status: "available",
     context_window_tokens: model.context_window_tokens,
     max_output_tokens: model.max_output_tokens,
-    default_reasoning_effort: reasoningBudgetTokens ? "high" : "none",
+    default_reasoning_effort: nativeEfforts ? "xhigh" : reasoningBudgetTokens ? "high" : "none",
     reasoning_efforts: reasoningEfforts,
     ...(reasoningBudgetTokens
       ? {
@@ -31,7 +34,7 @@ export function localModelConfigToMetadata(model: LocalModelConfig): ProviderMod
     platform: model.platform,
     server_url: model.server_url,
     source: model.source,
-    local_reasoning_budget_ratio: model.reasoning_budget_ratio,
+    local_reasoning_budget_ratio: nativeEfforts ? undefined : model.reasoning_budget_ratio,
   };
 }
 

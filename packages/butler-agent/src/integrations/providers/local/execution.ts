@@ -49,7 +49,7 @@ export async function runLocalPromptTextWithConfig(
   const response = await attributedLocalCompletion(config, options, requests, {
     model: config.model_id,
     messages,
-    ...localReasoningRequestParams(config),
+    ...localReasoningRequestParams(config, options.reasoningEffort),
     stream: false,
   });
   const text = extractLocalChatText(firstLocalAssistantMessage(response));
