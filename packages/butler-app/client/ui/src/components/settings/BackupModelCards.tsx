@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { SortableCardList } from "@/butler-ds";
 import { modelDisplayName, tokenWindowLabel } from "@/app/utils.ts";
 import type { AppModelSummary, SettingsView } from "@/app/types.ts";
@@ -14,6 +15,7 @@ export function BackupModelCards({
   saving: boolean;
   onUpdate: (models: string[]) => void;
 }) {
+  useAppLocale();
   const cards = fallback.models.flatMap((modelRef) => {
     const model = models.find((candidate) => candidate.model_ref === modelRef);
     return model

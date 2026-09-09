@@ -102,6 +102,21 @@ test("each active Steward has an ordered DS capsule with factual Plan progress",
     <StewardComposerCapsules children={[staleTerminalChild]} />,
   )).toBe("");
 
+  const waitingChild = structuredClone(
+    HARNESS_SS03_SUMMARY.steward_children![0]!,
+  );
+  waitingChild.active_turn = null;
+  waitingChild.latest_turn = {
+    ...HARNESS_SS03_SUMMARY.steward_children![0]!.active_turn!,
+    state: "delivered",
+  };
+  waitingChild.waiting_for_children = true;
+  const waitingHtml = renderToStaticMarkup(
+    <StewardComposerCapsules children={[waitingChild]} />,
+  );
+  expect(waitingHtml).toContain("Waiting for Worker results.");
+  expect(waitingHtml).not.toContain("Preparing final answer");
+
   const terminalSummary = {
     ...HARNESS_SS03_SUMMARY,
     turn_state: "delivered",
@@ -188,6 +203,72 @@ test("the capsule activity follows the newest safe activity row", () => {
 
   expect(html).toContain("Checking the latest evidence");
   expect(html).not.toContain("Earlier activity snapshot");
+});
+
+test("generic model waiting does not replace the latest substantive Steward activity", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const child = summary.steward_children![0]!;
+  child.active_turn = {
+    ...child.active_turn!,
+    progress: {
+      ...child.active_turn!.progress,
+      summary: "응답 생성 중",
+      safe_progress_rows: [{
+        id: "project-records-complete",
+        kind: "used_tool",
+        state: "delivered",
+        safe_label: "프로젝트 기록 확인",
+        safe_tool_name: "project_ledger_list",
+        tool_call_id: "project-records",
+        bridge_phase: "btcc_operation",
+      }, {
+        id: "next-model-round",
+        kind: "message",
+        state: "running",
+        safe_label: "응답 생성 중",
+        safe_tool_name: "model_round",
+        tool_call_id: "model-round-next",
+        bridge_phase: "model_round_waiting",
+      }],
+    },
+  };
+
+  const html = renderToStaticMarkup(<ComposerNotices summary={summary} />);
+
+  expect(html).toContain("프로젝트 기록 확인");
+  expect(html).not.toContain("응답 생성 중");
+});
+
+test("model-authored lifecycle narration does not replace factual Steward activity", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const child = summary.steward_children![0]!;
+  child.active_turn = {
+    ...child.active_turn!,
+    progress: {
+      ...child.active_turn!.progress,
+      summary: "실행 결과를 검토하고 있습니다",
+      safe_progress_rows: [{
+        id: "latest-factual-tool",
+        kind: "used_tool",
+        state: "delivered",
+        safe_label: "웹 검색 결과 확인",
+        safe_tool_name: "web_search",
+        tool_call_id: "search-result",
+      }, {
+        id: "review-phase-narration",
+        kind: "message",
+        state: "running",
+        safe_label: "실행 결과를 검토하고 있습니다",
+        work_decision_source: "model-authored",
+        activity_stage: "review",
+      }],
+    },
+  };
+
+  const html = renderToStaticMarkup(<ComposerNotices summary={summary} />);
+
+  expect(html).toContain("웹 검색 결과 확인");
+  expect(html).not.toContain("실행 결과를 검토하고 있습니다");
 });
 
 test("Steward result synthesis capsule reports preparation and offers no Stop", () => {
@@ -324,6 +405,17 @@ test("terminal Steward activity stays attached to the factual parent message", (
     },
   };
   child.active_turn = null;
+  child.artifacts = [{
+    id: "steward-report-artifact",
+    session_id: child.session_id,
+    message_id: "steward-result",
+    turn_id: child.latest_turn.id,
+    title: "research/qwen3.8-27b-awq-turboquant-vllm.md",
+    kind: "file",
+    safe_path_label: "research/qwen3.8-27b-awq-turboquant-vllm.md",
+    created_at: "2026-08-29T00:00:00.000Z",
+    open_action: "unsupported",
+  }];
 
   const progress = anchoredStewardProgressByMessageId(
     HARNESS_MESSAGES,
@@ -343,7 +435,38 @@ test("terminal Steward activity stays attached to the factual parent message", (
   expect(html).toContain("steward-parent-progress-card");
   expect(html).toContain("Review the activity surface");
   expect(html).toContain("완료됨");
+  expect(html).not.toContain('data-test-class="message-artifact-list"');
+  expect(html).not.toContain("research/qwen3.8-27b-awq-turboquant-vllm.md");
   expect(html).not.toContain("답변 완료");
+});
+
+test("recoverable Steward card shows replay without appearing active", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const child = summary.steward_children![0]!;
+  child.status = "failed";
+  child.latest_turn = {
+    ...child.active_turn!,
+    state: "runtime_fault",
+    cancellable: false,
+    retryable: true,
+  };
+  child.active_turn = null;
+  child.terminal = false;
+  const progress = anchoredStewardProgressByMessageId(
+    HARNESS_MESSAGES,
+    summary,
+  ).get("m4");
+  const html = renderToStaticMarkup(
+    <MessageContent
+      message={HARNESS_MESSAGES.find((message) => message.id === "m4")!}
+      copied={false}
+      footerMeta={null}
+      onCopyAssistantMessage={() => undefined}
+      stewardProgress={progress}
+    />,
+  );
+  expect(html).toMatch(/aria-label="(?:이어서 진행|Resume)"/u);
+  expect(html).toContain('data-test-class="steward-resume-action"');
 });
 
 test("two active Stewards attach to their own Butler messages", () => {

@@ -24,6 +24,7 @@ export function hydrateWorkPlan(row: GuidedWorkPlanRow): DurableWorkPlan {
     revision: row.revision,
     objective: row.objective,
     governingRefs: parseWorkJson(row.governing_refs_json),
+    ...(row.execution_mode ? { executionMode: row.execution_mode } : {}),
     actions: parseWorkJson(row.actions_json),
     checks: parseWorkJson(row.checks_json),
     originTurnId: row.origin_turn_id,
@@ -44,6 +45,7 @@ export function hydrateWorkResultRef(
 ): DurableWorkToolResultRef {
   return {
     resultRef: row.result_ref,
+    revision: row.sequence,
     toolCallId: row.tool_call_id,
     toolName: row.tool_name,
     status: row.status,

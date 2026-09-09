@@ -1,3 +1,4 @@
+import { readInterfaceContent } from "../../butler-i18n/src/index.ts";
 import type {
   SharedProgressRow,
   SharedTurnEvent,
@@ -36,6 +37,9 @@ export function progressRowFromSharedTurnEvent(
       ...base,
       kind: "message",
       safe_label: note,
+      interface_label_key: optionalText(payload.interfaceLabelKey),
+      interface_label_parameters: progressLabelParameters(payload.interfaceLabelParameters),
+      interface_content: readInterfaceContent(payload.interfaceContent),
       state: recoveryStatus === "cleared"
         ? "delivered"
         : recoveryStatus === "interrupted"
@@ -148,6 +152,8 @@ export function progressRowFromSharedTurnEvent(
             ? "delivered"
             : "running",
       safe_tool_name: toolName,
+      interface_content: readInterfaceContent(payload.interfaceContent),
+      interface_label_key: optionalText(payload.interfaceLabelKey),
       safe_input_label: inputLabel,
       tool_call_id: optionalText(payload.toolCallId),
       tool_result_id: optionalText(payload.resultId),
@@ -226,4 +232,10 @@ export function progressRowFromSharedTurnEvent(
     };
   }
   return null;
+}
+
+function progressLabelParameters(value: unknown): { attempt: number; maxAttempts: number } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { attempt, maxAttempts } = value as Record<string, unknown>;
+  return typeof attempt === "number" && Number.isInteger(attempt) && typeof maxAttempts === "number" && Number.isInteger(maxAttempts) ? { attempt, maxAttempts } : undefined;
 }

@@ -29,12 +29,23 @@
   display: none;
 }
 
+.stretch {
+  display: grid;
+  width: 100%;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
+
 .variant-default {
   min-height: 32px;
   padding: var(--space-1);
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
   background: var(--surface);
+}
+
+.variant-default,
+.trigger {
+  border-radius: var(--radius-control);
 }
 
 .variant-line {
@@ -54,7 +65,6 @@
   gap: var(--space-2);
   padding: 0 var(--space-3);
   border: 0;
-  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
@@ -88,6 +98,15 @@
 .trigger[data-disabled] {
   cursor: not-allowed;
   opacity: 0.52;
+}
+
+.stretch .trigger {
+  gap: var(--space-xs);
+  padding-inline: var(--space-sm);
+}
+
+.stretch .trigger svg {
+  flex-shrink: 0;
 }
 
 .orientation-vertical .list {

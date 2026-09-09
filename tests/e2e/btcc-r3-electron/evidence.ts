@@ -40,6 +40,31 @@ export function safeOutputTail(output: string[]): string[] {
       .replace(/Bearer\s+\S+/giu, "Bearer <redacted>"));
 }
 
+function normalizeModel(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.includes("/")
+    ? trimmed.slice(trimmed.indexOf("/") + 1)
+    : trimmed;
+}
+
+export function modelPathPassed(input: {
+  expectedModel: string;
+  providerAgentModels: string[];
+  providerReportedModel: string | null;
+  requestedModelRef: string | null;
+}): boolean {
+  if (
+    input.requestedModelRef === null ||
+    input.providerReportedModel === null ||
+    normalizeModel(input.requestedModelRef) !==
+      normalizeModel(input.expectedModel)
+  ) return false;
+  const proxiedRequest = input.providerAgentModels.at(-1);
+  return proxiedRequest === undefined ||
+    normalizeModel(input.providerReportedModel) ===
+      normalizeModel(proxiedRequest);
+}
+
 export function successEvidence(input: {
   launches: LaunchObservation[];
   observations: StepObservation[];
@@ -48,20 +73,16 @@ export function successEvidence(input: {
   run: PreparedRun;
 }): Record<string, unknown> {
   const { launches, observations, options, providerRequests, run } = input;
-  const normalizeModel = (value: string): string => {
-    const trimmed = value.trim();
-    return trimmed.includes("/")
-      ? trimmed.slice(trimmed.indexOf("/") + 1)
-      : trimmed;
-  };
   const allPassed = observations.every((item) =>
     item.expectations.passed &&
     item.reload.finalMatched !== false &&
     item.restart.finalMatched !== false &&
-    item.providerReportedModel !== null &&
-    item.providerAgentModels.length > 0 &&
-    normalizeModel(item.providerReportedModel) ===
-      normalizeModel(item.providerAgentModels.at(-1)!),
+    modelPathPassed({
+      expectedModel: run.model,
+      providerAgentModels: item.providerAgentModels,
+      providerReportedModel: item.providerReportedModel,
+      requestedModelRef: item.requestedModelRef,
+    }),
   );
   const providerPath = run.providerFixtureEnabled
     ? "deterministic_provider_fixture"

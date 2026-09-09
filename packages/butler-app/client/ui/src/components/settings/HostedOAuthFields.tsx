@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Button, ButtonContainer, Input, SettingsField, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { OpenAIOAuthLoginResult } from "./modelManagementApi";
@@ -19,6 +20,7 @@ export function HostedOAuthFields({
   onOpenUrl,
   onRestart,
 }: HostedOAuthFieldsProps) {
+  useAppLocale();
   const copy = appCopy.settings.modelManagement;
   const pending = login?.status === "pending" || login?.status === "starting";
   const failed = login?.status === "failed" || login?.status === "cancelled";
@@ -36,8 +38,9 @@ export function HostedOAuthFields({
       <Typo.Body>{status}</Typo.Body>
       {login?.auth_url && (
         <SettingsField
+          id="model-oauth-link"
           label={copy.oauthLink}
-          control={<Input value={login.auth_url} readOnly />}
+          control={<Input id="model-oauth-link" value={login.auth_url} readOnly />}
         />
       )}
       {login?.auth_url && (

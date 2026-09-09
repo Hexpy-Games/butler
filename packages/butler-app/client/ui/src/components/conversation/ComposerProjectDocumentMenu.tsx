@@ -1,11 +1,13 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
-import { PROJECT_DOCUMENT_PICKER_FILTERS } from "@/app/projectDocuments.ts";
+import { projectDocumentPickerFilters } from "@/app/projectDocuments.ts";
 import type {
   ProjectDashboardDocument,
-  ProjectDashboardView,
 } from "@/app/types.ts";
+import type { DashboardMaterialsPage } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import {
   ChevronRight,
   FileText,
@@ -30,13 +32,14 @@ export function ComposerProjectDocumentMenu({
   onClose: () => void;
   projectId: string | null;
 }) {
+  useAppLocale();
   return (
     <Popover>
       <PopoverTrigger asChild>
         <OptionMenuItem
           disabled={!projectId}
           icon={<FileText size={15} />}
-          label="프로젝트 문서"
+          label={appCopy.interfaceDetails.projectDocuments}
           description={<ChevronRight size={14} />}
         />
       </PopoverTrigger>
@@ -65,6 +68,7 @@ function ComposerProjectDocumentPicker({
   onClose: () => void;
   projectId: string | null;
 }) {
+  useAppLocale();
   const addProjectDocument = useComposerStore(
     (store) => store.addProjectDocument,
   );
@@ -75,15 +79,23 @@ function ComposerProjectDocumentPicker({
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
-    api<ProjectDashboardView>(
-      `/projects/${encodeURIComponent(projectId)}/dashboard`,
-    )
-      .then((dashboard) => {
-        if (!cancelled) setDocuments(dashboard.documents);
-      })
+    setDocuments([]);
+    const load = async () => {
+      let cursor: string | null = null;
+      const documents: ProjectDashboardDocument[] = [];
+      do {
+        const query: URLSearchParams = new URLSearchParams({ all: "true", limit: "100", ...(cursor ? { cursor } : {}) });
+        const page: DashboardMaterialsPage = await api(`/projects/${encodeURIComponent(projectId)}/dashboard/materials?${query}`);
+        if (cancelled) return;
+        if (page.status !== "ready") break;
+        documents.push(...page.documents); cursor = page.nextCursor;
+      } while (cursor);
+      setDocuments(documents);
+    };
+    load()
       .catch((error) => {
         if (!cancelled) {
-          notifyError(error, "Project documents failed", {
+          notifyError(error, appCopy.interfacePanels.projectDocumentsFailed, {
             id: `composer-project-documents-${projectId}`,
           });
         }
@@ -105,17 +117,17 @@ function ComposerProjectDocumentPicker({
 
   return (
     <FilteredSelectPopover
-      title="프로젝트 문서"
-      searchLabel="프로젝트 문서"
-      searchPlaceholder="문서 제목 검색"
-      searchClearLabel="검색 지우기"
+      title={appCopy.interfaceDetails.projectDocuments}
+      searchLabel={appCopy.interfaceDetails.projectDocuments}
+      searchPlaceholder={appCopy.interfaceDetails.searchDocuments}
+      searchClearLabel={appCopy.interfaceDetails.clearSearch}
       searchValue={searchValue}
       width="fixed"
-      filters={PROJECT_DOCUMENT_PICKER_FILTERS}
+      filters={projectDocumentPickerFilters()}
       activeFilterId={filter}
       onFilterChange={(id) => setFilter(id as ProjectDocumentFilter)}
       onSearchChange={setSearchValue}
-      emptyLabel="프로젝트 문서가 없습니다."
+      emptyLabel={appCopy.interfaceDetails.noDocuments}
       groups={groups}
     />
   );

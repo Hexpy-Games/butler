@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useMemo, useState } from "react";
 import {
   FilteredSelectPopover,
@@ -20,6 +21,7 @@ import {
 import { ComposerModelStatusButton } from "./ComposerModelStatusButton.tsx";
 
 export function ModelMenu() {
+  useAppLocale();
   const modelMenuOpen = useComposerStore((store) => store.modelMenuOpen);
   const setModelMenuOpen = useComposerStore((store) => store.setModelMenuOpen);
   const activeModel = useComposerStore((store) => store.activeModel);

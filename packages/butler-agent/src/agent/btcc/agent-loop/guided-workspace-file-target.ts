@@ -92,6 +92,7 @@ export async function guardWorkspaceFileTarget(input: {
       relativePath: input.path,
       allowMissingLeaf: true,
       rejectProtectedProjectLedgerWrites: true,
+      mutation: true,
       protectedProjectLedgerRoots: input.protectedProjectLedgerRoots,
     });
     if (!guard.ok || !guard.absolutePath) {

@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import {
   existsSync,
   mkdirSync,
@@ -84,12 +83,21 @@ try {
     }],
   });
 
+  mkdirSync(join(tempDir, "app-server"), { recursive: true });
+  const appServer = createAppServer({
+    dbPath: join(tempDir, "app-server", "butler-client.sqlite"),
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    port: 0,
+    automationSchedulerIntervalMs: false,
+  });
   const composition = createProductionBtccComposition({
-    butlerHome: tempDir,
+    butlerHome: process.cwd(),
     butlerData: tempDir,
     ownerId: "developer-log-live-e2e",
     sessionBindings: bindings,
     modelRound: countedLiveModelRound(),
+    appServerUrl: appServer.url,
   });
   const gatewayServer = createGatewayServer({
     router: new GatewayRouter({ store: bindings }),
@@ -97,13 +105,8 @@ try {
     butlerData: tempDir,
   });
 
-  const appServer = createAppServer({
-    dbPath: join(tempDir, "app-server", "butler-client.sqlite"),
-    butlerHome: tempDir,
-    butlerData: tempDir,
-    port: 0,
-  });
   try {
+    await composition.ready;
     const gated = await fetch(`${appServer.url}developer-logs`);
     assert(gated.status === 403, `developer logs should be gated while developer mode is off, got ${gated.status}`);
 
@@ -136,20 +139,20 @@ try {
     });
     assert(submitted.status === 202, `message submission failed: ${submitted.status}`);
 
-    dispatcher.poll({
-      queue,
-      server: gatewayServer,
-      store: bindings,
-      deliveryGuard,
-      limit: 4,
-      maxConcurrentSessions: 1,
-    });
+    const dispatchDeadline = Date.now() + 10_000;
+    let claimed = false;
+    let dispatchResult: unknown;
+    while (Date.now() < dispatchDeadline) {
+      const summary = dispatcher.poll({ queue, server: gatewayServer, store: bindings,
+        deliveryGuard, limit: 1, maxConcurrentSessions: 1,
+        onOutcome: (outcome) => { dispatchResult = outcome; } });
+      if (summary.claimed > 0) { claimed = true; break; }
+      await Bun.sleep(25);
+    }
+    assert(claimed, "App message did not reach the native inbound queue");
     await dispatcher.waitForIdle();
-    await waitForQueueState(
-      join(tempDir, "app-server", "butler-client.sqlite"),
-      clientMessageId,
-      "dispatched",
-    );
+    assert(liveModelCalls >= 1, `No provider call; dispatch=${JSON.stringify(dispatchResult)}`);
+    await waitForVisibleAnswer(appServer.url);
     assert(liveModelCalls >= 1, `expected at least one real model call, observed ${liveModelCalls}`);
 
     const logStore = new DeveloperLogStore({ butlerData: tempDir });
@@ -159,7 +162,10 @@ try {
     assert(entry.kind === "model_turn", `unexpected entry kind: ${entry.kind}`);
     assert(entry.request.input_text.includes("[REDACTED]"), "developer log did not redact request secret");
     assert(!entry.request.input_text.includes(secretToken), "developer log leaked request secret");
-    assert(entry.context.prompt_context.includes(answerToken), "developer log did not include rendered prompt context");
+    assert(entry.context.sections.some((section) => section.content.includes(answerToken)), "developer log did not include actual request context");
+    assert(entry.request.metadata.provider_round_count === liveModelCalls, "developer log round count mismatch");
+    assert(entry.request.metadata.response_format === "provider_raw", "actual provider raw response unavailable");
+    assert(!JSON.stringify(entry).includes(secretToken), "developer log leaked fixture secret");
     assert(entry.response.text.includes(answerToken), `developer log response missed the answer token: ${entry.response.text.slice(0, 200)}`);
     assert(entry.model.requested_model_ref === model, `developer log model mismatch: ${entry.model.requested_model_ref}`);
     assert(livePrompts.some((prompt) => prompt.includes(answerToken)), "live model prompt did not include requested answer token");
@@ -170,7 +176,7 @@ try {
     assert(apiView.ok, `developer logs API failed after enabling developer mode: ${apiView.status}`);
     const body = await apiView.json() as { data?: DeveloperLogListView };
     assert(body.data?.entries.length === 1, `developer logs API returned unexpected body: ${JSON.stringify(body.data?.pagination)}`);
-    assert(body.data.entries[0]?.context.prompt_context.includes(answerToken), "developer logs API omitted prompt context");
+    assert(body.data.entries[0]?.context.sections.some((section) => section.content.includes(answerToken)), "developer logs API omitted request context");
     assert(body.data.developer_mode_enabled === true, "developer logs API did not report developer mode enabled");
 
     const logPath = join(tempDir, "app", "developer-logs", "model-turns.jsonl");
@@ -205,9 +211,10 @@ function countedLiveModelRound(): ModelRoundPort {
     async runRound(request) {
       liveModelCalls += 1;
       livePrompts.push(request.messages.map((message) => message.content).join("\n"));
-      return await live.runRound(request);
+      return await live.runRound({ ...request, butlerData: sourceButlerData });
     },
     initialRequestBytes: live.initialRequestBytes?.bind(live),
+    contextSizing: live.contextSizing?.bind(live),
     statelessMessageBytes: live.statelessMessageBytes?.bind(live),
   };
 }
@@ -226,24 +233,14 @@ function publishNativeReadiness(root: string): void {
   );
 }
 
-async function waitForQueueState(
-  dbPath: string,
-  queuedClientMessageId: string,
-  state: string,
-): Promise<void> {
-  for (let attempt = 0; attempt < 240; attempt += 1) {
-    const db = new Database(dbPath, { readonly: true });
-    try {
-      const row = db.query<{ state: string }, [string]>(
-        "SELECT state FROM session_queued_messages WHERE client_message_id = ?",
-      ).get(queuedClientMessageId);
-      if (row?.state === state) return;
-    } finally {
-      db.close();
-    }
-    await Bun.sleep(250);
+async function waitForVisibleAnswer(url: string): Promise<void> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const result = await fetch(`${url}messages?chat_id=general&cursor=0`);
+    const body = await result.json() as { data?: { messages?: Array<{ role: string; text: string }> } };
+    if (body.data?.messages?.some((message) => message.role === "assistant" && message.text.includes(answerToken))) return;
+    await Bun.sleep(125);
   }
-  throw new Error(`Queue state did not become ${state}`);
+  throw new Error("The actual provider answer did not reach the public App messages API");
 }
 
 function assert(condition: unknown, message: string): asserts condition {

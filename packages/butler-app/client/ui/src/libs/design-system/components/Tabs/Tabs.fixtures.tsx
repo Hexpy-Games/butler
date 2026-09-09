@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./Tabs";
 export function TabsFixture() {
   return (
     <Tabs defaultValue="summary" data-ds-fixture="tabs">
-      <TabsList aria-label="Inspector sections">
+      <TabsList stretch aria-label="Inspector sections">
         <TabsTrigger value="summary"><Command size={15} />Summary</TabsTrigger>
         <TabsTrigger value="files"><FileText size={15} />Files</TabsTrigger>
         <TabsTrigger value="workers"><Blocks size={15} />Workers</TabsTrigger>

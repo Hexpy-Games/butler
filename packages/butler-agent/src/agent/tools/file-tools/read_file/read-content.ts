@@ -118,17 +118,17 @@ function lineNumberAtChar(text: string, charIndex: number): number {
   return text.slice(0, charIndex).split("\n").length;
 }
 
-function lineWindow(text: string, startChar: number, limitLines?: number): { candidate: string; endChar: number; limited: boolean } {
-  if (limitLines === undefined) return { candidate: text.slice(startChar), endChar: text.length, limited: false };
+function lineRangeEnd(text: string, startChar: number, limitLines?: number): number {
+  if (limitLines === undefined) return text.length;
   let seenLines = 0;
   for (let index = startChar; index < text.length; index += 1) {
     if (text[index] !== "\n") continue;
     seenLines += 1;
     if (seenLines >= limitLines) {
-      return { candidate: text.slice(startChar, index), endChar: index, limited: index < text.length };
+      return index;
     }
   }
-  return { candidate: text.slice(startChar), endChar: text.length, limited: false };
+  return text.length;
 }
 
 function readFailure(path: string, error: string, message: string, recoveryHint: string): ReadFileResult {
@@ -228,14 +228,22 @@ export async function readOneFile(
       };
     }
   }
+  const rangeStart = charIndexAtLine(text, request.start_line ?? 1);
+  const rangeEnd = lineRangeEnd(text, rangeStart, request.limit_lines);
   const startChar = continuationOffset === undefined
-    ? request.start_line === undefined ? 0 : charIndexAtLine(text, request.start_line)
+    ? rangeStart
     : charIndexAtByteOffset(text, continuationOffset);
+  if (startChar < rangeStart || startChar > rangeEnd) {
+    return {
+      result: readFailure(request.path, "invalid_cursor", "The cursor is outside the requested line range.", "Restart the requested range without cursor."),
+      sha256, outputBytes: 0, bytesRead: data.byteLength, hasMore: false, cursorInvalid: true,
+    };
+  }
   const startLine = lineNumberAtChar(text, startChar);
-  const window = lineWindow(text, startChar, request.limit_lines);
-  const selected = utf8Slice(window.candidate, request.max_bytes);
+  const candidate = text.slice(startChar, rangeEnd);
+  const selected = utf8Slice(candidate, request.max_bytes);
   const baseBytes = Buffer.byteLength(text.slice(0, startChar), "utf8");
-  const candidateBytes = Buffer.byteLength(window.candidate, "utf8");
+  const candidateBytes = Buffer.byteLength(candidate, "utf8");
   if (candidateBytes > 0 && selected.bytes === 0) {
     return {
       result: readFailure(request.path, "max_bytes_too_small_for_utf8", "The per-file byte budget cannot include the next UTF-8 character without splitting it.", "Increase max_bytes to at least the next UTF-8 character size."),
@@ -246,14 +254,8 @@ export async function readOneFile(
       startOffset: baseBytes,
     };
   }
-  let nextOffset = baseBytes + selected.bytes;
-  const selectedFullWindow = selected.bytes >= candidateBytes;
-  // A line-limited page intentionally omits its trailing delimiter. Advance
-  // over that delimiter so a continuation starts at the next line rather
-  // than yielding a stranded newline or restarting the same line.
-  if (selectedFullWindow && window.limited && text.charAt(window.endChar) === "\n") nextOffset += 1;
-  const remainingBytes = Buffer.byteLength(text.slice(charIndexAtByteOffset(text, nextOffset)), "utf8");
-  const hasMore = remainingBytes > 0;
+  const nextOffset = baseBytes + selected.bytes;
+  const hasMore = selected.bytes < candidateBytes;
   const contentLines = selected.content.length ? selected.content.split("\n") : [];
   const endLine = contentLines.length ? startLine + contentLines.length - 1 : startLine - 1;
   const result: ReadFileResult = {

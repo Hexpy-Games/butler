@@ -1,4 +1,5 @@
 import { APP_CACHE_BUDGET } from "./cacheBudget.ts";
+import { isMessageContent, type MessageContent } from "./messageContent";
 
 const COMPOSER_DRAFT_SCHEMA = "butler.composer-draft.v1";
 const COMPOSER_DRAFT_KEY_PREFIX = "butler:composer-draft:v1:";
@@ -7,6 +8,7 @@ export interface ComposerDraftSnapshot {
   schema: typeof COMPOSER_DRAFT_SCHEMA;
   session_id: string;
   text: string;
+  content_parts?: MessageContent;
   updated_at: string;
 }
 
@@ -21,11 +23,13 @@ export function composerDraftSnapshot(
   sessionId: string,
   text: string,
   updatedAt = new Date().toISOString(),
+  contentParts?: MessageContent,
 ): ComposerDraftSnapshot {
   return {
     schema: COMPOSER_DRAFT_SCHEMA,
     session_id: sessionId,
     text,
+    ...(contentParts ? { content_parts: contentParts } : {}),
     updated_at: updatedAt,
   };
 }
@@ -40,9 +44,10 @@ export function normalizeComposerDraft(
     draft.schema !== COMPOSER_DRAFT_SCHEMA ||
     draft.session_id !== expectedSessionId ||
     typeof draft.text !== "string" ||
+    (draft.content_parts !== undefined && !isMessageContent(draft.content_parts)) ||
     typeof draft.updated_at !== "string" ||
     !Number.isFinite(Date.parse(draft.updated_at)) ||
-    !draftTextWithinBudget(draft.text)
+    !draftTextWithinBudget(draft.content_parts ? JSON.stringify(draft.content_parts) : draft.text)
   ) return null;
   return draft as ComposerDraftSnapshot;
 }
@@ -103,8 +108,9 @@ export async function readCachedComposerDraft(
 export function writeCachedComposerDraft(
   sessionId: string,
   text: string,
+  contentParts?: MessageContent,
 ): ComposerDraftSnapshot | null {
-  const snapshot = composerDraftSnapshot(sessionId, text);
+  const snapshot = composerDraftSnapshot(sessionId, text, undefined, contentParts);
   if (!normalizeComposerDraft(snapshot, sessionId)) return null;
   writeLocalComposerDraft(snapshot);
   void composerDraftBridge()?.writeCachedComposerDraft?.({ snapshot }).catch(

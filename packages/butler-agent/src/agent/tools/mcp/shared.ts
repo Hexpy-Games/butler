@@ -27,7 +27,6 @@ export function createMcpToolHandlers(input: { butlerData: string }) {
         ? call.args.arguments as Record<string, unknown>
         : {};
       return {
-        ok: true,
         ...await callMcpTool({
           butlerData: input.butlerData,
           serverId,

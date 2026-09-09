@@ -8,6 +8,8 @@ interface NotifyOptions {
 interface NotifyStatusOptions {
   id?: string;
   tone?: "ok" | "muted" | "error";
+  duration?: number;
+  action?: { label: string; onClick: (event: React.MouseEvent<HTMLButtonElement>) => void };
 }
 
 export function safeErrorMessage(error: unknown, fallback: string): string {
@@ -26,15 +28,20 @@ export function notifyStatus(
   message: string,
   options: NotifyStatusOptions = {},
 ): void {
-  if (options.tone === "ok") {
-    toast.success(message, { id: options.id });
+  const { tone, ...toastOptions } = options;
+  if (tone === "ok") {
+    toast.success(message, toastOptions);
     return;
   }
-  if (options.tone === "error") {
-    toast.error(message, { id: options.id });
+  if (tone === "error") {
+    toast.error(message, toastOptions);
     return;
   }
-  toast.message(message, { id: options.id });
+  toast.message(message, toastOptions);
+}
+
+export function dismissNotification(id: string): void {
+  toast.dismiss(id);
 }
 
 export function notifyError(error: unknown, fallback: string, options: NotifyOptions = {}): void {

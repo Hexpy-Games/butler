@@ -1,6 +1,6 @@
-import { resolveAcceptedStewardReport } from "./accepted-terminal-report.ts";
-import { subsessionChildTurnId, subsessionResultId } from "./identities.ts";
+import { subsessionResultId } from "./identities.ts";
 import {
+  normalizeTerminalReportContent,
   defaultCode,
   safeTerminalSummary,
 } from "./terminal-results.ts";
@@ -21,11 +21,29 @@ export async function completeStewardResultForDependencies(
 ): Promise<CompleteStewardResultOutcome> {
   const relation = input.store.relationByChildSessionId(resultInput.childSessionId);
   if (!relation) throw new Error("subsession_relation_missing");
-  const expectedChildTurnId = subsessionChildTurnId(relation.relation_id);
-  if (resultInput.childTurnId !== expectedChildTurnId) {
-    throw new Error("subsession_child_turn_identity_mismatch");
+  const childTurn = await input.parentTurns.findTurn(resultInput.childTurnId);
+  if (resultInput.status !== "cancelled" &&
+      (!childTurn || childTurn.sessionId !== relation.child_session_id ||
+       childTurn.semanticState !== "delivered")) {
+    throw new Error("subsession_child_turn_missing");
   }
-  const expectedResultId = subsessionResultId(relation.child_session_id, expectedChildTurnId);
+  if (resultInput.status !== "cancelled") {
+    const expectedRootWorkId = input.store.rootWorkIdByRelationId(
+      relation.relation_id,
+    );
+    const sourceWork = await input.durableWork.boundWorkForTurn(
+      resultInput.childTurnId,
+    );
+    if (!expectedRootWorkId || !sourceWork ||
+      sourceWork.workId !== expectedRootWorkId ||
+      sourceWork.sessionId !== relation.child_session_id) {
+      throw new Error("subsession_root_work_identity_mismatch");
+    }
+  }
+  const expectedResultId = subsessionResultId(
+    relation.child_session_id,
+    resultInput.childTurnId,
+  );
   if (resultInput.resultId !== expectedResultId) throw new Error("subsession_result_identity_mismatch");
   if (resultInput.status === "cancelled") {
     await input.durableWork.abandonBoundWorkForTurn(resultInput.childTurnId);
@@ -57,6 +75,7 @@ export async function completeStewardResultForDependencies(
     summary: string;
     acceptanceEvidence: string[];
     changedArtifacts: string[];
+    changedFiles: NonNullable<Parameters<SubsessionDelegationService["completeStewardResult"]>[0]["changedFiles"]>;
     commits: string[];
     tests: string[];
     remainingRisks: string[];
@@ -64,25 +83,12 @@ export async function completeStewardResultForDependencies(
     detailRefs: string[];
   };
   if (resultInput.summary?.trim()) {
-    const report = await resolveAcceptedStewardReport({
-      binding: {
-        relationId: relation.relation_id,
-        resultId: resultInput.resultId,
-        childSessionId: relation.child_session_id,
-        childTurnId: resultInput.childTurnId,
-      },
-      reportedContent: resultInput.summary,
-      turns: input.parentTurns,
-    });
     evidence = {
-      summary: report.summary,
+      summary: safeSummary(resultInput.summary),
       acceptanceEvidence: [],
-      changedArtifacts: report.changedArtifacts,
-      commits: report.commits,
-      tests: report.tests,
-      remainingRisks: report.remainingRisks,
-      followUpRecommendations: report.followUpRecommendations,
-      detailRefs: report.detailRefs,
+      changedArtifacts: resultInput.changedArtifacts ?? [],
+      changedFiles: resultInput.changedFiles ?? [],
+      ...emptyReportDetails(),
     };
   } else {
     if (terminalStatus === "success") {
@@ -95,6 +101,7 @@ export async function completeStewardResultForDependencies(
       summary: safeTerminalSummary(terminalStatus, terminalCode),
       acceptanceEvidence: [],
       changedArtifacts: [],
+      changedFiles: [],
       ...emptyReportDetails(),
     };
   }
@@ -117,6 +124,7 @@ export async function completeStewardResultForDependencies(
     summary: evidence.summary,
     acceptanceEvidence: evidence.acceptanceEvidence,
     changedArtifacts: evidence.changedArtifacts,
+    changedFiles: evidence.changedFiles,
     commits: evidence.commits,
     tests: evidence.tests,
     remainingRisks: evidence.remainingRisks,
@@ -133,6 +141,10 @@ export async function completeStewardResultForDependencies(
     status: result.inserted ? "committed" : "duplicate",
     result: result.result,
   } satisfies CompleteStewardResultOutcome;
+}
+
+function safeSummary(value: string): string {
+  return normalizeTerminalReportContent(value);
 }
 
 function nonEmpty(value: unknown): string | null {

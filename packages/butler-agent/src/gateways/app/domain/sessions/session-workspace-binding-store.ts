@@ -3,5 +3,5 @@ import type { SessionBindingStore } from
 
 export type AppSessionWorkspaceBindingStore = Pick<
   SessionBindingStore,
-  "getBySessionId" | "upsert" | "rebindWorkspace" | "deleteSession" | "close"
+  "getBySessionId" | "upsert" | "rebindWorkspace" | "compareAndSetExecutionContext" | "deleteSession" | "close"
 >;

@@ -1,0 +1,20 @@
+.badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 20px;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--composer-glass-control-bg, var(--surface-raised));
+  color: var(--text-secondary);
+}
+
+.label {
+  color: inherit;
+  font-size: var(--font-size-1);
+  line-height: 1;
+  white-space: nowrap;
+}

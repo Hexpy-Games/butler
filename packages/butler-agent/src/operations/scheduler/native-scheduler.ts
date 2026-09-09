@@ -110,7 +110,7 @@ function defaultRunCommand(command: string[], env: Record<string, string>) {
   const [program, ...args] = command;
   if (!program) return { status: 1, stderr: "missing command" };
   const result = spawnSync(program, args, {
-    cwd: env.BUTLER_HOME,
+    cwd: env.BUTLER_DATA,
     env,
     encoding: "utf8",
   });

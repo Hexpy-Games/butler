@@ -169,7 +169,7 @@ export function resolveAppManagedForegroundCommand(input?: {
 } | null;
 
 export function windowsAppForegroundCommand(input: {
-  runtimeHome: string;
+  butlerData: string;
   runtime: string;
   processHost: string;
   daemon: string;

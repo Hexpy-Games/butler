@@ -1,4 +1,5 @@
 import type { ProgressRow } from "../types.ts";
+import { appCopy } from "../copy.ts";
 import type { PhaseActivity } from "./activity.ts";
 
 /**
@@ -16,8 +17,8 @@ export function fallbackOrdinaryActivity(
   const first = operations[0];
   return [{
     id: first.semantic_block_id?.trim() || `turn:${resolvedTurnId}:ordinary`,
-    title: "작업 중",
-    summary: "작업 중",
+    title: appCopy.interfaceStatus.working,
+    summary: appCopy.interfaceStatus.working,
     createdAt: first.created_at,
     operations,
   }];

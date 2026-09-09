@@ -3,8 +3,7 @@ import {
   DEFAULT_RIGHT_PANEL_WIDTH,
   LEFT_PANEL_MAX_WIDTH,
   LEFT_PANEL_MIN_WIDTH,
-  RIGHT_PANEL_MAX_WIDTH,
-  RIGHT_PANEL_MIN_WIDTH,
+  normalizeRightPanelWidth,
   clampPanelWidth,
 } from "./panelSizing.ts";
 
@@ -23,6 +22,8 @@ export interface AppUiStateSnapshot {
   sidebar_chats_collapsed: boolean;
   sidebar_projects_collapsed: boolean;
   sidebar_collapsed_project_ids: string[];
+  space_tab: "all" | "recent" | "running";
+  space_collapsed_keys: string[];
 }
 
 interface AppUiStateBridge {
@@ -71,16 +72,16 @@ export function snapshotForAppUiState(
       LEFT_PANEL_MIN_WIDTH,
       LEFT_PANEL_MAX_WIDTH,
     ),
-    right_panel_width: clampPanelWidth(
+    right_panel_width: normalizeRightPanelWidth(
       Number(input.right_panel_width ?? DEFAULT_RIGHT_PANEL_WIDTH),
-      RIGHT_PANEL_MIN_WIDTH,
-      RIGHT_PANEL_MAX_WIDTH,
     ),
     sidebar_chats_collapsed: input.sidebar_chats_collapsed ?? false,
     sidebar_projects_collapsed: input.sidebar_projects_collapsed ?? false,
     sidebar_collapsed_project_ids: normalizeStringArray(
       input.sidebar_collapsed_project_ids,
     ),
+    space_tab: input.space_tab === "recent" || input.space_tab === "running" ? input.space_tab : "all",
+    space_collapsed_keys: normalizeStringArray(input.space_collapsed_keys),
   };
 }
 

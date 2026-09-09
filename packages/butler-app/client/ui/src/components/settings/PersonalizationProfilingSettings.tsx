@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { reasoningOptionLabel } from "@/app/utils.ts";
 import type {
@@ -32,6 +33,7 @@ export function PersonalizationProfilingSettings({
   personalizationLoaded: boolean;
   setPersonalizationDraft: SetPersonalizationDraft;
 }) {
+  useAppLocale();
   const settingsCopy = appCopy.settings;
   const settingsFields = settingsCopy.fields;
   const settingsDescriptions = settingsCopy.descriptions;

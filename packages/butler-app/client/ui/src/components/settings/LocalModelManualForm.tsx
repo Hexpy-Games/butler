@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Input, SettingsField, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 
@@ -18,6 +19,7 @@ export function LocalModelManualForm({
   manualContext,
   setManualContext,
 }: LocalModelManualFormProps) {
+  useAppLocale();
   const copy = appCopy.settings.localModels;
 
   return (

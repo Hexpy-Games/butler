@@ -1,15 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { CliError, nowIso } from "./errors.js";
 import { optionalNumber, optionalString, requiredOption } from "./args.js";
-import { appendLedgerEvent, projectPath, projectRelative } from "./fs.js";
+import { appendLedgerEvent, projectRelative } from "./fs.js";
 import {
+  committedRecordSources,
   readRecord,
-  readRecordBody,
-  recordFiles,
   topLevelRecordPath,
   updateMarkdownRecord,
   writeMarkdownRecord,
 } from "./records.js";
+import { frontmatterBody } from "./frontmatter.js";
 import { gitCommitEvidence } from "./git-evidence.js";
 import { assertTransition, completionGateIssues } from "./state-machine.js";
 import { refreshDerivedIndexAfterMutation } from "./indexer.js";
@@ -128,8 +128,8 @@ function baseRecord(kind, options) {
 }
 
 function recordsMatching(project, id, kind = null) {
-  return recordFiles(project)
-    .map((filePath) => ({ filePath, record: readRecord(project, filePath) }))
+  return committedRecordSources(project)
+    .map(({ filePath, raw }) => ({ filePath, raw, record: readRecord(project, filePath, raw) }))
     .filter(({ record }) => record && record.id === id && (kind === null || record.kind === kind));
 }
 
@@ -212,11 +212,11 @@ function createRecordLocked(project, options) {
 }
 
 export function showRecord(project, options) {
-  const { filePath, record } = resolveRecord(project, options);
+  const { filePath, record, raw } = resolveRecord(project, options);
   if (!options.body) return record;
   return {
     ...record,
-    body: readRecordBody(projectPath(project, record.path)) ?? readRecordBody(filePath),
+    body: filePath.endsWith(".md") ? frontmatterBody(raw) : null,
   };
 }
 

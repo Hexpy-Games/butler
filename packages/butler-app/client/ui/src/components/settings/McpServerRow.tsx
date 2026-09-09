@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { McpServerView } from "@/app/types.ts";
 import {
@@ -23,6 +24,7 @@ export function McpServerRow({
   onEdit: () => void;
   onRemove: () => void;
 }) {
+  useAppLocale();
   const copy = appCopy.settings;
   const toggleLabel = server.enabled
     ? copy.actions.disableMcpServer

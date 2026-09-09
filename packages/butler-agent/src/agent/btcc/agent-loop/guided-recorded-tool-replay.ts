@@ -16,7 +16,6 @@ import {
 } from "../work/index.ts";
 import {
   publishWorkProgress,
-  safeAttachToolResult,
 } from "./guided-work-runtime.ts";
 import {
   publishOperation,
@@ -72,9 +71,6 @@ export async function replayRecordedGuidedToolCall(
   if (!record) return null;
   if (record.status === "completed") {
     await repairCompletedWorkRelation(input, record);
-    if (!isDurableWorkTool(input.call.name)) {
-      await safeAttachToolResult(input.execution, input.execution.workScope, record.callId);
-    }
     rememberDescribedTools(
       input.call.name,
       record.result,
@@ -89,7 +85,8 @@ export async function replayRecordedGuidedToolCall(
       status: "started",
     });
     if (isDurableWorkTool(input.call.name) && toolResultSucceeded(record.result)) {
-      await input.activityProjection.publishAccepted(input.activity);
+      await input.activityProjection.publishAccepted(input.activity,
+        await input.execution.durableWork.boundWorkForTurn(input.execution.turn.turnId));
       await publishWorkProgress(
         input.execution.progress,
         input.execution.turn.turnId,

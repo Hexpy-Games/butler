@@ -1,5 +1,9 @@
 import type { DurableWorkView } from "../work/index.ts";
-import { unresolvedWorkActionKeys } from "../work/index.ts";
+import {
+  availableWorkReviewSubjects,
+  executableWorkActionKeys,
+  unresolvedWorkActionKeys,
+} from "../work/index.ts";
 
 /** Model-facing Work status projection; internal IDs remain model-only. */
 export function durableWorkToolView(work: DurableWorkView): Record<string, unknown> {
@@ -14,7 +18,10 @@ export function durableWorkToolView(work: DurableWorkView): Record<string, unkno
     work_id: work.workId,
     status: work.status,
     current_stage: work.currentStage ?? null,
+    execution_mode: work.currentPlan?.executionMode ?? null,
     allowed_next_stages: work.allowedNextStages,
+    available_review_subjects: availableWorkReviewSubjects(work),
+    executable_action_keys: executableWorkActionKeys(work),
     actions: work.currentPlan?.actions.map((action) => {
       const progress = work.actionProgress.find((item) =>
         item.actionKey === action.actionKey);

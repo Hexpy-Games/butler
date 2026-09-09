@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import type { ProviderQuotaResultView } from "@/app/types.ts";
 import { ProgressMeter, Stack, Typo } from "@/butler-ds";
 import {
@@ -15,22 +17,23 @@ function clampRemaining(value: number | null): number | null {
 
 function remainingLabel(value: number | null): string {
   const formatted = formatRemaining(value);
-  return formatted === "미확인" ? formatted : `${formatted} 남음`;
+  return value === null ? formatted : appCopy.interfaceTemplates.remaining(formatted);
 }
 
 function secondaryLabel(window: ProviderQuotaWindow): string | null {
   const details = [
     window.resetsAt
-      ? `재설정 ${formatQuotaTimestamp(window.resetsAt)}`
+      ? appCopy.interfaceTemplates.resets(formatQuotaTimestamp(window.resetsAt))
       : null,
     window.expiresAt
-      ? `만료 ${formatQuotaTimestamp(window.expiresAt)}`
+      ? appCopy.interfaceTemplates.expires(formatQuotaTimestamp(window.expiresAt))
       : null,
   ].filter((detail): detail is string => detail !== null);
   return details.length > 0 ? details.join(" · ") : null;
 }
 
 export function ProviderQuotaGauge({ window }: { window: ProviderQuotaWindow }) {
+  useAppLocale();
   const remaining = clampRemaining(window.remainingPercent);
   const label = windowLabel(window);
   const valueLabel = remainingLabel(remaining);

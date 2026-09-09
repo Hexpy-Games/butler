@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
@@ -54,7 +55,7 @@ export function useAutomationDetail(
         }
       } catch (error) {
         if (!cancelled) {
-          notifyError(error, "Automation detail failed", {
+          notifyError(error, appCopy.interfacePanels.automationDetailFailed, {
             id: `automation-detail-${automationId}`,
           });
           onStatus({ label: "ready", tone: "ok" });

@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
 import { api, importSkillZip } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -21,11 +22,12 @@ import { SkillActions } from "./SkillActions";
 import { SkillGroup } from "./SkillGroup";
 
 export function SkillsSettings() {
+  useAppLocale();
   const copy = appCopy.settings;
   const openSession = useButlerStore((state) => state.openSession);
   const closeSettings = useButlerStore((state) => state.closeSettings);
   const nickname = useSettingsUIStore(
-    (state) => state.personalization?.profile.butler_nickname || "Butler",
+    (state) => state.personalization?.profile.butler_nickname || appCopy.firstRun.product,
   );
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [view, setView] = useState<SkillSettingsView | null>(null);
@@ -57,7 +59,7 @@ export function SkillsSettings() {
       body: JSON.stringify({
         kind: project ? "project" : "chat",
         project_id: project?.id,
-        title: `${nickname}과 어떤 스킬을 만들어볼까요?`,
+        title: appCopy.interfaceTemplates.skillTitle(nickname),
         session_hint: `skill-builder-${project?.id ?? "default"}-${Date.now()}`,
       }),
     });
@@ -75,8 +77,8 @@ export function SkillsSettings() {
       <Stack gap="md">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="default">기본</TabsTrigger>
-            <TabsTrigger value="project">프로젝트</TabsTrigger>
+            <TabsTrigger value="default">{appCopy.interfaceDetails.default}</TabsTrigger>
+            <TabsTrigger value="project">{appCopy.interfaceDetails.project}</TabsTrigger>
           </TabsList>
           <TabsContent value="default">
             <Stack gap="md">
@@ -85,11 +87,11 @@ export function SkillsSettings() {
                 onCreate={() => void createSkillChat()}
               />
               <SkillGroup
-                title="코어 기본 스킬"
+                title={appCopy.interfaceDetails.coreSkills}
                 skills={view?.core ?? []}
                 maxVisibleRows={4}
               />
-              <SkillGroup title="사용자 추가 스킬" skills={view?.user ?? []} />
+              <SkillGroup title={appCopy.interfaceDetails.userSkills} skills={view?.user ?? []} />
             </Stack>
           </TabsContent>
           <TabsContent value="project">
@@ -110,7 +112,7 @@ export function SkillsSettings() {
                   onCreate={() => void createSkillChat(selectedProject)}
                 />
                 <SkillGroup
-                  title={selectedProject?.display_name ?? "프로젝트 스킬"}
+                  title={selectedProject?.display_name ?? appCopy.interfaceDetails.projectSkills}
                   skills={selectedProject?.skills ?? []}
                 />
               </Stack>

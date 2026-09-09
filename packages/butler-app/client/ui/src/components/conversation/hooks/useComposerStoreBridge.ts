@@ -27,7 +27,7 @@ interface UseComposerStoreBridgeProps {
   setIsComposing: Dispatch<SetStateAction<boolean>>;
   setModelMenuOpen: Dispatch<SetStateAction<boolean>>;
   state: ReturnType<typeof useComposerState>;
-  textAreaRef: RefObject<HTMLTextAreaElement | null>;
+  textAreaRef: RefObject<HTMLElement | null>;
 }
 
 export function useComposerStoreBridge(props: UseComposerStoreBridgeProps) {
@@ -70,6 +70,7 @@ export function useComposerStoreBridge(props: UseComposerStoreBridgeProps) {
       handleKeyDown: handlers.handleKeyDown,
       handleModelChoice: handlers.handleModelChoice,
       handlePlanModeChange: handlers.handlePlanModeChange,
+      applyServerPlanMode: controls.setPlanMode,
       handleReasoningChange: handlers.handleReasoningChange,
       isSending,
       large,

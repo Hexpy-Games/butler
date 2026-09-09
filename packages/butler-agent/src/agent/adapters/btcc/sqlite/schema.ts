@@ -127,6 +127,11 @@ CREATE TABLE IF NOT EXISTS btcc_turns (
   semantic_state TEXT NOT NULL CHECK (
     semantic_state IN ('admitted', 'delivery_committed', 'delivered', 'cancelled')
   ),
+  authority_continuation_json TEXT,
+  suspension_reason TEXT CHECK (
+    suspension_reason IS NULL OR
+    suspension_reason IN ('authority_pending', 'waiting_for_worker')
+  ),
   active_checkpoint_id TEXT,
   route TEXT CHECK (route IS NULL OR route IN ('direct', 'assisted', 'managed')),
   final_payload_json TEXT,
@@ -138,6 +143,8 @@ CREATE TABLE IF NOT EXISTS btcc_turns (
     final_disposition IS NULL OR final_disposition IN ('completed', 'cancelled')
   )
 );
+
+CREATE INDEX IF NOT EXISTS idx_btcc_turns_session ON btcc_turns(session_id);
 
 CREATE TABLE IF NOT EXISTS btcc_model_route_events (
   event_id TEXT PRIMARY KEY,
@@ -231,6 +238,7 @@ CREATE TABLE IF NOT EXISTS btcc_guided_tool_calls (
   status TEXT NOT NULL,
   result_json TEXT,
   result_sha256 TEXT,
+  changed_files_json TEXT,
   error_code TEXT,
   delivery_state TEXT CHECK (
     delivery_state IS NULL OR delivery_state IN (
@@ -264,6 +272,14 @@ CREATE TABLE IF NOT EXISTS btcc_canonical_deliveries (
   outbox_id TEXT NOT NULL UNIQUE,
   assistant_message_id TEXT NOT NULL UNIQUE,
   inserted_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_context_compactions (
+  turn_id TEXT NOT NULL,
+  source_digest TEXT NOT NULL,
+  covered_units INTEGER NOT NULL,
+  summary TEXT NOT NULL,
+  PRIMARY KEY (turn_id, source_digest)
 );
 
 CREATE TABLE IF NOT EXISTS btcc_context_documents (

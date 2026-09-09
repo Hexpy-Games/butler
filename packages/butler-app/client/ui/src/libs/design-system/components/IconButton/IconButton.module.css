@@ -3,7 +3,7 @@
   height: var(--icon-button-size, 30px);
   min-height: var(--icon-button-size, 30px);
   overflow: hidden;
-  border-radius: var(--radius-pill);
+  border-radius: var(--icon-button-radius, var(--radius-pill));
   color: var(--text-secondary);
   cursor: pointer;
   background: transparent;
@@ -11,13 +11,13 @@
   place-items: center;
   display: inline-grid;
 }
-.moduleScope:hover {
-  background: var(--selection);
+.moduleScope:hover:not(:disabled) {
+  background: var(--icon-button-surface, var(--selection));
   color: var(--text-primary);
 }
 
 .moduleScope.selected {
-  background: var(--selection);
+  background: var(--icon-button-surface, var(--selection));
   color: var(--text-primary);
 }
 .moduleScope:disabled {

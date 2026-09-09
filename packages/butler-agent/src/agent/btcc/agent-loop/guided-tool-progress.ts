@@ -1,6 +1,6 @@
 import type { BtccTurnProgressObserver } from "../contracts.ts";
 import { digest } from "../identity/index.ts";
-import { publicToolTitle } from "../projection/index.ts";
+import { publicToolTitle, publicToolTitleReference } from "../projection/index.ts";
 import { summarizeToolProgress } from "../../output/progress/tool-progress.ts";
 
 export function rememberDescribedTools(
@@ -33,7 +33,7 @@ export async function publishOperation(
   if (!progress?.operationChanged) return;
   try {
     const args = input.args ?? {};
-    const summary = summarizeToolProgress(input.toolName, args, "ko");
+    const summary = summarizeToolProgress(input.toolName, args, "en");
     const inputLabel = summary.inputLabel;
     const detailRows = summary.detailRows;
     await progress.operationChanged({
@@ -42,6 +42,7 @@ export async function publishOperation(
       activityId: input.activityId,
       requestId: input.requestId,
       publicTitle: publicToolTitle(input.toolName, args),
+      interfaceContent: { title: publicToolTitleReference(input.toolName, args) },
       capabilityRef: input.toolName,
       status: input.status,
       ...(inputLabel && inputLabel !== input.toolName ? { inputLabel } : {}),
@@ -103,7 +104,7 @@ export function ordinaryToolError(
     ok: false,
     error: {
       code: "tool_error",
-      message: `${toolName} could not complete: ${message.slice(0, 1_000)}`,
+      message: `${toolName} could not complete: ${message}`,
     },
   };
 }

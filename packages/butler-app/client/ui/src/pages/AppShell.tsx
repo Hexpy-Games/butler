@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { appCopy } from "@/app/copy.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import {
   AdaptivePanelResizeHandle,
   AdaptiveShell,
@@ -8,11 +8,14 @@ import {
   AdaptiveShellScrim,
   AdaptiveShellSidebar,
   AdaptiveShellWorkspace,
+  Stack,
 } from "@/butler-ds";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
 import { Sidebar } from "@/components/layout/Sidebar.tsx";
+import { useOrganizationNotice } from "@/components/space/hooks/useOrganizationNotice";
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
+import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
 import { Conversation } from "@/components/conversation/Conversation.tsx";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
@@ -41,8 +44,6 @@ import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
 import {
   LEFT_PANEL_MAX_WIDTH,
   LEFT_PANEL_MIN_WIDTH,
-  RIGHT_PANEL_MAX_WIDTH,
-  RIGHT_PANEL_MIN_WIDTH,
   usePanelResize,
 } from "@/hooks/usePanelResize.ts";
 import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
@@ -51,6 +52,7 @@ import { FirstRunSetup } from "@/components/first-run/FirstRunSetup.tsx";
 import { readFirstRunState } from "@/app/firstRunSetup.ts";
 
 export function AppShell() {
+  useAppLocale();
   const [firstRunState, setFirstRunState] = useState(() =>
     readFirstRunState(
       window.localStorage,
@@ -77,6 +79,7 @@ export function AppShell() {
 
 function AppWorkspaceShell() {
   useAppBootstrap();
+  useOrganizationNotice();
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const setLeftOpen = useButlerStore((state) => state.setLeftOpen);
   const view = useButlerStore((state) => state.view);
@@ -108,6 +111,9 @@ function AppWorkspaceShell() {
     enabled: chromeEnvironment() === "browser",
   });
   const {
+    shellRef,
+    rightMin,
+    rightMax,
     beginPanelResize,
     handlePanelResizeKeyDown,
     leftPanelWidth,
@@ -115,6 +121,7 @@ function AppWorkspaceShell() {
     rightPanelWidth,
     resizingPanel,
   } = usePanelResize({
+    leftOpen,
     setLeftOpen: (value) => setLeftOpen(value),
   });
   useNarrowRightPanelAutoCollapse({
@@ -127,10 +134,12 @@ function AppWorkspaceShell() {
 
   return (
     <AdaptiveShell
+      ref={shellRef}
       className={`mac-window ${appThemeClasses(settings, systemPrefersDark)}`}
       chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window"
       leftOpen={leftOpen}
+      compactSidebarFullWidth
       platform={nativePlatform()}
       resizing={Boolean(resizingPanel)}
       rightOpen={effectiveRightOpen}
@@ -159,20 +168,25 @@ function AppWorkspaceShell() {
             data-test-class="workspace"
           >
             <Titlebar />
-            {view.kind === "automations" ||
-            view.kind === "automation-detail" ? (
-              <AutomationsView />
-            ) : view.kind === "project-dashboard" ? (
-              <ProjectDashboardView />
-            ) : (
-              <Conversation />
-            )}
+            <Stack fill gap="none">
+              <LiveConnectionNotice />
+              <Stack fill gap="none">
+                {view.kind === "automations" ||
+                view.kind === "automation-detail" ? (
+                  <AutomationsView />
+                ) : view.kind === "project-dashboard" ? (
+                  <ProjectDashboardView />
+                ) : (
+                  <Conversation />
+                )}
+              </Stack>
+            </Stack>
           </AdaptiveShellWorkspace>
         </>
       )}
       {!isSettingsView && leftOpen && (
         <AdaptivePanelResizeHandle
-          aria-label="Resize left sidebar"
+          aria-label={appCopy.titlebar.resizeLeftPanel}
           aria-orientation="vertical"
           aria-controls="butler-left-sidebar"
           aria-valuemax={LEFT_PANEL_MAX_WIDTH}
@@ -195,11 +209,11 @@ function AppWorkspaceShell() {
       )}
       {!isSettingsView && effectiveRightOpen && (
         <AdaptivePanelResizeHandle
-          aria-label="Resize right panel"
+          aria-label={appCopy.titlebar.resizeRightPanel}
           aria-orientation="vertical"
           aria-controls="butler-right-inspector"
-          aria-valuemax={RIGHT_PANEL_MAX_WIDTH}
-          aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
+          aria-valuemax={rightMax}
+          aria-valuemin={rightMin}
           aria-valuenow={rightPanelWidth}
           data-test-class="panel-resize-handle right-panel-resize-handle"
           side="right"
@@ -210,7 +224,7 @@ function AppWorkspaceShell() {
       {!isSettingsView && (
         <AdaptiveShellScrim
           label={
-            effectiveRightOpen ? appCopy.titlebar.hideRightPanel : "Hide sidebar"
+            effectiveRightOpen ? appCopy.titlebar.hideRightPanel : appCopy.titlebar.hideLeftPanel
           }
           open={leftOpen || effectiveRightOpen}
           onDismiss={() =>

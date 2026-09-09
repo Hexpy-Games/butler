@@ -1099,6 +1099,31 @@ test("getSessionView preload bridge returns a serializable resync envelope", () 
   });
 });
 
+test("live preload reports connection open before any event arrives", () => {
+  const preloadPath = resolve(import.meta.dir, "../../packages/butler-app/client/electron/preload.cjs");
+  const result = spawnSync("node", ["-e", `
+    const Module = require("node:module");
+    const load = Module._load;
+    let bridge;
+    Module._load = (request, parent, isMain) => request === "electron"
+      ? { contextBridge: { exposeInMainWorld(name, value) { bridge = value; } },
+          ipcRenderer: { invoke: async () => null, on() {}, removeListener() {} } }
+      : load(request, parent, isMain);
+    global.fetch = async () => new Response(new ReadableStream({ start() {} }));
+    require(${JSON.stringify(preloadPath)});
+    let events = 0;
+    let stop;
+    stop = bridge.subscribeLiveEvents({}, {
+      onEvent() { events++; },
+      onError(error) { process.stderr.write(JSON.stringify(error)); process.exitCode = 1; },
+      onOpen() { process.stdout.write(JSON.stringify({ connected: true, events })); stop(); },
+    });
+  `], { cwd: process.cwd(), encoding: "utf8", timeout: 5000 });
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe("");
+  expect(JSON.parse(result.stdout)).toEqual({ connected: true, events: 0 });
+});
+
 test("renderer API resynchronizes an expired opaque session-view cursor once", async () => {
   const calls: unknown[] = [];
   Object.defineProperty(globalThis, "window", {

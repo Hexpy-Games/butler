@@ -2,13 +2,13 @@ import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type { GuidedEffectAccessMode } from "../effects/index.ts";
 import {
   AUTHORITY_DENIAL_TEXT,
+  type AuthorityOutcomeReceipt,
   type PrincipalAuthority,
 } from "../authority/index.ts";
-import type {
-  GuidedActivityBinding,
-  GuidedActivityProjection,
-} from "../projection/index.ts";
+import type { GuidedActivityProjection } from "../projection/index.ts";
 import type { BtccAgentLoopInput } from "./contracts.ts";
+import { isDurableWorkTool } from "../work/index.ts";
+import { normalizeGuidedToolCall } from "../../tools/tool-call-normalization.ts";
 
 /**
  * Captures only user-facing progress text for operational fallback.  The
@@ -66,7 +66,20 @@ export function createGuidedAskFirstProgress(
   progress: BtccTurnProgressObserver | undefined,
 ): BtccTurnProgressObserver | undefined {
   if (!progress) return undefined;
-  return { stateChanged: (update) => progress.stateChanged(update) };
+  return {
+    stateChanged: (update) => progress.stateChanged(update),
+    workProgressChanged: (update) => progress.workProgressChanged?.(update),
+    phaseActivityChanged: (update) => progress.phaseActivityChanged?.(update),
+    operationChanged: (update) => progress.operationChanged?.({
+      turnId: update.turnId, semanticState: update.semanticState,
+      activityId: update.activityId, requestId: update.requestId,
+      publicTitle: update.publicTitle, capabilityRef: update.capabilityRef, status: update.status,
+      interfaceContent: update.interfaceContent,
+    }),
+    modelRoundWaitingChanged: (update) => progress.modelRoundWaitingChanged?.(update),
+    operationalNoticeChanged: (update) => progress.operationalNoticeChanged?.(update),
+    runtimeFaulted: (update) => progress.runtimeFaulted?.(update),
+  };
 }
 
 export function createGuidedAuthorityProjection(input: {
@@ -80,9 +93,8 @@ export function createGuidedAuthorityProjection(input: {
   publicActivity: GuidedActivityProjection;
   loopCallbacks: Pick<
     BtccAgentLoopInput,
-    "onAssistantTextBeforeTools" | "finalTextFromToolResult"
+    "onAssistantTextBeforeTools" | "outcomeFromToolResult"
   >;
-  continuation: boolean;
   project(text: string): string;
 } {
   const authorityDecision = authorityDecisionForContinuation(input);
@@ -94,17 +106,16 @@ export function createGuidedAuthorityProjection(input: {
   return {
     publicActivity,
     loopCallbacks: createGuidedPublicLoopCallbacks({
-      accessMode: input.accessMode,
       activity: publicActivity,
       ...(authorityDecision ? { authorityDecision } : {}),
     }),
-    continuation: Boolean(input.requestRef),
     project: (text) => input.requestRef
       ? projectGuidedAuthorityOutcome({
           authority: input.authority,
           ownerSessionId: input.ownerSessionId,
           turnId: input.turnId,
           requestRef: input.requestRef,
+          report: text,
         })
       : text,
   };
@@ -134,48 +145,53 @@ function createGuidedPublicActivity(input: {
   authorityDecision?: "allowed" | "denied" | "modified";
 }): GuidedActivityProjection {
   if (input.accessMode !== "ask_first") return input.activity;
-  const pendingText = input.authorityDecision === "denied"
+  const decisionText = input.authorityDecision === "denied"
     ? AUTHORITY_DENIAL_TEXT
     : input.authorityDecision === "modified"
       ? "Replacement command is waiting for Allow."
-    : "Reviewed command pending Allow.";
+      : undefined;
   return {
     observeToolBatch: (batch) => input.activity.observeToolBatch({
-      text: pendingText,
-      toolCalls: batch.toolCalls.map((call) => ({ name: call.name, args: {} })),
+      text: decisionText ?? batch.text,
+      toolCalls: batch.toolCalls.map(askFirstActivityCall),
     }),
-    observeTool: (call) => input.activity.observeTool({ ...call, args: {} }),
-    markManaged: (binding?: GuidedActivityBinding) => input.activity.markManaged(binding),
-    publishAccepted: (binding: GuidedActivityBinding) => input.activity.publishAccepted(binding),
+    observeTool: (call) => input.activity.observeTool({ ...call, ...askFirstActivityCall(call) }),
+    publishAccepted: (binding, work) => input.activity.publishAccepted(binding, work),
   };
 }
 
+function askFirstActivityCall(call: { name: string; args: Record<string, unknown> }) {
+  const normalized = normalizeGuidedToolCall({ toolName: call.name, args: call.args });
+  // Work descriptions are projected field by field by the activity renderer.
+  // Approval protects execution input, not the authored Plan or review subject.
+  return isDurableWorkTool(normalized.name) ? normalized : { name: call.name, args: {} };
+}
+
 function createGuidedPublicLoopCallbacks(input: {
-  accessMode: GuidedEffectAccessMode;
   activity: GuidedActivityProjection;
   authorityDecision?: "allowed" | "denied" | "modified";
-}): Pick<BtccAgentLoopInput, "onAssistantTextBeforeTools" | "finalTextFromToolResult"> {
+}): Pick<BtccAgentLoopInput, "onAssistantTextBeforeTools" | "outcomeFromToolResult"> {
   return {
     onAssistantTextBeforeTools: ({ text, toolCalls }) => input.activity.observeToolBatch({
-      text: input.accessMode !== "ask_first"
-        ? text
-        : input.authorityDecision === "denied"
-          ? AUTHORITY_DENIAL_TEXT
-          : input.authorityDecision === "modified"
-            ? "Replacement command is waiting for Allow."
-          : "Reviewed command pending Allow.",
+      text: input.authorityDecision === "denied"
+        ? AUTHORITY_DENIAL_TEXT
+        : input.authorityDecision === "modified"
+          ? "Replacement command is waiting for Allow."
+          : text,
       toolCalls: toolCalls.map((call) => ({
         name: call.name,
-        args: input.accessMode === "ask_first" ? {} : call.arguments,
+        args: call.arguments,
       })),
     }),
-    finalTextFromToolResult: ({ toolResult }) => {
-      if (input.authorityDecision === "denied") return AUTHORITY_DENIAL_TEXT;
+    outcomeFromToolResult: ({ toolResult }) => {
+      if (input.authorityDecision === "denied") {
+        return { kind: "reply", text: AUTHORITY_DENIAL_TEXT };
+      }
       if (input.authorityDecision === "modified" && authorityPending(toolResult.output)) {
-        return "Replacement command is waiting for Allow.";
+        return { kind: "suspend", reason: "authority_pending" };
       }
       return authorityPending(toolResult.output)
-        ? "This reviewed command is waiting for Allow."
+        ? { kind: "suspend", reason: "authority_pending" }
         : null;
     },
   };
@@ -186,6 +202,7 @@ function projectGuidedAuthorityOutcome(input: {
   ownerSessionId: string;
   turnId: string;
   requestRef: string;
+  report: string;
 }): string {
   if (!input.authority) return "Approved command outcome could not be verified.";
   try {
@@ -196,8 +213,14 @@ function projectGuidedAuthorityOutcome(input: {
     });
     if (execution.decision === "denied") return AUTHORITY_DENIAL_TEXT;
     if (execution.decision === "modified") return "Replacement command is waiting for Allow.";
-    if (execution.outcome === "applied") return "Approved command completed once.";
-    if (execution.outcome === "failed") return "Approved command failed to complete.";
+    // The receipt describes one operation, not the eventual Work outcome. Keep
+    // the common public report after a known outcome, including later failures.
+    if (execution.outcome === "applied" || execution.outcome === "failed") {
+      return input.report;
+    }
+    if (execution.outcome === "uncertain") {
+      return authorityUncertainOutcomeText(execution.outcomeReceipt);
+    }
     return "Approved command outcome is pending.";
   } catch {
     return "Approved command outcome could not be verified.";
@@ -207,4 +230,35 @@ function projectGuidedAuthorityOutcome(input: {
 function authorityPending(value: unknown): boolean {
   return value !== null && typeof value === "object" && !Array.isArray(value) &&
     (value as Record<string, unknown>).authority_pending === true;
+}
+
+const AUTHORITY_UNCERTAIN_TEXT = "확인 필요";
+const AUTHORITY_EVIDENCE_REF_PREFIX = "authority-evidence-";
+const AUTHORITY_EVIDENCE_REF_BODY_MIN = 8;
+const AUTHORITY_EVIDENCE_REF_BODY_MAX = 64;
+const AUTHORITY_EVIDENCE_REF_BODY_PATTERN = /^[a-z0-9-]+$/;
+
+/**
+ * Terminal projection for a possibly-started uncertain authority outcome.
+ * Emits only a bounded, opaque evidence reference when it matches the safe
+ * format; receipt internals (journal ids, attempt counts, error codes) and any
+ * malformed or unbounded evidence value never reach the public string.
+ */
+function authorityUncertainOutcomeText(
+  receipt: AuthorityOutcomeReceipt | undefined,
+): string {
+  const evidenceRef = safeAuthorityEvidenceRef(receipt?.evidenceRef);
+  return evidenceRef
+    ? `${AUTHORITY_UNCERTAIN_TEXT} · ${evidenceRef}`
+    : AUTHORITY_UNCERTAIN_TEXT;
+}
+
+function safeAuthorityEvidenceRef(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  if (!value.startsWith(AUTHORITY_EVIDENCE_REF_PREFIX)) return null;
+  const body = value.slice(AUTHORITY_EVIDENCE_REF_PREFIX.length);
+  if (body.length < AUTHORITY_EVIDENCE_REF_BODY_MIN) return null;
+  if (body.length > AUTHORITY_EVIDENCE_REF_BODY_MAX) return null;
+  if (!AUTHORITY_EVIDENCE_REF_BODY_PATTERN.test(body)) return null;
+  return value;
 }

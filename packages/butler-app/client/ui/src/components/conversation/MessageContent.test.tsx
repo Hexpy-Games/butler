@@ -17,7 +17,7 @@ afterEach(() => {
     .IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("completed unbound ordinary turn discloses 작업 중 and operation rows", async () => {
+test("completed unbound ordinary turn discloses 완료 and operation history", async () => {
   const dom = new JSDOM("<div id=\"root\"></div>", { url: "http://localhost" });
   Object.assign(globalThis, {
     window: dom.window,
@@ -68,11 +68,43 @@ test("completed unbound ordinary turn discloses 작업 중 and operation rows", 
   if (!(header instanceof dom.window.HTMLButtonElement)) {
     throw new Error("Missing completed activity disclosure header.");
   }
-  expect(header.textContent).toContain("활동 · 작업 중");
+  expect(header.textContent).toContain("활동 · 완료");
   expect(container.textContent).not.toContain("Bun 실행 완료");
 
   await act(async () => header.click());
   expect(container.textContent).toContain("Bun 실행 완료");
   expect(container.querySelector("[data-work-stage]")).toBeNull();
+  await act(async () => root.unmount());
+});
+
+test("failed Steward result text stays a normal answer without a system error code", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", { url: "http://localhost" });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const container = dom.window.document.querySelector("#root");
+  if (!(container instanceof dom.window.HTMLElement)) throw new Error("Missing root.");
+  const root = createRoot(container);
+
+  await act(async () => root.render(
+    <MessageContent
+      message={{
+        id: "steward-result",
+        role: "assistant",
+        text: "확인한 내용과 남은 문제를 보고합니다.",
+        status: "failed",
+      }}
+      copied={false}
+      footerMeta={null}
+    />,
+  ));
+
+  expect(container.textContent).toContain("확인한 내용과 남은 문제를 보고합니다.");
+  expect(container.querySelector(".failure-notice")).toBeNull();
   await act(async () => root.unmount());
 });

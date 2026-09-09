@@ -26,6 +26,7 @@ import {
   HARNESS_MODEL_CATALOG,
   HARNESS_MESSAGES,
   HARNESS_NAVIGATION,
+  HARNESS_PRIMARY_MODEL,
   HARNESS_PROJECT_DASHBOARD,
   HARNESS_SS03_NAVIGATION,
   HARNESS_SS03_OBSERVER_VIEW,
@@ -33,12 +34,11 @@ import {
   HARNESS_SUMMARY,
 } from "@/app/fixtures.ts";
 import { appThemeClasses, isDraftChatId, projectDraftId } from "@/app/utils.ts";
+import type { WorkerProfile } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import {
   LEFT_PANEL_MAX_WIDTH,
   LEFT_PANEL_MIN_WIDTH,
-  RIGHT_PANEL_MAX_WIDTH,
-  RIGHT_PANEL_MIN_WIDTH,
   usePanelResize,
 } from "@/hooks/usePanelResize.ts";
 import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
@@ -97,13 +97,25 @@ export function VisualHarness() {
         : HARNESS_SUMMARY,
     [ss03Surface, worktreeSurface],
   );
-  const harnessSettings = useMemo(
-    () =>
-      visualTheme === EMPTY_SETTINGS.appearance_theme
-        ? EMPTY_SETTINGS
-        : { ...EMPTY_SETTINGS, appearance_theme: visualTheme },
-    [visualTheme],
-  );
+  const harnessSettings = useMemo(() => {
+    const workerProfiles: WorkerProfile[] = [
+      {
+        id: "default",
+        label: appCopy.interfaceDetails.default,
+        enabled: true,
+        job: { kind: "builtin", job: "coding" },
+        model: HARNESS_PRIMARY_MODEL.model_ref,
+        reasoning_effort: HARNESS_PRIMARY_MODEL.default_reasoning_effort,
+      },
+    ];
+    return visualTheme === EMPTY_SETTINGS.appearance_theme
+      ? { ...EMPTY_SETTINGS, worker_profiles: workerProfiles }
+      : {
+          ...EMPTY_SETTINGS,
+          appearance_theme: visualTheme,
+          worker_profiles: workerProfiles,
+        };
+  }, [visualTheme]);
   const systemPrefersDark = useSystemThemePreference();
   usePortalThemeClasses(harnessSettings, systemPrefersDark);
   const rightAvailable =
@@ -113,6 +125,9 @@ export function VisualHarness() {
   const newChatActive =
     view.kind === "session" && isDraftChatId(activeChatId);
   const {
+    shellRef,
+    rightMin,
+    rightMax,
     beginPanelResize,
     handlePanelResizeKeyDown,
     leftPanelWidth,
@@ -120,6 +135,7 @@ export function VisualHarness() {
     rightPanelWidth,
     resizingPanel,
   } = usePanelResize({
+    leftOpen,
     setLeftOpen,
   });
   useNarrowRightPanelAutoCollapse({
@@ -188,6 +204,7 @@ export function VisualHarness() {
   }, [ss03Surface]);
   return (
     <AdaptiveShell
+      ref={shellRef}
       className={`mac-window visual-harness ${appThemeClasses(harnessSettings, systemPrefersDark)}`}
       chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window visual-harness"
@@ -278,8 +295,8 @@ export function VisualHarness() {
           aria-label="Resize right panel"
           aria-orientation="vertical"
           aria-controls="butler-right-inspector"
-          aria-valuemax={RIGHT_PANEL_MAX_WIDTH}
-          aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
+          aria-valuemax={rightMax}
+          aria-valuemin={rightMin}
           aria-valuenow={rightPanelWidth}
           data-test-class="panel-resize-handle right-panel-resize-handle"
           side="right"

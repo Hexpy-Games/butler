@@ -5,7 +5,7 @@ import {
   readFileSync,
   realpathSync,
 } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import type { ArtifactRef } from "../../../core/contracts.ts";
 import type { AppMessageResponderFile } from "../../domain/sessions/message-responder-contract.ts";
 import type { AppMessageFileStore } from "../../domain/message-files/message-file-store.ts";
@@ -35,7 +35,7 @@ export function artifactFilesFromOutbound(input: {
   const project = chat?.project_id ? input.getProjectRow(chat.project_id) : null;
   const allowedRoots = [
     input.butlerData,
-    project?.workspace_path ?? input.butlerHome,
+    ...(project?.workspace_path ? [project.workspace_path] : []),
     join(input.butlerData, "artifacts", "public-data"),
   ].map((root) => resolve(root));
   const files: AppMessageResponderFile[] = [];
@@ -55,7 +55,7 @@ export function artifactFilesFromOutbound(input: {
       )
     : new Set<string>();
   for (const artifact of input.artifacts) {
-    const path = firstReadableArtifactPath(artifact, allowedRoots, seen);
+    const path = firstReadableArtifactPath(artifact, allowedRoots, seen, input);
     if (!path) continue;
     seen.add(path);
     const name = basename(
@@ -89,9 +89,16 @@ function firstReadableArtifactPath(
   artifact: ArtifactRef,
   allowedRoots: string[],
   seen: Set<string>,
+  storage: { butlerHome: string; butlerData: string },
 ): string | null {
   const canonicalRoots = allowedRoots.map(canonicalPath);
-  for (const path of artifactCandidatePaths(artifact, allowedRoots)) {
+  const legacyRoot = resolve(storage.butlerHome, "artifacts");
+  for (const candidatePath of artifactCandidatePaths(artifact, allowedRoots)) {
+    // Old reports move without rewriting historical message/Turn payloads.
+    // Resolve their old references only to data, never read the source copy.
+    const path = isPathInside(legacyRoot, candidatePath)
+      ? resolve(storage.butlerData, "artifacts", relative(legacyRoot, candidatePath))
+      : candidatePath;
     if (seen.has(path)) continue;
     if (!allowedRoots.some((root) => isPathInside(root, path))) continue;
     if (!existsSync(path)) continue;

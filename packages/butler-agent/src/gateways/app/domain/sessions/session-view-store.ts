@@ -10,6 +10,7 @@ import {
 } from "./session-read-model.ts";
 import { createTranscriptExportStream } from "./session-transcript-export.ts";
 import { isActiveWorkerActivity } from "../workers/worker-activity-read-model.ts";
+import { relabelWorkerActivities } from "../workers/worker-activity-ordering.ts";
 import {
   encodeSessionCursor,
   type SessionMessagePageOptions,
@@ -38,6 +39,7 @@ import {
   type StewardObserverRelation,
 } from "./steward-observer.ts";
 import { sessionViewForStewardObserver } from "./steward-observer-view.ts";
+import { projectStewardWorkerActivity } from "./steward-observer-worker.ts";
 
 export class AppSessionViewStore {
   constructor(
@@ -149,6 +151,7 @@ export class AppSessionViewStore {
         : undefined;
     return {
       session_id: session.id,
+      branch_seed: session.branch_seed,
       latest_progress: latestProgress,
       latest_turn_cancellable: latestTurn?.cancellable,
       latest_turn_subsession_result:
@@ -229,6 +232,7 @@ export class AppSessionViewStore {
     const firstCursor = Number(messagePage.items[0]?.cursor ?? 0);
     const afterCursor = requestedAfterCursor;
     const view: SessionView = {
+      branch_seed: session.branch_seed,
       protocol_version: APP_PROTOCOL_VERSION,
       session_id: session.id,
       kind: session.kind,
@@ -351,10 +355,19 @@ export class AppSessionViewStore {
   private getStewardSessionView(
     relation: StewardObserverRelation,
   ): SessionView {
+    const workers = relabelWorkerActivities(
+      this.stewardObserver.relationsForParent(relation.child_session_id)
+        .map((workerRelation) => projectStewardWorkerActivity(
+        workerRelation,
+        this.stewardObserver.snapshot(workerRelation.child_session_id),
+        this.stewardObserver.delegationPresentation(workerRelation.relation_id),
+        )),
+    );
     return sessionViewForStewardObserver(
       relation,
       this.stewardObserver.snapshot(relation.child_session_id),
       this.latestEventCursor(),
+      workers,
     );
   }
 }

@@ -10,6 +10,7 @@ export interface OpenAIResponseContinuation {
   /** Highest Turn-local occurrence already represented by the Responses chain. */
   deliveredThroughOrdinal?: number;
   statelessInput?: Array<Record<string, unknown>>;
+  toolSurfaceDigest?: string;
   providerRouteIdentity?: ProviderRouteCacheIdentity;
   contextProjection?: ContextProjectionRebaseIdentity;
 }

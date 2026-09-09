@@ -129,20 +129,6 @@ export function availableWorkReviewSubjects(
   );
 }
 
-export function assertWorkPlanReplacementStage(currentStage: WorkStage): void {
-  try {
-    assertWorkStageTransition(currentStage, "planning");
-  } catch (error) {
-    if (!(error instanceof WorkStageTransitionError)) throw error;
-    throw new WorkTransitionGuardError(
-      currentStage,
-      "replace_work_plan",
-      reviewGuard(currentStage),
-      reviewNextAction(currentStage),
-    );
-  }
-}
-
 function reviewEntryStages(subject: WorkReviewSubject): WorkStage[] {
   if (subject === "plan") return ["planning", "execution", "review"];
   if (subject === "result") return ["execution", "review"];
@@ -221,5 +207,24 @@ export function unresolvedWorkActionKeys(
 ): string[] {
   return progress
     .filter((action) => action.status !== "done" && action.status !== "skipped")
+    .map((action) => action.actionKey);
+}
+
+export function executableWorkActionKeys(
+  work: Pick<DurableWorkView, "currentPlan" | "actionProgress">,
+): string[] {
+  if (!work.currentPlan) return [];
+  const progressByKey = new Map(
+    work.actionProgress.map((progress) => [progress.actionKey, progress.status]),
+  );
+  return work.currentPlan.actions
+    .filter((action) => {
+      const status = progressByKey.get(action.actionKey) ?? "pending";
+      if (status === "done" || status === "skipped" || status === "blocked") return false;
+      return action.dependencyKeys.every((dependencyKey) => {
+        const dependencyStatus = progressByKey.get(dependencyKey);
+        return dependencyStatus === "done" || dependencyStatus === "skipped";
+      });
+    })
     .map((action) => action.actionKey);
 }

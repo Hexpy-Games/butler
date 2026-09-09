@@ -5,24 +5,56 @@ import type {
   ModelRoundTool,
   PhaseContinuityPrivateDigester,
 } from "../ports/model-round.ts";
-import { PhaseContinuityProjectionError } from "../ports/model-round.ts";
+import type { ContextCompactor } from "./context-compaction.ts";
 import { continuationRequestDigest } from "../turn/index.ts";
 import type { TurnContinuationBudgetState } from "../turn/index.ts";
-import { phaseContinuityProjectionIdentity, projectPhaseContinuity } from
-  "./phase-continuity-projection.ts";
+import { latestWorkAnchorResults } from "../operation-result-replay/index.ts";
 
 export type BoundedTurnContext = {
   messages: readonly ModelRoundMessage[];
   modelFacingBytes: number;
   requestDigest: string;
   evictedAtomicUnits: number;
+  compactedAtomicUnits: number;
 };
+
+const DEFAULT_MODEL_CONTEXT_BYTES = 192 * 1024;
+
+/** Reserve fresh results before selecting older history for the next request. */
+export function toolResultBatchModelFacingBudget(input: {
+  messages: readonly ModelRoundMessage[];
+  instructions?: string;
+  tools: readonly ModelRoundTool[];
+  toolChoice?: "auto" | "required";
+  maxModelFacingBytes?: number;
+  budgetMaxModelFacingBytes?: number;
+  resultCount: number;
+  perResultMaxBytes: number;
+}): number {
+  const requestLimit = input.budgetMaxModelFacingBytes ??
+    input.maxModelFacingBytes ?? DEFAULT_MODEL_CONTEXT_BYTES;
+  const overhead = serializedBytes({
+    instructions: input.instructions,
+    tools: input.tools,
+    toolChoice: input.toolChoice,
+    messages: [],
+  });
+  const desired = input.resultCount * input.perResultMaxBytes;
+  const required = atomicUnits(input.messages).flatMap((unit) =>
+    unit.mandatory ? unit.messages : [],
+  );
+  return Math.min(
+    desired,
+    Math.max(0, requestLimit - overhead - serializedBytes(required)),
+  );
+}
 
 export async function prepareBoundedModelContext(input: {
   messages: readonly ModelRoundMessage[];
   instructions?: string;
   tools: readonly ModelRoundTool[];
   toolChoice?: "auto" | "required";
+  maxModelFacingBytes?: number;
   budget?: {
     state: TurnContinuationBudgetState;
     admitRequest(value: {
@@ -36,19 +68,21 @@ export async function prepareBoundedModelContext(input: {
     messages: readonly ModelRoundMessage[], butlerData?: string,
   ) => number;
   butlerData?: string;
+  compactor?: ContextCompactor;
+  contextSizing?: { maxMessageBytes: number; messageBytes(messages: readonly ModelRoundMessage[]): number };
 }): Promise<{
   messages: readonly ModelRoundMessage[];
   contextProjection?: ContextProjectionRebaseIdentity;
+  requiresRebase: boolean;
   envelope?: {
     schemaVersion: "butler.turn-context-envelope.v1";
     modelFacingBytes: number;
     requestDigest: string;
     responseItemId: string;
     contextProjection?: ContextProjectionRebaseIdentity;
-    admitProviderBody(serializedBytes: number): Promise<void>;
+    admitProviderBody?(serializedBytes: number): Promise<void>;
   };
 }> {
-  if (!input.budget) return { messages: input.messages };
   const overheadBytes = serializedBytes({
     instructions: input.instructions,
     tools: input.tools,
@@ -57,46 +91,31 @@ export async function prepareBoundedModelContext(input: {
   });
   const messageLimit = Math.max(
     1,
-    input.budget.state.limits.maxModelFacingBytes - overheadBytes,
+    (input.budget?.state.limits.maxModelFacingBytes ?? input.maxModelFacingBytes ?? DEFAULT_MODEL_CONTEXT_BYTES) - overheadBytes,
   );
+  if (input.compactor) {
+    // Byte admission and model token capacity are separate constraints. Scale
+    // model pressure into this byte envelope; neither may hide the other.
+    const sizing = input.contextSizing;
+    const messageBytes = (messages: readonly ModelRoundMessage[]) =>
+      input.statelessMessageBytes?.(messages, input.butlerData) ?? serializedBytes(messages);
+    const measure = (messages: readonly ModelRoundMessage[]) => Math.max(
+      messageBytes(messages),
+      sizing ? sizing.messageBytes(messages) * messageLimit / sizing.maxMessageBytes : 0,
+    );
+    const projection = await input.compactor.prepare(input.messages, messageLimit, measure);
+    const bounded: BoundedTurnContext = {
+      messages: projection.messages, modelFacingBytes: messageBytes(projection.messages),
+      requestDigest: continuationRequestDigest(projection.messages),
+      evictedAtomicUnits: 0, compactedAtomicUnits: projection.identity ? 1 : 0,
+    };
+    return finalizeBoundedModelContext(input, bounded, overheadBytes, projection.identity);
+  }
   const exactBounded = buildBoundedTurnContext(input.messages, messageLimit);
   if (exactBounded.evictedAtomicUnits === 0) {
     return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
   }
-  const hasReplayCarrier = input.messages.some((message) =>
-    message.operationResultReference !== undefined,
-  );
-  if (!hasReplayCarrier) {
-    return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
-  }
-  if (!input.phaseContinuityPrivateDigester || !input.statelessMessageBytes) {
-    throw new PhaseContinuityProjectionError(
-      "phase_continuity_projection_dependency_missing",
-    );
-  }
-  const projected = projectPhaseContinuity({
-    messages: input.messages,
-    digester: input.phaseContinuityPrivateDigester!,
-    serializedBytes: (messages) =>
-      input.statelessMessageBytes!(messages, input.butlerData),
-  });
-  const projectedBounded = buildBoundedTurnContext(projected.messages, messageLimit);
-  const projectionAdmitted = Boolean(projected.identity) &&
-      input.statelessMessageBytes!(projectedBounded.messages, input.butlerData) <
-      input.statelessMessageBytes!(exactBounded.messages, input.butlerData);
-  if (!projectionAdmitted) {
-    return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
-  }
-  const contextProjection = phaseContinuityProjectionIdentity(projectedBounded.messages);
-  if (!contextProjection) {
-    return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
-  }
-  return finalizeBoundedModelContext(
-    input,
-    projectedBounded,
-    overheadBytes,
-    contextProjection,
-  );
+  return finalizeBoundedModelContext(input, exactBounded, overheadBytes);
 }
 
 function finalizeBoundedModelContext(
@@ -114,6 +133,7 @@ function finalizeBoundedModelContext(
   });
   return {
     messages: bounded.messages,
+    requiresRebase: bounded.evictedAtomicUnits > 0 || bounded.compactedAtomicUnits > 0,
     ...(contextProjection ? { contextProjection } : {}),
     envelope: {
       schemaVersion: "butler.turn-context-envelope.v1",
@@ -121,13 +141,13 @@ function finalizeBoundedModelContext(
       requestDigest,
       responseItemId: input.responseItemId,
       ...(contextProjection ? { contextProjection } : {}),
-      admitProviderBody: async (serializedBytes) => {
+      ...(input.budget ? { admitProviderBody: async (serializedBytes: number) => {
         await input.budget!.admitRequest({
           roundId: input.roundId,
           requestDigest,
           modelFacingBytes: serializedBytes,
         });
-      },
+      } } : {}),
     },
   };
 }
@@ -153,6 +173,7 @@ export function buildBoundedTurnContext(
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error("invalid_model_facing_byte_limit");
   if (messages.length === 0 || messages[0]?.role !== "user") throw new Error("turn_current_request_missing");
   const units = atomicUnits(messages);
+  let compactedAtomicUnits = 0;
   const selected = new Set<number>([0]);
   for (let index = 1; index < units.length; index += 1) {
     if (units[index]!.mandatory) selected.add(index);
@@ -165,6 +186,7 @@ export function buildBoundedTurnContext(
       modelFacingBytes,
       requestDigest: continuationRequestDigest(bounded),
       evictedAtomicUnits: units.length - selected.size,
+      compactedAtomicUnits,
     };
   }
   for (let index = units.length - 1; index >= 1; index -= 1) {
@@ -174,6 +196,18 @@ export function buildBoundedTurnContext(
     if (serializedBytes(next) <= maxBytes) {
       selected.add(index);
       bounded = next;
+      continue;
+    }
+    const referenceUnit = compactStoredOutputUnit(units[index]!);
+    if (referenceUnit) {
+      const original = units[index]!;
+      units[index] = referenceUnit;
+      const referenced = flatten(units, candidate);
+      if (serializedBytes(referenced) <= maxBytes) {
+        selected.add(index);
+        bounded = referenced;
+        compactedAtomicUnits += 1;
+      } else units[index] = original;
     }
   }
   const modelFacingBytes = serializedBytes(bounded);
@@ -182,17 +216,19 @@ export function buildBoundedTurnContext(
     modelFacingBytes,
     requestDigest: continuationRequestDigest(bounded),
     evictedAtomicUnits: units.length - selected.size,
+    compactedAtomicUnits,
   };
 }
 
-function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
+export function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
   const units: AtomicUnit[] = [{ messages: [messages[0]!], mandatory: true }];
+  let hasOpenToolCalls = false;
   let index = 1;
   while (index < messages.length) {
     const message = messages[index]!;
     if (message.role === "tool") throw new Error("turn_tool_protocol_orphan");
     if (message.role !== "assistant" || !message.toolCalls?.length) {
-      units.push({ messages: [message], mandatory: false });
+      units.push({ messages: [message], mandatory: message.requestSegmentKind === "phase_continuity" || message.requestSegmentKind === "current_user_request" });
       index += 1;
       continue;
     }
@@ -212,6 +248,7 @@ function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
       resultIds.add(result.toolCallId);
     }
     const mandatory = [...callIds].some((id) => !resultIds.has(id));
+    hasOpenToolCalls ||= mandatory;
     units.push({ messages: unitMessages, mandatory });
     index = cursor;
   }
@@ -219,8 +256,50 @@ function atomicUnits(messages: readonly ModelRoundMessage[]): AtomicUnit[] {
   const newestToolUnit = units.findLastIndex((unit) =>
     unit.messages.some((message) => message.role === "tool"),
   );
-  if (newestToolUnit >= 0) units[newestToolUnit]!.mandatory = true;
+  // Pending calls are the next result batch. Its reservation may replace the
+  // previous completed batch; Work/Plan anchors below remain mandatory.
+  if (newestToolUnit >= 0 && !hasOpenToolCalls) units[newestToolUnit]!.mandatory = true;
+  const latestUser = units.findLastIndex((unit) => unit.messages.some((message) => message.role === "user"));
+  if (latestUser >= 0) units[latestUser]!.mandatory = true;
+  const latestDirection = units.findLastIndex((unit) => unit.messages.some((message) =>
+    message.role === "user" && message.requestSegmentKind === "current_user_request",
+  ));
+  if (latestDirection >= 0) units[latestDirection]!.mandatory = true;
+  const currentWork = units.findLastIndex((unit) => unit.messages.some((message) =>
+    message.requestSegmentKind === "project_ledger_and_work_authority"));
+  if (currentWork >= 0) units[currentWork]!.mandatory = true;
+  // Plan arguments contain the current action descriptions; the result alone is
+  // not an adequate anchor. Keep the entire last accepted call/result unit.
+  const anchors = latestWorkAnchorResults(messages);
+  for (const unit of units) {
+    if (unit.messages.some((message) => anchors.has(message))) unit.mandatory = true;
+  }
   return units;
+}
+
+/** Retain only existing reader handles, never invent an exact-result capability. */
+function compactStoredOutputUnit(unit: AtomicUnit): AtomicUnit | undefined {
+  let changed = false;
+  const messages = unit.messages.map((message): ModelRoundMessage => {
+    if (message.role !== "tool") return message;
+    let payload: Record<string, any>;
+    try { payload = JSON.parse(message.content); } catch { return message; }
+    const artifact = payload?.output?.butler_tool_artifact;
+    const reference = message.operationResultReference;
+    if (!reference && (!artifact || typeof artifact.id !== "string" || typeof artifact.path !== "string")) return message;
+    changed = true;
+    return {
+      ...message,
+      content: JSON.stringify({
+        ok: payload.ok,
+        output_omitted: true,
+        ...(payload.error ? { error: payload.error } : {}),
+        ...(reference ? { operation_result: reference } : {}),
+        ...(artifact ? { read_tool_output_artifact: { artifact_id: artifact.id, path: artifact.path } } : {}),
+      }),
+    };
+  });
+  return changed ? { ...unit, messages } : undefined;
 }
 
 function flatten(units: readonly AtomicUnit[], selected: ReadonlySet<number>): ModelRoundMessage[] {

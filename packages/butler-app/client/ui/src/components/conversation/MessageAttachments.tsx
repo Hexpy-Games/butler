@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import type { MessageFileRef } from "@/app/types.ts";
 import { AttachmentList } from "@/butler-ds";
 import { messageFileUrl } from "./messageMedia";
@@ -13,11 +15,12 @@ export function MessageAttachments({
 }: {
   attachments: MessageFileRef[];
 }) {
+  useAppLocale();
   if (attachments.length === 0) return null;
   return (
     <div
       data-test-class="message-attachment-list"
-      aria-label="Message attachments"
+      aria-label={appCopy.interfacePanels.attachments}
     >
       <AttachmentList
         items={attachments.map((attachment) => ({

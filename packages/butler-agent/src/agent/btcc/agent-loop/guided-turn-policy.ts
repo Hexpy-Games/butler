@@ -1,4 +1,5 @@
 import type { ButlerExecutionPolicy } from "../contracts.ts";
+import { butlerDataPath } from "../../../runtime/paths.ts";
 import type { BtccAgentLoopResult } from "./contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
 import { parseToolCatalogId } from "../../tools/progressive-catalog.ts";
@@ -18,7 +19,7 @@ import {
 } from "./durable-work-tools.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import { GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES } from
-  "./guided-project-ledger-effect.ts";
+  "./guided-project-ledger-effect-input.ts";
 import { guidedToolDefinition } from "./guided-tool-definition.ts";
 import { safeCommandActionLabel } from "../../output/progress/arguments.ts";
 import { currentModelRouteCandidate } from "../model-route/index.ts";
@@ -28,8 +29,14 @@ import {
 } from "./guided-session-workspace-policy.ts";
 import { readOperationResultsToolDefinition } from
   "../../tools/monitoring/read_operation_results/index.ts";
-import { applyStewardTaskEffectBoundary } from "./guided-phase-policy-helpers.ts";
 const STEWARD_PARENT_TOOL_NAMES = ["delegate_to_steward", "steer_steward", "cancel_steward"];
+const WORKER_DELEGATION_TOOL_NAME = "delegate_to_worker";
+const WORKER_DIRECTION_TOOL_NAME = "steer_worker";
+const WORKER_WAIT_TOOL_NAME = "wait_for_worker";
+const GUIDED_MANAGED_LEDGER_EFFECT_TOOL_NAMES =
+  GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES.filter((name) =>
+    name !== "project_ledger_work_complete",
+  );
 
 const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
   disabledReason:
@@ -67,7 +74,7 @@ export function guidedPolicy(turn: TurnRecord): ButlerExecutionPolicy {
     trackingMode: turn.context.projectRef ? "ledger" : "local",
     requiredNativeToolProfiles: [],
     requiredNativeTools: [],
-    workspacePath: workspaceFromScopes(turn) ?? process.cwd(),
+    workspacePath: workspaceFromScopes(turn) ?? butlerDataPath(),
     ...(turn.context.projectRef ? { projectId: turn.context.projectRef } : {}),
   };
 }
@@ -120,21 +127,32 @@ export function authorizedToolDefinitions(
   });
   if (policy.accessMode === "full_access") names.add("call_mcp_tool");
   else names.delete("call_mcp_tool");
-  if (policy.role === "butler" && policy.accessMode === "full_access") {
+  if (policy.role === "butler") {
     for (const name of STEWARD_PARENT_TOOL_NAMES) names.add(name);
   } else {
     for (const name of STEWARD_PARENT_TOOL_NAMES) names.delete(name);
   }
+  if (policy.role === "steward") {
+    names.add(WORKER_DELEGATION_TOOL_NAME);
+    names.add(WORKER_DIRECTION_TOOL_NAME);
+    names.add(WORKER_WAIT_TOOL_NAME);
+  } else {
+    names.delete(WORKER_DELEGATION_TOOL_NAME);
+    names.delete(WORKER_DIRECTION_TOOL_NAME);
+    names.delete(WORKER_WAIT_TOOL_NAME);
+  }
   for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
   const guidedLedgerEffects = new Set<string>(
-    policy.accessMode === "full_access" &&
+    policy.accessMode !== "read_only" &&
       policy.trackingMode === "ledger" &&
       (policy.projectId || turn.context.projectRef)
-      ? GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES
+      ? GUIDED_MANAGED_LEDGER_EFFECT_TOOL_NAMES
       : [],
   );
   for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
   for (const name of guidedLedgerEffects) names.add(name);
+  if (turn.context.projectSources?.length) names.add("read_project_source");
+  else names.delete("read_project_source");
   return [
     ...guidedNativeToolDefinitions(exactResultReplayEnabled)
       .filter((tool) => names.has(tool.name)),
@@ -146,7 +164,7 @@ export function hiddenNativeToolNamesForGuidedTurn(
   enableProjectLedgerEffects: boolean,
 ): string[] {
   const supported = new Set<string>(
-    enableProjectLedgerEffects ? GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES : [],
+    enableProjectLedgerEffects ? GUIDED_MANAGED_LEDGER_EFFECT_TOOL_NAMES : [],
   );
   return [
     ...WORK_TRACKING_TOOL_NAMES,
@@ -156,9 +174,9 @@ export function hiddenNativeToolNamesForGuidedTurn(
 }
 
 export function directSynthesisToolDefinitions<T extends { name: string }>(
-  tools: readonly T[],
+  _tools: readonly T[],
 ): T[] {
-  return tools.filter((tool) => !STEWARD_PARENT_TOOL_NAMES.includes(tool.name));
+  return [];
 }
 
 export function visibleToolDefinitions(authorized: readonly FunctionToolDefinition[], policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "trackingMode" | "projectId" | "subsession">, includeAttachedImageTool = false): FunctionToolDefinition[] {
@@ -174,27 +192,30 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
     "grep_files",
     "list_files",
     "recall_memory",
+    "query_memory",
     "list_conversation_sessions",
     "read_conversation_session",
+    "read_project_source",
     ...DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name),
     "project_ledger_status",
     ...(includeAttachedImageTool ? ["analyze_attached_image"] : []),
     ...(projectLedgerWork
       ? ["project_ledger_list"]
       : []),
-    ...(projectLedgerWork && policy.accessMode === "full_access"
+    ...(projectLedgerWork && policy.accessMode !== "read_only"
       ? [
           "project_ledger_create",
-          "project_ledger_work_complete",
         ]
       : []),
-    ...(policy.role === "butler" && policy.accessMode === "full_access"
+    ...(policy.role === "butler"
       ? ["delegate_to_steward", "steer_steward", "cancel_steward"]
+      : []),
+    ...(policy.role === "steward"
+      ? [WORKER_DELEGATION_TOOL_NAME, WORKER_DIRECTION_TOOL_NAME, WORKER_WAIT_TOOL_NAME]
       : []),
     ...guidedWorkspaceVisibleToolNames(policy),
   ]);
-  return applyStewardTaskEffectBoundary(policy, authorized)
-    .filter((tool) => visible.has(tool.name))
+  return authorized.filter((tool) => visible.has(tool.name))
     .map(guidedToolDefinition);
 }
 

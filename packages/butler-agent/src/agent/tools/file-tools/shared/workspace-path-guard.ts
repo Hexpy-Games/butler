@@ -1,6 +1,7 @@
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, normalize, relative, resolve } from "node:path";
 import { projectLedgerProtectedPath } from "./project-ledger-protection.ts";
+import { isInsideProgramHome } from "../../../../runtime/paths.ts";
 
 export interface WorkspacePathGuardInput {
   workspaceRoot: string;
@@ -11,6 +12,8 @@ export interface WorkspacePathGuardInput {
   allowDirectories?: boolean;
   /** Require the admitted path itself to be a directory. */
   requireDirectory?: boolean;
+  mutation?: boolean;
+  programHome?: string;
   rejectProtectedProjectLedgerPaths?: boolean;
   rejectProtectedProjectLedgerWrites?: boolean;
   protectedProjectLedgerRoots?: string[];
@@ -117,6 +120,9 @@ export async function resolveWorkspacePathGuard(input: WorkspacePathGuardInput):
   const absolutePath = isInside(workspaceRoot, unresolvedAbsolutePath)
     ? resolve(rootReal, relative(workspaceRoot, unresolvedAbsolutePath))
     : unresolvedAbsolutePath;
+  if (input.mutation && isInsideProgramHome(absolutePath, input.programHome)) {
+    return { ok: false, workspaceRoot: rootReal, requestedPath, reason: "program_directory_read_only" };
+  }
   if (!isInside(rootReal, absolutePath)) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, reason: "path_escape" };
   const workspaceRelativePath = relative(rootReal, absolutePath);
   if (looksSensitiveWorkspacePath(workspaceRelativePath)) {

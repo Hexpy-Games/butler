@@ -1,3 +1,37 @@
 .withIconText {
   min-width: 0;
 }
+
+.glass {
+  min-height: calc(var(--space-4) * 2);
+  max-width: 100%;
+  border: 1px solid var(--composer-glass-border);
+  background: var(--composer-glass-bg);
+  box-shadow: var(--shadow-card);
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  -webkit-backdrop-filter: var(--composer-glass-filter);
+  backdrop-filter: var(--composer-glass-filter);
+}
+
+.glass:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--composer-glass-control-bg);
+}
+
+.glass:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px var(--ring),
+    var(--shadow-card);
+}
+
+.glass [data-slot="button-icon"] {
+  flex: 0 0 auto;
+}
+
+.glass [data-slot="button-text"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

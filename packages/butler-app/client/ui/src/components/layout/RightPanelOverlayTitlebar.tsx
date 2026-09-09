@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import {
   AdaptivePanelTitlebar,
   IconButton,
@@ -7,6 +8,7 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 
 export function RightPanelOverlayTitlebar() {
+  useAppLocale();
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
 
   return (

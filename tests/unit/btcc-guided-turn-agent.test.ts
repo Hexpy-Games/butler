@@ -14,6 +14,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TurnRecord, TurnStateRepository } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
+import type { SubsessionDelegationDependencies, SubsessionDelegationService } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
+import { createSubsessionDelegationService } from
+  "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
+import { NativeInboundQueue } from
+  "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 import type { BtccRunCommand } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { DurableWorkService, DurableWorkView } from
@@ -28,7 +34,7 @@ import {
 } from "../../packages/butler-agent/src/agent/btcc/identity/index.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
-import { createProductionGuidedTurnAgent } from
+import { createProductionGuidedTurnAgent, runBtccAgentLoop, type BtccAgentLoop } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import { dispositionMaterialFingerprint } from
   "../../packages/butler-agent/src/agent/btcc/work/index.ts";
@@ -53,6 +59,8 @@ import { createGuidedOperationalProgressCapture } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-progress.ts";
 import { createGuidedToolCallExecutor } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-call-execution.ts";
+import { GuidedEffectProcessReplacementError } from
+  "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
 import { createGuidedRoundToolSurfaceResolver } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-round-tool-surface.ts";
 import { prepareBtccToolCall } from
@@ -67,6 +75,8 @@ import { createToolCallToolHandler } from
   "../../packages/butler-agent/src/agent/tools/tool-bridge/tool_call/executor.ts";
 import { runCommandToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/run-command/run_command/definition.ts";
+import { delegateToStewardToolDefinition } from
+  "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
 import type { ContextualButlerToolExecutor } from
   "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { createGuidedActivityProjection } from
@@ -81,32 +91,6 @@ import { buildModelRoute, ModelRouteDurabilityError } from
   "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { runOpenAIModelRound } from
   "../../packages/butler-agent/src/integrations/providers/openai/model-round.ts";
-
-test("substantial Butler work cannot settle as a promise-only direct reply", async () => {
-  const records: Array<{ toolName: string }> = [];
-  const closeout = createGuidedTurnCloseout({
-    durableWork: {} as DurableWorkService,
-    toolJournal: { list: () => records } as never,
-    workScope: { turnId: "turn-delegation-gate", sessionId: "session-delegation-gate" },
-    turnId: "turn-delegation-gate",
-    trackingMode: "none",
-    responseLanguage: "Korean",
-    originalRequest: "이전 문서를 요구사항을 보존해서 수정해줘",
-    subsessionRoutingRequired: true,
-  });
-
-  await expect(closeout.reviewFinalCandidate({ text: "수정하겠습니다." }))
-    .resolves.toMatchObject({
-      status: "continue",
-      observation: expect.stringContaining("delegate_to_steward"),
-    });
-  expect(closeout.subsessionRoutingRepairRequired()).toBe(true);
-
-  records.push({ toolName: "delegate_to_steward" });
-  expect(closeout.subsessionRoutingRepairRequired()).toBe(false);
-  await expect(closeout.reviewFinalCandidate({ text: "위임했습니다." }))
-    .resolves.toEqual({ status: "accepted" });
-});
 
 type ScriptedModelRoundStep =
   | ModelRoundResult
@@ -179,16 +163,17 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
         return { text: "BTCC final answer", toolCalls: [] };
       },
     };
-    const agent = createProductionGuidedTurnAgent({
+    const agent = fixture.admitEol(createProductionGuidedTurnAgent({
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
       butlerHome: fixture.root,
       butlerData: fixture.root,
       contextDocuments: fixture.stores.contextDocuments,
       toolJournal: fixture.stores.guidedToolJournal,
+      operationResultReader: fixture.stores.guidedOperationResultReader,
       effectJournal: fixture.stores.guidedEffectJournal,
       durableWork: fixture.stores.durableWork,
       modelRound,
-    });
+    }));
 
     const result = await agent.run({
       turn: turnRecord(fixture.root, { turnId: "guided-btcc-loop-entry" }),
@@ -251,6 +236,7 @@ test("feature Guided Turn restores the existing bounded Work closeout opportunit
           (message) => message.name === "record_work_disposition",
         );
         expect(dispositionResult).toBeDefined();
+        expect(request.tools).toEqual([]);
         dispositionOutput = JSON.parse(dispositionResult!.content);
         return { text: "최종 답변", toolCalls: [] };
       },
@@ -290,6 +276,388 @@ test("feature Guided Turn restores the existing bounded Work closeout opportunit
       process.env.BUTLER_PHASE_TOOL_SURFACE = previousSurface;
     }
   }
+});
+
+test("Worker result returns to the current Steward Work before reporting", async () => {
+  const previousSurface = process.env.BUTLER_PHASE_TOOL_SURFACE;
+  process.env.BUTLER_PHASE_TOOL_SURFACE = "on";
+  const fixture = createFixture("guided-worker-result-resume");
+  try {
+    const artifacts = [{
+      id: "artifact-worker-report", kind: "report" as const,
+      title: "report.md", safePathLabel: "artifacts/generated/report.md",
+    }];
+    const turnId = `steward-worker-result-${"a".repeat(32)}`;
+    const turn = await admitTurn(
+      localRunCommand(fixture.root, turnId),
+      fixture.stores.admission,
+      fixture.stores.turns,
+    );
+    turn.context.executionPolicy = {
+      role: "steward",
+      accessMode: "full_access",
+      trackingMode: "local",
+      requiredNativeToolProfiles: [],
+      requiredNativeTools: [],
+      workspacePath: fixture.root,
+      subsession: {
+        relationId: "relation-worker-result-resume",
+        delegationId: "delegation-worker-result-resume",
+        taskId: "task-worker-result-resume",
+        executionMode: "mutation",
+        mutationScope: ["."],
+        allowedToolsAndEffects: [],
+      },
+    };
+    const subsessionDelegation = {
+      async ensureChildRootWork(input: {
+        childTurnId: string;
+        childSessionId: string;
+        objective: string;
+      }) {
+        const existing = await fixture.stores.durableWork.boundWorkForTurn(
+          input.childTurnId,
+        );
+        if (existing) return existing.workId;
+        const work = await fixture.stores.durableWork.replacePlan({
+          turnId: input.childTurnId,
+          sessionId: input.childSessionId,
+          mutationCallId: "worker-result-resume-plan",
+          startNew: true,
+          objective: input.objective,
+          actions: [{
+            actionKey: "finish-requested-outcome",
+            description: "Finish the requested outcome after Worker return",
+            dependencyKeys: [],
+          }],
+          checks: [],
+        });
+        return work.workId;
+      },
+      async resolveParentResultEvidence() {
+        return {
+          synthesisEvidence: "The Worker completed its assigned implementation.",
+          outcome: "success" as const,
+          parentWorkId: "worker-parent-work",
+          changedFiles: [],
+          artifacts,
+        };
+      },
+      async enabledWorkerProfiles() { return []; },
+      async activeParentDelegations() { return []; },
+      async shouldWaitForWorker() { return false; },
+      async consumeStewardDirection() { return null; },
+    } as unknown as SubsessionDelegationService;
+    let modelCalls = 0;
+    const agent = fixture.admitEol(createProductionGuidedTurnAgent({
+      phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
+      butlerHome: fixture.root,
+      butlerData: fixture.root,
+      contextDocuments: fixture.stores.contextDocuments,
+      toolJournal: fixture.stores.guidedToolJournal,
+      operationResultReader: fixture.stores.guidedOperationResultReader,
+      effectJournal: fixture.stores.guidedEffectJournal,
+      durableWork: fixture.stores.durableWork,
+      subsessionDelegation,
+      modelRound: {
+        async runRound(request) {
+          modelCalls += 1;
+          if (modelCalls === 1) {
+            expect(request.tools.map((tool) => tool.name)).toContain("read_file");
+            expect(request.messages[0]?.content).toContain(
+              "Review it against the existing Plan first",
+            );
+            return { text: "Worker review completed; other work remains.", toolCalls: [] };
+          }
+          if (modelCalls === 2) {
+            expect(request.messages.at(-1)?.content).toContain(
+              "record_work_disposition",
+            );
+            const work = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+            return toolResponse([toolCall(
+              "worker-result-resume-disposition",
+              "record_work_disposition",
+              {
+                work_id: work!.workId,
+                disposition: "completed",
+                summary: "The requested outcome is complete.",
+                action_updates: [{
+                  action_key: "finish-requested-outcome",
+                  status: "done",
+                }],
+              },
+            )]);
+          }
+          return { text: "The requested outcome is complete.", toolCalls: [] };
+        },
+      },
+    }));
+
+    const result = await agent.run({ turn, signal: new AbortController().signal });
+
+    expect(result.content).toBe("The requested outcome is complete.");
+    expect(result.artifacts).toEqual(artifacts);
+    expect(modelCalls).toBe(3);
+    await expect(fixture.stores.durableWork.boundWorkForTurn(turnId)).resolves
+      .toMatchObject({ status: "completed" });
+  } finally {
+    fixture.close();
+    restoreEnv("BUTLER_PHASE_TOOL_SURFACE", previousSurface);
+  }
+});
+
+test("legacy Worker uses its existing bound Micro Work surface", async () => {
+  const fixture = createFixture("guided-bound-worker-surface");
+  try {
+    const command = localRunCommand(fixture.root, "bound-worker-surface");
+    command.context.executionPolicy = {
+      role: "worker", accessMode: "full_access", trackingMode: "local",
+      requiredNativeToolProfiles: [], requiredNativeTools: [], workspacePath: fixture.root,
+    };
+    const turn = await admitTurn(command, fixture.stores.admission, fixture.stores.turns);
+    await fixture.stores.durableWork.startWork({
+      sessionId: turn.sessionId, turnId: turn.turnId, mutationCallId: "runtime-micro-work",
+      objective: "The assigned bounded Worker action",
+    });
+    const captured = new Error("surface captured");
+    const agent = fixture.agent({ async runRound(request) {
+      const names = new Set(request.tools.map((tool) => tool.name));
+      expect(names.has("start_work")).toBe(false);
+      expect(names.has("continue_work")).toBe(false);
+      expect(names.has("replace_work_plan")).toBe(true);
+      expect(names.has("record_work_review")).toBe(false);
+      expect(names.has("delegate_to_worker")).toBe(false);
+      expect(names.has("delegate_to_steward")).toBe(false);
+      throw captured;
+    } });
+    await expect(agent.run({ turn, signal: new AbortController().signal })).rejects.toBe(captured);
+  } finally {
+    fixture.close();
+  }
+});
+
+test.each(["ordinary", "direction", "fast-result"])("Steward executes directly before assignment, then manages Workers and waits without Work closeout (%s)", async (scenario) => {
+  const directionDuringWait = scenario === "direction";
+  const fastResult = scenario === "fast-result";
+  const fixture = createFixture("guided-explicit-worker-wait");
+  try {
+    const command = localRunCommand(fixture.root, "steward-wait");
+    command.context.executionPolicy = {
+      role: "steward", accessMode: "full_access", trackingMode: "local",
+      requiredNativeToolProfiles: [], requiredNativeTools: [], workspacePath: fixture.root,
+    };
+    const turn = await admitTurn(command, fixture.stores.admission, fixture.stores.turns);
+    const work = await fixture.stores.durableWork.replacePlan({
+      turnId: turn.turnId, sessionId: turn.sessionId, mutationCallId: "wait-plan",
+      startNew: true, objective: "Inspect context, assign Worker, then integrate its result",
+      actions: [
+        { actionKey: "worker-action", description: "Bounded Worker task", dependencyKeys: [] },
+        ...(!fastResult ? [{ actionKey: "worker-next", description: "Another bounded task", dependencyKeys: [] }] : []),
+      ], checks: [],
+    });
+    writeFileSync(join(fixture.root, "independent.txt"), "independent work verified");
+    let active = false;
+    let rounds = 0;
+    let pendingDirection = false;
+    let workerCompleted = false;
+    const resultId = "worker-fast-result";
+    const resultTurnId = `steward-worker-result-${digest(resultId).slice(0, 32)}`;
+    const queue = new NativeInboundQueue(fixture.root);
+    const steered: Array<{ relationId?: string; instruction: string }> = [];
+    const service = createSubsessionDelegationService({
+      butlerData: fixture.root,
+      store: {
+        relationsByParentSessionId: () => [{ relation_id: "same-worker-relation" }],
+        resultByRelationId: () => workerCompleted ? { result_id: resultId } : null,
+      },
+    } as unknown as SubsessionDelegationDependencies);
+    Object.assign(service, {
+      async resolveParentResultEvidence() { return null; },
+      async ensureChildRootWork(input: { childTurnId: string }) {
+        if (input.childTurnId !== turn.turnId) await fixture.stores.durableWork.bindOpenWork({
+          turnId: input.childTurnId, sessionId: turn.sessionId,
+        }, work.workId);
+        return work.workId;
+      },
+      async consumeStewardDirection() {
+        if (!pendingDirection) return null;
+        pendingDirection = false;
+        return { revision: 1, instruction: "Keep the same Worker and check the updated requirement." };
+      },
+      async enabledWorkerProfiles() { return []; },
+      async activeParentDelegations() { return active ? [{}] : []; },
+      async delegateWorkerReviewed() {
+        active = true;
+        if (fastResult) {
+          active = false;
+          workerCompleted = true;
+          queue.enqueueIdempotent({
+            eventId: `worker-result:${resultId}`, transport: "app", accountId: "local",
+            peer: { kind: "dm", id: turn.sessionId }, sender: { id: "butler-worker-result" },
+            message: { id: "fast-worker-message", text: "Worker completed its assigned action.", timestamp: new Date().toISOString() },
+            routingHints: { sessionId: turn.sessionId, turnId: resultTurnId },
+          });
+        }
+      },
+      async steerSteward(input: { relationId?: string; instruction: string }) {
+        steered.push(input);
+        return { relation_id: input.relationId, instruction_id: "worker-direction", revision: 1, status: "pending" };
+      },
+    });
+    const agent = fixture.admitEol(createProductionGuidedTurnAgent({
+      phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
+      butlerHome: fixture.root, butlerData: fixture.root,
+      contextDocuments: fixture.stores.contextDocuments,
+      toolJournal: fixture.stores.guidedToolJournal,
+      operationResultReader: fixture.stores.guidedOperationResultReader,
+      effectJournal: fixture.stores.guidedEffectJournal,
+      durableWork: fixture.stores.durableWork,
+      subsessionDelegation: service,
+      modelRound: { async runRound(request) {
+        rounds += 1;
+        if (rounds === 1) return toolResponse([toolCall("inspect-context", "read_file", {
+          requests: [{ path: "independent.txt" }],
+        })]);
+        if (rounds === 2) {
+          expect(JSON.stringify(messagesWithToolResults(request).at(-1))).toContain("independent work verified");
+          return toolResponse([
+            toolCall("assign", "delegate_to_worker", {
+              action_key: "worker-action", objective: "Do the bounded task",
+              acceptance_criteria: [], implementation_brief: "Only the assigned action",
+            }),
+            toolCall("forbidden-inspect", "read_file", { requests: [{ path: "independent.txt" }] }),
+            toolCall("forbidden-command", "run_command", {
+              command: "printf forbidden > concurrent.txt", summary: "Attempt concurrent execution",
+            }),
+          ]);
+        }
+        if (rounds === 3) {
+          expect(request.tools.map((tool) => tool.name).sort()).toEqual([
+            "delegate_to_worker", "steer_worker", "wait_for_worker",
+          ]);
+          const outputs = messagesWithToolResults(request).slice(-3).map(toolMessageOutput);
+          expect(outputs[0]).toMatchObject({ status: "queued" });
+          expect(outputs[1]).toMatchObject({ ok: false, error: { code: "tool_unavailable" } });
+          expect(outputs[2]).toMatchObject({ ok: false, error: { code: "tool_unavailable" } });
+          expect(existsSync(join(fixture.root, "concurrent.txt"))).toBe(false);
+          if (!fastResult) return toolResponse([toolCall("assign-next", "delegate_to_worker", {
+            action_key: "worker-next", objective: "Another bounded assignment",
+            acceptance_criteria: [], implementation_brief: "Only the assigned action",
+          })]);
+        }
+        if ((!fastResult && rounds === 4) || (fastResult && rounds === 3)) {
+          pendingDirection = directionDuringWait;
+          return toolResponse([toolCall("wait", "wait_for_worker", {})]);
+        }
+        if (directionDuringWait && rounds === 5) {
+          expect(request.messages.at(-1)?.content).toContain("check the updated requirement");
+          expect(request.tools.map((tool) => tool.name).sort()).toEqual([
+            "delegate_to_worker", "steer_worker", "wait_for_worker",
+          ]);
+          return toolResponse([toolCall("steer", "steer_worker", {
+            relation_id: "same-worker-relation", instruction: "Check the updated requirement.",
+          })]);
+        }
+        if (fastResult && rounds === 4) {
+          expect(request.messages[0]?.content).toContain("Worker completed its assigned action.");
+          expect(request.tools.map((tool) => tool.name)).toContain("read_file");
+          return toolResponse([toolCall("review-result", "read_file", {
+            requests: [{ path: "independent.txt" }],
+          })]);
+        }
+        if (fastResult && rounds === 5) {
+          expect(JSON.stringify(messagesWithToolResults(request).at(-1))).toContain("independent work verified");
+          return toolResponse([toolCall("integrated-result", "record_work_disposition", {
+            work_id: work.workId, disposition: "completed", summary: "Worker result integrated and reviewed.",
+            action_updates: [{ action_key: "worker-action", status: "done" }],
+          })]);
+        }
+        if (fastResult && rounds === 6) return { text: "Worker result integrated and reviewed.", toolCalls: [] };
+        throw new Error("Wait must not request a final model round");
+      } },
+    }));
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission, turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness, agent,
+    });
+    const result = await runtime.runTurn(command);
+    expect(rounds).toBe(directionDuringWait ? 5 : fastResult ? 3 : 4);
+    expect(steered).toEqual(directionDuringWait
+      ? [expect.objectContaining({ relationId: "same-worker-relation", instruction: "Check the updated requirement." })]
+      : []);
+    expect(result).toMatchObject({ kind: "delivered", content: "", executionOutcome: "waiting_for_worker" });
+    expect(await runtime.runTurn(command)).toMatchObject({ content: "", executionOutcome: "waiting_for_worker" });
+    expect(rounds).toBe(directionDuringWait ? 5 : fastResult ? 3 : 4);
+    expect(closeoutRowCounts(fixture.dbPath, turn.turnId)).toEqual({ diagnostics: 0, dispositions: 0 });
+    expect((await fixture.stores.durableWork.boundWorkForTurn(turn.turnId))?.status).toBe("open");
+    if (fastResult) {
+      expect(await service.shouldWaitForWorker({ parentSessionId: turn.sessionId, parentTurnId: turn.turnId })).toBe(true);
+      const queuedResult = queue.claim(1)[0]!;
+      expect(queuedResult.envelope.routingHints?.turnId).toBe(resultTurnId);
+      expect(await service.shouldWaitForWorker({ parentSessionId: turn.sessionId, parentTurnId: resultTurnId })).toBe(false);
+      const continuation = localRunCommand(fixture.root, resultTurnId);
+      continuation.context.executionPolicy = command.context.executionPolicy;
+      continuation.message.content = queuedResult.envelope.message.text!;
+      expect(await runtime.runTurn(continuation)).toMatchObject({
+        kind: "delivered", content: "Worker result integrated and reviewed.", workStatus: "completed",
+      });
+      queue.complete(queuedResult);
+      expect(await service.shouldWaitForWorker({ parentSessionId: turn.sessionId, parentTurnId: "later-turn" })).toBe(false);
+      expect((await fixture.stores.durableWork.boundWorkForTurn(resultTurnId))?.workId).toBe(work.workId);
+    }
+  } finally { fixture.close(); }
+});
+
+test("Steward no-tool answers cannot finalize active Workers; failed assignment and idle wait preserve direct execution", async () => {
+  const fixture = createFixture("guided-worker-wait-admission");
+  try {
+    for (const active of [true, false]) {
+      writeFileSync(join(fixture.root, "direct.txt"), "direct execution remains available");
+      let rounds = 0;
+      const turn = turnRecord(fixture.root, { turnId: active ? "active-worker-answer" : "idle-worker-wait" });
+      turn.context.executionPolicy!.role = "steward";
+      const agent = fixture.admitEol(createProductionGuidedTurnAgent({
+        phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
+        butlerHome: fixture.root, butlerData: fixture.root,
+        contextDocuments: fixture.stores.contextDocuments, toolJournal: fixture.stores.guidedToolJournal,
+        operationResultReader: fixture.stores.guidedOperationResultReader,
+        effectJournal: fixture.stores.guidedEffectJournal, durableWork: fixture.stores.durableWork,
+        subsessionDelegation: {
+          async resolveParentResultEvidence() { return null; },
+          async ensureChildRootWork() { return "unused"; },
+          async consumeStewardDirection() { return null; },
+          async enabledWorkerProfiles() { return []; },
+          async activeParentDelegations() { return active ? [{}] : []; },
+          async shouldWaitForWorker() { return active; },
+          async delegateWorkerReviewed() { throw new Error("No suitable Worker is available"); },
+        } as unknown as SubsessionDelegationService,
+        modelRound: { async runRound(request) {
+          rounds += 1;
+          if (!active && rounds === 1) return toolResponse([
+            toolCall("failed-assignment", "delegate_to_worker", {
+              action_key: "bounded-task", objective: "Attempt Worker assignment",
+              acceptance_criteria: [], implementation_brief: "Only the assigned action",
+            }),
+            toolCall("direct-after-failure", "read_file", { requests: [{ path: "direct.txt" }] }),
+          ]);
+          if (!active && rounds === 2) {
+            const outputs = messagesWithToolResults(request).slice(-2).map(toolMessageOutput);
+            expect(outputs[0]).toMatchObject({ ok: false });
+            expect(JSON.stringify(outputs[1])).toContain("direct execution remains available");
+            expect(request.tools.map((tool) => tool.name)).toContain("read_file");
+            return toolResponse([toolCall("idle-wait", "wait_for_worker", {})]);
+          }
+          if (!active) expect(toolMessageOutput(messagesWithToolResults(request).at(-1))).toMatchObject({ status: "no_active_worker" });
+          return { text: "normal answer", toolCalls: [] };
+        } },
+      }));
+      const result = await agent.run({ turn, signal: new AbortController().signal });
+      expect(result.content).toBe(active ? "" : "normal answer");
+      expect(result.suspension).toBe(active ? "waiting_for_worker" : undefined);
+      expect(rounds).toBe(active ? 1 : 3);
+    }
+  } finally { fixture.close(); }
 });
 
 test("a terminal Turn fences late effects from reopening completed Work", async () => {
@@ -351,7 +719,6 @@ test("a terminal Turn fences late effects from reopening completed Work", async 
     })).toMatchObject({ ok: true, created: true });
     const closeout = createGuidedTurnCloseout({
       durableWork: fixture.stores.durableWork,
-      toolJournal: fixture.stores.guidedToolJournal,
       workScope: { turnId, sessionId: "guided-local-session" },
       turnId,
       trackingMode: "local",
@@ -478,7 +845,6 @@ test("ordinary open cannot reopen completed Work and a concurrent fresh completi
         };
         const closeout = createGuidedTurnCloseout({
           durableWork: competingService,
-          toolJournal: fixture.stores.guidedToolJournal,
           workScope: { turnId, sessionId: "guided-local-session" },
           turnId,
           trackingMode: "local",
@@ -665,7 +1031,7 @@ test("a late same-Turn result invalidates disposition and persists a fresh open 
   }
 });
 
-test("closeout read and settlement-persistence failures leave final delivery rows absent", async () => {
+test("open-disposition publication failure preserves the answer while core closeout failures abort", async () => {
   const previousSurface = process.env.BUTLER_PHASE_TOOL_SURFACE;
   process.env.BUTLER_PHASE_TOOL_SURFACE = "on";
   for (const failure of ["read", "diagnostic", "backfill", "persist"] as const) {
@@ -684,13 +1050,17 @@ test("closeout read and settlement-persistence failures leave final delivery row
         recordDisposition: async (input) => {
           if (failure === "persist" &&
               input.disposition === "open" && input.expectedMaterialFingerprint) {
-            throw new Error("closeout persistence failed");
+            throw Object.assign(new Error("closeout publication failed"), {
+              code: "project_ledger_effect_uncertain",
+            });
           }
           return base.recordDisposition(input);
         },
         claimCloseoutCorrection: async (input) => {
           if (failure === "diagnostic") {
-            throw new Error("closeout diagnostic persistence failed");
+            throw Object.assign(new Error("closeout claim publication failed"), {
+              code: "project_ledger_effect_uncertain",
+            });
           }
           return base.claimCloseoutCorrection(input);
         },
@@ -736,33 +1106,47 @@ test("closeout read and settlement-persistence failures leave final delivery row
         agent,
       });
 
-      await expect(runtime.runTurn(localRunCommand(fixture.root, turnId))).rejects
-        .toMatchObject({
+      const run = runtime.runTurn(localRunCommand(fixture.root, turnId));
+      const publicationFailure = failure === "diagnostic" || failure === "persist";
+      if (publicationFailure) {
+        await expect(run).resolves.toMatchObject({
+          kind: "delivered",
+          content: "저장되지 않아야 하는 최종 후보",
+        });
+      } else {
+        await expect(run).rejects.toMatchObject({
           name: "GuidedWorkCloseoutError",
           code: "guided_work_closeout_persistence_failed",
         });
+      }
       expect(modelCalls).toBe(
         failure === "read" || failure === "diagnostic" ? 2 : 3,
       );
       const db = new Database(fixture.dbPath);
       try {
-        expect(db.query<{
+        const delivery = db.query<{
           final_payload_json: string | null;
           delivery_outbox_id: string | null;
         }, [string]>(`
           SELECT final_payload_json, delivery_outbox_id FROM btcc_turns
           WHERE turn_id = ?
-        `).get(turnId)).toEqual({
-          final_payload_json: null,
-          delivery_outbox_id: null,
-        });
+        `).get(turnId);
+        if (publicationFailure) {
+          expect(delivery?.final_payload_json).not.toBeNull();
+          expect(delivery?.delivery_outbox_id).not.toBeNull();
+        } else {
+          expect(delivery).toEqual({
+            final_payload_json: null,
+            delivery_outbox_id: null,
+          });
+        }
         expect(db.query<{ count: number }, [string]>(`
           SELECT COUNT(*) AS count FROM btcc_delivery_outbox WHERE turn_id = ?
-        `).get(turnId)?.count).toBe(0);
+        `).get(turnId)?.count).toBe(publicationFailure ? 1 : 0);
         expect(db.query<{ count: number }, [string]>(`
           SELECT COUNT(*) AS count FROM btcc_messages
           WHERE turn_id = ? AND role = 'assistant'
-        `).get(turnId)?.count).toBe(0);
+        `).get(turnId)?.count).toBe(publicationFailure ? 1 : 0);
       } finally {
         db.close(false);
       }
@@ -821,7 +1205,6 @@ test("runtime-owned open closeout survives reopen while terminal Turns reject la
     });
     const closeout = createGuidedTurnCloseout({
       durableWork: reopened.durableWork,
-      toolJournal: reopened.guidedToolJournal,
       workScope: { turnId, sessionId: "guided-local-session" },
       turnId,
       trackingMode: "local",
@@ -969,7 +1352,7 @@ test("production closeout reuses its durable correction after crash and late mat
       sanitizedTarget: "workspace:late.txt",
     })).toMatchObject({ ok: true, created: true });
     let recoveredProviderCalls = 0;
-    const recoveredAgent = createProductionGuidedTurnAgent({
+    const recoveredAgent = fixture.admitEol(createProductionGuidedTurnAgent({
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
       butlerHome: fixture.root,
       butlerData: fixture.root,
@@ -984,7 +1367,7 @@ test("production closeout reuses its durable correction after crash and late mat
           return { text: "재시작 후 후보", toolCalls: [] };
         },
       },
-    });
+    }));
     await expect(recoveredAgent.run({
       turn,
       signal: new AbortController().signal,
@@ -1111,7 +1494,7 @@ test("runtime-owned open notice survives a crash before final Turn delivery", as
       storageProfile: "ephemeral",
     });
     let recoveredProviderCalls = 0;
-    const recoveredAgent = createProductionGuidedTurnAgent({
+    const recoveredAgent = fixture.admitEol(createProductionGuidedTurnAgent({
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
       butlerHome: fixture.root,
       butlerData: fixture.root,
@@ -1126,7 +1509,7 @@ test("runtime-owned open notice survives a crash before final Turn delivery", as
           return { text: "재시작 뒤 전달 후보", toolCalls: [] };
         },
       },
-    });
+    }));
     const recoveredRuntime = createGuidedTurnRuntime({
       admission: reopened.admission,
       turns: reopened.turns,
@@ -1660,7 +2043,7 @@ test("production feature execution instructions preserve guarded effects and ato
     });
 
     expect(captured?.instructions).toContain("create or reuse one Work");
-    expect(captured?.instructions).toContain("execute effects through the existing guard");
+    expect(captured?.instructions).toContain("Execute effects through the existing guard");
     expect(captured?.instructions).toContain("inspect the actual result");
     expect(captured?.instructions).toContain("record_work_disposition");
     expect(captured?.instructions).toContain("optional quality records");
@@ -1673,119 +2056,13 @@ test("production feature execution instructions preserve guarded effects and ato
       .not.toContain("project_ledger_work_complete");
     expect(JSON.stringify(fixture.stores.guidedToolJournal.list(
       "guided-feature-execution-instructions",
-    ))).toContain("native:project_ledger_work_complete");
+    ))).not.toContain("native:project_ledger_work_complete");
   } finally {
     if (previousFlag === undefined) {
       delete process.env.BUTLER_PHASE_TOOL_SURFACE;
     } else {
       process.env.BUTLER_PHASE_TOOL_SURFACE = previousFlag;
     }
-    fixture.close();
-  }
-});
-
-test("production Guided Turn rereads Work across execution windows in one agent run", async () => {
-  const fixture = createFixture("guided-production-window-continuation");
-  try {
-    const requests: ModelRoundRequest[] = [];
-    let modelCalls = 0;
-    let loadContextCalls = 0;
-    let boundWorkCalls = 0;
-    const durableWork = fixture.stores.durableWork;
-    const trackedDurableWork = {
-      ...durableWork,
-      async loadContext(scope: Parameters<typeof durableWork.loadContext>[0]) {
-        loadContextCalls += 1;
-        return durableWork.loadContext(scope);
-      },
-      async boundWorkForTurn(turnId: string) {
-        boundWorkCalls += 1;
-        return durableWork.boundWorkForTurn(turnId);
-      },
-    };
-    const modelRound: ModelRoundPort = {
-      async runRound(request) {
-        requests.push(request);
-        modelCalls += 1;
-        if (modelCalls === 1) {
-          return toolResponse([toolCall("window-plan", "replace_work_plan", {
-            start_new: true,
-            objective: "Preserve evidence across the execution windows.",
-            actions: [{
-              action_key: "preserve-evidence",
-              description: "Keep the collected evidence available for the final answer.",
-            }],
-            checks: ["The final answer uses the collected evidence."],
-          })]);
-        }
-        if (modelCalls === 2) {
-          return toolResponse([toolCall("window-checkpoint", "record_work_checkpoint", {
-            action_updates: [{
-              action_key: "preserve-evidence",
-              status: "active",
-            }],
-            public_summary: "The collected evidence remains available.",
-            next_step: "Use the evidence in the final answer.",
-          })]);
-        }
-        if (modelCalls === 3) {
-          const bound = await durableWork.boundWorkForTurn(
-            "guided-production-window-turn",
-          );
-          return toolResponse([toolCall("window-disposition", "record_work_disposition", {
-            work_id: bound!.workId,
-            disposition: "open",
-            summary: "수집한 근거를 유지하며 답변을 준비합니다.",
-            remaining_actions: ["최종 답변을 전달한다"],
-          })]);
-        }
-        return { text: "확인된 근거를 바탕으로 답변을 완료했습니다.", toolCalls: [] };
-      },
-    };
-    const agent = createProductionGuidedTurnAgent({
-      phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
-      butlerHome: fixture.root,
-      butlerData: fixture.root,
-      contextDocuments: fixture.stores.contextDocuments,
-      toolJournal: fixture.stores.guidedToolJournal,
-      effectJournal: fixture.stores.guidedEffectJournal,
-      durableWork: trackedDurableWork,
-      modelRound,
-      executionWindowSize: 1,
-    });
-    const turnId = "guided-production-window-turn";
-    const runtime = createGuidedTurnRuntime({
-      admission: fixture.stores.admission,
-      turns: fixture.stores.turns,
-      messages: fixture.stores.messages,
-      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
-      agent,
-    });
-    const result = await runtime.runTurn(localRunCommand(fixture.root, turnId));
-    expect(result).toMatchObject({
-      kind: "delivered",
-      content: "확인된 근거를 바탕으로 답변을 완료했습니다.",
-    });
-    await expect(fixture.stores.durableWork.boundWorkForTurn(turnId)).resolves
-      .toMatchObject({ status: "open", latestDisposition: { disposition: "open" } });
-    expect(modelCalls).toBe(4);
-    expect(loadContextCalls).toBeGreaterThanOrEqual(4);
-    expect(boundWorkCalls).toBeGreaterThanOrEqual(4);
-    expect(requests).toHaveLength(4);
-    expect(requests[0]?.messages.filter((message) => message.role === "user"))
-      .toHaveLength(1);
-    expect(requests[1]?.messages.filter((message) => message.role === "user"))
-      .toHaveLength(2);
-    expect(requests[2]?.messages.filter((message) => message.role === "user"))
-      .toHaveLength(3);
-    expect(requests[1]?.messages.at(-1)?.content).toContain("Execution checkpoint 1");
-    expect(requests[1]?.messages.at(-1)?.content).toContain("Durable Work status");
-    expect(requests[2]?.messages.at(-1)?.content).toContain("Execution checkpoint 2");
-    expect(requests[2]?.messages.at(-1)?.content)
-      .toContain("The collected evidence remains available.");
-    expect(requests[3]?.messages.filter((message) => message.role === "user"))
-      .toHaveLength(4);
-  } finally {
     fixture.close();
   }
 });
@@ -1977,7 +2254,7 @@ test("primary-only route uses the durable routed path", async () => {
   }
 });
 
-test("production Turn rejects a persisted accepted response without its round tool surface", async () => {
+test("production Turn resumes a persisted accepted response without recomputing its prior tool surface", async () => {
   const previousSurface = process.env.BUTLER_PHASE_TOOL_SURFACE;
   process.env.BUTLER_PHASE_TOOL_SURFACE = "on";
   const fixture = createFixture("guided-persisted-tool-surface-mismatch");
@@ -2035,21 +2312,21 @@ test("production Turn rejects a persisted accepted response without its round to
         },
       }),
     });
-    await expect(productionRuntime.runTurn(command)).rejects.toMatchObject({
-      name: "RoundToolSurfaceError",
-      code: "round_tool_surface_continuation_invalid",
+    await expect(productionRuntime.runTurn(command)).resolves.toMatchObject({
+      kind: "delivered",
+      content: "stale accepted response",
     });
     expect(providerCalls).toBe(0);
     expect(fixture.stores.guidedToolJournal.list(turnId)).toEqual([]);
     const persistedTurn = await fixture.stores.turns.findTurn(turnId);
-    expect(persistedTurn?.semanticState).toBe("admitted");
-    expect(persistedTurn?.finalPayload).toBeUndefined();
+    expect(persistedTurn?.semanticState).toBe("delivered");
+    expect(persistedTurn?.finalPayload?.content).toBe("stale accepted response");
     const db = new Database(fixture.dbPath, { readonly: true });
     try {
       expect(db.query<{ count: number }, [string]>(`
         SELECT COUNT(*) AS count FROM btcc_messages
         WHERE turn_id = ? AND role = 'assistant'
-      `).get(turnId)?.count).toBe(0);
+      `).get(turnId)?.count).toBe(1);
     } finally {
       db.close();
     }
@@ -2089,9 +2366,17 @@ test("Guided model rounds attribute provider usage before completion progress", 
   }
 });
 
-test("Guided Turn promotes persona and profile context into every provider instruction", async () => {
+test("Guided Turn keeps admitted EOL separate from persona in every provider instruction", async () => {
   const fixture = createFixture("guided-persona-instructions");
   try {
+    const eolRef = fixture.stores.contextDocuments.persist({
+      scopeKind: "user",
+      scopeId: "local-user",
+      projectionClass: "profile",
+      sourceId: "eol",
+      sourceRevision: "eol-v1",
+      content: "EOL_EXACT_GOVERNING_INSTRUCTION",
+    });
     const personaRef = fixture.stores.contextDocuments.persist({
       scopeKind: "user",
       scopeId: "local-user",
@@ -2117,18 +2402,21 @@ test("Guided Turn promotes persona and profile context into every provider instr
       content: "## Turn Environment\nAssistant Response Language: Korean",
     });
     const instructions: Array<string | undefined> = [];
+    const prompts: string[] = [];
     const agent = fixture.agent(scriptedModelRound([
       (request) => {
         instructions.push(request.instructions);
+        prompts.push(request.messages[0]?.content ?? "");
         return toolResponse([toolCall("read-1", "read_file", { requests: [{ path: "README.md" }] })]);
       },
       (request) => {
         instructions.push(request.instructions);
+        prompts.push(request.messages[0]?.content ?? "");
         return { text: "확인했냥.", toolCalls: [] };
       },
     ]));
     const turn = turnRecord(fixture.root, { turnId: "guided-persona-instructions" });
-    turn.context.profileRefs = [personaRef, profileRef];
+    turn.context.profileRefs = [eolRef, personaRef, profileRef];
     turn.context.optionalHotCacheRefs = [runtimeRef];
 
     await agent.run({ turn, signal: new AbortController().signal });
@@ -2139,6 +2427,74 @@ test("Guided Turn promotes persona and profile context into every provider instr
       expect(value).toContain("말끝에 반드시 냥을 붙인다.");
       expect(value).toContain("Preferred address: 사용자님");
       expect(value).toContain("Use Korean for every user-facing message");
+      expect(value).toContain("EOL_EXACT_GOVERNING_INSTRUCTION");
+      expect(value).toContain("not Butler persona or ordinary user content");
+    }
+    for (const prompt of prompts) {
+      expect(prompt).not.toContain("EOL_EXACT_GOVERNING_INSTRUCTION");
+      expect(prompt).not.toContain("BUTLER_PERSONA_PRIVATE");
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Steward receives admitted EOL on every round without Butler persona", async () => {
+  const fixture = createFixture("guided-steward-eol-instructions");
+  try {
+    const eolRef = fixture.stores.contextDocuments.persist({
+      scopeKind: "user", scopeId: "steward-role", projectionClass: "profile",
+      sourceId: "eol", sourceRevision: "eol-steward-v1",
+      content: "STEWARD_EOL_EXACT_GOVERNING_INSTRUCTION",
+    });
+    fixture.stores.contextDocuments.persist({
+      scopeKind: "user", scopeId: "local-user", projectionClass: "profile",
+      sourceId: "active-persona-reminder", sourceRevision: "persona-private-v1",
+      content: "BUTLER_PERSONA_PRIVATE",
+    });
+    const requests: ModelRoundRequest[] = [];
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        requests.push(request);
+        return toolResponse([toolCall("steward-read", "read_file", {
+          requests: [{ path: "README.md" }],
+        })]);
+      },
+      (request) => {
+        requests.push(request);
+        return { text: "Steward result", toolCalls: [] };
+      },
+    ]));
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-steward-eol-instructions",
+      trackingMode: "local",
+    });
+    turn.context.userRef = "steward-role";
+    turn.context.profileRefs = [eolRef];
+    turn.context.executionPolicy = {
+      role: "steward", accessMode: "full_access", trackingMode: "local",
+      requiredNativeToolProfiles: [], requiredNativeTools: [],
+      workspacePath: fixture.root,
+      subsession: {
+        relationId: "relation-eol", delegationId: "delegation-eol",
+        taskId: "task-eol", executionMode: "read_only", mutationScope: [],
+        allowedToolsAndEffects: [
+          "grep_files:workspace", "list_files:workspace", "read_file:workspace",
+          "web_read:network", "web_search:network",
+        ],
+      },
+    };
+
+    await agent.run({ turn, signal: new AbortController().signal });
+
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      expect(request.instructions).toContain("STEWARD_EOL_EXACT_GOVERNING_INSTRUCTION");
+      expect(request.instructions).toContain("exact EOL admitted for this Turn governs both Butler and Steward");
+      expect(request.instructions).not.toContain("BUTLER_PERSONA_PRIVATE");
+      expect(request.messages[0]?.content).not.toContain(
+        "STEWARD_EOL_EXACT_GOVERNING_INSTRUCTION",
+      );
     }
   } finally {
     fixture.close();
@@ -2227,6 +2583,8 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
       .toBeUndefined();
     expect(await availability(fullAccessProjectTurn, "complete_project_work"))
       .toBeUndefined();
+    expect(await availability(fullAccessProjectTurn, "project_ledger_work_complete"))
+      .toBeUndefined();
     expect(await availability(turnRecord(fixture.root, {
       accessMode: "read_only",
       trackingMode: "ledger",
@@ -2271,12 +2629,11 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     expect(visibleNames).not.toContain("project_ledger_show");
     expect(visibleNames).toContain("project_ledger_create");
     expect(visibleNames).not.toContain("project_ledger_work_update");
-    expect(visibleNames).toContain("project_ledger_work_complete");
-    expect(instructions).toContain("keep one concise Project Ledger Work record");
-    expect(instructions).toContain("Check for related Work first and reuse it");
+    expect(visibleNames).not.toContain("project_ledger_work_complete");
     expect(instructions).toContain(
-      "complete it after validating the requested outcome",
+      "The bound Managed Work is the single project-work lifecycle",
     );
+    expect(instructions).not.toContain("alongside the internal Work record");
     expect(instructions).not.toContain(
       "Do not attempt to mutate the Project Ledger",
     );
@@ -2356,191 +2713,6 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
       error: { code: "tool_unavailable" },
     });
   } finally {
-    fixture.close();
-  }
-});
-
-test("Guided project Work initializes and closes Project Ledger through reviewed effects", async () => {
-  const fixture = createFixture("guided-project-ledger-lifecycle");
-  const previousFlag = process.env.BUTLER_PHASE_TOOL_SURFACE;
-  process.env.BUTLER_PHASE_TOOL_SURFACE = "on";
-  const ledgerRoot = join(
-    fixture.root,
-    "project-ledger",
-    "projects",
-    "guided-ledger-project",
-  );
-  writeFileSync(
-    join(fixture.root, "package.json"),
-    `${JSON.stringify({ name: "guided-ledger-project" })}\n`,
-  );
-  bindAppProject(fixture.dbPath, {
-    id: "guided-project-session",
-    workspacePath: fixture.root,
-    ledgerProjectId: "guided-ledger-project",
-  });
-  try {
-    const turnId = "turn-guided-project-ledger-lifecycle";
-    const planCalls = [toolCall("plan-1", "replace_work_plan", {
-        objective: "Complete one tracked project change",
-        actions: [{
-          action_key: "create-ledger-work",
-          description: "Create one concise Project Ledger Work record",
-          effect: {
-            capability: "project_ledger_create",
-            target: "project-ledger:work:W-GUIDED-LIFECYCLE",
-          },
-        }, {
-          action_key: "complete-ledger-work",
-          description: "Complete the Project Ledger Work after validation",
-          dependency_keys: ["create-ledger-work"],
-          effect: {
-            capability: "project_ledger_work_complete",
-            target: "project-ledger:work:W-GUIDED-LIFECYCLE",
-          },
-        }],
-        checks: ["The canonical Project Ledger Work is done"],
-      })];
-    const planReviewCalls = [toolCall("plan-review-1", "record_work_review", {
-        subject: "plan",
-        verdict: "accept",
-        summary: "The plan is concise and matches the project request.",
-      })];
-    const searchCalls = [
-      toolCall("search-create", "tool_search", {
-        query: "project_ledger_create",
-        include_disabled: true,
-      }),
-      toolCall("search-complete", "tool_search", {
-        query: "project_ledger_work_complete",
-        include_disabled: true,
-      }),
-    ];
-    const describeCalls = [toolCall("describe-effects", "tool_describe", {
-      ids: [
-        "native:project_ledger_create",
-        "native:project_ledger_work_complete",
-      ],
-    })];
-    const createCalls = [toolCall("create-1", "tool_call", {
-      id: "native:project_ledger_create",
-      arguments: {
-        kind: "work",
-        id: "W-GUIDED-LIFECYCLE",
-        title: "Guided project lifecycle",
-        status: "proposed",
-        spec: "SPEC-GUIDED-LIFECYCLE",
-        acceptance: "The tracked project result is validated and reported",
-      },
-    })];
-    const completeCalls = [toolCall("complete-1", "tool_call", {
-      id: "native:project_ledger_work_complete",
-      arguments: {
-        id: "W-GUIDED-LIFECYCLE",
-        validation: "Lifecycle integration test passed",
-        review: "The requested tracked outcome is complete",
-        report: "The Guided result contains the completed outcome",
-      },
-    })];
-    const reviewCalls = [
-      toolCall("checkpoint-1", "record_work_checkpoint", {
-        action_updates: [{ action_key: "create-ledger-work", status: "done" }, {
-          action_key: "complete-ledger-work",
-          status: "done",
-        }],
-        public_summary: "The Project Ledger Work was created and completed.",
-        next_step: "Review the completed project result.",
-      }),
-      toolCall("result-review-1", "record_work_review", {
-        subject: "result",
-        verdict: "accept",
-        summary: "The Project Ledger Work was created and completed.",
-      }),
-    ];
-    const completionCalls = [toolCall("completion-1", "record_work_review", {
-        subject: "completion",
-        verdict: "accept",
-        summary: "The whole Work satisfies the original project request and checks.",
-      })];
-    const agent = fixture.agent(scriptedModelRound([
-      toolResponse(planCalls),
-      toolResponse(planReviewCalls),
-      toolResponse(searchCalls),
-      toolResponse(describeCalls),
-      toolResponse(createCalls),
-      toolResponse(completeCalls),
-      toolResponse(reviewCalls),
-      toolResponse(completionCalls),
-      async () => {
-        const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
-        return toolResponse([toolCall("disposition-1", "record_work_disposition", {
-          work_id: bound!.workId,
-          disposition: "completed",
-          summary: "The tracked project change is complete.",
-          action_updates: [{ action_key: "create-ledger-work", status: "done" }, {
-            action_key: "complete-ledger-work", status: "done",
-          }],
-        })]);
-      },
-      (request) => {
-        expect(existsSync(ledgerRoot)).toBe(true);
-        expect(request.messages.some((message) => message.role === "tool")).toBe(true);
-        return { text: "프로젝트 작업과 기록을 완료했습니다.", toolCalls: [] };
-      },
-      async () => {
-        const bound = await fixture.stores.durableWork.boundWorkForTurn(turnId);
-        return toolResponse([toolCall("disposition-1", "record_work_disposition", {
-          work_id: bound!.workId,
-          disposition: "completed",
-          summary: "Project Ledger 효과와 검토 결과를 확인했습니다.",
-        })]);
-      },
-      { text: "프로젝트 작업과 기록을 완료했습니다.", toolCalls: [] },
-    ]), { butlerHome: process.cwd() });
-    const runtime = createGuidedTurnRuntime({
-      admission: fixture.stores.admission,
-      turns: fixture.stores.turns,
-      messages: fixture.stores.messages,
-      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
-      agent,
-    });
-    const delivered = await runtime.runTurn(projectRunCommand(fixture.root, turnId));
-    expect(delivered)
-      .toMatchObject({
-      kind: "delivered",
-      content: "프로젝트 작업과 기록을 완료했습니다.",
-    });
-    const journal = fixture.stores.guidedToolJournal.list(turnId);
-    expect(journal.find((entry) => entry.toolName === "tool_search" &&
-      JSON.stringify(entry.arguments).includes("project_ledger_create"))?.result)
-      .toMatchObject({ results: [expect.objectContaining({
-        id: "native:project_ledger_create",
-        enabled: true,
-      })] });
-    expect(journal.find((entry) => entry.toolName === "tool_describe")?.result)
-      .toMatchObject({ ok: true, missing: [] });
-    expect(journal.find((entry) => entry.toolName === "project_ledger_create")?.result)
-      .toMatchObject({ ok: true });
-    expect(journal.find((entry) => entry.toolName === "project_ledger_work_complete")?.result)
-      .toMatchObject({ ok: true });
-    expect(existsSync(join(ledgerRoot, "project.json"))).toBe(true);
-    expect(existsSync(join(ledgerRoot, "work", "W-GUIDED-LIFECYCLE", "work.md")))
-      .toBe(true);
-    const work = await fixture.stores.durableWork.boundWorkForTurn(turnId);
-    expect(work).toMatchObject({
-      status: "completed",
-      latestResultReview: { verdict: "accept" },
-      latestCompletionValidation: { verdict: "accept" },
-    });
-    expect(fixture.stores.guidedEffectJournal.listForWork(work!.workId))
-      .toHaveLength(2);
-    expect((await fixture.stores.turns.findTurn(turnId))?.route).toBe("managed");
-  } finally {
-    if (previousFlag === undefined) {
-      delete process.env.BUTLER_PHASE_TOOL_SURFACE;
-    } else {
-      process.env.BUTLER_PHASE_TOOL_SURFACE = previousFlag;
-    }
     fixture.close();
   }
 });
@@ -3125,21 +3297,26 @@ test("flag-on Guided capability list exposes the canonical exact reader as calla
   }
 });
 
-test("flag-off required exact capability fails before Guided provider dispatch", async () => {
+test("exact result reader remains callable when optional replay compression is off", async () => {
   const fixture = createFixture("guided-exact-replay-off-required");
   const previous = process.env.BUTLER_OPERATION_RESULT_REPLAY;
   delete process.env.BUTLER_OPERATION_RESULT_REPLAY;
   let calls = 0;
   try {
-    const agent = fixture.agent({ async runRound() {
+    const agent = fixture.agent({ async runRound(request) {
       calls += 1;
-      return { text: "must not dispatch", toolCalls: [] };
+      expect(request.tools.some((tool) => tool.name === "read_operation_results")).toBe(true);
+      return { text: "reader available", toolCalls: [] };
     } });
-    const turn = turnRecord(fixture.root, { accessMode: "full_access" });
-    turn.context.executionPolicy!.requiredNativeTools = ["read_operation_results"];
-    await expect(agent.run({ turn, signal: new AbortController().signal }))
-      .rejects.toThrow("required tool is unavailable while exact replay is disabled");
-    expect(calls).toBe(0);
+    const command = localRunCommand(fixture.root, "exact-reader-flag-off");
+    command.context.executionPolicy!.requiredNativeTools = ["read_operation_results"];
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission, turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness, agent,
+    });
+    await runtime.runTurn(command);
+    expect(calls).toBeGreaterThan(0);
   } finally {
     if (previous === undefined) delete process.env.BUTLER_OPERATION_RESULT_REPLAY;
     else process.env.BUTLER_OPERATION_RESULT_REPLAY = previous;
@@ -3759,7 +3936,7 @@ test("Guided agent offers the existing Work controls plus disposition and keeps 
     expect(visibleNames).not.toContain("list_work_streams");
     expect(visibleNames).not.toContain("update_work_stream_state");
     expect(outcome.route).toBe("direct");
-    expect(toolSurfaceDigest).toBeUndefined();
+    expect(toolSurfaceDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(await fixture.stores.durableWork.boundWorkForTurn(turn.turnId)).toBeNull();
   } finally {
     if (previousSurface === undefined) delete process.env.BUTLER_PHASE_TOOL_SURFACE;
@@ -3853,7 +4030,7 @@ test("feature Guided Turn refreshes disposition from durable Work and effect fac
             },
           )]);
         }
-        expect(surfaces[4]).toContain("record_work_disposition");
+        expect(surfaces[4]).toEqual([]);
         return { text: "facts were refreshed", toolCalls: [] };
       },
     };
@@ -3874,7 +4051,7 @@ test("feature Guided Turn refreshes disposition from durable Work and effect fac
     expect(digests[2]).not.toBe(digests[0]);
     expect(digests[2]).not.toBe(digests[1]);
     expect(digests[3]).toBe(digests[1]);
-    expect(digests[4]).toBe(digests[3]);
+    expect(digests[4]).not.toBe(digests[3]);
     expect(result.content).toBe("facts were refreshed");
 
     const disposition = DURABLE_WORK_TOOL_DEFINITIONS.find((tool) =>
@@ -4034,6 +4211,8 @@ test("feature Work schemas project only valid review subjects and Plan action ke
   });
 
   expect(execution.names.has("run_command")).toBe(true);
+  expect(execution.names.has("start_work")).toBe(false);
+  expect(execution.names.has("continue_work")).toBe(false);
   expect(statusOnly.digest).toBe(execution.digest);
   expect(acceptedResult.digest).not.toBe(execution.digest);
   const encodedExecution = JSON.stringify(execution.tools);
@@ -4056,6 +4235,120 @@ test("feature Work schemas project only valid review subjects and Plan action ke
     }),
   });
   expect(invalid.validationError).toContain("action_key");
+});
+
+test("delegation schema appears for the bound accepted Plan Review", async () => {
+  const turnId = "reviewed-delegation-surface-turn";
+  const sessionId = "reviewed-delegation-surface-session";
+  const plan = {
+    planRevisionId: "reviewed-delegation-plan-r1",
+    revision: 1,
+    objective: "Preserve the exact named model through Steward research.",
+    governingRefs: ["SPEC-M2-REVIEWED-STEWARD-DELEGATION"],
+    actions: [{
+      actionKey: "delegate-reviewed-research",
+      description: "Delegate the reviewed research objective.",
+      dependencyKeys: [],
+    }],
+    checks: [],
+    originTurnId: turnId,
+    createdAt: "2026-08-24T00:00:00.000Z",
+  };
+  const base: DurableWorkView = {
+    workId: "reviewed-delegation-work",
+    sessionId,
+    scope: { kind: "session", sessionId },
+    origin: { turnId, messageId: "reviewed-delegation-message" },
+    objective: plan.objective,
+    status: "open",
+    currentStage: "planning",
+    allowedNextStages: ["execution"],
+    actionProgress: [{ actionKey: "delegate-reviewed-research", status: "pending" }],
+    currentPlan: plan,
+    resultRefs: [],
+    createdAt: "2026-08-24T00:00:00.000Z",
+    updatedAt: "2026-08-24T00:00:00.000Z",
+  };
+  let boundWork: DurableWorkView | null = null;
+  let contextWork: DurableWorkView | null = null;
+  const delegationRecords: import("../../packages/butler-agent/src/agent/btcc/ports/guided-tool-journal.ts").GuidedToolJournalRecord[] = [];
+  const durableWork = {
+    boundWorkForTurn: async () => boundWork,
+    loadContext: async () => contextWork ? {
+      work: contextWork,
+      originalRequest: { turnId, messageId: "reviewed-delegation-message", content: plan.objective },
+      resultFacts: [],
+    } : null,
+  } as unknown as DurableWorkService;
+  const resolve = createGuidedRoundToolSurfaceResolver({
+    turnId,
+    tools: [...DURABLE_WORK_TOOL_DEFINITIONS, delegateToStewardToolDefinition],
+    requiredToolNames: new Set(),
+    toolJournal: { list: () => delegationRecords },
+    durableWork,
+    workScope: { turnId, sessionId },
+    effectJournal: { listForWork: async () => [] },
+    turnReleaseDelegationTool: "delegate_to_steward",
+  });
+
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(false);
+  contextWork = {
+    ...base,
+    latestPlanReview: {
+      reviewRevisionId: "reviewed-delegation-review-r1",
+      revision: 1,
+      subject: "plan",
+      verdict: "accept",
+      summary: "The exact intent is ready for delegation.",
+      corrections: [],
+      boundPlanRevisionId: plan.planRevisionId,
+      boundResultRefs: [],
+      originTurnId: turnId,
+      createdAt: "2026-08-24T00:00:01.000Z",
+    },
+  };
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(false);
+  boundWork = base;
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(false);
+  boundWork = {
+    ...base,
+    latestPlanReview: {
+      reviewRevisionId: "reviewed-delegation-review-r1",
+      revision: 1,
+      subject: "plan",
+      verdict: "accept",
+      summary: "The exact intent is ready for delegation.",
+      corrections: [],
+      boundPlanRevisionId: plan.planRevisionId,
+      boundResultRefs: [],
+      originTurnId: turnId,
+      createdAt: "2026-08-24T00:00:01.000Z",
+    },
+  };
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(true);
+  boundWork = {
+    ...boundWork,
+    currentPlan: { ...plan, originTurnId: "earlier-user-turn" },
+    latestPlanReview: {
+      ...boundWork.latestPlanReview!,
+      originTurnId: "earlier-user-turn",
+    },
+  };
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(true);
+  delegationRecords.push({
+    callId: "queued-delegation",
+    toolName: "delegate_to_steward",
+    rawArguments: "{}",
+    arguments: {},
+    status: "completed",
+    result: { ok: true, status: "queued" },
+  });
+  expect([...((await resolve()).names)]).toEqual([]);
+  boundWork = {
+    ...boundWork,
+    currentPlan: { ...plan, planRevisionId: "reviewed-delegation-plan-r2", revision: 2 },
+  };
+  expect((await resolve()).names.has("delegate_to_steward")).toBe(false);
 });
 
 test("Guided tool discovery hides the retired R2 Work catalog", async () => {
@@ -5219,7 +5512,7 @@ test("run_command rejects a sanitizer-empty public summary before journal or dis
   }
 });
 
-test("Guided agent turns provider failure into one fact-based final report", async () => {
+test("Guided agent preserves provider failure without fabricating a final progress report", async () => {
   const fixture = createFixture("guided-fallback");
   try {
     writeFileSync(join(fixture.root, "settings.json"), '{"enabled":true}\n');
@@ -5237,12 +5530,14 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       },
     ]));
     const outcome = await fallbackAgent.run({
-      turn: turnRecord(fixture.root),
+      turn: await admitTurn(localRunCommand(fixture.root, "guided-agent-turn"),
+        fixture.stores.admission, fixture.stores.turns),
       signal: new AbortController().signal,
     });
-    expect(outcome).toEqual({
+    expect(outcome).toMatchObject({
       route: "assisted",
-      content: "현재 요청을 처리했지만 답변 생성을 마치지 못했습니다.\n현재 Turn에서 확인된 내용: 검증된 소스 근거를 확인했습니다.\n완료되지 않은 작업을 완료로 처리하지 않았습니다.",
+      content: "",
+      runtimeFailure: { code: "provider_api_error", retryable: true },
     });
     expect(calls).toBe(2);
 
@@ -5255,7 +5550,8 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       { text: "폴더를 확인했습니다.", toolCalls: [] },
     ]));
     expect((await commandAgent.run({
-      turn: turnRecord(fixture.root, { turnId: "turn-command" }),
+      turn: await admitTurn(localRunCommand(fixture.root, "turn-command"),
+        fixture.stores.admission, fixture.stores.turns),
       signal: new AbortController().signal,
     })).route).toBe("assisted");
   } finally {
@@ -5359,16 +5655,19 @@ test("unbound capture fallback never inherits an unrelated candidate Work", asyn
 test("whole-goal sequence preserves explicit relation across restart and exhaustion", async () => {
   const fixture = createFixture("guided-whole-goal-sequence");
   let currentStores = fixture.stores;
-  const createAgent = (modelRound: ModelRoundPort) => createProductionGuidedTurnAgent({
-    butlerHome: fixture.root,
-    butlerData: fixture.root,
-    phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
-    contextDocuments: currentStores.contextDocuments,
-    toolJournal: currentStores.guidedToolJournal,
-    effectJournal: currentStores.guidedEffectJournal,
-    durableWork: currentStores.durableWork,
-    modelRound,
-  });
+  const createAgent = (modelRound: ModelRoundPort) => fixture.admitEol(
+    createProductionGuidedTurnAgent({
+      butlerHome: fixture.root,
+      butlerData: fixture.root,
+      phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
+      contextDocuments: currentStores.contextDocuments,
+      toolJournal: currentStores.guidedToolJournal,
+      operationResultReader: currentStores.guidedOperationResultReader,
+      effectJournal: currentStores.guidedEffectJournal,
+      durableWork: currentStores.durableWork,
+      modelRound,
+    }),
+  );
   const createRuntime = (turnId: string, modelRound: ModelRoundPort) =>
     createGuidedTurnRuntime({
       admission: currentStores.admission,
@@ -5407,6 +5706,7 @@ test("whole-goal sequence preserves explicit relation across restart and exhaust
             monitoringWorkId = output.work?.work_id ?? "";
             return toolResponse([toolCall("monitor-plan", "replace_work_plan", {
               objective: "안전한 모니터링 기준선을 확인합니다",
+              execution_mode: "direct",
               actions: [{
                 action_key: "monitor-baseline",
                 description: "안전한 기준선을 확인합니다",
@@ -5417,7 +5717,6 @@ test("whole-goal sequence preserves explicit relation across restart and exhaust
           }
           if (monitoringCalls === 3) {
             return toolResponse([toolCall("monitor-checkpoint", "record_work_checkpoint", {
-              next_stage: "execution",
               action_updates: [{ action_key: "monitor-baseline", status: "active" }],
               public_summary: "기준선 확인을 진행합니다.",
               next_step: "기준선 확인을 마칩니다.",
@@ -5523,7 +5822,8 @@ test("whole-goal sequence preserves explicit relation across restart and exhaust
     if (exhaustedCapture.kind === "delivered") {
       expect(exhaustedCapture.content).not.toContain("안전한 모니터링 기준선");
       expect(exhaustedCapture.content).not.toContain(monitoringWorkId);
-      expect(exhaustedCapture.content).toContain("현재 요청을 처리했지만 답변 생성을 마치지 못했습니다.");
+      expect(exhaustedCapture.runtimeFailure).toEqual({ code: "provider_api_error", retryable: true });
+      expect(exhaustedCapture.acceptedWorkResult).toEqual({ status: "failed" });
     }
     captureWorkId = (await currentStores.durableWork.boundWorkForTurn(
       "whole-goal-capture-start",
@@ -5546,6 +5846,7 @@ test("whole-goal sequence preserves explicit relation across restart and exhaust
           if (captureContinuationCalls === 2) {
             return toolResponse([toolCall("capture-plan", "replace_work_plan", {
               objective: "캡처 하드닝 근거를 정리합니다",
+              execution_mode: "direct",
               actions: [{
                 action_key: "capture-hardening",
                 description: "캡처 하드닝 근거를 정리합니다",
@@ -5556,7 +5857,6 @@ test("whole-goal sequence preserves explicit relation across restart and exhaust
           }
           if (captureContinuationCalls === 3) {
             return toolResponse([toolCall("capture-checkpoint", "record_work_checkpoint", {
-              next_stage: "execution",
               action_updates: [{ action_key: "capture-hardening", status: "active" }],
               public_summary: "캡처 하드닝 근거를 정리하는 중입니다.",
               next_step: "현재 변경 근거를 확인합니다.",
@@ -5678,7 +5978,7 @@ test("continue_work does not republish an old Plan into fallback progress", asyn
     if (outcome.kind === "delivered") {
       expect(outcome.content).not.toContain("오래된 Plan");
       expect(outcome.content).not.toContain(workId);
-      expect(outcome.content).toContain("현재 요청을 완료하지 못했고 답변 생성을 마치지 못했습니다.");
+      expect(outcome.runtimeFailure).toEqual({ code: "provider_api_error", retryable: true });
     }
   } finally {
     fixture.close();
@@ -6226,7 +6526,7 @@ test("Guided operational fallback follows configured response language", () => {
   expect(fallback).not.toContain("답변 생성을");
 });
 
-test("Guided operational fallback is captured without a second report model call", async () => {
+test("Guided provider failure is returned without a second report model call", async () => {
   const toolCall = {
     callId: "guided-fallback-precomputed-call",
     toolName: "read_file",
@@ -6249,7 +6549,6 @@ test("Guided operational fallback is captured without a second report model call
       prompt: "현재까지 확인한 내용을 알려 주세요.",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6262,12 +6561,10 @@ test("Guided operational fallback is captured without a second report model call
   });
 
   expect(calls).toBe(1);
-  expect(answer).toContain("답변 생성을 마치지 못했습니다");
-  expect(answer).not.toContain("Tool read_file");
-  expect(answer).not.toContain("captured-before-report-model");
+  expect(answer).toEqual({ failure: { code: "provider_api_error", retryable: true } });
 });
 
-test("Guided operational fallback never exposes a model budget or retry request", async () => {
+test("Guided provider failure retains only typed failure identity", async () => {
   let calls = 0;
   const modelRound = scriptedModelRound([
     () => {
@@ -6281,7 +6578,6 @@ test("Guided operational fallback never exposes a model budget or retry request"
       prompt: "결과를 알려 주세요.",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6293,14 +6589,11 @@ test("Guided operational fallback never exposes a model budget or retry request"
     }),
   });
 
-  expect(answer).toContain("답변 생성을 마치지 못했습니다");
-  expect(answer).not.toContain("available tool budget");
-  expect(answer).not.toContain("another turn");
-  expect(answer).not.toMatch(/retry|다시 요청/iu);
+  expect(answer).toEqual({ failure: { code: "provider_api_error", retryable: true } });
   expect(calls).toBe(1);
 });
 
-test("Guided operational fallback is deterministic instead of a persona model call", async () => {
+test("Guided provider failure does not invoke another persona model call", async () => {
   let calls = 0;
   const modelRound = scriptedModelRound([
     () => {
@@ -6314,7 +6607,6 @@ test("Guided operational fallback is deterministic instead of a persona model ca
       prompt: "작업을 완료해 줘.",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6322,7 +6614,7 @@ test("Guided operational fallback is deterministic instead of a persona model ca
     loadFacts: async () => ({ work: null, toolCalls: [], effects: [] }),
   });
 
-  expect(answer).toContain("답변 생성을 마치지 못했습니다");
+  expect(answer).toEqual({ failure: { code: "provider_api_error", retryable: true } });
   expect(calls).toBe(1);
 });
 
@@ -6342,7 +6634,6 @@ test("Guided empty main response returns a deterministic fact-based fallback", a
       prompt: "빈 응답을 보고 가능한 실패로 처리해 주세요.",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6357,47 +6648,6 @@ test("Guided empty main response returns a deterministic fact-based fallback", a
   expect(answer).not.toMatch(/다시 요청|retry|continue/iu);
   expect(calls).toBe(1);
   expect(factLoads).toBe(1);
-});
-
-test("Guided model exhaustion uses the deterministic fallback without another model round", async () => {
-  let calls = 0;
-  let factLoads = 0;
-  const answer = await runGuidedAgentLoopWithOperationalReport({
-    options: {
-      prompt: "도구 실행이 끝나지 않은 요청입니다.",
-      tools: [{
-        name: "echo",
-        description: "Echo a safe message.",
-        parameters: {
-          type: "object",
-          properties: { message: { type: "string" } },
-          required: ["message"],
-        },
-      }],
-      modelRound: scriptedModelRound([
-        () => {
-          calls += 1;
-          return toolResponse([toolCall("exhaustion-call", "echo", {
-            message: "still working",
-          })]);
-        },
-      ]),
-      maxIterations: 1,
-      executeTool: async () => ({ ok: true }),
-    },
-    parentSignal: new AbortController().signal,
-    originalRequest: "도구 실행이 끝나지 않은 요청입니다.",
-    loadFacts: async () => {
-      factLoads += 1;
-      return { work: null, toolCalls: [], effects: [] };
-    },
-  });
-
-  expect(calls).toBe(1);
-  expect(factLoads).toBe(1);
-  expect(answer).toContain("답변 생성을 마치지 못했습니다");
-  expect(answer).not.toContain("available tool budget");
-  expect(answer).not.toContain("echo: ok");
 });
 
 test("Guided unexpected local failure does not start an operational report request", async () => {
@@ -6416,7 +6666,6 @@ test("Guided unexpected local failure does not start an operational report reque
       prompt: "로컬 오류는 위로 전달해 주세요.",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6451,7 +6700,6 @@ test("Guided permanent provider failure does not start an operational report req
           throw permanent;
         },
       ]),
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -6460,7 +6708,7 @@ test("Guided permanent provider failure does not start an operational report req
       factLoads += 1;
       return { work: null, toolCalls: [], effects: [] };
     },
-  })).rejects.toBe(permanent);
+  })).resolves.toEqual({ failure: { code: "provider_auth_error", retryable: false } });
 
   expect(calls).toBe(1);
   expect(factLoads).toBe(0);
@@ -6482,7 +6730,6 @@ test("Guided parent cancellation does not deliver an operational fallback", asyn
       prompt: "중지할 작업",
       tools: [],
       modelRound,
-      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: controller.signal,
@@ -6501,6 +6748,108 @@ test("Guided parent cancellation does not deliver an operational fallback", asyn
 
   await expect(running).rejects.toThrow("user stopped the Turn");
   expect(factLoads).toBe(0);
+});
+
+test("Guided tool exceptions retain the full message in the journal and next model round", async () => {
+  const fixture = createFixture("guided-full-tool-error");
+  try {
+    const turn = turnRecord(fixture.root, { turnId: "turn-full-tool-error" });
+    const message = `${"diagnostic detail ".repeat(150)}ROOT CAUSE: missing dependency`;
+    const expected = `grep_files could not complete: ${message}`;
+    const executor = createGuidedToolCallExecutor({
+      turn, signal: new AbortController().signal,
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["grep_files"]), describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      workspacePath: () => fixture.root, butlerData: fixture.root,
+      executeButlerTool: async () => { throw new Error(message); },
+    });
+    const result = await runBtccAgentLoop({
+      prompt: "Find the cause.",
+      tools: authorizedToolDefinitions(turn, {}).filter((tool) => tool.name === "grep_files"),
+      executeTool: (call) => executor.executeTool({
+        name: call.name, args: call.arguments, rawArguments: call.rawArguments,
+        providerCallId: call.id,
+      }),
+      modelRound: scriptedModelRound([
+        toolResponse([toolCall("long-error", "grep_files", { pattern: "fact", root: "." })]),
+        (request) => {
+          const output = toolMessageOutput(messagesWithToolResults(request)[0]);
+          expect(output).toEqual({
+            ok: false, error: { code: "tool_error", message: expected },
+            output: { ok: false, error: { code: "tool_error", message: expected } },
+          });
+          return { text: "The missing dependency caused the failure.", toolCalls: [] };
+        },
+      ]),
+    });
+    expect(result.finalText).toBe("The missing dependency caused the failure.");
+    const records = fixture.stores.guidedToolJournal.list(turn.turnId);
+    expect(records).toHaveLength(1);
+    expect(records[0]?.result).toEqual({ ok: false, error: { code: "tool_error", message: expected } });
+  } finally {
+    fixture.close();
+  }
+});
+
+test("process replacement interruption rejects identically without finalizing the tool call", async () => {
+  const fixture = createFixture("guided-process-replacement-interruption");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "turn-process-replacement-interruption",
+    });
+    const interruption = new GuidedEffectProcessReplacementError();
+    const args = { query: "fact", path: "." };
+    const callId = digest([
+      "btcc-guided-tool-call.v1",
+      turn.turnId,
+      "0",
+      "grep_files",
+      stableJson(args),
+    ].join("\0"));
+    const operations: string[] = [];
+    const executor = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      progress: {
+        stateChanged: async () => {},
+        operationChanged: async (update) => {
+          operations.push(update.status);
+        },
+      },
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["grep_files"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      workspacePath: () => fixture.root,
+      butlerData: fixture.root,
+      executeButlerTool: async () => {
+        throw interruption;
+      },
+    });
+
+    let caught: unknown;
+    try {
+      await executor.executeTool({
+        name: "grep_files",
+        args,
+        rawArguments: JSON.stringify(args),
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBe(interruption);
+    expect(caught).toBeInstanceOf(GuidedEffectProcessReplacementError);
+    expect(operations).toEqual(["started"]);
+    expect(fixture.stores.guidedToolJournal.find(callId)?.status).toBe(
+      "started",
+    );
+  } finally {
+    fixture.close();
+  }
 });
 
 async function addAttachedFileResult(
@@ -6588,19 +6937,30 @@ function createFixture(label: string) {
     ownerId: label,
     storageProfile: "ephemeral",
   });
+  const admittedEolRef = stores.contextDocuments.persist({
+    scopeKind: "user",
+    scopeId: "local-user",
+    projectionClass: "profile",
+    sourceId: "eol",
+    sourceRevision: "test-admitted-eol-v1",
+    content: "TEST_ADMITTED_EOL_GOVERNING_INSTRUCTION",
+  });
   return {
     root,
     dbPath,
     stores,
+    admitEol(agent: BtccAgentLoop): BtccAgentLoop {
+      return withAdmittedEol(agent, admittedEolRef);
+    },
     agent(
       modelRound: ModelRoundPort,
       operational: {
         butlerHome?: string;
         durableWork?: DurableWorkService;
       } = {},
-    ) {
+    ): BtccAgentLoop {
       const { butlerHome = root } = operational;
-      return createProductionGuidedTurnAgent({
+      const agent = createProductionGuidedTurnAgent({
         phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
         butlerHome,
         butlerData: root,
@@ -6611,10 +6971,25 @@ function createFixture(label: string) {
         durableWork: operational.durableWork ?? stores.durableWork,
         modelRound,
       });
+      return withAdmittedEol(agent, admittedEolRef);
     },
     close() {
       stores.close();
       rmSync(root, { recursive: true, force: true });
+    },
+  };
+}
+
+function withAdmittedEol(
+  agent: BtccAgentLoop,
+  admittedEolRef: string,
+): BtccAgentLoop {
+  return {
+    async run(input) {
+      if (input.turn.context.profileRefs.length === 0) {
+        input.turn.context.profileRefs = [admittedEolRef];
+      }
+      return await agent.run(input);
     },
   };
 }

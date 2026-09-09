@@ -1,6 +1,7 @@
 import { mkdirSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
+import { resolve } from "node:path";
 import type {
   SessionBinding,
   SessionBindingLookup,
@@ -20,6 +21,8 @@ interface SessionRow {
   role: StoredSessionBinding["role"];
   lifecycle_state: SessionLifecycleState;
   project_id: string | null;
+  app_project_id: string | null;
+  ledger_project_id: string | null;
   workspace_path: string;
   runtime_adapter_id: string;
   model_provider_id: string;
@@ -123,6 +126,17 @@ export class SessionBindingStore {
     return this.dbPath;
   }
 
+  /** Repair the old general-session default; never alter a project/worktree. */
+  relocateLegacyGeneralWorkspaces(programHome: string, butlerData: string): number {
+    return this.db.query(`
+      UPDATE session_bindings SET workspace_path = ?
+      WHERE workspace_path = ?
+        AND COALESCE(project_id, '') = '' AND COALESCE(app_project_id, '') = ''
+        AND COALESCE(ledger_project_id, '') = ''
+        AND json_extract(COALESCE(metadata_json, '{}'), '$.sessionWorkspace') IS NULL
+    `).run(resolve(butlerData), resolve(programHome)).changes;
+  }
+
   upsert(binding: UpsertSessionBindingInput): StoredSessionBinding {
     const existing = this.getBySessionId(binding.sessionId);
     const now = binding.updatedAt ?? new Date().toISOString();
@@ -134,6 +148,12 @@ export class SessionBindingStore {
       (lifecycleState === "closed" || lifecycleState === "crashed" ? undefined : now);
     const metadata = binding.metadata ?? existing?.metadata;
     const transportBindings = dedupeTransportBindings(binding.transportBindings);
+    const appProjectId = Object.hasOwn(binding, "appProjectId")
+      ? binding.appProjectId
+      : existing?.appProjectId ?? binding.projectId;
+    const ledgerProjectId = Object.hasOwn(binding, "ledgerProjectId")
+      ? binding.ledgerProjectId
+      : existing?.ledgerProjectId;
 
     const upsertSession = this.db.query(`
       INSERT INTO session_bindings (
@@ -141,6 +161,8 @@ export class SessionBindingStore {
         role,
         lifecycle_state,
         project_id,
+        app_project_id,
+        ledger_project_id,
         workspace_path,
         runtime_adapter_id,
         model_provider_id,
@@ -151,11 +173,13 @@ export class SessionBindingStore {
         updated_at,
         last_active_at,
         metadata_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         role = excluded.role,
         lifecycle_state = excluded.lifecycle_state,
         project_id = excluded.project_id,
+        app_project_id = excluded.app_project_id,
+        ledger_project_id = excluded.ledger_project_id,
         workspace_path = excluded.workspace_path,
         runtime_adapter_id = excluded.runtime_adapter_id,
         model_provider_id = excluded.model_provider_id,
@@ -186,6 +210,8 @@ export class SessionBindingStore {
         binding.role,
         lifecycleState,
         binding.projectId ?? null,
+        appProjectId ?? null,
+        ledgerProjectId ?? null,
         binding.workspacePath,
         binding.runtimeAdapterId,
         binding.modelProviderId,
@@ -252,6 +278,40 @@ export class SessionBindingStore {
     return new Date(nextMs).toISOString();
   }
 
+  /** Replace execution identity together; transcript, model and transport identity stay intact. */
+  compareAndSetExecutionContext(input: {
+    sessionId: string;
+    expectedUpdatedAt: string;
+    operationId: string;
+    workspacePath: string;
+    projectId: string | null;
+    appProjectId: string | null;
+    ledgerProjectId: string | null;
+    metadata: Record<string, unknown>;
+  }): ReturnType<SessionBindingStore["rebindWorkspace"]> {
+    return this.db.transaction(() => {
+      const current = this.getBySessionId(input.sessionId);
+      if (!current) return { status: "missing" as const };
+      if (current.metadata?.relocationId === input.operationId) {
+        const same = current.workspacePath === input.workspacePath &&
+          (current.projectId ?? null) === input.projectId &&
+          (current.appProjectId ?? null) === input.appProjectId &&
+          (current.ledgerProjectId ?? null) === input.ledgerProjectId;
+        return { status: same ? "applied" as const : "changed" as const, binding: current };
+      }
+      if (current.updatedAt !== input.expectedUpdatedAt) return { status: "changed" as const, binding: current };
+      const updatedAt = this.nextRevisionTimestamp(input.expectedUpdatedAt);
+      this.db.query(`UPDATE session_bindings
+        SET workspace_path=?,project_id=?,app_project_id=?,ledger_project_id=?,metadata_json=?,updated_at=?
+        WHERE session_id=? AND updated_at=?`).run(
+          input.workspacePath, input.projectId, input.appProjectId, input.ledgerProjectId,
+          JSON.stringify({ ...input.metadata, relocationId: input.operationId }), updatedAt,
+          input.sessionId, input.expectedUpdatedAt,
+        );
+      return { status: "applied" as const, binding: this.getBySessionId(input.sessionId)! };
+    })();
+  }
+
   getBySessionId(sessionId: string): StoredSessionBinding | null {
     const row = this.db.query(`
       SELECT
@@ -259,6 +319,8 @@ export class SessionBindingStore {
         role,
         lifecycle_state,
         project_id,
+        app_project_id,
+        ledger_project_id,
         workspace_path,
         runtime_adapter_id,
         model_provider_id,
@@ -294,6 +356,8 @@ export class SessionBindingStore {
         role,
         lifecycle_state,
         project_id,
+        app_project_id,
+        ledger_project_id,
         workspace_path,
         runtime_adapter_id,
         model_provider_id,
@@ -325,6 +389,8 @@ export class SessionBindingStore {
           s.role,
           s.lifecycle_state,
           s.project_id,
+          s.app_project_id,
+          s.ledger_project_id,
           s.workspace_path,
           s.runtime_adapter_id,
           s.model_provider_id,
@@ -361,6 +427,8 @@ export class SessionBindingStore {
         s.role,
         s.lifecycle_state,
         s.project_id,
+        s.app_project_id,
+        s.ledger_project_id,
         s.workspace_path,
         s.runtime_adapter_id,
         s.model_provider_id,
@@ -426,6 +494,8 @@ export class SessionBindingStore {
         role TEXT NOT NULL,
         lifecycle_state TEXT NOT NULL,
         project_id TEXT,
+        app_project_id TEXT,
+        ledger_project_id TEXT,
         workspace_path TEXT NOT NULL,
         runtime_adapter_id TEXT NOT NULL,
         model_provider_id TEXT NOT NULL,
@@ -456,6 +526,22 @@ export class SessionBindingStore {
       CREATE INDEX IF NOT EXISTS idx_session_lifecycle_state
         ON session_bindings (lifecycle_state, updated_at);
     `);
+    this.ensureColumn("session_bindings", "app_project_id", "TEXT");
+    this.ensureColumn("session_bindings", "ledger_project_id", "TEXT");
+    this.db.exec(`
+      UPDATE session_bindings
+      SET app_project_id = project_id
+      WHERE app_project_id IS NULL AND project_id IS NOT NULL;
+    `);
+  }
+
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const columns = this.db.query<{ name: string }, []>(
+      `PRAGMA table_info(${table})`,
+    ).all();
+    if (!columns.some((item) => item.name === column)) {
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
   }
 
   private hydrateSession(row: SessionRow): StoredSessionBinding {
@@ -464,6 +550,8 @@ export class SessionBindingStore {
       role: row.role,
       lifecycleState: row.lifecycle_state,
       projectId: row.project_id ?? undefined,
+      appProjectId: row.app_project_id ?? row.project_id ?? undefined,
+      ledgerProjectId: row.ledger_project_id ?? undefined,
       workspacePath: row.workspace_path,
       runtimeAdapterId: row.runtime_adapter_id,
       modelProviderId: row.model_provider_id,

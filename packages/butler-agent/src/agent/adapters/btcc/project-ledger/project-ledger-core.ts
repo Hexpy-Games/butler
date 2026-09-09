@@ -34,6 +34,7 @@ export type ProjectLedgerCore = {
     }>;
   };
   writeIndex(project: string): unknown;
+  deferDerivedIndex<T>(project: string, mutation: () => T): T;
   check(project: string): { ok: boolean; issues?: unknown[] };
   render(project: string, view: string, options: Record<string, unknown>): unknown;
   projectPath(project: string, path: string): string;
@@ -44,7 +45,15 @@ export type ProjectLedgerCore = {
     options: { id: string; kind?: string },
   ): ProjectLedgerRecord;
   planTransitionPath(kind: string, from: string | undefined, to: string): string[];
-  observeProjectLedgerPromotion(publication: unknown): unknown;
+  observeProjectLedgerPromotion(publication: unknown, beforeRelease?: () => void): unknown;
+  observeProjectLedgerRecordHead(project: string, paths: string[]): {
+    projectRoot: string; sourceSha256: string; sourceFileCount: number;
+    storageSha256: string; storageEntryCount: number; recordPaths: string[];
+  };
+  readCommittedProjectLedgerRecords(project: string, paths: string[]): Array<{ path: string; raw: string | null }>;
+  publicationReadVersion(project: string): string;
+  parseFrontmatter(text: string): Record<string, unknown> | null;
+  frontmatterBody(text: string): string;
   observeProjectLedgerSourceHead(project: string): {
     projectRoot: string;
     sourceSha256: string;
@@ -70,7 +79,7 @@ export function loadProjectLedgerCore(): Promise<ProjectLedgerCore> {
 
 async function loadCore(): Promise<ProjectLedgerCore> {
   const [commands, docs, filesystem, lifecycle, records, recordCommands, stateMachine,
-    transactions, indexer, renderer] =
+    transactions, indexer, renderer, frontmatter] =
     await Promise.all([
       import(corePath("commands.js")),
       import(corePath("docs-migration.js")),
@@ -82,6 +91,7 @@ async function loadCore(): Promise<ProjectLedgerCore> {
       import(corePath("transactions/index.js")),
       import(corePath("indexer.js")),
       import(corePath("renderer.js")),
+      import(corePath("frontmatter.js")),
     ]);
   return {
     initProject: commands.initProject,
@@ -97,6 +107,7 @@ async function loadCore(): Promise<ProjectLedgerCore> {
     updateWork: lifecycle.updateWork,
     buildIndex: indexer.buildIndex,
     writeIndex: indexer.writeIndex,
+    deferDerivedIndex: indexer.deferDerivedIndex,
     check: indexer.check,
     render: renderer.render,
     projectPath: filesystem.projectPath,
@@ -105,6 +116,11 @@ async function loadCore(): Promise<ProjectLedgerCore> {
     resolveRecord: recordCommands.resolveRecord,
     planTransitionPath: stateMachine.planTransitionPath,
     observeProjectLedgerPromotion: transactions.observeProjectLedgerPromotion,
+    observeProjectLedgerRecordHead: transactions.observeProjectLedgerRecordHead,
+    readCommittedProjectLedgerRecords: transactions.readCommittedProjectLedgerRecords,
+    publicationReadVersion: transactions.publicationReadVersion,
+    parseFrontmatter: frontmatter.parseFrontmatter,
+    frontmatterBody: frontmatter.frontmatterBody,
     observeProjectLedgerSourceHead: transactions.observeProjectLedgerSourceHead,
     prepareProjectLedgerPublication: transactions.prepareProjectLedgerPublication,
     loadPreparedProjectLedgerPublication: transactions.loadPreparedProjectLedgerPublication,

@@ -27,15 +27,20 @@ import {
 } from "../operation-result-replay/index.ts";
 import { phaseMinimalStableInstructionSurface } from "./guided-phase-instructions.ts";
 import {
-  applyStewardTaskEffectBoundary,
   phaseAllowsTool,
   removeRuntimeOwnedSchemaDefaults,
 } from "./guided-phase-policy-helpers.ts";
 import { ordinaryChatPhaseForIntent } from "./guided-delegation-intent.ts";
 
 const FLAG_NAME = "BUTLER_PHASE_TOOL_SURFACE";
-const POLICY_REVISION = "butler.btcc-tool-instruction-policy.v1";
+const POLICY_REVISION = "butler.btcc-tool-instruction-policy.v2";
 const TRUE_FLAG_VALUES = new Set(["1", "true", "on", "yes"]);
+const STEWARD_PARENT_TOOL_NAMES = new Set([
+  "delegate_to_steward", "steer_steward", "cancel_steward",
+]);
+const WORKER_DELEGATION_TOOL_NAME = "delegate_to_worker";
+const WORKER_DIRECTION_TOOL_NAME = "steer_worker";
+const WORKER_WAIT_TOOL_NAME = "wait_for_worker";
 
 export type GuidedTurnPhase = "direct" | "read_only" | "execution";
 
@@ -85,42 +90,56 @@ export function selectGuidedTurnPhasePolicy(
   }
 
   assertRequiredProfilesKnown(executionPolicy.requiredNativeToolProfiles);
+  const requiredProfiles = executionPolicy.role === "butler"
+    ? executionPolicy.requiredNativeToolProfiles.filter((profile) =>
+      profile !== "project" && profile !== "project-lifecycle")
+    : executionPolicy.requiredNativeToolProfiles;
   assertNonExecutionProfilesEffectFree(
-    executionPolicy.requiredNativeToolProfiles,
+    requiredProfiles,
     phase,
   );
 
   const admittedProfileTools = selectButlerToolsForProfiles(
-    executionPolicy.requiredNativeToolProfiles,
+    requiredProfiles,
   ).filter((tool) => !isGuidedRuntimeUnavailable(tool.name))
     .filter((tool) => exactResultReplay.exactReadCapability ||
       !isExactResultReadTool(tool.name));
+  const accessAuthorizedNames = new Set(legacyAuthorized.map((tool) => tool.name));
   const admittedAuthority = new Map([
     ...legacyAuthorized,
-    ...admittedProfileTools,
+    ...admittedProfileTools.filter((tool) =>
+      executionPolicy.accessMode === "full_access" ||
+      accessAuthorizedNames.has(tool.name),
+    ),
+    ...(executionPolicy.role === "butler"
+      ? BUTLER_TOOLS.filter((tool) => STEWARD_PARENT_TOOL_NAMES.has(tool.name))
+      : []),
+    ...(executionPolicy.role === "steward"
+      ? BUTLER_TOOLS.filter((tool) =>
+        tool.name === WORKER_DELEGATION_TOOL_NAME ||
+        tool.name === WORKER_DIRECTION_TOOL_NAME ||
+        tool.name === WORKER_WAIT_TOOL_NAME)
+      : []),
   ].map((tool) => [tool.name, tool]));
   const phaseAuthority = new Map([
     ...admittedAuthority.values(),
-    ...(executionPolicy.role === "steward" && executionPolicy.subsession
+    ...(executionPolicy.subsession && executionPolicy.trackingMode !== "none"
       ? DURABLE_WORK_TOOL_DEFINITIONS
       : []),
   ].map((tool) => [tool.name, tool] as const));
   const admittedAuthorizedTools = admitExactResultReadTool(
     [...phaseAuthority.values()].filter((tool) =>
-      executionPolicy.role === "steward" && executionPolicy.subsession &&
+      executionPolicy.subsession && executionPolicy.trackingMode !== "none" &&
         DURABLE_WORK_TOOL_DEFINITIONS.some((candidate) => candidate.name === tool.name)
         ? true
         : phaseAllowsTool(phase, tool),
     ),
     exactResultReplay,
   );
-  const authorizedTools = applyStewardTaskEffectBoundary(
-    executionPolicy,
-    admittedAuthorizedTools,
-  );
+  const authorizedTools = admittedAuthorizedTools;
   const admittedRequiredToolNames = new Set([
     ...executionPolicy.requiredNativeTools,
-    ...executionPolicy.requiredNativeToolProfiles.flatMap((profile) =>
+    ...requiredProfiles.flatMap((profile) =>
       profileInitialToolNames(profile, phase),
     ),
   ]);
@@ -147,7 +166,7 @@ export function selectGuidedTurnPhasePolicy(
     phase,
   );
   assertRequiredProfileAuthorityRetained(
-    executionPolicy.requiredNativeToolProfiles,
+    requiredProfiles,
     authorizedTools,
     providerTools,
     phase,
@@ -179,7 +198,8 @@ function providerCandidateToolNames(
   phase: GuidedTurnPhase,
   authorizedTools: readonly FunctionToolDefinition[],
   admittedRequiredToolNames: ReadonlySet<string>,
-  policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "subsession">,
+  policy: Pick<ButlerExecutionPolicy,
+    "role" | "accessMode" | "trackingMode" | "subsession">,
 ): Set<string> {
   const baselineProfiles = [
     "public-web",
@@ -209,13 +229,26 @@ function providerCandidateToolNames(
       names.add(tool.name);
     }
   }
-  if (phase === "execution" || (policy.role === "steward" && policy.subsession)) {
+  if (phase === "execution" ||
+    (policy.subsession && policy.trackingMode !== "none")) {
     for (const tool of DURABLE_WORK_TOOL_DEFINITIONS) names.add(tool.name);
   }
-  if (policy.role === "butler" && policy.accessMode === "full_access") {
-    names.add("delegate_to_steward");
-    names.add("steer_steward");
-    names.add("cancel_steward");
+  if (policy.role === "butler") {
+    for (const name of STEWARD_PARENT_TOOL_NAMES) names.add(name);
+  }
+  if (policy.role === "steward") {
+    names.add(WORKER_DELEGATION_TOOL_NAME);
+    names.add(WORKER_DIRECTION_TOOL_NAME);
+    names.add(WORKER_WAIT_TOOL_NAME);
+  }
+  if (policy.role === "butler") {
+    for (const name of [...names]) {
+      const metadata = TOOL_CAPABILITY_METADATA[name];
+      if (metadata?.category === "project" &&
+          !DURABLE_WORK_TOOL_DEFINITIONS.some((tool) => tool.name === name)) {
+        names.delete(name);
+      }
+    }
   }
   return names;
 }
@@ -330,6 +363,10 @@ function guidedTurnPhase(
   policy: ButlerExecutionPolicy,
   originalMessage: string,
 ): GuidedTurnPhase {
+  if (policy.trackingMode !== "none" &&
+      (policy.role === "butler" || Boolean(policy.subsession))) {
+    return "execution";
+  }
   const hasWorkspaceAuthority = policy.requiredNativeToolProfiles
     .includes("workspace") || policy.requiredNativeTools.some((name) => {
       const category = TOOL_CAPABILITY_METADATA[name]?.category;

@@ -1,7 +1,8 @@
 import { createHash } from "crypto";
+import { resolveRuntimeMessageLanguage } from "../output/messages.ts";
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { isAbsolute, join } from "path";
 import type { AttachmentRef, InboundEnvelope, StoredSessionBinding } from "../../test-support/harness/contracts.ts";
 import type { GatewayRoute } from "../../gateways/core/contracts.ts";
 import { appendPromptAssemblyContextMetric } from "../../operations/metrics/context-monitor.ts";
@@ -15,7 +16,7 @@ import type {
   ContextScopeKind,
 } from "../context/context-projection.ts";
 import { cognitionMemoryRoot } from "../cognition/paths.ts";
-import { renderFeedbackBufferContext } from "../cognition/feedback/buffer.ts";
+import { renderScopedFeedbackBufferContexts } from "../cognition/feedback/buffer.ts";
 import { projectMemoryPath, refreshProjectCapsule } from "../cognition/memory/project-memory.ts";
 import { sessionContinuityPath } from "../cognition/continuity/continuity-store.ts";
 import {
@@ -183,6 +184,9 @@ function buildDynamicMemorySections(input: {
     butlerData: input.butlerData,
     projectId: input.projectId,
   });
+  const projectMemory = projectMemoryFile
+    ? readTextIfExists(projectMemoryFile)
+    : null;
   pushSection(sections, {
     id: "hot-cache",
     title: "Hot Cache",
@@ -202,7 +206,7 @@ function buildDynamicMemorySections(input: {
   pushSection(sections, {
     id: "project-memory",
     title: "Project Memory",
-    content: projectMemoryFile ? readTextIfExists(projectMemoryFile) : null,
+    content: projectMemory,
     region: "retrieved_context",
     projectionClass: "optional_hot_cache",
     scopeKind: "project",
@@ -210,12 +214,22 @@ function buildDynamicMemorySections(input: {
   pushSection(sections, {
     id: "project-hot-cache",
     title: "Project Hot Cache",
-    content: readTextIfExists(join(input.workspacePath, ".butler", "hot-cache.md")),
+    content: projectHotCache(input.workspacePath, projectMemory),
     region: "retrieved_context",
     projectionClass: "mandatory_hot_cache",
     scopeKind: input.projectId ? "project" : "session",
   });
   return sections;
+}
+
+function projectHotCache(workspacePath: string, projectMemory: string | null): string | null {
+  const sessionCache = readTextIfExists(join(workspacePath, ".butler", "hot-cache.md"));
+  if (sessionCache) return sessionCache;
+  const canonicalPath = projectMemory
+    ?.match(/^- canonical_path:\s*(.+)$/mu)?.[1]
+    ?.trim();
+  if (!canonicalPath || !isAbsolute(canonicalPath)) return null;
+  return readTextIfExists(join(canonicalPath, ".butler", "hot-cache.md"));
 }
 
 function buildDynamicPersonalizationSections(input: {
@@ -242,18 +256,6 @@ function buildDynamicPersonalizationSections(input: {
     });
   }
   pushSection(sections, {
-    id: "feedback-buffer",
-    title: "Active Feedback Buffer",
-    content: renderFeedbackBufferContext({
-      butlerData: input.butlerData,
-      sessionId: input.sessionId,
-      projectId: input.projectId,
-    }),
-    region: "live_configuration",
-    projectionClass: "recent_feedback",
-    scopeKind: "session",
-  });
-  pushSection(sections, {
     id: "profile-projection",
     title: "Profile Projection",
     content: renderRuntimeProfileProjectionPrompt(
@@ -272,17 +274,7 @@ function buildLiveConfigurationSections(input: {
   binding: StoredSessionBinding;
 }): PromptSection[] {
   const sections: PromptSection[] = [];
-  if (input.binding.role === "butler") {
-    pushSection(sections, {
-      id: "eol",
-      title: "Butler Operating Ethos / EOL",
-      content: readTextIfExists(join(input.butlerData, "eol.md")) ??
-        readTextIfExists(butlerAgentResourcesPath(input.butlerHome, "eol.md")),
-      region: "live_configuration",
-      projectionClass: "profile",
-      scopeKind: "user",
-    });
-  } else {
+  if (input.binding.role !== "butler") {
     pushSection(sections, {
       id: "steward-config",
       title: "Steward Prompt",
@@ -310,12 +302,21 @@ function buildLiveConfigurationSections(input: {
     projectionClass: "profile",
     scopeKind: "user",
   });
+  return sections;
+}
+
+function buildEolSections(input: {
+  butlerHome: string;
+  butlerData: string;
+}): PromptSection[] {
+  const sections: PromptSection[] = [];
   pushSection(sections, {
-    id: "rules",
-    title: "Active Rules",
-    content: buildRulesContent(join(cognitionMemoryRoot(input.butlerData), "rules")),
+    id: "eol",
+    title: "Butler Operating Ethos / EOL",
+    content: readTextIfExists(join(input.butlerData, "eol.md")) ??
+      readTextIfExists(butlerAgentResourcesPath(input.butlerHome, "eol.md")),
     region: "live_configuration",
-    projectionClass: "mandatory_hot_cache",
+    projectionClass: "profile",
     scopeKind: "user",
   });
   return sections;
@@ -334,13 +335,6 @@ function hashSections(sections: PromptSection[]): string {
     .slice(0, 16);
 }
 
-function promptLocale(config: PromptButlerConfig): "en" | "ko" {
-  const language = (safeConfigText(config.user?.responseLanguage) ||
-    safeConfigText(config.user?.language)).toLocaleLowerCase("en-US");
-  if (/\bko\b|\bkor\b|korean|한국|한국어/u.test(language)) return "ko";
-  return "en";
-}
-
 function buildActivePersonaReminderSection(butlerData: string): PromptSection | null {
   const activePersona = readTextIfExists(join(butlerData, "personas", "active.md"));
   if (!activePersona) return null;
@@ -355,8 +349,8 @@ function buildActivePersonaReminderSection(butlerData: string): PromptSection | 
     scopeKind: "user",
     content: [
       "Use this current persona for every user-facing answer in this turn.",
-      "Use the configured Assistant Response Language from the Turn Environment for every final answer and visible status text.",
-      "Preserve the persona's tone and signature speech patterns; if the persona text is written in another language, translate or adapt that voice into the configured response language.",
+      "Use the configured Assistant Response Language from the Turn Environment by default. Follow the user's explicit request to answer or translate into another language instead.",
+      "Preserve the persona's tone and signature speech patterns; translate or adapt that voice into the configured response language, or the language explicitly requested by the user.",
       "For long answers, carry the persona through section bodies and the closing, not only the opening sentence.",
       "Do not let tool, review, or report formatting instructions erase the persona.",
       "",
@@ -383,6 +377,7 @@ function buildRuntimeStateSection(input: {
   lines.push(...buildTurnEnvironmentContext({
     envelope: input.envelope,
     config: input.config,
+    butlerData: input.butlerData,
   }));
 
   if (input.binding.projectId) {
@@ -405,8 +400,8 @@ function buildRuntimeStateSection(input: {
     title: "Runtime State",
     content: lines.join("\n"),
     region: "runtime_state",
-    projectionClass: "optional_hot_cache",
-    scopeKind: input.binding.projectId ? "project" : "session",
+    projectionClass: "mandatory_hot_cache",
+    scopeKind: "session",
   };
 }
 
@@ -633,12 +628,13 @@ function projectMemoryStatus(input: {
 function buildTurnEnvironmentContext(input: {
   envelope: InboundEnvelope;
   config: PromptButlerConfig;
+  butlerData: string;
 }): string[] {
   const user = input.config.user ?? {};
   const timestamp = parseTurnTimestamp(input.envelope.message.timestamp);
   const timezone = safeConfigText(user.timezone) || "UTC";
   const language = safeConfigText(user.language) || "unknown";
-  const responseLanguage = safeConfigText(user.responseLanguage) || language;
+  const responseLanguage = resolveRuntimeMessageLanguage({ butlerData: input.butlerData });
   const techLanguage = safeConfigText(user.techLanguage);
   const geoHint = bestGeoHint(user, timezone);
   const localTime = formatLocalTime(timestamp, timezone);
@@ -647,7 +643,7 @@ function buildTurnEnvironmentContext(input: {
     `Current Time UTC: ${timestamp.toISOString()}`,
     `Current Local Time: ${localTime}`,
     `User Timezone: ${timezone}`,
-    `User Language: ${language}`,
+    `Interface Language (app labels only): ${language}`,
     `Assistant Response Language: ${responseLanguage}`,
   ];
   if (techLanguage) lines.push(`User Technical Language: ${techLanguage}`);
@@ -711,7 +707,7 @@ export class PromptAssembler {
     this.butlerData = getButlerData(this.butlerHome, options.butlerData);
   }
 
-  private buildStaticContextSections(binding: StoredSessionBinding): PromptSection[] {
+  private buildRuntimeSystemContext(): PromptSection[] {
     const sections: PromptSection[] = [];
 
     pushSection(sections, {
@@ -722,6 +718,11 @@ export class PromptAssembler {
       projectionClass: "profile",
       scopeKind: "user",
     });
+    return sections;
+  }
+
+  private buildStaticContextSections(binding: StoredSessionBinding): PromptSection[] {
+    const sections = this.buildRuntimeSystemContext();
 
     if (binding.role === "butler") {
       pushSection(sections, {
@@ -844,35 +845,88 @@ export class PromptAssembler {
     return this.buildContextAssemblyForRuntime(input, false);
   }
 
+  buildStewardContextAssembly(input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+  }): ContextAssembly {
+    return this.buildSharedContextAssembly(input, false);
+  }
+
+  private buildSharedContextAssembly(input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+  }, includeLegacyWorkState: boolean, roleConfiguration: PromptSection[] = []): ContextAssembly {
+    const liveConfiguration = buildEolSections({
+      butlerHome: this.butlerHome,
+      butlerData: this.butlerData,
+    });
+    pushSection(liveConfiguration, {
+      id: "rules",
+      title: "Active Rules",
+      content: buildRulesContent(join(cognitionMemoryRoot(this.butlerData), "rules")),
+      region: "live_configuration",
+      projectionClass: "mandatory_hot_cache",
+      scopeKind: "user",
+    });
+    for (const { scopeKind, content } of renderScopedFeedbackBufferContexts({
+      butlerData: this.butlerData,
+      sessionId: input.binding.sessionId,
+      projectId: input.binding.projectId,
+    })) {
+      pushSection(liveConfiguration, {
+        id: scopeKind === "user" ? "feedback-buffer" : `${scopeKind}-feedback-buffer`,
+        title: "Active Feedback Buffer",
+        content,
+        region: "live_configuration",
+        projectionClass: "recent_feedback",
+        scopeKind,
+      });
+    }
+    liveConfiguration.push(...roleConfiguration);
+    const liveConfigHash = hashSections(liveConfiguration);
+    return {
+      staticContext: this.buildRuntimeSystemContext(),
+      liveConfiguration,
+      runtimeState: [buildRuntimeStateSection({
+        ...input,
+        config: readPromptButlerConfig(this.butlerData),
+        liveConfigHash,
+        butlerData: this.butlerData,
+        projectMemoryStatus: this.projectCapsuleStatus(input.binding),
+        includeLegacyWorkState,
+      })],
+      workingContext: [],
+      retrievedContext: [],
+      currentInput: [],
+      references: [],
+      liveConfigHash,
+    };
+  }
+
   private buildContextAssemblyForRuntime(input: {
     binding: StoredSessionBinding;
     envelope: InboundEnvelope;
     route?: GatewayRoute;
   }, includeLegacyWorkState: boolean): ContextAssembly {
-    const config = readPromptButlerConfig(this.butlerData);
-    const liveConfiguration = buildLiveConfigurationSections({
+    const roleConfiguration = buildLiveConfigurationSections({
       butlerHome: this.butlerHome,
       butlerData: this.butlerData,
       binding: input.binding,
     });
-    const liveConfigHash = hashSections(liveConfiguration);
     const personalization = buildDynamicPersonalizationSections({
       butlerHome: this.butlerHome,
       butlerData: this.butlerData,
       sessionId: input.binding.sessionId,
       role: input.binding.role,
-      locale: promptLocale(config),
+      locale: resolveRuntimeMessageLanguage({ butlerData: this.butlerData }),
       projectId: input.binding.projectId,
     });
+    const common = this.buildSharedContextAssembly(input, includeLegacyWorkState, [
+      ...roleConfiguration,
+      ...personalization.filter((section) => section.region === "live_configuration"),
+    ]);
     const runtimeState = [
-      buildRuntimeStateSection({
-        ...input,
-        config,
-        liveConfigHash,
-        butlerData: this.butlerData,
-        projectMemoryStatus: this.projectCapsuleStatus(input.binding),
-        includeLegacyWorkState,
-      }),
+      ...common.runtimeState,
       ...personalization.filter((section) => section.region === "runtime_state"),
     ];
     const retrievedContext = [
@@ -883,14 +937,10 @@ export class PromptAssembler {
         workspacePath: input.binding.workspacePath,
       }),
     ];
-    const livePersonalization = personalization.filter((section) => section.region === "live_configuration");
     const currentAttachmentReferences = buildCurrentAttachmentReferenceSection(input);
     return {
       staticContext: this.buildStaticContextSections(input.binding),
-      liveConfiguration: [
-        ...liveConfiguration,
-        ...livePersonalization,
-      ],
+      liveConfiguration: common.liveConfiguration,
       runtimeState,
       workingContext: currentAttachmentReferences ? [currentAttachmentReferences] : [],
       retrievedContext,
@@ -898,7 +948,7 @@ export class PromptAssembler {
         buildCurrentInputSection({ envelope: input.envelope }),
       ],
       references: attachmentReferencesFromEnvelope(input.envelope),
-      liveConfigHash,
+      liveConfigHash: common.liveConfigHash,
     };
   }
 }

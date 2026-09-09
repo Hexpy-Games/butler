@@ -12,11 +12,9 @@ import {
 import { randomUUID } from "crypto";
 import { homedir } from "os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "path";
-import {
-  estimateContextTokens,
-  trimTextToTokenBudget,
-} from "./budget.ts";
+import { estimateContextTokens } from "./budget.ts";
 import { TOOL_EVIDENCE_REHYDRATION_SCHEMA } from "./tool-evidence-retention.ts";
+import { sliceToolArtifactText, type ToolArtifactTextSlice } from "./tool-artifact-slice.ts";
 
 export interface ShellCommandResult {
   stdout: string;
@@ -36,17 +34,16 @@ export interface ToolOutputArtifact {
 
 export interface BudgetedToolOutput extends ShellCommandResult {
   butler_tool_artifact?: ToolOutputArtifact;
+  output_presentation?: {
+    mode: "auto" | "silent_on_success" | "full";
+    requested_max_tokens: number | null;
+    applied_max_tokens: number;
+    suppressed: boolean;
+    truncated: boolean;
+  };
 }
 
-export interface ToolOutputArtifactSlice {
-  text: string;
-  start_line: number;
-  returned_lines: number;
-  total_lines: number;
-  estimated_tokens: number;
-  truncated_by_lines: boolean;
-  truncated_by_tokens: boolean;
-}
+export type ToolOutputArtifactSlice = ToolArtifactTextSlice;
 
 export interface FocusedToolOutputArtifactRead {
   schema_version?: typeof TOOL_EVIDENCE_REHYDRATION_SCHEMA;
@@ -54,6 +51,12 @@ export interface FocusedToolOutputArtifactRead {
   ok: boolean;
   error?: string;
   rawTextStored: false;
+  limits?: {
+    requested_max_tokens: number | null;
+    applied_max_tokens: number;
+    requested_limit_lines: number | null;
+    applied_limit_lines: number;
+  };
   artifact?: {
     id: string;
     path: string;
@@ -117,12 +120,37 @@ export function budgetToolOutput(input: {
   command?: string;
   cwd?: string;
   maxModelTokens?: number;
+  outputMode?: unknown;
+  validationSuite?: unknown;
+  /** Keep the original available if a later model-request budget reduces the preview. */
+  retainOriginal?: boolean;
   now?: Date;
 }): BudgetedToolOutput {
-  const maxModelTokens = Math.max(200, input.maxModelTokens ?? 1_200);
+  const requestedTokens = typeof input.maxModelTokens === "number" && Number.isFinite(input.maxModelTokens)
+    ? input.maxModelTokens : null;
+  const maxModelTokens = Math.max(200, Math.min(8_000, Math.trunc(requestedTokens ?? 1_200)));
+  const mode = input.outputMode === "full" || input.outputMode === "silent_on_success"
+    ? input.outputMode : "auto";
+  const success = input.result.exit_code === 0 && !input.result.timed_out;
+  const suppressed = success && (mode === "silent_on_success" ||
+    (mode === "auto" && typeof input.validationSuite === "string" && Boolean(input.validationSuite.trim())));
+  const preview = suppressed
+    ? { ...input.result, stdout: "", stderr: "" }
+    : !success && mode !== "full" && input.outputMode !== undefined
+      ? { ...input.result, stdout: failureOutputPreview(input.result.stdout), stderr: failureOutputPreview(input.result.stderr) }
+      : input.result;
+  const presentation: NonNullable<BudgetedToolOutput["output_presentation"]> = {
+    mode,
+    requested_max_tokens: requestedTokens,
+    applied_max_tokens: maxModelTokens,
+    suppressed,
+    truncated: preview.stdout !== input.result.stdout || preview.stderr !== input.result.stderr,
+  };
   const rawText = outputText(input.result);
   const rawTokens = estimateContextTokens(rawText);
-  if (rawTokens <= maxModelTokens) return input.result;
+  if (rawTokens <= maxModelTokens && !presentation.truncated && !input.retainOriginal) {
+    return input.outputMode === undefined ? input.result : { ...input.result, output_presentation: presentation };
+  }
 
   const butlerData = getButlerData(input.butlerData);
   const now = input.now ?? new Date();
@@ -142,19 +170,17 @@ export function budgetToolOutput(input: {
   };
   writeFileSync(path, JSON.stringify(artifact, null, 2), "utf8");
 
-  const stdoutPreview = trimTextToTokenBudget(input.result.stdout, Math.floor(maxModelTokens * 0.55), { from: "start" });
-  const stderrPreview = trimTextToTokenBudget(input.result.stderr, Math.floor(maxModelTokens * 0.25), { from: "start" });
+  const previewNeedsBudget = estimateContextTokens(outputText(preview)) > maxModelTokens;
   const notice = [
     `[Butler compacted ${rawTokens.toLocaleString("en-US")} estimated tool-output tokens into a preview.]`,
     `Artifact ID: ${id}`,
-    `Artifact path: ${path}`,
-    "Ask for a focused artifact slice if the preview is insufficient.",
+    "Use read_tool_output_artifact with search or a focused slice for omitted output.",
   ].join("\n");
   const compact: BudgetedToolOutput = {
-    stdout: [notice, stdoutPreview ? `stdout preview:\n${stdoutPreview}` : ""].filter(Boolean).join("\n\n"),
-    stderr: stderrPreview ? `stderr preview:\n${stderrPreview}` : "",
+    ...(previewNeedsBudget ? fitOutputPreview(preview, notice, maxModelTokens) : preview),
     exit_code: input.result.exit_code,
     timed_out: input.result.timed_out,
+    output_presentation: { ...presentation, truncated: presentation.truncated || previewNeedsBudget },
   };
   const compactTokens = estimateContextTokens(outputText(compact));
   compact.butler_tool_artifact = {
@@ -166,6 +192,39 @@ export function budgetToolOutput(input: {
     command: input.command,
   };
   return compact;
+}
+
+function fitOutputPreview(result: ShellCommandResult, notice: string, maxTokens: number): ShellCommandResult {
+  const preview = { ...result, stdout: notice, stderr: "" };
+  const stderrText = (value: string) => value ? `stderr preview:\n${value}` : "";
+  const stderrLength = prefixLengthWithinBudget(result.stderr, Math.floor(maxTokens * 0.45), (value) =>
+    outputText({ ...preview, stderr: stderrText(value) }),
+  );
+  preview.stderr = stderrText(result.stderr.slice(0, stderrLength));
+  const stdoutText = (value: string) => value ? `${notice}\n\nstdout preview:\n${value}` : notice;
+  const stdoutLength = prefixLengthWithinBudget(result.stdout, maxTokens, (value) =>
+    outputText({ ...preview, stdout: stdoutText(value) }),
+  );
+  preview.stdout = stdoutText(result.stdout.slice(0, stdoutLength));
+  return preview;
+}
+
+/** Measure the exact rendered preview, including notices, stream labels and whitespace. */
+function prefixLengthWithinBudget(text: string, maxTokens: number, render: (value: string) => string = (value) => value): number {
+  let low = 0;
+  let high = text.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (estimateContextTokens(render(text.slice(0, middle))) <= maxTokens) low = middle;
+    else high = middle - 1;
+  }
+  return low;
+}
+
+function failureOutputPreview(output: string): string {
+  const lines = output.split("\n");
+  if (lines.length <= 20 && output.length <= 1_000) return output;
+  return `...[output truncated]\n${lines.slice(-20).join("\n").slice(-1_000)}`;
 }
 
 export function readToolOutputArtifact(path: string): Record<string, unknown> | null {
@@ -257,36 +316,14 @@ function resolveArtifactReference(input: {
   return { ok: false, error: "artifact_reference_required", root };
 }
 
-function sliceStreamText(input: {
-  text: string;
-  offsetLines: number;
-  limitLines: number;
-  maxTokens: number;
-}): ToolOutputArtifactSlice {
-  const lines = input.text.split(/\r?\n/);
-  const offset = Math.max(0, Math.min(lines.length, input.offsetLines));
-  const limit = Math.max(1, input.limitLines);
-  const selected = lines.slice(offset, offset + limit);
-  const lineLimitedText = selected.join("\n");
-  const tokenLimitedText = trimTextToTokenBudget(lineLimitedText, Math.max(1, input.maxTokens), { from: "start" });
-  const tokenLimitedLines = tokenLimitedText ? tokenLimitedText.split(/\r?\n/) : [];
-  return {
-    text: tokenLimitedText,
-    start_line: offset,
-    returned_lines: tokenLimitedLines.length,
-    total_lines: lines.length,
-    estimated_tokens: estimateContextTokens(tokenLimitedText),
-    truncated_by_lines: offset + selected.length < lines.length,
-    truncated_by_tokens: tokenLimitedText.length < lineLimitedText.length,
-  };
-}
-
 export function readToolOutputArtifactSlice(input: {
   butlerData?: string;
   artifactId?: string;
   path?: string;
   stream?: "stdout" | "stderr" | "both";
   offsetLines?: number;
+  offsetChars?: number;
+  search?: string;
   limitLines?: number;
   maxTokens?: number;
   maxArtifactScanFiles?: number;
@@ -328,6 +365,8 @@ export function readToolOutputArtifactSlice(input: {
 
   const stream = input.stream ?? "both";
   const offsetLines = typeof input.offsetLines === "number" ? Math.max(0, Math.trunc(input.offsetLines)) : 0;
+  const offsetChars = typeof input.offsetChars === "number" && Number.isFinite(input.offsetChars)
+    ? Math.max(0, Math.trunc(input.offsetChars)) : undefined;
   const limitLines = typeof input.limitLines === "number" ? Math.max(1, Math.min(500, Math.trunc(input.limitLines))) : 80;
   const maxTokens = typeof input.maxTokens === "number" ? Math.max(50, Math.min(8_000, Math.trunc(input.maxTokens))) : 1_200;
   const stdoutHasText = result.stdout.trim().length > 0;
@@ -344,19 +383,29 @@ export function readToolOutputArtifactSlice(input: {
     ok: true,
     rawTextStored: false,
     artifact: artifactMetadata(resolved.path, artifact),
+    limits: {
+      requested_max_tokens: input.maxTokens ?? null,
+      applied_max_tokens: maxTokens,
+      requested_limit_lines: input.limitLines ?? null,
+      applied_limit_lines: limitLines,
+    },
   };
   if (stream === "stdout" || stream === "both") {
-    output.stdout = sliceStreamText({
+    output.stdout = sliceToolArtifactText({
       text: result.stdout,
       offsetLines,
+      offsetChars,
+      search: input.search,
       limitLines,
       maxTokens: stdoutTokens,
     });
   }
   if (stream === "stderr" || stream === "both") {
-    output.stderr = sliceStreamText({
+    output.stderr = sliceToolArtifactText({
       text: result.stderr,
       offsetLines,
+      offsetChars,
+      search: input.search,
       limitLines,
       maxTokens: stderrTokens,
     });

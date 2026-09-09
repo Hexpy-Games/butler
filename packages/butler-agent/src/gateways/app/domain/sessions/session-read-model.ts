@@ -48,6 +48,9 @@ export interface SessionSummaryReadModelRow {
   active_turn_state: TurnState | null;
   active_turn_safe_error_code: string | null;
   safe_status_label: string | null;
+  safe_status_label_key?: string | null;
+  safe_status_label_parameters_json?: string | null;
+  safe_status_content_json?: string | null;
 }
 
 export function chatFromRow(row: ChatReadModelRow): ChatSummary {
@@ -127,6 +130,9 @@ export function sessionFromRow(
     last_message_preview: previewText(row.last_message_preview),
     active_turn_state: row.active_turn_state ?? undefined,
     safe_status_label: publicStatusLabel,
+    safe_status_label_key: publicStatusLabel ? row.safe_status_label_key ?? undefined : undefined,
+    safe_status_label_parameters: publicStatusLabel && row.safe_status_label_parameters_json ? JSON.parse(row.safe_status_label_parameters_json) : undefined,
+    safe_status_content: publicStatusLabel && row.safe_status_content_json ? JSON.parse(row.safe_status_content_json) : undefined,
     unread_count: 0,
     pinned: row.pinned === 1,
     archived: row.archived === 1,

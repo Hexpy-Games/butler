@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import {
   ArrowLeft,
   Breadcrumb,
@@ -25,6 +26,7 @@ export function ModelSettingsTitle({
   onRoot,
   onManagement,
 }: ModelSettingsTitleProps) {
+  useAppLocale();
   const copy = appCopy.settings;
   const pageTitle =
     modelRoute.page === "management"

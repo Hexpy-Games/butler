@@ -24,8 +24,84 @@ import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import { seedLegacySessionWork } from
   "./support/btcc-r3-legacy-session-work-fixture.ts";
+import { providerNetworkError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 
-test("R3 managed Work survives a store restart and continues in a fresh Turn", async () => {
+const eolRefByRoot = new Map<string, string>();
+
+test.each([
+  ["steward", false], ["worker", false], ["steward", true],
+] as const)("%s continues open Work and preserves completion (report failure: %s)", async (role, reportFailure) => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-delegated-open-"));
+  const dbPath = join(root, "butler.sqlite");
+  const stores = openBtccSqliteStores({ dbPath, ownerId: "delegated-open", storageProfile: "ephemeral" });
+  let workId = "";
+  const report = `Completed both files. ${"Full report preserved. ".repeat(100)}END-OF-REPORT`;
+  try {
+    const runtime = createRuntime({ root, dbPath, stores, butlerHome: process.cwd(), modelRound: scriptedModelRound([
+      () => toolResponse([toolCall("plan", "replace_work_plan", {
+        objective: "Write both requested files", execution_mode: "direct",
+        actions: ["first", "second"].map((key) => ({ action_key: key,
+          effect: { capability: "write_file", target: `workspace:${key}.txt` } })),
+        checks: ["Both files contain their marker"],
+      })]),
+      (request) => {
+        const result = lastToolOutput(request, "replace_work_plan") as { work: { work_id: string } };
+        workId = result.work.work_id;
+        return toolResponse([toolCall("review", "record_work_review", {
+          subject: "plan", verdict: "accept", summary: "Two files satisfy the request", corrections: [],
+        })]);
+      },
+      () => toolResponse([toolCall("first", "write_file", { path: "first.txt", content: "ORCHID" })]),
+      (request) => {
+        expect(lastToolOutput(request, "write_file")).toMatchObject({ ok: true });
+        return toolResponse([toolCall("open", "record_work_disposition", {
+        work_id: workId, disposition: "open", summary: "First file written; second remains",
+        action_updates: [{ action_key: "first", status: "done" }],
+        remaining_actions: ["second"], next_condition: "Continue immediately, no approval required",
+      })]);
+      },
+      (request) => {
+        expect(lastToolOutput(request, "record_work_disposition")).toMatchObject({ ok: true });
+        expect(request.tools.some((tool) => tool.name === "write_file")).toBe(true);
+        return { text: "Partial completion; second file remains.", toolCalls: [] };
+      },
+      (request) => {
+        expect(request.messages.some((message) => message.content.includes("delegated assignment is still open"))).toBe(true);
+        return { text: "", toolCalls: [] };
+      },
+      () => ({ text: "", toolCalls: [] }),
+      () => toolResponse([toolCall("second", "write_file", { path: "second.txt", content: "MAPLE" })]),
+      (request) => {
+        expect(lastToolOutput(request, "write_file")).toMatchObject({ ok: true });
+        return toolResponse([toolCall("complete", "record_work_disposition", {
+        work_id: workId, disposition: "completed", summary: "Both requested files written",
+        action_updates: [{ action_key: "first", status: "done" }, { action_key: "second", status: "done" }],
+        remaining_actions: [], followups: [],
+      })]);
+      },
+      (request) => {
+        expect(lastToolOutput(request, "record_work_disposition")).toMatchObject({ ok: true });
+        expect(request.tools).toEqual([]);
+        if (reportFailure) throw providerNetworkError({ provider: "openai", api: "responses", endpoint: "https://example.test", error: new Error("offline") });
+        return { text: report, toolCalls: [] };
+      },
+    ]) });
+    const input = command(root, `open-${role}`, "Write both requested files");
+    input.context.executionPolicy!.role = role;
+    const output = await runtime.runTurn(input);
+    expect(output).toMatchObject({ kind: "delivered", acceptedWorkResult: { status: "success" } });
+    expect(readFileSync(join(root, "first.txt"), "utf8")).toBe("ORCHID");
+    expect(readFileSync(join(root, "second.txt"), "utf8")).toBe("MAPLE");
+    expect(await stores.durableWork.boundWorkForTurn(input.turnId)).toMatchObject({ workId, status: "completed" });
+    if (reportFailure) expect(output).toHaveProperty("runtimeFailure");
+    else expect(output).toMatchObject({ content: report });
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("R3 Work Ledger maps managed Work across restart and fresh Turn lineage", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-integration-"));
   const dbPath = join(root, "butler.sqlite");
   const firstTurnId = "work-turn-1";
@@ -52,6 +128,7 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
           ]));
           return toolResponse([toolCall("work-plan-1", "replace_work_plan", {
             objective: "Create and verify report.md",
+            execution_mode: "direct",
             actions: [{
               action_key: "write_report",
               description: "Write the requested report",
@@ -224,11 +301,12 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
       ]),
     });
 
-    const continuationOutcome = await runtime.runTurn(command(
+    const continuationCommand = command(
       root,
       secondTurnId,
       "이어서 마무리해 주세요.",
-    ));
+    );
+    const continuationOutcome = await runtime.runTurn(continuationCommand);
     expect(continuationOutcome).toMatchObject({
       kind: "delivered",
       content: "이전 작업을 이어 최종 검토까지 마쳤습니다.",
@@ -247,21 +325,61 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
 
     const completed = await secondStores.durableWork.boundWorkForTurn(secondTurnId);
     expect(completed).toMatchObject({
+      workId: firstWorkId,
+      sessionId: continuationCommand.sessionId,
+      origin: { turnId: firstTurnId },
       status: "completed",
+      scope: { kind: "session", sessionId: continuationCommand.sessionId },
       currentStage: "reporting",
-      currentPlan: { revision: 1 },
-      latestPlanReview: { subject: "plan", verdict: "accept" },
-      latestResultReview: { subject: "result", verdict: "accept" },
+      currentPlan: {
+        planRevisionId: expect.any(String),
+        revision: 1,
+        originTurnId: firstTurnId,
+      },
+      latestPlanReview: {
+        reviewRevisionId: expect.any(String),
+        revision: 1,
+        subject: "plan",
+        verdict: "accept",
+        originTurnId: firstTurnId,
+      },
+      latestResultReview: {
+        reviewRevisionId: expect.any(String),
+        revision: 2,
+        subject: "result",
+        verdict: "accept",
+        originTurnId: secondTurnId,
+      },
       latestCompletionValidation: {
+        reviewRevisionId: expect.any(String),
+        revision: 3,
         subject: "completion",
         verdict: "accept",
+        originTurnId: secondTurnId,
+      },
+      latestDisposition: {
+        dispositionRevisionId: expect.any(String),
+        revision: 2,
+        disposition: "completed",
+        originTurnId: secondTurnId,
       },
     });
+    const plan = completed?.currentPlan;
+    const planAction = plan?.actions[0];
+    const resultEvidence = completed?.resultRefs ?? [];
+    const resultReview = completed?.latestResultReview;
+    const settlement = completed?.latestDisposition;
+    expect(planAction).toMatchObject({ actionKey: "write_report" });
+    expect(planAction).not.toHaveProperty("taskId");
+    expect(resultEvidence.map((result) => result.originTurnId))
+      .toEqual([firstTurnId, secondTurnId]);
+    expect(resultReview?.boundResultRefs)
+      .toEqual(resultEvidence.map((result) => result.resultRef));
+    expect(settlement?.disposition).toBe("completed");
     expect(completed?.resultRefs.map((result) => result.toolName))
       .toEqual(["write_file", "read_file"]);
     expect(completed?.latestResultReview?.boundResultRefs)
       .toEqual(completed?.resultRefs.map((result) => result.resultRef));
-    expect(completed?.origin.turnId).toBe(firstTurnId);
     expect((await secondStores.turns.findTurn(secondTurnId))?.route).toBe("managed");
   } finally {
     secondStores.close();
@@ -290,6 +408,7 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
       modelRound: scriptedModelRound([
         () => toolResponse([toolCall("stop-plan-1", "replace_work_plan", {
           objective: "Prepare a resumable report",
+          execution_mode: "direct",
           actions: [{
             action_key: "prepare",
             description: "Prepare and verify the report",
@@ -424,6 +543,7 @@ test("ordinary tools stay Turn-local until explicit Work relation and backfill",
       modelRound: scriptedModelRound([
         () => toolResponse([toolCall("late-bind-plan-1", "replace_work_plan", {
           objective: "Read source.txt and report the observed fact",
+          execution_mode: "direct",
           actions: [{
             action_key: "read_source",
             description: "Read the source file",
@@ -661,6 +781,7 @@ test("a model final echo of the model-only Work id is replaced before delivery",
       modelRound: scriptedModelRound([
         () => toolResponse([toolCall("id-echo-plan", "replace_work_plan", {
           objective: "내부 ID를 사용자에게 노출하지 않는 작업",
+          execution_mode: "direct",
           actions: [{
             action_key: "prepare",
             description: "결과를 준비합니다",
@@ -714,6 +835,7 @@ test("an action-key summary without optional description cannot trap the model l
       modelRound: scriptedModelRound([
         () => toolResponse([toolCall("nonblocking-plan-summary", "replace_work_plan", {
           objective: "Create answer.txt",
+          execution_mode: "direct",
           actions: [{
             action_key: "요청한 답변 파일 작성",
             dependency_keys: [],
@@ -803,6 +925,7 @@ test("a rejected stage transition is not projected as accepted progress", async 
         () => {
           const planArgs = {
             objective: "Prepare the requested answer",
+            execution_mode: "direct",
             actions: [{
               action_key: "prepare-answer",
               description: "Prepare the answer",
@@ -1007,6 +1130,7 @@ test("R3 projects Plan, tool, Review, disposition, and final events", async () =
           modelCalls += 1;
           const planArgs = {
             objective: "Read and report the requested source",
+            execution_mode: "direct",
             actions: [{
               action_key: "read_source",
               description: "Read source.txt",
@@ -1151,6 +1275,7 @@ test("R3 activity projection failure cannot veto its tool result or final delive
           modelCalls += 1;
           const planArgs = {
             objective: "Preserve the requested result despite a UI projection failure",
+            execution_mode: "direct",
             actions: [{
               action_key: "report_result",
               description: "Return the requested result",
@@ -1276,13 +1401,104 @@ test("R3 keeps Direct and single read-only Turns free of staged Work activity", 
   }
 });
 
+test("resumed Work edits use its saved execution activity through the production runtime", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-resume-activity-"));
+  const dbPath = join(root, "butler.sqlite");
+  const stores = openBtccSqliteStores({ dbPath, ownerId: "resume-activity", storageProfile: "ephemeral" });
+  const activities = new Map<string, string | undefined>();
+  const editStages: Array<string | undefined> = [];
+  const setup = { root, dbPath, stores, butlerHome: join(root, "program") };
+  try {
+    const first = createRuntime({
+      ...setup,
+      modelRound: scriptedModelRound([
+        toolResponse([toolCall("resume-start", "start_work", { objective: "Edit the report in two user Turns" })]),
+        toolResponse([toolCall("resume-plan", "replace_work_plan", {
+          objective: "Edit the report in two user Turns", execution_mode: "direct",
+          actions: [{
+            action_key: "edit-report", description: "보고서 내용 수정", dependency_keys: [],
+            effect: { capability: "workspace mutation", target: "workspace:report.txt" },
+          }], checks: [],
+        })]),
+        toolResponse([toolCall("resume-review", "record_work_review", {
+          subject: "plan", verdict: "accept", summary: "A small direct edit.", corrections: [],
+        })]),
+        toolResponse([toolCall("resume-write", "write_file", { path: "report.txt", content: "Before\n" })]),
+        (request) => {
+          expect(lastToolOutput(request, "write_file")).toMatchObject({ ok: true });
+          const selected = lastToolOutput(request, "replace_work_plan") as { work: { work_id: string } };
+          return toolResponse([toolCall("resume-open", "record_work_disposition", {
+            work_id: selected.work.work_id, disposition: "open", summary: "The report is ready for the next requested edit.", remaining_actions: ["Apply the user's next edit"],
+          })]);
+        },
+        { text: "초안을 작성했습니다.", toolCalls: [] },
+      ]),
+    });
+    const firstOutcome = await first.runTurn(command(root, "resume-first", "초안을 작성하고 다음 수정을 기다리세요."));
+    expect(stores.guidedToolJournal.list("resume-first").map((call) => ({ tool: call.toolName, result: call.result })))
+      .toEqual(expect.arrayContaining([{ tool: "write_file", result: expect.objectContaining({ ok: true }) }]));
+    expect(firstOutcome).toMatchObject({ kind: "delivered", content: "초안을 작성했습니다." });
+    const work = await stores.durableWork.boundWorkForTurn("resume-first");
+    expect(work?.currentStage).toBe("execution");
+    const second = createRuntime({
+      ...setup,
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged(update) { activities.set(update.activityId, update.displayStage); },
+        operationChanged(update) {
+          if (update.capabilityRef === "edit_file" && update.status === "started") {
+            editStages.push(activities.get(update.activityId ?? ""));
+          }
+        },
+      },
+      modelRound: scriptedModelRound([
+        toolResponse([
+          toolCall("resume-select", "continue_work", { work_id: work!.workId }),
+          toolCall("resume-edit", "edit_file", { path: "report.txt", old_text: "Before", new_text: "After" }),
+        ]),
+        (request) => {
+          expect(lastToolOutput(request, "edit_file")).toMatchObject({ ok: true });
+          expect(editStages).toEqual(["execution"]);
+          return toolResponse([toolCall("resume-complete", "record_work_disposition", {
+            work_id: work!.workId, disposition: "completed", summary: "The requested edit is complete.", remaining_actions: [],
+            action_updates: [{ action_key: "edit-report", status: "done" }],
+          })]);
+        },
+        { text: "요청하신 수정을 완료했습니다.", toolCalls: [] },
+      ]),
+    });
+    expect(await second.runTurn(command(root, "resume-second", "같은 보고서의 Before를 After로 바꾸세요.")))
+      .toMatchObject({ kind: "delivered" });
+    expect(readFileSync(join(root, "report.txt"), "utf8")).toBe("After\n");
+    expect(await stores.durableWork.boundWorkForTurn("resume-second"))
+      .toMatchObject({ workId: work!.workId, status: "completed" });
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function createRuntime(input: {
   root: string;
   dbPath: string;
+  butlerHome?: string;
   stores: ReturnType<typeof openBtccSqliteStores>;
   modelRound: ModelRoundPort;
   progress?: BtccTurnProgressObserver;
 }) {
+  writeFileSync(
+    join(input.root, "eol.md"),
+    "Act only from explicit evidence and preserve the exact reviewed objective.\n",
+    "utf8",
+  );
+  eolRefByRoot.set(input.root, input.stores.contextDocuments.persist({
+    scopeKind: "user",
+    scopeId: "local-user",
+    projectionClass: "profile",
+    sourceId: "eol",
+    sourceRevision: "test-eol-v1",
+    content: "Act only from explicit evidence and preserve the exact reviewed objective.",
+  }));
   return createGuidedTurnRuntime({
     admission: input.stores.admission,
     turns: input.stores.turns,
@@ -1291,10 +1507,11 @@ function createRuntime(input: {
     ...(input.progress ? { progress: input.progress } : {}),
     agent: createProductionGuidedTurnAgent({
       phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
-      butlerHome: input.root,
+      butlerHome: input.butlerHome ?? input.root,
       butlerData: input.root,
       contextDocuments: input.stores.contextDocuments,
       toolJournal: input.stores.guidedToolJournal,
+      operationResultReader: input.stores.guidedOperationResultReader,
       effectJournal: input.stores.guidedEffectJournal,
       durableWork: input.stores.durableWork,
       modelRound: input.modelRound,
@@ -1323,7 +1540,7 @@ function command(
     },
     context: {
       userRef: "local-user",
-      profileRefs: [],
+      profileRefs: [requiredTestEolRef(root)],
       recentFeedbackRefs: [],
       mandatoryHotCacheRefs: [],
       optionalHotCacheRefs: [],
@@ -1338,6 +1555,12 @@ function command(
       },
     },
   };
+}
+
+function requiredTestEolRef(root: string): string {
+  const contextRef = eolRefByRoot.get(root);
+  if (!contextRef) throw new Error("test_eol_not_installed");
+  return contextRef;
 }
 
 type ScriptedModelRoundStep =

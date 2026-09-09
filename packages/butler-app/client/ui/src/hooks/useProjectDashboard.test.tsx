@@ -83,6 +83,50 @@ test("project dashboard sessions stay on navigation after a stale dashboard resp
   expect(latestSessions).toEqual(["최신 생성 제목", "신규 세션"]);
 });
 
+test("dashboard loading and request failure never become an empty success; retry and project switch recover", async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document,
+    navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true });
+  const pending: Array<{ resolve: (value: ProjectDashboardView) => void; reject: (error: Error) => void }> = [];
+  dom.window.butlerApp = { getProjectDashboard: () => new Promise<ProjectDashboardView>((resolve, reject) => {
+    pending.push({ resolve, reject });
+  }) };
+  useButlerStore.setState({ view: { kind: "project-dashboard", projectId: "project-live" }, navigation: navigation() });
+  let current!: ReturnType<typeof useProjectDashboard>;
+  function StateHarness() { current = useProjectDashboard({}); return <div>{current.status}</div>; }
+  root = createRoot(dom.window.document.getElementById("root")!);
+  await act(async () => root?.render(<StateHarness />));
+  expect(current.status).toBe("loading");
+  expect(current.dashboard).toBeNull();
+  await act(async () => pending[0]!.reject(new Error("private transport detail")));
+  expect(current.status).toBe("error");
+  expect(current.dashboard).toBeNull();
+  await act(async () => current.retry());
+  expect(current.status).toBe("loading");
+  await act(async () => pending[1]!.resolve(dashboard([])));
+  expect(current.status).toBe("ready");
+  expect(current.dashboard?.documents).toEqual([]);
+  const accepted = current.dashboard;
+  await act(async () => current.retry());
+  expect(current.status).toBe("ready");
+  await act(async () => pending[2]!.reject(new Error("refresh temporarily unavailable")));
+  expect(current.status).toBe("ready");
+  expect(current.dashboard).toBe(accepted);
+  expect(current.refreshFailed).toBe(true);
+  const other = navigation();
+  other.projects[0] = { ...other.projects[0]!, id: "another-project" };
+  await act(async () => useButlerStore.setState({ navigation: other,
+    view: { kind: "project-dashboard", projectId: "another-project" } }));
+  expect(current.status).toBe("loading");
+  expect(current.dashboard).toBeNull();
+  await act(async () => useButlerStore.setState({ navigation: navigation([]),
+    view: { kind: "project-dashboard", projectId: "removed-project" } }));
+  expect(current.status).toBe("missing");
+  await act(async () => pending[3]!.resolve(dashboard([])));
+  expect(current.dashboard).toBeNull();
+});
+
 function Harness({
   initialDashboard,
   onSessions,
@@ -99,6 +143,7 @@ function Harness({
 
 function navigation(sessions: ProjectSummary["sessions"] = [session("session-live", "Prompt fallback")]): NavigationView {
   return {
+    space: { revision: 0, nodes: [], groups: [] },
     chats: [],
     projects: [{
       id: "project-live",

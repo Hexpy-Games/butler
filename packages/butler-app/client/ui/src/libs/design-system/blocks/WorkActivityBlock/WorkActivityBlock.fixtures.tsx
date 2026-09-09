@@ -1,5 +1,6 @@
 import { Search, Terminal, Wrench } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
+import { Button } from "../../components/Button";
 import { WorkActivityBlock } from "./WorkActivityBlock";
 
 export function WorkActivityBlockFixture() {
@@ -38,6 +39,11 @@ export function WorkActivityBlockFixture() {
         title="확인한 결과를 답변에 반영합니다"
         description="완료된 뒤에도 배경 블록으로 바뀌지 않고 같은 타임라인 형태를 유지합니다."
         tools={tools.slice(0, 2)}
+      />
+      <WorkActivityBlock
+        title="조사 작업 위임"
+        tools={[{ id: "assignment", title: "워커 호출", details: "작업을 전달했습니다.",
+          after: <Button variant="outline" shape="pill" text="Juno · 2/3 · 파일 수정 중" /> }]}
       />
     </Stack>
   );

@@ -91,6 +91,7 @@ export async function runHostedOpenAICompatibleModelRound(
     config,
     {
       messages: await hostedModelRoundMessages(request),
+      ...(request.maxOutputTokens ? { max_tokens: request.maxOutputTokens } : {}),
       ...(request.tools.length > 0
         ? { tools: hostedChatTools(request.tools.map(modelRoundTool)) }
         : {}),
@@ -102,6 +103,7 @@ export async function runHostedOpenAICompatibleModelRound(
     {
       attribution: request.usageAttribution,
       roundIndex,
+      admitProviderBody: request.boundedContinuation?.admitProviderBody,
     },
     request.providerRetryAttempts,
   );

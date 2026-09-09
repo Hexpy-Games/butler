@@ -1,4 +1,7 @@
+import type { MessageContent } from "../../../../foundation/message-content.ts";
 import { Database } from "bun:sqlite";
+import { readSessionBranchSeed } from "./session-branch-store.ts";
+import { assertSessionCanClose } from "./session-lifecycle-policy.ts";
 import type {
   ChatRow,
   MessageRow,
@@ -26,6 +29,8 @@ import type {
   TurnRecord,
   UpdateSessionRequest,
 } from "../../interface/protocol/app-protocol.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "../../../../agent/btcc/project-plan.ts";
 import { visibleMessageSqlPredicate } from "../sessions/visible-message-sql.ts";
 import { AppSessionMessageRecordStore } from "./session-message-record-store.ts";
 import type {
@@ -110,6 +115,7 @@ export class AppSessionRecordStore {
   }
 
   rollbackSessionCreation(sessionId: string): void {
+    assertSessionCanClose(sessionId);
     this.db.query("DELETE FROM chats WHERE id = ?").run(sessionId);
   }
 
@@ -117,6 +123,7 @@ export class AppSessionRecordStore {
     sessionId: string,
     input: UpdateSessionRequest,
   ): SessionActionResult {
+    if (input.archived === true) assertSessionCanClose(sessionId);
     const current = this.getSession(sessionId);
     const title = input.title?.trim();
     if (input.title !== undefined && !title) {
@@ -145,6 +152,7 @@ export class AppSessionRecordStore {
   }
 
   deleteSessionPermanent(sessionId: string): SessionActionResult {
+    assertSessionCanClose(sessionId);
     const session = this.getSession(sessionId);
     this.db.query("DELETE FROM chats WHERE id = ?").run(sessionId);
     this.appendEvent("session.permanently_deleted", { session });
@@ -184,6 +192,15 @@ export class AppSessionRecordStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+
+        (
+          SELECT t.safe_status_label_parameters_json
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS safe_status_label_parameters_json,
+        (SELECT t.safe_status_content_json FROM turns t WHERE t.chat_id = c.id ORDER BY t.rowid DESC LIMIT 1) AS safe_status_content_json,
         (
           SELECT t.safe_error_code
           FROM turns t
@@ -205,7 +222,7 @@ export class AppSessionRecordStore {
         "Session not found.",
       );
     }
-    return sessionFromRow(row);
+    return { ...sessionFromRow(row), branch_seed: readSessionBranchSeed(this.db, sessionId) };
   }
 
   listTurns(chatId: string, cursor = 0): TurnRecord[] {
@@ -213,7 +230,7 @@ export class AppSessionRecordStore {
     const rows = this.db
       .query<TurnRow, [string, number]>(
         `
-      SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
+      SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_status_label_key, safe_error_code,
         retryable, cancellable, attempt, execution_controls_json, execution_model_json,
         created_at, updated_at
       FROM turns
@@ -231,7 +248,7 @@ export class AppSessionRecordStore {
     const row = this.db
       .query<TurnRow, [string]>(
         `
-      SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
+      SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_status_label_key, safe_error_code,
         retryable, cancellable, attempt, execution_controls_json, execution_model_json,
         created_at, updated_at
       FROM turns
@@ -261,7 +278,7 @@ export class AppSessionRecordStore {
       this.db
         .query<ChatRow, [string]>(
           `
-      SELECT id, title, kind, project_id, conversation_session_id, created_at, updated_at
+      SELECT id, title, kind, project_id, conversation_session_id, archived, created_at, updated_at
       FROM chats
       WHERE id = ?
     `,
@@ -292,12 +309,23 @@ export class AppSessionRecordStore {
     return this.messages.listArtifactSummaries(chatId);
   }
 
+  listProjectArtifacts(projectId: string, query: { cursor?: string; limit: number }) {
+    return this.messages.listProjectArtifacts(projectId, query);
+  }
+
   getMessageRow(messageId: string): MessageRow | null {
     return this.messages.getMessageRow(messageId);
   }
 
   messageRecordById(messageId: string): MessageRecord {
     return this.messages.messageRecordById(messageId);
+  }
+
+  replaceMessageChangedFiles(
+    messageId: string,
+    details: readonly (ChangedFileDetail | string)[],
+  ): MessageRecord {
+    return this.messages.replaceMessageChangedFiles(messageId, details);
   }
 
   getLatestAssistantMessageForTurn(turnId: string): MessageRow | null {
@@ -311,10 +339,12 @@ export class AppSessionRecordStore {
     status: MessageStatus,
     options: {
       clientMessageId?: string;
+      contentParts?: MessageContent;
       turnId?: string;
       safeErrorCode?: string;
       retryable?: boolean;
       attachments?: MessageFileRow[];
+      plan?: ProjectLedgerPlan;
       conversationSessionId?: string | null;
       conversationTurnId?: string | null;
       conversationMessageId?: string | null;
@@ -330,6 +360,7 @@ export class AppSessionRecordStore {
       status?: MessageStatus;
       safeErrorCode?: string | null;
       retryable?: boolean;
+      plan?: ProjectLedgerPlan | null;
     },
   ): MessageRecord {
     return this.messages.updateMessage(messageId, input);

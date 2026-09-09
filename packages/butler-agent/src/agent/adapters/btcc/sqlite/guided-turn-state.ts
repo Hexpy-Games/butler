@@ -14,7 +14,7 @@ export type GuidedTurnSemanticState = typeof GUIDED_TURN_STATES[number];
 
 export type GuidedTurnTransition = Extract<
   AcceptedTurnTransition,
-  { kind: "accept_guided_final" | "observe_delivery" }
+  { kind: "suspend" | "accept_guided_final" | "observe_delivery" }
 >;
 
 const guidedTurnStates = new Set<string>(GUIDED_TURN_STATES);
@@ -32,6 +32,7 @@ export function assertGuidedTurnTransition(
 ): asserts transition is GuidedTurnTransition {
   const kind = (transition as { kind: string }).kind;
   if (
+    kind !== "suspend" &&
     kind !== "accept_guided_final" &&
     kind !== "observe_delivery"
   ) {

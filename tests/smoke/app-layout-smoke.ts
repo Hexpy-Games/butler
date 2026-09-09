@@ -2645,10 +2645,17 @@ try {
     .getByRole("heading", { name: appCopy.settings.panels.butlerModel })
     .waitFor({ state: "visible" });
   await page
-    .getByText(appCopy.settings.panels.workerModelRules)
+    .getByText(appCopy.settings.panels.workerProfiles)
     .waitFor({ state: "visible" });
-  await page.getByText("Deep work").waitFor({ state: "visible" });
-  await page.getByText("Routine work").waitFor({ state: "visible" });
+  const workerProfilePanels = page.locator(testClass("worker-profile"));
+  assert(
+    (await workerProfilePanels.count()) >= 1,
+    "models settings should render at least one worker profile",
+  );
+  await workerProfilePanels
+    .first()
+    .getByRole("heading", { name: "Default", exact: true })
+    .waitFor({ state: "visible" });
   await page
     .getByText("GPT-5.5", { exact: false })
     .first()
@@ -2699,8 +2706,8 @@ try {
     (await contextLimitInput.inputValue()) === "120000",
     "context limit setting should accept a lower effective token budget",
   );
-  const workerRulePanel = page.locator(testClass("worker-model-rule")).first();
-  const workerRuleBorder = await workerRulePanel.evaluate((element) => {
+  const workerProfilePanel = page.locator(testClass("worker-profile")).first();
+  const workerProfileBorder = await workerProfilePanel.evaluate((element) => {
     const style = getComputedStyle(element);
     return {
       borderColor: style.borderTopColor,
@@ -2708,21 +2715,24 @@ try {
     };
   });
   assert(
-    parseFloat(workerRuleBorder.borderWidth) >= 1,
-    `worker model rules should be bordered repeated items: ${JSON.stringify(workerRuleBorder)}`,
+    parseFloat(workerProfileBorder.borderWidth) >= 1,
+    `worker profiles should be bordered repeated items: ${JSON.stringify(workerProfileBorder)}`,
   );
-  const workerEnableField = page
-    .locator(testClasses("settings-field", "worker-rule-enabled-field"))
+  const workerEnableField = workerProfilePanel
+    .locator(testClass("settings-field"))
+    .filter({
+      has: page.getByText(appCopy.settings.fields.enabled, { exact: true }),
+    })
     .first();
   const enableLabelBox = await workerEnableField.locator("label").boundingBox();
   const enableSwitchBox = await workerEnableField
-    .locator('[role="switch"]')
+    .locator('[role="switch"][data-slot="switch"]')
     .boundingBox();
   assert(
     enableLabelBox &&
       enableSwitchBox &&
       enableSwitchBox.y > enableLabelBox.y + enableLabelBox.height - 1,
-    "worker rule enable switch should be a vertical SettingsField, not a header action row",
+    "worker profile enable switch should be a vertical SettingsField, not a header action row",
   );
   const localBudgetSlider = page
     .locator(testClasses("settings-field", "local-reasoning-budget-field"))

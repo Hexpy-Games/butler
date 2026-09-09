@@ -1,4 +1,5 @@
 import type { ToolProgressSummary } from "../../tools/tool-support.ts";
+import type { InterfaceContentReferences } from "../../../../../butler-i18n/src/index.ts";
 
 export type WorkProgressTask = {
   taskId: string;
@@ -38,6 +39,7 @@ export interface BtccTurnProgressObserver {
       "validation" | "reporting";
     title: string;
     summary: string;
+    interfaceContent?: InterfaceContentReferences;
     rationale?: string;
     nextStep?: string;
     modelRef?: string;
@@ -48,6 +50,7 @@ export interface BtccTurnProgressObserver {
     activityId: string;
     requestId: string;
     publicTitle: string;
+    interfaceContent?: InterfaceContentReferences;
     capabilityRef: string;
     status: "started" | "completed" | "failed" | "cancelled";
     inputLabel?: ToolProgressSummary["inputLabel"];

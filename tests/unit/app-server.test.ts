@@ -650,10 +650,16 @@ test("fresh app settings honor an install-selected local model default", async (
     expect(settings.data.model).toBe("local/gemma-install");
     expect(settings.data.context_window_tokens).toBe(32768);
     expect(settings.data.effective_consolidation_model).toBe("local/gemma-install");
-    expect(settings.data.worker_model_rules).toEqual([
-      expect.objectContaining({ id: "deep_work", model: "local/gemma-install" }),
-      expect.objectContaining({ id: "routine_work", model: "local/gemma-install" }),
+    expect(settings.data.worker_profiles).toEqual([
+      expect.objectContaining({
+        id: "default",
+        enabled: true,
+        model: "local/gemma-install",
+        reasoning_effort: "none",
+      }),
     ]);
+    expect(settings.data.max_simultaneous_workers).toBe(10);
+    expect(settings.data).not.toHaveProperty("worker_model_rules");
     const catalog = await getJson(`${server.url}model-catalog`);
     expect(catalog.data.generation).toMatch(/^[a-f0-9]{64}$/);
     expect(catalog.data.default_model_ref).toBe("local/gemma-install");
@@ -954,8 +960,12 @@ test("product app server exposes no responder substitution", () => {
   );
 
   expect(serverSource).toContain("return createComposedAppServer(options, {});");
-  expect(serverTypes.match(/interface CreateAppServerOptions[\s\S]*?\n\}/u)?.[0])
-    .not.toContain("responder");
+  const baseOptions = serverTypes.match(/interface CreateAppServerBaseOptions[\s\S]*?\n\}/u)?.[0];
+  const publicOptions = serverTypes.match(/type CreateAppServerOptions[\s\S]*?\n\);/u)?.[0];
+  expect(baseOptions).toBeDefined();
+  expect(publicOptions).toBeDefined();
+  expect(baseOptions).not.toContain("responder");
+  expect(publicOptions).not.toContain("responder");
 });
 
 test("responder injection lives under explicit test support", () => {
@@ -1499,94 +1509,42 @@ test("navigation starts with no default projects and no workspace paths", async 
   }
 });
 
-test("project dashboard reads Project Ledger documents from Butler data home", async () => {
+test("project dashboard lists metadata and reads exact source details without full-body list payloads", async () => {
   const butlerData = join(tempDir, ".butler");
-  const workspaceRoot = join(tempDir, "project-workspace");
-
   const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
-    butlerData,
-    projectWorkspaceRoot: workspaceRoot,
-    port: 0,
+    dbPath: join(tempDir, "app.sqlite"), butlerData,
+    projectWorkspaceRoot: join(tempDir, "workspace"), port: 0,
   });
   try {
-    const created = await postJson(`${server.url}projects`, {
-      source: "scratch",
-      display_name: "Data home project",
-    });
+    const created = await postJson(`${server.url}projects`, { source: "scratch", display_name: "Data home project" });
     const projectId = created.data.project.id as string;
-    const specDir = join(
-      butlerData,
-      "project-ledger",
-      "projects",
-      projectId,
-      "specs",
-    );
-    const planDir = join(
-      butlerData,
-      "project-ledger",
-      "projects",
-      projectId,
-      "plans",
-    );
-    const workDir = join(
-      butlerData,
-      "project-ledger",
-      "projects",
-      projectId,
-      "work",
-      "dashboard-work",
-    );
-    const taskDir = join(workDir, "tasks");
-    mkdirSync(specDir, { recursive: true });
-    mkdirSync(planDir, { recursive: true });
-    mkdirSync(taskDir, { recursive: true });
-    writeFileSync(
-      join(specDir, "local-spec.md"),
-      "# Data home spec\n\nSpec body with [external](https://example.com).",
-      "utf8",
-    );
-    writeFileSync(
-      join(planDir, "local-plan.md"),
-      "# Data home plan\n\nPlan body.",
-      "utf8",
-    );
-    writeFileSync(
-      join(workDir, "work.md"),
-      '---\nstatus: "done"\n---\n\n# Data home work\n\nWork body.',
-      "utf8",
-    );
-    writeFileSync(
-      join(taskDir, "task.md"),
-      '---\nstatus: "done"\n---\n\n# Data home task\n\nTask body.',
-      "utf8",
-    );
-
-    const dashboard = await getJson(
-      `${server.url}projects/${encodeURIComponent(projectId)}/dashboard`,
-    );
+    const root = join(butlerData, "project-ledger", "projects", projectId);
+    mkdirSync(root, { recursive: true });
+    writeFileSync(join(root, "project.json"), JSON.stringify({ id: projectId, name: "Fixture", status: "active" }));
+    writeFileSync(join(root, "ledger.jsonl"), "");
+    const { loadProjectLedgerCore } = await import("../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-ledger-core.ts");
+    const core = await loadProjectLedgerCore();
+    core.createRecord(root, { kind: "spec", id: "SPEC-DASH", title: "Dashboard source", status: "active",
+      body: "# Dashboard source\n\n[external](https://example.com)\n" + butlerData });
+    core.createRecord(root, { kind: "plan", id: "PLAN-DASH", title: "Dashboard plan", status: "active", body: "# Plan" });
+    const dashboard = await getJson(`${server.url}projects/${projectId}/dashboard`);
     expect(dashboard.data.stats.specs).toBe(1);
     expect(dashboard.data.stats.plans).toBe(1);
-    expect(
-      dashboard.data.documents.map(
-        (document: { title: string }) => document.title,
-      ),
-    ).toContain("Data home spec");
-    expect(
-      dashboard.data.documents.map(
-        (document: { safe_path_label: string }) => document.safe_path_label,
-      ),
-    ).toContain(`project-ledger/projects/${projectId}/specs/local-spec.md`);
-    expect(JSON.stringify(dashboard)).not.toContain(
-      `${process.cwd()}/.project-ledger`,
-    );
+    expect(dashboard.data.documents).toEqual([]);
+    const materials = await getJson(`${server.url}projects/${projectId}/dashboard/materials`);
+    expect(materials.data.total).toBe(2);
+    const spec = materials.data.documents.find((item: { id: string }) => item.id === "SPEC-DASH");
+    expect(spec.markdown).toBe("");
+    const source = await getJson(`${server.url}projects/${projectId}/dashboard/source?kind=spec&id=SPEC-DASH&revision=${spec.revision}`);
+    expect(source.data.markdown).toContain("[external](https://example.com)");
+    expect(source.data.markdown).toContain("[local]");
+    expect(source.data.revision).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(source)).not.toContain(butlerData);
     expect(JSON.stringify(dashboard)).not.toContain("workspace_path");
-  } finally {
-    server.stop();
-  }
+  } finally { server.stop(); }
 });
 
-test("project dashboard resolves Butler data Project Ledger by workspace slug", async () => {
+test("project dashboard does not infer a Ledger from a matching workspace slug", async () => {
   const butlerData = join(tempDir, ".butler");
   const folderSelectionSecret = "dashboard-data-home-folder-secret";
   const selectedFolder = join(tempDir, "sandy-bot");
@@ -1653,20 +1611,10 @@ test("project dashboard resolves Butler data Project Ledger by workspace slug", 
     const dashboard = await getJson(
       `${server.url}projects/${encodeURIComponent(project.id)}/dashboard`,
     );
-    expect(dashboard.data.stats.specs).toBe(1);
-    expect(dashboard.data.stats.plans).toBe(1);
-    expect(
-      dashboard.data.documents.map(
-        (document: { safe_path_label: string }) => document.safe_path_label,
-      ),
-    ).toContain("project-ledger/projects/sandy-bot/specs/sandy-spec.md");
-    expect(
-      dashboard.data.documents.map(
-        (document: { safe_path_label: string }) => document.safe_path_label,
-      ),
-    ).toContain(
-      "project-ledger/projects/sandy-bot/work/W-SANDY/tasks/T-SANDY-001/task.md",
-    );
+    expect(dashboard.data.stats.specs).toBe(0);
+    expect(dashboard.data.stats.plans).toBe(0);
+    expect(dashboard.data.documents).toEqual([]);
+    expect(dashboard.data.overview.status).toBe("unavailable");
     expect(JSON.stringify(dashboard)).not.toContain(
       `project-ledger/projects/${project.id}/`,
     );
@@ -1676,7 +1624,7 @@ test("project dashboard resolves Butler data Project Ledger by workspace slug", 
   }
 });
 
-test("project dashboard falls back to folder Project Ledger documents without leaking paths", async () => {
+test("project dashboard never falls back to folder Ledger documents without a binding", async () => {
   const folderSelectionSecret = "dashboard-folder-secret";
   const selectedFolder = join(tempDir, "selected-ledger-project");
   const specDir = join(selectedFolder, ".project-ledger", "specs");
@@ -1701,18 +1649,19 @@ test("project dashboard falls back to folder Project Ledger documents without le
     const dashboard = await getJson(
       `${server.url}projects/${encodeURIComponent(project.id)}/dashboard`,
     );
-    expect(dashboard.data.stats.specs).toBeGreaterThan(0);
-    expect(dashboard.data.stats.plans).toBeGreaterThan(0);
+    expect(dashboard.data.stats.specs).toBe(0);
+    expect(dashboard.data.stats.plans).toBe(0);
+    expect(dashboard.data.overview.status).toBe("unavailable");
     expect(
       dashboard.data.documents.some((document: { safe_path_label: string }) =>
         document.safe_path_label.startsWith("workspace/.project-ledger/specs/"),
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       dashboard.data.documents.some((document: { safe_path_label: string }) =>
         document.safe_path_label.startsWith("workspace/.project-ledger/plans/"),
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(JSON.stringify(dashboard)).not.toContain(process.cwd());
     expect(JSON.stringify(dashboard)).not.toContain("workspace_path");
   } finally {
@@ -3269,6 +3218,9 @@ test("new chat briefing returns localized onboarding fallback until onboarding c
       response_language: "ko",
     });
     expect(localized.data.response_language).toBe("ko");
+    const stillEnglishBriefing = await getJson(`${server.url}new-chat-briefing`);
+    expect(stillEnglishBriefing.data.source.locale).toBe("en");
+    await patchJson(`${server.url}settings`, { language: "ko" });
     const koreanBriefing = await getJson(`${server.url}new-chat-briefing`);
     expect(koreanBriefing.data).toMatchObject({
       moment: "온보딩",
@@ -3420,20 +3372,16 @@ test("settings, command palette, and project actions are route-backed and privac
       },
       desktop_tray_enabled: true,
     });
-    expect(settings.data.worker_model_rules).toEqual([
+    expect(settings.data.worker_profiles).toEqual([
       expect.objectContaining({
-        id: "deep_work",
-        model: "openai/gpt-5.5",
-        reasoning_effort: "high",
+        id: "default",
         enabled: true,
-      }),
-      expect.objectContaining({
-        id: "routine_work",
         model: "openai/gpt-5.5",
-        reasoning_effort: "medium",
-        enabled: true,
+        reasoning_effort: "xhigh",
       }),
     ]);
+    expect(settings.data.max_simultaneous_workers).toBe(10);
+    expect(settings.data).not.toHaveProperty("worker_model_rules");
     expect(settings.data.web_search).toMatchObject({
       provider: "duckduckgo-html",
       api_key_configured: false,
@@ -3500,6 +3448,7 @@ test("settings, command palette, and project actions are route-backed and privac
       (model: { model_ref: string }) => model.model_ref,
     );
     expect(modelRefs).toContain("xai/grok-4.5");
+    expect(modelRefs).toContain("openai/gpt-6-astra");
     expect(modelRefs).toContain("openai/gpt-5.6-sol");
     expect(modelRefs).toContain("openai/gpt-5.6-terra");
     expect(modelRefs).toContain("openai/gpt-5.6-luna");
@@ -3555,11 +3504,11 @@ test("settings, command palette, and project actions are route-backed and privac
     ).toBe(true);
     expect(
       catalog.data.models.find(
-        (model: { model_ref: string }) => model.model_ref === "openai/gpt-5.6-sol",
+        (model: { model_ref: string }) => model.model_ref === "openai/gpt-6-astra",
       ),
     ).toMatchObject({
       context_window_tokens: 1_050_000,
-      reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+      reasoning_efforts: ["low", "medium", "high", "xhigh", "max"],
       runtime_supported: true,
     });
     expect(
@@ -3660,6 +3609,15 @@ test("settings, command palette, and project actions are route-backed and privac
       effective_consolidation_model: "openai/gpt-5.4-mini",
       consolidation_uses_butler_model: false,
     });
+    const consolidationModelPersisted = await getJson(
+      `${server.url}settings`,
+    );
+    expect(consolidationModelPersisted.data).toMatchObject({
+      consolidation_model: "openai/gpt-5.4-mini",
+      consolidation_reasoning_effort: "medium",
+      effective_consolidation_model: "openai/gpt-5.4-mini",
+      consolidation_uses_butler_model: false,
+    });
     const migratedShortcut = await patchJson(`${server.url}settings`, {
       multiline_send_behavior: "enter_newline_shift_enter_send",
     });
@@ -3746,66 +3704,74 @@ test("settings, command palette, and project actions are route-backed and privac
       "unexpected_field",
     );
 
-    const invalidWorkerRuleSettings = await fetch(`${server.url}settings`, {
+    const invalidWorkerProfileSettings = await fetch(`${server.url}settings`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        worker_model_rules: [
+        worker_profiles: [
           {
-            id: "deep",
-            label: "Deep",
-            condition: "Deep work",
+            id: "invalid-extra",
+            label: "Invalid extra",
+            enabled: true,
+            job: { kind: "builtin", job: "coding" },
             model: "openai/gpt-5.5",
             reasoning_effort: "high",
-            enabled: true,
             unexpected_nested_field: "must not pass",
           },
         ],
       }),
     });
-    const invalidWorkerRuleBody = await invalidWorkerRuleSettings.json();
-    expect(invalidWorkerRuleSettings.status).toBe(400);
-    expect(invalidWorkerRuleBody.error.code).toBe("invalid_settings_request");
-    expect(JSON.stringify(invalidWorkerRuleBody)).not.toContain(
+    const invalidWorkerProfileBody = await invalidWorkerProfileSettings.json();
+    expect(invalidWorkerProfileSettings.status).toBe(400);
+    expect(invalidWorkerProfileBody.error.code).toBe(
+      "invalid_settings_request",
+    );
+    expect(JSON.stringify(invalidWorkerProfileBody)).not.toContain(
       "unexpected_nested_field",
     );
 
-    const workerRulesUpdated = await patchJson(`${server.url}settings`, {
-      worker_model_rules: [
+    const workerProfilesUpdated = await patchJson(`${server.url}settings`, {
+      worker_profiles: [
         {
-          id: "routine search work",
+          id: "w1",
           label: "Routine search work",
-          condition: "Search, inspect, and format",
+          enabled: true,
+          job: { kind: "custom", text: "Search, inspect, and format" },
           model: "openai/gpt-5.4-mini",
           reasoning_effort: "medium",
-          enabled: true,
         },
         {
-          id: "anthropic-runtime-work",
+          id: "w2",
           label: "Anthropic runtime work",
-          condition: "Provider wired through native runtime",
+          enabled: true,
+          job: { kind: "custom", text: "Provider wired through native runtime" },
           model: "anthropic/claude-opus-5",
           reasoning_effort: "high",
-          enabled: true,
         },
       ],
     });
-    expect(workerRulesUpdated.data.worker_model_rules).toEqual([
+    expect(workerProfilesUpdated.data.worker_profiles).toEqual([
+      expect.objectContaining({ id: "default", enabled: true }),
       expect.objectContaining({
-        id: "routine-search-work",
+        id: "w1",
         label: "Routine search work",
+        enabled: true,
+        job: { kind: "custom", text: "Search, inspect, and format" },
         model: "openai/gpt-5.4-mini",
         reasoning_effort: "medium",
-        enabled: true,
       }),
       expect.objectContaining({
-        id: "anthropic-runtime-work",
+        id: "w2",
         label: "Anthropic runtime work",
+        enabled: true,
+        job: { kind: "custom", text: "Provider wired through native runtime" },
         model: "anthropic/claude-opus-5",
         reasoning_effort: "high",
-        enabled: true,
       }),
     ]);
+    expect(workerProfilesUpdated.data).not.toHaveProperty(
+      "worker_model_rules",
+    );
 
     await postJson(`${server.url}messages`, {
       chat_id: "general",
@@ -4012,62 +3978,20 @@ test("Backup models settings sanitize through the canonical config and survive r
   }
 });
 
-test("settings accepts GPT-5.6 max reasoning effort", async () => {
+test("settings accepts GPT-6 Astra max reasoning effort", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
   });
   try {
     const maxReasoning = await patchJson(`${server.url}settings`, {
-      model: "openai/gpt-5.6-sol",
+      model: "openai/gpt-6-astra",
       reasoning_effort: "max",
       consolidation_reasoning_effort: "max",
     });
-    expect(maxReasoning.data.model).toBe("openai/gpt-5.6-sol");
+    expect(maxReasoning.data.model).toBe("openai/gpt-6-astra");
     expect(maxReasoning.data.reasoning_effort).toBe("max");
     expect(maxReasoning.data.consolidation_reasoning_effort).toBe("max");
-  } finally {
-    server.stop();
-  }
-});
-
-test("message responders receive configured worker model rules", async () => {
-  const responderInputs: Array<{ workerModelRules?: unknown[] }> = [];
-  const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
-    port: 0,
-    responder(input) {
-      responderInputs.push({ workerModelRules: input.workerModelRules });
-      return { texts: ["ok"] };
-    },
-  });
-  try {
-    await patchJson(`${server.url}settings`, {
-      worker_model_rules: [
-        {
-          id: "deep_work",
-          label: "Deep work",
-          condition: "Research and analysis",
-          model: "openai/gpt-5.5",
-          reasoning_effort: "high",
-          enabled: true,
-        },
-      ],
-    });
-
-    await postJson(`${server.url}messages`, {
-      chat_id: "general",
-      text: "start worker",
-    });
-
-    expect(responderInputs[0]?.workerModelRules).toContainEqual(
-      expect.objectContaining({
-        id: "deep_work",
-        model: "openai/gpt-5.5",
-        reasoning_effort: "high",
-        enabled: true,
-      }),
-    );
   } finally {
     server.stop();
   }
@@ -4527,14 +4451,22 @@ test("registered local models can be edited and deleted without stale settings r
     await patchJson(`${server.url}settings`, {
       model: "local/gemma-before",
       reasoning_effort: "none",
-      worker_model_rules: [
+      worker_profiles: [
         {
-          id: "local-deep",
-          label: "Local deep",
-          condition: "Use local before",
+          id: "default",
+          label: "Default",
+          enabled: true,
+          job: { kind: "builtin", job: "coding" },
           model: "local/gemma-before",
           reasoning_effort: "none",
+        },
+        {
+          id: "w1",
+          label: "Local deep",
           enabled: true,
+          job: { kind: "custom", text: "Use local before" },
+          model: "local/gemma-before",
+          reasoning_effort: "none",
         },
       ],
     });
@@ -4579,12 +4511,19 @@ test("registered local models can be edited and deleted without stale settings r
 
     const remappedSettings = await getJson(`${server.url}settings`);
     expect(remappedSettings.data.model).toBe("local/gemma-after");
-    expect(remappedSettings.data.worker_model_rules).toContainEqual(
+    expect(remappedSettings.data.worker_profiles).toEqual([
       expect.objectContaining({
+        id: "default",
         model: "local/gemma-after",
         reasoning_effort: "none",
       }),
-    );
+      expect.objectContaining({
+        id: "w1",
+        model: "local/gemma-after",
+        reasoning_effort: "none",
+      }),
+    ]);
+    expect(remappedSettings.data).not.toHaveProperty("worker_model_rules");
 
     const deleted = await deleteJson(
       `${server.url}model-catalog/local-models/${encodeURIComponent("local/gemma-after")}`,
@@ -4598,8 +4537,9 @@ test("registered local models can be edited and deleted without stale settings r
     const normalizedSettings = await getJson(`${server.url}settings`);
     expect(normalizedSettings.data.model).toBe("openai/gpt-5.5");
     expect(
-      JSON.stringify(normalizedSettings.data.worker_model_rules),
+      JSON.stringify(normalizedSettings.data.worker_profiles),
     ).not.toContain("local/gemma-after");
+    expect(normalizedSettings.data).not.toHaveProperty("worker_model_rules");
   } finally {
     server.stop();
   }
@@ -7546,6 +7486,9 @@ test("app transport send fails the turn instead of leaving thinking when queue h
     },
     enqueueAppCancellation() {
       throw new Error("unexpected cancellation");
+    },
+    enqueueAppResume() {
+      throw new Error("unexpected resume");
     },
     enqueueAppTurn() {
       throw new Error("simulated queue write failure");
@@ -11087,25 +11030,26 @@ test("app transport sync skips unchanged transcript snapshots", async () => {
 test("app transport sync includes archived sessions while a turn is active", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  server.store.createSession({ kind: "chat", session_hint: "archive-topic" });
   const result = await postJson(`${server.url}messages`, {
-    chat_id: "general",
+    chat_id: "archive-topic",
     text: "archived active progress",
   });
   const turnId = result.data.turn.id;
   const userMessageId = result.data.accepted.id;
-  await postJson(`${server.url}sessions/general/archive`, {});
+  await postJson(`${server.url}sessions/archive-topic/archive`, {});
   server.stop();
 
   appendAppTranscriptEvent(
     createTranscriptEvent({
-      sessionId: "butler/app-general",
+      sessionId: "butler/app-archive-topic",
       kind: "outbound",
       transport: "app",
       timestamp: "2026-05-18T12:05:30.000Z",
       payload: {
         actionId: `runtime-intermediate:app:${userMessageId}:archived-active-progress`,
         accountId: "local",
-        peer: { kind: "dm", id: "general" },
+        peer: { kind: "dm", id: "archive-topic" },
         message: {
           text: "",
           replyToMessageId: userMessageId,
@@ -13871,6 +13815,7 @@ test("pending cancellation outbox dispatches after App restart", async () => {
       queue.enqueueAppCancellation(input, metadata);
       throw new Error("simulated crash after cancellation queue write");
     },
+    enqueueAppResume: (input, metadata) => queue.enqueueAppResume(input, metadata),
   };
   let server = createAppServer({
     dbPath, butlerData: tempDir, port: 0, serviceClient: failingClient,

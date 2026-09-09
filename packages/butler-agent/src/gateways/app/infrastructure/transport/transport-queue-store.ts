@@ -28,6 +28,8 @@ import {
   verifyTurnExecutionControls,
   type TurnExecutionControlsV1,
 } from "../../../core/turn-execution-controls.ts";
+import { resolveSessionReferences } from "../../domain/sessions/session-references.ts";
+import type { ResolvedProjectSource } from "../../../../foundation/message-content.ts";
 
 export class AppTransportQueueStore {
   constructor(
@@ -66,6 +68,8 @@ export class AppTransportQueueStore {
       turnId: string;
       claimId: string;
     }) => boolean,
+    private readonly branchSeed: (sessionId: string) => import("../../../../foundation/session-branch.ts").SessionBranchSeed | undefined,
+    private readonly projectSources: (chatId: string, messageId: string) => ResolvedProjectSource[] = () => [],
   ) {}
 
   enqueueAppTransportTurn(input: {
@@ -78,6 +82,7 @@ export class AppTransportQueueStore {
     queueReplay?: boolean;
     visualAdmission?: VisualImageAdmissionResult;
     authorityRequestRef?: string;
+    planId?: string;
   }): TurnRecord {
     let transportInput: Parameters<ButlerServiceClient["enqueueAppTurn"]>[0];
     let turnBeforeEnqueue: TurnRecord;
@@ -99,6 +104,10 @@ export class AppTransportQueueStore {
         : null;
       const sessionId = sessionHintForRow(input.chatId);
       turnBeforeEnqueue = this.getTurn(input.turnId);
+      const projectSources = this.projectSources(input.chatId, input.message.id);
+      if (input.message.content_parts?.parts.some((part) => part.type === "project_source_ref") && !projectSources.length) {
+        throw new Error("project_source_snapshot_missing");
+      }
       transportInput = {
         chatId: input.chatId,
         messageId: input.message.id,
@@ -115,6 +124,11 @@ export class AppTransportQueueStore {
         executionControls,
         appQueueClaimId: input.queueClaimId,
         appTurnContext: {
+          branchSeed: this.branchSeed(input.chatId),
+          projectSources,
+          contentParts: input.message.content_parts,
+          sessionReferences: resolveSessionReferences({ content: input.message.content_parts,
+            butlerData: this.butlerData, getChat: (id) => this.getChatRow(id) }),
           version: 1,
           session: {
             id: input.chatId,
@@ -145,6 +159,7 @@ export class AppTransportQueueStore {
           ...(input.authorityRequestRef
             ? { authorityClientMessageId: input.message.id }
             : {}),
+          ...(input.planId ? { planId: input.planId } : {}),
         },
         attachments: this.messageFiles.attachmentsForTransport(
           input.message.id,

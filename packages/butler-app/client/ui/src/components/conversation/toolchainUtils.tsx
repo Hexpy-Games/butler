@@ -1,12 +1,13 @@
 import type { ReactElement } from "react";
 import { type WorkActivityToolItem } from "@/butler-ds";
-import { appCopy } from "@/app/copy.ts";
+import { appCopy, getAppLocale, interfaceProgressLabel, interfaceArgumentLabel } from "@/app/copy.ts";
 import { isVisibleToolActivity } from "@/app/conversation-progress";
 import type { ProgressRow, WorkBlockView } from "@/app/types.ts";
 import { OperationOutputDetails } from "./OperationOutputDetails";
 import { publicOperationTitle } from
   "../../../../../../butler-progress-projection/src/index.ts";
 import { activityIcon } from "./toolchainIcons";
+import { WorkerCallCapsule } from "./WorkerCallCapsule";
 
 export { activityIcon } from "./toolchainIcons";
 
@@ -44,6 +45,9 @@ export function workActivityToolsFromRows(
     title: toolchainSummaryLabel(row),
     summaryLabel: toolchainGroupLabel(row),
     details: toolDetails(row, turnId),
+    ...(row.safe_tool_name === "delegate_to_worker" && turnId && row.tool_call_id ? {
+      after: <WorkerCallCapsule turnId={turnId} callId={row.tool_call_id} />,
+    } : {}),
     }));
 }
 
@@ -78,12 +82,13 @@ export function toolchainLabel(row: ProgressRow): string {
   if (row.safe_tool_name && row.safe_input_label) {
     return `${row.safe_tool_name}: ${row.safe_input_label}`;
   }
-  return row.safe_tool_name ?? row.safe_input_label ?? "Tool";
+  return row.safe_tool_name ?? row.safe_input_label ?? appCopy.interfaceDetails.tool;
 }
 
 export function toolchainSummaryLabel(row: ProgressRow): string {
+  if (row.safe_tool_name === "delegate_to_worker") return appCopy.interfaceStatus.workerCall;
   if (row.bridge_phase === "btcc_operation") {
-    return row.safe_label || publicOperationTitle(row.safe_tool_name);
+    return interfaceProgressLabel(row) || publicOperationTitle(row.safe_tool_name, getAppLocale());
   }
   const detailCount = row.safe_detail_rows?.length ?? 0;
   const firstDetail = row.safe_detail_rows?.[0];
@@ -103,39 +108,36 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
 }
 
 export function toolchainGroupLabel(row: ProgressRow): string {
+  if (row.safe_tool_name === "delegate_to_worker") return appCopy.interfaceStatus.work;
   if (row.bridge_phase === "btcc_operation") {
-    if (row.safe_tool_name === "web_search") return "검색";
+    if (row.safe_tool_name === "web_search") return appCopy.interfaceStatus.search;
     if (
       row.safe_tool_name === "web_read" ||
       row.safe_tool_name === "read_file" ||
       row.safe_tool_name === "list_files" ||
       row.safe_tool_name === "grep_files"
     ) {
-      return "조회";
+      return appCopy.interfaceStatus.lookup;
     }
     if (row.safe_tool_name === "edit_file" || row.safe_tool_name === "write_file") {
-      return "편집";
+      return appCopy.interfaceStatus.edit;
     }
-    if (row.safe_tool_name === "run_command") return "명령";
-    return "작업";
+    if (row.safe_tool_name === "run_command") return appCopy.interfaceStatus.command;
+    return appCopy.interfaceStatus.work;
   }
   const toolName = row.safe_tool_name?.trim();
   if (
     row.kind === "searched" ||
     toolName === "Web search"
   ) {
-    return "검색";
+    return appCopy.interfaceStatus.search;
   }
   if (row.kind === "ran_command" || toolName === "Bash") return "Bash";
-  if (row.kind === "read") return toolName || "읽기";
-  if (row.kind === "edited") return "편집";
-  if (row.kind === "dispatch") return "작업";
-  if (toolName && !isGenericToolName(toolName)) return toolName;
-  return "검토";
-}
-
-function isGenericToolName(value: string): boolean {
-  return ["Tool", "Used tool", "도구"].includes(value);
+  if (row.kind === "read") return toolName || appCopy.interfaceStatus.read;
+  if (row.kind === "edited") return appCopy.interfaceStatus.edit;
+  if (row.kind === "dispatch") return appCopy.interfaceStatus.work;
+  if (toolName && !["Tool", "Used tool", "도구"].includes(toolName)) return toolName;
+  return appCopy.interfaceStatus.review;
 }
 
 export function toolchainDetailLabel(
@@ -145,8 +147,8 @@ export function toolchainDetailLabel(
   const value = detail.safe_value?.trim();
   const label =
     row.kind === "todo" && detail.safe_label.trim().toLowerCase() === "phase"
-      ? "단계"
-      : detail.safe_label;
+      ? appCopy.interfaceStatus.phase
+      : interfaceArgumentLabel(detail.kind, detail.safe_label);
   if (!value) return label;
   if (row.safe_tool_name === "Web search")
     return appCopy.conversation.work.webSearchDetail(value);

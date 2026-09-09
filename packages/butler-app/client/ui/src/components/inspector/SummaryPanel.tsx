@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import type { ReactElement } from "react";
 import {
   ActivityFeed,
@@ -22,6 +24,7 @@ export function SummaryPanel({
   status: StatusPill;
   summary?: SessionSummaryView | null;
 }) {
+  useAppLocale();
   const progressRows = summaryProgressRows(
     summary?.latest_progress?.safe_progress_rows ?? [],
   );
@@ -30,8 +33,8 @@ export function SummaryPanel({
     <>
       <ActivityFeed
         data-test-class="summary-progress-panel"
-        title="Progress"
-        emptyLabel="No session progress yet"
+        title={appCopy.interfacePanels.progress}
+        emptyLabel={appCopy.interfacePanels.noProgress}
         style={inspectorInset}
         items={progressRows.map((item, index) => ({
           id: `${item.id}:${index}`,
@@ -39,30 +42,30 @@ export function SummaryPanel({
           title: item.safe_label,
         }))}
       />
-      <InspectorPanel title="Branch details">
-        <KeyValueRow label="Gateway" value={status.label} />
+      <InspectorPanel title={appCopy.interfacePanels.branchDetails}>
+        <KeyValueRow label={appCopy.interfacePanels.gateway} value={status.label} />
         <KeyValueRow
-          label="Git branch"
+          label={appCopy.interfacePanels.gitBranch}
           value={branchValue(summary?.branch_info)}
         />
         <KeyValueRow
-          label="Workspace"
+          label={appCopy.interfacePanels.workspace}
           value={workspaceValue(summary?.branch_info)}
         />
         <KeyValueRow
-          label="Changes"
+          label={appCopy.interfacePanels.changes}
           value={dirtyValue(summary?.branch_info)}
         />
         <KeyValueRow
-          label="Context"
+          label={appCopy.interfacePanels.context}
           value={contextTooltip(summary?.context_details)}
         />
       </InspectorPanel>
-      <InspectorPanel title="Skills">
+      <InspectorPanel title={appCopy.interfacePanels.skills}>
         {skillsUsed.length > 0 ? (
           skillsUsed.map((skill) => <Artifact key={skill} label={skill} />)
         ) : (
-          <EmptyPanelLine label="No app-visible skills" />
+          <EmptyPanelLine label={appCopy.interfacePanels.noVisibleSkills} />
         )}
       </InspectorPanel>
     </>
@@ -72,50 +75,50 @@ export function SummaryPanel({
 function branchValue(
   branch: SessionSummaryView["branch_info"] | undefined,
 ): string {
-  if (!branch) return "Unavailable";
+  if (!branch) return appCopy.interfacePanels.unavailable;
   if (branch.workspace_mode === "git") {
-    return branch.branch_name?.trim() || "Detached HEAD";
+    return branch.branch_name?.trim() || appCopy.interfacePanels.detachedHead;
   }
-  if (branch.workspace_mode === "folder") return "Not a Git workspace";
-  if (branch.workspace_mode === "none") return "No project workspace";
+  if (branch.workspace_mode === "folder") return appCopy.interfacePanels.notGit;
+  if (branch.workspace_mode === "none") return appCopy.interfacePanels.noWorkspace;
   if (branch.safe_error_code === "git_not_installed") {
-    return "Git is not installed";
+    return appCopy.interfacePanels.noGit;
   }
-  return "Unavailable";
+  return appCopy.interfacePanels.unavailable;
 }
 
 function workspaceValue(
   branch: SessionSummaryView["branch_info"] | undefined,
 ): string {
-  if (!branch) return "Unavailable";
+  if (!branch) return appCopy.interfacePanels.unavailable;
   if (
     branch.workspace_binding === "session_worktree" &&
     branch.workspace_status === "unavailable"
   ) {
-    return "Session worktree unavailable";
+    return appCopy.interfacePanels.unavailableWorktree;
   }
   if (branch.workspace_binding === "session_worktree") {
-    return "Session worktree";
+    return appCopy.interfacePanels.worktree;
   }
   if (branch.workspace_binding === "project") {
-    return `Project · ${branch.workspace_label?.trim() || "Project workspace"}`;
+    return appCopy.settings.options.local;
   }
-  if (branch.workspace_mode === "none") return "No project workspace";
-  if (branch.workspace_mode === "folder") return "Project folder";
-  if (branch.workspace_mode === "git") return "Project workspace";
+  if (branch.workspace_mode === "none") return appCopy.interfacePanels.noWorkspace;
+  if (branch.workspace_mode === "folder") return appCopy.interfacePanels.projectFolder;
+  if (branch.workspace_mode === "git") return appCopy.interfacePanels.projectWorkspace;
   if (branch.safe_error_code === "git_not_installed") {
-    return "Project workspace (Git unavailable)";
+    return appCopy.interfacePanels.projectWorkspaceNoGit;
   }
-  return "Unavailable";
+  return appCopy.interfacePanels.unavailable;
 }
 
 function dirtyValue(
   branch: SessionSummaryView["branch_info"] | undefined,
 ): string {
-  if (branch?.workspace_status === "unavailable") return "Unavailable";
-  if (branch?.dirty === true) return "Dirty";
-  if (branch?.dirty === false) return "Clean";
-  return "Unavailable";
+  if (branch?.workspace_status === "unavailable") return appCopy.interfacePanels.unavailable;
+  if (branch?.dirty === true) return appCopy.interfacePanels.dirty;
+  if (branch?.dirty === false) return appCopy.interfacePanels.clean;
+  return appCopy.interfacePanels.unavailable;
 }
 
 function progressStateTone(state?: string): string {

@@ -14,6 +14,7 @@ import type { AppTransportProjectionStoreOptions } from "./transport-projection-
 import { artifactFilesFromOutbound } from "./outbound-artifact-files.ts";
 import { safeOptionalShortToken } from "../core/projection-safe-values.ts";
 import { projectClaimedOutbound } from "./claimed-outbound-projection.ts";
+import { projectLedgerPlanFromUnknown } from "../../../../agent/btcc/project-plan.ts";
 
 export function projectAppFinalResult(input: {
   options: AppTransportProjectionStoreOptions;
@@ -49,8 +50,55 @@ export function projectAppFinalResult(input: {
     return false;
   }
 
+  if (metadata.kind === "turn_suspended") {
+    let settledForDrain = false;
+    const projected = projectClaimedOutbound(
+      options,
+      { chatId, turnId, metadata },
+      () => {
+        input.deleteStagedOutbound();
+        if (metadata.suspension === "authority_pending") {
+          const waitingTurn = options.updateTurnState(turnId, "waiting_for_form", {
+            safeStatusLabel: "Waiting for approval", retryable: false, cancellable: true, safeErrorCode: null,
+          });
+          options.appendEvent("turn.state_changed", { turn: waitingTurn });
+          markProjectedTransportEvent(actionId, event.eventId, chatId);
+          options.touchChat(chatId);
+          return true;
+        }
+        // The durable BTCC Turn remains explicitly suspended and resumable.
+        // Its App ingress Turn is settled silently so the composer and the
+        // per-session queue are not held by an execution claim that no longer
+        // owns runtime execution.
+        const waitingTurn = options.updateTurnState(turnId, "delivered", {
+          safeStatusLabel: "",
+          retryable: false,
+          cancellable: false,
+          safeErrorCode: null,
+        });
+        options.appendEvent("turn.state_changed", { turn: waitingTurn });
+        const settled = settleQueuedTurn(options, chatId, turnId, metadata);
+        if (!settled && queuedSettlementRequired(options, chatId, turnId, metadata)) {
+          return false;
+        }
+        markProjectedTransportEvent(actionId, event.eventId, chatId);
+        options.touchChat(chatId);
+        settledForDrain = settled;
+        return true;
+      },
+    );
+    if (projected && settledForDrain) {
+      void options.drainQueuedSessionMessages(chatId).catch(() => undefined);
+    }
+    return projected;
+  }
+
   const text = sanitizeAppTransportFinalText(message.text);
   const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
+  const changedFiles = changedFilePathsFromOutbound(message.changedFiles);
+  const plan = projectLedgerPlanFromUnknown(message.plan ?? metadata.plan);
+  const activatedByPlanTurn = plan?.status === "active" &&
+    options.getTurn(turnId).execution_controls?.plan_mode === true;
   const delivery = deliveryLimitationMetadataFromRecord(metadata);
   const limitedDelivery = Boolean(delivery);
   const noVisibleReply =
@@ -80,7 +128,10 @@ export function projectAppFinalResult(input: {
     markProjectedTransportEvent(actionId, event.eventId, chatId);
     return false;
   }
-  if (!text && artifacts.length === 0 && !noVisibleReply) return false;
+  if (
+    !text && artifacts.length === 0 && changedFiles.length === 0 && !plan &&
+    !noVisibleReply
+  ) return false;
   if (noVisibleReply) {
     if (!hasDurableQueueClaim) {
       input.deleteStagedOutbound();
@@ -138,7 +189,7 @@ export function projectAppFinalResult(input: {
       });
       if (
         isSameDeliveredFinal(existing, text, options.getTurn(turnId).state) &&
-        artifactFiles.length === 0
+        artifactFiles.length === 0 && changedFiles.length === 0 && !plan
       ) {
         const settled = settleQueuedTurn(options, chatId, turnId, metadata);
         if (!settled && queuedSettlementRequired(options, chatId, turnId, metadata)) {
@@ -164,6 +215,8 @@ export function projectAppFinalResult(input: {
         turnId,
         text ? [text] : [],
         files,
+        changedFiles,
+        plan,
       );
       if (
         terminalRecoverableCorrection ||
@@ -211,6 +264,18 @@ export function projectAppFinalResult(input: {
       if (!settled && queuedSettlementRequired(options, chatId, turnId, metadata)) {
         return false;
       }
+      if (activatedByPlanTurn && plan) {
+        if (!options.createAcceptedPlanContinuation) {
+          throw new Error("accepted_plan_continuation_dependency_missing");
+        }
+        options.updateSessionControlsView?.(chatId, { plan_mode: false });
+        options.createAcceptedPlanContinuation({
+          sessionId: chatId,
+          sourceTurnId: turnId,
+          planId: plan.id,
+          planTitle: plan.title,
+        });
+      }
       markProjectedTransportEvent(actionId, event.eventId, chatId);
       options.touchChat(chatId);
       settledForDrain = settled;
@@ -218,8 +283,19 @@ export function projectAppFinalResult(input: {
     },
   );
   if (!projected) return false;
-  if (settledForDrain) void options.drainQueuedSessionMessages(chatId).catch(() => undefined);
+  if (settledForDrain) {
+    void options.drainQueuedSessionMessages(chatId).catch(() => undefined);
+  }
   return true;
+}
+
+function changedFilePathsFromOutbound(value: unknown): import("../../../../agent/tools/file-tools/shared/changed-file-detail.ts").ChangedFileDetail[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((detail): detail is import("../../../../agent/tools/file-tools/shared/changed-file-detail.ts").ChangedFileDetail =>
+    Boolean(detail && typeof detail === "object" && !Array.isArray(detail) &&
+      typeof (detail as Record<string, unknown>).path === "string" &&
+      Array.isArray((detail as Record<string, unknown>).lines)),
+  ).slice(0, 40);
 }
 
 function settleQueuedTurn(

@@ -10,6 +10,8 @@ import type {
   MessageRole,
   MessageStatus,
 } from "../../interface/protocol/app-protocol.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "../../../../agent/btcc/project-plan.ts";
 
 export class AppAssistantMessageStore {
   constructor(
@@ -27,6 +29,7 @@ export class AppAssistantMessageStore {
           safeErrorCode?: string;
           retryable?: boolean;
           attachments?: MessageFileRow[];
+          plan?: ProjectLedgerPlan;
         },
       ) => MessageRecord;
       updateMessage: (
@@ -36,9 +39,14 @@ export class AppAssistantMessageStore {
           status?: MessageStatus;
           safeErrorCode?: string | null;
           retryable?: boolean;
+          plan?: ProjectLedgerPlan | null;
         },
       ) => MessageRecord;
       messageRecordById: (messageId: string) => MessageRecord;
+      replaceMessageChangedFiles: (
+        messageId: string,
+        details: readonly (ChangedFileDetail | string)[],
+      ) => MessageRecord;
       getLatestAssistantMessageForTurn: (turnId: string) => MessageRow | null;
       listMessages: (chatId: string) => MessageRecord[];
       messageWithTerminalWorkBlocks: (
@@ -54,10 +62,12 @@ export class AppAssistantMessageStore {
     turnId: string,
     texts: string[],
     files: MessageFileRow[] = [],
+    changedFiles: ChangedFileDetail[] = [],
+    plan?: ProjectLedgerPlan,
   ): MessageRecord[] {
-    return normalizedAssistantReplyTexts(texts, files).map(
+    return normalizedAssistantReplyTexts(texts, files, plan).map(
       (replyText, index, normalizedReplies) => {
-        const reply = this.input.insertMessage(
+        let reply = this.input.insertMessage(
           chatId,
           "assistant",
           replyText,
@@ -65,8 +75,12 @@ export class AppAssistantMessageStore {
           {
             turnId,
             attachments: index === normalizedReplies.length - 1 ? files : [],
+            ...(index === normalizedReplies.length - 1 && plan ? { plan } : {}),
           },
         );
+        if (index === normalizedReplies.length - 1) {
+          reply = this.input.replaceMessageChangedFiles(reply.id, changedFiles);
+        }
         this.input.appendEvent("message.created", { message: reply });
         return reply;
       },
@@ -78,18 +92,30 @@ export class AppAssistantMessageStore {
     turnId: string,
     texts: string[],
     files: MessageFileRow[] = [],
+    changedFiles: ChangedFileDetail[] = [],
+    plan?: ProjectLedgerPlan,
   ): MessageRecord[] {
-    const normalizedReplies = normalizedAssistantReplyTexts(texts, files);
+    const normalizedReplies = normalizedAssistantReplyTexts(texts, files, plan);
     const existing = this.input.getLatestAssistantMessageForTurn(turnId);
-    if (!existing) return this.insertReplies(chatId, turnId, normalizedReplies, files);
+    if (!existing) {
+      return this.insertReplies(
+        chatId,
+        turnId,
+        normalizedReplies,
+        files,
+        changedFiles,
+        plan,
+      );
+    }
 
     const [firstReply, ...remainingReplies] = normalizedReplies;
     const attachFilesToUpdated = remainingReplies.length === 0 ? files : [];
     let updated = this.input.updateMessage(existing.id, {
-      text: firstReply ?? "Butler did not return a visible reply.",
+      text: firstReply ?? "",
       status: "delivered",
       safeErrorCode: null,
       retryable: false,
+      ...(remainingReplies.length === 0 && plan ? { plan } : {}),
     });
     if (attachFilesToUpdated.length > 0) {
       this.input.messageFiles.attachToMessage(
@@ -99,11 +125,22 @@ export class AppAssistantMessageStore {
       );
       updated = this.input.messageRecordById(updated.id);
     }
+    updated = this.input.replaceMessageChangedFiles(
+      updated.id,
+      remainingReplies.length === 0 ? changedFiles : [],
+    );
     this.input.appendEvent("message.updated", { message: updated });
     if (remainingReplies.length === 0) return [updated];
     return [
       updated,
-      ...this.insertReplies(chatId, turnId, remainingReplies, files),
+      ...this.insertReplies(
+        chatId,
+        turnId,
+        remainingReplies,
+        files,
+        changedFiles,
+        plan,
+      ),
     ];
   }
 
@@ -225,9 +262,11 @@ export class AppAssistantMessageStore {
 function normalizedAssistantReplyTexts(
   texts: string[],
   files: MessageFileRow[],
+  plan?: ProjectLedgerPlan,
 ): string[] {
   const replyTexts = texts.map((item) => item.trim()).filter(Boolean);
   if (replyTexts.length > 0) return replyTexts;
   if (files.length > 0) return ["Butler attached a file."];
+  if (plan) return [""];
   return ["Butler did not return a visible reply."];
 }

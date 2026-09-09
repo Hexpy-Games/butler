@@ -102,7 +102,7 @@ export class AppSessionQueueDispatcher {
         `
       SELECT rowid, id, chat_id, text, client_message_id, input_identity_digest,
         control_resolution_json, controls_json,
-        attachments_json, state, safe_error_code, dispatched_message_id, turn_id,
+        attachments_json, content_parts_json, state, safe_error_code, dispatched_message_id, turn_id,
         claim_id, claim_owner, claimed_at, lease_expires_at,
         terminal_result_message_id, created_at, updated_at
       FROM session_queued_messages

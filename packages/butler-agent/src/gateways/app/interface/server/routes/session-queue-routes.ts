@@ -57,6 +57,7 @@ function strictQueueMessageRequest(
   return {
     ...(typeof body.chat_id === "string" ? { chat_id: body.chat_id } : {}),
     ...(typeof body.text === "string" ? { text: body.text } : {}),
+    ...(body.content_parts ? { content_parts: body.content_parts } : {}),
     ...(typeof body.client_message_id === "string"
       ? { client_message_id: body.client_message_id }
       : {}),

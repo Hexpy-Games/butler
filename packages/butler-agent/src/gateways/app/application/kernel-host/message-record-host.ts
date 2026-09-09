@@ -1,3 +1,4 @@
+import type { MessageContent } from "../../../../foundation/message-content.ts";
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
 import type {
   MessageRow,
@@ -19,6 +20,8 @@ import type {
   QueuedMessageRecord,
   SessionControlState,
 } from "../../interface/protocol/app-protocol.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "../../../../agent/btcc/project-plan.ts";
 import type { AppEventEnvelope } from "../../interface/protocol/app-protocol.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
 
@@ -34,10 +37,12 @@ export interface AppStoreKernelMessageRecordHost {
     status: MessageStatus,
     options?: {
       clientMessageId?: string;
+      contentParts?: MessageContent;
       turnId?: string;
       safeErrorCode?: string;
       retryable?: boolean;
       attachments?: MessageFileRow[];
+      plan?: ProjectLedgerPlan;
       conversationSessionId?: string | null;
       conversationTurnId?: string | null;
       conversationMessageId?: string | null;
@@ -48,13 +53,21 @@ export interface AppStoreKernelMessageRecordHost {
     turnId: string,
     texts: string[],
     files?: MessageFileRow[],
+    changedFiles?: ChangedFileDetail[],
+    plan?: ProjectLedgerPlan,
   ): MessageRecord[];
   insertOrReplaceAssistantReplies(
     chatId: string,
     turnId: string,
     texts: string[],
     files?: MessageFileRow[],
+    changedFiles?: ChangedFileDetail[],
+    plan?: ProjectLedgerPlan,
   ): MessageRecord[];
+  replaceMessageChangedFiles(
+    messageId: string,
+    details: readonly (ChangedFileDetail | string)[],
+  ): MessageRecord;
   finalizeResponderLimitedDelivery(
     chatId: string,
     turnId: string,
@@ -88,6 +101,7 @@ export interface AppStoreKernelMessageRecordHost {
       status?: MessageStatus;
       safeErrorCode?: string | null;
       retryable?: boolean;
+      plan?: ProjectLedgerPlan | null;
     },
   ): MessageRecord;
   runResponder(
@@ -149,21 +163,35 @@ export function createMessageRecordHost(
         options,
       );
     },
-    insertAssistantReplies(chatId, turnId, texts, files = []) {
+    insertAssistantReplies(chatId, turnId, texts, files = [], changedFiles = [], plan) {
       return kernel.assistantMessages.insertReplies(
         chatId,
         turnId,
         texts,
         files,
+        changedFiles,
+        plan,
       );
     },
-    insertOrReplaceAssistantReplies(chatId, turnId, texts, files = []) {
+    insertOrReplaceAssistantReplies(
+      chatId,
+      turnId,
+      texts,
+      files = [],
+      changedFiles = [],
+      plan,
+    ) {
       return kernel.assistantMessages.insertOrReplaceReplies(
         chatId,
         turnId,
         texts,
         files,
+        changedFiles,
+        plan,
       );
+    },
+    replaceMessageChangedFiles(messageId, details) {
+      return kernel.sessionRecords.replaceMessageChangedFiles(messageId, details);
     },
     finalizeResponderLimitedDelivery(
       chatId,

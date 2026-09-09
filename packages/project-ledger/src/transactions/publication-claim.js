@@ -89,5 +89,6 @@ function claimIdentity(transaction) {
     publicationId: transaction.publicationId,
     canonicalRoot: transaction.canonicalRoot,
     baseSha256: transaction.base.sourceSha256,
+    ...(transaction.base.recordPaths ? { journalPath: transaction.journalPath } : {}),
   };
 }

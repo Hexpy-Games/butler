@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Button, Stack } from "@/butler-ds";
 
@@ -14,6 +15,7 @@ export function MessageRetryActions({
   onRetryTurn,
   onRetryTurnWithCurrentControls,
 }: MessageRetryActionsProps) {
+  useAppLocale();
   const retrying = retryingTurnId === turnId;
 
   return (

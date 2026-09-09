@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Field, FieldDescription, FieldLabel, Input } from "@/butler-ds";
 import type { McpServerFormState } from "./mcpSettingsUtils";
@@ -10,12 +11,14 @@ export function HttpFields({
   form: McpServerFormState;
   onChange: (patch: Partial<McpServerFormState>) => void;
 }) {
+  useAppLocale();
   const copy = appCopy.settings;
   return (
     <>
       <Field>
-        <FieldLabel>{copy.fields.mcpUrl}</FieldLabel>
+        <FieldLabel htmlFor="mcp-http-url">{copy.fields.mcpUrl}</FieldLabel>
         <Input
+          id="mcp-http-url"
           value={form.url}
           onChange={(event) => onChange({ url: event.target.value })}
         />
@@ -25,7 +28,7 @@ export function HttpFields({
         <FieldDescription>{copy.descriptions.mcpSecrets}</FieldDescription>
         <McpSecretRows
           title={copy.fields.mcpHeaders}
-          addLabel="헤더 추가"
+          addLabel={appCopy.interfaceDetails.addHeader}
           rows={form.headerRows}
           onRowsChange={(headerRows) =>
             onChange({ headerRows, headersDirty: true })

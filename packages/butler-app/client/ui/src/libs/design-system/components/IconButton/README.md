@@ -25,6 +25,9 @@ Prefer token-backed spacing and responsive composition. Validate the fixture in 
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 
 ## Best practice
+- A container may set `--icon-button-surface` to a token-backed background shorthand
+  (for example a centered radial gradient). This changes hover/selected paint only;
+  the button hit target, focus ring and accessible name remain unchanged.
 - Compose it with other `@/butler-ds` components before adding bespoke CSS.
 - Keep layout fluid; do not assume a fixed desktop width.
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.

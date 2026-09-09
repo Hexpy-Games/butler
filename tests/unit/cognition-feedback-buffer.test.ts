@@ -17,6 +17,28 @@ function tempData(): string {
   return mkdtempSync(join(tmpdir(), "butler-feedback-buffer-"));
 }
 
+test("feedback context filters session/project ownership before applying its limit", () => {
+  const butlerData = tempData();
+  try {
+    for (const [scope, text] of [
+      ["session:other", "UNRELATED_SESSION"], ["project:other", "UNRELATED_PROJECT"],
+      ["session", "UNOWNED_SESSION"], ["project", "UNOWNED_PROJECT"],
+      ["session:parent", "PARENT_CORRECTION"], ["project:active", "PROJECT_CORRECTION"],
+      ["style", "USER_STYLE_CORRECTION"],
+    ]) addFeedbackEntry(butlerData, { scope, text: text!, targetRef: "test" });
+    const context = renderFeedbackBufferContext({
+      butlerData, sessionId: "parent", projectId: "active", maxEntries: 3,
+    });
+    expect(context).toContain("PARENT_CORRECTION");
+    expect(context).toContain("PROJECT_CORRECTION");
+    expect(context).toContain("USER_STYLE_CORRECTION");
+    expect(context).not.toContain("UNRELATED");
+    expect(context).not.toContain("UNOWNED");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("feedback buffer stores parseable markdown entries with durable metadata", () => {
   const butlerData = tempData();
   try {

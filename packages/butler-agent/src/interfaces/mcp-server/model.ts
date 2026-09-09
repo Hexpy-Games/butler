@@ -7,6 +7,7 @@ export const BUTLER_CONFIG_PATH = join(BUTLER_DIR.DATA, "butler.config.json");
 export const DEFAULT_MODEL = "openai/gpt-5.5-codex";
 
 export const VALID_MODELS = [
+  "gpt-6-astra",
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",

@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { projectTurnActivity } from "@/app/conversation-progress";
 import type { ProgressRow } from "@/app/types.ts";
 import { CurrentTurnStatus } from "./CurrentTurnStatus";
@@ -19,6 +20,7 @@ export function TurnActivityPanel({
   turnId?: string;
   startedAt?: string;
 }) {
+  useAppLocale();
   const {
     decisions,
     modelRoundWait,
@@ -64,9 +66,11 @@ export function TurnActivityPanel({
         <TurnDecisionRow decision={decisions.at(-1)!} />
       ) : null}
       <CurrentTurnStatus
+        state={state}
         modelRoundWait={modelRoundWait}
         operation={operation}
         publicActivity={publicActivity}
+        phaseLabel={phaseActivities.at(-1)?.summary}
         startedAt={startedAt ?? earliestProgressTimestamp(rows)}
       />
     </Stack>

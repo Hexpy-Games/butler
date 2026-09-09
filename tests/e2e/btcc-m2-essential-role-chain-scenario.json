@@ -1,0 +1,40 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "m2-essential-role-chain",
+  "model": "openai/gpt-5.6-sol",
+  "reasoningEffort": "low",
+  "accessMode": "full_access",
+  "session": {
+    "kind": "project",
+    "projectDisplayName": "M2 essential role chain",
+    "title": "M2 Butler Steward Worker"
+  },
+  "fixtures": [
+    {
+      "path": "input/source.txt",
+      "text": "M2_ROLE_CHAIN_MARKER=essential-worker-path\n"
+    }
+  ],
+  "steps": [
+    {
+      "id": "butler-steward-worker",
+      "prompt": "input/source.txt를 읽고 그 내용을 포함한 role-chain-result.md를 작성해 주세요. Butler는 구상, 계획, 계획 리뷰 뒤 Steward에게 위임하고, Steward는 자신의 구상, 계획, 계획 리뷰 뒤 파일 작성 실행을 Worker 한 명에게 맡겨 주세요. Worker 보고를 받은 Steward가 결과를 직접 리뷰하고 검토한 뒤 Butler에게 보고하고, Butler가 최종 답변을 주세요.",
+      "timeoutMs": 900000,
+      "expect": {
+        "terminalState": "delivered",
+        "files": [
+          {
+            "path": "role-chain-result.md",
+            "contains": [
+              "M2_ROLE_CHAIN_MARKER=essential-worker-path"
+            ]
+          }
+        ],
+        "work": {
+          "exists": true,
+          "status": "completed"
+        }
+      }
+    }
+  ]
+}

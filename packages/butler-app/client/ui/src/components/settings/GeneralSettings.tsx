@@ -1,13 +1,16 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
-import { SettingsSection, SettingsSelect } from "./SettingsFormComponents";
+import { SettingsSection, SettingsSelect, SettingsSwitch } from "./SettingsFormComponents";
 import { DesktopShellSettings } from "./DesktopShellSettings";
 import { SettingsSearchableSelect } from "./SettingsSearchableSelect";
 import { SearchSettings } from "./SearchSettings";
+import { WorkStatusPanelContainer } from "./WorkStatusPanelContainer";
 
 export function GeneralSettings() {
+  useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
@@ -22,6 +25,8 @@ export function GeneralSettings() {
   return (
     <>
       <SettingsSection title={settingsCopy.sections.general}>
+        <SettingsSwitch label={appCopy.interfaceDetails.smartGroups} description={appCopy.interfaceDetails.smartGroupsDescription}
+          checked={draft.smart_grouping_enabled} onChange={value => update({ smart_grouping_enabled: value }, setSettings)} />
         <SettingsSelect
           label={settingsFields.language}
           description={settingsDescriptions.language}
@@ -86,6 +91,7 @@ export function GeneralSettings() {
           ]}
         />
       </SettingsSection>
+      <WorkStatusPanelContainer />
       <DesktopShellSettings draft={draft} />
       <SearchSettings draft={draft} />
     </>

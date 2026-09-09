@@ -41,6 +41,8 @@ export interface TurnControlResolution {
   };
   /** Internal App Allow adapter identity; excluded from signed execution controls. */
   authority_request_ref?: string;
+  /** Internal Plan-mode continuation binding; excluded from signed controls. */
+  plan_id?: string;
   /** Trusted durable Steward-result origin; persisted into signed Turn controls. */
   subsession_result?: SubsessionResultTurnContext;
 }

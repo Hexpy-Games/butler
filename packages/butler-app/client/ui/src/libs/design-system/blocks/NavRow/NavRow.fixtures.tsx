@@ -27,14 +27,32 @@ export function NavRowFixture() {
         label="With action"
         onClick={() => undefined}
         actions={
-          <IconButton label="Add"><Plus size={14} /></IconButton>
+          <IconButton label="Add">
+            <Plus size={14} />
+          </IconButton>
         }
         actionsVisibility="hover"
       />
+      <NavRow icon={<Folder size={17} />} label="Disabled state" disabled />
       <NavRow
+        multiline
         icon={<Folder size={17} />}
-        label="Disabled state"
-        disabled
+        label="Recent conversation"
+        meta={<span>Project / conversation context · 3 minutes ago</span>}
+        actions={<IconButton label="Add"><Plus size={14} /></IconButton>}
+        onClick={() => undefined}
+      />
+      <NavRow
+        multiline
+        icon={<Folder size={17} />}
+        label={
+          <>
+            Multi-line navigation title
+            <br />
+            Project / conversation context
+          </>
+        }
+        onClick={() => undefined}
       />
     </Stack>
   );

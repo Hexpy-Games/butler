@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { UsageMonitorView } from "@/app/types.ts";
 import { Stack, SurfacePanel, Typo } from "@/butler-ds";
@@ -14,15 +15,16 @@ export function UsageProviderPanel({
   activeProviderId: string | null;
   providers: UsageProvider[];
 }) {
+  useAppLocale();
   return (
     <SurfacePanel elevation="none">
       <Stack gap="md">
         <Stack align="row" justify="between" cross="start" gap="md" wrap>
           <Stack gap="xs" style={{ minWidth: 0, flex: "1 1 260px" }}>
-            <Typo.Body as="div">API 프로바이더 사용량</Typo.Body>
+            <Typo.Body as="div">{appCopy.interfaceDetails.apiProviderUsage}</Typo.Body>
             <Typo.Caption>
               {activeProviderId
-                ? `현재 기준: ${activeProviderId}`
+                ? appCopy.interfaceTemplates.activeProvider(activeProviderId)
                 : appCopy.settings.descriptions.usageMonitorEmpty}
             </Typo.Caption>
           </Stack>

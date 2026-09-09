@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { readStewardResult, renderParentResult } from "./subsession-result-record.ts";
 
 export type SubsessionParentInput = {
   relation_id: string;
@@ -11,7 +12,7 @@ export type SubsessionParentInput = {
   text: string;
   model_ref: string;
   reasoning_effort: string;
-  access_mode: "full_access";
+  access_mode: "full_access" | "ask_first" | "read_only";
   timestamp: string;
 };
 
@@ -27,7 +28,7 @@ export function pendingParentInputs(db: Database): SubsessionParentInput[] {
     FROM btcc_subsession_outbox AS outbox
     JOIN btcc_session_relations AS relation ON relation.relation_id = outbox.relation_id
     WHERE outbox.status = 'pending' ORDER BY outbox.created_at ASC, outbox.outbox_id ASC
-  `).all().map((row) => ({
+  `).all().map((row) => restorePendingReport(db, {
     ...(JSON.parse(row.input_json) as Omit<SubsessionParentInput, "result_id">),
     relation_id: row.relation_id,
     result_id: row.result_id,
@@ -45,10 +46,16 @@ export function pendingParentInputForResult(
     JOIN btcc_session_relations AS relation ON relation.relation_id = outbox.relation_id
     WHERE outbox.result_id = ? AND outbox.status = 'pending'
   `).get(resultId);
-  return row ? {
+  return row ? restorePendingReport(db, {
     ...(JSON.parse(row.input_json) as SubsessionParentInput),
     safe_title: row.safe_title,
-  } : null;
+  }) : null;
+}
+
+function restorePendingReport(db: Database, input: SubsessionParentInput): SubsessionParentInput {
+  const result = readStewardResult(db, input.relation_id);
+  return result && result.result_id === input.result_id
+    ? { ...input, text: renderParentResult(result) } : input;
 }
 
 export function markParentInputDelivered(db: Database, resultId: string): void {

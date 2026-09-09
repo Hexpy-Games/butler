@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { appCopy } from "@/app/copy.ts";
+import { confirmAction } from "@/app/confirmation.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import type { AppModelSummary, LocalModelDiscoveryRequest } from "@/app/types.ts";
 
@@ -42,7 +43,7 @@ export function useLocalModelUnsavedGuard({
       setLeaveGuard(null);
       return;
     }
-    setLeaveGuard(() => !hasUnsavedChanges || window.confirm(warning));
+    setLeaveGuard(() => !hasUnsavedChanges || confirmAction(warning));
     return () => setLeaveGuard(null);
   }, [hasUnsavedChanges, isEditing, setLeaveGuard, warning]);
 

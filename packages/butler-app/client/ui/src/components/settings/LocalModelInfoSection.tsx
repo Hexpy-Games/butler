@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Button, Save, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { LocalModelDiscoveryResult } from "@/app/types.ts";
@@ -40,6 +41,7 @@ export function LocalModelInfoSection({
   isEditing,
   onRegister,
 }: LocalModelInfoSectionProps) {
+  useAppLocale();
   const copy = appCopy.settings.localModels;
 
   return (

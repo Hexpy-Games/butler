@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -12,6 +13,7 @@ const PAGE_SIZE = 30;
 type DeveloperLogKindFilter = "all" | "model_turn" | "model_turn_error";
 
 export function DeveloperLogsSettings() {
+  useAppLocale();
   const [view, setView] = useState<DeveloperLogListView | null>(null);
   const [query, setQuery] = useState("");
   const [sessionId, setSessionId] = useState("");

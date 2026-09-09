@@ -1,9 +1,15 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { memo } from "react";
 import type { MessageRecord } from "@/app/types.ts";
 import { appCopy } from "@/app/copy.ts";
+import { visibleSystemMessageText } from "@/app/system-event-message.ts";
 import { Stack, Tag } from "@/butler-ds";
-import { isRuntimeFaultRetryableMessage } from "@/app/utils.ts";
+import {
+  isAssistantFailureNoticeMessage,
+  isRuntimeFaultRetryableMessage,
+} from "@/app/utils.ts";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
+import { BranchMessageActions } from "./BranchMessageActions";
 import {
   AssistantFailureNotice,
   MessageRetryActionsContainer,
@@ -11,8 +17,11 @@ import {
 import { CompletedWorkBlocks } from "./CompletedWorkBlocks";
 import { CompletedTurnActivity } from "./CompletedTurnActivity";
 import { MessageArtifacts } from "./MessageArtifacts";
+import { MessageChangedFiles } from "./MessageChangedFiles";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageMarkdown } from "./MessageMarkdown";
+import { PlanDocumentMessage } from "./PlanDocumentMessage";
+import { UserMessageText } from "./UserMessageText";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
 import { StewardParentProgress } from "./StewardParentProgress";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
@@ -32,6 +41,9 @@ function MessageContentComponent({
   onCopyAssistantMessage,
   stewardProgress,
 }: MessageContentProps) {
+  useAppLocale();
+  const artifacts = message.artifacts ?? [];
+  const failureNotice = isAssistantFailureNoticeMessage(message);
   return (
     <>
       {message.role === "assistant" ? (
@@ -47,7 +59,7 @@ function MessageContentComponent({
           />
           {stewardProgress ? (
             <Stack data-test-class="steward-message-content" gap="md">
-              {message.status === "failed" ? (
+              {failureNotice ? (
                 <AssistantFailureNotice message={message} />
               ) : (
                 <MessageMarkdown
@@ -57,7 +69,7 @@ function MessageContentComponent({
               )}
               <StewardParentProgress progress={stewardProgress} />
             </Stack>
-          ) : message.status === "failed" ? (
+          ) : failureNotice ? (
             <AssistantFailureNotice message={message} />
           ) : (
             <MessageMarkdown
@@ -65,6 +77,9 @@ function MessageContentComponent({
               text={message.text}
             />
           )}
+          {message.plan_document ? (
+            <PlanDocumentMessage plan={message.plan_document} />
+          ) : null}
           {message.status === "cancelled" && (
             <div role="status">
               <Tag ariaLabel={appCopy.conversation.stoppedStatus}>
@@ -73,17 +88,22 @@ function MessageContentComponent({
             </div>
           )}
         </>
+      ) : message.role === "user" ? (
+        <UserMessageText key={message.id} text={message.text} contentParts={message.content_parts} />
       ) : (
-        message.text
+        visibleSystemMessageText(message)
       )}
       {message.role !== "assistant" && (
         <MessageAttachments attachments={message.attachments ?? []} />
       )}
       {message.role === "assistant" && (
         <MessageArtifacts
-          artifacts={message.artifacts ?? []}
+          artifacts={artifacts}
           attachments={message.attachments ?? []}
         />
+      )}
+      {message.role === "assistant" && (
+        <MessageChangedFiles files={message.changed_files ?? []} />
       )}
       {message.role === "assistant" && onCopyAssistantMessage && (
         <AssistantResponseFooter
@@ -92,6 +112,10 @@ function MessageContentComponent({
           status={message.status}
           suppressTerminalStatus={Boolean(stewardProgress)}
           onCopy={() => onCopyAssistantMessage(message)}
+          actions={message.chat_id === "general" && message.text.trim() &&
+            (!message.status || ["delivered", "completed", "sent"].includes(message.status)) ? (
+              <BranchMessageActions sessionId={message.chat_id} messageId={message.id} />
+            ) : undefined}
         />
       )}
       {message.role !== "assistant" &&

@@ -10,6 +10,10 @@ import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { SqliteGuidedTurnStateRepository } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/sqlite-guided-turn-state-repository.ts";
+import { SqlitePrincipalAuthorityRepository } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
+import { createPrincipalAuthority } from
+  "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
 import type {
   AcceptedTurnTransition,
   TurnRecord,
@@ -190,7 +194,8 @@ function createFixture(ownerId: string) {
   }, {
     isAlive: () => false,
   });
-  const turns = new SqliteGuidedTurnStateRepository(db, owner);
+  const turns = new SqliteGuidedTurnStateRepository(db, owner,
+    createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)));
   return {
     db,
     turns,

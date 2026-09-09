@@ -55,7 +55,7 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
-  glassRadius = "panel",
+  glassRadius = "composer",
   showCloseButton = true,
   ...props
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {

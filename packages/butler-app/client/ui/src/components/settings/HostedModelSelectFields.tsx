@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { SettingsSelect } from "./SettingsFormComponents";
 import { modelOptionLabel } from "./modelManagementUtils";
@@ -22,6 +23,7 @@ export function HostedModelSelectFields({
   onModelRefChange,
   onProviderIdChange,
 }: HostedModelSelectFieldsProps) {
+  useAppLocale();
   const copy = appCopy.settings.modelManagement;
 
   return (

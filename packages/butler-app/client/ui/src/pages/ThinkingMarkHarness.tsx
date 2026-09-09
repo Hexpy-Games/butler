@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { type CSSProperties, useState } from "react";
 import { ButlerMarkIcon } from "@/components/common/ButlerMarkIcon.tsx";
 import { ButlerThinkingMark } from "@/components/common/ButlerThinkingMark.tsx";
@@ -30,7 +31,7 @@ export function ThinkingMarkHarness() {
             />
           </div>
           <div className={styles["control-group"]}>
-            <div className={styles["control-label"]}>State</div>
+            <div className={styles["control-label"]}>{appCopy.automations.fields.state}</div>
             <div className={styles.segmented} role="group" aria-label="Thinking mark state">
               <button
                 className={markState === "idle" ? styles["segment-active"] : styles.segment}
@@ -44,8 +45,7 @@ export function ThinkingMarkHarness() {
                 onClick={() => setMarkState("working")}
                 type="button"
               >
-                Working
-              </button>
+                {appCopy.space.working}</button>
             </div>
           </div>
         </div>

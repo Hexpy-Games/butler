@@ -1,0 +1,36 @@
+.timeline {
+  display: grid;
+  gap: var(--space-md);
+}
+.event {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: var(--space-sm);
+}
+.event:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 32px;
+  bottom: calc(-1 * var(--space-md));
+  width: 1px;
+  background: var(--line);
+}
+.marker {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-md);
+  color: var(--text-tertiary);
+}
+.session {
+  justify-self: start;
+  max-width: 100%;
+  width: fit-content;
+  margin-left: var(--space-sm);
+}
+.sessionTitle {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

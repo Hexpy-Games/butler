@@ -1,4 +1,5 @@
 import type { SqliteGuidedEffectJournal } from "../../adapters/index.ts";
+import type { GuidedEffectFaultHook } from "../effects/index.ts";
 import type {
   ModelRoundPort,
   PhaseContinuityPrivateDigester,
@@ -12,17 +13,19 @@ import type { PrincipalAuthority } from "../authority/index.ts";
 import type { SubsessionDelegationService } from "../subsessions/index.ts";
 
 export type ProductionGuidedTurnAgentInput = {
+  contextCompactions: import("../ports/context-compaction.ts").ContextCompactionStore;
   butlerHome: string;
   butlerData: string;
   phaseContinuityPrivateDigester: PhaseContinuityPrivateDigester;
   contextDocuments: ContextDocumentReader;
   toolJournal: GuidedToolJournal;
-  operationResultReader?: GuidedOperationResultReader;
+  operationResultReader: GuidedOperationResultReader;
   effectJournal: SqliteGuidedEffectJournal;
   authority: PrincipalAuthority;
   durableWork: DurableWorkService;
   modelRound?: ModelRoundPort;
   sessionBindingStore?: GuidedSessionWorkspaceBindingStore;
-  executionWindowSize?: number;
   subsessionDelegation?: SubsessionDelegationService;
+  /** TEST-ONLY deterministic fault proof; production composition callers omit it. */
+  guidedEffectFaultHook?: GuidedEffectFaultHook;
 };

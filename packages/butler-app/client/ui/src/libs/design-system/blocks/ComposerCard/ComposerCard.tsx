@@ -7,7 +7,6 @@ import type {
 } from "react";
 import { forwardRef } from "react";
 import { SendHorizontal, Square } from "../../components/Icons";
-import { Switch } from "../../components/Switch";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
 import styles from "./ComposerCard.module.css";
@@ -116,23 +115,12 @@ export function ComposerCardCompactPreview({
 }
 
 export function ComposerCardToolbarSpacer() {
-  return <span className={styles.spacer} aria-hidden="true" />;
-}
-
-export function ComposerPlanToggle({
-  checked,
-  label,
-  onCheckedChange,
-}: {
-  checked: boolean;
-  label: ReactNode;
-  onCheckedChange: (checked: boolean) => void;
-}) {
   return (
-    <label className={styles.planToggle} data-test-class="plan-switch">
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
-      <span>{label}</span>
-    </label>
+    <span
+      className={styles.spacer}
+      aria-hidden="true"
+      data-test-class="composer-toolbar-spacer"
+    />
   );
 }
 

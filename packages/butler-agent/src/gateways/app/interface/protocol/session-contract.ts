@@ -9,6 +9,7 @@ import type { MessageRecord, TurnRecord } from "./messaging-contract.ts";
 import type { ProgressSummaryRow } from "./progress-contract.ts";
 import type { SessionArtifactSummary } from "./attachment-contract.ts";
 import type { SettingsView } from "./settings-contract.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
 
 export interface SessionControlState {
   model: string;
@@ -38,6 +39,7 @@ export interface WorkStreamSummaryView {
 }
 
 export interface TurnProgressSnapshotView {
+  summary_reference?: import("../../../../../../butler-i18n/src/index.ts").InterfaceTextReference;
   summary?: string;
   updated_at?: string;
   turn_id?: string;
@@ -134,6 +136,7 @@ export interface StewardResultView {
   summary: string;
   acceptance_evidence: string[];
   changed_artifacts: string[];
+  changed_files?: ChangedFileDetail[];
   created_at: string;
 }
 
@@ -144,17 +147,20 @@ export interface StewardSessionSummaryView {
   status: SessionViewStatus;
   active_turn: SessionViewTurn | null;
   latest_turn: SessionViewTurn | null;
+  waiting_for_children?: boolean;
   activity_rows: ProgressSummaryRow[];
   approved_plan_revision?: number;
   approved_plan_total?: number;
   approved_plan_completed?: number;
   artifacts: SessionArtifactSummary[];
+  changed_files: ChangedFileDetail[];
   result: StewardResultView | null;
   updated_at: string;
   terminal: boolean;
 }
 
 export interface SessionView {
+  branch_seed?: import("../../../../foundation/session-branch.ts").SessionBranchSeed;
   protocol_version: typeof APP_PROTOCOL_VERSION;
   session_id: string;
   kind: ChatKind;
@@ -162,7 +168,10 @@ export interface SessionView {
   status: SessionViewStatus;
   active_turn: SessionViewTurn | null;
   latest_turn: SessionViewTurn | null;
+  waiting_for_children?: boolean;
   messages: MessageRecord[];
+  /** Activity from observer executions without an assistant message. */
+  activity_history?: Array<{ turn_id: string; created_at: string; rows: ProgressSummaryRow[] }>;
   message_window: SessionViewMessageWindow;
   workers: WorkerActivitySummary[];
   work_streams: WorkStreamSummaryView[];
@@ -181,6 +190,7 @@ export interface SessionView {
 }
 
 export interface SessionSummaryView {
+  branch_seed?: import("../../../../foundation/session-branch.ts").SessionBranchSeed;
   session_id: string;
   latest_progress: TurnProgressSnapshotView;
   latest_turn_cancellable?: boolean;

@@ -1,5 +1,6 @@
 import type { TurnExecutionControlsV1 } from "./turn-execution-controls.ts";
 import type { VisualAttachmentManifest } from "../../agent/image-attachment/contracts.ts";
+import type { ChangedFileDetail } from "../../agent/tools/file-tools/shared/changed-file-detail.ts";
 import type { VisualImageAdmissionResult } from "../../agent/image-attachment/contracts.ts";
 
 export type { VisualAttachmentManifest } from "../../agent/image-attachment/contracts.ts";
@@ -76,9 +77,17 @@ export interface InboundEnvelope {
     turnAttempt?: number;
     appQueueClaimId?: string;
     canonicalEventId?: string;
+    /** Internal durable authority continuation identity for a child Session. */
+    authorityRequestRef?: string;
+    /** Internal queue identity paired with authorityRequestRef. */
+    authorityClientMessageId?: string;
   };
   executionControls?: TurnExecutionControlsV1;
   appTurnContext?: {
+    contentParts?: import("../../foundation/message-content.ts").MessageContent;
+    branchSeed?: import("../../foundation/session-branch.ts").SessionBranchSeed;
+    sessionReferences?: import("../../foundation/message-content.ts").ResolvedSessionReference[];
+    projectSources?: import("../../foundation/message-content.ts").ResolvedProjectSource[];
     version: 1;
     session: { id: string; kind: "chat" | "project" };
     conversation: {
@@ -100,16 +109,19 @@ export interface InboundEnvelope {
     authorityRequestRef?: string;
     /** Durable App queue identity paired with the stored authority request. */
     authorityClientMessageId?: string;
+    /** Internal Project Ledger Plan binding for a Plan-mode continuation. */
+    planId?: string;
   };
   nativeStewardContext?: {
     version: 1;
+    role?: "steward" | "worker";
     projectName: string;
     workspacePath: string;
     modelRef?: ModelRef;
     reasoningEffort?: string;
   };
   control?: {
-    kind: "cancel_turn";
+    kind: "cancel_turn" | "resume_turn";
     requestId: string;
     turnId: string;
     requestedAt: string;
@@ -130,6 +142,7 @@ export interface OutboundAction {
     text?: string;
     attachments?: AttachmentRef[];
     artifacts?: ArtifactRef[];
+    changedFiles?: ChangedFileDetail[];
     replyToMessageId?: string;
     editMessageId?: string;
   };
@@ -166,7 +179,7 @@ export interface TransportAdapter {
   send(action: OutboundAction): Promise<DeliveryResult>;
 }
 
-export type GatewayDurableRole = Exclude<SessionRole, "worker">;
+export type GatewayDurableRole = SessionRole;
 export type GatewayRouteReason =
   | "session-hint"
   | "steward-hint"
@@ -227,6 +240,7 @@ export type GatewayRoleHandler = (input: GatewayHandlerInput) => Promise<Gateway
 export interface GatewayRoleHandlers {
   butler?: GatewayRoleHandler;
   steward?: GatewayRoleHandler;
+  worker?: GatewayRoleHandler;
 }
 
 export interface GatewayHandledResult {

@@ -18,7 +18,6 @@ import type {
 } from "../../../image-attachment/contracts.ts";
 
 const MAX_PROMPT_CHARS = 4_000;
-const MAX_RESULT_CHARS = 16_000;
 
 export function createAnalyzeAttachedImageToolHandler(input: {
   butlerData: string;
@@ -67,7 +66,10 @@ export function createAnalyzeAttachedImageToolHandler(input: {
       });
       const text = safeMcpText(result.result, tempRoot, tempPath);
       return {
-        ok: true,
+        ok: result.ok,
+        ...(result.error ? { error: { ...result.error,
+          message: scrubTempPaths(result.error.message, tempRoot, tempPath),
+        } } : {}),
         file_id: fileId,
         server_id: ZAI_VISION_MCP_SERVER_ID,
         tool_name: ZAI_VISION_MCP_TOOL_NAME,
@@ -149,7 +151,6 @@ function safeMcpText(value: unknown, tempRoot: string, tempPath: string): string
   const record = value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
-  if (record.isError === true) throw new Error("zai_vision_mcp_failed");
   const content = Array.isArray(record.content) ? record.content : [];
   const text = content
     .filter((item): item is Record<string, unknown> =>
@@ -159,12 +160,11 @@ function safeMcpText(value: unknown, tempRoot: string, tempPath: string): string
     .filter(Boolean)
     .join("\n")
     .trim();
-  if (text) return scrubTempPaths(text, tempRoot, tempPath).slice(0, MAX_RESULT_CHARS);
+  if (text) return scrubTempPaths(text, tempRoot, tempPath);
   const structured = record.structuredContent;
   if (structured !== undefined) {
     try {
-      return scrubTempPaths(JSON.stringify(structured), tempRoot, tempPath)
-        .slice(0, MAX_RESULT_CHARS);
+      return scrubTempPaths(JSON.stringify(structured), tempRoot, tempPath);
     } catch { /* fall through */ }
   }
   return "(Z.AI Vision returned no textual analysis.)";

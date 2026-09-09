@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { type ReactNode } from "react";
 import { Field, FieldLabel, Grid, KeyValueRow, Section, Stack } from "@/butler-ds";
 import { Input } from "@/butler-ds";
@@ -18,6 +19,7 @@ interface AutomationFormProps {
 }
 
 export function AutomationForm({ children }: AutomationFormProps) {
+  useAppLocale();
   const title = useAutomationStore((state) => state.title);
   const promptBody = useAutomationStore((state) => state.promptBody);
   const targetSessionId = useAutomationStore((state) => state.targetSessionId);
@@ -96,7 +98,7 @@ export function AutomationForm({ children }: AutomationFormProps) {
                 <SelectItem value="3600">1 hour</SelectItem>
                 <SelectItem value="7200">2 hours</SelectItem>
                 <SelectItem value="86400">24 hours</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
+                <SelectItem value="custom">{appCopy.interfacePanels.custom}</SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>

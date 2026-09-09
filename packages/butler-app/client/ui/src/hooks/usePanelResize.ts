@@ -10,10 +10,10 @@ import {
   DEFAULT_RIGHT_PANEL_WIDTH,
   LEFT_PANEL_MAX_WIDTH,
   LEFT_PANEL_MIN_WIDTH,
-  RIGHT_PANEL_MAX_WIDTH,
   RIGHT_PANEL_MIN_WIDTH,
   clampPanelWidth,
 } from "@/app/panelSizing.ts";
+import { usePanelGeometry } from "./usePanelGeometry";
 
 const KEYBOARD_RESIZE_STEP = 16;
 
@@ -22,17 +22,20 @@ export {
   DEFAULT_RIGHT_PANEL_WIDTH,
   LEFT_PANEL_MAX_WIDTH,
   LEFT_PANEL_MIN_WIDTH,
-  RIGHT_PANEL_MAX_WIDTH,
   RIGHT_PANEL_MIN_WIDTH,
 };
 
 export function usePanelResize({
   setLeftOpen,
+  leftOpen,
 }: {
   setLeftOpen: (value: boolean) => void;
+  leftOpen: boolean;
 }) {
-  const leftPanelWidth = useButlerStore((state) => state.leftPanelWidth);
-  const rightPanelWidth = useButlerStore((state) => state.rightPanelWidth);
+  const preferredLeft = useButlerStore((state) => state.leftPanelWidth);
+  const preferredRight = useButlerStore((state) => state.rightPanelWidth);
+  const { shellRef, leftWidth: leftPanelWidth, rightWidth: rightPanelWidth, rightMin, rightMax } =
+    usePanelGeometry({ leftWidth: preferredLeft, rightWidth: preferredRight, leftOpen });
   const setLeftPanelWidth = useButlerStore((state) => state.setLeftPanelWidth);
   const setRightPanelWidth = useButlerStore((state) => state.setRightPanelWidth);
   const [resizingPanel, setResizingPanel] = useState<"left" | "right" | null>(null);
@@ -49,7 +52,7 @@ export function usePanelResize({
 
   function resizeRightPanel(nextWidth: number) {
     setRightPanelWidth(
-      clampPanelWidth(nextWidth, RIGHT_PANEL_MIN_WIDTH, RIGHT_PANEL_MAX_WIDTH),
+      clampPanelWidth(nextWidth, rightMin, rightMax),
     );
   }
 
@@ -71,6 +74,7 @@ export function usePanelResize({
     function finishResize() {
       window.removeEventListener("pointermove", moveResize);
       window.removeEventListener("pointerup", finishResize);
+      window.removeEventListener("pointercancel", finishResize);
       document.body.style.cursor = previousCursor;
       document.body.style.userSelect = previousUserSelect;
       setResizingPanel(null);
@@ -88,6 +92,7 @@ export function usePanelResize({
 
     window.addEventListener("pointermove", moveResize);
     window.addEventListener("pointerup", finishResize, { once: true });
+    window.addEventListener("pointercancel", finishResize, { once: true });
   }
 
   function handlePanelResizeKeyDown(
@@ -112,9 +117,9 @@ export function usePanelResize({
       return;
     }
     if (event.key === "Home") {
-      resizeRightPanel(RIGHT_PANEL_MIN_WIDTH);
+      resizeRightPanel(rightMin);
     } else if (event.key === "End") {
-      resizeRightPanel(RIGHT_PANEL_MAX_WIDTH);
+      resizeRightPanel(rightMax);
     } else {
       resizeRightPanel(
         rightPanelWidth +
@@ -131,6 +136,9 @@ export function usePanelResize({
   } as CSSProperties;
 
   return {
+    shellRef,
+    rightMin,
+    rightMax,
     beginPanelResize,
     handlePanelResizeKeyDown,
     leftPanelWidth,

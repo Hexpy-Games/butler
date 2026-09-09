@@ -50,13 +50,11 @@ export function transformPublicDataTable(input: {
 }): Record<string, unknown> {
   const columns = stringArray(input.args.columns)
     .map((column) => sanitizePublicText(column, ""))
-    .filter(Boolean)
-    .slice(0, 12);
+    .filter(Boolean);
   if (columns.length === 0) throw new Error("transform_public_data_table requires at least one column");
   if (!Array.isArray(input.args.rows)) throw new Error("transform_public_data_table requires rows");
   const rows = input.args.rows
     .filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object" && !Array.isArray(row)))
-    .slice(0, 50)
     .map((row) => Object.fromEntries(columns.map((column) => [
       column,
       publicDataCell(row[column]),

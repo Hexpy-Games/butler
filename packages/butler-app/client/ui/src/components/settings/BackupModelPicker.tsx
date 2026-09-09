@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useMemo, useState } from "react";
 import {
   Button,
@@ -24,6 +25,7 @@ export function BackupModelPicker({
   saving: boolean;
   onUpdate: SettingsUpdate;
 }) {
+  useAppLocale();
   const copy = appCopy.settings.backupModels;
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");

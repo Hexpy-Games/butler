@@ -33,16 +33,21 @@ function normalizePatternArgs(args: Record<string, unknown>):
   | { ok: true; pattern: string; regex: boolean; caseSensitive: boolean }
   | { ok: false; error: "invalid_arguments"; message: string; recovery_hint: string } {
   const pattern = String(args.pattern ?? "").trim();
+  // New calls state the mode explicitly. Older admitted calls retain their
+  // original regex/mode aliases and omitted-mode literal semantics on replay.
+  if (typeof args.literal === "boolean") {
+    return { ok: true, pattern, regex: !args.literal, caseSensitive: Boolean(args.case_sensitive ?? true) };
+  }
   const hasMode = Object.prototype.hasOwnProperty.call(args, "mode");
   const hasRegex = Object.prototype.hasOwnProperty.call(args, "regex");
   const mode = typeof args.mode === "string" ? args.mode.trim().toLowerCase() : "";
   if (hasMode && mode !== "literal" && mode !== "regex") {
-    return { ok: false, error: "invalid_arguments", message: "mode must be literal or regex when supplied as a replay alias.", recovery_hint: "Use canonical regex=true or regex=false." };
+    return { ok: false, error: "invalid_arguments", message: "mode must be literal or regex when supplied as a replay alias.", recovery_hint: "Use literal=false for regex or literal=true for exact text." };
   }
   const modeRegex = mode === "regex";
   const regex = Boolean(args.regex ?? false);
   if (hasMode && hasRegex && modeRegex !== regex) {
-    return { ok: false, error: "invalid_arguments", message: "regex and replay alias mode disagree.", recovery_hint: "Provide only the canonical regex field." };
+    return { ok: false, error: "invalid_arguments", message: "regex and replay alias mode disagree.", recovery_hint: "Provide only the literal field." };
   }
   return { ok: true, pattern, regex: hasRegex ? regex : modeRegex, caseSensitive: Boolean(args.case_sensitive ?? true) };
 }
@@ -148,7 +153,7 @@ export async function executeGrepFilesTool(
   }
   let matcherSource: string;
   try { matcherSource = regex ? pattern : escapeRegExp(pattern); new RegExp(matcherSource, caseSensitive ? "" : "i"); } catch (error) {
-    return { ok: false, error: "invalid_pattern", detail: error instanceof Error ? error.message : String(error), message: "The requested search pattern is not valid.", recovery_hint: "Fix the regex or use the default literal mode.", evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: "invalid_pattern" }) };
+    return { ok: false, error: "invalid_pattern", detail: error instanceof Error ? error.message : String(error), message: "The requested search pattern is not valid.", recovery_hint: "Fix the regex or use literal=true for exact text.", evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: "invalid_pattern" }) };
   }
   const traversal = await traverseWorkspaceFiles({ workspaceRoot: guard.workspaceRoot, rootPath: guard.realPath ?? guard.absolutePath!, includeGlobs, excludeGlobs, protectedProjectLedgerRoots: context.protectedProjectLedgerRoots, ...(cursor?.scan_path ? { afterPath: cursor.scan_path, includeAfterPath: cursor.scan_inclusive === true } : {}), limits });
   const displayedRoot = relative(guard.workspaceRoot, guard.realPath ?? guard.absolutePath!).replace(/\\/g, "/") || ".";
@@ -166,7 +171,7 @@ export async function executeGrepFilesTool(
     ? candidates.filter((candidate) => compareSearchPosition(candidate, after) >= 0)
     : candidates;
   const matcherFlags = caseSensitive ? "" : "i";
-  const candidateResults: CandidateReadResult[] = [];
+  const candidateResults: Array<CandidateReadResult & { path: string }> = [];
   const matches: SearchMatch[] = [];
   let outputBytes = 0;
   let maxMatchesReached = false;
@@ -183,7 +188,7 @@ export async function executeGrepFilesTool(
     const batchResults = await mapBounded(batch, MAX_READ_CONCURRENCY, (candidate) => readCandidate(candidate, matcherSource, matcherFlags, contextLines, maxBytesPerFile, maxMatches, maxOutputBytes, after, { deadlineAt }));
     // All reads in a small deterministic batch are accounted for, even when
     // the first result satisfies the output budget and stops later processing.
-    candidateResults.push(...batchResults);
+    candidateResults.push(...batchResults.map((result, index) => ({ ...result, path: batch[index]!.path })));
     for (let index = 0; index < batchResults.length; index += 1) {
       const result = batchResults[index]!;
       const candidateMatches = result.matches
@@ -283,15 +288,19 @@ export async function executeGrepFilesTool(
     max_output_bytes: maxOutputBytes,
     output_truncated: maxOutputReached,
     truncated: truncated || candidateIncomplete,
-    ...(candidateIncomplete ? { partial: true, partial_reasons: partialReasons } : {}),
+    ...(candidateIncomplete ? {
+      partial: true,
+      partial_reasons: partialReasons,
+      unsearched_files: partialCandidateResults.map((result) => ({ path: result.path, reason: result.reason })),
+    } : {}),
     ...(stoppedBy ? { stopped_by: stoppedBy } : {}),
     ...(
       elapsedBudgetReached
-        ? { recovery_hint: "Search reached timeout_ms before all candidate files were read; narrow the root or globs, raise timeout_ms, and retry without cursor." }
+        ? { recovery_hint: "Search reached its time budget before all candidate files were read; narrow the root or globs and retry without cursor." }
         : candidateIncomplete
-        ? { recovery_hint: partialReasons.includes("io_error") ? "Search encountered a candidate I/O error; retry with a narrower admitted root or after checking workspace permissions." : "Some candidates exceeded max_bytes_per_file; raise that bound or narrow the include globs and retry without cursor." }
+        ? { recovery_hint: partialReasons.includes("io_error") ? "Search encountered a candidate I/O error; inspect unsearched_files and check workspace permissions." : "Some candidates exceeded max_bytes_per_file; read relevant unsearched_files with read_file using line ranges." }
         : traversal.stoppedBy && !traversalSupportsCursor(traversal.stoppedBy)
-          ? { recovery_hint: traversal.stoppedBy === "io_error" ? "Search hit a workspace I/O error; retry grep_files with a narrower admitted root or glob." : "Search stopped before a safe file boundary; narrow the root/globs or raise the directory/depth/time cap and retry without cursor." }
+          ? { recovery_hint: traversal.stoppedBy === "io_error" ? "Search hit a workspace I/O error; retry grep_files with a narrower admitted root or glob." : "Search stopped before a safe file boundary; narrow the root/globs and retry without cursor." }
           : {}
     ),
     ...(nextCursor ? { next_cursor: nextCursor } : {}),

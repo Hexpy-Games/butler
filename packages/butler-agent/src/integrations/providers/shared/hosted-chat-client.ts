@@ -245,7 +245,7 @@ export async function createHostedChatCompletion(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
-  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number; admitProviderBody?(bytes: number): Promise<void> },
   retryAttempts?: number,
   providerRoundPolicy?: Partial<ProviderRoundPolicy>,
 ): Promise<Record<string, any>> {
@@ -279,7 +279,7 @@ async function createHostedChatCompletionOnce(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
-  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number; admitProviderBody?(bytes: number): Promise<void> },
   recordProgress: () => void = () => {},
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(hostedChatCompletionsUrl(config));
@@ -309,6 +309,7 @@ async function createHostedChatCompletionOnce(
     usageAttribution: budgetContext?.attribution,
     roundIndex: budgetContext?.roundIndex,
   });
+  await budgetContext?.admitProviderBody?.(Buffer.byteLength(admittedRequest.serialized_request, "utf8"));
   let response: Response;
   try {
     response = await fetch(hostedChatCompletionsUrl(config), {

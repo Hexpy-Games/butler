@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
@@ -12,6 +13,7 @@ import type {
 } from "@/app/types.ts";
 import { useSessionControlSnapshot } from "./useSessionControlSnapshot.ts";
 import { resolveComposerModelTruth } from "../composerModelResolution.ts";
+import { activeProjectId } from "../composerProjectContext.ts";
 
 export type ComposerControlPatch = {
   model?: string;
@@ -31,7 +33,11 @@ export function useComposerControls(
     useState<ComposerModelState>("loading");
   const [reasoning, setReasoning] = useState<ReasoningEffort>("medium");
   const [accessMode, setAccessMode] = useState(settings.access_mode);
-  const [planMode, setPlanMode] = useState(Boolean(settings.plan_mode_default));
+  const navigation = useButlerStore((state) => state.navigation);
+  const planModeAvailable = Boolean(activeProjectId(navigation, activeChatId));
+  const [planMode, setPlanMode] = useState(
+    planModeAvailable && Boolean(settings.plan_mode_default),
+  );
   const session = useSessionControlSnapshot(activeChatId);
   const composerSelectionTouchedRef = useRef(false);
   const refreshedGenerationRef = useRef<string | null>(null);
@@ -45,12 +51,17 @@ export function useComposerControls(
   }, [activeChatId]);
 
   useEffect(() => {
+    if (!planModeAvailable) setPlanMode(false);
+  }, [planModeAvailable]);
+
+  useEffect(() => {
     const truth = resolveComposerModelTruth({
       catalog: modelCatalog,
       catalogState: modelCatalogState,
       controls: session.snapshot,
       controlsState: session.loadState,
       settings,
+      planModeAvailable,
     });
     setModelState(truth.state);
     if (truth.state !== "ready") setModel(truth.model);
@@ -68,7 +79,7 @@ export function useComposerControls(
           })
           .catch((error) => {
             setModelState("error");
-            notifyError(error, "Model catalog refresh failed", {
+            notifyError(error, appCopy.interfacePanels.modelRefreshFailed, {
               id: `model-catalog-generation-${activeChatId}`,
             });
           });
@@ -85,6 +96,7 @@ export function useComposerControls(
     activeChatId,
     modelCatalog,
     modelCatalogState,
+    planModeAvailable,
     session.loadState,
     session.snapshot,
     setGlobalModelCatalog,

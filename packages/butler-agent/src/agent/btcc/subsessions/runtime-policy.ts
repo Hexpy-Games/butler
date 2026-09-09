@@ -1,13 +1,63 @@
 import type { StoredSessionBinding } from
   "../../../test-support/harness/contracts.ts";
-import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
-import { selectButlerToolsForProfiles } from "../../tools/profiles.ts";
-import type { SubsessionExecutionMode } from "./contracts.ts";
+import type { TurnRecord } from "../turn/index.ts";
+import type {
+  DelegationRequest,
+  ReviewedDelegationPlan,
+  ReviewedDelegationRequest,
+} from "./contracts.ts";
+import {
+  SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS,
+  SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS,
+} from "./scope.ts";
 
-/** Inherit the parent authority ceiling; only a read-only Task narrows effects. */
+export const DEFAULT_STEWARD_SAFE_TITLE = "Delegated Steward work";
+
+export function reviewedStewardDelegationRequest(
+  input: ReviewedDelegationRequest,
+  reviewed: ReviewedDelegationPlan,
+): DelegationRequest {
+  const execution = derivedStewardExecutionIntent(input.parent_access_mode);
+  const { request, ...identity } = input;
+  return {
+    ...identity,
+    safe_title: input.safe_title ?? DEFAULT_STEWARD_SAFE_TITLE,
+    execution_mode: execution.executionMode,
+    objective: request,
+    acceptance_criteria: [],
+    task_or_plan_refs: [],
+    constraints_and_non_goals: [],
+    allowed_tools_and_effects: execution.allowedToolsAndEffects,
+    mutation_scope: execution.mutationScope,
+    parent_work_ref: reviewed.parent_work_ref,
+  };
+}
+
+/** Derive legacy packet execution hints from the admitted Composer authority. */
+export function derivedStewardExecutionIntent(
+  accessMode: "full_access" | "ask_first" | "read_only",
+): {
+  executionMode: "read_only" | "mutation";
+  allowedToolsAndEffects: string[];
+  mutationScope: string[];
+} {
+  if (accessMode === "read_only") {
+    return {
+      executionMode: "read_only",
+      allowedToolsAndEffects: [...SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS],
+      mutationScope: [],
+    };
+  }
+  return {
+    executionMode: "mutation",
+    allowedToolsAndEffects: [...SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS],
+    mutationScope: ["."],
+  };
+}
+/** Inherit the exact user-admitted Composer authority without model-authored narrowing. */
 export function inheritedStewardRuntimePolicy(
   parent: StoredSessionBinding,
-  executionMode: SubsessionExecutionMode,
+  parentAccessMode: "full_access" | "ask_first" | "read_only",
 ): Record<string, unknown> {
   const source = objectRecord(parent.metadata?.runtimePolicy);
   const trackingMode = trackingModeValue(
@@ -17,46 +67,49 @@ export function inheritedStewardRuntimePolicy(
   const parentTools = stringValues(
     source.requiredNativeTools ?? source.required_tools,
   );
-  const readOnly = executionMode === "read_only";
-  const inherited = readOnly
-    ? readOnlyAuthority(parentProfiles, parentTools)
-    : { profiles: parentProfiles, tools: parentTools };
   return {
     ...source,
-    accessMode: readOnly ? "read_only" : "full_access",
+    accessMode: parentAccessMode,
     trackingMode,
     tracking_mode: trackingMode,
-    requiredNativeToolProfiles: inherited.profiles,
-    requiredNativeTools: inherited.tools,
-    required_tools: [...inherited.tools],
+    requiredNativeToolProfiles: parentProfiles,
+    requiredNativeTools: parentTools,
+    required_tools: [...parentTools],
     authoritySource: "parent_session",
     authority_source: "parent_session",
   };
 }
 
-function readOnlyAuthority(
-  profiles: readonly string[],
-  tools: readonly string[],
-): { profiles: string[]; tools: string[] } {
-  const inheritedProfiles: string[] = [];
-  const inheritedTools = new Set(tools.filter(isEffectFreeTool));
-  for (const profile of profiles) {
-    const profileTools = selectButlerToolsForProfiles([profile]);
-    if (profile === "project" || (
-      profileTools.length > 0 && profileTools.every((tool) => isEffectFreeTool(tool.name))
-    )) {
-      inheritedProfiles.push(profile);
-      continue;
-    }
-    for (const tool of profileTools) {
-      if (isEffectFreeTool(tool.name)) inheritedTools.add(tool.name);
-    }
-  }
-  return { profiles: inheritedProfiles, tools: [...inheritedTools] };
+export function normalizeStewardAccessMode(
+  value: unknown,
+): "full_access" | "ask_first" | "read_only" {
+  if (value === "full_access" || value === "ask_first" || value === "read_only") return value;
+  throw new Error("delegation_parent_access_mode_invalid");
 }
 
-function isEffectFreeTool(name: string): boolean {
-  return BUTLER_TOOLS.find((tool) => tool.name === name)?.effectBoundary === "none";
+/** Resolve the immutable effective Composer authority admitted with the parent Turn. */
+export function admittedParentTurnAccessMode(
+  turn: TurnRecord,
+): "full_access" | "ask_first" | "read_only" {
+  const admitted = normalizeStewardAccessMode(turn.modelSelection.controls.accessMode);
+  const contextual = turn.context.executionPolicy?.accessMode;
+  if (!contextual) return admitted;
+  const rank = { read_only: 0, ask_first: 1, full_access: 2 } as const;
+  return rank[contextual] <= rank[admitted] ? contextual : admitted;
+}
+
+/** Keep the Steward root Work scope identical to its ordinary Turn scope. */
+export function stewardRootWorkScope(
+  binding: StoredSessionBinding,
+): { projectRef?: string } {
+  const source = objectRecord(binding.metadata?.runtimePolicy);
+  const trackingMode = trackingModeValue(
+    source.trackingMode ?? source.tracking_mode,
+  ) ?? (binding.projectId ? "ledger" : "local");
+  if (trackingMode !== "ledger") return {};
+  const projectRef = binding.projectId?.trim();
+  if (!projectRef) throw new Error("steward_project_binding_missing");
+  return { projectRef };
 }
 
 function objectRecord(value: unknown): Record<string, unknown> {

@@ -40,7 +40,8 @@ export async function runLocalModelRound(
       tool_choice: request.toolChoice ?? "auto",
       ...localReasoningRequestParams(config),
       stream: false,
-    }, request.signal, context, undefined, request.providerRetryAttempts),
+      ...(request.maxOutputTokens ? { max_tokens: request.maxOutputTokens } : {}),
+    }, request.signal, { ...context, admitProviderBody: request.boundedContinuation?.admitProviderBody }, undefined, request.providerRetryAttempts),
     usage: openAICompatibleUsageSample,
   });
   const assistant = firstLocalAssistantMessage(response);

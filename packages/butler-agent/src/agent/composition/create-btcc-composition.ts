@@ -1,9 +1,10 @@
 import {
   agentBtccStoragePaths,
   createProjectLedgerLegacyWorkSource,
-  openBtccSqliteStores,
+  openProductionBtccSqliteStores,
 } from "../adapters/index.ts";
 import { createBtcc } from "../btcc/index.ts";
+import { AppContextPreparation } from "./app-context-preparation.ts";
 import {
   createTurnRuntime,
   DefaultBtccTurnPreparation,
@@ -11,6 +12,7 @@ import {
 } from "../btcc/turn/index.ts";
 import { createProductionGuidedTurnAgent } from "../btcc/agent-loop/index.ts";
 import type { ModelRoundPort } from "../btcc/agent-loop/index.ts";
+import type { GuidedEffectFaultHook } from "../btcc/effects/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { AgentConversationStore } from "../conversation/index.ts";
@@ -32,9 +34,12 @@ import { DeveloperLogStore } from "../../operations/diagnostics/developer-log-st
 import {
   createAppParentInputSink,
   createSubsessionDelegationService,
+  createWorkerProfileReader,
+  stewardResumeRequestId,
 } from "../btcc/subsessions/index.ts";
 import { resolveAppGatewayRuntimeConfig } from "../../operations/gateway/registry.ts";
 import { readLocalAuthConfigFromEnvironment } from "../../gateways/app/interface/server/local-auth.ts";
+import { FileQueueButlerServiceClient } from "../../gateways/core/client.ts";
 
 /**
  * Production wiring only.  Lifecycle policy lives in `agent/btcc/btcc.ts`
@@ -46,6 +51,8 @@ export function createProductionBtccComposition(input: {
   ownerId: string;
   /** Test-only one-round provider seam; production callers omit it. */
   modelRound?: ModelRoundPort;
+  /** TEST-ONLY deterministic fault proof; default-omitted in production. */
+  guidedEffectFaultHook?: GuidedEffectFaultHook;
   memoryAttribution?: RuntimeMemoryAttributionPort;
   /**
    * Developer-diagnostics gate; defaults to reading the app settings
@@ -59,31 +66,50 @@ export function createProductionBtccComposition(input: {
 }) {
   let phaseContinuityKey: Buffer | undefined;
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
+  const bindings = input.sessionBindings ?? new SessionBindingStore(
+    `${input.butlerData}/runtime/session-store.sqlite`,
+  );
+  bindings.relocateLegacyGeneralWorkspaces(input.butlerHome, input.butlerData);
   const legacyProjectWorkSource = createProjectLedgerLegacyWorkSource({
     butlerData: input.butlerData,
     resolver: projectLedgerResolver,
   });
-  const stores = openBtccSqliteStores({
-    dbPath: agentBtccStoragePaths(input.butlerData).agentBtccDbPath,
-    ownerId: input.ownerId,
-    legacyProjectWorkSource,
-  });
-  const bindings = input.sessionBindings ?? new SessionBindingStore(
-    `${input.butlerData}/runtime/session-store.sqlite`,
-  );
+  let stores: ReturnType<typeof openProductionBtccSqliteStores>;
+  try {
+    stores = openProductionBtccSqliteStores({
+      dbPath: agentBtccStoragePaths(input.butlerData).agentBtccDbPath,
+      ownerId: input.ownerId,
+      legacyProjectWorkSource,
+      workSelection: {
+        butlerHome: input.butlerHome,
+        butlerData: input.butlerData,
+        sessionBindings: bindings,
+        projectLedgerResolver,
+      },
+    });
+  } catch (error) {
+    if (!input.sessionBindings) bindings.close();
+    throw error;
+  }
   const conversations = input.conversationStore ?? new AgentConversationStore({
     butlerData: input.butlerData,
   });
+  const appServerUrl = input.appServerUrl ?? resolveAppGatewayRuntimeConfig({
+    butlerData: input.butlerData,
+  }).serverUrl;
+  const appLocalAuth = input.appLocalAuth ?? readLocalAuthConfigFromEnvironment();
   const subsessions = createSubsessionDelegationService({
     butlerData: input.butlerData,
     sessionBindings: bindings,
     durableWork: stores.durableWork,
     store: stores.subsessionStore,
     parentInputSink: createAppParentInputSink({
-      appServerUrl: input.appServerUrl ?? resolveAppGatewayRuntimeConfig({
-        butlerData: input.butlerData,
-      }).serverUrl,
-      localAuth: input.appLocalAuth ?? readLocalAuthConfigFromEnvironment(),
+      appServerUrl,
+      localAuth: appLocalAuth,
+    }),
+    workerProfiles: createWorkerProfileReader({
+      appServerUrl,
+      localAuth: appLocalAuth,
     }),
     toolJournal: stores.guidedToolJournal,
     effectJournal: stores.guidedEffectJournal,
@@ -124,12 +150,14 @@ export function createProductionBtccComposition(input: {
         },
       },
       contextDocuments: stores.contextDocuments,
+      contextCompactions: stores.contextCompactions,
       toolJournal: stores.guidedToolJournal,
       operationResultReader: stores.guidedOperationResultReader,
       effectJournal: stores.guidedEffectJournal,
       durableWork: stores.durableWork,
       authority: stores.authority,
       modelRound: input.modelRound,
+      guidedEffectFaultHook: input.guidedEffectFaultHook,
       sessionBindingStore: bindings,
       subsessionDelegation: subsessions,
     }),
@@ -143,25 +171,69 @@ export function createProductionBtccComposition(input: {
     turns: stores.turns,
     wakeAuthorizations: stores.wakeAuthorizations,
   };
+  let startupRecovery: Promise<void> = Promise.resolve();
   const assembly = createBtcc({
     runtime,
-    preparation: new DefaultBtccTurnPreparation(preparationDependencies),
+    preparation: new AppContextPreparation(new DefaultBtccTurnPreparation(preparationDependencies), {
+      serverUrl: appServerUrl, localAuth: appLocalAuth,
+    }, stores.turns),
     progressEvents: stores.progressEvents,
     turns: stores.turns,
     close: async () => {
-      memoryAttribution.close();
-      stores.close();
-      if (!input.conversationStore) conversations.close();
-      if (!input.sessionBindings) bindings.close();
+      try {
+        await startupRecovery;
+      } finally {
+        memoryAttribution.close();
+        stores.close();
+        if (!input.conversationStore) conversations.close();
+        if (!input.sessionBindings) bindings.close();
+      }
     },
   });
+  const serviceClient = new FileQueueButlerServiceClient({
+    butlerData: input.butlerData,
+  });
+  const recoverInterruptedStewards = () => {
+    const requestedAt = new Date().toISOString();
+    for (const recovery of stores.stewardObserver.recoverableTurns()) {
+      // Native queue process-replacement recovery already owns an interrupted
+      // original event. Only synthesize the explicit resume when that canonical
+      // queue record is absent, avoiding two physical deliveries for one Turn.
+      if (serviceClient.hasPendingEvent(recovery.original_event_id)) continue;
+      serviceClient.enqueueAppResume({
+        chatId: recovery.relation.child_session_id,
+        sessionId: recovery.relation.child_session_id,
+        turnId: recovery.turn_id,
+        requestId: stewardResumeRequestId(
+          recovery.relation.relation_id,
+          recovery.recovery_id,
+        ),
+        requestedAt,
+        originalEventId: recovery.original_event_id,
+        originalMessageId: recovery.original_message_id,
+        originalMessage: recovery.original_message,
+      }, {
+        source: "btcc-steward-startup-recovery",
+        relation_id: recovery.relation.relation_id,
+      });
+    }
+  };
+  startupRecovery = subsessions.recoverPendingParentInputs()
+    .catch(() => {
+      // A persisted child result stays pending for a later retry, but it must
+      // not prevent unrelated user Turns from reaching the native executor.
+      console.error("btcc_subsession_parent_input_recovery_deferred");
+    })
+    .then(() => {
+      recoverInterruptedStewards();
+    });
   return {
     btcc: assembly.btcc,
     host: assembly.host,
     // A persisted Steward result may have committed its outbox just before
     // process loss. Re-enter that same durable handoff once at composition
     // startup; the App queue remains the sole owner after admission.
-    ready: subsessions.recoverPendingParentInputs().then(() => undefined),
+    ready: startupRecovery,
     authority: stores.authority,
     subsessions,
   };

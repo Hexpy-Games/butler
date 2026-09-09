@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -16,6 +17,7 @@ export function ArtifactsPanel({
 }: {
   artifacts: SessionArtifactSummary[];
 }) {
+  useAppLocale();
   const selectedArtifactId = useButlerStore(
     (state) => state.selectedArtifactId,
   );

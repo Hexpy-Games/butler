@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useMemo, useState } from "react";
 import { activeChatFromNavigation } from "@/app/utils.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -18,6 +19,7 @@ import { useSessionViewSubscription } from
 void appCopy;
 
 export function Conversation() {
+  const locale = useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const navigation = useButlerStore((state) => state.navigation);
   const messages = useButlerStore((state) => state.messages);
@@ -39,7 +41,7 @@ export function Conversation() {
 
   const activeChat = useMemo(
     () => activeChatFromNavigation(navigation, activeChatId),
-    [activeChatId, navigation],
+    [activeChatId, navigation, locale],
   );
   const isActiveChatSending =
     isSending &&
@@ -71,7 +73,7 @@ export function Conversation() {
     summary?.steward_children?.some((child) => child.active_turn) ||
     summary?.latest_progress?.safe_progress_rows?.length,
   );
-  const showMessageList = hasMessages || hasDurableActivity;
+  const showMessageList = hasMessages || hasDurableActivity || Boolean(summary?.branch_seed);
   const showEmptyState = !showMessageList && !messageLoadPending;
   const composerLarge = true;
   const newChatTitleIconSize = showEmptyState

@@ -6,7 +6,9 @@ export const TURN_CONTINUATION_EXHAUSTED_CODE =
   "turn_continuation_budget_exhausted" as const;
 
 export type TurnContinuationBudgetLimits = {
+  /** Retained for persisted v2 compatibility; round count does not terminate a Turn. */
   maxModelRequests: number;
+  /** Retained for persisted v2 compatibility; round count does not terminate a Turn. */
   maxToolRounds: number;
   maxModelFacingBytes: number;
   maxCumulativeModelFacingBytes: number;
@@ -106,6 +108,31 @@ export function selectTurnContinuationBudget(
   return validateTurnContinuationLimits(limits);
 }
 
+/**
+ * The byte envelope is an early memory guard. Provider token admission remains
+ * authoritative, so scale this guard with the admitted model instead of using
+ * one small fixed window for every model.
+ */
+export function continuationLimitsForModel(
+  limits: TurnContinuationBudgetLimits,
+  contextWindowTokens: number | undefined,
+): TurnContinuationBudgetLimits {
+  if (!contextWindowTokens || !Number.isFinite(contextWindowTokens) ||
+      limits.maxModelFacingBytes !== DEFAULT_LIMITS.maxModelFacingBytes) return limits;
+  return {
+    ...limits,
+    maxModelFacingBytes: modelContextByteLimit(contextWindowTokens),
+  };
+}
+
+/** Shared request sizing also applies when cumulative-budget accounting is off. */
+export function modelContextByteLimit(contextWindowTokens?: number): number {
+  return contextWindowTokens && Number.isFinite(contextWindowTokens)
+    ? Math.min(HARD_CEILINGS.maxModelFacingBytes,
+      Math.max(DEFAULT_LIMITS.maxModelFacingBytes, Math.trunc(contextWindowTokens) * 2))
+    : DEFAULT_LIMITS.maxModelFacingBytes;
+}
+
 export function validateTurnContinuationLimits(
   limits: TurnContinuationBudgetLimits,
 ): TurnContinuationBudgetLimits {
@@ -150,9 +177,6 @@ export function parseTurnContinuationBudgetState(
   const limits = validateTurnContinuationLimits(state.limits);
   if (!Array.isArray(state.admittedRequests) || !Array.isArray(state.completedOutputRounds) ||
       !Array.isArray(state.completedToolRounds)) throw new Error("invalid_continuation_budget_rounds");
-  if (state.admittedRequests.length > limits.maxModelRequests ||
-      state.completedOutputRounds.length > limits.maxModelRequests ||
-      state.completedToolRounds.length > limits.maxToolRounds) throw new Error("invalid_continuation_budget_bounds");
   const admittedRequests = state.admittedRequests.map((item) => ({
     roundId: requiredText(item.roundId),
     requestDigest: requiredDigest(item.requestDigest),
@@ -230,7 +254,6 @@ export function transitionTurnContinuationBudget(
       };
     }
     if (event.modelFacingBytes > state.limits.maxModelFacingBytes) return exhaust(state, "model_facing_bytes", now);
-    if (state.admittedRequests.length >= state.limits.maxModelRequests) return exhaust(state, "max_model_requests", now);
     const consumedModelFacingBytes = safeAdd(
       state.consumedModelFacingBytes,
       integer(event.modelFacingBytes),
@@ -250,7 +273,6 @@ export function transitionTurnContinuationBudget(
   }
   if (event.kind === "record_tool_round") {
     if (state.completedToolRounds.includes(event.roundId)) return state;
-    if (state.completedToolRounds.length >= state.limits.maxToolRounds) return exhaust(state, "max_tool_rounds", now);
     return { ...state, completedToolRounds: [...state.completedToolRounds, requiredText(event.roundId)], lastProgressAtMs: now };
   }
   if (state.completedOutputRounds.includes(event.roundId)) return state;

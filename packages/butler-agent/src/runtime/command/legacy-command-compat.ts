@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { CommandExecutor, CommandRequest } from "./contracts.ts";
+import { protectProgramFiles } from "./program-write-protection.ts";
 
 export interface LegacyCommandCompatibilityInput {
   command: string;
@@ -8,6 +9,7 @@ export interface LegacyCommandCompatibilityInput {
   timeoutMs: number;
   signal?: AbortSignal;
   pipefail?: boolean;
+  readOnlyProgramHome?: string;
 }
 
 export interface LegacyCommandCompatibilityResult {
@@ -27,14 +29,14 @@ export function legacyCommandCompatibilityRequest(
 ): CommandRequest {
   return {
     plan: {
-      steps: [{
+      steps: [protectProgramFiles({
         executable: process.execPath,
         arguments: [
           "run",
           join(import.meta.dir, "legacy-command-host.ts"),
           ...(input.pipefail ? ["--pipefail"] : []),
         ],
-      }],
+      }, input.readOnlyProgramHome)],
     },
     cwd: input.cwd,
     environment: {

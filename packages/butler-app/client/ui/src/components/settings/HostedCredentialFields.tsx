@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Input, SettingsField, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { ModelCatalogView, ProviderAuthMethod } from "@/app/types.ts";
@@ -54,6 +55,7 @@ export function HostedCredentialFields({
   onCredentialLabelChange,
   authMethods,
 }: HostedCredentialFieldsProps) {
+  useAppLocale();
   const copy = appCopy.settings.modelManagement;
   const credentials = providerCredentials(modelCatalog, providerId);
   const selectedCredential = credentials.find((item) => item.id === credentialId);
@@ -77,8 +79,9 @@ export function HostedCredentialFields({
       ) : null}
       {showApiBaseUrl ? (
         <SettingsField
+          id="hosted-api-base-url"
           label={copy.apiBaseUrl}
-          control={<Input value={apiBaseUrl} onChange={(event) => onApiBaseUrlChange(event.target.value)} />}
+          control={<Input id="hosted-api-base-url" value={apiBaseUrl} onChange={(event) => onApiBaseUrlChange(event.target.value)} />}
         />
       ) : null}
       {authMethod === "api_key" ? (
@@ -98,19 +101,22 @@ export function HostedCredentialFields({
           />
           {selectedCredential && !showNewKey ? (
             <SettingsField
+              id="hosted-api-key-masked"
               label={copy.apiKey}
-              control={<Input value={selectedCredential.masked_value} disabled />}
+              control={<Input id="hosted-api-key-masked" value={selectedCredential.masked_value} disabled />}
             />
           ) : null}
           {showNewKey ? (
             <>
               <SettingsField
+                id="hosted-credential-label"
                 label={copy.credentialLabel}
-                control={<Input value={credentialLabel} onChange={(event) => onCredentialLabelChange(event.target.value)} />}
+                control={<Input id="hosted-credential-label" value={credentialLabel} onChange={(event) => onCredentialLabelChange(event.target.value)} />}
               />
               <SettingsField
+                id="hosted-api-key"
                 label={copy.apiKey}
-                control={<Input value={apiKey} onChange={(event) => onApiKeyChange(event.target.value)} type="password" />}
+                control={<Input id="hosted-api-key" value={apiKey} onChange={(event) => onApiKeyChange(event.target.value)} type="password" />}
               />
             </>
           ) : null}

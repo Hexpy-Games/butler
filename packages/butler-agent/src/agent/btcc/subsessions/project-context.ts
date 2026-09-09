@@ -5,6 +5,7 @@ import type {
   DelegationProjectContextSnapshot,
   SubsessionDelegationDependencies,
 } from "./contracts.ts";
+import type { StoredSessionBinding } from "../../../test-support/harness/contracts.ts";
 
 const PROJECT_CONTEXT_SOURCES = {
   "project-hot-cache": "mandatory_hot_cache",
@@ -22,14 +23,16 @@ export async function snapshotDelegationProjectContext(input: {
 }): Promise<DelegationProjectContextSnapshot | undefined> {
   const projectId = input.projectId?.trim();
   if (!projectId) return undefined;
-  const requiredSourceIds: ProjectContextSourceId[] = ["project-hot-cache"];
   const parentTurn = await input.turns.findTurn(input.parentTurnId).catch(() => null);
   if (!parentTurn || parentTurn.sessionId !== input.parentSessionId ||
       parentTurn.context.projectRef !== projectId ||
       parentTurn.context.executionPolicy?.projectId !== projectId) {
-    return incompleteSnapshot(projectId, requiredSourceIds, requiredSourceIds);
+    return incompleteSnapshot(
+      projectId,
+      ["project-hot-cache"],
+      ["project-hot-cache"],
+    );
   }
-
   const selected = new Map<ProjectContextSourceId, DelegationProjectContextRef>();
   const candidates = [
     ...parentTurn.context.mandatoryHotCacheRefs,
@@ -57,6 +60,9 @@ export async function snapshotDelegationProjectContext(input: {
     }
   }
 
+  const requiredSourceIds: ProjectContextSourceId[] = selected.has("project-hot-cache")
+    ? ["project-hot-cache"]
+    : [];
   const missingSourceIds = requiredSourceIds.filter((sourceId) => !selected.has(sourceId));
   const refs = [...selected.values()];
   return {
@@ -68,18 +74,79 @@ export async function snapshotDelegationProjectContext(input: {
   };
 }
 
+export async function snapshotChildProjectContext(input: {
+  parentSessionId: string;
+  parentTurnId: string;
+  parent: Pick<StoredSessionBinding, "projectId" | "appProjectId" | "ledgerProjectId">;
+  turns: Pick<TurnStateRepository, "findTurn">;
+  documents: ContextDocumentReader;
+}): Promise<{
+  projectContext: DelegationProjectContextSnapshot | undefined;
+  inheritedProject: ReturnType<typeof childProjectContextBinding>;
+  recentFeedbackRefs: string[];
+}> {
+  const projectContext = await snapshotDelegationProjectContext({
+    ...input,
+    projectId: input.parent.appProjectId ?? input.parent.projectId,
+  });
+  const parentTurn = await input.turns.findTurn(input.parentTurnId).catch(() => null);
+  const recentFeedbackRefs = parentTurn?.sessionId === input.parentSessionId
+    ? parentTurn.context.recentFeedbackRefs.filter((ref) => {
+        try {
+          const document = input.documents.read(ref);
+          return document.contextRef === ref && document.sourceId === "session-feedback-buffer" &&
+            document.projectionClass === "recent_feedback" && document.scopeKind === "session";
+        } catch {
+          // Missing optional feedback never prevents delegation.
+          return false;
+        }
+      })
+    : [];
+  return {
+    projectContext,
+    inheritedProject: childProjectContextBinding(projectContext, input.parent),
+    recentFeedbackRefs,
+  };
+}
+
 export function childProjectContextBinding(
   context: DelegationProjectContextSnapshot | undefined,
-): { projectId: string; metadata: Record<string, unknown> } | undefined {
-  if (!context?.project_id) return undefined;
+  parent: Pick<StoredSessionBinding, "projectId" | "appProjectId" | "ledgerProjectId">,
+): {
+  sessionBinding: Pick<StoredSessionBinding, "projectId" | "appProjectId" | "ledgerProjectId">;
+  metadata: Record<string, unknown>;
+} | undefined {
+  const appProjectId = parent.appProjectId ?? parent.projectId;
+  if (!appProjectId) {
+    if (context?.project_id) throw new Error("subsession_project_context_mismatch");
+    return undefined;
+  }
+  if (context?.project_id !== appProjectId) {
+    throw new Error("subsession_project_context_mismatch");
+  }
+  assertExactChildLedgerProjectIdentity(parent);
   return {
-    projectId: context.project_id,
+    sessionBinding: {
+      projectId: appProjectId,
+      appProjectId,
+      ...(parent.ledgerProjectId !== undefined
+        ? { ledgerProjectId: parent.ledgerProjectId }
+        : {}),
+    },
     metadata: {
-      project_id: context.project_id,
+      project_id: appProjectId,
       mandatory_hot_cache_refs: context.mandatory_refs.map((ref) => ref.context_ref),
       optional_hot_cache_refs: context.optional_refs.map((ref) => ref.context_ref),
     },
   };
+}
+
+export function assertExactChildLedgerProjectIdentity(
+  binding: Pick<StoredSessionBinding, "projectId" | "appProjectId" | "ledgerProjectId">,
+): void {
+  if ((binding.appProjectId ?? binding.projectId) && binding.ledgerProjectId === undefined) {
+    throw new Error("subsession_child_ledger_project_binding_missing");
+  }
 }
 
 export async function delegationProjectContextReady(
@@ -94,9 +161,7 @@ export async function delegationProjectContextReady(
   const bindingProject = record(record(binding?.metadata).subsession).project_context;
   if (!context) {
     return !binding.projectId && bindingProject === undefined && !turn.context.projectRef &&
-      !turn.context.executionPolicy?.projectId &&
-      turn.context.mandatoryHotCacheRefs.length === 0 &&
-      turn.context.optionalHotCacheRefs.length === 0;
+      !turn.context.executionPolicy?.projectId;
   }
   const bindingContext = record(bindingProject);
   const mandatoryRefs = context.mandatory_refs.map((ref) => ref.context_ref);
@@ -107,8 +172,8 @@ export async function delegationProjectContextReady(
       !sameStrings(bindingContext.optional_hot_cache_refs, optionalRefs) ||
       turn.context.projectRef !== context.project_id ||
       turn.context.executionPolicy?.projectId !== context.project_id ||
-      !sameStrings(turn.context.mandatoryHotCacheRefs, mandatoryRefs) ||
-      !sameStrings(turn.context.optionalHotCacheRefs, optionalRefs)) return false;
+      !mandatoryRefs.every((ref) => turn.context.mandatoryHotCacheRefs.includes(ref)) ||
+      !optionalRefs.every((ref) => turn.context.optionalHotCacheRefs.includes(ref))) return false;
   return [...context.mandatory_refs, ...context.optional_refs].every((ref) => {
     try {
       const document = dependencies.contextDocuments.read(ref.context_ref);

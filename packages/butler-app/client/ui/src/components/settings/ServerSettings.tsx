@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
@@ -7,6 +8,7 @@ import { FolderPlus } from "@/butler-ds";
 import { SettingsSection, SettingsInput } from "./SettingsFormComponents";
 
 export function ServerSettings() {
+  useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const setDraft = useSettingsUIStore((state) => state.setDraft);
   const update = useSettingsUIStore((state) => state.update);

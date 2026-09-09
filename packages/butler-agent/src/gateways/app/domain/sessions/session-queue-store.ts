@@ -1,4 +1,7 @@
 import { Database } from "bun:sqlite";
+import { isMessageContent, messageContentText, readMessageContent } from "../../../../foundation/message-content.ts";
+import type { MessageContent, ResolvedProjectSource } from "../../../../foundation/message-content.ts";
+import { AppSessionContextGate } from "./session-context-gate.ts";
 import { createHash } from "node:crypto";
 import type { QueuedMessageRow } from "../../infrastructure/core/records.ts";
 import type { AppMessageFileStore } from "../message-files/message-file-store.ts";
@@ -71,6 +74,21 @@ function queueAttachmentPayload(
 }
 
 export class AppSessionQueueStore {
+  projectSourcesForMessage(chatId: string, messageId: string): ResolvedProjectSource[] {
+    const row = this.db.query<{ project_source_refs_json: string | null }, [string, string]>(
+      "SELECT project_source_refs_json FROM session_queued_messages WHERE chat_id = ? AND dispatched_message_id = ?",
+    ).get(chatId, messageId);
+    return row?.project_source_refs_json ? JSON.parse(row.project_source_refs_json) : [];
+  }
+
+  private assertProjectSourceScope(chatId: string, sources: ResolvedProjectSource[], expectedProjectId?: string) {
+    if (!sources.length && expectedProjectId === undefined) return;
+    const current = this.db.query<{ project_id: string | null; archived: number }, [string]>("SELECT project_id, archived FROM chats WHERE id = ?").get(chatId);
+    if (!current || current.archived || (expectedProjectId !== undefined && current.project_id !== expectedProjectId) ||
+        sources.some((source) => source.projectId !== current.project_id)) {
+      throw new AppStoreOperationError(409, "project_source_scope_changed", "Project source scope changed.");
+    }
+  }
   constructor(
     private readonly db: Database,
     private readonly messageFiles: AppMessageFileStore,
@@ -91,6 +109,11 @@ export class AppSessionQueueStore {
       type: string,
       payload: Record<string, unknown>,
     ) => void,
+    private readonly retainsApprovalClaim: (turnId: string) => boolean,
+    private readonly resolveProjectSources: (chatId: string, content?: MessageContent) => Promise<ResolvedProjectSource[]> = async (_chatId, content) => {
+      if (content?.parts.some((part) => part.type === "project_source_ref")) throw new AppStoreOperationError(503, "project_sources_unavailable", "Project sources are unavailable.");
+      return [];
+    },
   ) {}
 
   listSessionQueue(sessionId = DEFAULT_CHAT_ID): SessionQueueView {
@@ -98,13 +121,17 @@ export class AppSessionQueueStore {
     const rows = this.db
       .query<QueuedMessageRow, [string]>(
         `
-      SELECT rowid, id, chat_id, text, controls_json, attachments_json, state,
+      SELECT rowid, id, chat_id, text, controls_json, attachments_json, content_parts_json, state,
         client_message_id, input_identity_digest, control_resolution_json, safe_error_code,
         dispatched_message_id, turn_id,
         claim_id, claim_owner, claimed_at, lease_expires_at,
         terminal_result_message_id, created_at, updated_at
       FROM session_queued_messages
-      WHERE chat_id = ? AND state IN ('queued', 'failed')
+      WHERE chat_id = ?
+        AND (
+          state = 'queued'
+          OR (state = 'failed' AND COALESCE(safe_error_code, '') <> 'turn_cancelled')
+        )
       ORDER BY rowid ASC
     `,
       )
@@ -122,7 +149,11 @@ export class AppSessionQueueStore {
   ): Promise<SessionQueueView> {
     const chatId = input.chat_id?.trim() || DEFAULT_CHAT_ID;
     this.ensureChat(chatId);
-    const text = (input.text ?? "").trim();
+    new AppSessionContextGate(this.db).assertNotRelocating(chatId);
+    if (input.content_parts !== undefined && !isMessageContent(input.content_parts)) {
+      throw new AppStoreOperationError(400, "invalid_message_content", "대화 참조의 형식이 올바르지 않습니다.");
+    }
+    const text = input.content_parts ? messageContentText(input.content_parts) : (input.text ?? "").trim();
     const clientMessageId = stableClientMessageId(input.client_message_id);
     const existing = this.getQueuedMessageByClientId(chatId, clientMessageId);
     if (existing) {
@@ -138,7 +169,7 @@ export class AppSessionQueueStore {
         queuedInputIdentityDigest(input, text, replayFiles, {
           includeSubsessionResult: false,
         });
-      const legacyReplayMatches = existing.input_identity_digest ===
+      const legacyReplayMatches = !input.content_parts && existing.input_identity_digest ===
         legacyQueuedInputIdentityDigest(input, text, replayFiles) &&
         sameAttachmentIdentityOrder(
           requestedAttachmentIds(input),
@@ -166,6 +197,7 @@ export class AppSessionQueueStore {
       );
     }
     const inputIdentityDigest = queuedInputIdentityDigest(input, text, attachableFiles);
+    const projectSources = await this.resolveProjectSources(chatId, input.content_parts);
     let reservation: {
       concurrent?: QueuedMessageRow | null;
       queuedId?: string;
@@ -173,6 +205,8 @@ export class AppSessionQueueStore {
     };
     try {
       reservation = this.db.transaction(() => {
+        new AppSessionContextGate(this.db).assertNotRelocating(chatId);
+        this.assertProjectSourceScope(chatId, projectSources, input.expected_project_id);
         const concurrent = this.getQueuedMessageByClientId(chatId, clientMessageId);
         if (concurrent) return { concurrent };
         const resolvedControls = admittedControls ?? this.controlsForMessageSend(chatId, input);
@@ -184,6 +218,7 @@ export class AppSessionQueueStore {
           ...(input.subsession_result
             ? { subsession_result: input.subsession_result }
             : {}),
+          ...(input.plan_id ? { plan_id: input.plan_id.trim() } : {}),
         };
         const now = new Date().toISOString();
         const queuedId = `queued-${crypto.randomUUID()}`;
@@ -192,12 +227,12 @@ export class AppSessionQueueStore {
             `
       INSERT INTO session_queued_messages (
         id, chat_id, text, client_message_id, input_identity_digest, control_resolution_json,
-        controls_json, attachments_json,
+        controls_json, attachments_json, content_parts_json, project_source_refs_json,
         state, safe_error_code, dispatched_message_id, turn_id, claim_id,
         claim_owner, claimed_at, lease_expires_at, terminal_result_message_id,
         created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', NULL, NULL, NULL, NULL, NULL, NULL,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, ?, ?)
             `,
           )
@@ -210,6 +245,8 @@ export class AppSessionQueueStore {
             JSON.stringify(controlResolution),
             JSON.stringify(controlResolution.controls),
             JSON.stringify(queueAttachmentPayload(attachableFiles)),
+            input.content_parts ? JSON.stringify(input.content_parts) : null,
+            JSON.stringify(projectSources),
             now,
             now,
           );
@@ -280,6 +317,69 @@ export class AppSessionQueueStore {
     return this.listSessionQueue(chatId);
   }
 
+  createPlanContinuation(input: {
+    chatId: string;
+    clientMessageId: string;
+    planId: string;
+    text: string;
+  }): SessionQueueView {
+    const request: QueueMessageRequest = {
+      chat_id: input.chatId,
+      client_message_id: input.clientMessageId,
+      plan_id: input.planId,
+      text: input.text,
+      plan_mode: false,
+    };
+    this.ensureChat(input.chatId);
+    const text = input.text.trim();
+    const clientMessageId = stableClientMessageId(input.clientMessageId);
+    const inputIdentityDigest = queuedInputIdentityDigest(request, text, []);
+    const existing = this.getQueuedMessageByClientId(input.chatId, clientMessageId);
+    if (existing) {
+      if (existing.input_identity_digest !== inputIdentityDigest) {
+        throw new AppStoreOperationError(
+          409,
+          "queued_message_identity_conflict",
+          "This Plan continuation was already accepted with different input.",
+        );
+      }
+      return this.listSessionQueue(input.chatId);
+    }
+    const controls = this.controlsForMessageSend(input.chatId, request);
+    const controlResolution: TurnControlResolution = {
+      ...controls,
+      plan_id: input.planId,
+    };
+    const queuedId = `queued-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+    this.db.query(`
+      INSERT INTO session_queued_messages (
+        id, chat_id, text, client_message_id, input_identity_digest, control_resolution_json,
+        controls_json, attachments_json, content_parts_json, state, safe_error_code, dispatched_message_id,
+        turn_id, claim_id, claim_owner, claimed_at, lease_expires_at,
+        terminal_result_message_id, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, '[]', NULL, 'queued', NULL, NULL, NULL, NULL, NULL, NULL,
+        NULL, NULL, ?, ?)
+    `).run(
+      queuedId,
+      input.chatId,
+      text,
+      clientMessageId,
+      inputIdentityDigest,
+      JSON.stringify(controlResolution),
+      JSON.stringify(controlResolution.controls),
+      now,
+      now,
+    );
+    this.appendEvent("session_queue.changed", {
+      session_id: input.chatId,
+      queued_message_id: queuedId,
+      action: "created",
+    });
+    return this.listSessionQueue(input.chatId);
+  }
+
   async updateQueuedMessage(
     queuedMessageId: string,
     input: UpdateQueuedMessageRequest,
@@ -299,8 +399,11 @@ export class AppSessionQueueStore {
         "Approved command queue entries cannot be edited.",
       );
     }
-    const text =
-      typeof input.text === "string" ? input.text.trim() : current.text;
+    if (input.content_parts !== undefined && !isMessageContent(input.content_parts)) {
+      throw new AppStoreOperationError(400, "invalid_message_content", "대화 참조의 형식이 올바르지 않습니다.");
+    }
+    const content = input.content_parts ?? (input.text === undefined ? readMessageContent(current.content_parts_json) : undefined);
+    const text = content ? messageContentText(content) : typeof input.text === "string" ? input.text.trim() : current.text;
     const attachableFiles =
       input.attachments === undefined
         ? this.messageFiles.queuedRows(current)
@@ -329,19 +432,32 @@ export class AppSessionQueueStore {
       current.chat_id,
       { ...controls, ...input },
     );
+    if (input.plan_id || this.controlResolutionFromRow(current)?.plan_id) {
+      controlResolution.plan_id = input.plan_id?.trim() ||
+        this.controlResolutionFromRow(current)?.plan_id;
+    }
     const visualAdmission = await this.admitVisualAttachments(
       attachableFiles,
       controlResolution.controls.model,
     );
-    const inputIdentityDigest = queuedInputIdentityDigest(input, text, attachableFiles);
+    const inputIdentityDigest = queuedInputIdentityDigest({ ...input, content_parts: content }, text, attachableFiles);
+    const sameSources = JSON.stringify(content ?? null) === (current.content_parts_json ?? "null");
+    const savedSources = this.db.query<{ project_source_refs_json: string | null }, [string]>(
+      "SELECT project_source_refs_json FROM session_queued_messages WHERE id = ?",
+    ).get(queuedMessageId);
+    const projectSources: ResolvedProjectSource[] = sameSources && savedSources?.project_source_refs_json
+      ? JSON.parse(savedSources.project_source_refs_json) : await this.resolveProjectSources(current.chat_id, content);
     const now = new Date().toISOString();
-    this.db
+    this.db.transaction(() => {
+      new AppSessionContextGate(this.db).assertNotRelocating(current.chat_id);
+      this.assertProjectSourceScope(current.chat_id, projectSources);
+      const result = this.db
       .query(
         `
       UPDATE session_queued_messages
       SET text = ?, control_resolution_json = ?, controls_json = ?,
-        attachments_json = ?, input_identity_digest = ?, updated_at = ?
-      WHERE id = ? AND state = 'queued'
+        attachments_json = ?, content_parts_json = ?, project_source_refs_json = ?, input_identity_digest = ?, updated_at = ?
+      WHERE id = ? AND state = 'queued' AND COALESCE(input_identity_digest, '') = ?
     `,
       )
       .run(
@@ -349,10 +465,15 @@ export class AppSessionQueueStore {
         JSON.stringify(controlResolution),
         JSON.stringify(controlResolution.controls),
         JSON.stringify(queueAttachmentPayload(attachableFiles, visualAdmission)),
+        content ? JSON.stringify(content) : null,
+        JSON.stringify(projectSources),
         inputIdentityDigest,
         now,
         queuedMessageId,
+        current.input_identity_digest ?? "",
       );
+      if (result.changes !== 1) throw new AppStoreOperationError(409, "queued_message_changed", "Queued message changed. Reload it.");
+    })();
     this.appendEvent("session_queue.changed", {
       session_id: current.chat_id,
       queued_message_id: queuedMessageId,
@@ -363,7 +484,7 @@ export class AppSessionQueueStore {
 
   deleteQueuedMessage(queuedMessageId: string): SessionQueueView {
     const current = this.getQueuedMessageRow(queuedMessageId);
-    if (!current || current.state !== "queued") {
+    if (!current || !["queued", "failed"].includes(current.state)) {
       throw new AppStoreOperationError(
         404,
         "queued_message_not_found",
@@ -383,7 +504,7 @@ export class AppSessionQueueStore {
         `
       UPDATE session_queued_messages
       SET state = 'deleted', updated_at = ?
-      WHERE id = ? AND state = 'queued'
+      WHERE id = ? AND state IN ('queued', 'failed')
     `,
       )
       .run(now, queuedMessageId);
@@ -403,7 +524,7 @@ export class AppSessionQueueStore {
       SELECT rowid, id, chat_id, text, client_message_id, input_identity_digest,
         control_resolution_json,
         controls_json,
-        attachments_json, state, safe_error_code, dispatched_message_id, turn_id,
+        attachments_json, content_parts_json, state, safe_error_code, dispatched_message_id, turn_id,
         claim_id, claim_owner, claimed_at, lease_expires_at,
         terminal_result_message_id, created_at, updated_at
       FROM session_queued_messages
@@ -426,7 +547,7 @@ export class AppSessionQueueStore {
       SELECT rowid, id, chat_id, text, client_message_id, input_identity_digest,
         control_resolution_json,
         controls_json,
-        attachments_json, state, safe_error_code, dispatched_message_id, turn_id,
+        attachments_json, content_parts_json, state, safe_error_code, dispatched_message_id, turn_id,
         claim_id, claim_owner, claimed_at, lease_expires_at,
         terminal_result_message_id, created_at, updated_at
       FROM session_queued_messages
@@ -452,7 +573,7 @@ export class AppSessionQueueStore {
       SELECT rowid, id, chat_id, text, client_message_id, input_identity_digest,
         control_resolution_json,
         controls_json,
-        attachments_json, state, safe_error_code, dispatched_message_id, turn_id,
+        attachments_json, content_parts_json, state, safe_error_code, dispatched_message_id, turn_id,
         claim_id, claim_owner, claimed_at, lease_expires_at,
         terminal_result_message_id, created_at, updated_at
       FROM session_queued_messages
@@ -470,7 +591,7 @@ export class AppSessionQueueStore {
     const recoveryRows = currentOwner
       ? rows.concat(this.db.query<QueuedMessageRow, string[]>(`
           SELECT rowid, id, chat_id, text, client_message_id, input_identity_digest,
-            control_resolution_json, controls_json, attachments_json, state,
+            control_resolution_json, controls_json, attachments_json, content_parts_json, state,
             safe_error_code, dispatched_message_id, turn_id,
             claim_id, claim_owner, claimed_at, lease_expires_at,
             terminal_result_message_id, created_at, updated_at
@@ -486,6 +607,7 @@ export class AppSessionQueueStore {
     const uniqueRows = new Map(recoveryRows.map((row) => [row.id, row]));
     let recoveredCount = 0;
     for (const row of uniqueRows.values()) {
+      if (row.turn_id && this.retainsApprovalClaim(row.turn_id)) continue;
       const ownerIsForeign = Boolean(
         currentOwner && row.claim_owner && row.claim_owner !== currentOwner,
       );
@@ -806,6 +928,7 @@ export class AppSessionQueueStore {
       id: row.id,
       chat_id: row.chat_id,
       text: row.text,
+      content_parts: readMessageContent(row.content_parts_json),
       ...(row.client_message_id
         ? { client_message_id: row.client_message_id }
         : {}),
@@ -821,6 +944,8 @@ export class AppSessionQueueStore {
       record.dispatched_message_id = row.dispatched_message_id;
     }
     if (row.turn_id) record.turn_id = row.turn_id;
+    const planId = this.controlResolutionFromRow(row)?.plan_id;
+    if (planId) record.plan_id = planId;
     if (row.terminal_result_message_id) {
       record.terminal_result_message_id = row.terminal_result_message_id;
     }
@@ -850,11 +975,14 @@ function queuedInputIdentityDigest(
   return createHash("sha256").update(JSON.stringify({
     version: requestedIds.length > 0 ? 2 : 1,
     text,
+    ...(input.content_parts ? { content_parts: input.content_parts } : {}),
+    ...("expected_project_id" in input && input.expected_project_id !== undefined ? { expected_project_id: input.expected_project_id } : {}),
     explicit_controls: {
       model: input.model ?? null,
       reasoning_effort: input.reasoning_effort ?? null,
       access_mode: input.access_mode ?? null,
       plan_mode: input.plan_mode ?? null,
+      plan_id: input.plan_id ?? null,
       authority_request_ref: input.authority_request_ref ?? null,
       ...(options.includeSubsessionResult !== false && input.subsession_result
         ? { subsession_result: input.subsession_result }

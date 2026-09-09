@@ -9,6 +9,7 @@ import {
 } from "fs";
 import { homedir } from "os";
 import { basename, isAbsolute, join, relative, resolve } from "path";
+import { sliceToolArtifactText, type ToolArtifactTextSlice } from "./tool-artifact-slice.ts";
 
 export const RAW_TOOL_ARTIFACT_SCHEMA = "butler.raw-tool-artifact.v1";
 export const EVIDENCE_PACKET_SCHEMA = "butler.evidence-packet.v1";
@@ -63,15 +64,7 @@ export interface RetainedToolEvidence {
   artifact: RawToolArtifactReference | null;
 }
 
-export interface ToolEvidenceArtifactSlice {
-  text: string;
-  start_line: number;
-  returned_lines: number;
-  total_lines: number;
-  estimated_tokens: number;
-  truncated_by_lines: boolean;
-  truncated_by_tokens: boolean;
-}
+export type ToolEvidenceArtifactSlice = ToolArtifactTextSlice;
 
 export interface FocusedToolEvidenceArtifactRead {
   schema_version?: typeof TOOL_EVIDENCE_REHYDRATION_SCHEMA;
@@ -398,30 +391,6 @@ function artifactMetadata(path: string, artifact: Record<string, unknown>): Focu
   };
 }
 
-function sliceText(input: {
-  text: string;
-  offsetLines: number;
-  limitLines: number;
-  maxTokens: number;
-}): ToolEvidenceArtifactSlice {
-  const lines = input.text.split(/\r?\n/);
-  const offset = Math.max(0, Math.min(lines.length, input.offsetLines));
-  const limit = Math.max(1, input.limitLines);
-  const selected = lines.slice(offset, offset + limit);
-  const lineLimitedText = selected.join("\n");
-  const tokenLimitedText = trimTextToFastTokenBudget(lineLimitedText, Math.max(1, input.maxTokens));
-  const tokenLimitedLines = tokenLimitedText ? tokenLimitedText.split(/\r?\n/) : [];
-  return {
-    text: tokenLimitedText,
-    start_line: offset,
-    returned_lines: tokenLimitedLines.length,
-    total_lines: lines.length,
-    estimated_tokens: fastEstimateTokens(tokenLimitedText),
-    truncated_by_lines: offset + selected.length < lines.length,
-    truncated_by_tokens: tokenLimitedText.length < lineLimitedText.length,
-  };
-}
-
 export function retainToolEvidence(input: {
   context?: ToolEvidenceRetentionContext;
   toolName: string;
@@ -513,6 +482,7 @@ export function readToolEvidenceArtifactSlice(input: {
   artifactId?: string;
   path?: string;
   offsetLines?: number;
+  offsetChars?: number;
   limitLines?: number;
   maxTokens?: number;
   maxArtifactScanFiles?: number;
@@ -560,9 +530,11 @@ export function readToolEvidenceArtifactSlice(input: {
     ok: true,
     rawTextStored: false,
     artifact: artifactMetadata(resolved.path, artifact),
-    text: sliceText({
+    text: sliceToolArtifactText({
       text: artifact.serialized_text,
       offsetLines,
+      offsetChars: typeof input.offsetChars === "number" && Number.isFinite(input.offsetChars)
+        ? Math.max(0, Math.trunc(input.offsetChars)) : undefined,
       limitLines,
       maxTokens,
     }),

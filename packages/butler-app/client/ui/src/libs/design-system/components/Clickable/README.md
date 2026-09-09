@@ -21,6 +21,11 @@ import { Clickable } from "@/butler-ds";
 
 Provide an accessible label when the visible content is not plain text.
 
+Nested icon controls retain compact defaults. A row can declare
+`--clickable-action-size` and `--clickable-action-icon-size` to preserve its own
+touch-target and icon-slot sizing instead. Set the icon size on the nearest
+control when leading identity icons differ from trailing action icons.
+
 ## Who can use this component
 Product engineers and agents can use it when composing interactive rows. Design-system maintainers own its keyboard and accessibility contract.
 

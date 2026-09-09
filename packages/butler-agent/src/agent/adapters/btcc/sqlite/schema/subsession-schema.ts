@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_delegations (
   child_turn_id TEXT NOT NULL UNIQUE,
   root_work_id TEXT NOT NULL UNIQUE,
   packet_json TEXT NOT NULL,
+  dispatch_intent_json TEXT,
+  dispatch_state TEXT CHECK (dispatch_state IS NULL OR dispatch_state IN ('pending', 'enqueued')),
   created_at TEXT NOT NULL,
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)
 );
@@ -50,11 +52,13 @@ CREATE TABLE IF NOT EXISTS btcc_steward_results (
   status TEXT NOT NULL CHECK (status IN ('success', 'blocked', 'failed', 'cancelled')),
   code TEXT CHECK (code IS NULL OR code IN (
     'delegation_context_incomplete',
-    'steward_execution_failed', 'steward_cancelled'
+    'steward_execution_failed', 'steward_cancelled',
+    'worker_work_incomplete', 'worker_no_progress'
   )),
   summary TEXT NOT NULL,
   acceptance_evidence_json TEXT NOT NULL,
   changed_artifacts_json TEXT NOT NULL,
+  changed_files_json TEXT NOT NULL DEFAULT '[]',
   commits_json TEXT NOT NULL DEFAULT '[]',
   tests_json TEXT NOT NULL DEFAULT '[]',
   remaining_risks_json TEXT NOT NULL DEFAULT '[]',

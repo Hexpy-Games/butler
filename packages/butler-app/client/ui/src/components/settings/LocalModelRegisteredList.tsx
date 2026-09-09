@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { LocalModelRow } from "./LocalModelRow";
@@ -18,6 +19,7 @@ export function LocalModelRegisteredList({
   onEdit,
   onDelete,
 }: LocalModelRegisteredListProps) {
+  useAppLocale();
   const copy = appCopy.settings.localModels;
   if (models.length === 0) return null;
 

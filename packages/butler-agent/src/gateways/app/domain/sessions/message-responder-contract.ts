@@ -19,7 +19,6 @@ export interface AppMessageResponderInput {
   projectWorkspacePath?: string;
   model?: string;
   reasoningEffort?: SettingsView["reasoning_effort"];
-  workerModelRules?: SettingsView["worker_model_rules"];
   accessMode?: SettingsView["access_mode"];
   planMode?: boolean;
   onSessionTitle?: (title: string) => void;

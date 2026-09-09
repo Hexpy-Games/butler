@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { Activity } from "@/butler-ds";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
 import { ActivityHeatmap, Section } from "@/butler-ds";
@@ -8,11 +10,12 @@ export function ProjectActivityPanel({
 }: {
   days: ProjectDashboardActivityDay[];
 }) {
+  useAppLocale();
   return (
     <Section
       gap="lg"
       icon={<Activity size={16} />}
-      title="Recent activity"
+      title={appCopy.interfacePanels.recentActivity}
     >
       {days.length > 0 ? (
         <ActivityHeatmap
@@ -24,7 +27,7 @@ export function ProjectActivityPanel({
           }))}
         />
       ) : (
-        <EmptyPanelLine label="No recent activity yet" />
+        <EmptyPanelLine label={appCopy.interfacePanels.noRecentActivity} />
       )}
     </Section>
   );

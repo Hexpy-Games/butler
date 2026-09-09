@@ -28,6 +28,7 @@ const projectSession = (input: {
 });
 
 const navigation = (): NavigationView => ({
+  space: { revision: 0, nodes: [], groups: [] },
   chats: [],
   projects: [
     {

@@ -6,6 +6,7 @@ import type {
 } from "./types.ts";
 
 export const EMPTY_NAVIGATION: NavigationView = {
+  space: { revision: 0, nodes: [], groups: [] },
   chats: [],
   projects: [],
   automations_summary: { total_count: 0, enabled_count: 0 },
@@ -35,7 +36,8 @@ export const EMPTY_SETTINGS: SettingsView = {
   effective_consolidation_model: "",
   consolidation_uses_butler_model: true,
   context_window_tokens: 258_000,
-  worker_model_rules: [],
+  worker_profiles: [],
+  max_simultaneous_workers: 10,
   access_mode: "full_access",
   plan_mode_default: false,
   follow_up_behavior: "queue",
@@ -52,6 +54,7 @@ export const EMPTY_SETTINGS: SettingsView = {
     "#434d70",
   ],
   translucent_sidebar: true,
+  smart_grouping_enabled: true,
   diagnostics_enabled: false,
   desktop_notifications: {
     enabled: true,

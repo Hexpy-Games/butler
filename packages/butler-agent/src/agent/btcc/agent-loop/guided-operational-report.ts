@@ -1,6 +1,8 @@
 import { runBtccAgentLoop } from "./agent-loop.ts";
 import type { BtccAgentLoopInput } from "./contracts.ts";
-import type { BtccEmptyResponsePolicy } from "../contracts.ts";
+import type { BtccTurnSuspension } from "./contracts.ts";
+import type { BtccEmptyResponsePolicy, BtccRuntimeFailure } from "../contracts.ts";
+import { ModelRouteRecoveredFailureError } from "../model-route/index.ts";
 import { ModelProviderRequestError } from
   "../../../integrations/providers/provider-errors.ts";
 import {
@@ -20,22 +22,34 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
   originalRequest: string;
   emptyResponsePolicy?: BtccEmptyResponsePolicy;
   loadFacts: () => Promise<Omit<OperationalFacts, "originalRequest">>;
-}): Promise<string> {
+  onSuspension?: (reason: BtccTurnSuspension, continuation?: BtccAgentLoopInput["authorityContinuation"]) => void;
+}): Promise<string | { failure: BtccRuntimeFailure }> {
   try {
     const result = await runBtccAgentLoop({
       ...input.options,
       signal: input.parentSignal,
     });
     const candidate = result.finalText.trim();
-    // An empty, non-limited result is a genuine terminal no-visible outcome.
+    if (result.suspension) {
+      input.onSuspension?.(result.suspension, result.authorityContinuation);
+      return "";
+    }
+    // An empty result is a genuine terminal no-visible outcome.
     // Preserve it for the transport dispatcher to emit its typed queue
     // failure; converting it into an assistant fallback would hide the
     // durable input settlement obligation.
-    if (!result.stoppedByLimit &&
-        (candidate || input.emptyResponsePolicy === "typed_terminal")) return candidate;
+    if (candidate || input.emptyResponsePolicy === "typed_terminal") return candidate;
   } catch (error) {
     if (input.parentSignal.aborted) throwIfAborted(input.parentSignal);
-    if (!allowsOperationalReport(error)) throw error;
+    // The Turn runtime owns error reporting and final acceptance. Never turn an
+    // exhausted model request into ordinary progress prose or run another model.
+    if (error instanceof ModelProviderRequestError) {
+      return { failure: { code: error.code, retryable: error.retryable } };
+    }
+    if (error instanceof ModelRouteRecoveredFailureError) {
+      return { failure: { code: error.failureCode, retryable: error.disposition === "retry" } };
+    }
+    throw error;
   }
 
   let facts: OperationalFacts = {
@@ -55,10 +69,6 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
   }
   const fallback = guidedOperationalFallback(facts);
   return fallback;
-}
-
-function allowsOperationalReport(error: unknown): boolean {
-  return error instanceof ModelProviderRequestError && error.retryable;
 }
 
 function throwIfAborted(signal: AbortSignal): void {

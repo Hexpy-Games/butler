@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import type { ReactElement } from "react";
 import {
   Blocks,
@@ -20,6 +21,7 @@ interface InspectorProps {
 }
 
 export function Inspector({ id }: InspectorProps = {}) {
+  useAppLocale();
   const status = useButlerStore((state) => state.status);
   const summary = useButlerStore((state) => state.summary);
   const activeTab = useButlerStore((state) => state.rightTab);

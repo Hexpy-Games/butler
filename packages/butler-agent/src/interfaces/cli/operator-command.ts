@@ -853,7 +853,7 @@ async function startAppGatewayProcess(parsed: ParsedCommonOptions): Promise<{ pi
   const stderrFd = openSync(logs.stderr, "a", 0o600);
   const [_program, ...commandArgs] = appGatewayCommand(parsed);
   const child = spawn(process.execPath, commandArgs, {
-    cwd: parsed.options.home,
+    cwd: parsed.options.data,
     detached: true,
     stdio: ["ignore", stdoutFd, stderrFd],
     env: {
@@ -1910,7 +1910,7 @@ function uninstall(parsed: ParsedCommonOptions, args: string[]): never {
 
 function runShell(program: string, args: string[], parsed: ParsedCommonOptions): never {
   const result = spawnSync(program, args, {
-    cwd: parsed.options.home,
+    cwd: parsed.options.data,
     stdio: "inherit",
     env: process.env,
   });

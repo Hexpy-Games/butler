@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { AutomationRunList } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { relativeAge } from "@/app/utils.ts";
@@ -8,6 +9,7 @@ interface AutomationRunsProps {
 }
 
 export function AutomationRuns({ runs }: AutomationRunsProps) {
+  useAppLocale();
   return (
     <AutomationRunList
       title={appCopy.automations.fields.runs}

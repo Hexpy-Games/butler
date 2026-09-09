@@ -33,6 +33,42 @@
   padding-top: var(--space-1);
 }
 
+.indented {
+  padding-inline-start: var(--nav-tree-indent, var(--space-lg));
+  padding-bottom: var(--space-sm);
+}
+
+.stickyGroup > .header[data-slot="clickable"] {
+  position: sticky;
+  top: calc(
+    var(--nav-sticky-offset, 0px) + var(--nav-sticky-depth) *
+      var(--sidebar-row-height)
+  );
+  z-index: calc(20 - var(--nav-sticky-depth));
+  background: var(--nav-sticky-surface, var(--color-surface-base));
+  backdrop-filter: var(--nav-sticky-filter, none);
+}
+
+.stickyGroup > .header[data-slot="clickable"]:hover {
+  background:
+    linear-gradient(var(--selection), var(--selection)),
+    var(--nav-sticky-surface, var(--color-surface-base));
+}
+
+.stickyGroup > .content:not(.collapsed),
+.stickyGroup > .content > .inner {
+  overflow: visible;
+}
+
+.stickyGroup > .content {
+  --sticky-clip-top: 0px;
+  clip-path: inset(var(--sticky-clip-top, 0) 0 0);
+}
+
+.stickyGroup > .collapsed {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .content {
     transition: none;

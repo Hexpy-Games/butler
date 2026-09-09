@@ -12,8 +12,6 @@ import type {
 import type { StoredSessionBinding } from
   "../../../test-support/harness/contracts.ts";
 import type { TurnRecord } from "./contracts.ts";
-import { storedBindingFromTurnRecord } from
-  "../../../operations/diagnostics/developer-log-turn-capture/index.ts";
 import type { StableTurnRequestIdentity } from "./load-or-admit-turn.ts";
 
 export function requestIdentityForRequest(
@@ -25,6 +23,7 @@ export function requestIdentityForRequest(
       triggerKey: request.eventId,
       messageId: request.message.id,
       content: request.message.content,
+      messageContent: request.appTurnContext?.contentParts,
     };
   }
   return {
@@ -48,8 +47,21 @@ export function replayBinding(
   request: BtccTurnRequest,
 ): StoredSessionBinding {
   const executionPolicy = turn.context.executionPolicy;
+  const modelRef = `${turn.modelSelection.provider}/${turn.modelSelection.model}` as StoredSessionBinding["modelRef"];
   return {
-    ...storedBindingFromTurnRecord(turn, request.message.timestamp),
+    sessionId: turn.sessionId,
+    role: executionPolicy?.role === "steward" || executionPolicy?.role === "worker"
+      ? executionPolicy.role
+      : "butler",
+    ...(turn.context.projectRef ? { projectId: turn.context.projectRef } : {}),
+    workspacePath: executionPolicy?.workspacePath ?? "",
+    runtimeAdapterId: "btcc-turn-runtime",
+    modelProviderId: turn.modelSelection.provider,
+    modelRef,
+    transportBindings: [],
+    lifecycleState: "active",
+    createdAt: request.message.timestamp,
+    updatedAt: request.message.timestamp,
     metadata: {
       accessMode: executionPolicy?.accessMode ?? "read_only",
       reasoning_effort: turn.modelSelection.reasoningEffort,
@@ -115,6 +127,21 @@ function contextForRequest(
   request: BtccTurnRequest,
   context: ButlerContextInput,
 ): ButlerContextInput {
+  if (request.appTurnContext) context = { ...context, appSessionId: request.appTurnContext.session.id };
+  if (request.appTurnContext?.branchSeed) context = { ...context, branchSeed: request.appTurnContext.branchSeed };
+  if (request.appTurnContext?.contentParts) context = { ...context, messageContent: request.appTurnContext.contentParts };
+  if (request.appTurnContext?.projectSources?.length) context = { ...context,
+    projectSources: request.appTurnContext.projectSources,
+    ...(context.executionPolicy ? { executionPolicy: { ...context.executionPolicy,
+      requiredNativeTools: [...new Set([...context.executionPolicy.requiredNativeTools, "read_project_source"])],
+    } } : {}),
+  };
+  if (request.appTurnContext?.sessionReferences?.length) context = { ...context,
+    sessionReferences: request.appTurnContext.sessionReferences,
+    ...(context.executionPolicy ? { executionPolicy: { ...context.executionPolicy,
+      requiredNativeTools: [...new Set([...context.executionPolicy.requiredNativeTools, "read_conversation_session"])],
+    } } : {}),
+  };
   return request.emptyResponsePolicy
     ? { ...context, emptyResponsePolicy: request.emptyResponsePolicy }
     : context;
@@ -134,6 +161,7 @@ function destinationForRequest(request: BtccTurnRequest): BtccProgressDestinatio
 
 export function inboundEnvelopeFor(request: BtccTurnRequest): InboundEnvelope {
   return {
+    appTurnContext: request.appTurnContext,
     eventId: request.eventId,
     signal: request.signal,
     transport: request.transport,

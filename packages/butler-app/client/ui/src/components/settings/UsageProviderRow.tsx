@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import type {
   ProviderQuotaResultView,
   UsageMonitorView,
@@ -21,6 +23,7 @@ export function UsageProviderRow({
   provider: UsageProvider;
   divider: boolean;
 }) {
+  useAppLocale();
   const quota = provider.remaining;
   return (
     <Stack
@@ -38,21 +41,21 @@ export function UsageProviderRow({
         <Typo.Body as="div">{provider.providerId}</Typo.Body>
         <Typo.Caption>
           {provider.source === "provider_adapter"
-            ? "프로바이더 어댑터"
-            : "로컬 텔레메트리"} {" "}
-          · 요청 {formatCount(provider.requestCount)} · 입력{" "}
-          {formatCompact(provider.promptTokens)} · 출력{" "}
+            ? appCopy.interfaceStatus.providerAdapter
+            : appCopy.interfaceStatus.localTelemetry} {" "}
+          {appCopy.interfaceDetails.requestsLabel}{formatCount(provider.requestCount)} {appCopy.interfaceDetails.inputLabel}{" "}
+          {formatCompact(provider.promptTokens)} {appCopy.interfaceDetails.outputLabel}{" "}
           {formatCompact(provider.outputTokens)}
         </Typo.Caption>
         {quota.available && quota.stale ? (
-          <Typo.Caption>잔여량: 이전 확인값(새로고침 실패)</Typo.Caption>
+          <Typo.Caption>{appCopy.interfaceStatus.staleQuota}</Typo.Caption>
         ) : null}
         {!quota.available ? (
-          <Typo.Caption>잔여량: {quotaReasonLabel(quota.reason?.code)}</Typo.Caption>
+          <Typo.Caption>{appCopy.interfaceDetails.quotaLabel}{quotaReasonLabel(quota.reason?.code)}</Typo.Caption>
         ) : null}
         {renderQuotaDetails(quota)}
         <Typo.Caption>
-          과금: {provider.billing.available ? "확인됨" : provider.billing.reason}
+          {appCopy.interfaceDetails.billingLabel}{provider.billing.available ? appCopy.interfaceStatus.confirmed : provider.billing.reason}
         </Typo.Caption>
       </Stack>
       <Typo.Body
@@ -70,10 +73,10 @@ function renderQuotaDetails(quota: ProviderQuotaResultView) {
   return (
     <Stack gap="xs">
       <Typo.Caption>
-        플랜: {planLabel(quota.planKind, quota.planName)} · 출처: {sourceLabel(quota.sourceKind)}
+        {appCopy.interfaceDetails.planLabel}{planLabel(quota.planKind, quota.planName)} {appCopy.interfaceDetails.sourceLabel}{sourceLabel(quota.sourceKind)}
       </Typo.Caption>
       <Typo.Caption>
-        조회 시각: {quota.fetchedAt ? formatQuotaTimestamp(quota.fetchedAt) : "미확인"}
+        {appCopy.interfaceDetails.fetchedLabel}{quota.fetchedAt ? formatQuotaTimestamp(quota.fetchedAt) : appCopy.interfaceStatus.unknown}
         {quota.stale ? ` · ${quotaReasonLabel(quota.reason?.code)}` : ""}
       </Typo.Caption>
       {quota.windows.map((window) => (

@@ -25,6 +25,9 @@ Use `masked={false}` for first-screen compositions that should not fade at the
 scroll edges, and `scrollable={false}` for first screens whose inner rail owns
 overflow. Use `virtualized` and pass a measured `height` for long timelines.
 Product containers still own message data and submission.
+The shell supplies the named `conversation` inline-size container for empty-state
+content. Within AdaptiveShell's `workspace` container, narrow conversation gutters
+and composer insets follow the actual pane width even on desktop.
 
 ## Who can use this component
 

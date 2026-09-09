@@ -17,6 +17,7 @@ import {
   satisfiedCompletionObligationsFromEvidenceReceipts,
 } from "../output/evidence/receipts.ts";
 import { createAutomationToolHandlers } from "./automation/index.ts";
+import { createStartTopicConversationHandler } from "./conversation/executor.ts";
 import { createDataTableToolHandlers } from "./data-table/index.ts";
 import { createMcpToolHandlers } from "./mcp/index.ts";
 import { createImageToolHandlers } from "./image/index.ts";
@@ -31,6 +32,7 @@ import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
 import { createWorkspaceToolHandlers } from "./workspace-tool-handlers.ts";
+import { readProjectSource } from "./project-source/executor.ts";
 import { createSubsessionToolHandlers } from "./subsession/index.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
 import type {
@@ -127,7 +129,7 @@ export function createButlerToolExecutor(
 ): ContextualButlerToolExecutor {
   const workspaceReference = input.workspaceReference ?? (input.sessionId && input.sessionBindingStore
     ? createUnavailableWorkspaceReference()
-    : createWorkspaceReference(input.workspacePath ?? input.butlerHome));
+    : createWorkspaceReference(input.workspacePath ?? input.butlerData));
   const projectLedgerWorkspaceReference = input.workspaceReference || input.sessionId
     ? workspaceReference
     : undefined;
@@ -205,6 +207,7 @@ export function createButlerToolExecutor(
       sessionId: input.sessionId,
       automationStore,
     }),
+    start_topic_conversation: createStartTopicConversationHandler(input),
     ...createWorkTrackingToolHandlers({
       butlerData: input.butlerData,
       sessionId: input.sessionId,
@@ -252,8 +255,8 @@ export function createButlerToolExecutor(
       sessionId: input.sessionId,
       sessionBindingStore: input.sessionBindingStore,
       mutationScope: input.subsessionMutationScope,
-      allowedToolsAndEffects: input.subsessionAllowedToolsAndEffects,
     }),
+    read_project_source: (call) => readProjectSource(call, { butlerData: input.butlerData, sources: input.projectSources ?? [] }),
     ...createSubsessionToolHandlers({
       service: input.subsessionDelegation,
       parentSessionId: input.sessionId,
@@ -261,6 +264,7 @@ export function createButlerToolExecutor(
       anchorMessageId: input.anchorMessageId,
       modelRef: input.modelRef,
       reasoningEffort: input.reasoningEffort,
+      parentAccessMode: input.parentAccessMode,
     }),
   });
   toolExecutorRef.current = toolExecutors;

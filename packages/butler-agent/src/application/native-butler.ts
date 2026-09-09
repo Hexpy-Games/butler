@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { retryDecidedAuthorityInputs } from "../gateways/app/application/authority-handoff.ts";
 import type {
   DeliveryResult,
   ModelProviderAdapter,
@@ -75,9 +76,11 @@ export async function runNativeButlerMain(
   const config = readButlerConfig(butlerData);
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
+  store.relocateLegacyGeneralWorkspaces(butlerHome, butlerData);
   let btcc: Btcc | undefined = input.btcc;
   let btccHost: BtccComposition["host"] | undefined = input.btccHost;
   let subsessionDelegation: BtccComposition["subsessions"] | undefined;
+  let authority: BtccComposition["authority"] | undefined;
   let btccReady: Promise<void> | undefined;
   const shutdownFlagPath = join(butlerData, "locks", "butler-shutdown");
   const pollMs = input.shutdownPollMs ?? 500;
@@ -108,6 +111,7 @@ export async function runNativeButlerMain(
       btcc = composition.btcc;
       btccHost = composition.host;
       subsessionDelegation = composition.subsessions;
+      authority = composition.authority;
       btccReady = composition.ready;
     }
     if (!btcc) throw new Error("BTCC facade was not created");
@@ -129,6 +133,7 @@ export async function runNativeButlerMain(
     const progressPublisher = createNativeButlerProgressPublisher({
       deliver: deliverThroughEnabledGate,
     });
+    btccHost?.progress.connect(progressPublisher);
     if (btccHost) await btccHost.progress.reconcile(progressPublisher);
     const recovered = inboundQueue.recoverRuntimeInterruptions(() => true);
     if (recovered.requeued > 0) {
@@ -165,11 +170,16 @@ export async function runNativeButlerMain(
         pollMs,
         shouldReplaceProcess: () => runtimeReplacementRequested,
         onPoll: async () => {
+          if (authority) {
+            try { await retryDecidedAuthorityInputs({ authority, butlerData }); }
+            catch { process.stderr.write("[authority] Resume enqueue unavailable; persisted decisions remain queued for the next poll.\n"); }
+          }
           await btccHost?.progress.reconcile(progressPublisher);
           const summary = inboundDispatcher.poll({
             queue: inboundQueue,
             server,
             store,
+            waitingSourceSessions: new Set(authority?.waitingSourceSessions()),
             deliveryGuard,
             deliverAction: deliverThroughEnabledGate,
             limit: 5,

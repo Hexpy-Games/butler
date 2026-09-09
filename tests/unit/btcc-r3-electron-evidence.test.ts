@@ -10,8 +10,9 @@ function observation() {
     finalText: "done",
     rendererFinalText: "done",
     rendererActivities: [],
-    providerReportedModel: "gpt-5.6-luna",
-    providerAgentModels: ["gpt-5.6-luna"],
+    requestedModelRef: "openai/gpt-5.6-sol",
+    providerReportedModel: "gpt-5.6-sol",
+    providerAgentModels: ["gpt-5.6-sol"],
     progressMessages: [],
     work: null,
     timing: {

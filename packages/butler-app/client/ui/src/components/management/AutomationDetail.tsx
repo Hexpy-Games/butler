@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { useEffect, useMemo } from "react";
 import type { SessionOption, StatusPill } from "@/app/types.ts";
 import { useAutomationStore } from "@/stores/automationStore";
@@ -21,11 +23,12 @@ export function AutomationDetail({
   onSaved,
   onStatus,
 }: AutomationDetailProps) {
+  useAppLocale();
   const sessionOptions = useMemo(
     () =>
       targetSessions.length > 0
         ? targetSessions
-        : [{ id: "general", label: "General chat" }],
+        : [{ id: "general", label: appCopy.interfacePanels.generalChat }],
     [targetSessions],
   );
 

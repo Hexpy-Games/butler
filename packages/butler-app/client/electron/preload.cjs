@@ -265,6 +265,8 @@ function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
         throw new Error("Live event stream response did not include a body.");
       }
       reader = response.body.getReader();
+      if (closed) { await reader.cancel(); return; }
+      handlers.onOpen?.();
       const decoder = new TextDecoder();
       let buffer = "";
       while (!closed) {
@@ -518,6 +520,15 @@ const butlerApp = Object.freeze({
   toggleWindowMaximize: () =>
     ipcRenderer.invoke("butler:window-toggle-maximize"),
   closeWindow: () => ipcRenderer.invoke("butler:window-close"),
+  getSessionFolderLaunchTargets: ({ sessionId } = {}) =>
+    ipcRenderer.invoke("butler:get-session-folder-launch-targets", {
+      sessionId,
+    }),
+  openSessionFolder: ({ sessionId, target } = {}) =>
+    ipcRenderer.invoke("butler:open-session-folder", {
+      sessionId,
+      target,
+    }),
   listChats: () => requestJson("/chats"),
   listNavigation: () => requestJson("/navigation"),
   getNewChatBriefing: ({ date, projectId } = {}) => {
@@ -586,7 +597,26 @@ const butlerApp = Object.freeze({
   deleteProjectPermanent: ({ projectId }) => requestJson(`/projects/${encodeURIComponent(projectId)}?permanent=true`, {
     method: "DELETE",
   }),
+  mutateSpace: ({ resource, body }) => {
+    if (!["groups", "moves", "group-sessions", "undo", "pins", "relocations", "branches", "branch-source"].includes(resource)) throw new Error("Invalid space operation");
+    return requestJson(`/space/${resource}`, { method: "POST", body: JSON.stringify(body) });
+  },
+  changeSpaceGroup: ({ groupId, method, body }) => {
+    if (method !== "PATCH" && method !== "DELETE") throw new Error("Invalid group operation");
+    return requestJson(`/space/groups/${encodeURIComponent(groupId)}`, { method, body: JSON.stringify(body) });
+  },
   getProjectDashboard: ({ projectId }) => requestJson(`/projects/${encodeURIComponent(projectId)}/dashboard`),
+  getProjectDashboardResource: ({ projectId, resource, query = "" }) => {
+    if (!["records", "materials", "source", "history", "artifacts", "statistics"].includes(resource)) throw new Error("Invalid dashboard resource");
+    const params = new URLSearchParams(query);
+    return requestJson(`/projects/${encodeURIComponent(projectId)}/dashboard/${resource}?${params.toString()}`);
+  },
+  updateProjectDashboardResource: ({ projectId, resource, body }) => {
+    if (!["preferences", "briefing", "attachment"].includes(resource)) throw new Error("Invalid dashboard operation");
+    return requestJson(`/projects/${encodeURIComponent(projectId)}/dashboard/${resource}`, {
+      method: resource === "preferences" ? "PATCH" : "POST", body: JSON.stringify(body),
+    });
+  },
   selectProjectFolder: () => ipcRenderer.invoke("butler:select-project-folder"),
   listSessions: ({ kind, projectId } = {}) => {
     const params = new URLSearchParams();
@@ -625,12 +655,20 @@ const butlerApp = Object.freeze({
     method: "PATCH",
     body: JSON.stringify(controls ?? {}),
   }),
+  decideSessionPlan: ({ sessionId, planId, action, instruction } = {}) => requestJson(
+    `/sessions/${encodeURIComponent(sessionId ?? "")}/plan-decisions/${encodeURIComponent(planId ?? "")}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ action, ...(instruction ? { instruction } : {}) }),
+    },
+  ),
   listProjectSessions: ({ projectId } = {}) => {
     const params = new URLSearchParams();
     if (projectId) params.set("project_id", projectId);
     const query = params.toString();
     return requestJson(query ? `/project-sessions?${query}` : "/project-sessions");
   },
+  getWorkStatus: () => requestJson("/work-status"),
   listMessages: ({ chatId = "general", cursor = 0 } = {}) => {
     const params = new URLSearchParams({
       chat_id: chatId,
@@ -668,12 +706,13 @@ const butlerApp = Object.freeze({
       body: form,
     });
   },
-  sendMessage: ({ chatId, text, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments }) => requestJson("/messages", {
+  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments }) => requestJson("/messages", {
     method: "POST",
     body: JSON.stringify({
       chat_id: chatId,
       text,
       client_message_id: clientMessageId,
+      content_parts: contentParts,
       model,
       reasoning_effort: reasoningEffort,
       access_mode: accessMode,
@@ -686,11 +725,44 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/session-queue?${params.toString()}`);
   },
-  queueMessage: ({ chatId, text, model, reasoningEffort, accessMode, planMode, attachments }) => requestJson("/session-queue", {
+  getAuthorityRequests: ({ sessionId } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(`/authority-requests?${params.toString()}`);
+  },
+  allowAuthorityRequest: ({ sessionId, requestRef, scope = "once" } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(
+      `/authority-requests/${encodeURIComponent(requestRef ?? "")}/allow?${params.toString()}`,
+      { method: "POST", body: JSON.stringify({ scope }) },
+    );
+  },
+  revokeConversationPermission: ({ sessionId, grantRef } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(`/authority-permissions/${encodeURIComponent(grantRef ?? "")}?${params.toString()}`, { method: "DELETE" });
+  },
+  denyAuthorityRequest: ({ sessionId, requestRef } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(
+      `/authority-requests/${encodeURIComponent(requestRef ?? "")}/deny?${params.toString()}`,
+      { method: "POST" },
+    );
+  },
+  modifyAuthorityRequest: ({ alternative, sessionId, requestRef } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(
+      `/authority-requests/${encodeURIComponent(requestRef ?? "")}/modify?${params.toString()}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ alternative }),
+      },
+    );
+  },
+  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) => requestJson("/session-queue", {
     method: "POST",
     body: JSON.stringify({
       chat_id: chatId,
       text,
+      content_parts: contentParts,
       model,
       reasoning_effort: reasoningEffort,
       access_mode: accessMode,
@@ -698,11 +770,12 @@ const butlerApp = Object.freeze({
       attachments,
     }),
   }),
-  updateQueuedMessage: ({ queuedMessageId, text, model, reasoningEffort, accessMode, planMode, attachments }) =>
+  updateQueuedMessage: ({ queuedMessageId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) =>
     requestJson(`/session-queue/${encodeURIComponent(queuedMessageId ?? "")}`, {
       method: "PATCH",
       body: JSON.stringify({
         text,
+        content_parts: contentParts,
         model,
         reasoning_effort: reasoningEffort,
         access_mode: accessMode,
@@ -725,6 +798,20 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({}),
   }),
+  cancelSteward: ({ relationId, parentSessionId }) => requestJson(
+    `/steward-relations/${encodeURIComponent(relationId)}/cancel`,
+    {
+      method: "POST",
+      body: JSON.stringify({ parent_session_id: parentSessionId }),
+    },
+  ),
+  resumeSteward: ({ relationId, parentSessionId }) => requestJson(
+    `/steward-relations/${encodeURIComponent(relationId)}/resume`,
+    {
+      method: "POST",
+      body: JSON.stringify({ parent_session_id: parentSessionId }),
+    },
+  ),
   getOperationOutput: ({ turnId, requestId, resultId, offset = 0 }) => {
     const params = new URLSearchParams({
       result_id: resultId,

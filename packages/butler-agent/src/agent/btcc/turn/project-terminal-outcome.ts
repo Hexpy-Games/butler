@@ -13,12 +13,21 @@ export function projectTerminalOutcome(turn: TurnRecord): BtccTurnOutcome {
     turnId: turn.turnId,
     messageId: turn.canonicalAssistantMessageId,
     content: turn.finalPayload.content,
+    ...(turn.finalPayload.runtimeFailure ? { runtimeFailure: turn.finalPayload.runtimeFailure } : {}),
+    ...(turn.finalPayload.executionOutcome ? { executionOutcome: turn.finalPayload.executionOutcome } : {}),
     ...(turn.finalPayload.workStatus
       ? { workStatus: turn.finalPayload.workStatus }
+      : {}),
+    ...(turn.finalPayload.acceptedWorkResult
+      ? { acceptedWorkResult: turn.finalPayload.acceptedWorkResult }
       : {}),
     ...(turn.finalPayload.artifacts?.length
       ? { artifacts: turn.finalPayload.artifacts }
       : {}),
+    ...(turn.finalPayload.changedFiles?.length
+      ? { changedFiles: turn.finalPayload.changedFiles }
+      : {}),
+    ...(turn.finalPayload.plan ? { plan: turn.finalPayload.plan } : {}),
     ...(turn.finalPayload.modelIdentity
       ? { modelIdentity: turn.finalPayload.modelIdentity }
       : {}),

@@ -94,11 +94,41 @@ test("BTCC returns a text-only model response", async () => {
   });
 
   expect(result.finalText).toBe("hi");
-  expect(result.stoppedByLimit).toBe(false);
   expect(result.events.map((event) => event.type)).toEqual([
     "model_call",
     "model_response",
   ]);
+});
+
+test("BTCC executes a restored approved call before the first model round", async () => {
+  let dispatches = 0;
+  const restored = call("approved-echo", "echo", { message: "stored input" });
+  const { port, requests } = scriptedModelRound([
+    (request) => {
+      expect(dispatches).toBe(1);
+      expect(toolMessages(request)).toHaveLength(1);
+      expect(toolMessages(request)[0]?.toolCallId).toBe(restored.id);
+      expect(toolMessages(request)[0]?.content).toContain("stored input");
+      return response({ text: "Observed the completed operation." });
+    },
+  ]);
+  const result = await runBtccAgentLoop({
+    prompt: "Continue the approved operation exactly once.",
+    tools: [echoTool],
+    resumedToolCall: restored,
+    modelRound: port,
+    executeTool: async (operation) => {
+      dispatches += 1;
+      expect(operation.arguments).toEqual({ message: "stored input" });
+      return { ok: true, text: operation.arguments.message };
+    },
+  });
+  expect(dispatches).toBe(1);
+  expect(requests).toHaveLength(1);
+  expect(result.events.map((event) => event.type)).toEqual([
+    "tool_call", "tool_result", "model_call", "model_response",
+  ]);
+  expect(result.finalText).toBe("Observed the completed operation.");
 });
 
 test("BTCC awaits one round tool snapshot and uses it for provider and execution", async () => {
@@ -190,7 +220,6 @@ test("BTCC does not create an empty-response retry loop", async () => {
     prompt: "hello",
     model: "test/model",
     tools: [echoTool],
-    maxIterations: 8,
     modelRound: port,
     executeTool: async () => {
       throw new Error("should not execute");
@@ -199,7 +228,6 @@ test("BTCC does not create an empty-response retry loop", async () => {
 
   expect(calls).toBe(2);
   expect(result.finalText).toBe("");
-  expect(result.stoppedByLimit).toBe(false);
 });
 
 test("BTCC keeps bounded web evidence in the model message and the full result in the event", async () => {
@@ -291,7 +319,6 @@ test("BTCC serializes schema validation failures as compact typed errors", async
     prompt: "echo hello",
     model: "test/model",
     tools: [echoTool],
-    maxIterations: 3,
     modelRound: port,
     executeTool: async () => {
       executed += 1;
@@ -359,7 +386,6 @@ test("BTCC rejects JSON Schema type, enum, and array violations as ordinary tool
     prompt: "collect values",
     model: "test/model",
     tools: [collectTool],
-    maxIterations: 4,
     modelRound: port,
     executeTool: async () => {
       executed += 1;
@@ -433,7 +459,7 @@ test("BTCC preserves the exact structured successful result for the next round",
 
   expect(JSON.parse(observed)).toEqual({
     ok: true,
-    output: { text: "RAW_EXACT_RESULT", nested: { count: 7 } },
+    output: { tool_name: "echo", text: "RAW_EXACT_RESULT", nested: { count: 7 } },
   });
   expect(observed).not.toContain("completed-tool-evidence");
   expect(observed).not.toContain("evidence_packet");
@@ -617,7 +643,7 @@ test("BTCC converts thrown tool errors into model-visible tool results", async (
   expect(result.finalText).toBe("The tool failed truthfully.");
 });
 
-test("BTCC promotes resolved logical failures and exposes one compact error", async () => {
+test("BTCC classifies logical failures without discarding their recovery context", async () => {
   let observed: Record<string, unknown> | undefined;
   const rawFailure = {
     ok: false,
@@ -628,10 +654,10 @@ test("BTCC promotes resolved logical failures and exposes one compact error", as
       next_action: "Review the result.",
     },
     work: {
-      work_id: "private-work-id",
-      actions: [{ action_key: "private-action", status: "done" }],
+      work_id: "current-work-id",
+      actions: [{ action_key: "inspect-current-result", status: "done" }],
     },
-    evidence_capability_receipts: [{ private: "receipt" }],
+    evidence_capability_receipts: [{ capability: "source_verified", verified: true }],
   };
   const { port } = scriptedModelRound([
     response({ toolCalls: [call("call-1", "echo", { message: "hello" })] }),
@@ -665,9 +691,8 @@ test("BTCC promotes resolved logical failures and exposes one compact error", as
       code: "invalid_work_stage_transition",
       message: "Result review is required before completion review.",
     },
+    output: { tool_name: "echo", ...rawFailure },
   });
-  expect(JSON.stringify(observed)).not.toContain("private-work-id");
-  expect(JSON.stringify(observed)).not.toContain("receipt");
 });
 
 test("BTCC rejects removed read_file aliases without executing or echoing arguments", async () => {
@@ -835,7 +860,6 @@ test("BTCC feeds repeated identical failed tool calls back to the model", async 
     prompt: "try a failing local action",
     model: "test/model",
     tools: [echoTool],
-    maxIterations: 8,
     modelRound: port,
     executeTool: async () => {
       throw new Error("boom");
@@ -843,11 +867,9 @@ test("BTCC feeds repeated identical failed tool calls back to the model", async 
   });
 
   expect(modelCalls).toBe(4);
-  expect(result.stoppedByLimit).toBe(false);
   expect(result.finalText).toBe("I saw the repeated tool failures and can answer normally.");
   expect(result.finalText).not.toContain("same tool call failed repeatedly");
   expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(3);
-  expect(result.events.map((event) => event.type)).not.toContain("execution_window_boundary");
 });
 
 test("BTCC records every completed parallel result before terminal finalization", async () => {
@@ -865,8 +887,9 @@ test("BTCC records every completed parallel result before terminal finalization"
     tools: safeTools,
     modelRound: port,
     executeTool: async (toolCall) => ({ tool: toolCall.name }),
-    finalTextFromToolResult: ({ toolCall }) =>
-      toolCall.name === "terminal" ? "Terminal result is enough." : null,
+    outcomeFromToolResult: ({ toolCall }) => toolCall.name === "terminal"
+      ? { kind: "reply", text: "Terminal result is enough." }
+      : null,
   });
 
   expect(result.finalText).toBe("Terminal result is enough.");
@@ -880,6 +903,79 @@ test("BTCC records every completed parallel result before terminal finalization"
     "tool_result",
     "tool_result",
   ]);
+});
+
+test("BTCC turns a completed tool batch into one tool-free final report round", async () => {
+  const tools: BtccAgentLoopToolDefinition[] = [
+    { name: "finish", description: "Finish work.", parameters: {}, concurrencySafe: true },
+    { name: "observe", description: "Observe work.", parameters: {}, concurrencySafe: true },
+  ];
+  const { port, requests } = scriptedModelRound([
+    response({ toolCalls: [call("observe", "observe", {}), call("finish", "finish", {})] }),
+    response({ text: "Work is complete." }),
+  ]);
+  const executed: string[] = [];
+
+  const result = await runBtccAgentLoop({
+    prompt: "finish the work",
+    model: "test/model",
+    tools,
+    modelRound: port,
+    executeTool: async (toolCall) => {
+      executed.push(toolCall.name);
+      return { ok: true };
+    },
+    afterToolBatch: ({ toolCalls, toolResults }) =>
+      toolCalls.some((toolCall, index) =>
+        toolCall.name === "finish" && toolResults[index]?.ok === true,
+      )
+        ? "final_report"
+        : "continue",
+    reviewFinalCandidate: async () => ({ status: "accepted" }),
+  });
+
+  expect(executed).toEqual(["observe", "finish"]);
+  expect(requests).toHaveLength(2);
+  expect(requests[1]?.tools).toEqual([]);
+  expect(requests[1]?.messages.at(-1)?.content).toContain("normal assistant response");
+  expect(requests[1]?.messages.at(-1)?.content).toContain("runtime delivers it");
+  expect(result.finalText).toBe("Work is complete.");
+});
+
+test("a report candidate rejected by fresh direction restores execution tools", async () => {
+  const { port, requests } = scriptedModelRound([
+    response({ toolCalls: [call("first", "echo", { message: "first" })] }),
+    response({ text: "Stale report" }),
+    response({ toolCalls: [call("second", "echo", { message: "second" })] }),
+    response({ text: "Updated full report" }),
+  ]);
+  let reviewed = 0;
+  const output = await runBtccAgentLoop({ prompt: "Complete work", tools: [echoTool], modelRound: port,
+    executeTool: async () => ({ ok: true }), afterToolBatch: () => "final_report",
+    reviewFinalCandidate: async () => ++reviewed === 1
+      ? { status: "continue", observation: "Apply the new requested correction before reporting." }
+      : { status: "accepted" },
+  });
+  expect(requests[1]?.tools).toEqual([]);
+  expect(requests[2]?.tools).toEqual([echoTool]);
+  expect(output.finalText).toBe("Updated full report");
+});
+
+test("steering before a report request restores tools before sending that request", async () => {
+  const { port, requests } = scriptedModelRound([
+    response({ toolCalls: [call("first", "echo", { message: "first" })] }),
+    response({ toolCalls: [call("second", "echo", { message: "correction" })] }),
+    response({ text: "Corrected report" }),
+  ]);
+  let round = 0;
+  const output = await runBtccAgentLoop({ prompt: "Complete work", tools: [echoTool], modelRound: port,
+    executeTool: async () => ({ ok: true }), afterToolBatch: () => "final_report",
+    beforeModelRound: async () => ++round === 2 ? ["Apply this correction before reporting."] : [],
+    reviewFinalCandidate: async () => ({ status: "accepted" }),
+  });
+  expect(requests[1]?.tools).toEqual([echoTool]);
+  expect(requests[2]?.tools).toEqual([]);
+  expect(output.finalText).toBe("Corrected report");
 });
 
 test("BTCC does not terminalize repeated failed tool calls when error text changes", async () => {
@@ -903,7 +999,6 @@ test("BTCC does not terminalize repeated failed tool calls when error text chang
     prompt: "retry same missing file",
     model: "test/model",
     tools: [echoTool],
-    maxIterations: 8,
     modelRound: port,
     executeTool: async () => {
       attempts += 1;
@@ -912,11 +1007,9 @@ test("BTCC does not terminalize repeated failed tool calls when error text chang
   });
 
   expect(attempts).toBe(3);
-  expect(result.stoppedByLimit).toBe(false);
   expect(result.finalText).toBe("I can report the changing failures without synthetic stop text.");
   expect(result.finalText).not.toContain("same tool call failed repeatedly");
   expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(3);
-  expect(result.events.map((event) => event.type)).not.toContain("execution_window_boundary");
 });
 
 test("BTCC records every repeated parallel failure before continuing", async () => {
@@ -1036,7 +1129,6 @@ test("BTCC keeps repeated invalid schema arguments as structured observations", 
     prompt: "echo with repaired schema",
     model: "test/model",
     tools: [echoTool],
-    maxIterations: 5,
     modelRound: port,
     executeTool: async () => {
       throw new Error("invalid calls should not execute");
@@ -1049,258 +1141,6 @@ test("BTCC keeps repeated invalid schema arguments as structured observations", 
   const context = modelInputs.slice(1).join("\n");
   expect(context).toContain("\"code\":\"invalid_arguments\"");
   expect(context).toContain("Tool echo requires argument: message");
-});
-
-test("BTCC produces a truthful partial response when the loop limit is reached", async () => {
-  const { port } = scriptedModelRound([response({
-    toolCalls: [call("call-1", "echo", { message: "still running" })],
-  })]);
-
-  const result = await runBtccAgentLoop({
-    prompt: "never finishes",
-    model: "test/model",
-    tools: [echoTool],
-    maxIterations: 1,
-    modelRound: port,
-    executeTool: async () => ({ ok: true }),
-  });
-
-  expect(result.stoppedByLimit).toBe(true);
-  expect(result.finalText).toContain("available tool budget");
-  expect(result.finalText).not.toContain("agent loop");
-  expect(result.finalText).toContain("echo: ok");
-  expect(result.events.at(-1)?.type).toBe("execution_window_boundary");
-});
-
-test("BTCC continues through multiple execution windows in the same loop", async () => {
-  const requests: ModelRoundRequest[] = [];
-  const { port } = scriptedModelRound([
-    (request) => {
-      requests.push(request);
-      return response({
-        toolCalls: [call("window-call-1", "echo", { message: "first" })],
-      });
-    },
-    (request) => {
-      requests.push(request);
-      return response({
-        toolCalls: [call("window-call-2", "echo", { message: "second" })],
-      });
-    },
-    (request) => {
-      requests.push(request);
-      return response({ text: "one final answer" });
-    },
-  ]);
-  const boundaries: number[] = [];
-
-  const result = await runBtccAgentLoop({
-    prompt: "finish this request",
-    model: "test/model",
-    tools: [echoTool],
-    maxIterations: 1,
-    modelRound: port,
-    executeTool: async (toolCall) => ({ message: toolCall.arguments.message }),
-    onExecutionWindowBoundary: ({ windowIndex }) => {
-      boundaries.push(windowIndex);
-      return `Execution checkpoint ${windowIndex + 1}. Use the existing evidence.`;
-    },
-  });
-
-  expect(result.finalText).toBe("one final answer");
-  expect(result.stoppedByLimit).toBe(false);
-  expect(requests).toHaveLength(3);
-  expect(boundaries).toEqual([0, 1]);
-  expect(result.events.filter((event) => event.type === "execution_window_boundary"))
-    .toHaveLength(2);
-  expect(requests[0]?.messages.filter((message) => message.role === "user"))
-    .toHaveLength(1);
-  expect(requests[1]?.messages.filter((message) => message.role === "user"))
-    .toHaveLength(2);
-  expect(requests[2]?.messages.filter((message) => message.role === "user"))
-    .toHaveLength(3);
-});
-
-test("BTCC carries an empty window response into the next execution window", async () => {
-  const { port, requests } = scriptedModelRound([
-    response(),
-    response({ text: "completed after the empty window" }),
-  ]);
-  const boundaries: number[] = [];
-
-  const result = await runBtccAgentLoop({
-    prompt: "recover from an empty window",
-    model: "test/model",
-    tools: [echoTool],
-    maxIterations: 1,
-    modelRound: port,
-    executeTool: async () => ({ ok: true }),
-    onExecutionWindowBoundary: ({ windowIndex }) => {
-      boundaries.push(windowIndex);
-      return "Execution checkpoint: preserve the existing evidence.";
-    },
-  });
-
-  expect(result.finalText).toBe("completed after the empty window");
-  expect(result.stoppedByLimit).toBe(false);
-  expect(requests).toHaveLength(2);
-  expect(boundaries).toEqual([0]);
-  expect(requests[1]?.messages.at(-1)).toMatchObject({
-    role: "user",
-    content: "Execution checkpoint: preserve the existing evidence.",
-  });
-});
-
-test("BTCC continues after an empty response in a later execution window", async () => {
-  const { port } = scriptedModelRound([
-    response(),
-    response({ toolCalls: [call("empty-window-tool", "echo", { message: "evidence" })] }),
-    response(),
-    response({ text: "completed after persistent empty responses" }),
-  ]);
-  let boundaries = 0;
-
-  const result = await runBtccAgentLoop({
-    prompt: "preserve the same Turn through empty responses",
-    model: "test/model",
-    tools: [echoTool],
-    maxIterations: 2,
-    modelRound: port,
-    executeTool: async () => ({ ok: true }),
-    onExecutionWindowBoundary: () => {
-      boundaries += 1;
-      return "Execution checkpoint: preserve the existing evidence.";
-    },
-  });
-
-  expect(result.finalText).toBe("completed after persistent empty responses");
-  expect(result.stoppedByLimit).toBe(false);
-  expect(boundaries).toBe(2);
-});
-
-test("BTCC treats a two-iteration window as non-terminal", async () => {
-  let modelCalls = 0;
-  let boundaries = 0;
-  const { port } = scriptedModelRound([
-    response({ toolCalls: [call("window-two-1", "echo", { message: "one" })] }),
-    response({ toolCalls: [call("window-two-2", "echo", { message: "two" })] }),
-    response({ toolCalls: [call("window-two-3", "echo", { message: "three" })] }),
-    response({ text: "finished after the second window" }),
-  ]);
-
-  const result = await runBtccAgentLoop({
-    prompt: "cross a two-round window",
-    model: "test/model",
-    tools: [echoTool],
-    maxIterations: 2,
-    modelRound: {
-      async runRound(request) {
-        modelCalls += 1;
-        return port.runRound(request);
-      },
-    },
-    executeTool: async () => ({ ok: true }),
-    onExecutionWindowBoundary: () => {
-      boundaries += 1;
-      return "Execution checkpoint: preserve the existing evidence.";
-    },
-  });
-
-  expect(modelCalls).toBe(4);
-  expect(boundaries).toBe(1);
-  expect(result.finalText).toBe("finished after the second window");
-  expect(result.stoppedByLimit).toBe(false);
-});
-
-test("BTCC does not derive an execution window from an exhausted usage attribution", async () => {
-  let modelCalls = 0;
-  const { port } = scriptedModelRound([
-    () => {
-      modelCalls += 1;
-      return response({ toolCalls: [call("budget-window-1", "echo", { message: "one" })] });
-    },
-    () => {
-      modelCalls += 1;
-      return response({ text: "completed after the usage observation" });
-    },
-  ]);
-
-  const result = await runBtccAgentLoop({
-    prompt: "do not stop at the attribution counter",
-    model: "test/model",
-    tools: [echoTool],
-    maxIterations: 1,
-    usageAttribution: {
-      turnId: "usage-window-turn",
-      budgetState: {
-        status: "exhausted",
-        requestCount: 330,
-        maxRequests: 330,
-      },
-    },
-    modelRound: port,
-    executeTool: async () => ({ ok: true }),
-    onExecutionWindowBoundary: () => "Use the existing evidence from the previous window.",
-  });
-
-  expect(modelCalls).toBe(2);
-  expect(result.finalText).toBe("completed after the usage observation");
-  expect(result.stoppedByLimit).toBe(false);
-});
-
-test("BTCC aborts between execution windows without starting another model round", async () => {
-  const controller = new AbortController();
-  const stopped = new Error("user stopped the Turn");
-  let modelCalls = 0;
-  const { port } = scriptedModelRound([
-    () => {
-      modelCalls += 1;
-      return response({
-        toolCalls: [call("abort-window-1", "echo", { message: "stop" })],
-      });
-    },
-  ]);
-
-  const running = runBtccAgentLoop({
-    prompt: "stop between windows",
-    model: "test/model",
-    tools: [echoTool],
-    maxIterations: 1,
-    signal: controller.signal,
-    modelRound: port,
-    executeTool: async () => ({ ok: true }),
-    onExecutionWindowBoundary: () => {
-      controller.abort(stopped);
-      return "This observation must not start another model round.";
-    },
-  });
-
-  await expect(running).rejects.toThrow("user stopped the Turn");
-  expect(modelCalls).toBe(1);
-});
-
-test("BTCC delegates loop-limit synthesis when a finalizer is provided", async () => {
-  const { port } = scriptedModelRound([response({
-    toolCalls: [call("call-1", "echo", { message: "evidence" })],
-  })]);
-
-  const result = await runBtccAgentLoop({
-    prompt: "search then answer",
-    model: "test/model",
-    tools: [echoTool],
-    maxIterations: 1,
-    modelRound: port,
-    executeTool: async () => ({ evidence: "usable" }),
-    onLoopLimit: async ({ toolResults }) => `Final answer from ${toolResults[0]?.name}.`,
-  });
-
-  expect(result.stoppedByLimit).toBe(true);
-  expect(result.finalText).toBe("Final answer from echo.");
-  expect(result.finalText).not.toContain("available tool budget");
-  expect(result.messages.at(-1)).toMatchObject({
-    role: "assistant",
-    content: "Final answer from echo.",
-  });
 });
 
 test("BTCC can stop immediately after a terminal tool result", async () => {
@@ -1318,14 +1158,13 @@ test("BTCC can stop immediately after a terminal tool result", async () => {
     tools: [echoTool],
     modelRound: port,
     executeTool: async () => ({ report: "Published report." }),
-    finalTextFromToolResult: ({ toolResult }) => {
+    outcomeFromToolResult: ({ toolResult }) => {
       const output = toolResult.output as { report?: string };
-      return output.report ?? null;
+      return output.report ? { kind: "reply", text: output.report } : null;
     },
   });
 
   expect(modelCalls).toBe(1);
-  expect(result.stoppedByLimit).toBe(false);
   expect(result.finalText).toBe("Published report.");
   expect(result.events.map((event) => event.type)).toEqual([
     "model_call",
@@ -1333,4 +1172,29 @@ test("BTCC can stop immediately after a terminal tool result", async () => {
     "tool_call",
     "tool_result",
   ]);
+});
+
+test("BTCC returns an explicit suspension for an authority-pending tool result", async () => {
+  const { port } = scriptedModelRound([
+    response({ toolCalls: [call("call-pending", "echo", { message: "effect" })] }),
+  ]);
+
+  const result = await runBtccAgentLoop({
+    prompt: "run the approved effect",
+    model: "test/model",
+    tools: [echoTool],
+    modelRound: port,
+    executeTool: async () => ({ authority_pending: true }),
+    outcomeFromToolResult: ({ toolResult }) => {
+      const output = toolResult.output as { authority_pending?: boolean };
+      return output.authority_pending
+        ? { kind: "suspend", reason: "authority_pending" }
+        : null;
+    },
+  });
+
+  expect(result).toMatchObject({
+    finalText: "",
+    suspension: "authority_pending",
+  });
 });

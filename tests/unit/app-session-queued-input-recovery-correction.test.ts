@@ -615,6 +615,9 @@ test("a stale App handoff cannot terminalize a replacement claim", async () => {
     enqueueAppCancellation(input, metadata) {
       return delegate.enqueueAppCancellation(input, metadata);
     },
+    enqueueAppResume(input, metadata) {
+      return delegate.enqueueAppResume(input, metadata);
+    },
   };
   const server = createTestAppServer({
     dbPath,
@@ -751,6 +754,9 @@ test("a post-enqueue exception keeps the durable Native event recoverable", asyn
     },
     enqueueAppCancellation(input, metadata) {
       return delegate.enqueueAppCancellation(input, metadata);
+    },
+    enqueueAppResume(input, metadata) {
+      return delegate.enqueueAppResume(input, metadata);
     },
   };
   let server: ReturnType<typeof createTestAppServer> | undefined = createTestAppServer({
@@ -1531,6 +1537,9 @@ test("a stale cancellation acknowledgement is fenced after its advisory lookup",
       turnState: "cancelled",
       outboxState: "completed",
     });
+    expect(server.store.listSessionQueue("general").queued_messages).not.toContainEqual(
+      expect.objectContaining({ client_message_id: clientMessageId }),
+    );
     expect(server.store.db.query<{ count: number }, [string]>(`
       SELECT COUNT(*) AS count FROM app_transport_projection_receipts
       WHERE action_id = ?
@@ -3437,6 +3446,7 @@ test("production App replay does not execute a reviewed workspace effect twice",
                 arguments: {
                   start_new: true,
                   objective: "Create the reviewed effect file",
+                  execution_mode: "direct",
                   actions: [{
                     action_key: "write-effect-file",
                     description: "Write the requested effect file",
@@ -3450,6 +3460,7 @@ test("production App replay does not execute a reviewed workspace effect twice",
                 rawArguments: JSON.stringify({
                   start_new: true,
                   objective: "Create the reviewed effect file",
+                  execution_mode: "direct",
                   actions: [{
                     action_key: "write-effect-file",
                     description: "Write the requested effect file",
@@ -3852,6 +3863,11 @@ async function waitForQueueState(
 }
 
 function publishNativeReadiness(root: string): void {
+  writeFileSync(
+    join(root, "eol.md"),
+    "Act only from explicit evidence and preserve the exact reviewed objective.\n",
+    "utf8",
+  );
   mkdirSync(join(root, "state"), { recursive: true });
   writeFileSync(
     join(root, "state", "butler-main-native.json"),

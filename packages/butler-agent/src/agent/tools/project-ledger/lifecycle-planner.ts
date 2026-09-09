@@ -280,7 +280,11 @@ function withRecoverableProjectLedgerError(result: Record<string, unknown>): Rec
   if (result.ok !== false || !result.error || typeof result.error !== "object" || Array.isArray(result.error)) return result;
   const error = result.error as Record<string, unknown>;
   const nativeNext = projectLedgerNativeNextHints(error);
-  if (nativeNext.length === 0) return result;
+  if (nativeNext.length === 0) {
+    return ["invalid_input", "invalid_arguments", "invalid_state", "invalid_transition", "completion_gate_failed"].includes(String(error.code))
+      ? { ...result, recoverable: true }
+      : result;
+  }
   return {
     ...result,
     recoverable: true,

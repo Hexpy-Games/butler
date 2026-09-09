@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Skeleton, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { ActivityReadModel } from "@/app/conversation-progress";
@@ -16,6 +17,7 @@ export function TurnActivityPending({
   readModels: ActivityReadModel[];
   state?: string;
 }) {
+  useAppLocale();
   const markTheme = useButlerMarkTheme();
   const receipt = acknowledgedReceipt(readModels);
   const pendingLabel = receipt?.label.trim()

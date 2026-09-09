@@ -74,6 +74,8 @@ export function createAppSessionModuleGraph(input: {
       host.insertMessage(chatId, role, text, status, options),
     updateMessage: (messageId, update) => host.updateMessage(messageId, update),
     messageRecordById: (messageId) => host.messageRecordById(messageId),
+    replaceMessageChangedFiles: (messageId, paths) =>
+      host.replaceMessageChangedFiles(messageId, paths),
     getLatestAssistantMessageForTurn: (turnId) =>
       host.getLatestAssistantMessageForTurn(turnId),
     listMessages: (chatId) => host.listMessages(chatId),
@@ -130,6 +132,7 @@ export function createAppSessionModuleGraph(input: {
       host.enqueueAppTransportTurn(turnInput),
   });
   const userMessageTurns = new AppUserMessageTurnStore({
+    organizeFirstMessage: (message, model) => { void host.sessionTopicGrouping.start(message.chat_id, message.id, message.text, model); },
     butlerData,
     defaultChatId,
     ensureChat: (chatId) => host.ensureChat(chatId),

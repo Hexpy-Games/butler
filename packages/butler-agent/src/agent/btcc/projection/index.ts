@@ -3,7 +3,7 @@ export { createBtccTrustedWakeProjectionHost } from "./btcc-trusted-wake-produce
 export {
   createGuidedActivityProjection,
 } from "./projection.ts";
-export { publicToolTitle } from "./guided-activity-content.ts";
+export { publicToolTitle, publicToolTitleReference } from "./guided-activity-content.ts";
 export { publicWorkActionDisplay } from "./work-action-display.ts";
 export type {
   GuidedActivityBinding,

@@ -29,11 +29,11 @@ export const runCommandToolDefinition = {
       },
       max_output_tokens: {
         type: "integer",
-        description: "Optional stdout/stderr token budget.",
+        description: "Optional preview token budget, default 1200, applied range 200-8000. The result reports requested/applied limits and truncation. Omitted output stays in the existing artifact reader.",
       },
       output_paths: {
         type: "array",
-        description: "Existing workspace paths or artifact labels to publish after success. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR. If none can be published, the tool returns a recoverable failure.",
+        description: "Existing regular files to publish as deliverables after success, not directories or globs. Omit for ordinary source changes and build directories; file changes are tracked separately. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR. Publication failure is separate from command exit status and success.",
         items: {
           type: "string",
         },
@@ -45,7 +45,7 @@ export const runCommandToolDefinition = {
       state_effect: {
         type: "string",
         enum: ["read_only", "mutation", "validation", "remote_observation"],
-        description: "Effect intent: mutation and remote_observation require full access plus accepted Plan Review. For read_only and validation, the admitted access mode owns the execution environment; validation_suite only labels evidence.",
+        description: "Effect intent: mutation and remote_observation require accepted Plan Review and admitted execution authority; ask_first suspends for approval and resumes after approval, while full_access uses existing authority. For read_only and validation, the admitted access mode owns the execution environment; validation_suite only labels evidence.",
       },
       output_mode: {
         type: "string",
@@ -54,7 +54,7 @@ export const runCommandToolDefinition = {
           "silent_on_success",
           "full",
         ],
-        description: "Output mode: auto suppresses successes only with validation_suite and bounds failures; silent_on_success suppresses successes; full preserves output.",
+        description: "Preview only: auto suppresses successes with validation_suite and bounds failures; silent_on_success suppresses successes; full avoids suppression and failure-tail reduction but still obeys the preview token cap. Original stdout/stderr remains retrievable for every omitted portion.",
       },
     },
     required: [

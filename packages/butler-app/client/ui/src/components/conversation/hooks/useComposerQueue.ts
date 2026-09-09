@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { RefObject } from "react";
 import { browserRandomUUID } from "@/app/id.ts";
 import { useButlerStore } from "@/app/store.ts";
+import { useComposerStore } from "../composerStore";
 import type {
   QueuedMessageRecord,
   SessionSummaryView,
@@ -9,14 +10,16 @@ import type {
 import type { useFileAttachments } from "./useFileAttachments";
 
 interface UseComposerQueueProps {
+  enabled?: boolean;
   activeChatId: string;
   summary: SessionSummaryView | null;
   files: ReturnType<typeof useFileAttachments>;
   setText: (text: string) => void;
-  textAreaRef: RefObject<HTMLTextAreaElement | null>;
+  textAreaRef: RefObject<HTMLElement | null>;
 }
 
 export function useComposerQueue({
+  enabled = true,
   activeChatId,
   summary,
   files,
@@ -32,8 +35,10 @@ export function useComposerQueue({
   );
 
   useEffect(() => {
+    if (!enabled) return;
     void refreshSessionQueue(activeChatId);
   }, [
+    enabled,
     activeChatId,
     refreshSessionQueue,
     summary?.latest_progress?.state,
@@ -42,7 +47,8 @@ export function useComposerQueue({
   ]);
 
   const handleEditQueued = (message: QueuedMessageRecord) => {
-    setText(message.text);
+    if (message.content_parts) useComposerStore.getState().setContentParts(message.content_parts);
+    else setText(message.text);
     files.setAttachments(
       (message.attachments ?? []).map((file) => ({
         id: `queued-${file.file_id}-${browserRandomUUID()}`,
@@ -59,7 +65,7 @@ export function useComposerQueue({
   };
 
   return {
-    sessionQueue,
+    sessionQueue: enabled ? sessionQueue : [],
     handleEditQueued,
     handleDeleteQueued,
   };

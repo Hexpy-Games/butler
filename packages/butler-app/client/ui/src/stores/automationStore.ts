@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import type { FormEvent } from "react";
 import { create } from "zustand";
 import { api } from "@/app/api.ts";
@@ -108,7 +109,7 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         runs: runList.runs ?? [],
       });
     } catch (error) {
-      notifyError(error, "Automation detail failed", {
+      notifyError(error, appCopy.interfacePanels.automationDetailFailed, {
         id: `automation-detail-${automationId}`,
       });
       onStatus({ label: "ready", tone: "ok" });

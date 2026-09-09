@@ -34,8 +34,8 @@ export function encodeProjectPathKey(path: string): string {
   return path.replace(/[^a-zA-Z0-9]/g, "-");
 }
 
-function readRegistry(home: string): RegistryProject[] {
-  const configPath = join(home, "data", "butler.config.json");
+function readRegistry(data: string): RegistryProject[] {
+  const configPath = join(data, "butler.config.json");
   if (!existsSync(configPath)) return [];
   try {
     const config = JSON.parse(readFileSync(configPath, "utf8"));
@@ -65,7 +65,7 @@ export function resolveProjectKey(
   if (!raw) return null;
 
   const home = opts.home ?? homedir();
-  const registry = opts.registry ?? readRegistry(process.env.BUTLER_HOME || join(home, ".butler"));
+  const registry = opts.registry ?? readRegistry(process.env.BUTLER_DATA || join(home, ".butler"));
 
   // 1. Exact name hit.
   for (const p of registry) {

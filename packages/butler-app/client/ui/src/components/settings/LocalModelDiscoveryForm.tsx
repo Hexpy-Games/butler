@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import {
   Select,
   SelectContent,
@@ -7,6 +8,7 @@ import {
   SelectValue,
   SettingsField,
 } from "@/butler-ds";
+import { useId } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { modelDisplayName, tokenWindowLabel } from "@/app/utils.ts";
 import type { LocalModelDiscoveryResult } from "@/app/types.ts";
@@ -22,18 +24,23 @@ export function LocalModelDiscoveryForm({
   selectedModelRef,
   setSelectedModelRef,
 }: LocalModelDiscoveryFormProps) {
+  useAppLocale();
   const copy = appCopy.settings.localModels;
+  const controlId = useId();
+  const descriptionId = useId();
 
   if (discovery.models.length === 0) return null;
 
   return (
     <SettingsField
+      id={controlId}
       data-test-class="settings-field"
       label={copy.discoveredModel}
       description={copy.discoveredModelDescription}
+      descriptionId={descriptionId}
       control={
         <Select value={selectedModelRef} onValueChange={setSelectedModelRef}>
-          <SelectTrigger>
+          <SelectTrigger id={controlId} aria-describedby={descriptionId}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

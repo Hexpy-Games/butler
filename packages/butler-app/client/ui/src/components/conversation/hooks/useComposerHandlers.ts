@@ -35,7 +35,7 @@ interface UseComposerHandlersProps {
   setAccessMenuOpen: (open: boolean) => void;
   persistControls: (partial: ComposerControlPatch) => void;
   composerSelectionTouchedRef: MutableRefObject<boolean>;
-  textAreaRef: RefObject<HTMLTextAreaElement | null>;
+  textAreaRef: RefObject<HTMLElement | null>;
   isComposing: boolean;
   multilineSendBehavior?: string;
   onSend: (text: string, controls: ComposerControls) => void;

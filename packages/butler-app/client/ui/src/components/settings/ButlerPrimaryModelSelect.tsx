@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { EMPTY_MODEL_CATALOG } from "@/app/constants.ts";
 import { appCopy } from "@/app/copy.ts";
 import { modelDisplayName, tokenWindowLabel } from "@/app/utils.ts";
@@ -26,6 +27,7 @@ export function ButlerPrimaryModelSelect({
   onManage,
   onUpdate,
 }: ButlerPrimaryModelSelectProps) {
+  useAppLocale();
   const settingsCopy = appCopy.settings;
   const settingsFields = settingsCopy.fields;
   const settingsDescriptions = settingsCopy.descriptions;

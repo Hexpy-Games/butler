@@ -4,6 +4,7 @@ import { ensureAppMessageQuerySchema } from "./message-query-schema.ts";
 import { ensureColumn, tableExists } from "./schema-migration.ts";
 import { ensureTerminalRetentionSchema } from "../retention/schema.ts";
 import { initializeProjectLedgerBindings } from "./project-ledger-binding-migration.ts";
+import { migrateSpaceSchema } from "./space-schema.ts";
 
 const DEFAULT_CHAT_ID = "general";
 const DEFAULT_CHAT_TITLE = "Onboarding";
@@ -43,6 +44,17 @@ export function migrateAppStoreSchema(
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS project_dashboard_briefing_cache (
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      binding_revision TEXT,
+      source_digest TEXT NOT NULL,
+      response_language TEXT NOT NULL,
+      generator_version TEXT NOT NULL,
+      content_json TEXT NOT NULL,
+      generated_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, response_language)
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
       chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
@@ -56,7 +68,8 @@ export function migrateAppStoreSchema(
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       safe_error_code TEXT,
-      retryable INTEGER NOT NULL DEFAULT 0
+      retryable INTEGER NOT NULL DEFAULT 0,
+      plan_json TEXT
     );
 
     CREATE TABLE IF NOT EXISTS message_files (
@@ -77,6 +90,14 @@ export function migrateAppStoreSchema(
       file_id TEXT NOT NULL REFERENCES message_files(id) ON DELETE CASCADE,
       position INTEGER NOT NULL,
       PRIMARY KEY (message_id, file_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS message_changed_files (
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL,
+      safe_path_label TEXT NOT NULL,
+      detail_json TEXT,
+      PRIMARY KEY (message_id, position)
     );
 
     CREATE TABLE IF NOT EXISTS session_queued_messages (
@@ -305,8 +326,19 @@ export function migrateAppStoreSchema(
   ensureColumn(db, "messages", "updated_at", "TEXT");
   ensureColumn(db, "messages", "safe_error_code", "TEXT");
   ensureColumn(db, "messages", "retryable", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "messages", "plan_json", "TEXT");
+  ensureColumn(db, "messages", "content_parts_json", "TEXT");
+  ensureColumn(db, "session_queued_messages", "content_parts_json", "TEXT");
+  ensureColumn(db, "session_queued_messages", "project_source_refs_json", "TEXT");
+  ensureColumn(db, "message_changed_files", "detail_json", "TEXT");
   ensureColumn(db, "projects", "ledger_project_id", "TEXT");
+  ensureColumn(db, "projects", "description", "TEXT");
+  ensureColumn(db, "projects", "dashboard_preferences_json", "TEXT");
+  ensureColumn(db, "projects", "dashboard_preferences_revision", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "turns", "execution_controls_json", "TEXT");
+  ensureColumn(db, "turns", "safe_status_label_key", "TEXT");
+  ensureColumn(db, "turns", "safe_status_label_parameters_json", "TEXT");
+  ensureColumn(db, "turns", "safe_status_content_json", "TEXT");
   ensureColumn(db, "turns", "execution_model_json", "TEXT");
   ensureColumn(db, "session_queued_messages", "client_message_id", "TEXT");
   ensureColumn(db, "session_queued_messages", "input_identity_digest", "TEXT");
@@ -470,11 +502,15 @@ function legacyQueuedInputIdentityDigest(db: Database, row: {
 }
 
 export function seedAppStoreDefaults(db: Database): void {
+  migrateSpaceSchema(db);
   const now = new Date().toISOString();
   db.prepare(`
     INSERT OR IGNORE INTO chats (id, title, kind, project_id, pinned, archived, created_at, updated_at)
     VALUES (?, ?, ?, ?, 0, 0, ?, ?)
   `).run(DEFAULT_CHAT_ID, DEFAULT_CHAT_TITLE, "chat", null, now, now);
+  // Repair only the permanent channel. Same-title topic sessions remain archived.
+  db.query("UPDATE chats SET archived = 0 WHERE id = ? AND archived != 0")
+    .run(DEFAULT_CHAT_ID);
   db
     .query(
       `

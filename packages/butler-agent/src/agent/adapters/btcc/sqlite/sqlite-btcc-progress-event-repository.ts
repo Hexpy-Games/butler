@@ -117,6 +117,7 @@ export class SqliteBtccProgressEventRepository implements BtccProgressEventRepos
 function canonicalEvent(input: RuntimeTurnEventInput): RuntimeTurnEventInput {
   return {
     ...input,
+    createdAt: input.createdAt ?? new Date().toISOString(),
     visibility: input.visibility ?? "public",
   };
 }

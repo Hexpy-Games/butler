@@ -14,6 +14,8 @@ It standardizes command search layout while keeping results domain-owned.
 
 ## How to use this component
 Pass query state, change handler, and result children.
+`CommandPalettePanel` also accepts a `feedback` slot for caller-owned loading,
+empty or failed-search feedback; results and retry behavior remain domain-owned.
 
 ## Who can use this component
 Command palette containers.

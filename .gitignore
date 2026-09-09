@@ -1,6 +1,7 @@
 # ── Private user data accidentally created inside the checkout ───────────────
 data/
 .project-ledger/
+.dev-butler/
 
 # ── Private top-level runtime paths must live under $BUTLER_DATA instead ─────
 .env
@@ -23,9 +24,7 @@ tests/.env.test
 # ── Build artifacts ───────────────────────────────────────────────────────────
 __pycache__/
 node_modules/
-app-client/ui/dist/
-packages/butler-app/client/ui/dist/
-packages/butler-app/client/electron/dist/
+dist/
 app-client/ui/.*/skills/
 app-client/ui/.*/**/skills/
 app-client/ui/skills/

@@ -80,6 +80,7 @@ export async function waitForTurn(
   let acknowledgedAtMs: number | null = null;
   let firstRenderedActivityAtMs: number | null = null;
   let turnId: string | null = null;
+  let delegatedTurnId: string | null = null;
   let stopClicked = false;
   const progress = new Set<string>();
   while (Date.now() - startedAt < timeoutMs) {
@@ -95,7 +96,8 @@ export async function waitForTurn(
       continue;
     }
     const candidate = view.active_turn ?? view.latest_turn;
-    if (candidate?.id && candidate.id !== previousTurnId) {
+    if (candidate?.id && candidate.id !== previousTurnId &&
+        candidate.id !== delegatedTurnId) {
       turnId ??= candidate.id;
       acknowledgedAtMs ??= Date.now();
       for (const label of progressLabels(view)) progress.add(label);
@@ -112,6 +114,15 @@ export async function waitForTurn(
         view.status && TERMINAL_STATES.has(view.status) &&
           view.latest_turn?.id === turnId,
       );
+      const activeSteward = (view.steward_children ?? []).some((child) =>
+        child.status === "active" || child.terminal === false,
+      );
+      if (terminal && activeSteward) {
+        delegatedTurnId = turnId;
+        turnId = null;
+        await new Promise((resolveWait) => setTimeout(resolveWait, 250));
+        continue;
+      }
       if (terminal && options.stopAfterAcknowledgement && !stopClicked) {
         throw new Error(
           `Electron Turn ${turnId} reached ${view.status} before the visible Stop button was clicked.`,
@@ -181,7 +192,11 @@ export async function runScenarioStep(
   });
   const previousTurnId = before.latest_turn?.id ?? null;
   const prompt = materializePrompt(step.prompt, run);
-  await launch.page.fill('[data-test-class="composer-card"] textarea', prompt);
+  const compact = '[data-test-class="composer-card"][data-expanded="false"] [data-slot="composer-compact-preview"]';
+  if (await launch.page.evaluate<boolean>(`Boolean(document.querySelector(${JSON.stringify(compact)}))`)) {
+    await launch.page.clickSelector(compact);
+  }
+  await launch.page.fill('[data-test-class="composer-card"] [contenteditable="true"]', prompt);
   const submittedAtMs = Date.now();
   await launch.page.clickSelector('[data-test-class="composer-send-button"]');
   const terminal = await waitForTurn(
@@ -213,6 +228,8 @@ export async function runScenarioStep(
   const providerReportedModel =
     terminal.view.latest_turn?.execution_model?.provider_reported_model_ref ??
     null;
+  const requestedModelRef =
+    terminal.view.latest_turn?.execution_model?.requested_model_ref ?? null;
   const screenshotDir = join(run.runRoot, "screenshots");
   mkdirSync(screenshotDir, { recursive: true });
   const finalScreenshot = join(
@@ -225,9 +242,11 @@ export async function runScenarioStep(
     promptSha256: hashText(prompt),
     turnId: terminal.turnId,
     terminalState,
+    stewardDelivered: (terminal.view.steward_children ?? []).some((child) => child.status === "delivered"),
     finalText,
     rendererFinalText: renderedFinal,
     rendererActivities,
+    requestedModelRef,
     providerReportedModel,
     progressMessages: terminal.progressMessages,
     work,
@@ -255,6 +274,10 @@ export async function runScenarioStep(
     screenshots: [finalScreenshot],
     providerAgentModels,
   };
+  if (step.expect?.stewardDelivered && !observation.stewardDelivered) {
+    observation.expectations.passed = false;
+    observation.expectations.failures.push("steward_delivery_missing");
+  }
   if (step.reloadAfter !== false) {
     await launch.page.reload();
     observation.reload = {

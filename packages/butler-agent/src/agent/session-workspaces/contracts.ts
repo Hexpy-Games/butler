@@ -86,6 +86,7 @@ export interface BindSessionGitWorktreeInput {
   branch: string;
   startPoint?: string;
   sessionId: string;
+  projectName?: string;
   butlerData: string;
   bindingStore: SessionWorkspaceBindingStore;
   workspaceReference: WorkspaceReference;

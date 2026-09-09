@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { AlertCircle, Button, Notice, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageRecord } from "@/app/types.ts";
@@ -14,6 +15,7 @@ export function FailureNotice({
   onRetryTurnWithCurrentControls: (turnId: string) => void;
   retryingTurnId: string | null;
 }) {
+  useAppLocale();
   const reason =
     message.text.trim() || appCopy.conversation.failure.fallbackReason;
   const retrying = Boolean(

@@ -28,13 +28,18 @@ export async function runGeminiModelRound(
     butlerData: request.butlerData,
     cacheScope: request.cacheScope,
   });
+  const reasoning = geminiReasoningParams(request.reasoningEffort);
   const response = await requests.request({
     model: config.modelRef,
     run: async (context) => await createGeminiContent(config, {
       ...(request.instructions?.trim()
         ? { systemInstruction: { parts: [{ text: request.instructions.trim() }] } }
         : {}),
-      ...geminiReasoningParams(request.reasoningEffort),
+      ...reasoning,
+      ...(request.maxOutputTokens ? { generationConfig: {
+        ...(reasoning.generationConfig as Record<string, unknown> | undefined),
+        maxOutputTokens: request.maxOutputTokens,
+      } } : {}),
       contents: geminiModelRoundMessages(request),
       ...(request.tools.length > 0
         ? { tools: geminiTools(request.tools.map(modelRoundTool)) }
@@ -42,7 +47,7 @@ export async function runGeminiModelRound(
       ...(request.toolChoice === "required"
         ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
         : {}),
-    }, request.signal, context, request.providerRetryAttempts),
+    }, request.signal, { ...context, admitProviderBody: request.boundedContinuation?.admitProviderBody }, request.providerRetryAttempts),
     usage: geminiUsageSample,
   });
   const parts = response.candidates?.[0]?.content?.parts;

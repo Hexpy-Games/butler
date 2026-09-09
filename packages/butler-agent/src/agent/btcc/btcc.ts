@@ -37,7 +37,11 @@ export function createBtcc(
 ): BtccAssembly {
   const activeTurns = new Map<string, Promise<BtccTurnOutcome>>();
   const sessionTails = new Map<string, Promise<void>>();
-  const turn: TurnFacade = createTurnFacade(dependencies);
+  const progress = createBtccProgressProjectionHost(dependencies.progressEvents);
+  const turn: TurnFacade = createTurnFacade({
+    ...dependencies,
+    publishCommitted: (event) => progress.publishCommitted(event),
+  });
   let closePromise: Promise<void> | null = null;
 
   const runTurn = (request: BtccTurnRequest): Promise<BtccTurnOutcome> => {
@@ -76,7 +80,7 @@ export function createBtcc(
   };
 
   const host: BtccHost = {
-    progress: createBtccProgressProjectionHost(dependencies.progressEvents),
+    progress,
     ...(dependencies.wake ? { wake: dependencies.wake } : {}),
     close() {
       closePromise ??= (async () => {

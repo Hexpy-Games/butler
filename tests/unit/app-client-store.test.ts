@@ -1005,7 +1005,12 @@ test("settings drafts fill default web search settings for legacy responses", as
 
 test("refreshSessionSummary ignores late responses for inactive sessions", async () => {
   let releaseResponse: (() => void) | undefined;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    const path = String(input);
+    if (path.startsWith("/authority-requests")) {
+      const sessionId = new URL(path, "http://butler.local").searchParams.get("session_id") ?? "";
+      return jsonResponse({ session_id: sessionId, requests: [] });
+    }
     await new Promise<void>((resolve) => {
       releaseResponse = resolve;
     });
@@ -2587,6 +2592,118 @@ test("openSession restores an already opened session from in-memory view", () =>
   ).toBe("Bash: cached in memory");
 });
 
+test("openSession immediately restores active Steward state from the keyed SessionView", () => {
+  const parentView = sessionView("session-a", {
+    messages: [
+      messageRecord("user-a", "session-a", "user", "deploy again", 1),
+      messageRecord(
+        "assistant-a",
+        "session-a",
+        "assistant",
+        "I delegated the deployment.",
+        2,
+        "parent-turn",
+      ),
+    ],
+  });
+  const childTurn = {
+    id: "child-turn",
+    state: "thinking",
+    safe_status_label: "Deploying the service",
+    cancellable: true,
+    retryable: false,
+    progress: {
+      turn_id: "child-turn",
+      state: "thinking",
+      safe_progress_rows: [
+        {
+          id: "child-row",
+          kind: "activity",
+          state: "thinking",
+          safe_label: "Restarting the service",
+        },
+      ],
+    },
+    created_at: "2026-05-05T00:00:01.000Z",
+    updated_at: "2026-05-05T00:00:02.000Z",
+  };
+  parentView.steward_children = [{
+    relation: {
+      relation_id: "relation-a",
+      parent_session_id: "session-a",
+      parent_turn_id: "parent-turn",
+      child_session_id: "steward-a",
+      anchor_message_id: "user-a",
+      ordinal: 1,
+      safe_title: "Pi deployment retry",
+      created_at: "2026-05-05T00:00:01.000Z",
+    },
+    session_id: "steward-a",
+    title: "Pi deployment retry",
+    status: "active",
+    active_turn: childTurn,
+    latest_turn: childTurn,
+    activity_rows: childTurn.progress.safe_progress_rows,
+    approved_plan_total: 3,
+    approved_plan_completed: 1,
+    artifacts: [],
+    changed_files: [],
+    result: null,
+    updated_at: "2026-05-05T00:00:02.000Z",
+    terminal: false,
+  }];
+
+  useButlerStore.setState({ activeChatId: "session-a" });
+  useButlerStore.getState().setSessionView(parentView);
+  useButlerStore.getState().openSession("session-b");
+  useButlerStore.getState().openSession("session-a");
+
+  const restored = useButlerStore.getState();
+  expect(restored.sessionView).toBe(restored.sessionViews["session-a"]);
+  expect(restored.summary?.steward_children?.[0]?.session_id).toBe(
+    "steward-a",
+  );
+  expect(restored.summary?.steward_children?.[0]?.active_turn?.id).toBe(
+    "child-turn",
+  );
+  expect(restored.messages.map((message) => message.id)).toEqual([
+    "user-a",
+    "assistant-a",
+  ]);
+  expect(restored.messageLoadPending).toBe(false);
+});
+
+test("cancelObservedSteward uses the Electron bridge with the exact relation and parent session", async () => {
+  const parentSessionId = "project-parent-session";
+  const calls: unknown[] = [];
+  const view = sessionView(parentSessionId);
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      location: { origin: "http://butler.local" },
+      butlerApp: {
+        cancelSteward: async (input: unknown) => {
+          calls.push(input);
+          return { relation_id: "relation-a", status: "cancelling" };
+        },
+        getSessionView: async () => ({ ok: true, data: view }),
+      },
+    },
+    writable: true,
+  });
+  useButlerStore.setState({
+    activeChatId: parentSessionId,
+    observerSessionId: null,
+  });
+
+  expect(await useButlerStore.getState().cancelObservedSteward("relation-a"))
+    .toBe(true);
+  expect(calls).toEqual([{
+    relationId: "relation-a",
+    parentSessionId,
+  }]);
+});
+
 test("openSession restores a server-loaded session before debounce cache writes", () => {
   useButlerStore.setState({
     activeChatId: "session-a",
@@ -3196,6 +3313,8 @@ test("hydrateUiState restores sidebar and panel presentation state", () => {
     sidebar_chats_collapsed: true,
     sidebar_projects_collapsed: true,
     sidebar_collapsed_project_ids: ["project-a", "project-b"],
+    space_tab: "recent",
+    space_collapsed_keys: ["g:health"],
   });
 
   expect(useButlerStore.getState()).toMatchObject({
@@ -3371,7 +3490,7 @@ test("cancelActiveTurn refreshes a stale SessionView before selecting its canoni
 
   await useButlerStore.getState().cancelActiveTurn();
 
-  expect(calls.slice(0, 2)).toEqual([
+  expect(calls.filter((call) => !call.path.startsWith("/authority-requests")).slice(0, 2)).toEqual([
     { path: "/session-view?session_id=session-a" },
     { path: "/turns/turn-refreshed/cancel", body: {} },
   ]);
@@ -3430,7 +3549,9 @@ test("cancelActiveTurn does not cancel a refreshed turn after the active chat ch
   releaseRefresh?.();
   await pendingCancel;
 
-  expect(calls).toEqual(["/session-view?session_id=session-a"]);
+  expect(calls.filter((path) => !path.startsWith("/authority-requests"))).toEqual([
+    "/session-view?session_id=session-a",
+  ]);
   expect(useButlerStore.getState().sessionView).toBeNull();
 });
 
@@ -3579,7 +3700,7 @@ test("cancelActiveTurn targets only the canonical SessionView active turn", asyn
 
   await useButlerStore.getState().cancelActiveTurn();
 
-  expect(calls[0]).toEqual({
+  expect(calls.find((call) => !call.path.startsWith("/authority-requests"))).toEqual({
     path: "/turns/turn-canonical/cancel",
     body: {},
   });
@@ -3704,7 +3825,7 @@ test("cancelActiveTurn does not apply cancellation to a new chat during post-can
   releaseReload?.();
   await pendingCancel;
 
-  expect(calls).toEqual([
+  expect(calls.filter((path) => !path.startsWith("/authority-requests"))).toEqual([
     `/turns/${turnA}/cancel`,
     `/session-view?session_id=${sessionA}`,
   ]);
@@ -3757,7 +3878,7 @@ test("cancelActiveTurn reports a failed canonical refresh without inferring a ta
   await useButlerStore.getState().cancelActiveTurn();
 
   expect(statusAtRefresh).toEqual({ label: "stopping", tone: "muted" });
-  expect(calls).toEqual([
+  expect(calls.filter((path) => !path.startsWith("/authority-requests"))).toEqual([
     "/session-view?session_id=session-refresh-failure",
   ]);
   expect(useButlerStore.getState().status).toEqual({
@@ -3863,6 +3984,52 @@ test("sendMessage keeps concurrent session sends scoped until each operation fin
   await sendC;
   expect(useButlerStore.getState().isSending).toBe(false);
   expect(useButlerStore.getState().sendingOperations).toEqual({});
+});
+
+test("dashboard send keeps its target and replay id, and cannot overwrite a conversation opened while awaiting acceptance", async () => {
+  let release: (() => void) | undefined;
+  let posted: Record<string, unknown> | undefined;
+  const session = { id: "dashboard-target", project_id: "project-a", archived: false, title: "Target" };
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const path = String(input);
+    if (path.startsWith("/project-sessions?")) return jsonResponse({ sessions: [session] });
+    if (path === "/messages" && init?.method === "POST") {
+      posted = JSON.parse(String(init.body));
+      await new Promise<void>((resolve) => { release = resolve; });
+      return jsonResponse({ accepted: messageRecord("accepted", session.id, "user", "question", 1),
+        replies: [messageRecord("reply", session.id, "assistant", "answer", 2)] });
+    }
+    if (path === "/navigation") return jsonResponse(EMPTY_NAVIGATION);
+    return jsonResponse({});
+  }) as typeof fetch;
+  useButlerStore.setState({ view: { kind: "project-dashboard", projectId: "project-a" }, activeChatId: "previous", messages: [] });
+  let accepted = false;
+  const send = useButlerStore.getState().sendMessage("question", {
+    dashboardTarget: { projectId: "project-a", sessionId: session.id, clientMessageId: "stable-retry-id" },
+    onAccepted: () => { accepted = true; },
+  });
+  await waitFor(() => Boolean(release));
+  expect(posted).toMatchObject({ expected_project_id: "project-a", chat_id: session.id, client_message_id: "stable-retry-id" });
+  expect(useButlerStore.getState().view.kind).toBe("project-dashboard");
+  const other = messageRecord("other-message", "other", "user", "keep this", 1);
+  useButlerStore.setState({ activeChatId: "other", view: { kind: "session" }, messages: [other] });
+  release!(); await send;
+  expect(accepted).toBe(true);
+  expect(useButlerStore.getState().activeChatId).toBe("other");
+  expect(useButlerStore.getState().messages).toEqual([other]);
+});
+
+test("dashboard target preflight cannot send to an archived or relocated conversation", async () => {
+  let sent = false;
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    if (String(input).startsWith("/project-sessions?")) return jsonResponse({ sessions: [
+      { id: "target", project_id: "different", archived: false },
+    ] });
+    sent = true; return jsonResponse({});
+  }) as typeof fetch;
+  useButlerStore.setState({ view: { kind: "project-dashboard", projectId: "project-a" } });
+  await useButlerStore.getState().sendMessage("question", { dashboardTarget: { projectId: "project-a", sessionId: "target" } });
+  expect(sent).toBe(false);
 });
 
 test("draft first send includes the initial message in session creation", async () => {

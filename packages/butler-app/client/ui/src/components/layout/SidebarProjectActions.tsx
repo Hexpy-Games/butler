@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import {
   Archive,
   LayoutDashboard,
@@ -20,6 +21,7 @@ interface SidebarProjectActionsProps {
 }
 
 export function SidebarProjectActions({ project }: SidebarProjectActionsProps) {
+  useAppLocale();
   const openNewProjectChat = useButlerStore(
     (state) => state.openNewProjectChat,
   );

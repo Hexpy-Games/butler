@@ -1,6 +1,11 @@
 import type {
   GatewayDispatchResult,
 } from "../../../gateways/core/contracts.ts";
+import type { ChangedFileDetail } from "../../../agent/btcc/index.ts";
+import {
+  projectLedgerPlanFromUnknown,
+  type ProjectLedgerPlan,
+} from "../../../agent/btcc/project-plan.ts";
 import type {
   ClaimedInboundEvent,
   NativeInboundQueue,
@@ -19,6 +24,7 @@ import {
   isMatchingClaimedAppTarget,
 } from "./control-ack-action.ts";
 import { bindQueuedInboundSession } from "./queued-inbound-session-binder.ts";
+import { GatewayRouter } from "../../../gateways/core/router.ts";
 
 type BtccInboundServer = {
   handleInbound(
@@ -35,6 +41,7 @@ export type BtccInboundDispatchSummary = {
 };
 
 export type BtccInboundDispatchOptions = {
+  waitingSourceSessions?: ReadonlySet<string>;
   queue: NativeInboundQueue;
   server: BtccInboundServer;
   store: SessionBindingStore;
@@ -79,7 +86,9 @@ export class BtccInboundDispatcher {
     const items = options.queue.claimEligible(
       Math.min(options.limit ?? DEFAULT_CONCURRENCY, capacity),
       (event) => {
-        return claimableSession(event, this.activeSessions, batchSessions);
+        const sessionKey = sessionKeyFor(event, options.store);
+        if (!event.envelope.control && options.waitingSourceSessions?.has(sessionKey)) return false;
+        return claimableSession(sessionKey, this.activeSessions, batchSessions);
       },
       options.now?.(),
       options.processingLeaseMs ?? DEFAULT_LEASE_MS,
@@ -103,7 +112,7 @@ export class BtccInboundDispatcher {
     options: BtccInboundDispatchOptions,
     aggregate: BtccInboundDispatchSummary,
   ): void {
-    const sessionKey = sessionKeyFor(item);
+    const sessionKey = sessionKeyFor(item, options.store);
     this.activeSessions.add(sessionKey);
     this.activeQueueIds.add(item.queueId);
     const task = dispatchItem(item, options)
@@ -286,10 +295,26 @@ function finalActions(
     return actions;
   }
   if (actions.length > 0) return actions;
+  if (terminalKind === "turn_suspended") {
+    const suspendedTargets = claimedAppTerminalTargets(item, targets);
+    return suspendedTargets.map((target) => finalAction({
+      item,
+      target,
+      text: "",
+      artifacts: [],
+      turnId: optionalText(result.handlerResult.metadata?.turnId) ??
+        item.envelope.routingHints?.turnId,
+      terminalKind,
+      noVisibleReply: true,
+      suspension: optionalText(result.handlerResult.metadata?.suspension),
+    }));
+  }
   const text = result.handlerResult.metadata?.text;
   const artifacts = artifactRefs(result.handlerResult.metadata?.artifacts);
+  const changedFiles = changedFilePaths(result.handlerResult.metadata?.changedFiles);
+  const plan = projectLedgerPlanFromUnknown(result.handlerResult.metadata?.plan);
   const noVisibleReply = typeof text !== "string" ||
-    (!text.trim() && artifacts.length === 0);
+    (!text.trim() && artifacts.length === 0 && changedFiles.length === 0 && !plan);
   const finalTargets = noVisibleReply
     ? claimedAppTerminalTargets(item, targets)
     : targets;
@@ -302,13 +327,17 @@ function finalActions(
     target,
     text: typeof text === "string" ? text : "",
     artifacts,
+    changedFiles,
+    plan,
     generatedSessionTitle,
     executionModel: result.handlerResult.metadata?.executionModel,
     canonicalMessageId: optionalText(result.handlerResult.metadata?.canonicalMessageId),
     turnId: optionalText(result.handlerResult.metadata?.turnId) ??
       item.envelope.routingHints?.turnId,
     noVisibleReply,
-    safeErrorCode: noVisibleReply ? "no_visible_result" : undefined,
+    ...(terminalKind === "turn_failed" ? { terminalKind } : {}),
+    safeErrorCode: optionalText(result.handlerResult.metadata?.safeErrorCode) ??
+      (noVisibleReply ? "no_visible_result" : undefined),
   }));
 }
 
@@ -330,11 +359,14 @@ function finalAction(input: {
   target: SessionTransportBinding;
   text: string;
   artifacts: ArtifactRef[];
+  changedFiles?: ChangedFileDetail[];
+  plan?: ProjectLedgerPlan;
   generatedSessionTitle?: string;
   canonicalMessageId?: string;
   turnId?: string;
   executionModel?: unknown;
   terminalKind?: string;
+  suspension?: string;
   noVisibleReply?: boolean;
   safeErrorCode?: string;
 }): OutboundAction {
@@ -357,11 +389,13 @@ function finalAction(input: {
     message: {
       text: input.text,
       artifacts: input.artifacts.length > 0 ? input.artifacts : undefined,
+      changedFiles: input.changedFiles?.length ? input.changedFiles : undefined,
       replyToMessageId: item.envelope.message.id,
     },
     metadata: {
       source: "gateway/btcc/btcc-inbound-dispatcher.ts",
       kind: input.terminalKind ?? "final_result",
+      ...(input.suspension ? { suspension: input.suspension } : {}),
       queueId: item.queueId,
       dispatchClaimId: item.processing.claimId,
       ...appClaimBinding,
@@ -371,8 +405,18 @@ function finalAction(input: {
       canonicalMessageId: input.canonicalMessageId,
       generatedSessionTitle: input.generatedSessionTitle,
       ...(input.executionModel ? { executionModel: input.executionModel } : {}),
+      ...(input.plan ? { plan: input.plan } : {}),
     },
   };
+}
+
+function changedFilePaths(value: unknown): ChangedFileDetail[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((detail): detail is ChangedFileDetail =>
+    Boolean(detail && typeof detail === "object" && !Array.isArray(detail) &&
+      typeof (detail as Record<string, unknown>).path === "string" &&
+      Array.isArray((detail as Record<string, unknown>).lines)),
+  ).slice(0, 40);
 }
 
 function artifactRefs(value: unknown): ArtifactRef[] {
@@ -419,18 +463,19 @@ function reactivateSession(
 }
 
 function claimableSession(
-  event: QueuedInboundEvent,
+  key: string,
   active: Set<string>,
   batch: Set<string>,
 ): boolean {
-  const key = sessionKeyFor(event);
   if (active.has(key) || batch.has(key)) return false;
   batch.add(key);
   return true;
 }
 
-function sessionKeyFor(event: QueuedInboundEvent): string {
-  const base = event.envelope.routingHints?.sessionId?.trim() || [
+function sessionKeyFor(event: QueuedInboundEvent, store: SessionBindingStore): string {
+  const routed = new GatewayRouter({ store }).routeInbound(event.envelope);
+  const base = event.envelope.routingHints?.sessionId?.trim() ||
+    (routed.status === "routed" ? routed.route.sessionId : undefined) || [
     event.envelope.transport,
     event.envelope.accountId,
     event.envelope.peer.kind,

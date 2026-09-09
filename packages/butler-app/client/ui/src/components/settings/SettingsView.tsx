@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -8,7 +9,7 @@ import { SettingsDetailContent } from "./SettingsDetailContent";
 import { SettingsDetailHeader } from "./SettingsDetailHeader";
 import { ModelSettingsTitle } from "./ModelSettingsTitle";
 import { SettingsSidebar } from "./SettingsSidebar";
-import { createSettingsSections } from "./settingsSections";
+import { createSettingsSectionGroups } from "./settingsSections";
 import { useDeveloperLogsAvailability } from "./useDeveloperLogsAvailability";
 import { useCompactSettingsPaneEntry } from "./useCompactSettingsPaneEntry";
 import { ArrowLeft, IconButton, SettingsShell } from "@/butler-ds";
@@ -19,6 +20,7 @@ interface SettingsViewProps {
   isActive?: boolean;
 }
 export function SettingsView({ initialSection, onClose, isActive = false }: SettingsViewProps = {}) {
+  useAppLocale();
   const [compactPane, setCompactPane] = useState<"master" | "detail">("master");
   const settings = useButlerStore((state) => state.settings);
   const closeSettings = useButlerStore((state) => state.closeSettings);
@@ -57,7 +59,7 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") closeView();
+      if (event.key === "Escape" && !event.defaultPrevented) closeView();
     }
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
@@ -65,14 +67,17 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
 
   const settingsCopy = appCopy.settings;
   const developerModeEnabled = useDeveloperLogsAvailability(settings.diagnostics_enabled === true);
-  const sections = createSettingsSections(settingsCopy, developerModeEnabled);
-  const title =
-    sections.find((item) => item.id === activeSection)?.label ??
-    settingsCopy.title;
+  const sectionGroups = createSettingsSectionGroups(
+    settingsCopy,
+    developerModeEnabled,
+  );
+  const sections = sectionGroups.flatMap((group) => group.sections);
+  const activeDescriptor = sections.find((item) => item.id === activeSection);
+  const title = activeDescriptor?.label ?? settingsCopy.title;
 
-  const changeSection = (section: SettingsSectionId) => {
+  const changeSection = async (section: SettingsSectionId) => {
     setLocalMessage(null);
-    if (!setActiveSection(section)) return;
+    if (!await setActiveSection(section)) return;
     setCompactPane("detail");
     if (storeView.kind === "settings") {
       setView({ kind: "settings", section });
@@ -81,10 +86,11 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
 
   useEffect(() => {
     if (activeSection !== "logs" || developerModeEnabled) return;
-    setActiveSection("about");
-    if (storeView.kind === "settings") {
-      setView({ kind: "settings", section: "about" });
-    }
+    void setActiveSection("about").then((changed) => {
+      if (changed && storeView.kind === "settings") {
+        setView({ kind: "settings", section: "about" });
+      }
+    });
   }, [
     activeSection,
     developerModeEnabled,
@@ -116,7 +122,7 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
       }
       sidebar={
         <SettingsSidebar
-          sections={sections}
+          sectionGroups={sectionGroups}
           activeSection={activeSection}
           backLabel={settingsCopy.back}
           onClose={closeView}
@@ -127,6 +133,7 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
       detailHeader={
         <SettingsDetailHeader
           title={title}
+          description={activeDescriptor?.description}
           secondary={titleSecondary}
           localMessage={localMessage}
         />

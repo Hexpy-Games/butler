@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { ContextDonutButton, Popover, PopoverContent, PopoverTrigger } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -6,6 +7,7 @@ import { useComposerStore } from "./composerStore";
 import { ContextUsagePopover } from "./ContextUsagePopover";
 
 export function ComposerContextControl() {
+  useAppLocale();
   const context = useComposerStore((store) => store.context);
   const open = useComposerStore((store) => store.contextPopoverOpen);
   const setOpen = useComposerStore((store) => store.setContextPopoverOpen);

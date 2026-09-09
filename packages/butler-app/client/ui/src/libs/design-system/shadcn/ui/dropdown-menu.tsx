@@ -235,14 +235,16 @@ function DropdownMenuSubContent({
   ...props
 }: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>) {
   return (
-    <DropdownMenuPrimitive.SubContent
-      data-slot="dropdown-menu-sub-content"
-      data-glass="popover"
-      data-radius="popover"
-      collisionPadding={floatingContentCollisionPadding}
-      className={cn(tintedGlassSurfaceClassName, styles.content, className)}
-      {...props}
-    />
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.SubContent
+        data-slot="dropdown-menu-sub-content"
+        data-glass="popover"
+        data-radius="popover"
+        collisionPadding={floatingContentCollisionPadding}
+        className={cn(tintedGlassSurfaceClassName, styles.content, className)}
+        {...props}
+      />
+    </DropdownMenuPrimitive.Portal>
   );
 }
 

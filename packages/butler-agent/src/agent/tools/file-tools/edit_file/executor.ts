@@ -20,7 +20,7 @@ import {
   safeWorkspaceResultPath,
 } from "../shared/workspace-path-guard.ts";
 import { normalizeWorkspaceSha256 } from "../shared/workspace-sha256.ts";
-import { locateExactText } from "./exact-text-locator.ts";
+import { prepareOrderedExactEdits } from "./ordered-edits.ts";
 import {
   executeBatchEdits,
   normalizeBatchEdits,
@@ -98,6 +98,14 @@ function invalidArguments(message: string, recoveryHint: string) {
   return failure({ error: "invalid_arguments", message, recoveryHint });
 }
 
+function noChangeRequested(message: string) {
+  return failure({
+    error: "no_change_requested",
+    message,
+    details: { changed: false },
+  });
+}
+
 function normalizeStartLine(value: unknown): number | undefined | "invalid" {
   if (value === undefined) return undefined;
   const parsed = Number(value);
@@ -120,6 +128,9 @@ function normalizeSingleEdit(args: Record<string, unknown>):
   }
   if (typeof args.new_text !== "string") {
     return { ok: false, result: invalidArguments("new_text must be a string.", "Use an empty string to remove old_text or provide replacement text.") };
+  }
+  if (args.old_text === args.new_text) {
+    return { ok: false, result: noChangeRequested("old_text and new_text are identical, so no file change was requested.") };
   }
   const startLine = normalizeStartLine(args.start_line);
   if (startLine === "invalid") {
@@ -170,6 +181,8 @@ async function executeSingleEdit(
     relativePath: edit.path,
     relativeOnly: context.allowedToolsAndEffects !== undefined,
     rejectProtectedProjectLedgerWrites: true,
+    mutation: true,
+    programHome: context.butlerHome,
     protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
   });
   if (!guard.ok) {
@@ -213,28 +226,25 @@ async function executeSingleEdit(
     });
     if (!guarded.ok) return mutationFailureResult(guarded);
 
-    const location = locateExactText({
-      text: decoded.text,
-      oldText: edit.oldText,
-      ...(edit.startLine === undefined ? {} : { startLine: edit.startLine }),
-    });
-    if (!location.ok) {
+    const ordered = prepareOrderedExactEdits([edit], new Map([[edit.path, decoded.text]]));
+    if (!ordered.ok) {
       return failure({
-        error: location.error,
+        error: ordered.error,
         path,
-        message: location.error === "old_text_ambiguous"
+        message: ordered.error === "old_text_ambiguous"
           ? "old_text occurs more than once in the target file."
           : "old_text was not found in the target file.",
         recoveryHint: "Retry with exact text and, when needed, a correct start_line hint.",
         details: {
           ...(edit.startLine === undefined ? {} : { start_line: edit.startLine }),
           before_sha256: snapshot.sha256,
-          occurrences: location.occurrenceCount,
+          occurrences: ordered.occurrenceCount,
         },
       });
     }
 
-    const afterText = `${decoded.text.slice(0, location.value.offset)}${edit.newText}${decoded.text.slice(location.value.offset + edit.oldText.length)}`;
+    const location = { value: ordered.locations[0]! };
+    const afterText = ordered.files.get(edit.path)!.afterText;
     const prepared = prepareWorkspaceFileMutation({
       snapshot,
       data: Buffer.from(afterText, "utf8"),
@@ -256,6 +266,7 @@ async function executeSingleEdit(
       after_sha256: committed.after_sha256,
       atomic_write: true as const,
       ...(committed.cleanup_failed ? { cleanup_failed: true } : {}),
+      ...(committed.changed_file ? { changed_file: committed.changed_file } : {}),
       metrics: { elapsed_ms: Math.max(0, Date.now() - startedAt), files_written: 1, bytes_written: committed.bytes },
       evidence_receipts: fileToolEvidenceReceipt({
         toolName: "edit_file",

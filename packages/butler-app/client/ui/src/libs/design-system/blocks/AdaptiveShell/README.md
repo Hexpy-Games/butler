@@ -16,8 +16,16 @@ exclusive open-panel state.
 ## Responsive behavior
 
 - Expanded layouts use resizable grid tracks.
-- Medium layouts use bounded overlay panels.
-- Compact layouts use an 88vw left drawer and full-cover right sheet.
+- The workspace is an inline-size query container. Product resize geometry may
+  retain a 320px workspace and give the inspector all remaining width; the shell
+  accepts the measured widths and a standard root ref without owning preferences.
+- Browser widths up to 1023px use one push drawer behavior, including medium.
+- Electron widths above 640px retain docked grid tracks; only compact uses a drawer.
+- The shared `adaptiveDrawerQuery` drives both the shell and panel-state policy.
+- Drawers push the full-width workspace, with a full-cover right sheet in compact.
+- Pass `compactSidebarFullWidth` for navigation that should fully cover the
+  drawer viewport. The default bounded drawer remains available.
+- The window chrome toggle stays fixed while the workspace moves.
 - Panels animate with transform and honor reduced motion.
 - The always-mounted scrim keeps a promoted compositor layer and animates only
   opacity, preventing repeated mobile panel toggles from flashing.

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { SqliteGuidedToolJournal } from
@@ -13,17 +14,27 @@ import {
 import {
   guidedInstructions,
   renderGuidedPrompt,
+  renderGuidedTurnRequestAttribution,
 } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-prompt.ts";
 import { guidedStewardInstructions } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-steward-instructions.ts";
+import { guidedWorkerInstructions } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-worker-instructions.ts";
+import { phaseMinimalStableInstructionSurface } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-phase-instructions.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tool-definitions.ts";
 import { workScopeForTurn } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { appRuntimePolicy } from
   "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
-import { delegateToStewardToolDefinition } from
+import {
+  delegateToStewardToolDefinition,
+  delegateToWorkerToolDefinition,
+  steerWorkerToolDefinition,
+  withWorkerProfileChoices,
+} from
   "../../packages/butler-agent/src/agent/tools/subsession/definition.ts";
 import {
   normalizeSubsessionMutationScope,
@@ -123,6 +134,12 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(prompt).toContain("Objective: Prepare a market brief");
   expect(prompt).not.toContain("tracking:");
   expect(instructions).toContain("Use Work when the task needs continuation across turns");
+  expect(instructions).toContain(
+    "Never repeat internal workflow or status labels, tool names, schema fields, identifiers, or labels coined for the model's convenience",
+  );
+  expect(instructions).toContain(
+    "Translate them into what was done, what remains, why it matters, and what happens next",
+  );
   expect(instructions).toContain("Skip Work for simple conversation");
   expect(instructions).not.toContain("turn_time_remaining_seconds");
   expect(instructions).toContain("single-step read-only lookup");
@@ -150,7 +167,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   );
   expect(instructions).toContain("do not enumerate files");
   expect(instructions).toContain(
-    "typed Project Ledger changes in the active project",
+    "explicitly requested typed Project Ledger changes in the active project",
   );
   expect(instructions).toContain(
     "Checkpoints update only actions or progress",
@@ -238,22 +255,13 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
 
   const projectInstructions = guidedInstructions(guidedPolicy(projectTurn));
   expect(projectInstructions).toContain(
-    "keep one concise Project Ledger Work record",
+    "The bound Managed Work is the single project-work lifecycle",
+  );
+  expect(projectInstructions).not.toContain(
+    "alongside the internal Work record",
   );
   expect(projectInstructions).toContain(
-    "Check for related Work first and reuse it when present",
-  );
-  expect(projectInstructions).toContain(
-    "then complete it after validating the requested outcome",
-  );
-  expect(projectInstructions).toContain(
-    "An uninitialized Project Ledger has no existing Work to reuse",
-  );
-  expect(projectInstructions).toContain(
-    "Do not create Project Ledger task or attempt hierarchies unless",
-  );
-  expect(projectInstructions).toContain(
-    "If Project Ledger bookkeeping fails, still deliver the truthful result",
+    "If requested bookkeeping fails, still deliver the truthful result",
   );
   expect(projectInstructions.indexOf("finish any Project Ledger publication or closeout effect"))
     .toBeLessThan(projectInstructions.indexOf("If useful, record a result Review or completion Validation"));
@@ -262,19 +270,19 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   );
 });
 
-test("SS-03B guided instructions define semantic delegation selection", () => {
+test("guided instructions require reviewed Butler intent before delegation", () => {
   const instructions = guidedInstructions(guidedPolicy(
     turnRecord({ accessMode: "full_access", projectRef: "butler" }),
   ));
 
   expect(instructions).toContain(
-    "Select the path from the user's complete objective and constraints.",
-  );
-  expect(instructions).toContain(
     "Keep simple conversation, stable knowledge, and one quick lookup in Butler.",
   );
   expect(instructions).toContain(
-    "Delegate bounded independent multi-step repository inspection, multi-source research or synthesis, persistent-artifact work, or execution-stage mutation with delegate_to_steward.",
+    "one complete request written exactly as Steward should receive it; runtime preserves that request unchanged",
+  );
+  expect(instructions).toContain(
+    "Preserve a user request or preference to use a Worker without weakening it into optional guidance.",
   );
   expect(instructions).toContain(
     "Honor explicit user direction to delegate. Do not override the substantial-work boundary by keeping that work in Butler.",
@@ -283,55 +291,42 @@ test("SS-03B guided instructions define semantic delegation selection", () => {
     "After calling delegate_to_steward, release this Turn; do not inspect or mutate the same objective before the later synthesis Turn.",
   );
   expect(instructions).toContain(
-    "Before starting, continuing, planning, or checkpointing Work, or using inspection or effect tools, choose the direct-versus-delegate path. When the semantic delegation boundary applies, make delegate_to_steward the first and only tool call in this Turn; this delegation rule takes precedence over Butler Work rules below, and Butler must not create, plan, or update Work for that delegated objective.",
+    "follow the Butler conception, Plan, and Plan Review flow, then call delegate_to_steward",
+  );
+  expect(instructions).toContain(
+    "Do not add Project Ledger records, commit requirements, independent reviews, proof campaigns, broad quality gates, or test matrices that the current user request and reviewed Plan did not require",
   );
   expect(instructions).toContain(
     "When the user corrects, extends, or redirects work that still has an active Steward relation, call steer_steward as the first and only tool so the same Steward and Work continue at the next safe boundary; never create a replacement relation. When the user asks to stop active delegated work, call cancel_steward as the first and only tool. If several Steward relations are active, select the exact relation_id or safe_title and fail closed when the target is ambiguous. Only after the prior relation is terminal may a substantial retry create a fresh delegate_to_steward relation. Do not inspect, plan, resume Work, or execute that delegated objective in Butler.",
   );
 });
 
-test("SS-03B delegation tool contract exposes canonical execution surfaces", () => {
+test("Steward delegation preserves Butler request text and keeps mechanics runtime-owned", () => {
   const parameters = delegateToStewardToolDefinition.parameters as {
-    oneOf?: Array<{ properties?: Record<string, any> }>;
+    properties?: Record<string, unknown>;
+    required?: string[];
   };
-  const variants = parameters.oneOf ?? [];
-  const readOnly = variants.find((variant) =>
-    variant.properties?.execution_mode?.const === "read_only",
-  );
-  const mutation = variants.find((variant) =>
-    variant.properties?.execution_mode?.const === "mutation",
-  );
-  const readOnlySurface = [
-    "grep_files:workspace",
-    "list_files:workspace",
-    "read_file:workspace",
-    "web_read:network",
-    "web_search:network",
-  ];
-
   expect(delegateToStewardToolDefinition.description).toContain(
-    "For read_only, allowed_tools_and_effects is exactly the complete five-value array",
+    "complete request exactly as the Steward should receive it",
   );
   expect(delegateToStewardToolDefinition.description).toContain(
-    "Every mutation Steward can list, grep, read, apply admitted edit/write effects, and run bounded workspace validation",
+    "omission uses a fixed privacy-safe title and never copies objective content",
   );
-  expect(readOnly).toBeDefined();
-  expect(readOnly?.properties?.allowed_tools_and_effects).toMatchObject({
-    minItems: 5,
-    maxItems: 5,
-    uniqueItems: true,
-    items: { enum: readOnlySurface },
-  });
-  expect(readOnly?.properties?.mutation_scope).toMatchObject({ maxItems: 0 });
-  expect(mutation).toBeDefined();
-  expect(mutation?.properties?.allowed_tools_and_effects).toMatchObject({
-    minItems: 1,
-    items: { enum: ["edit_file:workspace", "run_command:workspace", "write_file:workspace"] },
-  });
-  expect(mutation?.properties?.mutation_scope).toMatchObject({ minItems: 0 });
-  expect(mutation?.properties?.mutation_scope?.items?.description).toContain(
-    "whole session worktree",
+  expect(delegateToStewardToolDefinition.description).toContain(
+    "Runtime derives delegation identity, inherited Composer access, ordinary tools, workspace, admitted context and EOL, budget, and reviewed provenance",
   );
+  expect(Object.keys(parameters.properties ?? {})).toEqual(["request", "safe_title"]);
+  expect(parameters.required ?? []).toEqual(["request"]);
+  for (const runtimeOrReviewedField of [
+    "parent_access_mode",
+    "objective",
+    "acceptance_criteria",
+    "task_or_plan_refs",
+    "constraints_and_non_goals",
+    "execution_mode",
+    "allowed_tools_and_effects",
+    "mutation_scope",
+  ]) expect(parameters.properties).not.toHaveProperty(runtimeOrReviewedField);
   expect(normalizeSubsessionMutationScope(["."])).toEqual(["."]);
   expect(normalizeSubsessionMutationScopeForEffects(
     ["/Users/example/project"],
@@ -346,13 +341,43 @@ test("SS-03B delegation tool contract exposes canonical execution surfaces", () 
   }
 });
 
+test("Worker delegation exposes exact enabled opaque profile choices", () => {
+  const projected = withWorkerProfileChoices(delegateToWorkerToolDefinition, [
+    {
+      id: "default",
+      label: "Coding",
+      enabled: true,
+      job: { kind: "builtin", job: "coding" },
+      model: "openai/gpt-5.6-luna",
+      reasoning_effort: "max",
+    },
+    {
+      id: "w1",
+      label: "Review",
+      enabled: true,
+      job: { kind: "builtin", job: "review" },
+      model: "openai/gpt-5.6-sol",
+      reasoning_effort: "high",
+    },
+  ]);
+  const parameters = projected.parameters as {
+    properties: { profile_id: { enum: string[] } };
+  };
+
+  expect(parameters.properties.profile_id.enum).toEqual(["default", "w1"]);
+  expect(projected.description).toContain(
+    '{"id":"w1","label":"Review","job":"review"}',
+  );
+  expect(projected.description).toContain("ids are opaque selectors");
+});
+
 test("Steward instructions keep ordinary BTCC memory, authority, and closeout", () => {
   const commonCloseout =
     "Use record_work_disposition as the sole Work closeout authority, exactly as an ordinary Butler BTCC Turn does. Reviews and completion Validation are optional quality records, never Steward-only completion gates.";
-  const readOnlyPlanContract =
-    "For read_only, every Plan action must omit the effect field entirely; reads and synthesis are evidence actions, never effects.";
-  const multiStepPlanContract =
-    "Use at least two truthful top-level Plan actions for this substantial delegated Work; do not collapse materially separate discovery, mutation, verification, or synthesis stages into one umbrella action.";
+  const inheritedAccessContract =
+    "You inherit the Composer Turn's admitted full_access access mode exactly.";
+  const optionalQualityContract =
+    "Independent review and broad validation are optional. Do not turn them into Plan actions or completion conditions unless the user requested them or a concrete current risk makes that specific check necessary.";
   const common = {
     relationId: "relation",
     delegationId: "delegation",
@@ -368,14 +393,22 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
   };
 
   const readOnlyInstructions = guidedStewardInstructions({
+    accessMode: "full_access",
     subsession: { ...common, executionMode: "read_only" },
   });
   expect(readOnlyInstructions).toContain(commonCloseout);
   expect(readOnlyInstructions).not.toContain("only then settle the child Work as completed");
   expect(readOnlyInstructions).not.toContain("at least two material read operations");
-  expect(readOnlyInstructions).toContain(readOnlyPlanContract);
-  expect(readOnlyInstructions).toContain(multiStepPlanContract);
+  expect(readOnlyInstructions).toContain(inheritedAccessContract);
+  expect(readOnlyInstructions).toContain(
+    "do not treat this task label as an access mode or tool restriction",
+  );
+  expect(readOnlyInstructions).toContain(optionalQualityContract);
+  expect(readOnlyInstructions).toContain("You own Project Ledger reading and required updates");
+  expect(readOnlyInstructions).toContain("contents in the brief, not just record IDs");
+  expect(readOnlyInstructions).not.toContain("Use at least two truthful top-level Plan actions");
   const mutationInstructions = guidedStewardInstructions({
+    accessMode: "full_access",
     subsession: {
       ...common,
       executionMode: "mutation",
@@ -385,7 +418,7 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
   });
   expect(mutationInstructions).toContain(commonCloseout);
   expect(mutationInstructions).not.toContain("only then settle the child Work as completed");
-  expect(mutationInstructions).toContain(multiStepPlanContract);
+  expect(mutationInstructions).toContain(optionalQualityContract);
   expect(mutationInstructions).toContain(
     "project Hot Cache, Project Memory, durable feedback and corrections",
   );
@@ -393,9 +426,187 @@ test("Steward instructions keep ordinary BTCC memory, authority, and closeout", 
     "actively use recall_memory",
   );
   expect(mutationInstructions).toContain("same reviewed Plan and effect contract as Butler");
+  expect(mutationInstructions).toContain(
+    "Keep Plan actions inside this Work and create Worker tasks through delegate_to_worker",
+  );
+  expect(mutationInstructions).toContain(
+    "Honor an explicit Worker request",
+  );
+  expect(mutationInstructions).toContain(
+    "Do not create Project Ledger bookkeeping unless the delegated outcome explicitly requires it",
+  );
   expect(mutationInstructions).not.toMatch(
     /access conversation or memory tools|call MCP|mutate Project Ledger|omit effect from .*run_command/iu,
   );
+});
+
+test("Steward may delegate one Plan action while Worker has only execution duty", () => {
+  const subsession = {
+    relationId: "relation",
+    delegationId: "delegation",
+    taskId: "task",
+    executionMode: "mutation" as const,
+    mutationScope: ["."],
+    allowedToolsAndEffects: [],
+  };
+  const stewardPolicy = {
+    role: "steward",
+    accessMode: "full_access" as const,
+    trackingMode: "local" as const,
+    requiredNativeToolProfiles: ["workspace"],
+    requiredNativeTools: [],
+    workspacePath: "/tmp/workspace",
+    subsession,
+  };
+  const stewardTools = visibleToolDefinitions(
+    authorizedToolDefinitions(turnRecord({
+      accessMode: "full_access",
+      executionPolicy: stewardPolicy,
+    })),
+    stewardPolicy,
+  ).map((tool) => tool.name);
+  expect(stewardTools).toContain(delegateToWorkerToolDefinition.name);
+  expect(stewardTools).toContain(steerWorkerToolDefinition.name);
+  expect(stewardTools).toContain("write_file");
+  expect(guidedStewardInstructions(stewardPolicy)).toContain(
+    "After assignment succeeds, manage Workers only",
+  );
+
+  const workerPolicy = { ...stewardPolicy, role: "worker" };
+  const workerTools = authorizedToolDefinitions(turnRecord({
+    accessMode: "full_access",
+    executionPolicy: workerPolicy,
+  })).map((tool) => tool.name);
+  expect(workerTools).toContain("write_file");
+  expect(workerTools).not.toContain("delegate_to_steward");
+  expect(workerTools).not.toContain("delegate_to_worker");
+  expect(workerTools).not.toContain("steer_worker");
+  expect(workerTools).toContain("start_work");
+  expect(guidedWorkerInstructions(workerPolicy)).toContain(
+    "bound session-scoped Micro Work",
+  );
+});
+
+test("admitted EOL has distinct dynamic instruction attribution and fails closed", () => {
+  const eolRef = "e".repeat(64);
+  const personaRef = "a".repeat(64);
+  const duplicateEolRef = "d".repeat(64);
+  const untrustedProfileRef = "c".repeat(64);
+  const roleRef = "b".repeat(64);
+  const profileRef = "f".repeat(64);
+  const documents = new Map([
+    [eolRef, contextDocument(eolRef, "eol", "EOL_EXACT_INSTRUCTION")],
+    [personaRef, contextDocument(
+      personaRef,
+      "active-persona-reminder",
+      "PERSONA_EXACT",
+    )],
+    [duplicateEolRef, contextDocument(
+      duplicateEolRef,
+      "eol",
+      "DUPLICATE_EOL_INSTRUCTION",
+    )],
+    [untrustedProfileRef, contextDocument(
+      untrustedProfileRef,
+      "untrusted-profile",
+      "UNTRUSTED_PROFILE_INSTRUCTION",
+    )],
+    [roleRef, contextDocument(
+      roleRef, "role", `ROLE_SYSTEM_EXACT\n${"§".repeat(8_000)}`,
+    )],
+    [profileRef, contextDocument(
+      profileRef, "personalization-profile", `PERSONA_PROFILE_EXACT\n${"¤".repeat(8_000)}`,
+    )],
+  ]);
+  const reader = {
+    read(ref: string) {
+      const document = documents.get(ref);
+      if (!document) throw new Error("missing test document");
+      return document;
+    },
+    resolve(ref: string) {
+      return reader.read(ref).content;
+    },
+  };
+  const turn = turnRecord();
+  turn.context.profileRefs = [roleRef, personaRef, profileRef, eolRef];
+  const stable = phaseMinimalStableInstructionSurface(
+    "execution",
+    guidedPolicy(turn),
+    "test-tools-v1",
+  );
+  const request = renderGuidedTurnRequestAttribution(
+    turn,
+    stable.stableInstructionPrefix,
+    "Korean",
+    {
+      butlerData: "/tmp/butler-data",
+      contextDocuments: reader,
+      toolJournal: emptyToolJournal(),
+    },
+  );
+
+  expect(request.prompt).not.toContain("EOL_EXACT_INSTRUCTION");
+  expect(stable.stableProviderCachePrefix.instructionPrefix).toContain(
+    "exact EOL admitted for this Turn governs both Butler and Steward",
+  );
+  expect(stable.stableProviderCachePrefix.instructionPrefix).not.toContain(
+    "EOL_EXACT_INSTRUCTION",
+  );
+  const eolSource = request.requestSegmentSources.instructions.find((source) =>
+    source.text.includes("EOL_EXACT_INSTRUCTION"),
+  );
+  const personaSource = request.requestSegmentSources.instructions.find((source) =>
+    source.text.includes("PERSONA_EXACT"),
+  );
+  expect(eolSource).toMatchObject({
+    kind: "accepted_corrections_and_unresolved_obligations",
+    stability: "dynamic",
+  });
+  expect(personaSource).toMatchObject({
+    kind: "memory_recall_context",
+    stability: "dynamic",
+  });
+  expect(eolSource?.text).not.toContain("PERSONA_EXACT");
+  expect(personaSource?.text).not.toContain("EOL_EXACT_INSTRUCTION");
+  expect(request.instructions.indexOf("ROLE_SYSTEM_EXACT")).toBeLessThan(
+    request.instructions.indexOf("PERSONA_EXACT"),
+  );
+  expect(request.instructions.indexOf("PERSONA_EXACT")).toBeLessThan(
+    request.instructions.indexOf("EOL_EXACT_INSTRUCTION"),
+  );
+  expect([...request.instructions].filter((character) =>
+    character === "§" || character === "¤",
+  ).length).toBeLessThanOrEqual(12_000);
+
+  turn.context.profileRefs = [personaRef];
+  expect(() => renderGuidedTurnRequestAttribution(
+    turn, "You are Butler.\nStable protocol.", "", {
+      butlerData: "/tmp/butler-data", contextDocuments: reader,
+      toolJournal: emptyToolJournal(),
+    },
+  )).toThrow("guided_eol_instruction_document_invalid");
+  turn.context.profileRefs = [];
+  expect(() => renderGuidedTurnRequestAttribution(
+    turn, "You are Butler.\nStable protocol.", "", {
+      butlerData: "/tmp/butler-data", contextDocuments: reader,
+      toolJournal: emptyToolJournal(),
+    },
+  )).toThrow("guided_eol_instruction_document_invalid");
+  turn.context.profileRefs = [eolRef, duplicateEolRef];
+  expect(() => renderGuidedTurnRequestAttribution(
+    turn, "You are Butler.\nStable protocol.", "", {
+      butlerData: "/tmp/butler-data", contextDocuments: reader,
+      toolJournal: emptyToolJournal(),
+    },
+  )).toThrow("guided_eol_instruction_document_invalid");
+  turn.context.profileRefs = [eolRef, untrustedProfileRef];
+  expect(() => renderGuidedTurnRequestAttribution(
+    turn, "You are Butler.\nStable protocol.", "", {
+      butlerData: "/tmp/butler-data", contextDocuments: reader,
+      toolJournal: emptyToolJournal(),
+    },
+  )).toThrow("guided_profile_instruction_document_invalid");
 });
 
 test("R3 continuation guidance repairs legacy Work labels and refreshes downstream results", () => {
@@ -435,8 +646,18 @@ test("R3 Conception guidance actively selects associative recall and exposes cro
   expect(authorized).toContain("list_conversation_sessions");
   expect(authorized).toContain("read_conversation_session");
   expect(visible).toContain("recall_memory");
+  expect(visible).toContain("query_memory");
   expect(visible).toContain("list_conversation_sessions");
   expect(visible).toContain("read_conversation_session");
+  expect(authorized).toContain("delegate_to_steward");
+  expect(visible).toContain("delegate_to_steward");
+  expect(visible).not.toContain("write_file");
+  const askFirst = turnRecord({ accessMode: "ask_first" });
+  const askFirstVisible = visibleToolDefinitions(
+    authorizedToolDefinitions(askFirst, {}), guidedPolicy(askFirst),
+  ).map((tool) => tool.name);
+  expect(askFirstVisible).toContain("delegate_to_steward");
+  expect(askFirstVisible).toContain("write_file");
 });
 
 test("guided read-only policy authorizes and visibly exposes list_files", () => {
@@ -450,6 +671,23 @@ test("guided read-only policy authorizes and visibly exposes list_files", () => 
   expect(visible.find((tool) => tool.name === "list_files")?.parameters.properties).toHaveProperty("include_globs");
 });
 
+test("command-capable guided roles expose the existing output artifact reader", () => {
+  for (const role of ["butler", "steward", "worker"] as const) {
+    for (const accessMode of ["ask_first", "full_access"] as const) {
+      const turn = turnRecord({
+        accessMode,
+        executionPolicy: { ...executionPolicy("local"), role, accessMode },
+      });
+      const authorized = authorizedToolDefinitions(turn, {});
+      const visible = visibleToolDefinitions(authorized, guidedPolicy(turn));
+      for (const surface of [authorized, visible]) {
+        expect(surface.map((tool) => tool.name)).toContain("run_command");
+        expect(surface.map((tool) => tool.name)).toContain("read_tool_output_artifact");
+      }
+    }
+  }
+});
+
 test("session worktree binding is visible only on full-access project surfaces", () => {
   const projectFullAccess = turnRecord({
     projectRef: "butler",
@@ -461,6 +699,8 @@ test("session worktree binding is visible only on full-access project surfaces",
   });
   const projectAuthorized = authorizedToolDefinitions(projectFullAccess, {});
   expect(projectAuthorized.map((tool) => tool.name)).toContain("bind_session_git_worktree");
+  expect(projectAuthorized.map((tool) => tool.name))
+    .not.toContain("project_ledger_work_complete");
   expect(visibleToolDefinitions(projectAuthorized, guidedPolicy(projectFullAccess))
     .map((tool) => tool.name)).toContain("bind_session_git_worktree");
 
@@ -627,6 +867,23 @@ function executionPolicy(
     requiredNativeToolProfiles: [],
     requiredNativeTools: [],
     workspacePath: "/tmp/workspace",
+  };
+}
+
+function contextDocument(
+  contextRef: string,
+  sourceId: string,
+  content: string,
+) {
+  return {
+    contextRef,
+    contentSha256: createHash("sha256").update(content).digest("hex"),
+    sourceId,
+    projectionClass: "profile" as const,
+    scopeKind: "user" as const,
+    scopeId: "local-user",
+    sourceRevision: `${sourceId}-v1`,
+    content,
   };
 }
 

@@ -1,4 +1,6 @@
 import { APP_PROTOCOL_VERSION } from "./base-contract.ts";
+import type { MessageContent } from "../../../../foundation/message-content.ts";
+export type { MessageContent, MessageContentPart } from "../../../../foundation/message-content.ts";
 import type { MessageRole, MessageStatus, TurnState } from "./base-contract.ts";
 import type { SettingsView } from "./settings-contract.ts";
 import type { TurnExecutionControlsV1 } from "../../../core/turn-execution-controls.ts";
@@ -13,11 +15,15 @@ import type {
 } from "./progress-contract.ts";
 import type {
   SessionControlState,
+  SessionControlsView,
   SessionViewTurnDeliveryState,
   TurnProgressSnapshotView,
 } from "./session-contract.ts";
+import type { ProjectDashboardDocument } from "./session-dashboard-contract.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
 
 export interface MessageRecord {
+  content_parts?: MessageContent;
   id: string;
   chat_id: string;
   turn_id?: string;
@@ -37,11 +43,16 @@ export interface MessageRecord {
   cursor: number;
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
+  changed_files?: ChangedFileDetail[];
+  /** User-visible canonical Project Ledger Plan projected by a Plan-mode Turn. */
+  plan_document?: ProjectDashboardDocument;
   work_blocks?: WorkerActivityWorkBlock[];
   turn_activity_rows?: ProgressSummaryRow[];
 }
 
 export interface MessageSendRequest {
+  expected_project_id?: string;
+  content_parts?: MessageContent;
   chat_id?: string;
   text?: string;
   client_message_id?: string;
@@ -67,10 +78,13 @@ export interface MessageSendResult {
 }
 
 export interface QueuedMessageRecord {
+  content_parts?: MessageContent;
   id: string;
   chat_id: string;
   text: string;
   client_message_id?: string;
+  /** Internal binding for a Plan-mode continuation. */
+  plan_id?: string;
   attachments?: MessageFileRef[];
   controls: SessionControlState;
   state: "queued" | "dispatching" | "dispatched" | "deleted" | "failed";
@@ -89,9 +103,13 @@ export interface SessionQueueView {
 }
 
 export interface QueueMessageRequest {
+  expected_project_id?: string;
+  content_parts?: MessageContent;
   chat_id?: string;
   text?: string;
   client_message_id?: string;
+  /** Internal binding for a Plan-mode continuation. */
+  plan_id?: string;
   attachments?: MessageAttachmentInput[];
   model?: string;
   reasoning_effort?: SettingsView["reasoning_effort"];
@@ -104,7 +122,10 @@ export interface QueueMessageRequest {
 }
 
 export interface UpdateQueuedMessageRequest {
+  content_parts?: MessageContent;
   text?: string;
+  /** Internal binding for a Plan-mode continuation. */
+  plan_id?: string;
   attachments?: MessageAttachmentInput[];
   model?: string;
   reasoning_effort?: SettingsView["reasoning_effort"];
@@ -114,6 +135,19 @@ export interface UpdateQueuedMessageRequest {
   authority_request_ref?: string;
   /** @internal Trusted durable Steward-result synthesis origin. */
   subsession_result?: import("../../../core/turn-execution-controls.ts").SubsessionResultTurnContext;
+}
+
+export type PlanDecisionAction = "accept" | "reject" | "instruct";
+
+export interface PlanDecisionRequest {
+  action: PlanDecisionAction;
+  instruction?: string;
+}
+
+export interface PlanDecisionResult {
+  plan_document: ProjectDashboardDocument;
+  controls: SessionControlsView;
+  queued?: SessionQueueView;
 }
 
 export interface TurnRecord {

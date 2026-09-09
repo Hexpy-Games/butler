@@ -1,4 +1,5 @@
 import { existsSync, rmSync } from "node:fs";
+import { promoteRecordPublication, observeRecordPublication } from "./record-publication.js";
 import { assertPublicationClaim, releasePublicationClaim } from "./publication-claim.js";
 import { assertExchangeCompatible, inspectPublicationRoot } from "./publication-integrity.js";
 import { observeProjectLedgerSourceHead } from "./source-head.js";
@@ -9,6 +10,7 @@ import {
 } from "./transaction-journal.js";
 
 export function promoteProjectLedgerPublication(publication, exchangeRoots) {
+  if (publication.base.recordPaths) return promoteRecordPublication(publication);
   let journal = requiredJournal(publication);
   if (journal.status === "promoted" || journal.status === "observed") {
     assertActiveHead(
@@ -52,7 +54,8 @@ export function promoteProjectLedgerPublication(publication, exchangeRoots) {
   return receipt(publication, journal.status);
 }
 
-export function observeProjectLedgerPromotion(publication) {
+export function observeProjectLedgerPromotion(publication, beforeRelease) {
+  if (publication.base.recordPaths) return observeRecordPublication(publication, beforeRelease);
   const journal = requiredJournal(publication);
   assertActiveHead(
     publication.candidateHead,
@@ -60,6 +63,7 @@ export function observeProjectLedgerPromotion(publication) {
     "Project Ledger promoted head is not active",
   );
   if (journal.status === "observed") {
+    beforeRelease?.();
     rmSync(publication.candidateRoot, { recursive: true, force: true });
     if (existsSync(publication.claimPath)) {
       releasePublicationClaim(publication.claimPath, publication);
@@ -67,6 +71,7 @@ export function observeProjectLedgerPromotion(publication) {
     return receipt(publication, "observed");
   }
   saveTransactionJournal(publication.journalPath, { ...journal, status: "observed" });
+  beforeRelease?.();
   rmSync(publication.candidateRoot, { recursive: true, force: true });
   releasePublicationClaim(publication.claimPath, publication);
   return receipt(publication, "observed");

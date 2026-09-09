@@ -79,7 +79,9 @@ export async function deleteRegisteredModel(
   model: AppModelSummary,
 ): Promise<HostedModelDeletionResult | LocalModelDeletionResult> {
   const copy = appCopy.settings.modelManagement;
-  const confirmed = window.confirm(copy.deleteConfirm(modelDisplayName(model)));
+  const confirmed = await confirmAction(copy.deleteConfirm(modelDisplayName(model)), {
+    title: appCopy.common.delete, confirmLabel: appCopy.common.delete, destructive: true,
+  });
   if (!confirmed) throw new Error("Deletion cancelled");
   if (model.provider_id === "local") {
     return await api<LocalModelDeletionResult>(
@@ -92,3 +94,4 @@ export async function deleteRegisteredModel(
     { method: "DELETE" },
   );
 }
+import { confirmAction } from "@/app/confirmation.ts";
